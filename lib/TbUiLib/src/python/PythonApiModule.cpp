@@ -2639,16 +2639,10 @@ EntityHandle createEntity(
   auto* entityNode = new mdl::EntityNode{std::move(entity)};
   try
   {
-    const auto addedNodes =
-      mdl::addNodes(map, {{&mdl::parentForNodes(map), {entityNode}}});
-    if (addedNodes.empty())
+    if (!automation::addNodes(map, {entityNode}, select))
     {
       delete entityNode;
       throw std::runtime_error{"Could not add entity"};
-    }
-    if (select)
-    {
-      mdl::selectNodes(map, {entityNode});
     }
     if (!transaction.commit())
     {

@@ -53,6 +53,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationNodes.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include "kd/vector_utils.h"
@@ -504,29 +505,12 @@ std::optional<QJsonArray> addNodesWithTransaction(
 {
   auto addedNodes = std::vector<mdl::Node*>{};
   auto ok = executeTransaction(map, transactionName, [&]() {
-    if (selectCreated)
-    {
-      mdl::deselectAll(map);
-    }
-
-    auto& parent = mdl::parentForNodes(map);
-    if (!parent.canAddChildren(std::begin(nodes), std::end(nodes)))
-    {
-      return false;
-    }
-
-    auto nodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
-    nodesToAdd.emplace(&parent, nodes);
-    if (!map.executeAndStore(mdl::AddRemoveNodesCommand::add(nodesToAdd)))
+    if (!automation::addNodes(map, nodes, selectCreated))
     {
       return false;
     }
 
     addedNodes = nodes;
-    if (selectCreated)
-    {
-      mdl::selectNodes(map, addedNodes);
-    }
     return true;
   });
 
