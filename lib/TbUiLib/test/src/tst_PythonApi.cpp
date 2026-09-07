@@ -411,6 +411,25 @@ assert len(tb.documents.list()) == 1
     CHECK(metadataStore.contains("metadata-only-module"));
     CHECK(moduleStore.at("stale-module").objectIds.empty());
 
+    const auto forgottenMetadataOnly = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "tb.modules.forget('metadata-only-module')\n"
+        "try:\n"
+        "    tb.modules.inspect('metadata-only-module')\n"
+        "    raise AssertionError('metadata-only module was still available')\n"
+        "except KeyError:\n"
+        "    pass\n"
+        "result = {'remaining': len(tb.modules.list(include_stale=True))}",
+        "<mcp-python:forget-metadata-only-module>",
+        {},
+      });
+    CAPTURE(forgottenMetadataOnly.error);
+    REQUIRE(forgottenMetadataOnly.ok);
+    CHECK(forgottenMetadataOnly.value.toObject() == QJsonObject{{"remaining", 0}});
+    CHECK(metadataStore.empty());
+
     moduleStore.emplace(
       "rollback-module",
       automation::AutomationModuleRecord{

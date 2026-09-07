@@ -1625,25 +1625,45 @@ py::dict selectModule(const std::string& moduleId)
 void forgetModule(const std::string& moduleId)
 {
   const auto& context = requireContext();
-  if (context.moduleStore == nullptr)
+  if (context.moduleStore == nullptr && context.metadataStore == nullptr)
   {
     throw py::key_error{"Unknown module '" + moduleId + "'"};
   }
   const auto fingerprint =
     objectRegistry().documentFingerprint(currentDocument().get().map());
   auto removed = false;
-  for (auto it = context.moduleStore->begin(); it != context.moduleStore->end();)
+  if (context.moduleStore != nullptr)
   {
-    if (
-      it->second.moduleId.toStdString() == moduleId
-      && it->second.documentFingerprint == fingerprint)
+    for (auto it = context.moduleStore->begin(); it != context.moduleStore->end();)
     {
-      it = context.moduleStore->erase(it);
-      removed = true;
+      if (
+        it->second.moduleId.toStdString() == moduleId
+        && it->second.documentFingerprint == fingerprint)
+      {
+        it = context.moduleStore->erase(it);
+        removed = true;
+      }
+      else
+      {
+        ++it;
+      }
     }
-    else
+  }
+  if (context.metadataStore != nullptr)
+  {
+    for (auto it = context.metadataStore->begin(); it != context.metadataStore->end();)
     {
-      ++it;
+      if (
+        it->second.documentFingerprint == fingerprint
+        && it->second.metadata.value("moduleId").toString().toStdString() == moduleId)
+      {
+        it = context.metadataStore->erase(it);
+        removed = true;
+      }
+      else
+      {
+        ++it;
+      }
     }
   }
   if (!removed)
