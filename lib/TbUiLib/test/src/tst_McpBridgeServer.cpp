@@ -59,6 +59,7 @@
 #include "ui/mcp/McpBridgeServer.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <optional>
 
 #include <catch2/catch_test_macros.hpp>
@@ -254,7 +255,8 @@ TEST_CASE(
       {"executionId", "python-replay"},
       {"code",
        "import trenchbroom as tb\n"
-       "result = {'answer': arguments['answer'], 'documentId': tb.current_document().id}"},
+       "result = {'answer': arguments['answer'], 'documentId': "
+       "tb.current_document().id}"},
       {"arguments", QJsonObject{{"answer", 42}}},
       {"document", document},
     },
@@ -291,6 +293,57 @@ TEST_CASE(
   REQUIRE(conflict.error);
   CHECK(conflict.error->code == mcp::McpErrorCode::InvalidParams);
   CHECK_FALSE(conflict.error->details.value("retrySafe").toBool(true));
+
+  auto savedDocumentDirectory = QTemporaryDir{};
+  REQUIRE(savedDocumentDirectory.isValid());
+  const auto savedDocumentPath =
+    std::filesystem::path{savedDocumentDirectory.filePath("guarded.map").toStdWString()};
+  auto* mapWindow = appController.mapWindowManager().topMapWindow();
+  REQUIRE(mapWindow != nullptr);
+  REQUIRE(mapWindow->document().map().saveAs(savedDocumentPath));
+  const auto savedDocumentInspection = server.dispatchRequest(mcp::McpBridgeRequest{
+    "inspect-saved-document",
+    "tb_inspect",
+    QJsonObject{{"view", "document"}},
+    mcp::McpMode::ReadOnly,
+  });
+  REQUIRE(savedDocumentInspection.ok);
+
+  const auto missingSavedPath = server.dispatchRequest(mcp::McpBridgeRequest{
+    "execute-saved-document-without-path",
+    "tb_execute_python",
+    QJsonObject{
+      {"executionId", "python-saved-document-path"},
+      {"code", "result = {'value': 'must not run'}"},
+      {"document",
+       QJsonObject{{"fingerprint", savedDocumentInspection.result.value("fingerprint")}}},
+    },
+    mcp::McpMode::Edit,
+  });
+  CHECK_FALSE(missingSavedPath.ok);
+  REQUIRE(missingSavedPath.error);
+  CHECK(missingSavedPath.error->code == mcp::McpErrorCode::Forbidden);
+  CHECK(missingSavedPath.error->message.contains("requires the saved document path"));
+  CHECK_FALSE(missingSavedPath.error->details.value("mutatedDocument").toBool(true));
+
+  const auto guardedSavedPath = server.dispatchRequest(mcp::McpBridgeRequest{
+    "execute-saved-document-with-path",
+    "tb_execute_python",
+    QJsonObject{
+      {"executionId", "python-saved-document-path-accepted"},
+      {"code", "result = {'value': 'guarded'}"},
+      {"document",
+       QJsonObject{
+         {"fingerprint", savedDocumentInspection.result.value("fingerprint")},
+         {"path", QString::fromStdWString(savedDocumentPath.wstring())},
+       }},
+    },
+    mcp::McpMode::Edit,
+  });
+  REQUIRE(guardedSavedPath.ok);
+  CHECK(
+    guardedSavedPath.result.value("result").toObject().value("value").toString()
+    == "guarded");
 }
 
 TEST_CASE(
