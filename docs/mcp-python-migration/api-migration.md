@@ -60,6 +60,15 @@ JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它�
 拒绝非凸、退化、非有限或上下界颠倒的棱柱；所有项在附加到地图前构建完成，因此失败不会
 留下部分 batch。过渡期 MCP 的所有 prism 生成路径也使用这个构建器。
 
+## Checked Point Entities
+
+`tb.entities.create_checked_batch(entities, select=False)` 在一个原生事务中创建多个 point
+entity，并在写入前根据当前 FGD 验证每个 `classname`。每项包含 `classname`、可选的字符串
+`properties` 和可选三数字 `origin`；FGD 默认属性先写入，再由传入属性覆盖，空值属性会
+删除，brush entity 定义会拒绝。automation 服务会先构造全部节点，再由事务附加，因此无效
+定义或 entity payload 不会改动地图。过渡期 MCP `entity_create_checked_batch` 使用同一节点
+构造服务，同时保留协议专属诊断和历史记录。
+
 ## 文件 IR 预览
 
 `tb.ir.compile_preview_from_file(path)` 只接受绝对路径，读取受 10 MiB 上限约束的 JSON
