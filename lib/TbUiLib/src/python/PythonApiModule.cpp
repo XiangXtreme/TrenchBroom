@@ -1345,7 +1345,31 @@ py::object jsonValueToPython(const QJsonValue& value)
   return std::move(result);
 }
 
-py::dict moduleSummary(const automation::AutomationModuleRecord& module)
+std::vector<mdl::Node*> moduleNodes(
+  mdl::Map& map, const automation::AutomationModuleRecord& module)
+{
+  auto result = std::vector<mdl::Node*>{};
+  for (const auto& objectId : module.objectIds)
+  {
+    const auto resolved = objectRegistry().resolveExternalId(map, objectId);
+    if (!resolved.ok)
+    {
+      continue;
+    }
+    const auto path =
+      automation::AutomationObjectRegistry::parseLegacyObjectId(resolved.legacyPathId);
+    if (path)
+    {
+      if (auto* node = map.worldNode().resolvePath(*path); node != nullptr)
+      {
+        result.push_back(node);
+      }
+    }
+  }
+  return kdl::vec_sort_and_remove_duplicates(std::move(result));
+}
+
+py::dict moduleSummary(mdl::Map& map, const automation::AutomationModuleRecord& module)
 {
   auto result = py::dict{};
   result["id"] = module.moduleId.toStdString();
@@ -1356,11 +1380,28 @@ py::dict moduleSummary(const automation::AutomationModuleRecord& module)
   result["content_hash"] = module.contentHash.toStdString();
   result["quality_policy"] = jsonValueToPython(module.qualityPolicy);
   result["object_count"] = module.objectIds.size();
+  const auto nodes = moduleNodes(map, module);
+  result["live_object_count"] = nodes.size();
+  result["stale_object_count"] = module.objectIds.size() - nodes.size();
+  if (nodes.empty())
+  {
+    result["bounds"] = py::none();
+  }
+  else
+  {
+    auto bounds = nodes.front()->logicalBounds();
+    for (auto* node : nodes | std::views::drop(1))
+    {
+      bounds = vm::merge(bounds, node->logicalBounds());
+    }
+    result["bounds"] = boundsSnapshot(bounds);
+  }
   result["operation_count"] = module.operationIds.size();
   return result;
 }
 
-std::vector<py::dict> modulesForCurrentDocument()
+std::vector<py::dict> modulesForCurrentDocument(
+  const bool includeStale = false, const bool includeEmpty = false)
 {
   const auto& context = requireContext();
   if (context.moduleStore == nullptr)
@@ -1382,14 +1423,21 @@ std::vector<py::dict> modulesForCurrentDocument()
       continue;
     }
     seen.insert(module.moduleId);
-    result.push_back(moduleSummary(module));
+    auto summary = moduleSummary(document.get().map(), module);
+    if (
+      (!includeEmpty && module.objectIds.empty())
+      || (!includeStale && py::cast<size_t>(summary["live_object_count"]) == 0u))
+    {
+      continue;
+    }
+    result.push_back(std::move(summary));
   }
   return result;
 }
 
 py::dict inspectModule(const std::string& moduleId)
 {
-  for (auto& summary : modulesForCurrentDocument())
+  for (auto& summary : modulesForCurrentDocument(true, true))
   {
     if (py::cast<std::string>(summary["id"]) == moduleId)
     {
@@ -1420,26 +1468,7 @@ py::dict selectModule(const std::string& moduleId)
     throw py::key_error{"Unknown module '" + moduleId + "'"};
   }
 
-  auto nodes = std::vector<mdl::Node*>{};
-  for (const auto& objectId : module->second.objectIds)
-  {
-    const auto resolved = objectRegistry().resolveExternalId(map, objectId);
-    if (!resolved.ok)
-    {
-      continue;
-    }
-    const auto path =
-      automation::AutomationObjectRegistry::parseLegacyObjectId(resolved.legacyPathId);
-    if (!path)
-    {
-      continue;
-    }
-    if (auto* node = map.worldNode().resolvePath(*path); node != nullptr)
-    {
-      nodes.push_back(node);
-    }
-  }
-  nodes = kdl::vec_sort_and_remove_duplicates(std::move(nodes));
+  auto nodes = moduleNodes(map, module->second);
 
   auto transaction = ScopedPythonTransaction{document.get(), "Python API Select Module"};
   try
@@ -4625,7 +4654,11 @@ void defineModule(py::module_& module)
   });
 
   auto modules = module.def_submodule("modules", "Generated map module queries.");
-  modules.def("list", modulesForCurrentDocument);
+  modules.def(
+    "list",
+    modulesForCurrentDocument,
+    py::arg("include_stale") = false,
+    py::arg("include_empty") = false);
   modules.def("inspect", inspectModule, py::arg("module_id"));
   modules.def("select", selectModule, py::arg("module_id"));
 

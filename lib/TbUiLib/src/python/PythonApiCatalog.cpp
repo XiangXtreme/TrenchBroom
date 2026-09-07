@@ -294,7 +294,8 @@ constexpr auto GroupsSymbols = std::array{
 };
 
 constexpr auto ModulesSymbols = std::array{
-  PythonApiSymbol{"list", Function, "() -> list[dict]"},
+  PythonApiSymbol{
+    "list", Function, "(include_stale=False, include_empty=False) -> list[dict]"},
   PythonApiSymbol{"inspect", Function, "(module_id) -> dict"},
   PythonApiSymbol{"select", Function, "(module_id) -> dict"},
 };
