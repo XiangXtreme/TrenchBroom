@@ -33,6 +33,7 @@
 #include "mcp/McpBridgeConfig.h"
 #include "mcp/McpBridgeMessages.h"
 #include "mcp/McpError.h"
+#include "ui/automation/AutomationStateRecords.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include <functional>
@@ -112,38 +113,11 @@ struct McpOperationRecord
   QJsonObject detail() const;
 };
 
-struct McpBrushMetadataRecord
-{
-  QString objectId;
-  QString documentFingerprint;
-  QJsonObject metadata;
-  bool stale = false;
-};
-
-struct McpModuleRecord
-{
-  QString moduleId;
-  QString documentFingerprint;
-  QStringList objectIds;
-  QStringList operationIds;
-  QJsonObject metadata;
-  int revision = 0;
-  QString activeOperationId;
-  QString contentHash;
-  QJsonObject qualityPolicy;
-};
-
-struct McpIrPreviewCacheRecord
-{
-  QString previewId;
-  QString sourcePath;
-  QString irHash;
-  QString documentFingerprint;
-  QString activeDocumentPath;
-  qint64 createdAtMs = 0;
-  qint64 expiresAtMs = 0;
-  QJsonObject preview;
-};
+// Compatibility names for legacy MCP adapter code. New services use the
+// automation names above and must not depend on this bridge header.
+using McpBrushMetadataRecord = automation::AutomationObjectMetadataRecord;
+using McpModuleRecord = automation::AutomationModuleRecord;
+using McpIrPreviewCacheRecord = automation::AutomationIrPreviewRecord;
 
 struct McpReviewResourceRecord
 {

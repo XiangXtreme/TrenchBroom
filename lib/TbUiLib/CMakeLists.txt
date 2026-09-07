@@ -389,6 +389,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationAssets.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationDocuments.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationObjectRegistry.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationStateRecords.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationTransaction.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationValidation.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpBridgeServer.h
