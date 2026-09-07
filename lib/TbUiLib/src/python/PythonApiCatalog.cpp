@@ -164,6 +164,11 @@ constexpr auto DocumentsSymbols = std::array{
   PythonApiSymbol{
     "open", Function, "(path) -> Document", PythonApiValueType{PythonApiType::Document}},
   PythonApiSymbol{
+    "open_verified",
+    Function,
+    "(path) -> Document",
+    PythonApiValueType{PythonApiType::Document}},
+  PythonApiSymbol{
     "activate",
     Function,
     "(document) -> Document",

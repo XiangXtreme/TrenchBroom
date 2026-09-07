@@ -866,6 +866,21 @@ DocumentHandle openDocument(const std::string& path)
     PythonHandleRegistry::instance().documentGeneration(&openedWindow->document())};
 }
 
+DocumentHandle openVerifiedDocument(const std::string& path)
+{
+  const auto requestedPath = absolutePathFromPython(path);
+  auto document = openDocument(path);
+  auto pathError = std::error_code{};
+  const auto& openedPath = document.get().map().path();
+  if (
+    openedPath.empty()
+    || !std::filesystem::equivalent(openedPath, requestedPath, pathError))
+  {
+    throw std::runtime_error{"Opened document does not match the requested path"};
+  }
+  return document;
+}
+
 DocumentHandle activateDocument(DocumentHandle& document)
 {
   requirePythonActionMode("activate");
@@ -4779,6 +4794,7 @@ void defineModule(py::module_& module)
   documents.def("list", openDocuments);
   documents.def("snapshot", []() { return documentSnapshot(currentDocument()); });
   documents.def("open", openDocument, py::arg("path"));
+  documents.def("open_verified", openVerifiedDocument, py::arg("path"));
   documents.def("activate", activateDocument, py::arg("document"));
   documents.def(
     "close", closeDocument, py::arg("document"), py::arg("discard_changes") = false);

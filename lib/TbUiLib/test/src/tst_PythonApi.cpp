@@ -268,6 +268,7 @@ with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
     f.write(next(entity.classname for entity in doc.entities if entity.classname == "worldspawn"))
 opened = tb.documents.open(save_path)
 assert opened.path == save_path
+assert tb.documents.open_verified(save_path).path == save_path
 assert tb.documents.activate(opened).id == opened.id
 assert len(tb.documents.list()) == 1
 )");
