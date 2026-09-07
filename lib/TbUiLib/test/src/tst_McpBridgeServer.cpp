@@ -203,6 +203,9 @@ TEST_CASE(
   const auto namespacedSymbols = namespacedApi.result.value("symbols").toArray();
   REQUIRE(namespacedSymbols.size() == 1);
   CHECK(namespacedSymbols.first().toObject().value("returns").toString() == "Document");
+  CHECK(
+    namespacedSymbols.first().toObject().value("example").toString()
+    == "import trenchbroom as tb\nvalue = tb.documents.current");
 
   const auto request = mcp::McpBridgeRequest{
     "execute",

@@ -141,6 +141,20 @@ QString pythonApiExample(const PythonApiTypeInfo& type, const PythonApiSymbol& s
     return QString{"import trenchbroom as tb\nvalue = tb.Plane(tb.Vec3(0, 0, 1), 0).%1"}
       .arg(name);
   }
+  switch (type.type)
+  {
+  case PythonApiType::Documents:
+  case PythonApiType::Objects:
+  case PythonApiType::Entities:
+  case PythonApiType::Brushes:
+  case PythonApiType::Faces:
+  case PythonApiType::Materials:
+  case PythonApiType::Actions:
+    return QString{"import trenchbroom as tb\nvalue = tb.%1.%2"}.arg(
+      QString::fromUtf8(type.name), name);
+  default:
+    break;
+  }
   return QString{"# Obtain a %1 handle from its documented owner.\nvalue = handle.%2"}
     .arg(QString::fromUtf8(type.name), name);
 }
