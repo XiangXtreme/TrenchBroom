@@ -49,6 +49,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationGeometry.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include "kd/string_compare.h"
@@ -7378,9 +7379,11 @@ McpBridgeToolResult geometryAnalyzeSelectionResult(
   mdl::Map& map, const QJsonObject& params)
 {
   const auto grid = optionalDouble(params, "grid", 1.0);
-  if (!finitePositive(grid))
+  auto error = std::string{};
+  const auto analysis = automation::analyzeSelectionGeometry(map, grid, error);
+  if (!analysis)
   {
-    return invalidParamsFailure("grid must be greater than zero");
+    return invalidParamsFailure(QString::fromStdString(error));
   }
   const auto detail = params.value("detail").toString("summary").trimmed().toLower();
   const auto detailLevel = detail == "full"  ? QString{"full"}
@@ -7392,48 +7395,38 @@ McpBridgeToolResult geometryAnalyzeSelectionResult(
     detailLevel == "full" && mcpOptionalBool(params, "includeVertices", false);
   const auto includeBrushEntries = detailLevel == "ids" || detailLevel == "full";
 
-  auto brushes = selectedBrushNodes(map);
   auto brushResults = QJsonArray{};
   auto objectIds = QJsonArray{};
   auto invalidObjectIds = QJsonArray{};
   auto nonGridAlignedObjectIds = QJsonArray{};
   auto materials = QStringList{};
-  auto invalidBrushCount = 0;
-  auto nonGridAlignedCount = 0;
-  auto bounds = vm::bbox3d{};
-  auto hasBounds = false;
   auto truncated = false;
-  for (const auto* brushNode : brushes)
+  for (const auto& fact : analysis->brushes)
   {
+    const auto* brushNode = fact.brush;
     const auto& brush = brushNode->brush();
-    const auto gridOk = brushGridAligned(brush, grid);
     const auto objectId = nodePathId(*brushNode, map.worldNode());
-    if (!gridOk)
+    if (!fact.gridAligned)
     {
-      ++nonGridAlignedCount;
       if (nonGridAlignedObjectIds.size() < 10)
       {
         nonGridAlignedObjectIds.push_back(objectId);
       }
     }
-    if (!brush.closed() || !brush.fullySpecified())
+    if (!fact.convex)
     {
-      ++invalidBrushCount;
       if (invalidObjectIds.size() < 10)
       {
         invalidObjectIds.push_back(objectId);
       }
     }
 
-    bounds = hasBounds ? vm::merge(bounds, brushNode->logicalBounds())
-                       : brushNode->logicalBounds();
-    hasBounds = true;
-
-    for (const auto& material : brushMaterials(brush))
+    for (const auto& material : fact.materials)
     {
-      if (!materials.contains(material))
+      const auto name = QString::fromStdString(material);
+      if (!materials.contains(name))
       {
-        materials.push_back(material);
+        materials.push_back(name);
       }
     }
 
@@ -7455,12 +7448,17 @@ McpBridgeToolResult geometryAnalyzeSelectionResult(
     if (detailLevel == "full")
     {
       auto brushJson = nodeSummaryJson(*brushNode, map.worldNode());
-      brushJson.insert("vertexCount", static_cast<int>(brush.vertexCount()));
-      brushJson.insert("edgeCount", static_cast<int>(brush.edgeCount()));
-      brushJson.insert("closed", brush.closed());
-      brushJson.insert("convex", brush.closed() && brush.fullySpecified());
-      brushJson.insert("gridAligned", gridOk);
-      brushJson.insert("materials", stringListToJsonArray(brushMaterials(brush)));
+      brushJson.insert("vertexCount", static_cast<int>(fact.vertexCount));
+      brushJson.insert("edgeCount", static_cast<int>(fact.edgeCount));
+      brushJson.insert("closed", fact.closed);
+      brushJson.insert("convex", fact.convex);
+      brushJson.insert("gridAligned", fact.gridAligned);
+      auto brushMaterials = QStringList{};
+      for (const auto& material : fact.materials)
+      {
+        brushMaterials.push_back(QString::fromStdString(material));
+      }
+      brushJson.insert("materials", stringListToJsonArray(brushMaterials));
       if (includeVertices)
       {
         brushJson.insert("vertices", vertexPositionsToJson(brush.vertexPositions()));
@@ -7470,18 +7468,18 @@ McpBridgeToolResult geometryAnalyzeSelectionResult(
   }
 
   auto result = QJsonObject{
-    {"brushCount", static_cast<int>(brushes.size())},
-    {"invalidBrushCount", invalidBrushCount},
-    {"nonGridAlignedCount", nonGridAlignedCount},
+    {"brushCount", static_cast<int>(analysis->brushes.size())},
+    {"invalidBrushCount", static_cast<int>(analysis->invalidBrushCount)},
+    {"nonGridAlignedCount", static_cast<int>(analysis->nonGridAlignedCount)},
     {"grid", grid},
     {"detail", detailLevel},
     {"truncated", truncated},
     {"returnedBrushCount", includeBrushEntries ? brushResults.size() : 0},
     {"materials", stringListToJsonArray(materials)},
   };
-  if (hasBounds)
+  if (analysis->bounds)
   {
-    result.insert("bounds", boundsToJson(bounds));
+    result.insert("bounds", boundsToJson(*analysis->bounds));
   }
   if (!invalidObjectIds.isEmpty())
   {

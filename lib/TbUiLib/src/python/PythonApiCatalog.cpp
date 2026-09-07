@@ -19,6 +19,7 @@ constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::Groups, "groups"},
   PythonApiTypeInfo{PythonApiType::Modules, "modules"},
   PythonApiTypeInfo{PythonApiType::Ir, "ir"},
+  PythonApiTypeInfo{PythonApiType::Geometry, "geometry"},
   PythonApiTypeInfo{PythonApiType::History, "history"},
   PythonApiTypeInfo{PythonApiType::Assets, "assets"},
   PythonApiTypeInfo{PythonApiType::Actions, "actions"},
@@ -65,6 +66,8 @@ constexpr auto ModuleSymbols = std::array{
   PythonApiSymbol{
     "modules", Property, "modules", PythonApiValueType{PythonApiType::Modules}},
   PythonApiSymbol{"ir", Property, "ir", PythonApiValueType{PythonApiType::Ir}},
+  PythonApiSymbol{
+    "geometry", Property, "geometry", PythonApiValueType{PythonApiType::Geometry}},
   PythonApiSymbol{
     "history", Property, "history", PythonApiValueType{PythonApiType::History}},
   PythonApiSymbol{
@@ -312,6 +315,11 @@ constexpr auto ModulesSymbols = std::array{
 constexpr auto IrSymbols = std::array{
   PythonApiSymbol{"validate", Function, "(ir) -> dict"},
   PythonApiSymbol{"preview", Function, "(ir) -> dict"},
+};
+
+constexpr auto GeometrySymbols = std::array{
+  PythonApiSymbol{
+    "analyze_selection", Function, "(grid=1.0, detail='summary', max_brushes=100) -> dict"},
 };
 
 constexpr auto AssetsSymbols = std::array{
@@ -612,6 +620,8 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
     return ModulesSymbols;
   case PythonApiType::Ir:
     return IrSymbols;
+  case PythonApiType::Geometry:
+    return GeometrySymbols;
   case PythonApiType::History:
     return HistorySymbols;
   case PythonApiType::Assets:

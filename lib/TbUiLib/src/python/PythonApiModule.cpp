@@ -68,6 +68,7 @@
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationAssets.h"
 #include "ui/automation/AutomationDocuments.h"
+#include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationIr.h"
 #include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationTransaction.h"
@@ -1273,6 +1274,61 @@ py::object selectedObjectBounds(SelectionHandle selection)
 {
   const auto& bounds = selection.getDocument().map().selectionBounds();
   return bounds ? py::object{boundsSnapshot(*bounds)} : py::none();
+}
+
+py::dict analyzeSelectionGeometryFromPython(
+  const double grid, const std::string& detail, const size_t maxBrushes)
+{
+  auto document = currentDocument();
+  auto error = std::string{};
+  const auto analysis =
+    automation::analyzeSelectionGeometry(document.get().map(), grid, error);
+  if (!analysis)
+  {
+    throw py::value_error{error};
+  }
+
+  const auto normalizedDetail = QString::fromStdString(detail).trimmed().toLower();
+  if (normalizedDetail != "summary" && normalizedDetail != "full")
+  {
+    throw py::value_error{"detail must be summary or full"};
+  }
+
+  auto result = py::dict{};
+  result["brush_count"] = analysis->brushes.size();
+  result["invalid_brush_count"] = analysis->invalidBrushCount;
+  result["non_grid_aligned_count"] = analysis->nonGridAlignedCount;
+  result["grid"] = analysis->grid;
+  result["detail"] = normalizedDetail.toStdString();
+  if (analysis->bounds)
+  {
+    result["bounds"] = boundsSnapshot(*analysis->bounds);
+  }
+  else
+  {
+    result["bounds"] = py::none();
+  }
+  result["materials"] = analysis->materials;
+
+  if (normalizedDetail == "full")
+  {
+    auto brushes = std::vector<BrushHandle>{};
+    const auto returnedCount = std::min(maxBrushes, analysis->brushes.size());
+    brushes.reserve(returnedCount);
+    for (auto index = size_t{0u}; index < returnedCount; ++index)
+    {
+      auto* brush = analysis->brushes[index].brush;
+      brushes.push_back(BrushHandle{
+        &document.get(),
+        document.generation,
+        brush,
+        PythonHandleRegistry::instance().nodeLifetimeGeneration(brush)});
+    }
+    result["brushes"] = std::move(brushes);
+    result["returned_brush_count"] = returnedCount;
+    result["truncated"] = returnedCount < analysis->brushes.size();
+  }
+  return result;
 }
 
 py::dict validationCheck(const bool includeHidden, const size_t limit)
@@ -4938,6 +4994,14 @@ void defineModule(py::module_& module)
   auto ir = module.def_submodule("ir", "IR validation and compact preview operations.");
   ir.def("validate", validateAutomationIrFromPython, py::arg("ir"));
   ir.def("preview", validateAutomationIrFromPython, py::arg("ir"));
+
+  auto geometry = module.def_submodule("geometry", "Native geometry analysis operations.");
+  geometry.def(
+    "analyze_selection",
+    analyzeSelectionGeometryFromPython,
+    py::arg("grid") = 1.0,
+    py::arg("detail") = "summary",
+    py::arg("max_brushes") = 100u);
 
   auto placeModel = [](
                       const std::string& path,

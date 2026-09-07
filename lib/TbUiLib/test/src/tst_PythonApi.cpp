@@ -209,6 +209,11 @@ history = tb.history.status()
 assert {"can_undo", "can_redo", "undo_name", "redo_name"} <= set(history)
 brush = tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(16,16,-16),
                            (-16,-16,16),(16,-16,16),(16,16,16),(-16,16,16)])
+geometry = tb.geometry.analyze_selection(detail="full")
+assert geometry["brush_count"] >= 1
+assert geometry["invalid_brush_count"] == 0
+assert geometry["returned_brush_count"] == len(geometry["brushes"])
+assert geometry["bounds"] is not None
 all_brushes = tb.brushes.list()
 assert len(all_brushes) >= 1
 assert len(all_brushes[0].faces()) > 0
