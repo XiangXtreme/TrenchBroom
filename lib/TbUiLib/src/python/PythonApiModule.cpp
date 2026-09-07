@@ -3434,8 +3434,16 @@ void defineModule(py::module_& module)
   objects.def("duplicate", duplicateHelper);
   objects.def("delete_selection", deleteSelectionHelper);
   objects.def("deselect_all", deselectAllHelper);
+  objects.def("set_selection", [currentSelection](const py::iterable& objects) {
+    auto selection = currentSelection();
+    setSelection(selection, objects);
+  });
 
   auto entities = module.def_submodule("entities", "Entity collection operations.");
+  entities.def("list", []() {
+    auto document = currentDocument();
+    return allEntities(document.get());
+  });
   entities.def("selected", selectedEntities, py::arg("include_brushes") = false);
 
   auto brushes =

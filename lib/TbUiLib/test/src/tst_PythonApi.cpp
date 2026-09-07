@@ -145,6 +145,8 @@ assert tb.documents.current().path == doc.path
 assert len(tb.documents.list()) == 1
 assert tb.documents.list()[0].path == doc.path
 assert tb.objects.selection().brushes == []
+tb.objects.set_selection([])
+assert tb.entities.list()[0].classname == "worldspawn"
 assert tb.entities.selected() == []
 assert tb.brushes.selected() == []
 assert tb.faces.selected() == []

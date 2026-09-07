@@ -157,9 +157,15 @@ constexpr auto ObjectsSymbols = std::array{
   PythonApiSymbol{"duplicate", Function, "(target=None)"},
   PythonApiSymbol{"delete_selection", Function, "() -> bool"},
   PythonApiSymbol{"deselect_all", Function, "()"},
+  PythonApiSymbol{"set_selection", Function, "(objects)"},
 };
 
 constexpr auto EntitiesSymbols = std::array{
+  PythonApiSymbol{
+    "list",
+    Function,
+    "() -> list[Entity]",
+    PythonApiValueType{PythonApiType::Entity, 1u}},
   PythonApiSymbol{
     "selected",
     Function,
