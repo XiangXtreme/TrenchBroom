@@ -16,6 +16,7 @@ constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::Brushes, "brushes"},
   PythonApiTypeInfo{PythonApiType::Faces, "faces"},
   PythonApiTypeInfo{PythonApiType::Materials, "materials"},
+  PythonApiTypeInfo{PythonApiType::History, "history"},
   PythonApiTypeInfo{PythonApiType::Actions, "actions"},
   PythonApiTypeInfo{PythonApiType::Vec3, "Vec3"},
   PythonApiTypeInfo{PythonApiType::Plane, "Plane"},
@@ -54,6 +55,8 @@ constexpr auto ModuleSymbols = std::array{
   PythonApiSymbol{"faces", Property, "faces", PythonApiValueType{PythonApiType::Faces}},
   PythonApiSymbol{
     "materials", Property, "materials", PythonApiValueType{PythonApiType::Materials}},
+  PythonApiSymbol{
+    "history", Property, "history", PythonApiValueType{PythonApiType::History}},
   PythonApiSymbol{
     "actions", Property, "actions", PythonApiValueType{PythonApiType::Actions}},
   PythonApiSymbol{
@@ -259,6 +262,12 @@ constexpr auto MaterialsSymbols = std::array{
     "(query, limit=50) -> list[Material]",
     PythonApiValueType{PythonApiType::Material, 1u}},
   PythonApiSymbol{"current", Function, "() -> str"},
+};
+
+constexpr auto HistorySymbols = std::array{
+  PythonApiSymbol{"status", Function, "(document=None) -> dict"},
+  PythonApiSymbol{"undo", Function, "(document=None) -> bool"},
+  PythonApiSymbol{"redo", Function, "(document=None) -> bool"},
 };
 
 constexpr auto ActionsSymbols = std::array{
@@ -530,6 +539,8 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
     return FacesSymbols;
   case PythonApiType::Materials:
     return MaterialsSymbols;
+  case PythonApiType::History:
+    return HistorySymbols;
   case PythonApiType::Actions:
     return ActionsSymbols;
   case PythonApiType::Vec3:

@@ -177,6 +177,8 @@ assert isinstance(tb.materials.collections(), list)
 assert isinstance(tb.materials.current(), str)
 assert tb.materials.search("definitely-not-a-loaded-material") == []
 assert isinstance(tb.actions.list(), list)
+history = tb.history.status()
+assert {"can_undo", "can_redo", "undo_name", "redo_name"} <= set(history)
 brush = tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(16,16,-16),
                            (-16,-16,16),(16,-16,16),(16,16,16),(-16,16,16)])
 all_brushes = tb.brushes.list()

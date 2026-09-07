@@ -865,6 +865,45 @@ void closeDocument(DocumentHandle& document, const bool discardChanges)
   window.closeDocument(discardChanges);
 }
 
+py::dict historyStatus(DocumentHandle& document)
+{
+  const auto& map = document.get().map();
+  auto result = py::dict{};
+  result["can_undo"] = map.canUndoCommand();
+  result["can_redo"] = map.canRedoCommand();
+  result["undo_name"] = map.undoCommandName() != nullptr
+                          ? py::cast(*map.undoCommandName())
+                          : py::none();
+  result["redo_name"] = map.redoCommandName() != nullptr
+                          ? py::cast(*map.redoCommandName())
+                          : py::none();
+  return result;
+}
+
+bool undoDocument(DocumentHandle& document)
+{
+  requirePythonActionMode("history.undo");
+  auto& window = mapWindowForDocument(document);
+  if (!window.canUndo())
+  {
+    return false;
+  }
+  window.undo();
+  return true;
+}
+
+bool redoDocument(DocumentHandle& document)
+{
+  requirePythonActionMode("history.redo");
+  auto& window = mapWindowForDocument(document);
+  if (!window.canRedo())
+  {
+    return false;
+  }
+  window.redo();
+  return true;
+}
+
 Vec3 vec3FromObject(const py::handle& object)
 {
   if (py::isinstance<Vec3>(object))
@@ -4190,6 +4229,32 @@ void defineModule(py::module_& module)
   materials.def("search", searchMaterials, py::arg("query"), py::arg("limit") = 50u);
   materials.def(
     "current", []() { return currentDocument().get().map().currentMaterialName(); });
+
+  auto historyDocument = [](const py::object& document) {
+    return document.is_none() ? currentDocument() : py::cast<DocumentHandle>(document);
+  };
+  auto history = module.def_submodule("history", "Native undo and redo operations.");
+  history.def(
+    "status",
+    [historyDocument](const py::object& document) {
+      auto target = historyDocument(document);
+      return historyStatus(target);
+    },
+    py::arg("document") = py::none());
+  history.def(
+    "undo",
+    [historyDocument](const py::object& document) {
+      auto target = historyDocument(document);
+      return undoDocument(target);
+    },
+    py::arg("document") = py::none());
+  history.def(
+    "redo",
+    [historyDocument](const py::object& document) {
+      auto target = historyDocument(document);
+      return redoDocument(target);
+    },
+    py::arg("document") = py::none());
 
   auto actions =
     module.def_submodule("actions", "Native action discovery and execution.");

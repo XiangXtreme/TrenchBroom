@@ -18,6 +18,7 @@ enum class PythonApiType
   Brushes,
   Faces,
   Materials,
+  History,
   Actions,
   Vec3,
   Plane,
