@@ -7,6 +7,8 @@
 #include "ui/automation/AutomationIr.h"
 
 #include <QCryptographicHash>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 
 #include <algorithm>
@@ -119,7 +121,7 @@ bool validateAutomationIr(QJsonObject& ir, QString& error, QJsonArray& warnings)
       !operation.isObject()
       || operation.toObject().value("type").toString().trimmed().isEmpty())
     {
-      error = QString{"IR operations[%1] requires an object with type"}.arg(i);
+      error = QString{"IR operations[%1] requires type on an object"}.arg(i);
       return false;
     }
   }
@@ -213,6 +215,43 @@ AutomationIrParseResult parseAutomationIr(const QJsonObject& request)
   }
   result.ir = std::move(ir);
   return result;
+}
+
+AutomationIrParseResult parseAutomationIrFile(const QString& path)
+{
+  auto result = AutomationIrParseResult{};
+  const auto info = QFileInfo{path};
+  if (!info.isAbsolute())
+  {
+    result.error = "file-based IR path must be absolute";
+    return result;
+  }
+  if (!info.isFile() || !info.isReadable())
+  {
+    result.error = QString{"IR file is not readable: %1"}.arg(path);
+    return result;
+  }
+  if (info.size() > 10 * 1024 * 1024)
+  {
+    result.error = "IR file is too large; maximum size is 10 MiB";
+    return result;
+  }
+
+  auto file = QFile{path};
+  if (!file.open(QIODevice::ReadOnly))
+  {
+    result.error = QString{"Could not open IR file: %1"}.arg(path);
+    return result;
+  }
+  auto parseError = QJsonParseError{};
+  const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
+  if (parseError.error != QJsonParseError::NoError || !document.isObject())
+  {
+    result.error =
+      QString{"IR file must contain a JSON object: %1"}.arg(parseError.errorString());
+    return result;
+  }
+  return parseAutomationIr(QJsonObject{{"ir", document.object()}});
 }
 
 QString canonicalAutomationIrHash(const QJsonObject& ir)

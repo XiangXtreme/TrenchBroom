@@ -1747,38 +1747,14 @@ std::optional<QJsonObject> irFromFileParams(
     error = "file-based IR requires path";
     return std::nullopt;
   }
-  const auto info = QFileInfo{path};
-  if (!info.isAbsolute())
+  const auto parsed = automation::parseAutomationIrFile(path);
+  if (!parsed.ir)
   {
-    error = "file-based IR path must be absolute";
+    error = parsed.error;
     return std::nullopt;
   }
-  if (!info.isFile() || !info.isReadable())
-  {
-    error = QString{"IR file is not readable: %1"}.arg(path);
-    return std::nullopt;
-  }
-  if (info.size() > 10 * 1024 * 1024)
-  {
-    error = "IR file is too large; maximum size is 10 MiB";
-    return std::nullopt;
-  }
-
-  auto file = QFile{path};
-  if (!file.open(QIODevice::ReadOnly))
-  {
-    error = QString{"Could not open IR file: %1"}.arg(path);
-    return std::nullopt;
-  }
-  auto parseError = QJsonParseError{};
-  const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
-  if (parseError.error != QJsonParseError::NoError || !document.isObject())
-  {
-    error =
-      QString{"IR file must contain a JSON object: %1"}.arg(parseError.errorString());
-    return std::nullopt;
-  }
-  auto ir = document.object();
+  auto ir = *parsed.ir;
+  auto parsedWarnings = parsed.warnings;
   if (params.value("qualityPolicy").isObject())
   {
     ir.insert("qualityPolicy", params.value("qualityPolicy"));
@@ -1794,6 +1770,13 @@ std::optional<QJsonObject> irFromFileParams(
   if (!validateIrShape(ir, error, warnings))
   {
     return std::nullopt;
+  }
+  if (warnings != nullptr)
+  {
+    for (const auto& warning : parsedWarnings)
+    {
+      warnings->push_back(warning);
+    }
   }
   return ir;
 }
