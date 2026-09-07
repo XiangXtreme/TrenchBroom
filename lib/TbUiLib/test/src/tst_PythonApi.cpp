@@ -26,6 +26,7 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
+#include "mdl/EntityDefinitionManager.h"
 #include "mdl/EntityNode.h"
 #include "mdl/EntityProperties.h"
 #include "mdl/GameConfigFixture.h"
@@ -127,6 +128,9 @@ TEST_CASE("PythonApi")
                     appController.glManager().resourceManager())
                   | kdl::value();
   auto window = MapWindow{appController, std::move(document)};
+  window.document().map().entityDefinitionManager().setDefinitions({
+    {"test_spawn", {}, "", {}, mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}}},
+  });
 
   SECTION("runs Python API smoke script")
   {
@@ -272,6 +276,19 @@ assert created_entity.classname == "info_player_start"
 assert created_entity.id.startswith("mcp:")
 assert created_entity["targetname"] == "python-api-entity"
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 1
+checked_entities = tb.entities.create_checked_batch([
+    {"classname": "test_spawn", "origin": (96, 32, 48), "properties": {"targetname": "checked"}},
+    {"classname": "test_spawn", "origin": (128, 32, 48)},
+])
+assert len(checked_entities) == 2
+assert checked_entities[0]["targetname"] == "checked"
+checked_count = len(tb.entities.find(classname="test_spawn"))
+try:
+    tb.entities.create_checked_batch([{"classname": "test_spawn"}, {"classname": "missing"}])
+    raise AssertionError("checked entity batch accepted unknown class")
+except ValueError:
+    pass
+assert len(tb.entities.find(classname="test_spawn")) == checked_count
 tb.entities.update(created_entity, {"health": "100"}, ["targetname"])
 assert created_entity["health"] == "100"
 assert "targetname" not in created_entity
