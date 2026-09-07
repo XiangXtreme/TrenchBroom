@@ -1,6 +1,9 @@
 #pragma once
 
+#include "ui/automation/AutomationStateRecords.h"
+
 #include <filesystem>
+#include <map>
 #include <string>
 
 namespace tb::ui
@@ -34,6 +37,7 @@ struct PythonExecutionContext
   std::filesystem::path pluginDirectory;
   std::string pluginId;
   automation::AutomationObjectRegistry* objectRegistry = nullptr;
+  const std::map<QString, automation::AutomationModuleRecord>* moduleStore = nullptr;
   bool mcpExecution = false;
   bool allowNonTransactionalActions = true;
   bool allowPersistentUi = true;

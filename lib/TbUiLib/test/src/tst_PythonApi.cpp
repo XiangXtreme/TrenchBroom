@@ -183,6 +183,12 @@ try:
 except ValueError:
     pass
 assert isinstance(tb.actions.list(), list)
+assert tb.modules.list() == []
+try:
+    tb.modules.inspect("missing-module")
+    raise AssertionError("module inspection accepted a missing module")
+except KeyError:
+    pass
 validation = tb.validation.check()
 assert validation["valid"] == (validation["total_count"] == 0)
 assert validation["count"] <= validation["total_count"]

@@ -1307,6 +1307,60 @@ py::dict validationCheck(const bool includeHidden, const size_t limit)
   return result;
 }
 
+py::dict moduleSummary(const automation::AutomationModuleRecord& module)
+{
+  auto result = py::dict{};
+  result["id"] = module.moduleId;
+  result["document_fingerprint"] = module.documentFingerprint;
+  result["metadata"] = module.metadata.toVariantMap();
+  result["revision"] = module.revision;
+  result["active_operation_id"] = module.activeOperationId;
+  result["content_hash"] = module.contentHash;
+  result["quality_policy"] = module.qualityPolicy.toVariantMap();
+  result["object_count"] = module.objectIds.size();
+  result["operation_count"] = module.operationIds.size();
+  return result;
+}
+
+std::vector<py::dict> modulesForCurrentDocument()
+{
+  const auto& context = requireContext();
+  if (context.moduleStore == nullptr)
+  {
+    return {};
+  }
+
+  const auto document = currentDocument();
+  const auto fingerprint = objectRegistry().documentFingerprint(document.get().map());
+  auto result = std::vector<py::dict>{};
+  auto seen = std::set<QString>{};
+  for (const auto& [key, module] : *context.moduleStore)
+  {
+    Q_UNUSED(key);
+    if (
+      module.documentFingerprint != fingerprint || module.moduleId.isEmpty()
+      || seen.contains(module.moduleId))
+    {
+      continue;
+    }
+    seen.insert(module.moduleId);
+    result.push_back(moduleSummary(module));
+  }
+  return result;
+}
+
+py::dict inspectModule(const std::string& moduleId)
+{
+  for (auto& summary : modulesForCurrentDocument())
+  {
+    if (py::cast<std::string>(summary["id"]) == moduleId)
+    {
+      return summary;
+    }
+  }
+  throw py::key_error{"Unknown module '" + moduleId + "'"};
+}
+
 py::dict groupSummary(const mdl::GroupNode& group)
 {
   auto result = py::dict{};
@@ -4468,6 +4522,10 @@ void defineModule(py::module_& module)
   groups.def("ungroup_selected", [currentSelection]() {
     return ungroupSelectedGroups(currentSelection());
   });
+
+  auto modules = module.def_submodule("modules", "Generated map module queries.");
+  modules.def("list", modulesForCurrentDocument);
+  modules.def("inspect", inspectModule, py::arg("module_id"));
 
   auto placeModel = [](
                       const std::string& path,
