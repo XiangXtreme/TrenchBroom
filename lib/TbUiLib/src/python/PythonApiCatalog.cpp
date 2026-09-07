@@ -298,6 +298,7 @@ constexpr auto ModulesSymbols = std::array{
     "list", Function, "(include_stale=False, include_empty=False) -> list[dict]"},
   PythonApiSymbol{"inspect", Function, "(module_id) -> dict"},
   PythonApiSymbol{"select", Function, "(module_id) -> dict"},
+  PythonApiSymbol{"compact", Function, "(module_id) -> dict"},
   PythonApiSymbol{"forget", Function, "(module_id)"},
 };
 

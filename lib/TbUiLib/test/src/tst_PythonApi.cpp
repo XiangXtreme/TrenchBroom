@@ -288,6 +288,7 @@ assert len(tb.documents.list()) == 1
     auto& runtime = PythonRuntime::instance();
     auto moduleRegistry = automation::AutomationObjectRegistry{};
     auto moduleStore = std::map<QString, automation::AutomationModuleRecord>{};
+    auto metadataStore = std::map<QString, automation::AutomationObjectMetadataRecord>{};
     const auto documentFingerprint =
       moduleRegistry.documentFingerprint(window.document().map());
     const auto worldObjectId = moduleRegistry.registerNode(
@@ -313,7 +314,15 @@ assert len(tb.documents.list()) == 1
       "stale-module",
       automation::AutomationModuleRecord{
         "stale-module", documentFingerprint, {"mcp:missing"}, {}, {}, 1, {}, {}, {}});
+    metadataStore.emplace(
+      "stale-metadata",
+      automation::AutomationObjectMetadataRecord{
+        "mcp:missing",
+        documentFingerprint,
+        QJsonObject{{"moduleId", "stale-module"}},
+        true});
     context.objectRegistry = &moduleRegistry;
+    context.metadataStore = &metadataStore;
     context.moduleStore = &moduleStore;
 
     const auto modules = runtime.runMcpScript(
@@ -364,6 +373,21 @@ assert len(tb.documents.list()) == 1
     CHECK_FALSE(moduleStore.contains("test-module"));
     CHECK(moduleStore.contains("other-document-module"));
     CHECK(moduleStore.contains("stale-module"));
+
+    const auto compacted = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "result = tb.modules.compact('stale-module')",
+        "<mcp-python:compact-module>",
+        {},
+      });
+    CAPTURE(compacted.error);
+    REQUIRE(compacted.ok);
+    CHECK(compacted.value.toObject().value("removed_stale_metadata_count").toInt() == 1);
+    CHECK(compacted.value.toObject().value("removed_stale_object_id_count").toInt() == 1);
+    CHECK(metadataStore.empty());
+    CHECK(moduleStore.at("stale-module").objectIds.empty());
 
     moduleStore.emplace(
       "rollback-module",

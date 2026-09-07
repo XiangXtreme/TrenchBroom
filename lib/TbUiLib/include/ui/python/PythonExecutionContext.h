@@ -37,6 +37,7 @@ struct PythonExecutionContext
   std::filesystem::path pluginDirectory;
   std::string pluginId;
   automation::AutomationObjectRegistry* objectRegistry = nullptr;
+  std::map<QString, automation::AutomationObjectMetadataRecord>* metadataStore = nullptr;
   std::map<QString, automation::AutomationModuleRecord>* moduleStore = nullptr;
   bool mcpExecution = false;
   bool allowNonTransactionalActions = true;

@@ -1521,6 +1521,65 @@ void forgetModule(const std::string& moduleId)
   }
 }
 
+py::dict compactModule(const std::string& moduleId)
+{
+  const auto& context = requireContext();
+  if (context.moduleStore == nullptr)
+  {
+    throw py::key_error{"Unknown module '" + moduleId + "'"};
+  }
+
+  auto document = currentDocument();
+  auto& map = document.get().map();
+  const auto fingerprint = objectRegistry().documentFingerprint(map);
+  const auto moduleIdQString = QString::fromStdString(moduleId);
+  auto module = std::ranges::find_if(*context.moduleStore, [&](const auto& entry) {
+    return entry.second.moduleId == moduleIdQString
+           && entry.second.documentFingerprint == fingerprint;
+  });
+  if (module == context.moduleStore->end())
+  {
+    throw py::key_error{"Unknown module '" + moduleId + "'"};
+  }
+
+  auto removedMetadataCount = size_t{0};
+  if (context.metadataStore != nullptr)
+  {
+    for (auto it = context.metadataStore->begin(); it != context.metadataStore->end();)
+    {
+      const auto& record = it->second;
+      if (
+        record.documentFingerprint == fingerprint
+        && record.metadata.value("moduleId").toString() == moduleIdQString
+        && (record.stale || !objectRegistry().resolveExternalId(map, record.objectId).ok))
+      {
+        it = context.metadataStore->erase(it);
+        ++removedMetadataCount;
+      }
+      else
+      {
+        ++it;
+      }
+    }
+  }
+
+  auto& objectIds = module->second.objectIds;
+  const auto before = objectIds.size();
+  objectIds.erase(
+    std::remove_if(
+      objectIds.begin(),
+      objectIds.end(),
+      [&](const auto& objectId) {
+        return !objectRegistry().resolveExternalId(map, objectId).ok;
+      }),
+    objectIds.end());
+
+  auto result = moduleSummary(map, module->second);
+  result["removed_stale_metadata_count"] = removedMetadataCount;
+  result["removed_stale_object_id_count"] = before - objectIds.size();
+  return result;
+}
+
 py::dict groupSummary(const mdl::GroupNode& group)
 {
   auto result = py::dict{};
@@ -4691,6 +4750,7 @@ void defineModule(py::module_& module)
     py::arg("include_empty") = false);
   modules.def("inspect", inspectModule, py::arg("module_id"));
   modules.def("select", selectModule, py::arg("module_id"));
+  modules.def("compact", compactModule, py::arg("module_id"));
   modules.def("forget", forgetModule, py::arg("module_id"));
 
   auto placeModel = [](
