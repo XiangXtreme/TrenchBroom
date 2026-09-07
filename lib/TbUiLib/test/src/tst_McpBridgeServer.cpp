@@ -178,6 +178,24 @@ TEST_CASE(
   REQUIRE(document.value("fingerprint").isString());
   CHECK(document.value("fingerprint") == document.value("documentFingerprint"));
 
+  const auto inspectDocuments = server.dispatchRequest(mcp::McpBridgeRequest{
+    "inspect-documents",
+    "tb_inspect",
+    QJsonObject{{"view", "documents"}},
+    mcp::McpMode::ReadOnly});
+  REQUIRE(inspectDocuments.ok);
+  CHECK(inspectDocuments.result.value("count").toInt() == 1);
+
+  const auto inspectEntities = server.dispatchRequest(mcp::McpBridgeRequest{
+    "inspect-entities",
+    "tb_inspect",
+    QJsonObject{{"view", "entities"}},
+    mcp::McpMode::ReadOnly});
+  REQUIRE(inspectEntities.ok);
+  CHECK(inspectEntities.result.value("count").toInt() >= 0);
+  CHECK(
+    inspectEntities.result.value("filters").toObject().value("exactTypeOnly").toBool());
+
   const auto api = server.dispatchRequest(mcp::McpBridgeRequest{
     "api",
     "tb_api",

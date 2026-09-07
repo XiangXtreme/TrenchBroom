@@ -295,6 +295,11 @@ McpBridgeServer::McpBridgeServer(
             document.insert("fingerprint", document.value("documentFingerprint"));
             return McpBridgeToolResult::success(std::move(document));
           }
+          if (view == "documents")
+          {
+            return McpBridgeToolResult::success(
+              documentsListJson(appController, &m_objectRegistry));
+          }
           if (view == "map")
           {
             return McpBridgeToolResult::success(mapSnapshotJson(
@@ -308,12 +313,58 @@ McpBridgeServer::McpBridgeServer(
           {
             return McpBridgeToolResult::success(selectionJson(appController));
           }
+          if (view == "objects" || view == "entities")
+          {
+            auto query = params;
+            if (!query.contains("limit"))
+            {
+              query.insert("limit", 100);
+            }
+            if (view == "entities" && !query.contains("type"))
+            {
+              query.insert("type", "entity");
+            }
+            return selectionFilterResult(appController, query);
+          }
+          if (view == "materials")
+          {
+            auto query = params;
+            if (!query.contains("limit"))
+            {
+              query.insert("limit", 50);
+            }
+            return textureSearchResult(appController, query);
+          }
+          if (view == "assets")
+          {
+            auto query = params;
+            if (!query.contains("limit"))
+            {
+              query.insert("limit", 50);
+            }
+            return assetSearchResult(appController, query);
+          }
+          if (view == "modules")
+          {
+            return moduleListResult(
+              appController, params, m_brushMetadata, m_modules, m_objectRegistry);
+          }
+          if (view == "viewport")
+          {
+            return viewportLayoutGetResult(appController);
+          }
           if (view == "actions")
           {
             return McpBridgeToolResult::success(actionsListJson(appController));
           }
+          if (view == "compile")
+          {
+            return compileProfilesListResult(appController);
+          }
           return invalidParamsFailure(
-            "tb_inspect view must be status, document, map, selection, or actions");
+            "tb_inspect view must be status, document, documents, map, selection, "
+            "objects, "
+            "entities, materials, assets, modules, viewport, actions, or compile");
         }
         if (toolName == "tb_api")
         {
@@ -674,8 +725,48 @@ McpBridgeServer::McpBridgeServer(
               &m_objectRegistry,
               &m_brushMetadata);
           }
+          if (action == "targets")
+          {
+            return renderReviewTargetsResult(
+              appController,
+              params,
+              m_operationHistory,
+              &m_objectRegistry,
+              &m_brushMetadata);
+          }
+          if (action == "operation")
+          {
+            return renderReviewOperationResult(
+              appController,
+              params,
+              m_operationHistory,
+              &m_objectRegistry,
+              &m_brushMetadata);
+          }
+          if (action == "selector")
+          {
+            return renderReviewSelectorResult(
+              appController,
+              params,
+              m_operationHistory,
+              m_brushMetadata,
+              m_modules,
+              m_objectRegistry);
+          }
+          if (action == "module")
+          {
+            return moduleRenderReviewResult(
+              appController,
+              params,
+              m_operationHistory,
+              m_brushMetadata,
+              m_modules,
+              m_objectRegistry);
+          }
           return invalidParamsFailure(
-            "tb_capture action must be current, 2d, 3d, or scene");
+            "tb_capture action must be current, 2d, 3d, scene, targets, operation, "
+            "selector, "
+            "or module");
         }
         if (toolName == "documents_list")
         {

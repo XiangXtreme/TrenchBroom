@@ -629,7 +629,12 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
       objectSchema({
         {"view",
          stringProperty(
-           "status, document, map, selection, or actions. Defaults to status.")},
+           "status, document, documents, map, selection, objects, entities, materials, "
+           "assets, modules, viewport, actions, or compile. Defaults to status.")},
+        {"query", stringProperty("Optional material or asset text query.")},
+        {"type", stringProperty("Optional object type or asset type filter.")},
+        {"limit", integerProperty("Maximum object, material, or asset results.")},
+        {"detail", stringProperty("summary or full object detail.")},
       }),
       "core",
     },
@@ -723,7 +728,10 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
       false,
       true,
       objectSchema({
-        {"action", stringProperty("current, 2d, 3d, or scene. Defaults to current.")},
+        {"action",
+         stringProperty(
+           "current, 2d, 3d, scene, targets, operation, selector, or module. Defaults to "
+           "current.")},
         {"objectIds", arrayProperty("Optional object targets for scene review.")},
         {"edgeMode", stringProperty("all or silhouette for scene review.")},
       }),
