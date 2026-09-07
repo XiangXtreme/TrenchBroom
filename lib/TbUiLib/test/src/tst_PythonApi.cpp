@@ -147,6 +147,11 @@ assert tb.documents.list()[0].path == doc.path
 snapshot = tb.documents.snapshot()
 assert snapshot["entity_count"] >= 1
 assert snapshot["brush_count"] == 0
+assert snapshot["point_entity_count"] == 0
+assert snapshot["patch_count"] == 0
+assert snapshot["content_bounds"] is None
+assert snapshot["node_count"] >= 1
+assert isinstance(snapshot["worldspawn"], dict)
 assert snapshot["selected_node_count"] == 0
 assert "grid_size" in tb.objects.snapshot()
 assert "has_selection" in tb.objects.inspect()
@@ -168,6 +173,7 @@ all_brushes = tb.brushes.list()
 assert len(all_brushes) >= 1
 assert len(all_brushes[0].faces()) > 0
 assert tb.documents.snapshot()["brush_count"] >= 1
+assert tb.documents.snapshot()["content_bounds"] is not None
 assert tb.objects.inspect()["brush_count"] >= 1
 with doc.transaction("Python API smoke"):
     pass

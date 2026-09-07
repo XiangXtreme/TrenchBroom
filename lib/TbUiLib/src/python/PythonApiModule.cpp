@@ -42,6 +42,7 @@
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
+#include "mdl/MapFormat.h"
 #include "mdl/Map_Brushes.h"
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Geometry.h"
@@ -69,6 +70,7 @@
 
 #include "kd/overload.h"
 
+#include "vm/bbox.h"
 #include "vm/plane.h"
 
 #if defined(slots)
@@ -884,22 +886,90 @@ std::vector<EntityHandle> findEntities(
 std::vector<EntityHandle> selectedEntities(SelectionHandle& selection);
 std::vector<FaceHandle> selectedBrushFaces(SelectionHandle& selection);
 
+py::dict boundsSnapshot(const vm::bbox3d& bounds)
+{
+  auto result = py::dict{};
+  result["min"] = py::make_tuple(bounds.min.x(), bounds.min.y(), bounds.min.z());
+  result["max"] = py::make_tuple(bounds.max.x(), bounds.max.y(), bounds.max.z());
+  return result;
+}
+
+struct MapContentSummary
+{
+  int entityCount = 0;
+  int brushCount = 0;
+  int patchCount = 0;
+  std::optional<vm::bbox3d> bounds;
+};
+
+void collectMapContentSummary(const mdl::Node& node, MapContentSummary& summary)
+{
+  const auto contentNode = dynamic_cast<const mdl::EntityNode*>(&node) != nullptr
+                           || dynamic_cast<const mdl::BrushNode*>(&node) != nullptr
+                           || dynamic_cast<const mdl::PatchNode*>(&node) != nullptr;
+  if (dynamic_cast<const mdl::EntityNode*>(&node) != nullptr)
+  {
+    ++summary.entityCount;
+  }
+  else if (dynamic_cast<const mdl::BrushNode*>(&node) != nullptr)
+  {
+    ++summary.brushCount;
+  }
+  else if (dynamic_cast<const mdl::PatchNode*>(&node) != nullptr)
+  {
+    ++summary.patchCount;
+  }
+  if (contentNode)
+  {
+    summary.bounds = summary.bounds ? vm::merge(*summary.bounds, node.logicalBounds())
+                                    : node.logicalBounds();
+  }
+  for (const auto* child : node.children())
+  {
+    if (child != nullptr)
+    {
+      collectMapContentSummary(*child, summary);
+    }
+  }
+}
+
 py::dict documentSnapshot(DocumentHandle document)
 {
   auto& map = document.get().map();
   const auto& selection = map.selection();
   const auto& path = map.path();
+  auto content = MapContentSummary{};
+  collectMapContentSummary(map.worldNode(), content);
+  auto worldspawn = py::dict{};
+  for (const auto& property : map.worldNode().entity().properties())
+  {
+    worldspawn[py::cast(property.key())] = py::cast(property.value());
+  }
   auto result = py::dict{};
   result["path"] = path.empty() ? py::none() : py::cast(path.u8string());
   result["persistent"] = map.persistent();
   result["modified"] = map.modified();
   result["entity_count"] = py::int_(allEntities(document.get()).size());
-  result["brush_count"] = py::int_(allBrushes(document.get()).size());
+  result["point_entity_count"] = content.entityCount;
+  result["brush_count"] = content.brushCount;
+  result["patch_count"] = content.patchCount;
+  result["node_count"] = py::int_(map.worldNode().descendantCount() + 1u);
+  result["worldspawn"] = std::move(worldspawn);
+  if (content.bounds)
+  {
+    result["content_bounds"] = boundsSnapshot(*content.bounds);
+  }
+  else
+  {
+    result["content_bounds"] = py::none();
+  }
+  result["map_format"] = mdl::formatName(map.worldNode().mapFormat());
   result["selected_node_count"] = py::int_(selection.nodes.size());
   result["selected_entity_count"] = py::int_(selection.entities.size());
   result["selected_brush_count"] = py::int_(selection.brushes.size());
   result["selected_face_count"] = py::int_(selection.brushFaces.size());
   result["grid_size"] = map.grid().size();
+  result["grid_actual_size"] = map.grid().actualSize();
   result["grid_snap"] = map.grid().snap();
   result["grid_visible"] = map.grid().visible();
   return result;
