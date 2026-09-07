@@ -19,6 +19,7 @@ enum class PythonApiType
   Faces,
   Materials,
   History,
+  Assets,
   Actions,
   Vec3,
   Plane,

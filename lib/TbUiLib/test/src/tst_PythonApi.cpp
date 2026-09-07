@@ -210,6 +210,19 @@ assert updated_entity["armor"] == "50"
 tb.entities.properties_delete([updated_entity], ["armor"])
 created_entity = tb.entities.find(property="targetname", value="python-api-entity")[0]
 assert "armor" not in created_entity
+model_entity = tb.assets.place_model("models/python-api.mdl", (1, 2, 3))
+sprite_entity = tb.assets.place_sprite("sprites/python-api.spr")
+sound_entity = tb.assets.place_sound("sound/python-api.wav")
+assert model_entity.classname == "cycler_sprite"
+assert model_entity["model"] == "models/python-api.mdl"
+assert sprite_entity["model"] == "sprites/python-api.spr"
+assert sound_entity.classname == "ambient_generic"
+assert sound_entity["message"] == "sound/python-api.wav"
+try:
+    tb.assets.place_model("sprites/not-a-model.spr")
+    raise AssertionError("model placement accepted a sprite")
+except ValueError:
+    pass
 tb.entities.delete(created_entity)
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 0
 with doc.transaction("Python API smoke"):

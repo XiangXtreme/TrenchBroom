@@ -1923,6 +1923,33 @@ EntityHandle createEntity(
     PythonHandleRegistry::instance().nodeGeneration(entityNode)};
 }
 
+EntityHandle placeAsset(
+  const std::string& path,
+  const std::string_view expectedExtension,
+  const std::string& classname,
+  const std::string& property,
+  const py::object& origin,
+  const bool select)
+{
+  auto extension = std::filesystem::path{path}.extension().string();
+  std::ranges::transform(extension, extension.begin(), [](const unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  if (extension != expectedExtension)
+  {
+    throw py::value_error{
+      "asset path must have the " + std::string{expectedExtension} + " extension"};
+  }
+  if (property.empty())
+  {
+    throw py::value_error{"property must not be empty"};
+  }
+
+  auto properties = py::dict{};
+  properties[py::str{property}] = py::str{path};
+  return createEntity(classname, properties, origin, select);
+}
+
 void deleteEntity(EntityHandle& entity)
 {
   auto& document = DocumentHandle{entity.document, entity.generation}.get();
@@ -4181,6 +4208,53 @@ void defineModule(py::module_& module)
   });
   faces.def("selected", selectedFaces);
   faces.def("set_material", setFacesMaterial, py::arg("faces"), py::arg("material"));
+
+  auto placeModel = [](const std::string& path,
+                       const py::object& origin,
+                       const std::string& classname,
+                       const std::string& property,
+                       const bool select) {
+    return placeAsset(path, ".mdl", classname, property, origin, select);
+  };
+  auto placeSprite = [](const std::string& path,
+                        const py::object& origin,
+                        const std::string& classname,
+                        const std::string& property,
+                        const bool select) {
+    return placeAsset(path, ".spr", classname, property, origin, select);
+  };
+  auto placeSound = [](const std::string& path,
+                       const py::object& origin,
+                       const std::string& classname,
+                       const std::string& property,
+                       const bool select) {
+    return placeAsset(path, ".wav", classname, property, origin, select);
+  };
+  auto assets = module.def_submodule("assets", "GoldSrc asset placement operations.");
+  assets.def(
+    "place_model",
+    placeModel,
+    py::arg("path"),
+    py::arg("origin") = py::none(),
+    py::arg("classname") = "cycler_sprite",
+    py::arg("property") = "model",
+    py::arg("select") = false);
+  assets.def(
+    "place_sprite",
+    placeSprite,
+    py::arg("path"),
+    py::arg("origin") = py::none(),
+    py::arg("classname") = "cycler_sprite",
+    py::arg("property") = "model",
+    py::arg("select") = false);
+  assets.def(
+    "place_sound",
+    placeSound,
+    py::arg("path"),
+    py::arg("origin") = py::none(),
+    py::arg("classname") = "ambient_generic",
+    py::arg("property") = "message",
+    py::arg("select") = false);
 
   auto listMaterials = []() {
     auto document = currentDocument();

@@ -17,6 +17,7 @@ constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::Faces, "faces"},
   PythonApiTypeInfo{PythonApiType::Materials, "materials"},
   PythonApiTypeInfo{PythonApiType::History, "history"},
+  PythonApiTypeInfo{PythonApiType::Assets, "assets"},
   PythonApiTypeInfo{PythonApiType::Actions, "actions"},
   PythonApiTypeInfo{PythonApiType::Vec3, "Vec3"},
   PythonApiTypeInfo{PythonApiType::Plane, "Plane"},
@@ -57,6 +58,8 @@ constexpr auto ModuleSymbols = std::array{
     "materials", Property, "materials", PythonApiValueType{PythonApiType::Materials}},
   PythonApiSymbol{
     "history", Property, "history", PythonApiValueType{PythonApiType::History}},
+  PythonApiSymbol{
+    "assets", Property, "assets", PythonApiValueType{PythonApiType::Assets}},
   PythonApiSymbol{
     "actions", Property, "actions", PythonApiValueType{PythonApiType::Actions}},
   PythonApiSymbol{
@@ -268,6 +271,18 @@ constexpr auto HistorySymbols = std::array{
   PythonApiSymbol{"status", Function, "(document=None) -> dict"},
   PythonApiSymbol{"undo", Function, "(document=None) -> bool"},
   PythonApiSymbol{"redo", Function, "(document=None) -> bool"},
+};
+
+constexpr auto AssetsSymbols = std::array{
+  PythonApiSymbol{
+    "place_model", Function, "(path, origin=None, classname='cycler_sprite', ...) -> Entity",
+    PythonApiValueType{PythonApiType::Entity}},
+  PythonApiSymbol{
+    "place_sprite", Function, "(path, origin=None, classname='cycler_sprite', ...) -> Entity",
+    PythonApiValueType{PythonApiType::Entity}},
+  PythonApiSymbol{
+    "place_sound", Function, "(path, origin=None, classname='ambient_generic', ...) -> Entity",
+    PythonApiValueType{PythonApiType::Entity}},
 };
 
 constexpr auto ActionsSymbols = std::array{
@@ -541,6 +556,8 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
     return MaterialsSymbols;
   case PythonApiType::History:
     return HistorySymbols;
+  case PythonApiType::Assets:
+    return AssetsSymbols;
   case PythonApiType::Actions:
     return ActionsSymbols;
   case PythonApiType::Vec3:
