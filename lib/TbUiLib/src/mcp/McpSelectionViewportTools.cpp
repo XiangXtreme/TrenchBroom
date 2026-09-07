@@ -40,6 +40,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/automation/AutomationEntities.h"
 
 #include <map>
 #include <set>
@@ -206,20 +207,6 @@ QJsonObject linkedEntityNodeJson(
     result.insert("properties", entityPropertiesJson(entity));
   }
   return result;
-}
-
-QJsonObject linkFailureJson(
-  const QString& status,
-  const QString& from,
-  const QString& to,
-  const QString& recoveryAction)
-{
-  return QJsonObject{
-    {"status", status},
-    {"from", from},
-    {"to", to},
-    {"recoveryAction", recoveryAction},
-  };
 }
 
 McpBridgeToolResult entityLinkPreconditionFailure(
@@ -666,80 +653,27 @@ McpBridgeToolResult entityLinkChainInspectForMapResult(
       QJsonObject{{"source", startSource}});
   }
 
+  const auto chain =
+    automation::inspectEntityLinkChain(map, *startNode, classname, nameKey, nextKey);
+  if (!chain.error.isEmpty())
+  {
+    return McpBridgeToolResult::failure(mcp::McpErrorCode::InternalError, chain.error);
+  }
+
   auto nodes = QJsonArray{};
-  auto edges = QJsonArray{};
-  auto failures = QJsonArray{};
-  auto warnings = QJsonArray{};
-  auto visited = std::set<const mdl::EntityNodeBase*>{};
-  auto chainComplete = true;
-  auto hasCycle = false;
-  auto* current = startNode;
-  while (current != nullptr)
+  for (const auto* node : chain.nodes)
   {
     nodes.push_back(
-      linkedEntityNodeJson(*current, worldNode, nameKey, nextKey, detailValue));
-    if (!visited.insert(current).second)
-    {
-      chainComplete = false;
-      hasCycle = true;
-      break;
-    }
-
-    const auto fromName = entityPropertyString(current->entity(), nameKey);
-    const auto nextName = entityPropertyString(current->entity(), nextKey);
-    if (fromName.isEmpty())
-    {
-      warnings.push_back(QJsonObject{
-        {"status", "missing_name"},
-        {"objectId", mcpNodePathId(*current, worldNode)},
-        {"key", nameKey},
-      });
-    }
-    if (nextName.isEmpty())
-    {
-      break;
-    }
-
-    auto edge = QJsonObject{{"from", fromName}, {"to", nextName}};
-    const auto targetIt = byName.find(nextName);
-    if (targetIt == byName.end())
-    {
-      edge.insert("status", "missing_target");
-      edges.push_back(edge);
-      failures.push_back(linkFailureJson(
-        "missing_target", fromName, nextName, "fix_missing_entity_target_or_stop_chain"));
-      chainComplete = false;
-      break;
-    }
-    if (targetIt->second.size() != 1u)
-    {
-      edge.insert("status", "duplicate_targetname");
-      edge.insert("matchCount", static_cast<int>(targetIt->second.size()));
-      edges.push_back(edge);
-      failures.push_back(linkFailureJson(
-        "duplicate_targetname",
-        fromName,
-        nextName,
-        "rename_duplicate_targetname_then_retry"));
-      chainComplete = false;
-      break;
-    }
-
-    const auto* target = targetIt->second.front();
-    if (visited.contains(target))
-    {
-      edge.insert("status", "cycle");
-      edges.push_back(edge);
-      failures.push_back(linkFailureJson(
-        "cycle", fromName, nextName, "break_entity_link_cycle_then_retry"));
-      chainComplete = false;
-      hasCycle = true;
-      break;
-    }
-
-    edge.insert("status", "resolved");
-    edges.push_back(edge);
-    current = target;
+      linkedEntityNodeJson(*node, worldNode, nameKey, nextKey, detailValue));
+  }
+  auto warnings = QJsonArray{};
+  for (const auto& warning : chain.warnings)
+  {
+    warnings.push_back(QJsonObject{
+      {"status", warning.status},
+      {"objectId", mcpNodePathId(*warning.node, worldNode)},
+      {"key", warning.key},
+    });
   }
 
   auto result = QJsonObject{
@@ -748,15 +682,15 @@ McpBridgeToolResult entityLinkChainInspectForMapResult(
     {"nextKey", nextKey},
     {"startObjectId", mcpNodePathId(*startNode, worldNode)},
     {"startSource", startSource},
-    {"chainComplete", chainComplete},
-    {"hasCycle", hasCycle},
+    {"chainComplete", chain.chainComplete},
+    {"hasCycle", chain.hasCycle},
     {"nodeCount", nodes.size()},
-    {"edgeCount", edges.size()},
+    {"edgeCount", chain.edges.size()},
     {"candidateNodeCount", static_cast<int>(candidates.size())},
     {"duplicateNameCount", duplicateNames.size()},
     {"nodes", nodes},
-    {"edges", edges},
-    {"failures", failures},
+    {"edges", chain.edges},
+    {"failures", chain.failures},
     {"warnings", warnings},
     {"mutatedDocument", false},
   };

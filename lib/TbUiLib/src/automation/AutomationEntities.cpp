@@ -12,12 +12,14 @@
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityDefinitionManager.h"
 #include "mdl/EntityNode.h"
+#include "mdl/EntityNodeBase.h"
 #include "mdl/EntityProperties.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/ModelUtils.h"
+#include "mdl/Node.h"
 #include "mdl/WorldNode.h"
 #include "ui/automation/AutomationTransaction.h"
 
@@ -26,6 +28,7 @@
 #include <algorithm>
 #include <map>
 #include <ranges>
+#include <set>
 #include <type_traits>
 
 namespace tb::ui::automation
@@ -46,6 +49,46 @@ QJsonObject boundsToJson(const vm::bbox3d& bounds)
 QString entityDefinitionTypeName(const mdl::EntityDefinition& definition)
 {
   return mdl::getType(definition) == mdl::EntityDefinitionType::Point ? "point" : "brush";
+}
+
+QString entityPropertyString(const mdl::Entity& entity, const QString& key)
+{
+  if (const auto* value = entity.property(key.toStdString()))
+  {
+    return QString::fromStdString(*value);
+  }
+  return {};
+}
+
+bool entityMatchesClassname(
+  const mdl::EntityNodeBase& entityNode, const QString& classname)
+{
+  return classname.isEmpty()
+         || QString::fromStdString(entityNode.entity().classname())
+                .compare(classname, Qt::CaseInsensitive)
+              == 0;
+}
+
+void collectEntityNodes(
+  const mdl::Node& node,
+  const mdl::WorldNode& worldNode,
+  const QString& classname,
+  std::vector<const mdl::EntityNodeBase*>& entities)
+{
+  if (&node != &worldNode)
+  {
+    if (const auto* entityNode = dynamic_cast<const mdl::EntityNodeBase*>(&node))
+    {
+      if (entityMatchesClassname(*entityNode, classname))
+      {
+        entities.push_back(entityNode);
+      }
+    }
+  }
+  for (const auto* child : node.children())
+  {
+    collectEntityNodes(*child, worldNode, classname, entities);
+  }
 }
 
 QString propertyValueTypeName(const mdl::PropertyValueType& type)
@@ -325,6 +368,130 @@ AutomationBrushEntityResult untieBrushesFromEntity(
   }
 
   result.brushes = std::move(brushes);
+  return result;
+}
+
+AutomationEntityLinkChainResult inspectEntityLinkChain(
+  const mdl::Map& map,
+  const mdl::EntityNodeBase& start,
+  const QString& classname,
+  const QString& nameKey,
+  const QString& nextKey)
+{
+  auto result = AutomationEntityLinkChainResult{};
+  if (nameKey.trimmed().isEmpty() || nextKey.trimmed().isEmpty())
+  {
+    result.error = "nameKey and nextKey must not be empty";
+    return result;
+  }
+  if (!entityMatchesClassname(start, classname))
+  {
+    result.error = "start entity does not match classname";
+    return result;
+  }
+
+  const auto& worldNode = map.worldNode();
+  collectEntityNodes(worldNode, worldNode, classname, result.candidates);
+  const auto startIt =
+    std::find(result.candidates.begin(), result.candidates.end(), &start);
+  if (startIt == result.candidates.end())
+  {
+    result.error = "start entity does not belong to this map";
+    return result;
+  }
+
+  auto byName = std::map<QString, std::vector<const mdl::EntityNodeBase*>>{};
+  for (const auto* entityNode : result.candidates)
+  {
+    const auto name = entityPropertyString(entityNode->entity(), nameKey);
+    if (!name.isEmpty())
+    {
+      byName[name].push_back(entityNode);
+    }
+  }
+  for (const auto& [name, nodes] : byName)
+  {
+    if (nodes.size() > 1u)
+    {
+      result.duplicateNames.push_back(QJsonObject{
+        {"name", name},
+        {"count", static_cast<int>(nodes.size())},
+      });
+    }
+  }
+
+  auto visited = std::set<const mdl::EntityNodeBase*>{};
+  auto* current = &start;
+  while (current != nullptr)
+  {
+    result.nodes.push_back(current);
+    if (!visited.insert(current).second)
+    {
+      result.chainComplete = false;
+      result.hasCycle = true;
+      break;
+    }
+
+    const auto fromName = entityPropertyString(current->entity(), nameKey);
+    const auto nextName = entityPropertyString(current->entity(), nextKey);
+    if (fromName.isEmpty())
+    {
+      result.warnings.push_back({current, "missing_name", nameKey});
+    }
+    if (nextName.isEmpty())
+    {
+      break;
+    }
+
+    auto edge = QJsonObject{{"from", fromName}, {"to", nextName}};
+    const auto targetIt = byName.find(nextName);
+    if (targetIt == byName.end())
+    {
+      edge.insert("status", "missing_target");
+      result.edges.push_back(edge);
+      result.failures.push_back(QJsonObject{
+        {"status", "missing_target"},
+        {"from", fromName},
+        {"to", nextName},
+        {"recoveryAction", "fix_missing_entity_target_or_stop_chain"},
+      });
+      result.chainComplete = false;
+      break;
+    }
+    if (targetIt->second.size() != 1u)
+    {
+      edge.insert("status", "duplicate_targetname");
+      edge.insert("matchCount", static_cast<int>(targetIt->second.size()));
+      result.edges.push_back(edge);
+      result.failures.push_back(QJsonObject{
+        {"status", "duplicate_targetname"},
+        {"from", fromName},
+        {"to", nextName},
+        {"recoveryAction", "rename_duplicate_targetname_then_retry"},
+      });
+      result.chainComplete = false;
+      break;
+    }
+
+    const auto* target = targetIt->second.front();
+    if (visited.contains(target))
+    {
+      edge.insert("status", "cycle");
+      result.edges.push_back(edge);
+      result.failures.push_back(QJsonObject{
+        {"status", "cycle"},
+        {"from", fromName},
+        {"to", nextName},
+        {"recoveryAction", "break_entity_link_cycle_then_retry"},
+      });
+      result.chainComplete = false;
+      result.hasCycle = true;
+      break;
+    }
+    edge.insert("status", "resolved");
+    result.edges.push_back(edge);
+    current = target;
+  }
   return result;
 }
 

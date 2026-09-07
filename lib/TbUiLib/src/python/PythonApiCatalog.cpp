@@ -241,6 +241,11 @@ constexpr auto EntitiesSymbols = std::array{
   PythonApiSymbol{"entities_list", Function, "(type='', query='', limit=200) -> list[dict]"},
   PythonApiSymbol{"schema", Function, "(classname) -> dict"},
   PythonApiSymbol{
+    "link_chain_inspect",
+    Function,
+    "(start=None, classname='', name_key='targetname', next_key='target', "
+    "detail='summary', include_all_nodes=False) -> dict"},
+  PythonApiSymbol{
     "create_from_schema",
     Function,
     "(classname, properties={}, origin=None, select=True) -> Entity",

@@ -347,6 +347,19 @@ assert group["child_count"] == 1
 assert tb.groups.inspect_selected()[0]["name"] == "python-api-group"
 assert tb.groups.rename_selected("python-api-group-renamed")[0]["name"] == "python-api-group-renamed"
 assert tb.groups.ungroup_selected()["brush_count"] == 1
+link_start = tb.entities.create("path_corner", {"targetname": "python-link-1", "target": "python-link-2"})
+tb.entities.create("path_corner", {"targetname": "python-link-2", "target": "python-link-3"})
+tb.entities.create("path_corner", {"targetname": "python-link-3"})
+link_chain = tb.entities.link_chain_inspect(link_start, classname="path_corner", include_all_nodes=True)
+assert link_chain["chain_complete"]
+assert not link_chain["has_cycle"]
+assert len(link_chain["nodes"]) == 3
+assert link_chain["nodes"][1]["targetname"] == "python-link-2"
+assert len(link_chain["candidates"]) == 3
+tb.entities.create("path_corner", {"targetname": "python-link-2"})
+ambiguous_link_chain = tb.entities.link_chain_inspect(link_start, classname="path_corner")
+assert not ambiguous_link_chain["chain_complete"]
+assert ambiguous_link_chain["failures"][0]["status"] == "duplicate_targetname"
 tie_brushes = tb.brushes.create_boxes_batch([
     {"min": (224, 0, 0), "max": (256, 32, 32)},
     {"min": (264, 0, 0), "max": (296, 32, 32)},

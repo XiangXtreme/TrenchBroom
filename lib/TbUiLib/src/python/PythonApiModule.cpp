@@ -2851,6 +2851,121 @@ py::dict entitySchema(const std::string& classname)
   return py::cast<py::dict>(jsonValueToPython(*schema));
 }
 
+py::dict inspectEntityLinkChain(
+  const py::object& start,
+  const std::string& classname,
+  const std::string& nameKey,
+  const std::string& nextKey,
+  const std::string& detail,
+  const bool includeAllNodes)
+{
+  auto& document = currentDocument().get();
+  const auto normalizedClassname = QString::fromStdString(classname).trimmed();
+  const auto normalizedNameKey = QString::fromStdString(nameKey).trimmed();
+  const auto normalizedNextKey = QString::fromStdString(nextKey).trimmed();
+  const auto normalizedDetail = QString::fromStdString(detail).trimmed().toLower();
+  if (normalizedDetail != "summary" && normalizedDetail != "full")
+  {
+    throw py::value_error{"detail must be summary or full"};
+  }
+
+  const auto* startNode = static_cast<mdl::EntityNodeBase*>(nullptr);
+  if (start.is_none())
+  {
+    auto selected = std::vector<mdl::EntityNodeBase*>{};
+    for (auto* node : document.map().selection().nodes)
+    {
+      if (auto* entity = dynamic_cast<mdl::EntityNodeBase*>(node))
+      {
+        if (
+          normalizedClassname.isEmpty()
+          || QString::fromStdString(entity->entity().classname())
+               .compare(normalizedClassname, Qt::CaseInsensitive)
+               == 0)
+        {
+          selected.push_back(entity);
+        }
+      }
+    }
+    if (selected.size() != 1u)
+    {
+      throw py::value_error{
+        "current selection must contain exactly one matching entity start"};
+    }
+    startNode = selected.front();
+  }
+  else
+  {
+    if (!py::isinstance<EntityHandle>(start))
+    {
+      throw py::type_error{"start must be an Entity handle or None"};
+    }
+    auto& entity = py::cast<EntityHandle&>(start);
+    if (entity.document != &document)
+    {
+      throw py::value_error{"start entity belongs to a different document"};
+    }
+    startNode = &entity.get();
+  }
+
+  const auto chain = automation::inspectEntityLinkChain(
+    document.map(), *startNode, normalizedClassname, normalizedNameKey, normalizedNextKey);
+  if (!chain.error.isEmpty())
+  {
+    throw py::value_error{chain.error.toStdString()};
+  }
+
+  const auto documentGeneration = PythonHandleRegistry::instance().documentGeneration(&document);
+  const auto makeHandle = [&](auto* node) {
+    auto* mutableNode = const_cast<mdl::EntityNodeBase*>(node);
+    return EntityHandle{
+      &document,
+      documentGeneration,
+      mutableNode,
+      PythonHandleRegistry::instance().nodeGeneration(mutableNode)};
+  };
+  auto nodes = std::vector<EntityHandle>{};
+  nodes.reserve(chain.nodes.size());
+  for (const auto* node : chain.nodes)
+  {
+    nodes.push_back(makeHandle(node));
+  }
+
+  auto warnings = py::list{};
+  for (const auto& warning : chain.warnings)
+  {
+    auto item = py::dict{};
+    item["entity"] = makeHandle(warning.node);
+    item["status"] = warning.status.toStdString();
+    item["key"] = warning.key.toStdString();
+    warnings.append(std::move(item));
+  }
+  auto result = py::dict{};
+  result["start"] = makeHandle(startNode);
+  result["classname"] = normalizedClassname.toStdString();
+  result["name_key"] = normalizedNameKey.toStdString();
+  result["next_key"] = normalizedNextKey.toStdString();
+  result["detail"] = normalizedDetail.toStdString();
+  result["chain_complete"] = chain.chainComplete;
+  result["has_cycle"] = chain.hasCycle;
+  result["nodes"] = std::move(nodes);
+  result["edges"] = jsonValueToPython(chain.edges);
+  result["failures"] = jsonValueToPython(chain.failures);
+  result["warnings"] = std::move(warnings);
+  result["duplicate_names"] = jsonValueToPython(chain.duplicateNames);
+  if (includeAllNodes)
+  {
+    auto candidates = std::vector<EntityHandle>{};
+    candidates.reserve(chain.candidates.size());
+    for (const auto* node : chain.candidates)
+    {
+      candidates.push_back(makeHandle(node));
+    }
+    result["candidates"] = std::move(candidates);
+  }
+  return result;
+}
+
 EntityHandle createEntityFromSchema(
   const std::string& classname,
   const py::dict& properties,
@@ -5561,6 +5676,15 @@ void defineModule(py::module_& module)
     py::arg("query") = "",
     py::arg("limit") = 200u);
   entities.def("schema", entitySchema, py::arg("classname"));
+  entities.def(
+    "link_chain_inspect",
+    inspectEntityLinkChain,
+    py::arg("start") = py::none(),
+    py::arg("classname") = "",
+    py::arg("name_key") = "targetname",
+    py::arg("next_key") = "target",
+    py::arg("detail") = "summary",
+    py::arg("include_all_nodes") = false);
   entities.def(
     "create_from_schema",
     createEntityFromSchema,

@@ -81,6 +81,12 @@ entity，并在写入前根据当前 FGD 验证每个 `classname`。每项包含
 automation 服务执行原生命令，保留原生撤销语义；point entity、空集合、跨文档句柄和未知 FGD
 定义会在写入前失败。
 
+`tb.entities.link_chain_inspect(start=None, classname="", name_key="targetname", next_key="target",
+detail="summary", include_all_nodes=False)` 在实时地图中追踪实体属性
+链路。起点可以是显式 `Entity`，或当前选择中唯一匹配的实体；结果的 `nodes` 与
+`warnings[].entity` 都是可继续操作的 `Entity` 句柄，并报告重复名称、缺失目标和环路，
+不会读取 map 文件或猜测歧义目标。
+
 ## 文件 IR 预览
 
 `tb.ir.compile_preview_from_file(path)` 只接受绝对路径，读取受 10 MiB 上限约束的 JSON

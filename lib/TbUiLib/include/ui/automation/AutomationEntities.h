@@ -21,6 +21,7 @@ namespace tb::mdl
 {
 class BrushNode;
 class EntityNode;
+class EntityNodeBase;
 class Map;
 } // namespace tb::mdl
 
@@ -47,6 +48,26 @@ struct AutomationBrushEntityResult
 {
   mdl::EntityNode* entity = nullptr;
   std::vector<mdl::BrushNode*> brushes;
+  QString error;
+};
+
+struct AutomationEntityLinkWarning
+{
+  const mdl::EntityNodeBase* node = nullptr;
+  QString status;
+  QString key;
+};
+
+struct AutomationEntityLinkChainResult
+{
+  std::vector<const mdl::EntityNodeBase*> candidates;
+  std::vector<const mdl::EntityNodeBase*> nodes;
+  QJsonArray edges;
+  QJsonArray failures;
+  std::vector<AutomationEntityLinkWarning> warnings;
+  QJsonArray duplicateNames;
+  bool chainComplete = true;
+  bool hasCycle = false;
   QString error;
 };
 
@@ -78,5 +99,16 @@ AutomationBrushEntityResult tieBrushesToEntity(
  */
 AutomationBrushEntityResult untieBrushesFromEntity(
   mdl::Map& map, std::vector<mdl::BrushNode*> brushes);
+
+/**
+ * Follows entity property links from a document-bound start entity. The result keeps
+ * native node references so callers can present their own stable identities.
+ */
+AutomationEntityLinkChainResult inspectEntityLinkChain(
+  const mdl::Map& map,
+  const mdl::EntityNodeBase& start,
+  const QString& classname,
+  const QString& nameKey,
+  const QString& nextKey);
 
 } // namespace tb::ui::automation
