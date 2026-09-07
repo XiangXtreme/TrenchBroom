@@ -63,6 +63,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationAssets.h"
 #include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/python/PythonApiCatalog.h"
@@ -810,10 +811,11 @@ DocumentHandle openDocument(const std::string& path)
     throw py::value_error{"document path must name an existing regular file"};
   }
 
-  auto& current = DocumentHandle{
-                    context.document,
-                    PythonHandleRegistry::instance().documentGeneration(context.document)}
-                    .get();
+  auto& current =
+    DocumentHandle{
+      context.document,
+      PythonHandleRegistry::instance().documentGeneration(context.document)}
+      .get();
   throwIfError(context.appController->mapWindowManager().loadDocument(
     current.map().gameInfo(),
     current.map().worldNode().mapFormat(),
@@ -871,12 +873,10 @@ py::dict historyStatus(DocumentHandle& document)
   auto result = py::dict{};
   result["can_undo"] = map.canUndoCommand();
   result["can_redo"] = map.canRedoCommand();
-  result["undo_name"] = map.undoCommandName() != nullptr
-                          ? py::cast(*map.undoCommandName())
-                          : py::none();
-  result["redo_name"] = map.redoCommandName() != nullptr
-                          ? py::cast(*map.redoCommandName())
-                          : py::none();
+  result["undo_name"] =
+    map.undoCommandName() != nullptr ? py::cast(*map.undoCommandName()) : py::none();
+  result["redo_name"] =
+    map.redoCommandName() != nullptr ? py::cast(*map.redoCommandName()) : py::none();
   return result;
 }
 
@@ -1950,6 +1950,84 @@ EntityHandle placeAsset(
   return createEntity(classname, properties, origin, select);
 }
 
+std::string assetTypeName(const BrowserCellType type)
+{
+  switch (type)
+  {
+  case BrowserCellType::Model:
+    return "model";
+  case BrowserCellType::Sprite:
+    return "sprite";
+  case BrowserCellType::Sound:
+    return "sound";
+  case BrowserCellType::Folder:
+  case BrowserCellType::Prefab:
+    return "unknown";
+  }
+  return "unknown";
+}
+
+std::optional<BrowserCellType> assetTypeFromName(const std::string& type)
+{
+  if (type == "model")
+  {
+    return BrowserCellType::Model;
+  }
+  if (type == "sprite")
+  {
+    return BrowserCellType::Sprite;
+  }
+  if (type == "sound")
+  {
+    return BrowserCellType::Sound;
+  }
+  return std::nullopt;
+}
+
+py::list searchAssets(
+  const std::string& query, const py::object& type, const size_t limit)
+{
+  auto options = AutomationAssetSearchOptions{};
+  options.query = query;
+  options.limit = limit;
+  if (!type.is_none())
+  {
+    const auto typeName = py::cast<std::string>(type);
+    options.type = assetTypeFromName(typeName);
+    if (!options.type)
+    {
+      throw py::value_error{"type must be model, sprite, sound, or None"};
+    }
+  }
+
+  auto document = currentDocument();
+  const auto assets = searchAutomationAssets(document.get().map(), options);
+  if (!assets)
+  {
+    throw std::runtime_error{"Could not scan assets"};
+  }
+
+  auto result = py::list{};
+  for (const auto& asset : *assets)
+  {
+    auto summary = py::dict{};
+    summary["type"] = assetTypeName(asset.type);
+    summary["path"] = asset.path.generic_string();
+    summary["absolute_path"] = asset.absolutePath.generic_string();
+    summary["display_name"] = asset.displayName;
+    if (asset.lastModified)
+    {
+      summary["last_modified"] = asset.lastModified->time_since_epoch().count();
+    }
+    else
+    {
+      summary["last_modified"] = py::none();
+    }
+    result.append(std::move(summary));
+  }
+  return result;
+}
+
 void deleteEntity(EntityHandle& entity)
 {
   auto& document = DocumentHandle{entity.document, entity.generation}.get();
@@ -2909,7 +2987,8 @@ void defineModule(py::module_& module)
 
   py::class_<EntityHandle>(module, "Entity")
     .def_property_readonly(
-      "id", [](EntityHandle& self) {
+      "id",
+      [](EntityHandle& self) {
         return nodeId(DocumentHandle{self.document, self.generation}.get(), self.get());
       })
     .def_property_readonly(
@@ -3038,7 +3117,8 @@ void defineModule(py::module_& module)
 
   py::class_<BrushHandle>(module, "Brush")
     .def_property_readonly(
-      "id", [](BrushHandle& self) {
+      "id",
+      [](BrushHandle& self) {
         return nodeId(DocumentHandle{self.document, self.generation}.get(), self.get());
       })
     .def_property_readonly("entity", brushEntity)
@@ -4209,28 +4289,37 @@ void defineModule(py::module_& module)
   faces.def("selected", selectedFaces);
   faces.def("set_material", setFacesMaterial, py::arg("faces"), py::arg("material"));
 
-  auto placeModel = [](const std::string& path,
-                       const py::object& origin,
-                       const std::string& classname,
-                       const std::string& property,
-                       const bool select) {
+  auto placeModel = [](
+                      const std::string& path,
+                      const py::object& origin,
+                      const std::string& classname,
+                      const std::string& property,
+                      const bool select) {
     return placeAsset(path, ".mdl", classname, property, origin, select);
   };
-  auto placeSprite = [](const std::string& path,
-                        const py::object& origin,
-                        const std::string& classname,
-                        const std::string& property,
-                        const bool select) {
-    return placeAsset(path, ".spr", classname, property, origin, select);
-  };
-  auto placeSound = [](const std::string& path,
+  auto placeSprite = [](
+                       const std::string& path,
                        const py::object& origin,
                        const std::string& classname,
                        const std::string& property,
                        const bool select) {
+    return placeAsset(path, ".spr", classname, property, origin, select);
+  };
+  auto placeSound = [](
+                      const std::string& path,
+                      const py::object& origin,
+                      const std::string& classname,
+                      const std::string& property,
+                      const bool select) {
     return placeAsset(path, ".wav", classname, property, origin, select);
   };
   auto assets = module.def_submodule("assets", "GoldSrc asset placement operations.");
+  assets.def(
+    "search",
+    searchAssets,
+    py::arg("query") = "",
+    py::arg("type") = py::none(),
+    py::arg("limit") = 50u);
   assets.def(
     "place_model",
     placeModel,

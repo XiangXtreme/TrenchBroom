@@ -176,6 +176,12 @@ assert isinstance(tb.materials.list(), list)
 assert isinstance(tb.materials.collections(), list)
 assert isinstance(tb.materials.current(), str)
 assert tb.materials.search("definitely-not-a-loaded-material") == []
+assert tb.assets.search(query="python-api-missing-asset", limit=0) == []
+try:
+    tb.assets.search(type="invalid")
+    raise AssertionError("asset search accepted an invalid type")
+except ValueError:
+    pass
 assert isinstance(tb.actions.list(), list)
 history = tb.history.status()
 assert {"can_undo", "can_redo", "undo_name", "redo_name"} <= set(history)

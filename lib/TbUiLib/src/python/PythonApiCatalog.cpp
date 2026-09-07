@@ -153,7 +153,10 @@ constexpr auto DocumentsSymbols = std::array{
   PythonApiSymbol{
     "open", Function, "(path) -> Document", PythonApiValueType{PythonApiType::Document}},
   PythonApiSymbol{
-    "activate", Function, "(document) -> Document", PythonApiValueType{PythonApiType::Document}},
+    "activate",
+    Function,
+    "(document) -> Document",
+    PythonApiValueType{PythonApiType::Document}},
   PythonApiSymbol{"close", Function, "(document, discard_changes=False)"},
   PythonApiSymbol{
     "save",
@@ -274,14 +277,21 @@ constexpr auto HistorySymbols = std::array{
 };
 
 constexpr auto AssetsSymbols = std::array{
+  PythonApiSymbol{"search", Function, "(query='', type=None, limit=50) -> list[dict]"},
   PythonApiSymbol{
-    "place_model", Function, "(path, origin=None, classname='cycler_sprite', ...) -> Entity",
+    "place_model",
+    Function,
+    "(path, origin=None, classname='cycler_sprite', ...) -> Entity",
     PythonApiValueType{PythonApiType::Entity}},
   PythonApiSymbol{
-    "place_sprite", Function, "(path, origin=None, classname='cycler_sprite', ...) -> Entity",
+    "place_sprite",
+    Function,
+    "(path, origin=None, classname='cycler_sprite', ...) -> Entity",
     PythonApiValueType{PythonApiType::Entity}},
   PythonApiSymbol{
-    "place_sound", Function, "(path, origin=None, classname='ambient_generic', ...) -> Entity",
+    "place_sound",
+    Function,
+    "(path, origin=None, classname='ambient_generic', ...) -> Entity",
     PythonApiValueType{PythonApiType::Entity}},
 };
 

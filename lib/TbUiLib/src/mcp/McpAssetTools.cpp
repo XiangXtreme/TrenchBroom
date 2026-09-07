@@ -23,8 +23,6 @@
 #include "McpBridgeServerTools.h"
 #include "McpResponseUtils.h"
 #include "McpToolSupport.h"
-#include "fs/PathMatcher.h"
-#include "fs/TraversalMode.h"
 #include "mcp/McpError.h"
 #include "mdl/AddRemoveNodesCommand.h"
 #include "mdl/Brush.h"
@@ -32,9 +30,7 @@
 #include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
 #include "mdl/EntityProperties.h"
-#include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
-#include "mdl/Map_Assets.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/Map_World.h"
@@ -48,6 +44,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationAssets.h"
 
 #include <algorithm>
 #include <array>
@@ -318,34 +315,6 @@ std::optional<BrowserCellType> browserCellTypeFromString(const QString& type)
   return std::nullopt;
 }
 
-std::optional<std::vector<BrowserAsset>> collectMcpAssets(mdl::Map& map)
-{
-  const auto enabledMods = mdl::enabledMods(map);
-  if (enabledMods.empty())
-  {
-    return std::vector<BrowserAsset>{};
-  }
-
-  auto modRoots = std::vector<std::filesystem::path>{};
-  modRoots.reserve(enabledMods.size());
-  for (const auto& mod : enabledMods)
-  {
-    modRoots.push_back((map.gamePath() / std::filesystem::path{mod}).lexically_normal());
-  }
-
-  const auto& fs = map.gameFileSystem();
-  return collectBrowserAssets(
-    {},
-    modRoots,
-    [&](const auto& rootPath) {
-      return fs.find(
-        rootPath,
-        fs::TraversalMode::Recursive,
-        fs::makeExtensionPathMatcher(goldSrcAssetExtensions()));
-    },
-    [&](const auto& path) { return fs.makeAbsolute(path); });
-}
-
 QJsonObject assetJson(const BrowserAsset& asset)
 {
   auto json = QJsonObject{
@@ -382,7 +351,7 @@ McpBridgeToolResult assetSearchResult(
   }
 
   auto& map = mapWindow->document().map();
-  const auto assets = collectMcpAssets(map);
+  const auto assets = collectAutomationAssets(map);
   if (!assets)
   {
     return McpBridgeToolResult::failure(
