@@ -6,6 +6,7 @@
 
 #include "ui/automation/AutomationEntities.h"
 
+#include "base/Color.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityDefinitionManager.h"
@@ -13,10 +14,107 @@
 #include "mdl/EntityProperties.h"
 #include "mdl/Map.h"
 
+#include <type_traits>
+
 namespace tb::ui::automation
 {
 namespace
 {
+
+QJsonArray vecToJson(const vm::vec3d& value)
+{
+  return QJsonArray{value.x(), value.y(), value.z()};
+}
+
+QJsonObject boundsToJson(const vm::bbox3d& bounds)
+{
+  return QJsonObject{{"min", vecToJson(bounds.min)}, {"max", vecToJson(bounds.max)}};
+}
+
+QString entityDefinitionTypeName(const mdl::EntityDefinition& definition)
+{
+  return mdl::getType(definition) == mdl::EntityDefinitionType::Point ? "point" : "brush";
+}
+
+QString propertyValueTypeName(const mdl::PropertyValueType& type)
+{
+  return std::visit(
+    [](const auto& valueType) -> QString {
+      using T = std::decay_t<decltype(valueType)>;
+      if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::LinkTarget>)
+      {
+        return "target";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::LinkSource>)
+      {
+        return "target_source";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::String>)
+      {
+        return "string";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Boolean>)
+      {
+        return "boolean";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Integer>)
+      {
+        return "integer";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Float>)
+      {
+        return "float";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Choice>)
+      {
+        return "choice";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Flags>)
+      {
+        return "flags";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Origin>)
+      {
+        return "origin";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Input>)
+      {
+        return "input";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Output>)
+      {
+        return "output";
+      }
+      else if constexpr (
+        std::is_same_v<T, mdl::PropertyValueTypes::Color<RgbF>>
+        || std::is_same_v<T, mdl::PropertyValueTypes::Color<RgbB>>
+        || std::is_same_v<T, mdl::PropertyValueTypes::Color<Rgb>>)
+      {
+        return "color";
+      }
+      else
+      {
+        return "unknown";
+      }
+    },
+    type);
+}
+
+QJsonObject propertyDefinitionJson(const mdl::PropertyDefinition& property)
+{
+  auto result = QJsonObject{
+    {"key", QString::fromStdString(property.key)},
+    {"type", propertyValueTypeName(property.valueType)},
+    {"shortDescription", QString::fromStdString(property.shortDescription)},
+    {"longDescription", QString::fromStdString(property.longDescription)},
+    {"readOnly", property.readOnly},
+  };
+  if (const auto defaultValue = mdl::PropertyDefinition::defaultValue(property))
+  {
+    result.insert("defaultValue", QString::fromStdString(*defaultValue));
+  }
+  return result;
+}
 
 int removeEmptyProperties(mdl::Entity& entity)
 {
@@ -44,6 +142,71 @@ void deletePointEntityNodes(std::vector<mdl::EntityNode*>& nodes)
     delete node;
   }
   nodes.clear();
+}
+
+QJsonArray listEntityDefinitionSummaries(
+  const mdl::Map& map, const QString& type, const QString& query, const size_t limit)
+{
+  auto result = QJsonArray{};
+  if (limit == 0u)
+  {
+    return result;
+  }
+  for (const auto& definition : map.entityDefinitionManager().definitions())
+  {
+    const auto definitionType = entityDefinitionTypeName(definition);
+    if (!type.isEmpty() && definitionType != type)
+    {
+      continue;
+    }
+    const auto name = QString::fromStdString(definition.name);
+    const auto description = QString::fromStdString(definition.description);
+    if (
+      !query.isEmpty() && !name.contains(query, Qt::CaseInsensitive)
+      && !description.contains(query, Qt::CaseInsensitive))
+    {
+      continue;
+    }
+    result.push_back(QJsonObject{
+      {"classname", name},
+      {"type", definitionType},
+      {"description", description},
+      {"propertyCount", static_cast<int>(definition.propertyDefinitions.size())},
+    });
+    if (result.size() >= static_cast<qsizetype>(limit))
+    {
+      break;
+    }
+  }
+  return result;
+}
+
+std::optional<QJsonObject> entityDefinitionSchema(const mdl::Map& map, const QString& classname)
+{
+  const auto* definition =
+    map.entityDefinitionManager().definition(classname.trimmed().toStdString());
+  if (definition == nullptr)
+  {
+    return std::nullopt;
+  }
+
+  auto properties = QJsonArray{};
+  for (const auto& property : definition->propertyDefinitions)
+  {
+    properties.push_back(propertyDefinitionJson(property));
+  }
+  auto result = QJsonObject{
+    {"classname", QString::fromStdString(definition->name)},
+    {"type", entityDefinitionTypeName(*definition)},
+    {"description", QString::fromStdString(definition->description)},
+    {"propertyCount", properties.size()},
+    {"properties", properties},
+  };
+  if (const auto* pointDefinition = mdl::getPointEntityDefinition(definition))
+  {
+    result.insert("bounds", boundsToJson(pointDefinition->bounds));
+  }
+  return result;
 }
 
 AutomationPointEntityBuildResult buildCheckedPointEntities(

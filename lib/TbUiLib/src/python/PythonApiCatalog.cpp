@@ -238,6 +238,18 @@ constexpr auto EntitiesSymbols = std::array{
     Function,
     "(entities, select=False) -> list[Entity]",
     PythonApiValueType{PythonApiType::Entity, 1u}},
+  PythonApiSymbol{"entities_list", Function, "(type='', query='', limit=200) -> list[dict]"},
+  PythonApiSymbol{"schema", Function, "(classname) -> dict"},
+  PythonApiSymbol{
+    "create_from_schema",
+    Function,
+    "(classname, properties={}, origin=None, select=True) -> Entity",
+    PythonApiValueType{PythonApiType::Entity}},
+  PythonApiSymbol{
+    "create_checked",
+    Function,
+    "(classname, properties={}, origin=None, select=True) -> Entity",
+    PythonApiValueType{PythonApiType::Entity}},
   PythonApiSymbol{"delete", Function, "(entity)"},
   PythonApiSymbol{"update", Function, "(entity, properties={}, remove_keys=[])"},
   PythonApiSymbol{

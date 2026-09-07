@@ -282,6 +282,30 @@ checked_entities = tb.entities.create_checked_batch([
 ])
 assert len(checked_entities) == 2
 assert checked_entities[0]["targetname"] == "checked"
+definitions = tb.entities.entities_list(type="point", query="test_spawn")
+assert len(definitions) == 1
+assert definitions[0]["classname"] == "test_spawn"
+assert definitions[0]["type"] == "point"
+assert tb.entities.entities_list(type="brush", query="test_spawn") == []
+schema = tb.entities.schema("test_spawn")
+assert schema["classname"] == "test_spawn"
+assert schema["type"] == "point"
+assert schema["bounds"] is not None
+schema_entity = tb.entities.create_from_schema(
+    "test_spawn", {"targetname": "schema"}, (144, 32, 48), select=False)
+assert schema_entity["targetname"] == "schema"
+checked_entity = tb.entities.create_checked("test_spawn", select=False)
+assert checked_entity.classname == "test_spawn"
+try:
+    tb.entities.entities_list(type="invalid")
+    raise AssertionError("entity definition listing accepted invalid type")
+except ValueError:
+    pass
+try:
+    tb.entities.schema("missing")
+    raise AssertionError("entity schema accepted unknown classname")
+except KeyError:
+    pass
 checked_count = len(tb.entities.find(classname="test_spawn"))
 try:
     tb.entities.create_checked_batch([{"classname": "test_spawn"}, {"classname": "missing"}])

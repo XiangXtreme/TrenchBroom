@@ -6,11 +6,14 @@
 
 #pragma once
 
-#include "vm/bbox.h"
-
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QString>
 
+#include "vm/bbox.h"
+
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -47,5 +50,12 @@ AutomationPointEntityBuildResult buildCheckedPointEntities(
   const mdl::Map& map, const std::vector<AutomationPointEntitySpec>& entities);
 
 void deletePointEntityNodes(std::vector<mdl::EntityNode*>& nodes);
+
+/** Compact protocol-neutral summaries for querying the active FGD definitions. */
+QJsonArray listEntityDefinitionSummaries(
+  const mdl::Map& map, const QString& type, const QString& query, size_t limit);
+
+/** Returns the full FGD schema for an active entity classname, if present. */
+std::optional<QJsonObject> entityDefinitionSchema(const mdl::Map& map, const QString& classname);
 
 } // namespace tb::ui::automation

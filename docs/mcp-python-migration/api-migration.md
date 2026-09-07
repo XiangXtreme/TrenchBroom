@@ -69,6 +69,12 @@ entity，并在写入前根据当前 FGD 验证每个 `classname`。每项包含
 定义或 entity payload 不会改动地图。过渡期 MCP `entity_create_checked_batch` 使用同一节点
 构造服务，同时保留协议专属诊断和历史记录。
 
+`tb.entities.entities_list(type="", query="", limit=200)` 返回当前地图 FGD 的紧凑实体
+定义摘要；`type` 可为 `point` 或 `brush`。`tb.entities.schema(classname)` 返回一个定义的完整
+属性 schema、默认值和 point bounds。`tb.entities.create_from_schema(...)` 与
+`tb.entities.create_checked(...)` 使用这个 FGD 定义创建 point entity，应用 FGD 默认属性后再覆盖
+传入属性；它们与批量 checked 接口共享构造及事务服务。
+
 ## 文件 IR 预览
 
 `tb.ir.compile_preview_from_file(path)` 只接受绝对路径，读取受 10 MiB 上限约束的 JSON

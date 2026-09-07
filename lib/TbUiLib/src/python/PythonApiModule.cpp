@@ -2827,6 +2827,48 @@ std::vector<EntityHandle> createCheckedPointEntities(
   return result;
 }
 
+py::list listEntityDefinitions(
+  const std::string& type, const std::string& query, const size_t limit)
+{
+  const auto normalizedType = QString::fromStdString(type).trimmed().toLower();
+  if (!normalizedType.isEmpty() && normalizedType != "point" && normalizedType != "brush")
+  {
+    throw py::value_error{"type must be point or brush"};
+  }
+  const auto summaries = automation::listEntityDefinitionSummaries(
+    currentDocument().get().map(), normalizedType, QString::fromStdString(query), limit);
+  return py::cast<py::list>(jsonValueToPython(summaries));
+}
+
+py::dict entitySchema(const std::string& classname)
+{
+  const auto schema = automation::entityDefinitionSchema(
+    currentDocument().get().map(), QString::fromStdString(classname));
+  if (!schema)
+  {
+    throw py::key_error{"Unknown entity classname: " + classname};
+  }
+  return py::cast<py::dict>(jsonValueToPython(*schema));
+}
+
+EntityHandle createEntityFromSchema(
+  const std::string& classname,
+  const py::dict& properties,
+  const py::object& origin,
+  const bool select)
+{
+  auto entity = py::dict{};
+  entity["classname"] = classname;
+  entity["properties"] = properties;
+  if (!origin.is_none())
+  {
+    entity["origin"] = origin;
+  }
+  auto entities = py::list{};
+  entities.append(std::move(entity));
+  return createCheckedPointEntities(entities, select).front();
+}
+
 EntityHandle placeAsset(
   const std::string& path,
   const std::string_view expectedExtension,
@@ -5424,6 +5466,27 @@ void defineModule(py::module_& module)
     createCheckedPointEntities,
     py::arg("entities"),
     py::arg("select") = false);
+  entities.def(
+    "entities_list",
+    listEntityDefinitions,
+    py::arg("type") = "",
+    py::arg("query") = "",
+    py::arg("limit") = 200u);
+  entities.def("schema", entitySchema, py::arg("classname"));
+  entities.def(
+    "create_from_schema",
+    createEntityFromSchema,
+    py::arg("classname"),
+    py::arg("properties") = py::dict{},
+    py::arg("origin") = py::none(),
+    py::arg("select") = true);
+  entities.def(
+    "create_checked",
+    createEntityFromSchema,
+    py::arg("classname"),
+    py::arg("properties") = py::dict{},
+    py::arg("origin") = py::none(),
+    py::arg("select") = true);
   entities.def("delete", deleteEntity, py::arg("entity"));
   entities.def(
     "update",
