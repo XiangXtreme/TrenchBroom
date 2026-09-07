@@ -143,6 +143,7 @@ constexpr auto DocumentsSymbols = std::array{
     Function,
     "() -> list[Document]",
     PythonApiValueType{PythonApiType::Document, 1u}},
+  PythonApiSymbol{"snapshot", Function, "() -> dict"},
 };
 
 constexpr auto ObjectsSymbols = std::array{
@@ -151,6 +152,8 @@ constexpr auto ObjectsSymbols = std::array{
     Function,
     "() -> Selection",
     PythonApiValueType{PythonApiType::Selection}},
+  PythonApiSymbol{"snapshot", Function, "() -> dict"},
+  PythonApiSymbol{"inspect", Function, "() -> dict"},
   PythonApiSymbol{"translate", Function, "(...)"},
   PythonApiSymbol{"rotate", Function, "(...)"},
   PythonApiSymbol{"scale", Function, "(...)"},
@@ -171,9 +174,16 @@ constexpr auto EntitiesSymbols = std::array{
     Function,
     "(include_brushes=False) -> list[Entity]",
     PythonApiValueType{PythonApiType::Entity, 1u}},
+  PythonApiSymbol{
+    "find",
+    Function,
+    "(classname=None, property=None, value=None) -> list[Entity]",
+    PythonApiValueType{PythonApiType::Entity, 1u}},
 };
 
 constexpr auto BrushesSymbols = std::array{
+  PythonApiSymbol{
+    "list", Function, "() -> list[Brush]", PythonApiValueType{PythonApiType::Brush, 1u}},
   PythonApiSymbol{
     "selected",
     Function,

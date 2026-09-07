@@ -38,6 +38,7 @@
 #include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
 #include "mdl/EntityNodeBase.h"
+#include "mdl/Grid.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
@@ -80,6 +81,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <limits>
@@ -788,6 +790,144 @@ std::vector<EntityHandle> allEntities(MapDocument& document)
       PythonHandleRegistry::instance().nodeGeneration(entity)});
   }
   return handles;
+}
+
+std::vector<BrushHandle> allBrushes(MapDocument& document)
+{
+  auto brushes = std::vector<mdl::BrushNode*>{};
+  auto visitNode = std::function<void(mdl::Node&)>{};
+  visitNode = [&](mdl::Node& node) {
+    if (auto* brushNode = dynamic_cast<mdl::BrushNode*>(&node))
+    {
+      brushes.push_back(brushNode);
+      return;
+    }
+    for (auto* child : node.children())
+    {
+      if (child != nullptr)
+      {
+        visitNode(*child);
+      }
+    }
+  };
+  visitNode(document.map().worldNode());
+
+  auto result = std::vector<BrushHandle>{};
+  result.reserve(brushes.size());
+  const auto generation = PythonHandleRegistry::instance().documentGeneration(&document);
+  for (auto* brush : brushes)
+  {
+    result.push_back(BrushHandle{
+      &document,
+      generation,
+      brush,
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(brush)});
+  }
+  return result;
+}
+
+bool containsCaseInsensitive(const std::string_view value, const std::string_view query)
+{
+  if (query.empty())
+  {
+    return true;
+  }
+  const auto match =
+    std::ranges::search(value, query, [](const char lhs, const char rhs) {
+      return std::tolower(static_cast<unsigned char>(lhs))
+             == std::tolower(static_cast<unsigned char>(rhs));
+    });
+  return match.begin() != value.end();
+}
+
+std::vector<EntityHandle> findEntities(
+  MapDocument& document,
+  const std::optional<std::string>& classname,
+  const std::optional<std::string>& property,
+  const std::optional<std::string>& value)
+{
+  auto result = std::vector<EntityHandle>{};
+  for (auto entity : allEntities(document))
+  {
+    const auto& model = entity.get().entity();
+    if (classname && model.classname() != *classname)
+    {
+      continue;
+    }
+    if (property && !model.hasProperty(*property))
+    {
+      continue;
+    }
+    if (value)
+    {
+      auto matches = false;
+      for (const auto& candidate : model.properties())
+      {
+        if (
+          (!property || candidate.key() == *property)
+          && containsCaseInsensitive(candidate.value(), *value))
+        {
+          matches = true;
+          break;
+        }
+      }
+      if (!matches)
+      {
+        continue;
+      }
+    }
+    result.push_back(std::move(entity));
+  }
+  return result;
+}
+
+std::vector<EntityHandle> selectedEntities(SelectionHandle& selection);
+std::vector<FaceHandle> selectedBrushFaces(SelectionHandle& selection);
+
+py::dict documentSnapshot(DocumentHandle document)
+{
+  auto& map = document.get().map();
+  const auto& selection = map.selection();
+  const auto& path = map.path();
+  auto result = py::dict{};
+  result["path"] = path.empty() ? py::none() : py::cast(path.u8string());
+  result["persistent"] = map.persistent();
+  result["modified"] = map.modified();
+  result["entity_count"] = py::int_(allEntities(document.get()).size());
+  result["brush_count"] = py::int_(allBrushes(document.get()).size());
+  result["selected_node_count"] = py::int_(selection.nodes.size());
+  result["selected_entity_count"] = py::int_(selection.entities.size());
+  result["selected_brush_count"] = py::int_(selection.brushes.size());
+  result["selected_face_count"] = py::int_(selection.brushFaces.size());
+  result["grid_size"] = map.grid().size();
+  result["grid_snap"] = map.grid().snap();
+  result["grid_visible"] = map.grid().visible();
+  return result;
+}
+
+py::dict selectionSnapshot(SelectionHandle selection)
+{
+  const auto& mapSelection = selection.getDocument().map().selection();
+  auto result = py::dict{};
+  result["has_selection"] = mapSelection.hasAny();
+  result["node_count"] = py::int_(mapSelection.nodes.size());
+  result["entity_count"] = py::int_(mapSelection.entities.size());
+  result["brush_count"] = py::int_(mapSelection.brushes.size());
+  result["face_count"] = py::int_(mapSelection.brushFaces.size());
+  result["entities"] = selectedEntities(selection);
+  auto brushes = std::vector<BrushHandle>{};
+  brushes.reserve(mapSelection.brushes.size());
+  for (auto* brush : mapSelection.brushes)
+  {
+    brushes.push_back(BrushHandle{
+      &selection.getDocument(),
+      selection.generation,
+      brush,
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(brush)});
+  }
+  result["brushes"] = std::move(brushes);
+  result["faces"] = selectedBrushFaces(selection);
+  return result;
 }
 
 std::vector<BrushHandle> entityBrushes(EntityHandle& entity)
@@ -3425,9 +3565,15 @@ void defineModule(py::module_& module)
   auto documents = module.def_submodule("documents", "Document lifecycle operations.");
   documents.def("current", currentDocument);
   documents.def("list", openDocuments);
+  documents.def("snapshot", []() { return documentSnapshot(currentDocument()); });
 
   auto objects = module.def_submodule("objects", "Selection-backed object operations.");
   objects.def("selection", [currentSelection]() { return currentSelection(); });
+  objects.def("snapshot", []() { return documentSnapshot(currentDocument()); });
+  objects.def("inspect", [currentSelection]() {
+    auto selection = currentSelection();
+    return selectionSnapshot(selection);
+  });
   objects.def("translate", translateHelper);
   objects.def("rotate", rotateHelper);
   objects.def("scale", scaleHelper);
@@ -3445,9 +3591,25 @@ void defineModule(py::module_& module)
     return allEntities(document.get());
   });
   entities.def("selected", selectedEntities, py::arg("include_brushes") = false);
+  entities.def(
+    "find",
+    [](
+      const std::optional<std::string>& classname,
+      const std::optional<std::string>& property,
+      const std::optional<std::string>& value) {
+      auto document = currentDocument();
+      return findEntities(document.get(), classname, property, value);
+    },
+    py::arg("classname") = py::none(),
+    py::arg("property") = py::none(),
+    py::arg("value") = py::none());
 
   auto brushes =
     module.def_submodule("brushes", "Brush collection and creation operations.");
+  brushes.def("list", []() {
+    auto document = currentDocument();
+    return allBrushes(document.get());
+  });
   brushes.def("selected", selectedBrushes);
   brushes.def("create", createBrush, py::arg("points"), py::arg("material") = py::none());
 

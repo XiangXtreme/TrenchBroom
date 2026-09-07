@@ -144,6 +144,15 @@ assert isinstance(doc.material_collections, list)
 assert tb.documents.current().path == doc.path
 assert len(tb.documents.list()) == 1
 assert tb.documents.list()[0].path == doc.path
+snapshot = tb.documents.snapshot()
+assert snapshot["entity_count"] >= 1
+assert snapshot["brush_count"] == 0
+assert snapshot["selected_node_count"] == 0
+assert "grid_size" in tb.objects.snapshot()
+assert "has_selection" in tb.objects.inspect()
+assert len(tb.entities.find(classname="worldspawn")) == 1
+assert len(tb.entities.find(property="classname", value="world")) == 1
+assert len(tb.brushes.list()) == 0
 assert tb.objects.selection().brushes == []
 tb.objects.set_selection([])
 assert tb.entities.list()[0].classname == "worldspawn"
@@ -153,6 +162,13 @@ assert tb.faces.selected() == []
 assert isinstance(tb.materials.list(), list)
 assert isinstance(tb.materials.collections(), list)
 assert isinstance(tb.actions.list(), list)
+brush = tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(16,16,-16),
+                           (-16,-16,16),(16,-16,16),(16,16,16),(-16,16,16)])
+all_brushes = tb.brushes.list()
+assert len(all_brushes) >= 1
+assert len(all_brushes[0].faces()) > 0
+assert tb.documents.snapshot()["brush_count"] >= 1
+assert tb.objects.inspect()["brush_count"] >= 1
 with doc.transaction("Python API smoke"):
     pass
 with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
@@ -167,7 +183,10 @@ with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
     context.logger = &window.pythonLogger();
     context.scriptPath = env.dir() / "api_smoke.py";
 
-    CHECK(PythonRuntime::instance().runScript(context, context.scriptPath));
+    const auto scriptSucceeded =
+      PythonRuntime::instance().runScript(context, context.scriptPath);
+    CAPTURE(PythonRuntime::instance().lastError());
+    CHECK(scriptSucceeded);
     CHECK(env.loadFile("python-api-smoke-ok.txt") == "worldspawn");
   }
 
