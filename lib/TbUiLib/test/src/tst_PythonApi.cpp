@@ -347,6 +347,77 @@ assert len(tb.documents.list()) == 1
     CHECK(env.loadFile("python-api-smoke-ok.txt") == "worldspawn");
   }
 
+  SECTION("applies supported IR atomically through the native automation service")
+  {
+    auto env = fs::TestEnvironment{};
+    auto currentPathGuard = CurrentPathGuard{env.dir()};
+    env.createFile(
+      "ir_apply.py",
+      R"(
+import json
+import os
+import trenchbroom as tb
+
+before_brushes = len(tb.brushes.list())
+before_entities = len(tb.entities.find(classname="test_spawn"))
+applied = tb.ir.apply({
+    "name": "Python API atomic IR",
+    "select": False,
+    "selectEntities": False,
+    "operations": [
+        {"type": "box", "min": [-320, -64, -32], "max": [-256, 0, 32]},
+        {"type": "prism", "points2d": [[-240, -64], [-192, -64], [-192, 0], [-240, 0]],
+         "minZ": -32, "maxZ": 32},
+    ],
+    "entities": [{"classname": "test_spawn", "origin": [-224, 32, 16]}],
+})
+assert applied["atomic"]
+assert applied["brush_count"] == 2
+assert applied["entity_count"] == 1
+assert len(applied["brushes"]) == 2
+assert len(applied["entities"]) == 1
+assert len(applied["objects"]) == 3
+assert len(tb.brushes.list()) == before_brushes + 2
+assert len(tb.entities.find(classname="test_spawn")) == before_entities + 1
+
+path = os.path.abspath("ir-apply.json")
+with open(path, "w", encoding="utf-8") as file:
+    json.dump({"select": False, "operations": [{"type": "box", "size": [64, 64, 64]}]}, file)
+from_file = tb.ir.apply_from_file(path)
+assert os.path.samefile(from_file["source_path"], path)
+assert from_file["brush_count"] == 1
+assert "legacyUnversionedIr" in from_file["warnings"]
+
+before_invalid = len(tb.brushes.list())
+try:
+    tb.ir.apply({"operations": [
+        {"type": "box", "size": [64, 64, 64]},
+        {"type": "not-a-native-ir-operation"},
+    ]})
+    raise AssertionError("IR apply accepted an unsupported operation")
+except ValueError:
+    pass
+assert len(tb.brushes.list()) == before_invalid
+
+with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
+    file.write("ok")
+)");
+
+    auto context = PythonExecutionContext{};
+    context.mapWindow = &window;
+    context.document = &window.document();
+    context.appController = &window.appController();
+    context.currentMapView = window.currentMapViewBase();
+    context.logger = &window.pythonLogger();
+    context.scriptPath = env.dir() / "ir_apply.py";
+
+    const auto scriptSucceeded =
+      PythonRuntime::instance().runScript(context, context.scriptPath);
+    CAPTURE(PythonRuntime::instance().lastError());
+    CHECK(scriptSucceeded);
+    CHECK(env.loadFile("ir-apply-ok.txt") == "ok");
+  }
+
   SECTION("runs isolated MCP Python globals and rolls back invalid results")
   {
     auto context = PythonExecutionContext{};

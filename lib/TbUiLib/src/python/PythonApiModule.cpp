@@ -74,6 +74,7 @@
 #include "ui/automation/AutomationEntities.h"
 #include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationIr.h"
+#include "ui/automation/AutomationIrExecution.h"
 #include "ui/automation/AutomationNodes.h"
 #include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationStateStore.h"
@@ -1578,6 +1579,82 @@ py::dict compileAutomationIrPreviewFromFile(const std::string& path)
   result["ir"] = jsonValueToPython(*parsed.ir);
   result["warnings"] = jsonValueToPython(parsed.warnings);
   result["preview"] = jsonValueToPython(preview);
+  return result;
+}
+
+py::dict automationIrApplyResultToPython(
+  const automation::AutomationIrApplyResult& applyResult, MapDocument& document)
+{
+  auto result = py::dict{};
+  result["ir"] = jsonValueToPython(applyResult.ir);
+  result["warnings"] = jsonValueToPython(applyResult.warnings);
+  result["preview"] = jsonValueToPython(applyResult.preview);
+  result["brush_count"] = applyResult.brushCount;
+  result["entity_count"] = applyResult.entityCount;
+  result["atomic"] = true;
+
+  const auto documentGeneration =
+    PythonHandleRegistry::instance().documentGeneration(&document);
+  auto brushes = py::list{};
+  auto entities = py::list{};
+  auto objects = py::list{};
+  for (auto* node : applyResult.createdNodes)
+  {
+    if (auto* brush = dynamic_cast<mdl::BrushNode*>(node))
+    {
+      auto handle = BrushHandle{
+        &document,
+        documentGeneration,
+        brush,
+        PythonHandleRegistry::instance().nodeLifetimeGeneration(brush)};
+      brushes.append(py::cast(handle));
+      objects.append(py::cast(handle));
+    }
+    else if (auto* entity = dynamic_cast<mdl::EntityNodeBase*>(node))
+    {
+      auto handle = EntityHandle{
+        &document,
+        documentGeneration,
+        entity,
+        PythonHandleRegistry::instance().nodeGeneration(entity)};
+      entities.append(py::cast(handle));
+      objects.append(py::cast(handle));
+    }
+  }
+  result["brushes"] = std::move(brushes);
+  result["entities"] = std::move(entities);
+  result["objects"] = std::move(objects);
+  return result;
+}
+
+py::dict applyAutomationIrFromPython(const py::object& value, const std::string& name)
+{
+  auto& document = currentDocument().get();
+  auto options = automation::AutomationIrApplyOptions{};
+  options.transactionName = QString::fromStdString(name);
+  const auto applyResult =
+    automation::applyAutomationIr(document.map(), jsonObjectFromPython(value), options);
+  if (!applyResult.ok)
+  {
+    throw py::value_error{applyResult.error.toStdString()};
+  }
+  return automationIrApplyResultToPython(applyResult, document);
+}
+
+py::dict applyAutomationIrFromFile(const std::string& path, const std::string& name)
+{
+  const auto absolutePath = absolutePathFromPython(path);
+  const auto parsed = automation::parseAutomationIrFile(pathAsQString(absolutePath));
+  if (!parsed.ir)
+  {
+    throw py::value_error{parsed.error.toStdString()};
+  }
+  auto result = applyAutomationIrFromPython(jsonValueToPython(*parsed.ir), name);
+  if (!parsed.warnings.isEmpty())
+  {
+    result["warnings"] = jsonValueToPython(parsed.warnings);
+  }
+  result["source_path"] = pathAsQString(absolutePath).toStdString();
   return result;
 }
 
@@ -5453,6 +5530,16 @@ void defineModule(py::module_& module)
   ir.def("validate", validateAutomationIrFromPython, py::arg("ir"));
   ir.def("preview", validateAutomationIrFromPython, py::arg("ir"));
   ir.def("compile_preview_from_file", compileAutomationIrPreviewFromFile, py::arg("path"));
+  ir.def(
+    "apply",
+    applyAutomationIrFromPython,
+    py::arg("ir"),
+    py::arg("name") = "Python API Apply IR");
+  ir.def(
+    "apply_from_file",
+    applyAutomationIrFromFile,
+    py::arg("path"),
+    py::arg("name") = "Python API Apply IR");
 
   auto geometry = module.def_submodule("geometry", "Native geometry analysis operations.");
   geometry.def(

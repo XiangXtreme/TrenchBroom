@@ -75,5 +75,16 @@ entity，并在写入前根据当前 FGD 验证每个 `classname`。每项包含
 IR 文件，并复用与 MCP 相同的 schema 校验。成功时返回已规范化的 `ir`、兼容性
 `warnings` 和 `preview`。preview 包含 `python-ir-preview-*` ID、canonical source path、
 当前文档 fingerprint 和十分钟的过期信息；预览缓存由 `AppController` 的 automation state
-管理，最多保留 64 项。该操作不修改地图，也不执行 IR；文件 apply 与 replace guard 仍在
-迁移中，不能将预览成功当作可提交的地图操作。
+管理，最多保留 64 项。该操作不修改地图，也不执行 IR。
+
+## IR 执行基础闭环
+
+`tb.ir.apply(ir, name="Python API Apply IR")` 与
+`tb.ir.apply_from_file(path, name="Python API Apply IR")` 通过 automation 执行服务应用
+已校验的 IR，而不反调 MCP handler。当前服务支持 `box`（`min`/`max` 或 `origin`/`size`）、
+严格凸 `prism` 和 FGD 已定义的 point entity。它会在构造所有原生节点后才开启单一事务；任一
+操作、实体或原生提交失败时，不会留下此次请求的几何或实体。成功结果同时包含规范化 IR、预览、
+brush/entity 计数和可继续传给 `tb.objects`、`tb.brushes` 或 `tb.entities` 的句柄。
+
+`replace_module` 及其 preview guard、完整 blockout 操作集合仍在服务迁移中。当前它们会在
+写入前明确拒绝，不能以普通 `create` 代替其版本和内容 hash guard。

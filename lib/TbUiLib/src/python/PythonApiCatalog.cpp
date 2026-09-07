@@ -341,6 +341,9 @@ constexpr auto IrSymbols = std::array{
   PythonApiSymbol{"validate", Function, "(ir) -> dict"},
   PythonApiSymbol{"preview", Function, "(ir) -> dict"},
   PythonApiSymbol{"compile_preview_from_file", Function, "(path) -> dict"},
+  PythonApiSymbol{"apply", Function, "(ir, name='Python API Apply IR') -> dict"},
+  PythonApiSymbol{
+    "apply_from_file", Function, "(path, name='Python API Apply IR') -> dict"},
 };
 
 constexpr auto GeometrySymbols = std::array{
