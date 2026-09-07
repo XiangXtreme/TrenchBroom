@@ -1675,7 +1675,7 @@ void forgetModule(const std::string& moduleId)
 py::dict compactModule(const std::string& moduleId)
 {
   const auto& context = requireContext();
-  if (context.moduleStore == nullptr)
+  if (context.moduleStore == nullptr && context.metadataStore == nullptr)
   {
     throw py::key_error{"Unknown module '" + moduleId + "'"};
   }
@@ -1684,14 +1684,16 @@ py::dict compactModule(const std::string& moduleId)
   auto& map = document.get().map();
   const auto fingerprint = objectRegistry().documentFingerprint(map);
   const auto moduleIdQString = QString::fromStdString(moduleId);
-  auto module = std::ranges::find_if(*context.moduleStore, [&](const auto& entry) {
-    return entry.second.moduleId == moduleIdQString
-           && entry.second.documentFingerprint == fingerprint;
+  const auto recoveredModules = modulesForDocument(fingerprint, context);
+  const auto recovered = std::ranges::find_if(recoveredModules, [&](const auto& entry) {
+    return entry.moduleId == moduleIdQString;
   });
-  if (module == context.moduleStore->end())
+  if (recovered == recoveredModules.end())
   {
     throw py::key_error{"Unknown module '" + moduleId + "'"};
   }
+
+  auto compacted = *recovered;
 
   auto removedMetadataCount = size_t{0};
   if (context.metadataStore != nullptr)
@@ -1714,7 +1716,20 @@ py::dict compactModule(const std::string& moduleId)
     }
   }
 
-  auto& objectIds = module->second.objectIds;
+  auto* persistent = static_cast<automation::AutomationModuleRecord*>(nullptr);
+  if (context.moduleStore != nullptr)
+  {
+    for (auto& [key, record] : *context.moduleStore)
+    {
+      Q_UNUSED(key);
+      if (record.moduleId == moduleIdQString && record.documentFingerprint == fingerprint)
+      {
+        persistent = &record;
+        break;
+      }
+    }
+  }
+  auto& objectIds = persistent != nullptr ? persistent->objectIds : compacted.objectIds;
   const auto before = objectIds.size();
   objectIds.erase(
     std::remove_if(
@@ -1725,7 +1740,7 @@ py::dict compactModule(const std::string& moduleId)
       }),
     objectIds.end());
 
-  auto result = moduleSummary(map, module->second);
+  auto result = moduleSummary(map, persistent != nullptr ? *persistent : compacted);
   result["removed_stale_metadata_count"] = removedMetadataCount;
   result["removed_stale_object_id_count"] = before - objectIds.size();
   return result;
