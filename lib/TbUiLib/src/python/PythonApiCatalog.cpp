@@ -248,6 +248,12 @@ constexpr auto MaterialsSymbols = std::array{
     Function,
     "() -> list[MaterialCollection]",
     PythonApiValueType{PythonApiType::MaterialCollection, 1u}},
+  PythonApiSymbol{
+    "search",
+    Function,
+    "(query, limit=50) -> list[Material]",
+    PythonApiValueType{PythonApiType::Material, 1u}},
+  PythonApiSymbol{"current", Function, "() -> str"},
 };
 
 constexpr auto ActionsSymbols = std::array{

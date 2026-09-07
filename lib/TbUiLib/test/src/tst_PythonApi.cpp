@@ -174,6 +174,8 @@ assert tb.brushes.selected() == []
 assert tb.faces.selected() == []
 assert isinstance(tb.materials.list(), list)
 assert isinstance(tb.materials.collections(), list)
+assert isinstance(tb.materials.current(), str)
+assert tb.materials.search("definitely-not-a-loaded-material") == []
 assert isinstance(tb.actions.list(), list)
 brush = tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(16,16,-16),
                            (-16,-16,16),(16,-16,16),(16,16,16),(-16,16,16)])

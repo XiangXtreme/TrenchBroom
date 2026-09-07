@@ -4029,9 +4029,31 @@ void defineModule(py::module_& module)
     }
     return result;
   };
+  auto searchMaterials = [listMaterials](const std::string& query, const size_t limit) {
+    auto result = std::vector<MaterialHandle>{};
+    if (limit == 0u)
+    {
+      return result;
+    }
+    for (auto material : listMaterials())
+    {
+      if (containsCaseInsensitive(material.get().name(), query))
+      {
+        result.push_back(std::move(material));
+        if (result.size() == limit)
+        {
+          break;
+        }
+      }
+    }
+    return result;
+  };
   auto materials = module.def_submodule("materials", "Material collection operations.");
   materials.def("list", listMaterials);
   materials.def("collections", listMaterialCollections);
+  materials.def("search", searchMaterials, py::arg("query"), py::arg("limit") = 50u);
+  materials.def(
+    "current", []() { return currentDocument().get().map().currentMaterialName(); });
 
   auto actions =
     module.def_submodule("actions", "Native action discovery and execution.");
