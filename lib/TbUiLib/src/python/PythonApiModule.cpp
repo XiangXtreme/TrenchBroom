@@ -71,6 +71,7 @@
 #include "ui/automation/AutomationAssets.h"
 #include "ui/automation/AutomationBrushes.h"
 #include "ui/automation/AutomationDocuments.h"
+#include "ui/automation/AutomationEntities.h"
 #include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationIr.h"
 #include "ui/automation/AutomationNodes.h"
@@ -2661,6 +2662,92 @@ EntityHandle createEntity(
     PythonHandleRegistry::instance().documentGeneration(&document),
     entityNode,
     PythonHandleRegistry::instance().nodeGeneration(entityNode)};
+}
+
+std::vector<automation::AutomationPointEntitySpec> checkedPointEntitySpecsFromPython(
+  const py::iterable& entities)
+{
+  auto result = std::vector<automation::AutomationPointEntitySpec>{};
+  for (const auto& item : entities)
+  {
+    if (!PyDict_Check(item.ptr()))
+    {
+      throw py::type_error{"Each entity must be a dict"};
+    }
+    const auto entity = py::reinterpret_borrow<py::dict>(item);
+    if (!entity.contains("classname"))
+    {
+      throw py::value_error{"Each entity requires classname"};
+    }
+    auto spec = automation::AutomationPointEntitySpec{};
+    spec.classname = py::cast<std::string>(entity["classname"]);
+    if (entity.contains("properties"))
+    {
+      if (!PyDict_Check(entity["properties"].ptr()))
+      {
+        throw py::type_error{"entity properties must be a dict"};
+      }
+      for (const auto& property : py::reinterpret_borrow<py::dict>(entity["properties"]))
+      {
+        spec.properties.emplace(
+          py::cast<std::string>(property.first), py::cast<std::string>(property.second));
+      }
+    }
+    if (entity.contains("origin"))
+    {
+      spec.origin = toVmVec3(vec3FromObject(entity["origin"]));
+    }
+    result.push_back(std::move(spec));
+  }
+  if (result.empty())
+  {
+    throw py::value_error{"entities must not be empty"};
+  }
+  return result;
+}
+
+std::vector<EntityHandle> createCheckedPointEntities(
+  const py::iterable& entities, const bool select)
+{
+  auto& document = currentDocument().get();
+  auto& map = document.map();
+  auto built = automation::buildCheckedPointEntities(
+    map, checkedPointEntitySpecsFromPython(entities));
+  if (!built.error.isEmpty())
+  {
+    throw py::value_error{built.error.toStdString()};
+  }
+
+  auto nodes = std::vector<mdl::Node*>{};
+  nodes.reserve(built.nodes.size());
+  for (auto* node : built.nodes)
+  {
+    nodes.push_back(node);
+  }
+  auto transaction = ScopedPythonTransaction{document, "Python API Create Checked Entities"};
+  if (!automation::addNodes(map, nodes, select))
+  {
+    transaction.cancel();
+    automation::deletePointEntityNodes(built.nodes);
+    throw std::runtime_error{"Could not add checked point entities"};
+  }
+  if (!transaction.commit())
+  {
+    throw std::runtime_error{"Could not create checked point entities"};
+  }
+
+  const auto documentGeneration = PythonHandleRegistry::instance().documentGeneration(&document);
+  auto result = std::vector<EntityHandle>{};
+  result.reserve(built.nodes.size());
+  for (auto* node : built.nodes)
+  {
+    result.push_back(EntityHandle{
+      &document,
+      documentGeneration,
+      node,
+      PythonHandleRegistry::instance().nodeGeneration(node)});
+  }
+  return result;
 }
 
 EntityHandle placeAsset(
@@ -5254,6 +5341,11 @@ void defineModule(py::module_& module)
     py::arg("classname"),
     py::arg("properties") = py::dict{},
     py::arg("origin") = py::none(),
+    py::arg("select") = false);
+  entities.def(
+    "create_checked_batch",
+    createCheckedPointEntities,
+    py::arg("entities"),
     py::arg("select") = false);
   entities.def("delete", deleteEntity, py::arg("entity"));
   entities.def(
