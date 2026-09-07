@@ -15,6 +15,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AppController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationAssets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationDocuments.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationIr.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationObjectRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationTransaction.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationValidation.cpp
@@ -388,6 +389,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MousePreferencePane.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationAssets.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationDocuments.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationIr.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationObjectRegistry.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationStateRecords.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationStateStore.h
