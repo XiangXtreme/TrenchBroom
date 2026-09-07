@@ -1399,6 +1399,69 @@ py::dict inspectModule(const std::string& moduleId)
   throw py::key_error{"Unknown module '" + moduleId + "'"};
 }
 
+py::dict selectModule(const std::string& moduleId)
+{
+  const auto& context = requireContext();
+  if (context.moduleStore == nullptr)
+  {
+    throw py::key_error{"Unknown module '" + moduleId + "'"};
+  }
+
+  auto document = currentDocument();
+  auto& map = document.get().map();
+  const auto fingerprint = objectRegistry().documentFingerprint(map);
+  const auto module = std::ranges::find_if(*context.moduleStore, [&](const auto& entry) {
+    const auto& record = entry.second;
+    return record.moduleId.toStdString() == moduleId
+           && record.documentFingerprint == fingerprint;
+  });
+  if (module == context.moduleStore->end())
+  {
+    throw py::key_error{"Unknown module '" + moduleId + "'"};
+  }
+
+  auto nodes = std::vector<mdl::Node*>{};
+  for (const auto& objectId : module->second.objectIds)
+  {
+    const auto resolved = objectRegistry().resolveExternalId(map, objectId);
+    if (!resolved.ok)
+    {
+      continue;
+    }
+    const auto path =
+      automation::AutomationObjectRegistry::parseLegacyObjectId(resolved.legacyPathId);
+    if (!path)
+    {
+      continue;
+    }
+    if (auto* node = map.worldNode().resolvePath(*path); node != nullptr)
+    {
+      nodes.push_back(node);
+    }
+  }
+  nodes = kdl::vec_sort_and_remove_duplicates(std::move(nodes));
+
+  auto transaction = ScopedPythonTransaction{document.get(), "Python API Select Module"};
+  try
+  {
+    mdl::deselectAll(map);
+    if (!nodes.empty())
+    {
+      mdl::selectNodes(map, nodes);
+    }
+    if (!transaction.commit())
+    {
+      throw std::runtime_error{"Could not select module"};
+    }
+  }
+  catch (...)
+  {
+    transaction.cancel();
+    throw;
+  }
+  return selectionSnapshot(SelectionHandle{&document.get(), document.generation});
+}
+
 py::dict groupSummary(const mdl::GroupNode& group)
 {
   auto result = py::dict{};
@@ -4564,6 +4627,7 @@ void defineModule(py::module_& module)
   auto modules = module.def_submodule("modules", "Generated map module queries.");
   modules.def("list", modulesForCurrentDocument);
   modules.def("inspect", inspectModule, py::arg("module_id"));
+  modules.def("select", selectModule, py::arg("module_id"));
 
   auto placeModel = [](
                       const std::string& path,

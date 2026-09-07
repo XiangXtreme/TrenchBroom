@@ -290,12 +290,14 @@ assert len(tb.documents.list()) == 1
     auto moduleStore = std::map<QString, automation::AutomationModuleRecord>{};
     const auto documentFingerprint =
       moduleRegistry.documentFingerprint(window.document().map());
+    const auto worldObjectId = moduleRegistry.registerNode(
+      window.document().map(), window.document().map().worldNode());
     moduleStore.emplace(
       "test-module",
       automation::AutomationModuleRecord{
         "test-module",
         documentFingerprint,
-        {"mcp:object"},
+        {worldObjectId},
         {"mcp-op-1"},
         QJsonObject{{"role", "route"}},
         3,
@@ -315,8 +317,10 @@ assert len(tb.documents.list()) == 1
       PythonMcpExecutionRequest{
         "import trenchbroom as tb\n"
         "module = tb.modules.inspect('test-module')\n"
+        "selection = tb.modules.select('test-module')\n"
         "result = {'count': len(tb.modules.list()), 'id': module['id'], "
-        "'revision': module['revision'], 'role': module['metadata']['role']}",
+        "'revision': module['revision'], 'role': module['metadata']['role'], "
+        "'selected': selection['node_count']}",
         "<mcp-python:modules>",
         {},
       });
@@ -325,7 +329,12 @@ assert len(tb.documents.list()) == 1
     CHECK(
       modules.value.toObject()
       == QJsonObject{
-        {"count", 1}, {"id", "test-module"}, {"revision", 3}, {"role", "route"}});
+        {"count", 1},
+        {"id", "test-module"},
+        {"revision", 3},
+        {"role", "route"},
+        {"selected", 1},
+      });
 
     const auto first = runtime.runMcpScript(
       context,
