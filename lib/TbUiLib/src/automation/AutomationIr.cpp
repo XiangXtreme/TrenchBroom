@@ -195,6 +195,18 @@ AutomationIrParseResult parseAutomationIr(const QJsonObject& request)
     result.error = "IR field must be an object";
     return result;
   }
+  if (request.value("qualityPolicy").isObject())
+  {
+    ir.insert("qualityPolicy", request.value("qualityPolicy"));
+  }
+  if (request.contains("applyMode"))
+  {
+    ir.insert("applyMode", request.value("applyMode"));
+  }
+  if (request.contains("requireMaterialAvailable"))
+  {
+    ir.insert("requireMaterialAvailable", request.value("requireMaterialAvailable"));
+  }
   if (!validateAutomationIr(ir, result.error, result.warnings))
   {
     return result;

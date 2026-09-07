@@ -46,6 +46,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationIr.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include "vm/bbox.h"
@@ -1465,10 +1466,7 @@ QJsonObject moduleSummary(
 
 QString canonicalIrHash(const QJsonObject& ir)
 {
-  return QString{"sha256:%1"}.arg(QString::fromLatin1(
-    QCryptographicHash::hash(
-      QJsonDocument{ir}.toJson(QJsonDocument::Compact), QCryptographicHash::Sha256)
-      .toHex()));
+  return automation::canonicalAutomationIrHash(ir);
 }
 
 std::vector<mdl::Node*> canonicalModuleNodes(
@@ -1646,121 +1644,19 @@ QStringList allModuleIds(
 
 bool validateIrShape(QJsonObject& ir, QString& error, QJsonArray* warnings = nullptr)
 {
-  const auto schemaVersionValue = ir.value("schemaVersion");
-  if (schemaVersionValue.isUndefined())
+  const auto parsed = automation::parseAutomationIr(QJsonObject{{"ir", ir}});
+  if (!parsed.ir)
   {
-    ir.insert("schemaVersion", CurrentIrSchemaVersion);
-    if (warnings != nullptr)
-    {
-      warnings->push_back("legacyUnversionedIr");
-    }
-  }
-  else
-  {
-    if (!schemaVersionValue.isDouble())
-    {
-      error = "IR schemaVersion must be an integer";
-      return false;
-    }
-    const auto schemaVersion = schemaVersionValue.toInt();
-    if (schemaVersionValue.toDouble() != static_cast<double>(schemaVersion))
-    {
-      error = "IR schemaVersion must be an integer";
-      return false;
-    }
-    if (schemaVersion < 1)
-    {
-      error = "IR schemaVersion must be at least 1";
-      return false;
-    }
-    if (schemaVersion > CurrentIrSchemaVersion)
-    {
-      error = QString{"Unsupported IR schemaVersion %1; current version is %2"}.arg(
-        schemaVersion, CurrentIrSchemaVersion);
-      return false;
-    }
-  }
-
-  if (!qualityPolicyFromJson(ir, error))
-  {
+    error = parsed.error;
     return false;
   }
-
-  const auto applyMode = ir.value("applyMode").toString("create").trimmed().toLower();
-  if (applyMode != "create" && applyMode != "replace_module")
+  ir = *parsed.ir;
+  if (warnings != nullptr)
   {
-    error = "IR applyMode must be create or replace_module";
-    return false;
-  }
-  ir.insert("applyMode", applyMode);
-  if (
-    ir.contains("requireMaterialAvailable")
-    && !ir.value("requireMaterialAvailable").isBool())
-  {
-    error = "IR requireMaterialAvailable must be boolean";
-    return false;
-  }
-
-  const auto operationsValue = ir.value("operations");
-  const auto entitiesValue = ir.value("entities");
-  const auto hasOperations = !operationsValue.isUndefined() && !operationsValue.isNull();
-  const auto hasEntities = !entitiesValue.isUndefined() && !entitiesValue.isNull();
-  if (!hasOperations && !hasEntities)
-  {
-    error = "IR requires at least one operations or entities array";
-    return false;
-  }
-  if (hasOperations && !operationsValue.isArray())
-  {
-    error = "IR operations must be an array";
-    return false;
-  }
-  if (hasEntities && !entitiesValue.isArray())
-  {
-    error = "IR entities must be an array";
-    return false;
-  }
-  if (hasOperations)
-  {
-    const auto operations = operationsValue.toArray();
-    for (auto i = 0; i < operations.size(); ++i)
+    for (const auto& warning : parsed.warnings)
     {
-      if (!operations[i].isObject())
-      {
-        error = QString{"IR operations[%1] must be an object"}.arg(i);
-        return false;
-      }
-      const auto type = operations[i].toObject().value("type").toString().trimmed();
-      if (type.isEmpty())
-      {
-        error = QString{"IR operations[%1] requires type"}.arg(i);
-        return false;
-      }
+      warnings->push_back(warning);
     }
-  }
-  if (hasEntities)
-  {
-    const auto entities = entitiesValue.toArray();
-    for (auto i = 0; i < entities.size(); ++i)
-    {
-      if (!entities[i].isObject())
-      {
-        error = QString{"IR entities[%1] must be an object"}.arg(i);
-        return false;
-      }
-      const auto classname =
-        entities[i].toObject().value("classname").toString().trimmed();
-      if (classname.isEmpty())
-      {
-        error = QString{"IR entities[%1] requires classname"}.arg(i);
-        return false;
-      }
-    }
-  }
-  if (operationsValue.toArray().isEmpty() && entitiesValue.toArray().isEmpty())
-  {
-    error = "IR operations/entities must not both be empty";
-    return false;
   }
   return true;
 }
@@ -2217,6 +2113,7 @@ QStringList projectedOperationParts(const QJsonObject& operation)
 
 QJsonObject irPreviewJson(const QJsonObject& ir)
 {
+  auto result = automation::previewAutomationIr(ir);
   const auto operations = ir.value("operations").toArray();
   const auto entities = ir.value("entities").toArray();
   auto parts = QJsonArray{};
@@ -2281,17 +2178,11 @@ QJsonObject irPreviewJson(const QJsonObject& ir)
     warnings.push_back(qualityError);
   }
 
-  auto result = QJsonObject{
-    {"valid", warnings.isEmpty()},
-    {"schemaVersion", ir.value("schemaVersion").toInt(CurrentIrSchemaVersion)},
-    {"operationCount", operations.size()},
-    {"entityCount", entities.size()},
-    {"estimatedBrushCount", estimatedBrushCount},
-    {"estimatedObjectCount", estimatedBrushCount + entities.size()},
-    {"parts", parts},
-    {"moduleId", ir.value("moduleId").toString()},
-    {"warnings", warnings},
-  };
+  result.insert("valid", warnings.isEmpty());
+  result.insert("estimatedBrushCount", estimatedBrushCount);
+  result.insert("estimatedObjectCount", estimatedBrushCount + entities.size());
+  result.insert("parts", parts);
+  result.insert("warnings", warnings);
   if (qualityPolicy)
   {
     result.insert("qualityPolicy", qualityPolicyJson(*qualityPolicy));
