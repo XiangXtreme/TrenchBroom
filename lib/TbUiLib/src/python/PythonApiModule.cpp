@@ -64,6 +64,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationAssets.h"
+#include "ui/automation/AutomationDocuments.h"
 #include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/python/PythonApiCatalog.h"
@@ -811,18 +812,42 @@ DocumentHandle openDocument(const std::string& path)
     throw py::value_error{"document path must name an existing regular file"};
   }
 
-  auto& current =
-    DocumentHandle{
+  auto contextPathError = std::error_code{};
+  if (
+    context.document->map().path().lexically_normal() == openPath
+    || std::filesystem::equivalent(
+      context.document->map().path(), openPath, contextPathError))
+  {
+    return DocumentHandle{
       context.document,
-      PythonHandleRegistry::instance().documentGeneration(context.document)}
-      .get();
-  throwIfError(context.appController->mapWindowManager().loadDocument(
-    current.map().gameInfo(),
-    current.map().worldNode().mapFormat(),
-    MapDocument::DefaultWorldBounds,
-    openPath));
+      PythonHandleRegistry::instance().documentGeneration(context.document)};
+  }
 
-  auto* openedWindow = context.appController->mapWindowManager().topMapWindow();
+  auto& mapWindowManager = context.appController->mapWindowManager();
+  for (auto* mapWindow : mapWindowManager.mapWindows())
+  {
+    auto pathError = std::error_code{};
+    const auto samePath =
+      mapWindow != nullptr
+      && (mapWindow->document().map().path().lexically_normal() == openPath
+          || std::filesystem::equivalent(
+            mapWindow->document().map().path(), openPath, pathError));
+    if (samePath && !pathError)
+    {
+      if (!mapWindowManager.activateMapWindow(*mapWindow))
+      {
+        throw std::runtime_error{"Document window is no longer available"};
+      }
+      auto& document = mapWindow->document();
+      return DocumentHandle{
+        &document, PythonHandleRegistry::instance().documentGeneration(&document)};
+    }
+  }
+
+  throwIfError(openAutomationDocument(
+    *context.appController, openPath, &context.document->map().gameInfo()));
+
+  auto* openedWindow = mapWindowManager.topMapWindow();
   if (openedWindow == nullptr)
   {
     throw std::runtime_error{"Document open completed without an active window"};
@@ -843,6 +868,10 @@ DocumentHandle activateDocument(DocumentHandle& document)
   if (context.appController == nullptr)
   {
     throw std::runtime_error{"No application controller in Python execution context"};
+  }
+  if (&document.get() == context.document)
+  {
+    return document;
   }
   auto& window = mapWindowForDocument(document);
   if (!context.appController->mapWindowManager().activateMapWindow(window))

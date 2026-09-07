@@ -49,6 +49,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationDocuments.h"
 
 #include "vm/bbox.h"
 
@@ -130,80 +131,13 @@ QJsonObject documentOpenDiagnostic(
   };
 }
 
-std::optional<std::tuple<std::string, mdl::MapFormat>> detectGameAndFormatForMcp(
-  AppController& appController, const std::filesystem::path& path, QString& error)
-{
-  const auto detected = fs::Disk::withInputStream(path, mdl::readMapHeader)
-                        | kdl::transform_error([&](const auto& e) {
-                            error = QString::fromStdString(e.msg);
-                            return std::pair<std::optional<std::string>, mdl::MapFormat>{
-                              std::nullopt, mdl::MapFormat::Unknown};
-                          })
-                        | kdl::value();
-
-  auto [gameName, mapFormat] = detected;
-  if (!gameName)
-  {
-    error =
-      "Could not autodetect map game. Add a TrenchBroom map header or open the map "
-      "interactively once before using documents_open_verified from MCP.";
-    return std::nullopt;
-  }
-  if (mapFormat == mdl::MapFormat::Unknown)
-  {
-    error =
-      "Could not autodetect map format. Add a TrenchBroom map header or open the map "
-      "interactively once before using documents_open_verified from MCP.";
-    return std::nullopt;
-  }
-
-  const auto* gameInfo = appController.gameManager().gameInfo(*gameName);
-  if (gameInfo == nullptr)
-  {
-    error =
-      QString{
-        "Autodetected game '%1' is not available in this TrenchBroom "
-        "configuration."}
-        .arg(QString::fromStdString(*gameName));
-    return std::nullopt;
-  }
-
-  return std::tuple{std::move(*gameName), mapFormat};
-}
-
 McpBridgeToolResult openDocumentForMcp(
   AppController& appController,
   const std::filesystem::path& path,
   const QString& stage,
   const QString& bridgeInstanceId = {})
 {
-  auto error = QString{};
-  const auto gameNameAndMapFormat = detectGameAndFormatForMcp(appController, path, error);
-  if (!gameNameAndMapFormat)
-  {
-    return McpBridgeToolResult::success(documentOpenDiagnostic(
-      appController,
-      path,
-      "openFailed",
-      QString{"%1 %2"}.arg(stage, error).trimmed(),
-      bridgeInstanceId));
-  }
-
-  const auto& [gameName, mapFormat] = *gameNameAndMapFormat;
-  const auto* gameInfo = appController.gameManager().gameInfo(gameName);
-  if (gameInfo == nullptr)
-  {
-    return McpBridgeToolResult::success(documentOpenDiagnostic(
-      appController,
-      path,
-      "openFailed",
-      QString{"Game is no longer available after autodetect: %1"}.arg(
-        QString::fromStdString(gameName)),
-      bridgeInstanceId));
-  }
-
-  const auto result = appController.mapWindowManager().loadDocument(
-    *gameInfo, mapFormat, MapDocument::DefaultWorldBounds, path);
+  const auto result = openAutomationDocument(appController, path);
   if (!result)
   {
     return McpBridgeToolResult::success(documentOpenDiagnostic(
