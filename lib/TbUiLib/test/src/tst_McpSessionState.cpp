@@ -19,6 +19,7 @@
 
 #include <QDateTime>
 
+#include "ui/automation/AutomationStateStore.h"
 #include "ui/mcp/McpBridgeServer.h"
 
 #include <algorithm>
@@ -55,6 +56,30 @@ TEST_CASE("McpSessionState enforces bounded caches", "[McpBridgeServer][McpSessi
     const auto hint = state.evictedResourceHint("tbmcp://operation/mcp-op-0");
     REQUIRE(hint);
     CHECK(hint->value("recoveryAction").toString() == "refresh_history_status");
+  }
+
+  SECTION("shared automation state owns module, metadata, and preview records")
+  {
+    auto automationState = automation::AutomationStateStore{};
+    auto state = McpSessionState{automationState};
+    state.brushMetadata["doc:active|mcp:1"] =
+      McpBrushMetadataRecord{"mcp:1", "doc:active", {}, false};
+    state.modules["doc:active|module"] =
+      McpModuleRecord{"module", "doc:active", {}, {}, {}, 1, {}, {}, {}};
+    state.irPreviewCache["ir-preview-1"] = McpIrPreviewCacheRecord{
+      "ir-preview-1", {}, {}, "doc:active", {}, nowMs, nowMs + 1, {}};
+    ++state.nextIrPreviewIndex;
+
+    CHECK(automationState.objectMetadata.size() == 1u);
+    CHECK(automationState.modules.size() == 1u);
+    CHECK(automationState.irPreviews.size() == 1u);
+    CHECK(automationState.nextIrPreviewIndex == 2);
+
+    state.clear();
+    CHECK(automationState.objectMetadata.empty());
+    CHECK(automationState.modules.empty());
+    CHECK(automationState.irPreviews.empty());
+    CHECK(automationState.nextIrPreviewIndex == 1);
   }
 
   SECTION("IR previews expire and stay within the fixed budget")

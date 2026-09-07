@@ -135,6 +135,23 @@ QJsonObject compactReviewResource(const QJsonObject& result)
 
 } // namespace
 
+McpSessionState::McpSessionState()
+  : m_ownedAutomationState{std::make_unique<automation::AutomationStateStore>()}
+  , brushMetadata{m_ownedAutomationState->objectMetadata}
+  , modules{m_ownedAutomationState->modules}
+  , irPreviewCache{m_ownedAutomationState->irPreviews}
+  , nextIrPreviewIndex{m_ownedAutomationState->nextIrPreviewIndex}
+{
+}
+
+McpSessionState::McpSessionState(automation::AutomationStateStore& automationState)
+  : brushMetadata{automationState.objectMetadata}
+  , modules{automationState.modules}
+  , irPreviewCache{automationState.irPreviews}
+  , nextIrPreviewIndex{automationState.nextIrPreviewIndex}
+{
+}
+
 void McpSessionState::clear()
 {
   nextOperationIndex = 1;

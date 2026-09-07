@@ -1539,6 +1539,7 @@ McpBridgeServer::McpBridgeServer(
           QString{"MCP tool is registered but not wired yet: %1"}.arg(toolName));
       },
       std::move(transportLimits),
+      appController.automationState(),
       parent}
 {
   auto legacyDispatcher = std::make_shared<ToolHandler>(std::move(m_toolHandler));
@@ -1582,6 +1583,18 @@ McpBridgeServer::McpBridgeServer(
   : QObject{parent}
   , m_transportLimits{std::move(transportLimits)}
   , m_toolHandler{std::move(toolHandler)}
+{
+}
+
+McpBridgeServer::McpBridgeServer(
+  ToolHandler toolHandler,
+  McpBridgeTransportLimits transportLimits,
+  automation::AutomationStateStore& automationState,
+  QObject* parent)
+  : QObject{parent}
+  , m_transportLimits{std::move(transportLimits)}
+  , m_toolHandler{std::move(toolHandler)}
+  , m_session{automationState}
 {
 }
 

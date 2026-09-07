@@ -34,6 +34,7 @@
 #include "mcp/McpBridgeMessages.h"
 #include "mcp/McpError.h"
 #include "ui/automation/AutomationStateRecords.h"
+#include "ui/automation/AutomationStateStore.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include <functional>
@@ -137,6 +138,9 @@ struct McpSessionEvictionCounters
 
 class McpSessionState
 {
+private:
+  std::unique_ptr<automation::AutomationStateStore> m_ownedAutomationState;
+
 public:
   static constexpr auto MaxOperationRecords = size_t{1024};
   static constexpr auto MaxReviewResources = size_t{128};
@@ -145,13 +149,16 @@ public:
   static constexpr auto MaxResourcesPerPage = qsizetype{100};
   static constexpr auto IrPreviewTtlMs = qint64{10 * 60 * 1000};
 
+  McpSessionState();
+  explicit McpSessionState(automation::AutomationStateStore& automationState);
+
   int nextOperationIndex = 1;
   std::vector<McpOperationRecord> operationHistory;
-  std::map<QString, McpBrushMetadataRecord> brushMetadata;
-  std::map<QString, McpModuleRecord> modules;
-  std::map<QString, McpIrPreviewCacheRecord> irPreviewCache;
+  std::map<QString, McpBrushMetadataRecord>& brushMetadata;
+  std::map<QString, McpModuleRecord>& modules;
+  std::map<QString, McpIrPreviewCacheRecord>& irPreviewCache;
   std::map<QString, McpReviewResourceRecord> reviewResources;
-  int nextIrPreviewIndex = 1;
+  int& nextIrPreviewIndex;
   McpObjectRegistry objectRegistry;
   QStringList recentDocumentFingerprints;
   McpSessionEvictionCounters evictions;
@@ -240,6 +247,12 @@ public:
   std::optional<QJsonObject> readResource(const QString& uri) const;
 
 private:
+  McpBridgeServer(
+    ToolHandler toolHandler,
+    McpBridgeTransportLimits transportLimits,
+    automation::AutomationStateStore& automationState,
+    QObject* parent);
+
   mcp::McpBridgeResponse dispatchToolCall(const mcp::McpBridgeRequest& request) const;
   void clearSessionState();
   void startRequestDeadline(QLocalSocket& socket);

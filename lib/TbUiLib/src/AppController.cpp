@@ -60,6 +60,7 @@
 #include "ui/SystemPaths.h"
 #include "ui/UpdateConfig.h"
 #include "ui/WelcomeWindow.h"
+#include "ui/automation/AutomationStateStore.h"
 #include "ui/mcp/McpBridgeServer.h"
 #include "ui/mcp/McpHttpServer.h"
 #include "update/QtHttpClient.h"
@@ -193,6 +194,7 @@ AppController::AppController(
   , m_mapWindowManager{createMapWindowManager(*this, options.showMapWindows)}
   , m_recentDocuments{createRecentDocuments(this)}
   , m_actionManager{std::make_unique<ActionManager>()}
+  , m_automationState{std::make_unique<automation::AutomationStateStore>()}
   , m_mcpBridgeServer{std::make_unique<McpBridgeServer>(*this)}
   , m_mcpHttpServer{std::make_unique<McpHttpServer>(*m_mcpBridgeServer)}
   , m_welcomeWindow{std::make_unique<WelcomeWindow>(*this)}
@@ -280,6 +282,11 @@ RecentDocuments& AppController::recentDocuments()
 ActionManager& AppController::actionManager()
 {
   return *m_actionManager;
+}
+
+automation::AutomationStateStore& AppController::automationState()
+{
+  return *m_automationState;
 }
 
 const QJsonObject& AppController::mcpOverlayState() const

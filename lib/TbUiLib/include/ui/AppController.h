@@ -69,6 +69,10 @@ class McpBridgeServer;
 class McpHttpServer;
 class RecentDocuments;
 class WelcomeWindow;
+namespace automation
+{
+class AutomationStateStore;
+}
 
 struct AppControllerOptions
 {
@@ -100,6 +104,7 @@ private:
   MapWindowManager* m_mapWindowManager = nullptr;
   RecentDocuments* m_recentDocuments = nullptr;
   std::unique_ptr<ActionManager> m_actionManager;
+  std::unique_ptr<automation::AutomationStateStore> m_automationState;
   std::unique_ptr<McpBridgeServer> m_mcpBridgeServer;
   std::unique_ptr<McpHttpServer> m_mcpHttpServer;
   QString m_mcpStartupError;
@@ -140,6 +145,8 @@ public:
   RecentDocuments& recentDocuments();
 
   ActionManager& actionManager();
+
+  automation::AutomationStateStore& automationState();
 
   const QJsonObject& mcpOverlayState() const;
   void refreshMcpOverlayViews();
