@@ -2774,8 +2774,7 @@ void deleteEntity(EntityHandle& entity)
   withPreservedSelection(document, "Python API Delete Entity", [&](auto& map) {
     mdl::deselectAll(map);
     mdl::selectNodes(map, {entityNode});
-    mdl::removeSelectedNodes(map);
-    return true;
+    return automation::removeNodes(map, {entityNode});
   });
 }
 
@@ -4850,10 +4849,15 @@ void defineModule(py::module_& module)
   auto deleteSelectionHelper = [currentSelection]() {
     auto selection = currentSelection();
     auto& document = selection.getDocument();
+    auto nodes = document.map().selection().nodes;
     auto transaction = ScopedPythonTransaction{document, "Python API Delete Selection"};
     try
     {
-      mdl::removeSelectedNodes(document.map());
+      mdl::deselectAll(document.map());
+      if (!nodes.empty() && !automation::removeNodes(document.map(), std::move(nodes)))
+      {
+        throw std::runtime_error{"Could not delete selection"};
+      }
       if (!transaction.commit())
       {
         throw std::runtime_error{"Could not delete selection"};
