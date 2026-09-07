@@ -29,3 +29,15 @@ result = {"path": document.path, "argument": arguments.get("name")}
 旧 MCP 工具仍处于过渡目录。它们不构成推荐的新组合接口，也不得由新的 Python API
 通过 JSON 反调。完整替代关系与阶段状态见 `capability-map.json`；该文件在 G0 的
 逐能力审计完成前只表达计划，不表达能力对等。
+
+## 选择几何分析
+
+`tb.geometry.analyze_selection(grid=1.0, detail="summary", max_brushes=100)` 读取当前
+选择及其下的 brush，返回闭合/凸性、网格对齐、材质和合并 bounds 的原生几何事实。默认
+只返回计数、材质和 bounds；`detail="full"` 才返回 `brushes`，其中每项是可继续用于
+`tb.objects`、`tb.faces` 或编辑操作的 `Brush` 句柄。`max_brushes` 限制 full 结果，超过时
+返回 `truncated:true`，调用方应缩小选择后再请求完整句柄。
+
+该接口和过渡期的 `geometry_analyze_selection` 共享 automation 服务，服务层不依赖 MCP
+JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它不验证 BSP、游戏碰撞或
+视觉质量。
