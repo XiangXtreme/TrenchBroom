@@ -332,6 +332,13 @@ assert len(tb.documents.list()) == 1
         documentFingerprint,
         QJsonObject{{"moduleId", "stale-module"}},
         true});
+    metadataStore.emplace(
+      "metadata-only-module",
+      automation::AutomationObjectMetadataRecord{
+        worldObjectId,
+        documentFingerprint,
+        QJsonObject{{"moduleId", "metadata-only-module"}, {"part", "floor"}},
+        false});
     context.objectRegistry = &moduleRegistry;
     context.metadataStore = &metadataStore;
     context.moduleStore = &moduleStore;
@@ -342,9 +349,13 @@ assert len(tb.documents.list()) == 1
         "import trenchbroom as tb\n"
         "module = tb.modules.inspect('test-module')\n"
         "selection = tb.modules.select('test-module')\n"
+        "metadata_module = tb.modules.inspect('metadata-only-module')\n"
+        "metadata_selection = tb.modules.select('metadata-only-module')\n"
         "result = {'count': len(tb.modules.list()), 'id': module['id'], "
         "'revision': module['revision'], 'role': module['metadata']['role'], "
         "'selected': selection['node_count'], "
+        "'metadata_object_count': metadata_module['object_count'], "
+        "'metadata_selected': metadata_selection['node_count'], "
         "'stale_count': len(tb.modules.list(include_stale=True)), "
         "'stale_objects': tb.modules.inspect('stale-module')['stale_object_count']}",
         "<mcp-python:modules>",
@@ -352,17 +363,16 @@ assert len(tb.documents.list()) == 1
       });
     CAPTURE(modules.error);
     REQUIRE(modules.ok);
-    CHECK(
-      modules.value.toObject()
-      == QJsonObject{
-        {"count", 1},
-        {"id", "test-module"},
-        {"revision", 3},
-        {"role", "route"},
-        {"selected", 1},
-        {"stale_count", 2},
-        {"stale_objects", 1},
-      });
+    const auto moduleResult = modules.value.toObject();
+    CHECK(moduleResult.value("count").toInt() == 2);
+    CHECK(moduleResult.value("id").toString() == "test-module");
+    CHECK(moduleResult.value("revision").toInt() == 3);
+    CHECK(moduleResult.value("role").toString() == "route");
+    CHECK(moduleResult.value("selected").toInt() == 1);
+    CHECK(moduleResult.value("metadata_object_count").toInt() == 1);
+    CHECK(moduleResult.value("metadata_selected").toInt() >= 1);
+    CHECK(moduleResult.value("stale_count").toInt() == 3);
+    CHECK(moduleResult.value("stale_objects").toInt() == 1);
 
     const auto forgotten = runtime.runMcpScript(
       context,
@@ -380,7 +390,7 @@ assert len(tb.documents.list()) == 1
       });
     CAPTURE(forgotten.error);
     REQUIRE(forgotten.ok);
-    CHECK(forgotten.value.toObject() == QJsonObject{{"remaining", 1}});
+    CHECK(forgotten.value.toObject() == QJsonObject{{"remaining", 2}});
     CHECK_FALSE(moduleStore.contains("test-module"));
     CHECK(moduleStore.contains("other-document-module"));
     CHECK(moduleStore.contains("stale-module"));
@@ -397,7 +407,8 @@ assert len(tb.documents.list()) == 1
     REQUIRE(compacted.ok);
     CHECK(compacted.value.toObject().value("removed_stale_metadata_count").toInt() == 1);
     CHECK(compacted.value.toObject().value("removed_stale_object_id_count").toInt() == 1);
-    CHECK(metadataStore.empty());
+    CHECK(metadataStore.size() == 1);
+    CHECK(metadataStore.contains("metadata-only-module"));
     CHECK(moduleStore.at("stale-module").objectIds.empty());
 
     moduleStore.emplace(

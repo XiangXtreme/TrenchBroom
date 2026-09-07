@@ -1492,11 +1492,60 @@ py::dict moduleSummary(mdl::Map& map, const automation::AutomationModuleRecord& 
   return result;
 }
 
+std::vector<automation::AutomationModuleRecord> modulesForDocument(
+  const QString& fingerprint, const PythonExecutionContext& context)
+{
+  auto records = std::map<QString, automation::AutomationModuleRecord>{};
+  if (context.moduleStore != nullptr)
+  {
+    for (const auto& [key, module] : *context.moduleStore)
+    {
+      Q_UNUSED(key);
+      if (module.documentFingerprint == fingerprint && !module.moduleId.isEmpty())
+      {
+        records.insert_or_assign(module.moduleId, module);
+      }
+    }
+  }
+  if (context.metadataStore != nullptr)
+  {
+    for (const auto& [key, metadata] : *context.metadataStore)
+    {
+      Q_UNUSED(key);
+      const auto moduleId = metadata.metadata.value("moduleId").toString().trimmed();
+      if (metadata.documentFingerprint != fingerprint || moduleId.isEmpty())
+      {
+        continue;
+      }
+      auto& module = records[moduleId];
+      if (module.moduleId.isEmpty())
+      {
+        module.moduleId = moduleId;
+        module.documentFingerprint = fingerprint;
+        module.metadata = metadata.metadata;
+      }
+      if (!module.objectIds.contains(metadata.objectId))
+      {
+        module.objectIds.push_back(metadata.objectId);
+      }
+    }
+  }
+
+  auto result = std::vector<automation::AutomationModuleRecord>{};
+  result.reserve(records.size());
+  for (auto& [moduleId, module] : records)
+  {
+    Q_UNUSED(moduleId);
+    result.push_back(std::move(module));
+  }
+  return result;
+}
+
 std::vector<py::dict> modulesForCurrentDocument(
   const bool includeStale = false, const bool includeEmpty = false)
 {
   const auto& context = requireContext();
-  if (context.moduleStore == nullptr)
+  if (context.moduleStore == nullptr && context.metadataStore == nullptr)
   {
     return {};
   }
@@ -1504,17 +1553,8 @@ std::vector<py::dict> modulesForCurrentDocument(
   const auto document = currentDocument();
   const auto fingerprint = objectRegistry().documentFingerprint(document.get().map());
   auto result = std::vector<py::dict>{};
-  auto seen = std::set<QString>{};
-  for (const auto& [key, module] : *context.moduleStore)
+  for (const auto& module : modulesForDocument(fingerprint, context))
   {
-    Q_UNUSED(key);
-    if (
-      module.documentFingerprint != fingerprint || module.moduleId.isEmpty()
-      || seen.contains(module.moduleId))
-    {
-      continue;
-    }
-    seen.insert(module.moduleId);
     auto summary = moduleSummary(document.get().map(), module);
     if (
       (!includeEmpty && module.objectIds.empty())
@@ -1542,7 +1582,7 @@ py::dict inspectModule(const std::string& moduleId)
 py::dict selectModule(const std::string& moduleId)
 {
   const auto& context = requireContext();
-  if (context.moduleStore == nullptr)
+  if (context.moduleStore == nullptr && context.metadataStore == nullptr)
   {
     throw py::key_error{"Unknown module '" + moduleId + "'"};
   }
@@ -1550,17 +1590,16 @@ py::dict selectModule(const std::string& moduleId)
   auto document = currentDocument();
   auto& map = document.get().map();
   const auto fingerprint = objectRegistry().documentFingerprint(map);
-  const auto module = std::ranges::find_if(*context.moduleStore, [&](const auto& entry) {
-    const auto& record = entry.second;
-    return record.moduleId.toStdString() == moduleId
-           && record.documentFingerprint == fingerprint;
+  const auto records = modulesForDocument(fingerprint, context);
+  const auto module = std::ranges::find_if(records, [&](const auto& record) {
+    return record.moduleId.toStdString() == moduleId;
   });
-  if (module == context.moduleStore->end())
+  if (module == records.end())
   {
     throw py::key_error{"Unknown module '" + moduleId + "'"};
   }
 
-  auto nodes = moduleNodes(map, module->second);
+  auto nodes = moduleNodes(map, *module);
 
   auto transaction = ScopedPythonTransaction{document.get(), "Python API Select Module"};
   try
