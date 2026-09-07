@@ -138,6 +138,11 @@ constexpr auto ModuleSymbols = std::array{
 constexpr auto DocumentsSymbols = std::array{
   PythonApiSymbol{
     "current", Function, "() -> Document", PythonApiValueType{PythonApiType::Document}},
+  PythonApiSymbol{
+    "list",
+    Function,
+    "() -> list[Document]",
+    PythonApiValueType{PythonApiType::Document, 1u}},
 };
 
 constexpr auto ObjectsSymbols = std::array{

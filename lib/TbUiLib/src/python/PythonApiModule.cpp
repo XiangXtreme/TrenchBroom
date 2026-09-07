@@ -54,9 +54,11 @@
 #include "ui/Action.h"
 #include "ui/ActionExecutionContext.h"
 #include "ui/ActionManager.h"
+#include "ui/AppController.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
+#include "ui/MapWindowManager.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonExecutionContext.h"
@@ -654,6 +656,36 @@ DocumentHandle currentDocument()
   return DocumentHandle{
     context.document,
     PythonHandleRegistry::instance().documentGeneration(context.document)};
+}
+
+std::vector<DocumentHandle> openDocuments()
+{
+  auto& context = requireContext();
+  auto result = std::vector<DocumentHandle>{};
+  if (context.appController != nullptr)
+  {
+    for (auto* mapWindow : context.appController->mapWindowManager().mapWindows())
+    {
+      if (mapWindow == nullptr)
+      {
+        continue;
+      }
+      auto& document = mapWindow->document();
+      result.push_back(DocumentHandle{
+        &document, PythonHandleRegistry::instance().documentGeneration(&document)});
+    }
+  }
+  if (
+    context.document != nullptr
+    && std::none_of(result.begin(), result.end(), [&](const auto& document) {
+         return document.document == context.document;
+       }))
+  {
+    result.push_back(DocumentHandle{
+      context.document,
+      PythonHandleRegistry::instance().documentGeneration(context.document)});
+  }
+  return result;
 }
 
 Vec3 vec3FromObject(const py::handle& object)
@@ -3392,6 +3424,7 @@ void defineModule(py::module_& module)
 
   auto documents = module.def_submodule("documents", "Document lifecycle operations.");
   documents.def("current", currentDocument);
+  documents.def("list", openDocuments);
 
   auto objects = module.def_submodule("objects", "Selection-backed object operations.");
   objects.def("selection", [currentSelection]() { return currentSelection(); });

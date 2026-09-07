@@ -53,11 +53,11 @@
         "tb.documents.list"
       ],
       "verification": {
-        "testId": "T3-documents",
+        "testId": "TbUiLibTest PythonApi",
         "scenarioId": "S-documents",
-        "status": "planned"
+        "status": "passed"
       },
-      "status": "planned",
+      "status": "implemented",
       "placeholderReason": null
     },
     {

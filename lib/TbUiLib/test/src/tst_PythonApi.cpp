@@ -142,6 +142,8 @@ assert len(doc.entities) >= 1
 assert isinstance(doc.materials, list)
 assert isinstance(doc.material_collections, list)
 assert tb.documents.current().path == doc.path
+assert len(tb.documents.list()) == 1
+assert tb.documents.list()[0].path == doc.path
 assert tb.objects.selection().brushes == []
 assert tb.entities.selected() == []
 assert tb.brushes.selected() == []
