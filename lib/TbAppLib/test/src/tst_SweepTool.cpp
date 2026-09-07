@@ -112,13 +112,13 @@ TEST_CASE("SweepTool")
       const auto capFaceIndex = *sourceBrush.findFace(vm::vec3d{1, 0, 0});
       auto& capFace = sourceBrush.face(capFaceIndex);
       capFace.setMaterialName("sweep_cap");
-      capFace.setUvAttributes(capAttributes);
+      REQUIRE(capFace.setUvAttributes(capAttributes).is_success());
       capFace.setSurfaceAttributes(capSurfaceAttributes);
 
       const auto sideFaceIndex = *sourceBrush.findFace(vm::vec3d{0, 1, 0});
       auto& sideFace = sourceBrush.face(sideFaceIndex);
       sideFace.setMaterialName("sweep_side");
-      sideFace.setUvAttributes(sideAttributes);
+      REQUIRE(sideFace.setUvAttributes(sideAttributes).is_success());
       sideFace.setSurfaceAttributes(sideSurfaceAttributes);
       const auto sourceSideUvSnapshot = sideFace.takeUvCoordSystemSnapshot();
       brushNode->setBrush(std::move(sourceBrush));

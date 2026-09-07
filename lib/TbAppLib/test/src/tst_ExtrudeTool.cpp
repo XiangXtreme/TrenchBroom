@@ -904,11 +904,12 @@ TEST_CASE("ExtrudeTool")
     for (size_t i = 0; i < brush.faceCount(); ++i)
     {
       auto& face = brush.face(i);
-      face.setUvAttributes(mdl::UvAttributes{
-        vm::vec2f{float(i) + 0.25f, float(i) + 0.5f},
-        vm::vec2f{0.5f + float(i) * 0.125f, 1.25f + float(i) * 0.125f},
-        15.0f + float(i) * 7.0f})
-        | kdl::ignore();
+      REQUIRE(face
+                .setUvAttributes(mdl::UvAttributes{
+                  vm::vec2f{float(i) + 0.25f, float(i) + 0.5f},
+                  vm::vec2f{0.5f + float(i) * 0.125f, 1.25f + float(i) * 0.125f},
+                  15.0f + float(i) * 7.0f})
+                .is_success());
       auto surfaceAttributes = face.surfaceAttributes();
       surfaceAttributes.flags = int(i) + 1;
       face.setSurfaceAttributes(surfaceAttributes);
@@ -1016,11 +1017,12 @@ TEST_CASE("ExtrudeTool")
     {
       auto& face = brush.face(i);
       face.setMaterialName(i == *sourceCapIndex ? "cap" : "side" + std::to_string(i));
-      face.setUvAttributes(mdl::UvAttributes{
-        vm::vec2f{float(i) + 0.25f, float(i) + 0.5f},
-        vm::vec2f{0.5f + float(i) * 0.125f, 1.25f + float(i) * 0.125f},
-        15.0f + float(i) * 7.0f})
-        | kdl::ignore();
+      REQUIRE(face
+                .setUvAttributes(mdl::UvAttributes{
+                  vm::vec2f{float(i) + 0.25f, float(i) + 0.5f},
+                  vm::vec2f{0.5f + float(i) * 0.125f, 1.25f + float(i) * 0.125f},
+                  15.0f + float(i) * 7.0f})
+                .is_success());
     }
 
     auto* brushNode = new mdl::BrushNode{std::move(brush)};
@@ -1094,9 +1096,10 @@ TEST_CASE("ExtrudeTool")
     auto& sourceSide = brush.face(*sourceSideIndex);
     sourceSide.restoreUvCoordSystemSnapshot(
       mdl::UvCoordSystemSnapshot{vm::vec3d{1, 0, 0}, vm::vec3d{0.5, 0, 1}});
-    sourceSide.setUvAttributes(
-      mdl::UvAttributes{vm::vec2f{13.0f, -7.0f}, vm::vec2f{1.0f, 1.0f}, 0.0f})
-      | kdl::ignore();
+    REQUIRE(sourceSide
+              .setUvAttributes(
+                mdl::UvAttributes{vm::vec2f{13.0f, -7.0f}, vm::vec2f{1.0f, 1.0f}, 0.0f})
+              .is_success());
 
     const auto sourceSkew =
       mdl::measureUvSkew(sourceSide.uAxis(), sourceSide.vAxis(), sourceSide.normal());
