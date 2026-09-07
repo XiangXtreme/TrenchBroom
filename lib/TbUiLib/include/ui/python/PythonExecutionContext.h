@@ -29,6 +29,9 @@ struct PythonExecutionContext
   std::filesystem::path scriptPath;
   std::filesystem::path pluginDirectory;
   std::string pluginId;
+  bool mcpExecution = false;
+  bool allowNonTransactionalActions = true;
+  bool allowPersistentUi = true;
 };
 
 } // namespace tb::ui

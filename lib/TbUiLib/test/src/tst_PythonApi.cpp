@@ -197,6 +197,21 @@ with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
     REQUIRE(second.ok);
     CHECK(second.value.isNull());
 
+    auto transactionOnlyContext = context;
+    transactionOnlyContext.mcpExecution = true;
+    transactionOnlyContext.allowNonTransactionalActions = false;
+    transactionOnlyContext.allowPersistentUi = false;
+    const auto rejectedAction = runtime.runMcpScript(
+      transactionOnlyContext,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\ntb.current_document().save()",
+        "<mcp-python:transaction-action>",
+        {},
+      });
+    CHECK_FALSE(rejectedAction.ok);
+    CHECK(rejectedAction.rolledBack);
+    CHECK(rejectedAction.error.contains("requires mode='action'"));
+
     const auto beforeInvalidResult = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{

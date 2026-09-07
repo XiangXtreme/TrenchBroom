@@ -1715,6 +1715,10 @@ BrushHandle createBrush(const py::iterable& pointObjects, py::object materialNam
 void executeAction(const std::string& actionPath)
 {
   auto& context = requireContext();
+  if (context.mcpExecution && !context.allowNonTransactionalActions)
+  {
+    throw std::runtime_error{"MCP Python actions require mode='action'"};
+  }
   if (context.mapWindow == nullptr || context.appController == nullptr)
   {
     throw std::runtime_error{"No active map window"};
@@ -1754,6 +1758,10 @@ std::vector<std::string> listActions()
 PluginPanelHandle createPluginPanel(const std::string& title)
 {
   auto& context = requireContext();
+  if (!context.allowPersistentUi)
+  {
+    throw std::runtime_error{"MCP Python cannot create persistent plugin panels"};
+  }
   if (context.mapWindow == nullptr)
   {
     throw std::runtime_error{"No active map window"};
@@ -1776,6 +1784,10 @@ int registerCallback(const std::string& eventName, py::object callback)
   }
 
   auto& context = requireContext();
+  if (!context.allowPersistentUi)
+  {
+    throw std::runtime_error{"MCP Python cannot register persistent callbacks"};
+  }
   const auto token = g_nextCallbackToken++;
   g_callbacks.emplace(token, CallbackEntry{context.pluginId, std::move(callback)});
   g_eventCallbacks[eventName].push_back(token);
@@ -2009,12 +2021,22 @@ void defineModule(py::module_& module)
     .def(
       "save",
       [](DocumentHandle& self) {
+        const auto& context = requireContext();
+        if (context.mcpExecution && !context.allowNonTransactionalActions)
+        {
+          throw std::runtime_error{"MCP Python save requires mode='action'"};
+        }
         auto& document = self.get();
         throwIfError(document.map().save());
       })
     .def(
       "reload",
       [](DocumentHandle& self) {
+        const auto& context = requireContext();
+        if (context.mcpExecution && !context.allowNonTransactionalActions)
+        {
+          throw std::runtime_error{"MCP Python reload requires mode='action'"};
+        }
         auto& document = self.get();
         throwIfError(document.reload());
         PythonHandleRegistry::instance().invalidateDocument(&document);
@@ -2053,7 +2075,8 @@ void defineModule(py::module_& module)
       "clear_selection",
       [](DocumentHandle& self) {
         auto& document = self.get();
-        auto transaction = ScopedPythonTransaction{document, "Python API Clear Selection"};
+        auto transaction =
+          ScopedPythonTransaction{document, "Python API Clear Selection"};
         try
         {
           mdl::deselectAll(document.map());

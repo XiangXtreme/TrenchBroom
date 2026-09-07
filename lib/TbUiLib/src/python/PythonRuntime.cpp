@@ -889,7 +889,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     return execution;
   }
 
-  const auto modifiedBefore = context.document->map().modified();
+  const auto modificationCountBefore = context.document->map().modificationCount();
 
   auto transaction = request.transactional
                        ? std::make_optional(PythonDocumentTransaction{
@@ -1014,7 +1014,8 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   }
   execution.ok = true;
   execution.committed = transaction.has_value();
-  execution.mutatedDocument = !modifiedBefore && context.document->map().modified();
+  execution.mutatedDocument =
+    context.document->map().modificationCount() != modificationCountBefore;
   execution.value = *jsonResult;
   return execution;
 }

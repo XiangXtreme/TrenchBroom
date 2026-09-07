@@ -17,9 +17,10 @@ result = {"path": document.path, "argument": arguments.get("name")}
 结果转换错误、超时或提交错误时地图事务回滚。可信 Python 已开始运行后，回执不会
 宣称安全重试，因为脚本可能触及地图外的文件或程序。
 
-在迁移基础阶段，`mode` 仅支持 `transaction`。保存、关闭、导出、编译、打开和其他
-非原子 UI 动作将在 action API 完成后开放。文件脚本必须是绝对路径，运行时会设置真实
-`__file__` 并临时将父目录放入 `sys.path`。
+`mode:"transaction"` 是默认值，整段地图编辑在一个原生父事务中提交。保存、重载和
+通用编辑器 action 必须使用 `mode:"action"`；该模式不承诺整体回滚，失败回执会标记
+`partialMutation`。瞬时 MCP 脚本不能创建插件面板或持久 callback。文件脚本必须是绝对
+路径，运行时会设置真实 `__file__` 并临时将父目录放入 `sys.path`。
 
 使用 `tb_api` 搜索已绑定的 `trenchbroom` 符号。模糊查询最多返回八项摘要；传入
 精确 `symbol`（如 `Document.path`）才展开对应符号。现有 public Python API 的目录

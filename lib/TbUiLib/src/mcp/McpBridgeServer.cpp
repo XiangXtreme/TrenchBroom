@@ -255,9 +255,9 @@ McpBridgeServer::McpBridgeServer(
           }
           const auto mode =
             params.value("mode").toString("transaction").trimmed().toLower();
-          if (mode != "transaction")
+          if (mode != "transaction" && mode != "action")
           {
-            return invalidParamsFailure("MCP Python action mode is not implemented yet");
+            return invalidParamsFailure("MCP Python mode must be transaction or action");
           }
           const auto timeoutMs = params.value("timeoutMs").toInt(30'000);
           if (timeoutMs < 1 || timeoutMs > 90'000)
@@ -353,6 +353,9 @@ McpBridgeServer::McpBridgeServer(
           context.appController = &appController;
           context.currentMapView = mapWindow->currentMapViewBase();
           context.logger = &mapWindow->pythonLogger();
+          context.mcpExecution = true;
+          context.allowNonTransactionalActions = mode == "action";
+          context.allowPersistentUi = false;
           auto elapsed = QElapsedTimer{};
           elapsed.start();
           const auto execution = PythonRuntime::instance().runMcpScript(
@@ -363,16 +366,21 @@ McpBridgeServer::McpBridgeServer(
               params.value("arguments").toObject(),
               params.value("name").toString("MCP Python"),
               timeoutMs,
-              true,
+              mode == "transaction",
             });
           auto receipt = QJsonObject{
             {"executionId", executionId},
             {"bridgeInstanceId", m_bridgeInstanceId},
             {"sourceHash", sourceHash},
             {"document", active},
+            {"mode", mode},
+            {"status",
+             execution.ok         ? "completed"
+             : execution.executed ? "failed"
+                                  : "rejected"},
             {"durationMs", elapsed.elapsed()},
             {"mutatedDocument", execution.mutatedDocument},
-            {"partialMutation", false},
+            {"partialMutation", mode == "action" && execution.executed && !execution.ok},
             {"rolledBack", execution.rolledBack},
             {"retrySafe", !execution.executed},
             {"logs",

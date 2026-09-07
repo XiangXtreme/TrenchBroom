@@ -194,6 +194,16 @@ TEST_CASE(
   CHECK_FALSE(first.result.value("historicalReplay").toBool());
   CHECK(first.result.value("logs").isObject());
 
+  auto actionParams = request.params;
+  actionParams.insert("executionId", "python-action");
+  actionParams.insert("mode", "action");
+  const auto action = server.dispatchRequest(mcp::McpBridgeRequest{
+    "action", "tb_execute_python", actionParams, mcp::McpMode::Edit});
+  REQUIRE(action.ok);
+  CHECK(action.result.value("mode").toString() == "action");
+  CHECK(action.result.value("status").toString() == "completed");
+  CHECK_FALSE(action.result.value("partialMutation").toBool());
+
   const auto replay = server.dispatchRequest(request);
   REQUIRE(replay.ok);
   CHECK(replay.result.value("historicalReplay").toBool());

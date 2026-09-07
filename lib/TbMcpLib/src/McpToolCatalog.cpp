@@ -647,8 +647,8 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
     },
     {
       "tb_execute_python",
-      "Run trusted Python against one guarded map document in a single native "
-      "transaction.",
+      "Run trusted Python against one guarded map document in transaction or action "
+      "mode.",
       McpMode::Edit,
       true,
       true,
@@ -676,7 +676,9 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
                    stringProperty("Document fingerprint from tb_inspect.")},
                   {"path", stringProperty("Saved document path from tb_inspect.")}}}},
              "Target document identity. Transaction mode requires fingerprint.")},
-          {"mode", stringProperty("transaction only during the migration foundation.")},
+          {"mode",
+           stringProperty(
+             "transaction (default) or action for non-atomic UI/file actions.")},
           {"name", stringProperty("Native transaction name. Defaults to MCP Python.")},
           {"timeoutMs",
            integerProperty(
