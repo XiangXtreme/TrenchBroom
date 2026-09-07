@@ -1305,6 +1305,26 @@ std::vector<FaceHandle> selectedBrushFaces(SelectionHandle& selection)
   return result;
 }
 
+std::vector<FaceHandle> allFaces(MapDocument& document)
+{
+  auto result = std::vector<FaceHandle>{};
+  for (auto brush : allBrushes(document))
+  {
+    const auto& model = brush.get().brush();
+    for (auto index = size_t{0}; index < model.faceCount(); ++index)
+    {
+      result.push_back(FaceHandle{
+        brush.document,
+        brush.generation,
+        brush.brush,
+        brush.nodeLifetimeGeneration,
+        model.face(index).boundary(),
+        index});
+    }
+  }
+  return result;
+}
+
 std::vector<mdl::Node*> selectableNodesFromObjects(const py::iterable& objects)
 {
   auto result = std::vector<mdl::Node*>{};
@@ -2005,6 +2025,49 @@ void setFaceMaterial(FaceHandle& face, const std::string& materialName)
   withPreservedSelection(document, "Python API Set Face Material", [&](auto& map) {
     mdl::deselectAll(map);
     mdl::selectBrushFaces(map, {mdl::BrushFaceHandle{&brushNode, face.faceIndex}});
+    return mdl::setBrushFaceAttributes(map, {.materialName = materialName});
+  });
+}
+
+void setFacesMaterial(const py::iterable& faces, const std::string& materialName)
+{
+  auto handles = std::vector<FaceHandle>{};
+  for (const auto& face : faces)
+  {
+    handles.push_back(py::cast<FaceHandle>(face));
+  }
+  std::ranges::sort(
+    handles, {}, [](const auto& face) { return std::pair{face.brush, face.faceIndex}; });
+  handles.erase(
+    std::unique(
+      handles.begin(),
+      handles.end(),
+      [](const auto& lhs, const auto& rhs) {
+        return lhs.brush == rhs.brush && lhs.faceIndex == rhs.faceIndex;
+      }),
+    handles.end());
+  if (handles.empty())
+  {
+    return;
+  }
+
+  auto& document =
+    DocumentHandle{handles.front().document, handles.front().generation}.get();
+  auto brushFaces = std::vector<mdl::BrushFaceHandle>{};
+  brushFaces.reserve(handles.size());
+  for (const auto& face : handles)
+  {
+    if (face.document != &document)
+    {
+      throw py::value_error{"All faces must belong to the same document"};
+    }
+    auto& brushNode = face.getBrushNode();
+    brushFaces.emplace_back(&brushNode, face.faceIndex);
+  }
+
+  withPreservedSelection(document, "Python API Set Face Materials", [&](auto& map) {
+    mdl::deselectAll(map);
+    mdl::selectBrushFaces(map, brushFaces);
     return mdl::setBrushFaceAttributes(map, {.materialName = materialName});
   });
 }
@@ -3865,7 +3928,12 @@ void defineModule(py::module_& module)
   brushes.def("create", createBrush, py::arg("points"), py::arg("material") = py::none());
 
   auto faces = module.def_submodule("faces", "Face collection operations.");
+  faces.def("list", []() {
+    auto document = currentDocument();
+    return allFaces(document.get());
+  });
   faces.def("selected", selectedFaces);
+  faces.def("set_material", setFacesMaterial, py::arg("faces"), py::arg("material"));
 
   auto listMaterials = []() {
     auto document = currentDocument();

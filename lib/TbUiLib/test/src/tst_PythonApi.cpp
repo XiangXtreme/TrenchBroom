@@ -172,6 +172,10 @@ brush = tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(16,16,-16),
 all_brushes = tb.brushes.list()
 assert len(all_brushes) >= 1
 assert len(all_brushes[0].faces()) > 0
+all_faces = tb.faces.list()
+assert len(all_faces) >= 1
+tb.faces.set_material([all_faces[0], all_faces[0]], "python-api-material")
+assert tb.faces.list()[0].material == "python-api-material"
 assert tb.documents.snapshot()["brush_count"] >= 1
 assert tb.documents.snapshot()["content_bounds"] is not None
 assert tb.objects.inspect()["brush_count"] >= 1

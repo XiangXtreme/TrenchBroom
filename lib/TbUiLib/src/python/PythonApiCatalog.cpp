@@ -208,10 +208,13 @@ constexpr auto BrushesSymbols = std::array{
 
 constexpr auto FacesSymbols = std::array{
   PythonApiSymbol{
+    "list", Function, "() -> list[Face]", PythonApiValueType{PythonApiType::Face, 1u}},
+  PythonApiSymbol{
     "selected",
     Function,
     "() -> list[Face]",
     PythonApiValueType{PythonApiType::Face, 1u}},
+  PythonApiSymbol{"set_material", Function, "(faces, material)"},
 };
 
 constexpr auto MaterialsSymbols = std::array{
