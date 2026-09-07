@@ -180,6 +180,16 @@ created_entity = tb.entities.create(
 assert created_entity.classname == "info_player_start"
 assert created_entity["targetname"] == "python-api-entity"
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 1
+tb.entities.update(created_entity, {"health": "100"}, ["targetname"])
+assert created_entity["health"] == "100"
+assert "targetname" not in created_entity
+tb.entities.properties_update(
+    [created_entity, created_entity], {"targetname": "python-api-entity", "armor": "50"})
+updated_entity = tb.entities.find(property="targetname", value="python-api-entity")[0]
+assert updated_entity["armor"] == "50"
+tb.entities.properties_delete([updated_entity], ["armor"])
+created_entity = tb.entities.find(property="targetname", value="python-api-entity")[0]
+assert "armor" not in created_entity
 tb.entities.delete(created_entity)
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 0
 with doc.transaction("Python API smoke"):

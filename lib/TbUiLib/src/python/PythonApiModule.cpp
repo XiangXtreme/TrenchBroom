@@ -1703,6 +1703,88 @@ void deleteEntity(EntityHandle& entity)
   });
 }
 
+mdl::Entity updatedEntity(
+  const mdl::Entity& source,
+  const py::dict& properties,
+  const std::vector<std::string>& removeKeys)
+{
+  auto result = source;
+  for (const auto& item : properties)
+  {
+    result.addOrUpdateProperty(
+      py::cast<std::string>(item.first), py::cast<std::string>(item.second));
+  }
+  for (const auto& key : removeKeys)
+  {
+    if (key != mdl::EntityPropertyKeys::Classname)
+    {
+      result.removeProperty(key);
+    }
+  }
+  return result;
+}
+
+void updateEntity(
+  EntityHandle& entity,
+  const py::dict& properties,
+  const std::vector<std::string>& removeKeys)
+{
+  auto& document = DocumentHandle{entity.document, entity.generation}.get();
+  auto* entityNode = &entity.get();
+  auto replacement = updatedEntity(entityNode->entity(), properties, removeKeys);
+  withPreservedSelection(document, "Python API Update Entity", [&](auto& map) {
+    return mdl::updateNodeContents(
+      map,
+      "Python API Update Entity",
+      {{entityNode, mdl::NodeContents{std::move(replacement)}}});
+  });
+  entity.nodeGeneration = PythonHandleRegistry::instance().nodeGeneration(entity.entity);
+}
+
+void updateEntityProperties(
+  const py::iterable& entities,
+  const py::dict& properties,
+  const std::vector<std::string>& removeKeys)
+{
+  auto handles = std::vector<EntityHandle>{};
+  for (const auto& entity : entities)
+  {
+    handles.push_back(py::cast<EntityHandle>(entity));
+  }
+  std::ranges::sort(handles, {}, &EntityHandle::entity);
+  handles.erase(
+    std::unique(
+      handles.begin(),
+      handles.end(),
+      [](const auto& lhs, const auto& rhs) { return lhs.entity == rhs.entity; }),
+    handles.end());
+  if (handles.empty())
+  {
+    return;
+  }
+
+  auto& document =
+    DocumentHandle{handles.front().document, handles.front().generation}.get();
+  auto replacements = std::vector<std::pair<mdl::Node*, mdl::NodeContents>>{};
+  replacements.reserve(handles.size());
+  for (auto& handle : handles)
+  {
+    if (handle.document != &document)
+    {
+      throw py::value_error{"All entities must belong to the same document"};
+    }
+    auto* entityNode = &handle.get();
+    replacements.emplace_back(
+      entityNode,
+      mdl::NodeContents{updatedEntity(entityNode->entity(), properties, removeKeys)});
+  }
+
+  withPreservedSelection(document, "Python API Update Entity Properties", [&](auto& map) {
+    return mdl::updateNodeContents(
+      map, "Python API Update Entity Properties", std::move(replacements));
+  });
+}
+
 bool setSelectionProperty(
   SelectionHandle& selection,
   const std::string& key,
@@ -3741,6 +3823,25 @@ void defineModule(py::module_& module)
     py::arg("origin") = py::none(),
     py::arg("select") = false);
   entities.def("delete", deleteEntity, py::arg("entity"));
+  entities.def(
+    "update",
+    updateEntity,
+    py::arg("entity"),
+    py::arg("properties") = py::dict{},
+    py::arg("remove_keys") = std::vector<std::string>{});
+  entities.def(
+    "properties_update",
+    updateEntityProperties,
+    py::arg("entities"),
+    py::arg("properties") = py::dict{},
+    py::arg("remove_keys") = std::vector<std::string>{});
+  entities.def(
+    "properties_delete",
+    [](const py::iterable& entities, const std::vector<std::string>& keys) {
+      updateEntityProperties(entities, py::dict{}, keys);
+    },
+    py::arg("entities"),
+    py::arg("keys"));
   entities.def(
     "find",
     [](

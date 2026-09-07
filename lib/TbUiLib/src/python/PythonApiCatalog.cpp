@@ -180,6 +180,10 @@ constexpr auto EntitiesSymbols = std::array{
     "(classname, properties={}, origin=None, select=False) -> Entity",
     PythonApiValueType{PythonApiType::Entity}},
   PythonApiSymbol{"delete", Function, "(entity)"},
+  PythonApiSymbol{"update", Function, "(entity, properties={}, remove_keys=[])"},
+  PythonApiSymbol{
+    "properties_update", Function, "(entities, properties={}, remove_keys=[])"},
+  PythonApiSymbol{"properties_delete", Function, "(entities, keys)"},
   PythonApiSymbol{
     "find",
     Function,
