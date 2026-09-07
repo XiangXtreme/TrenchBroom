@@ -7,8 +7,10 @@
 审核都必须记录实际 HEAD 与工作区状态；基线不一致时必须在交付物中说明，
 不得静默替换。
 
-当前分支处于 G2 foundation：新执行入口、目录和配置升级已开始实现，但旧
-目录仍保留，不能将此阶段报告为能力对等或最终六入口切换。
+当前分支处于 G3 的增量迁移：G2 执行基础、回执和权限边界已经落地；Python
+API 已公开基础 documents、objects、entities、brushes、faces、materials 和 actions
+namespace，并已验证 `documents_list` 的替代 `tb.documents.list`。其余 capability-map
+条目仍是 `planned`，旧目录仍保留，不能将此阶段报告为能力对等或最终六入口切换。
 
 以下决定不可自行变更：受信任 Python 在现有进程和 Qt 主线程运行；每次执行
 使用独立 globals；默认整段地图事务；特殊 UI 或文件动作使用明确 action
