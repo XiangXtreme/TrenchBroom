@@ -309,6 +309,10 @@ assert len(tb.documents.list()) == 1
       "other-document-module",
       automation::AutomationModuleRecord{
         "other-document-module", "doc:other", {}, {}, {}, 1, {}, {}, {}});
+    moduleStore.emplace(
+      "stale-module",
+      automation::AutomationModuleRecord{
+        "stale-module", documentFingerprint, {"mcp:missing"}, {}, {}, 1, {}, {}, {}});
     context.objectRegistry = &moduleRegistry;
     context.moduleStore = &moduleStore;
 
@@ -320,7 +324,9 @@ assert len(tb.documents.list()) == 1
         "selection = tb.modules.select('test-module')\n"
         "result = {'count': len(tb.modules.list()), 'id': module['id'], "
         "'revision': module['revision'], 'role': module['metadata']['role'], "
-        "'selected': selection['node_count']}",
+        "'selected': selection['node_count'], "
+        "'stale_count': len(tb.modules.list(include_stale=True)), "
+        "'stale_objects': tb.modules.inspect('stale-module')['stale_object_count']}",
         "<mcp-python:modules>",
         {},
       });
@@ -334,6 +340,8 @@ assert len(tb.documents.list()) == 1
         {"revision", 3},
         {"role", "route"},
         {"selected", 1},
+        {"stale_count", 2},
+        {"stale_objects", 1},
       });
 
     const auto first = runtime.runMcpScript(
