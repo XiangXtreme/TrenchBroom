@@ -10,6 +10,8 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
@@ -1307,16 +1309,52 @@ py::dict validationCheck(const bool includeHidden, const size_t limit)
   return result;
 }
 
+py::object jsonValueToPython(const QJsonValue& value)
+{
+  if (value.isNull() || value.isUndefined())
+  {
+    return py::none();
+  }
+  if (value.isBool())
+  {
+    return py::bool_{value.toBool()};
+  }
+  if (value.isDouble())
+  {
+    return py::float_{value.toDouble()};
+  }
+  if (value.isString())
+  {
+    return py::str{value.toString().toStdString()};
+  }
+  if (value.isArray())
+  {
+    auto result = py::list{};
+    for (const auto& item : value.toArray())
+    {
+      result.append(jsonValueToPython(item));
+    }
+    return std::move(result);
+  }
+  auto result = py::dict{};
+  const auto object = value.toObject();
+  for (auto it = object.begin(); it != object.end(); ++it)
+  {
+    result[py::str{it.key().toStdString()}] = jsonValueToPython(it.value());
+  }
+  return std::move(result);
+}
+
 py::dict moduleSummary(const automation::AutomationModuleRecord& module)
 {
   auto result = py::dict{};
-  result["id"] = module.moduleId;
-  result["document_fingerprint"] = module.documentFingerprint;
-  result["metadata"] = module.metadata.toVariantMap();
+  result["id"] = module.moduleId.toStdString();
+  result["document_fingerprint"] = module.documentFingerprint.toStdString();
+  result["metadata"] = jsonValueToPython(module.metadata);
   result["revision"] = module.revision;
-  result["active_operation_id"] = module.activeOperationId;
-  result["content_hash"] = module.contentHash;
-  result["quality_policy"] = module.qualityPolicy.toVariantMap();
+  result["active_operation_id"] = module.activeOperationId.toStdString();
+  result["content_hash"] = module.contentHash.toStdString();
+  result["quality_policy"] = jsonValueToPython(module.qualityPolicy);
   result["object_count"] = module.objectIds.size();
   result["operation_count"] = module.operationIds.size();
   return result;

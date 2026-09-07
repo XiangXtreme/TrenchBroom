@@ -43,6 +43,7 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
+#include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/python/PythonHandleRegistry.h"
 #include "ui/python/PythonPluginManager.h"
 #include "ui/python/PythonPluginSession.h"
@@ -285,6 +286,47 @@ assert len(tb.documents.list()) == 1
     context.logger = &window.pythonLogger();
 
     auto& runtime = PythonRuntime::instance();
+    auto moduleRegistry = automation::AutomationObjectRegistry{};
+    auto moduleStore = std::map<QString, automation::AutomationModuleRecord>{};
+    const auto documentFingerprint =
+      moduleRegistry.documentFingerprint(window.document().map());
+    moduleStore.emplace(
+      "test-module",
+      automation::AutomationModuleRecord{
+        "test-module",
+        documentFingerprint,
+        {"mcp:object"},
+        {"mcp-op-1"},
+        QJsonObject{{"role", "route"}},
+        3,
+        "mcp-op-1",
+        "sha256:test",
+        QJsonObject{{"intent", "balanced"}},
+      });
+    moduleStore.emplace(
+      "other-document-module",
+      automation::AutomationModuleRecord{
+        "other-document-module", "doc:other", {}, {}, {}, 1, {}, {}, {}});
+    context.objectRegistry = &moduleRegistry;
+    context.moduleStore = &moduleStore;
+
+    const auto modules = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "module = tb.modules.inspect('test-module')\n"
+        "result = {'count': len(tb.modules.list()), 'id': module['id'], "
+        "'revision': module['revision'], 'role': module['metadata']['role']}",
+        "<mcp-python:modules>",
+        {},
+      });
+    CAPTURE(modules.error);
+    REQUIRE(modules.ok);
+    CHECK(
+      modules.value.toObject()
+      == QJsonObject{
+        {"count", 1}, {"id", "test-module"}, {"revision", 3}, {"role", "route"}});
+
     const auto first = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{
