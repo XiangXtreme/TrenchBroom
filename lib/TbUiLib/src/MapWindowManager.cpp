@@ -57,6 +57,23 @@ MapWindow* MapWindowManager::topMapWindow() const
   return m_mapWindows.empty() ? nullptr : m_mapWindows.front();
 }
 
+bool MapWindowManager::activateMapWindow(MapWindow& mapWindow)
+{
+  const auto it = std::ranges::find(m_mapWindows, &mapWindow);
+  if (it == m_mapWindows.end())
+  {
+    return false;
+  }
+
+  if (it != m_mapWindows.begin())
+  {
+    std::rotate(m_mapWindows.begin(), it, std::next(it));
+  }
+  mapWindow.raise();
+  mapWindow.activateWindow();
+  return true;
+}
+
 Result<void> MapWindowManager::createDocument(
   const mdl::GameInfo& gameInfo, mdl::MapFormat mapFormat, const vm::bbox3d& worldBounds)
 {

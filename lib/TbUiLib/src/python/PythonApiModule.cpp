@@ -776,6 +776,95 @@ void exportDocument(
   }));
 }
 
+MapWindow& mapWindowForDocument(DocumentHandle& document)
+{
+  auto& context = requireContext();
+  if (context.appController == nullptr)
+  {
+    throw std::runtime_error{"No application controller in Python execution context"};
+  }
+
+  auto& targetDocument = document.get();
+  for (auto* mapWindow : context.appController->mapWindowManager().mapWindows())
+  {
+    if (mapWindow != nullptr && &mapWindow->document() == &targetDocument)
+    {
+      return *mapWindow;
+    }
+  }
+  throw std::runtime_error{"Document window is no longer available"};
+}
+
+DocumentHandle openDocument(const std::string& path)
+{
+  requirePythonActionMode("open");
+  auto& context = requireContext();
+  if (context.appController == nullptr || context.document == nullptr)
+  {
+    throw std::runtime_error{"No active document"};
+  }
+
+  const auto openPath = absolutePathFromPython(path);
+  if (!std::filesystem::is_regular_file(openPath))
+  {
+    throw py::value_error{"document path must name an existing regular file"};
+  }
+
+  auto& current = DocumentHandle{
+                    context.document,
+                    PythonHandleRegistry::instance().documentGeneration(context.document)}
+                    .get();
+  throwIfError(context.appController->mapWindowManager().loadDocument(
+    current.map().gameInfo(),
+    current.map().worldNode().mapFormat(),
+    MapDocument::DefaultWorldBounds,
+    openPath));
+
+  auto* openedWindow = context.appController->mapWindowManager().topMapWindow();
+  if (openedWindow == nullptr)
+  {
+    throw std::runtime_error{"Document open completed without an active window"};
+  }
+  if (&openedWindow->document() == context.document)
+  {
+    PythonHandleRegistry::instance().invalidateDocument(context.document);
+  }
+  return DocumentHandle{
+    &openedWindow->document(),
+    PythonHandleRegistry::instance().documentGeneration(&openedWindow->document())};
+}
+
+DocumentHandle activateDocument(DocumentHandle& document)
+{
+  requirePythonActionMode("activate");
+  auto& context = requireContext();
+  if (context.appController == nullptr)
+  {
+    throw std::runtime_error{"No application controller in Python execution context"};
+  }
+  auto& window = mapWindowForDocument(document);
+  if (!context.appController->mapWindowManager().activateMapWindow(window))
+  {
+    throw std::runtime_error{"Document window is no longer available"};
+  }
+  return document;
+}
+
+void closeDocument(DocumentHandle& document, const bool discardChanges)
+{
+  requirePythonActionMode("close");
+  auto& targetDocument = document.get();
+  if (targetDocument.map().modified() && !discardChanges)
+  {
+    throw py::value_error{
+      "Document has unsaved changes; pass discard_changes=True to close it"};
+  }
+
+  auto& window = mapWindowForDocument(document);
+  PythonHandleRegistry::instance().invalidateDocument(&targetDocument);
+  window.closeDocument(discardChanges);
+}
+
 Vec3 vec3FromObject(const py::handle& object)
 {
   if (py::isinstance<Vec3>(object))
@@ -2563,6 +2652,7 @@ void defineModule(py::module_& module)
       })
     .def("vertex_tool_vertices", vertexToolVertices)
     .def("save", saveDocument)
+    .def("close", closeDocument, py::arg("discard_changes") = false)
     .def(
       "reload",
       [](DocumentHandle& self) {
@@ -3939,6 +4029,10 @@ void defineModule(py::module_& module)
   documents.def("current", currentDocument);
   documents.def("list", openDocuments);
   documents.def("snapshot", []() { return documentSnapshot(currentDocument()); });
+  documents.def("open", openDocument, py::arg("path"));
+  documents.def("activate", activateDocument, py::arg("document"));
+  documents.def(
+    "close", closeDocument, py::arg("document"), py::arg("discard_changes") = false);
   auto saveCurrentDocument = [](const py::object& path) {
     auto document = currentDocument();
     if (path.is_none())

@@ -214,6 +214,10 @@ with doc.transaction("Python API smoke"):
     pass
 with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
     f.write(doc.entities[0].classname)
+opened = tb.documents.open(save_path)
+assert opened.path == save_path
+assert tb.documents.activate(opened).id == opened.id
+assert len(tb.documents.list()) == 1
 )");
 
     auto context = PythonExecutionContext{};

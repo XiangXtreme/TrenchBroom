@@ -82,6 +82,7 @@ public:
 
   std::vector<MapWindow*> mapWindows() const;
   MapWindow* topMapWindow() const;
+  bool activateMapWindow(MapWindow& mapWindow);
   bool allMapWindowsClosed() const;
 
 private:
