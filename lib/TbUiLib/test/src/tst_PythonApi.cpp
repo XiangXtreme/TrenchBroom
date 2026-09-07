@@ -365,6 +365,23 @@ assert len(tb.documents.list()) == 1
     CHECK(moduleStore.contains("other-document-module"));
     CHECK(moduleStore.contains("stale-module"));
 
+    moduleStore.emplace(
+      "rollback-module",
+      automation::AutomationModuleRecord{
+        "rollback-module", documentFingerprint, {}, {}, {}, 1, {}, {}, {}});
+    const auto failedForget = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "tb.modules.forget('rollback-module')\n"
+        "raise RuntimeError('force transaction rollback')",
+        "<mcp-python:rollback-module-state>",
+        {},
+      });
+    CHECK_FALSE(failedForget.ok);
+    CHECK(failedForget.rolledBack);
+    CHECK(moduleStore.contains("rollback-module"));
+
     const auto first = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{

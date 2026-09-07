@@ -895,11 +895,18 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
                        ? std::make_optional(PythonDocumentTransaction{
                            *context.document, request.transactionName.toStdString()})
                        : std::nullopt;
+  auto moduleStoreBefore = request.transactional && context.moduleStore != nullptr
+                             ? std::optional{*context.moduleStore}
+                             : std::nullopt;
   auto cancel = [&]() {
     if (transaction)
     {
       transaction->cancel();
       execution.rolledBack = true;
+    }
+    if (moduleStoreBefore)
+    {
+      *context.moduleStore = *moduleStoreBefore;
     }
   };
 
@@ -1009,6 +1016,10 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   if (transaction && !transaction->commit())
   {
     execution.rolledBack = true;
+    if (moduleStoreBefore)
+    {
+      *context.moduleStore = *moduleStoreBefore;
+    }
     execution.error = "Could not commit the MCP Python transaction";
     return execution;
   }
