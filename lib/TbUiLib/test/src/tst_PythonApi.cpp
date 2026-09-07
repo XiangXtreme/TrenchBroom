@@ -134,6 +134,7 @@ TEST_CASE("PythonApi")
     env.createFile(
       "api_smoke.py",
       R"(
+import os
 import trenchbroom as tb
 
 doc = tb.current_document()
@@ -155,6 +156,10 @@ assert isinstance(snapshot["worldspawn"], dict)
 assert snapshot["selected_node_count"] == 0
 assert "grid_size" in tb.objects.snapshot()
 assert "has_selection" in tb.objects.inspect()
+save_path = os.path.abspath("python-api-save.map")
+assert tb.documents.save_as(save_path).path == save_path
+assert os.path.isfile(save_path)
+assert tb.documents.save_current().path == save_path
 assert len(tb.entities.find(classname="worldspawn")) == 1
 assert len(tb.entities.find(property="classname", value="world")) == 1
 assert len(tb.brushes.list()) == 0

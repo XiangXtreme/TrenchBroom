@@ -61,6 +61,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/QPathUtils.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonExecutionContext.h"
@@ -690,6 +691,39 @@ std::vector<DocumentHandle> openDocuments()
       PythonHandleRegistry::instance().documentGeneration(context.document)});
   }
   return result;
+}
+
+std::filesystem::path absolutePathFromPython(const std::string& value)
+{
+  const auto path = pathFromQString(
+    QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())));
+  if (!path.is_absolute())
+  {
+    throw py::value_error{"path must be absolute"};
+  }
+  return path;
+}
+
+void requirePythonActionMode(const char* const action)
+{
+  const auto& context = requireContext();
+  if (context.mcpExecution && !context.allowNonTransactionalActions)
+  {
+    throw std::runtime_error{
+      std::string{"MCP Python "} + action + " requires mode='action'"};
+  }
+}
+
+void saveDocument(DocumentHandle& document)
+{
+  requirePythonActionMode("save");
+  throwIfError(document.get().map().save());
+}
+
+void saveDocumentAs(DocumentHandle& document, const std::string& path)
+{
+  requirePythonActionMode("save_as");
+  throwIfError(document.get().map().saveAs(absolutePathFromPython(path)));
 }
 
 Vec3 vec3FromObject(const py::handle& object)
@@ -2477,17 +2511,7 @@ void defineModule(py::module_& module)
         return result;
       })
     .def("vertex_tool_vertices", vertexToolVertices)
-    .def(
-      "save",
-      [](DocumentHandle& self) {
-        const auto& context = requireContext();
-        if (context.mcpExecution && !context.allowNonTransactionalActions)
-        {
-          throw std::runtime_error{"MCP Python save requires mode='action'"};
-        }
-        auto& document = self.get();
-        throwIfError(document.map().save());
-      })
+    .def("save", saveDocument)
     .def(
       "reload",
       [](DocumentHandle& self) {
@@ -2500,6 +2524,7 @@ void defineModule(py::module_& module)
         throwIfError(document.reload());
         PythonHandleRegistry::instance().invalidateDocument(&document);
       })
+    .def("save_as", saveDocumentAs, py::arg("path"))
     .def(
       "transaction",
       [](DocumentHandle& self, std::string name) {
@@ -3853,6 +3878,25 @@ void defineModule(py::module_& module)
   documents.def("current", currentDocument);
   documents.def("list", openDocuments);
   documents.def("snapshot", []() { return documentSnapshot(currentDocument()); });
+  auto saveCurrentDocument = [](const py::object& path) {
+    auto document = currentDocument();
+    if (path.is_none())
+    {
+      saveDocument(document);
+    }
+    else
+    {
+      saveDocumentAs(document, py::cast<std::string>(path));
+    }
+    return document;
+  };
+  documents.def("save", saveCurrentDocument, py::arg("path") = py::none());
+  documents.def("save_as", [](const std::string& path) {
+    auto document = currentDocument();
+    saveDocumentAs(document, path);
+    return document;
+  });
+  documents.def("save_current", saveCurrentDocument, py::arg("path") = py::none());
 
   auto objects = module.def_submodule("objects", "Selection-backed object operations.");
   objects.def("selection", [currentSelection]() { return currentSelection(); });
