@@ -159,6 +159,11 @@ constexpr auto DocumentsSymbols = std::array{
     Function,
     "(path=None) -> Document",
     PythonApiValueType{PythonApiType::Document}},
+  PythonApiSymbol{
+    "export",
+    Function,
+    "(path, strip_tb_properties=True) -> Document",
+    PythonApiValueType{PythonApiType::Document}},
 };
 
 constexpr auto ObjectsSymbols = std::array{
@@ -300,6 +305,7 @@ constexpr auto DocumentSymbols = std::array{
     PythonApiValueType{PythonApiType::Vec3, 1u}},
   PythonApiSymbol{"save", Method, "()"},
   PythonApiSymbol{"save_as", Method, "(path)"},
+  PythonApiSymbol{"export", Method, "(path, strip_tb_properties=True)"},
   PythonApiSymbol{"reload", Method, "()"},
   PythonApiSymbol{
     "transaction",

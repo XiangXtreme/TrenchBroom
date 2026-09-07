@@ -38,6 +38,7 @@
 #include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
 #include "mdl/EntityNodeBase.h"
+#include "mdl/ExportOptions.h"
 #include "mdl/Grid.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
@@ -724,6 +725,23 @@ void saveDocumentAs(DocumentHandle& document, const std::string& path)
 {
   requirePythonActionMode("save_as");
   throwIfError(document.get().map().saveAs(absolutePathFromPython(path)));
+}
+
+void exportDocument(
+  DocumentHandle& document, const std::string& path, const bool stripTbProperties)
+{
+  requirePythonActionMode("export");
+  const auto exportPath = absolutePathFromPython(path);
+  if (exportPath == document.get().map().path())
+  {
+    throw py::value_error{"export path must not overwrite the document"};
+  }
+  throwIfError(document.get().map().exportAs(mdl::MapExportOptions{
+    exportPath,
+    stripTbProperties,
+    std::nullopt,
+    std::nullopt,
+  }));
 }
 
 Vec3 vec3FromObject(const py::handle& object)
@@ -2525,6 +2543,7 @@ void defineModule(py::module_& module)
         PythonHandleRegistry::instance().invalidateDocument(&document);
       })
     .def("save_as", saveDocumentAs, py::arg("path"))
+    .def("export", exportDocument, py::arg("path"), py::arg("strip_tb_properties") = true)
     .def(
       "transaction",
       [](DocumentHandle& self, std::string name) {
@@ -3897,6 +3916,15 @@ void defineModule(py::module_& module)
     return document;
   });
   documents.def("save_current", saveCurrentDocument, py::arg("path") = py::none());
+  documents.def(
+    "export",
+    [](const std::string& path, const bool stripTbProperties) {
+      auto document = currentDocument();
+      exportDocument(document, path, stripTbProperties);
+      return document;
+    },
+    py::arg("path"),
+    py::arg("strip_tb_properties") = true);
 
   auto objects = module.def_submodule("objects", "Selection-backed object operations.");
   objects.def("selection", [currentSelection]() { return currentSelection(); });

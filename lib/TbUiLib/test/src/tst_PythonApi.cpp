@@ -160,6 +160,9 @@ save_path = os.path.abspath("python-api-save.map")
 assert tb.documents.save_as(save_path).path == save_path
 assert os.path.isfile(save_path)
 assert tb.documents.save_current().path == save_path
+export_path = os.path.abspath("python-api-export.map")
+assert tb.documents.export(export_path).path == save_path
+assert os.path.isfile(export_path)
 assert len(tb.entities.find(classname="worldspawn")) == 1
 assert len(tb.entities.find(property="classname", value="world")) == 1
 assert len(tb.brushes.list()) == 0
