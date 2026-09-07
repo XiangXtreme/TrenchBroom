@@ -47,6 +47,7 @@
 #include "mdl/Map_Brushes.h"
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Geometry.h"
+#include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/NodeHandles.h"
@@ -1253,6 +1254,75 @@ py::object selectedObjectBounds(SelectionHandle selection)
 {
   const auto& bounds = selection.getDocument().map().selectionBounds();
   return bounds ? py::object{boundsSnapshot(*bounds)} : py::none();
+}
+
+py::dict groupSummary(const mdl::GroupNode& group)
+{
+  auto result = py::dict{};
+  result["name"] = group.group().name();
+  result["bounds"] = boundsSnapshot(group.logicalBounds());
+  result["child_count"] = group.childCount();
+  result["descendant_count"] = group.descendantCount();
+  result["opened"] = group.opened();
+  result["closed"] = group.closed();
+  return result;
+}
+
+std::vector<mdl::GroupNode*> selectedGroups(SelectionHandle selection)
+{
+  const auto& groups = selection.getDocument().map().selection().groups;
+  return {groups.begin(), groups.end()};
+}
+
+py::dict createGroupFromSelection(SelectionHandle selection, const std::string& name)
+{
+  if (name.empty())
+  {
+    throw py::value_error{"name must not be empty"};
+  }
+
+  auto* group = mdl::groupSelectedNodes(selection.getDocument().map(), name);
+  if (group == nullptr)
+  {
+    throw std::runtime_error{"Selected objects cannot be grouped"};
+  }
+  return groupSummary(*group);
+}
+
+py::list inspectSelectedGroups(SelectionHandle selection)
+{
+  auto result = py::list{};
+  for (const auto* group : selectedGroups(selection))
+  {
+    result.append(groupSummary(*group));
+  }
+  return result;
+}
+
+py::list renameSelectedGroups(SelectionHandle selection, const std::string& name)
+{
+  if (name.empty())
+  {
+    throw py::value_error{"name must not be empty"};
+  }
+
+  auto& map = selection.getDocument().map();
+  if (!map.selection().hasOnlyGroups())
+  {
+    throw py::value_error{"Current selection must contain only groups"};
+  }
+  mdl::renameSelectedGroups(map, name);
+  return inspectSelectedGroups(selection);
+}
+
+py::dict ungroupSelectedGroups(SelectionHandle selection)
+{
+  if (selectedGroups(selection).empty())
+  {
+    throw py::value_error{"Current selection must contain groups"};
+  }
+  mdl::ungroupSelectedNodes(selection.getDocument().map());
+  return selectionSnapshot(selection);
 }
 
 std::vector<BrushHandle> entityBrushes(EntityHandle& entity)
@@ -4333,6 +4403,20 @@ void defineModule(py::module_& module)
   });
   faces.def("selected", selectedFaces);
   faces.def("set_material", setFacesMaterial, py::arg("faces"), py::arg("material"));
+
+  auto groups = module.def_submodule("groups", "Native group organization operations.");
+  groups.def("create_from_selection", [currentSelection](const std::string& name) {
+    return createGroupFromSelection(currentSelection(), name);
+  });
+  groups.def("inspect_selected", [currentSelection]() {
+    return inspectSelectedGroups(currentSelection());
+  });
+  groups.def("rename_selected", [currentSelection](const std::string& name) {
+    return renameSelectedGroups(currentSelection(), name);
+  });
+  groups.def("ungroup_selected", [currentSelection]() {
+    return ungroupSelectedGroups(currentSelection());
+  });
 
   auto placeModel = [](
                       const std::string& path,

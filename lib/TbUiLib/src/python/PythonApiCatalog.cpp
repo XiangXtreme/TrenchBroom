@@ -16,6 +16,7 @@ constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::Brushes, "brushes"},
   PythonApiTypeInfo{PythonApiType::Faces, "faces"},
   PythonApiTypeInfo{PythonApiType::Materials, "materials"},
+  PythonApiTypeInfo{PythonApiType::Groups, "groups"},
   PythonApiTypeInfo{PythonApiType::History, "history"},
   PythonApiTypeInfo{PythonApiType::Assets, "assets"},
   PythonApiTypeInfo{PythonApiType::Actions, "actions"},
@@ -56,6 +57,8 @@ constexpr auto ModuleSymbols = std::array{
   PythonApiSymbol{"faces", Property, "faces", PythonApiValueType{PythonApiType::Faces}},
   PythonApiSymbol{
     "materials", Property, "materials", PythonApiValueType{PythonApiType::Materials}},
+  PythonApiSymbol{
+    "groups", Property, "groups", PythonApiValueType{PythonApiType::Groups}},
   PythonApiSymbol{
     "history", Property, "history", PythonApiValueType{PythonApiType::History}},
   PythonApiSymbol{
@@ -275,6 +278,13 @@ constexpr auto HistorySymbols = std::array{
   PythonApiSymbol{"status", Function, "(document=None) -> dict"},
   PythonApiSymbol{"undo", Function, "(document=None) -> bool"},
   PythonApiSymbol{"redo", Function, "(document=None) -> bool"},
+};
+
+constexpr auto GroupsSymbols = std::array{
+  PythonApiSymbol{"create_from_selection", Function, "(name) -> dict"},
+  PythonApiSymbol{"inspect_selected", Function, "() -> list[dict]"},
+  PythonApiSymbol{"rename_selected", Function, "(name) -> list[dict]"},
+  PythonApiSymbol{"ungroup_selected", Function, "() -> dict"},
 };
 
 constexpr auto AssetsSymbols = std::array{
@@ -565,6 +575,8 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
     return FacesSymbols;
   case PythonApiType::Materials:
     return MaterialsSymbols;
+  case PythonApiType::Groups:
+    return GroupsSymbols;
   case PythonApiType::History:
     return HistorySymbols;
   case PythonApiType::Assets:

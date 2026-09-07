@@ -233,10 +233,17 @@ except ValueError:
     pass
 tb.entities.delete(created_entity)
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 0
+tb.objects.set_selection([all_brushes[0]])
+group = tb.groups.create_from_selection("python-api-group")
+assert group["name"] == "python-api-group"
+assert group["child_count"] == 1
+assert tb.groups.inspect_selected()[0]["name"] == "python-api-group"
+assert tb.groups.rename_selected("python-api-group-renamed")[0]["name"] == "python-api-group-renamed"
+assert tb.groups.ungroup_selected()["brush_count"] == 1
 with doc.transaction("Python API smoke"):
     pass
 with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
-    f.write(doc.entities[0].classname)
+    f.write(next(entity.classname for entity in doc.entities if entity.classname == "worldspawn"))
 opened = tb.documents.open(save_path)
 assert opened.path == save_path
 assert tb.documents.activate(opened).id == opened.id

@@ -18,6 +18,7 @@ enum class PythonApiType
   Brushes,
   Faces,
   Materials,
+  Groups,
   History,
   Assets,
   Actions,
