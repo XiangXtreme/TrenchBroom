@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "baseCommit": "d98f869503f331809cd6727712438534c16c8c9e",
   "baselineCatalogCount": 142,
   "effectiveCapabilityCount": 140,
@@ -14,1281 +14,2275 @@
   "entries": [
     {
       "legacyTool": "tb_status",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return TrenchBroom MCP bridge status and active document summary.",
+      "domain": "inspect",
+      "replacementType": "six-entry inspection or API discovery",
+      "replacementSymbols": [
+        "tb_inspect / tb_api"
+      ],
+      "verification": {
+        "testId": "T3-inspect",
+        "scenarioId": "S-inspect",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "tb_doctor",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Diagnose MCP bridge configuration, mode, local trust, and tool availability.",
+      "domain": "inspect",
+      "replacementType": "six-entry inspection or API discovery",
+      "replacementSymbols": [
+        "tb_inspect / tb_api"
+      ],
+      "verification": {
+        "testId": "T3-inspect",
+        "scenarioId": "S-inspect",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List documents currently opened in TrenchBroom.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.list"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_open",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Open a map document by absolute path.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.open"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_open_verified",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Open, activate, and verify a map document before returning success.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.open_verified"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_activate",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Activate an open document by document index or path.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.activate"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_save",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Save an open document. Transient documents require an absolute path.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.save"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_save_current",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Save the active document. Alias of documents_save for automated MCP flows; use expectedDocumentPath to guard the active map before saving.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.save_current"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_save_as",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Save the active document to an absolute path. Alias of documents_save with path and optional expectedDocumentPath guard.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.save_as"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_close",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Close an open document. Dirty documents require discardChanges=true.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.close"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "documents_export",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Export an open document to a map file by absolute path.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.export"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "document_snapshot",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return metadata for the active document.",
+      "domain": "documents",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.documents.snapshot"
+      ],
+      "verification": {
+        "testId": "T3-documents",
+        "scenarioId": "S-documents",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "map_snapshot",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return a compact map summary for the active document.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.snapshot"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "map_search",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Search entities, brushes, and properties in the active map.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.search"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "selection_get",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return the current editor selection.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.get"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "selection_inspect",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Inspect the current editor selection with compact summaries by default. Use detail=full or includeProperties=true to read selected entity key/value properties such as targetname, target, origin, angles, and custom fields.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.inspect"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_link_chain_inspect",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Inspect entity key/value links in the active map without reading the .map file. Defaults to the current selected entity as the start and follows targetname -> target style links. Reports missing links, duplicate names, and cycles instead of guessing.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.link_chain_inspect"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "selection_set",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Set the current editor selection using MCP object ids.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.set"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "selection_filter",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Filter map objects by type, classname, targetname, material, bounds, or text.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.filter"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "selection_by_bounds",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Select leaf selectable objects whose logical bounds intersect or fit inside a box. Defaults exclude world/container matches.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.by_bounds"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "selection_grow",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Grow the current node selection to parents, children, or siblings.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.grow"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_focus",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. For normal Agent review, use render_review_current_scene(scope:\"selection\"), render_review_selector, or module_render_review instead.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.focus"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_clear_marks",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Clear MCP overlay markers, optionally clearing the editor selection.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.clear_marks"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_layout_get",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. Searchable for migration only; use geometry review tools instead of live UI layout inspection.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.layout_get"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_layout_set",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. Searchable for migration only; geometry review tools now provide deterministic saved review bundles without changing the live UI layout.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.layout_set"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_camera_frame_bounds",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. Searchable for migration only; use render_review_selector or module_render_review view presets instead of controlling the live editor camera.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.camera_frame_bounds"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_camera_set",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. Searchable for migration only; use render_review_selector or module_render_review view presets instead of controlling the live editor camera.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.camera_set"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "actions_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List executable TrenchBroom actions for the current context.",
+      "domain": "actions",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.actions.list"
+      ],
+      "verification": {
+        "testId": "T3-actions",
+        "scenarioId": "S-actions",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "action_execute",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Execute a TrenchBroom action by id if it is enabled in the current context.",
+      "domain": "actions",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.actions.execute"
+      ],
+      "verification": {
+        "testId": "T3-actions",
+        "scenarioId": "S-actions",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "overlay_set",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Set MCP overlay labels or highlighted object ids.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.set"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "overlay_clear",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Clear MCP overlay state.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.clear"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_capture_current",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. Searchable for migration only; use render_review_current_scene, render_review_selector, or render_review_operation for Agent scene review.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.capture_current"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_capture_3d",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. Searchable for migration only; use render_review_selector, render_review_operation, or module_render_review.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.capture_3d"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_capture_2d",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. Searchable for migration only; use render_review_selector, render_review_operation, or module_render_review.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.capture_2d"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "viewport_capture_scene_review",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Retired lightweight-runtime viewport helper. Searchable for migration only. For normal Agent self-review, use geometry review tools such as render_review_selector, render_review_operation, render_review_current_scene, or module_render_review.",
+      "domain": "viewport",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.viewport.capture_scene_review"
+      ],
+      "verification": {
+        "testId": "T3-viewport",
+        "scenarioId": "S-viewport",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "render_review_targets",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Low-level geometry review renderer used by higher-level review tools. Prefer render_review_selector, render_review_operation, or render_review_current_scene unless you already have explicit objectIds/operationIds and need direct control.",
+      "domain": "review",
+      "replacementType": "tb_capture plus Python API",
+      "replacementSymbols": [
+        "tb.review.review_targets"
+      ],
+      "verification": {
+        "testId": "T3-review",
+        "scenarioId": "S-review",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "render_review_current_scene",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a compact Agent-readable geometry review for the active document in one call. The tool automatically reviews current brush geometry, chooses terrain-friendly defaults when appropriate, writes a contact_sheet.png, and returns a small summary with preferredCapturePath. Use detail=full for captures, quality arrays, and other manifest details. renderReadable only checks render output readability; qualityValid is a legacy alias, not semantic geometry validation. Human or skill review must judge whether the image matches the requested scene intent.",
+      "domain": "review",
+      "replacementType": "tb_capture plus Python API",
+      "replacementSymbols": [
+        "tb.review.review_current_scene"
+      ],
+      "verification": {
+        "testId": "T3-review",
+        "scenarioId": "S-review",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "render_review_operation",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create an isolated Agent-readable geometry review bundle for generated scene objects. Pass operationIds or objectIds; the CPU renderer draws only target geometry with whitebox faces and strong outlines, avoiding live viewport layout/visibility changes. renderReadable only checks render output readability; qualityValid is a legacy alias, not semantic geometry validation. Human or skill review must judge whether the image matches the requested scene intent.",
+      "domain": "review",
+      "replacementType": "tb_capture plus Python API",
+      "replacementSymbols": [
+        "tb.review.review_operation"
+      ],
+      "verification": {
+        "testId": "T3-review",
+        "scenarioId": "S-review",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "selector_preview",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Preview a structured JSON selector against the active map. Selectors can combine session metadata, moduleId, operation ids, type, bounds, material, classname, targetname, and text query. idsMode=count returns counts only; idsMode=sample adds small object summaries.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.preview"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "objects_select_by_selector",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Replace the current selection with objects matched by a structured JSON selector. Use this to recover generated modules without carrying long object id lists.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.select_by_selector"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "objects_delete_by_selector",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Delete live objects matched by a structured JSON selector in one transaction. This is safer than pasting a long objectIds array when the target was tagged with moduleId/part/role metadata.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.delete_by_selector"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "render_review_selector",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Render an isolated geometry review for objects matched by a structured JSON selector. This composes selector_preview with render_review_targets and keeps the MCP response compact. renderReadable only checks render output readability; qualityValid is a legacy alias, not semantic geometry validation. Human or skill review must judge whether the image matches the requested scene intent.",
+      "domain": "review",
+      "replacementType": "tb_capture plus Python API",
+      "replacementSymbols": [
+        "tb.review.review_selector"
+      ],
+      "verification": {
+        "testId": "T3-review",
+        "scenarioId": "S-review",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "module_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List session-level modules discovered from metadata.moduleId and IR/module registry records. Modules are MCP-session only and are not written to the map. Defaults to live modules only so stale modules from previous documents do not pollute Agent target recovery.",
+      "domain": "modules",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.modules.list"
+      ],
+      "verification": {
+        "testId": "T3-modules",
+        "scenarioId": "S-modules",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "module_inspect",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Inspect one session-level module by moduleId, including live/stale object counts, operation ids, metadata, and bounds.",
+      "domain": "modules",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.modules.inspect"
+      ],
+      "verification": {
+        "testId": "T3-modules",
+        "scenarioId": "S-modules",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "module_select",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Select all live objects in a session-level module.",
+      "domain": "modules",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.modules.select"
+      ],
+      "verification": {
+        "testId": "T3-modules",
+        "scenarioId": "S-modules",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "module_render_review",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Render an isolated review bundle for a session-level module. By default the selector limit is raised to cover the full live module; pass limit only when you intentionally want a partial review. renderReadable only checks render output readability; qualityValid is a legacy alias, not semantic geometry validation. Human or skill review must judge whether the image matches the requested scene intent.",
+      "domain": "modules",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.modules.render_review"
+      ],
+      "verification": {
+        "testId": "T3-modules",
+        "scenarioId": "S-modules",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "module_validate",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Validate a session-level module's live objects and optional route continuity. This reports geometry facts only; skill/domain logic decides gameplay or aesthetic quality.",
+      "domain": "modules",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.modules.validate"
+      ],
+      "verification": {
+        "testId": "T3-modules",
+        "scenarioId": "S-modules",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "module_compact",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Remove stale session metadata/object references for one module. This cleans MCP session state only and does not modify the map or undo stack.",
+      "domain": "modules",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.modules.compact"
+      ],
+      "verification": {
+        "testId": "T3-modules",
+        "scenarioId": "S-modules",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_create",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create an entity in the active document.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.create"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_update",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Update entity key/value properties.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.update"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_properties_update",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Batch update entity key/value properties by objectIds or operationIds. Prefer this over deleting and recreating entities for key cleanup.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.properties_update"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_properties_delete",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Batch delete entity property keys by objectIds or operationIds.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.properties_delete"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_delete",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Delete an entity, brush, patch, group, or layer node.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.delete"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "fgd_entities_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List entity classes from the active game entity definitions.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.entities_list"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_schema",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return FGD schema details for one entity classname.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.schema"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_create_from_schema",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create an entity using FGD defaults plus supplied properties.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.create_from_schema"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_create_checked",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a point entity after checking the active FGD schema supports the classname. This is the preferred one-step helper over manually calling fgd_entities_list, entity_schema, and entity_create_from_schema.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.create_checked"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_create_checked_batch",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create multiple point entities after validating each classname against the active FGD schema. Use this for lights, spawns, and route markers that should land in one undoable transaction.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.create_checked_batch"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_tie_brushes",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Tie selected or specified brushes to a brush entity.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.tie_brushes"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "entity_untie_brushes",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Move brushes out of brush entities back to the world or current parent.",
+      "domain": "entities",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.entities.untie_brushes"
+      ],
+      "verification": {
+        "testId": "T3-entities",
+        "scenarioId": "S-entities",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_types_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List brush primitive types supported by MCP.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.types_list"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "shape_library_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List generic convex footprint grammars for route-aware polygon platforms.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.library_list"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a brush primitive using a type parameter.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_box",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a box brush in the active document.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_box"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_boxes_batch",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create many box brushes in one transaction. Prefer this for platform chains, jump blocks, and other repeated cuboids instead of many brush_create_box calls.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_boxes_batch"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_polygon_batch",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create many convex prism platforms from 2D polygons in one transaction. Prefer this for diamond, trapezoid, chamfered, and route-guiding platforms instead of box-only chains. Invalid batches fail before mutation and return polygonDiagnostics with failing point/edge indices for every invalid polygon.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_polygon_batch"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_wedge",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a wedge brush in the active document.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_wedge"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_cylinder",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a cylinder brush in the active document.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_cylinder"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_cone",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a cone brush in the active document.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_cone"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_pipe",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a hollow cylinder from multiple convex brushes.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_pipe"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_sphere",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a UV or ico sphere brush.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_sphere"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_pyramid",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a square pyramid brush.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_pyramid"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_tetrahedron",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a tetrahedron brush inside the given bounds.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_tetrahedron"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_from_planes",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create one expert brush from plane point triples.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_from_planes"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_prism",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create one convex vertical prism from a 2D polygon and Z range.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_prism"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_cylinder_sector",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create one convex annular cylinder-sector brush.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_cylinder_sector"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_create_arch",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "placeholder"
+      "actualCapability": "Create an arch brush primitive. Listed as unsupported until a stable native arch generator is exposed.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_arch"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "placeholder",
+      "placeholderReason": "The baseline catalog declares this capability but no implementation behavior was present for migration."
     },
     {
       "legacyTool": "brush_create_torus",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "placeholder"
+      "actualCapability": "Create a torus brush primitive. Listed as unsupported because BSP brushes cannot represent it as a single convex brush.",
+      "domain": "brushes",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.brushes.create_torus"
+      ],
+      "verification": {
+        "testId": "T3-brushes",
+        "scenarioId": "S-brushes",
+        "status": "planned"
+      },
+      "status": "placeholder",
+      "placeholderReason": "The baseline catalog declares this capability but no implementation behavior was present for migration."
     },
     {
       "legacyTool": "history_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Hidden diagnostic timeline for the active bridge session, including creation time and live/stale object counts when a document is active. Prefer history_status for normal Agent workflow and operation_inspect for a specific operation.",
+      "domain": "history",
+      "replacementType": "tb_history plus Python API",
+      "replacementSymbols": [
+        "tb.history.list"
+      ],
+      "verification": {
+        "testId": "T3-history",
+        "scenarioId": "S-history",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "history_status",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return compact MCP operation history availability diagnostics for the active bridge session and document.",
+      "domain": "history",
+      "replacementType": "tb_history plus Python API",
+      "replacementSymbols": [
+        "tb.history.status"
+      ],
+      "verification": {
+        "testId": "T3-history",
+        "scenarioId": "S-history",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "operation_inspect",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Inspect an MCP operation by operationId. Use detail=summary by default and detail=ids/full only when object ids or debug data are needed. Includes live/stale status when a document is active.",
+      "domain": "history",
+      "replacementType": "tb_history plus Python API",
+      "replacementSymbols": [
+        "tb.history.inspect"
+      ],
+      "verification": {
+        "testId": "T3-history",
+        "scenarioId": "S-history",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "operation_select",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Hidden manual recovery helper that selects live map objects created or changed by an MCP operation. Prefer selector_preview, module_inspect, render_review_operation, or operation_inspect unless a human explicitly needs the native selection changed.",
+      "domain": "history",
+      "replacementType": "tb_history plus Python API",
+      "replacementSymbols": [
+        "tb.history.select"
+      ],
+      "verification": {
+        "testId": "T3-history",
+        "scenarioId": "S-history",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "operation_validate",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return generic validation status for an MCP operation. Defaults to compact summary diagnostics; use detail=full to include per-object diagnostics.",
+      "domain": "history",
+      "replacementType": "tb_history plus Python API",
+      "replacementSymbols": [
+        "tb.history.validate"
+      ],
+      "verification": {
+        "testId": "T3-history",
+        "scenarioId": "S-history",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "history_undo_mcp",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Undo the latest MCP operation if it is still on top of the native undo stack.",
+      "domain": "history",
+      "replacementType": "tb_history plus Python API",
+      "replacementSymbols": [
+        "tb.history.undo_mcp"
+      ],
+      "verification": {
+        "testId": "T3-history",
+        "scenarioId": "S-history",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "history_undo_to_operation",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Undo MCP operations from the latest operation back to and including the given operationId. Stops with structured diagnostics if the native undo stack no longer matches the expected MCP transaction.",
+      "domain": "history",
+      "replacementType": "tb_history plus Python API",
+      "replacementSymbols": [
+        "tb.history.undo_to_operation"
+      ],
+      "verification": {
+        "testId": "T3-history",
+        "scenarioId": "S-history",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "history_redo_mcp",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Redo the latest MCP operation undone by history_undo_mcp.",
+      "domain": "history",
+      "replacementType": "tb_history plus Python API",
+      "replacementSymbols": [
+        "tb.history.redo_mcp"
+      ],
+      "verification": {
+        "testId": "T3-history",
+        "scenarioId": "S-history",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "asset_search",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Search GoldSrc model, sprite, and sound assets using the unified asset browser rules.",
+      "domain": "assets",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.assets.search"
+      ],
+      "verification": {
+        "testId": "T3-assets",
+        "scenarioId": "S-assets",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "asset_place_model",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a point entity for a .mdl asset.",
+      "domain": "assets",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.assets.place_model"
+      ],
+      "verification": {
+        "testId": "T3-assets",
+        "scenarioId": "S-assets",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "asset_place_sprite",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a point entity for a .spr asset.",
+      "domain": "assets",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.assets.place_sprite"
+      ],
+      "verification": {
+        "testId": "T3-assets",
+        "scenarioId": "S-assets",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "asset_place_sound",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create an ambient_generic entity for a .wav asset.",
+      "domain": "assets",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.assets.place_sound"
+      ],
+      "verification": {
+        "testId": "T3-assets",
+        "scenarioId": "S-assets",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "textures_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List loaded materials in the active document. With an empty query, returns the first N materials plus currentMaterial and fallbackMaterial.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.list"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "texture_search",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Search loaded materials in the active document. If no material matches, use fallbackMaterial from the result for safe blockout geometry. Returns detailed results plus materials/materialNames aliases for simple agent consumption.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.search"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "texture_lock_get",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return current texture lock and UV lock state for modeling operations.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.lock_get"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "texture_lock_set",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Set texture lock and/or UV lock for subsequent modeling operations.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.lock_set"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "texture_apply",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Apply a material to selected faces, target objects, operation targets, or a semantic subset such as top/bottom/side faces. Result reports whether the requested material exists in the loaded material set.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.apply"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "texture_apply_by_filter",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Apply a material to brushes matched by a safe selection_filter-style query. The tool only edits brush faces and ignores world/group/layer parents. It also accepts objectIds or operationIds as direct targets, then can narrow by faceSemantic or normal. Result reports materialExists and a fallbackMaterial when the requested material is not loaded.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.apply_by_filter"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "texture_replace",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Replace one material with another on selected faces/brushes or the whole map. Result reports find/replace material existence.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.replace"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "texture_align_face",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Apply a basic UV alignment mode to a face or face selection.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.align_face"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "texture_copy_from_face",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Copy material and UV attributes from one face to selected or specified target faces.",
+      "domain": "materials",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.materials.copy_from_face"
+      ],
+      "verification": {
+        "testId": "T3-materials",
+        "scenarioId": "S-materials",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "face_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List faces for one brush, selected brushes, or all selected brush faces.",
+      "domain": "faces",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.faces.list"
+      ],
+      "verification": {
+        "testId": "T3-faces",
+        "scenarioId": "S-faces",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "face_select",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Select one or more brush faces.",
+      "domain": "faces",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.faces.select"
+      ],
+      "verification": {
+        "testId": "T3-faces",
+        "scenarioId": "S-faces",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "face_texture_set",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Set face material and basic UV attributes for selected or specified faces.",
+      "domain": "faces",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.faces.texture_set"
+      ],
+      "verification": {
+        "testId": "T3-faces",
+        "scenarioId": "S-faces",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "objects_delete",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Delete one or more entity, brush, patch, group, or layer nodes.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.delete"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "objects_delete_by_filter",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Expert destructive helper that deletes selectable objects matched by a safe selection_filter-style query. Defaults exclude node:world, require selectable matches, and remove redundant descendants before deleting. Prefer structured selector_preview followed by objects_delete_by_selector for generated MCP content.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.delete_by_filter"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "objects_delete_by_operation",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Compatibility helper that deletes the live selectable objects changed by a previous MCP operation. Prefer structured selector/module deletion for current workflows; use this only when an operation id is the clearest target.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.delete_by_operation"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "objects_transform",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Transform one or more selectable objects using translate, rotate, or scale. Prefer selector targets for module/route/part iteration so generated scene pieces can be stretched, moved, or rotated without deleting and rebuilding them. If objectIds, operationIds, and selector are omitted, transforms the current user selection.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.transform"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "group_create_from_selection",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a native TrenchBroom group from the current user selection. Groups are for visible Outliner organization and user selection convenience; keep semantic tracking in module/metadata/selector records.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.create_from_selection"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "group_inspect",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Inspect native TrenchBroom group structure by objectId/objectIds or by current selected group. Returns group name, bounds, child counts, edit state, and linked group summary. This does not read or write semantic metadata.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.inspect"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "group_rename_selected",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Rename the currently selected native TrenchBroom group or groups. The current selection must contain only groups.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.rename_selected"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "group_ungroup_selected",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Ungroup the currently selected native TrenchBroom groups and leave their former children selected. Use for organization cleanup, not semantic metadata changes.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.ungroup_selected"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "map_validate",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Validate the active map and return compact passed/count/recoveryAction problem counts by default.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.validate"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "problems_check",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return map validation problems with passed/recoveryAction and safe quick fix metadata. Each problem includes a line-sensitive id for problems_fix and a stableKey for before/after comparison.",
+      "domain": "validation",
+      "replacementType": "tb_validate plus Python API",
+      "replacementSymbols": [
+        "tb.validation.check"
+      ],
+      "verification": {
+        "testId": "T3-validation",
+        "scenarioId": "S-validation",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "problems_fix",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Apply one safe quick fix to selected validation problem ids.",
+      "domain": "validation",
+      "replacementType": "tb_validate plus Python API",
+      "replacementSymbols": [
+        "tb.validation.fix"
+      ],
+      "verification": {
+        "testId": "T3-validation",
+        "scenarioId": "S-validation",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "map_fix_all_safe",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Apply all currently available safe validation quick fixes.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.fix_all_safe"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "compile_profiles_list",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "List compilation profiles for the active document.",
+      "domain": "compile",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.compile.profiles_list"
+      ],
+      "verification": {
+        "testId": "T3-compile",
+        "scenarioId": "S-compile",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "compile_run",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Run a compilation profile through TrenchBroom's existing compile dialog.",
+      "domain": "compile",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.compile.run"
+      ],
+      "verification": {
+        "testId": "T3-compile",
+        "scenarioId": "S-compile",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "compile_log_tail",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Return recent text from the current compile dialog output.",
+      "domain": "compile",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.compile.log_tail"
+      ],
+      "verification": {
+        "testId": "T3-compile",
+        "scenarioId": "S-compile",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "leaks_load_pointfile",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Load a compiler pointfile (.pts/.lin) into the active document.",
+      "domain": "validation",
+      "replacementType": "tb_validate plus Python API",
+      "replacementSymbols": [
+        "tb.validation.load_pointfile"
+      ],
+      "verification": {
+        "testId": "T3-validation",
+        "scenarioId": "S-validation",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "blockout_create_batch",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create multiple blockout operations in one transaction. Prefer this over many atomic brush_create calls for architectural generation.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.create_batch"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "python_generate_blockout",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Legacy script bridge that runs local Python source and compiles returned Blockout IR through blockout_create_batch. Prefer skill recipe scripts that write IR files, then use ir_compile_preview_from_file and ir_apply_from_file.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.generate_blockout"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "heightmap_import_grayscale",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Import a local grayscale image as brush terrain. Defaults to terraced_brushes; adaptive_surface approximates a smoother heightfield with finer brush cells in more complex areas.",
+      "domain": "heightmaps",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.heightmaps.import_grayscale"
+      ],
+      "verification": {
+        "testId": "T3-heightmaps",
+        "scenarioId": "S-heightmaps",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "heightmap_preview_grayscale",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Preview a local grayscale heightmap import without committing brushes.",
+      "domain": "heightmaps",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.heightmaps.preview_grayscale"
+      ],
+      "verification": {
+        "testId": "T3-heightmaps",
+        "scenarioId": "S-heightmaps",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "ir_validate",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Validate minimal TrenchBroom MCP scene IR without mutating the map. IR is a small JSON wrapper around existing atomic operations: operations for blockout_create_batch and entities for entity_create_checked_batch.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.validate"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "ir_compile_preview",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Preview minimal scene IR compile counts, parts, moduleId, and warnings without committing a transaction.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.compile_preview"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "ir_compile_preview_from_file",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Read a local JSON IR file and preview the same minimal scene IR without mutating the map. Use this when generated IR would be too large for the conversation context. Successful valid previews return a session previewId that ir_apply_from_file can reuse without resending the path.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.compile_preview_from_file"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "ir_apply",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Apply minimal scene IR by dispatching to existing atomic MCP operations in transactions. This is an orchestration convenience for skill-generated IR, not a scene prefab.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.apply"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "ir_apply_from_file",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Read a local JSON IR file and apply it through existing atomic MCP operations. The file is transport only; it does not add scene prefab semantics. Pass either path or a previewId returned by ir_compile_preview_from_file.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.apply_from_file"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "blockout_create_curved_corridor",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create a curved corridor as one transaction using floor, ceiling, inner wall, outer wall, and optional caps.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.create_curved_corridor"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "blockout_validate",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Validate Blockout IR dimensions without modifying the map.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.validate"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "blockout_create_spiral_stairs",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Create deterministic solid spiral stairs with matching center column and landing.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.create_spiral_stairs"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "geometry_analyze_selection",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Analyze selected brush geometry for vertices, bounds, convexity, grid alignment, and materials.",
+      "domain": "geometry",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.geometry.analyze_selection"
+      ],
+      "verification": {
+        "testId": "T3-geometry",
+        "scenarioId": "S-geometry",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "geometry_csg_selection",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Run native TrenchBroom CSG on the current selection. This is a selection-only boolean geometry primitive; prepare complex targets first with selection_set, objects_select_by_selector, or manual user selection.",
+      "domain": "geometry",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.geometry.csg_selection"
+      ],
+      "verification": {
+        "testId": "T3-geometry",
+        "scenarioId": "S-geometry",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "geometry_analyze_slopes",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Analyze live brush slope faces for ramp/wedge/surf/slide validation. Reports face normals, slope angle, rise direction, and whether each slope ascends or descends along routeDirection or start -> end. This is geometry/mapper semantics only, not gameplay difficulty analysis. Summary includes passed, slopeCount, warning samples, and recoveryAction. If operationIds, objectIds, and selector are omitted, analyzes the current user-selected brushes.",
+      "domain": "geometry",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.geometry.analyze_slopes"
+      ],
+      "verification": {
+        "testId": "T3-geometry",
+        "scenarioId": "S-geometry",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "geometry_analyze_route_continuity",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Analyze ordered route brush surfaces for playable continuity. Reports each target's upward playable face and each adjacent seam's verticalStep, horizontalGap, fullWidthContinuous, positiveGap, overlapDepth, and classification. edgeGapMax is retained as a legacy endpoint-distance metric and does not necessarily represent an empty seam. New workflows should use positiveGap, overlapDepth, and acceptancePassed. Summary includes passed, max gap/step fields, failing seam samples, and recoveryAction. Same-height overlaps are reported as overlap_continuous_height and remain continuous. If operationIds, objectIds, and selector are omitted, analyzes the current user-selected brushes.",
+      "domain": "geometry",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.geometry.analyze_route_continuity"
+      ],
+      "verification": {
+        "testId": "T3-geometry",
+        "scenarioId": "S-geometry",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "geometry_analyze_shell_seams",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Analyze annotated shell seam metadata on generated brush shells. This read-only validator groups brush metadata shellSeams by key and checks participant counts, shared vertex coordinates, and maxVertexDelta. It does not infer intended seams from arbitrary old map geometry; targets without shellSeams should be rebuilt with an annotated recipe or reviewed visually. If operationIds, objectIds, and selector are omitted, analyzes the current user-selected brushes.",
+      "domain": "geometry",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.geometry.analyze_shell_seams"
+      ],
+      "verification": {
+        "testId": "T3-geometry",
+        "scenarioId": "S-geometry",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_metadata_set",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Legacy object-id metadata setter. Prefer passing defaultMetadata/metadata to creation tools or using structured selectors/modules for recovery.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.set"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "brush_metadata_get",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Legacy object-id metadata reader. Prefer selector_preview or module_inspect for structured metadata recovery.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.get"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "selection_by_metadata",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Legacy metadata selector. Prefer structured selectors with selector_preview, objects_select_by_selector, objects_delete_by_selector, and render_review_selector.",
+      "domain": "objects",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.objects.by_metadata"
+      ],
+      "verification": {
+        "testId": "T3-objects",
+        "scenarioId": "S-objects",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "kz_distance_analyze_chain",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Compatibility alias for route_geometry_analyze_chain. Returns geometric route facts only. Prefer geometry_analyze_route_continuity for route validation; difficulty should be judged by the Agent using project/domain context.",
+      "domain": "geometry",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.geometry.distance_analyze_chain"
+      ],
+      "verification": {
+        "testId": "T3-geometry",
+        "scenarioId": "S-geometry",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "route_geometry_analyze_chain",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Analyze ordered brush-platform geometry facts such as edge gap, effective distance, height delta, lateral offset, and landing window area. This tool does not classify gameplay difficulty or pass/fail viability. Prefer geometry_analyze_route_continuity for current route validation workflows.",
+      "domain": "geometry",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.geometry.geometry_analyze_chain"
+      ],
+      "verification": {
+        "testId": "T3-geometry",
+        "scenarioId": "S-geometry",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "blockout_validate_spiral_stairs",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Validate selected spiral-stair brushes generated through MCP.",
+      "domain": "ir",
+      "replacementType": "trenchbroom Python API",
+      "replacementSymbols": [
+        "tb.ir.validate_spiral_stairs"
+      ],
+      "verification": {
+        "testId": "T3-ir",
+        "scenarioId": "S-ir",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     },
     {
       "legacyTool": "tb_tools_search",
-      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
-      "replacementType": "planned",
-      "replacementSymbols": [],
-      "tests": [],
-      "scenarioId": null,
-      "status": "planned"
+      "actualCapability": "Search available TrenchBroom MCP tools by name, category, or description. Use detail=schema when exact parameters are needed.",
+      "domain": "inspect",
+      "replacementType": "six-entry inspection or API discovery",
+      "replacementSymbols": [
+        "tb_inspect / tb_api"
+      ],
+      "verification": {
+        "testId": "T3-inspect",
+        "scenarioId": "S-inspect",
+        "status": "planned"
+      },
+      "status": "planned",
+      "placeholderReason": null
     }
   ]
 }
