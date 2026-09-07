@@ -1491,6 +1491,36 @@ py::dict selectModule(const std::string& moduleId)
   return selectionSnapshot(SelectionHandle{&document.get(), document.generation});
 }
 
+void forgetModule(const std::string& moduleId)
+{
+  const auto& context = requireContext();
+  if (context.moduleStore == nullptr)
+  {
+    throw py::key_error{"Unknown module '" + moduleId + "'"};
+  }
+  const auto fingerprint =
+    objectRegistry().documentFingerprint(currentDocument().get().map());
+  auto removed = false;
+  for (auto it = context.moduleStore->begin(); it != context.moduleStore->end();)
+  {
+    if (
+      it->second.moduleId.toStdString() == moduleId
+      && it->second.documentFingerprint == fingerprint)
+    {
+      it = context.moduleStore->erase(it);
+      removed = true;
+    }
+    else
+    {
+      ++it;
+    }
+  }
+  if (!removed)
+  {
+    throw py::key_error{"Unknown module '" + moduleId + "'"};
+  }
+}
+
 py::dict groupSummary(const mdl::GroupNode& group)
 {
   auto result = py::dict{};
@@ -4661,6 +4691,7 @@ void defineModule(py::module_& module)
     py::arg("include_empty") = false);
   modules.def("inspect", inspectModule, py::arg("module_id"));
   modules.def("select", selectModule, py::arg("module_id"));
+  modules.def("forget", forgetModule, py::arg("module_id"));
 
   auto placeModel = [](
                       const std::string& path,

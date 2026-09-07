@@ -344,6 +344,27 @@ assert len(tb.documents.list()) == 1
         {"stale_objects", 1},
       });
 
+    const auto forgotten = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "tb.modules.forget('test-module')\n"
+        "try:\n"
+        "    tb.modules.inspect('test-module')\n"
+        "    raise AssertionError('forgotten module was still available')\n"
+        "except KeyError:\n"
+        "    pass\n"
+        "result = {'remaining': len(tb.modules.list(include_stale=True))}",
+        "<mcp-python:forget-module>",
+        {},
+      });
+    CAPTURE(forgotten.error);
+    REQUIRE(forgotten.ok);
+    CHECK(forgotten.value.toObject() == QJsonObject{{"remaining", 1}});
+    CHECK_FALSE(moduleStore.contains("test-module"));
+    CHECK(moduleStore.contains("other-document-module"));
+    CHECK(moduleStore.contains("stale-module"));
+
     const auto first = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{
