@@ -178,6 +178,21 @@ TEST_CASE(
   REQUIRE(document.value("fingerprint").isString());
   CHECK(document.value("fingerprint") == document.value("documentFingerprint"));
 
+  const auto api = server.dispatchRequest(mcp::McpBridgeRequest{
+    "api",
+    "tb_api",
+    QJsonObject{{"symbol", "Document.path"}},
+    mcp::McpMode::ReadOnly,
+  });
+  REQUIRE(api.ok);
+  const auto apiSymbols = api.result.value("symbols").toArray();
+  REQUIRE(apiSymbols.size() == 1);
+  const auto apiSymbol = apiSymbols.first().toObject();
+  CHECK(apiSymbol.value("parameters").toString().isEmpty());
+  CHECK(apiSymbol.value("returns").toString() == "str | None");
+  CHECK(apiSymbol.value("effect").toString() == "read");
+  CHECK(apiSymbol.value("example").toString().contains("tb.current_document()"));
+
   const auto request = mcp::McpBridgeRequest{
     "execute",
     "tb_execute_python",

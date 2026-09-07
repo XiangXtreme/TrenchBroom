@@ -27,6 +27,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalServer>
+#include <QStringList>
 #include <QUuid>
 
 #include "McpBridgeServerTools.h"
@@ -45,6 +46,122 @@
 namespace tb::ui
 {
 namespace mcp = tb::mcp;
+
+namespace
+{
+
+QString pythonApiEffect(const PythonApiSymbol& symbol)
+{
+  if (symbol.kind == PythonApiSymbolKind::Property)
+  {
+    return "read";
+  }
+  if (symbol.kind == PythonApiSymbolKind::Class)
+  {
+    return "construct";
+  }
+
+  const auto name = QString::fromUtf8(symbol.name).toLower();
+  static const auto editPrefixes = QStringList{
+    "add",
+    "cancel",
+    "clear",
+    "commit",
+    "create",
+    "delete",
+    "duplicate",
+    "execute",
+    "register",
+    "reload",
+    "remove",
+    "rotate",
+    "save",
+    "scale",
+    "set",
+    "translate",
+    "unregister",
+  };
+  for (const auto& prefix : editPrefixes)
+  {
+    if (name.startsWith(prefix))
+    {
+      return "edit";
+    }
+  }
+  return "read";
+}
+
+QString pythonApiParameters(const PythonApiSymbol& symbol)
+{
+  const auto detail = QString::fromUtf8(symbol.detail);
+  const auto arrow = detail.indexOf("->");
+  if (detail.startsWith('('))
+  {
+    return arrow >= 0 ? detail.left(arrow).trimmed() : detail;
+  }
+  return {};
+}
+
+QString pythonApiReturnType(const PythonApiSymbol& symbol)
+{
+  const auto detail = QString::fromUtf8(symbol.detail);
+  const auto arrow = detail.indexOf("->");
+  if (arrow >= 0)
+  {
+    return detail.mid(arrow + 2).trimmed();
+  }
+  return symbol.kind == PythonApiSymbolKind::Property ? detail : "None";
+}
+
+QString pythonApiExample(const PythonApiTypeInfo& type, const PythonApiSymbol& symbol)
+{
+  const auto name = QString::fromUtf8(symbol.name);
+  if (type.type == PythonApiType::Module)
+  {
+    return QString{"import trenchbroom as tb\nvalue = tb.%1"}.arg(name);
+  }
+  if (type.type == PythonApiType::Document)
+  {
+    return QString{
+      "import trenchbroom as tb\ndocument = tb.current_document()\nvalue = document.%1"}
+      .arg(name);
+  }
+  if (type.type == PythonApiType::Selection)
+  {
+    return QString{
+      "import trenchbroom as tb\nselection = tb.selection()\nvalue = selection.%1"}
+      .arg(name);
+  }
+  if (type.type == PythonApiType::Vec3)
+  {
+    return QString{"import trenchbroom as tb\nvalue = tb.Vec3(0, 0, 0).%1"}.arg(name);
+  }
+  if (type.type == PythonApiType::Plane)
+  {
+    return QString{"import trenchbroom as tb\nvalue = tb.Plane(tb.Vec3(0, 0, 1), 0).%1"}
+      .arg(name);
+  }
+  return QString{"# Obtain a %1 handle from its documented owner.\nvalue = handle.%2"}
+    .arg(QString::fromUtf8(type.name), name);
+}
+
+QJsonObject pythonApiSymbolJson(
+  const PythonApiTypeInfo& type, const PythonApiSymbol& symbol)
+{
+  const auto qualified =
+    QString{"%1.%2"}.arg(QString::fromUtf8(type.name), QString::fromUtf8(symbol.name));
+  return QJsonObject{
+    {"symbol", qualified},
+    {"kind", static_cast<int>(symbol.kind)},
+    {"signature", QString::fromUtf8(symbol.detail)},
+    {"parameters", pythonApiParameters(symbol)},
+    {"returns", pythonApiReturnType(symbol)},
+    {"effect", pythonApiEffect(symbol)},
+    {"example", pythonApiExample(type, symbol)},
+  };
+}
+
+} // namespace
 
 McpBridgeToolResult noActiveDocumentFailure()
 {
@@ -184,11 +301,7 @@ McpBridgeServer::McpBridgeServer(
               {
                 continue;
               }
-              symbols.push_back(QJsonObject{
-                {"symbol", qualified},
-                {"kind", static_cast<int>(symbol.kind)},
-                {"signature", QString::fromUtf8(symbol.detail)},
-              });
+              symbols.push_back(pythonApiSymbolJson(type, symbol));
               if (exact.isEmpty() && symbols.size() == 8)
               {
                 return McpBridgeToolResult::success(QJsonObject{
