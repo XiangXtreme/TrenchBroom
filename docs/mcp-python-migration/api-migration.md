@@ -75,6 +75,12 @@ entity，并在写入前根据当前 FGD 验证每个 `classname`。每项包含
 `tb.entities.create_checked(...)` 使用这个 FGD 定义创建 point entity，应用 FGD 默认属性后再覆盖
 传入属性；它们与批量 checked 接口共享构造及事务服务。
 
+`tb.entities.tie_brushes(classname, brushes=None)` 会把显式 `Brush` 集合或当前选中笔刷绑定到
+一个 FGD brush entity，并返回新建的 `Entity`。`tb.entities.untie_brushes(objects=None)` 接受
+显式 `Brush`／brush `Entity` 集合或当前选中笔刷，返回移回原生父级的 `Brush` 集合。两者通过
+automation 服务执行原生命令，保留原生撤销语义；point entity、空集合、跨文档句柄和未知 FGD
+定义会在写入前失败。
+
 ## 文件 IR 预览
 
 `tb.ir.compile_preview_from_file(path)` 只接受绝对路径，读取受 10 MiB 上限约束的 JSON

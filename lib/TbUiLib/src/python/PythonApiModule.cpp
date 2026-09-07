@@ -2869,6 +2869,94 @@ EntityHandle createEntityFromSchema(
   return createCheckedPointEntities(entities, select).front();
 }
 
+std::vector<mdl::BrushNode*> brushNodesFromPython(
+  const py::object& objects, MapDocument& document, const bool allowEntities)
+{
+  if (objects.is_none())
+  {
+    return document.map().selection().brushes;
+  }
+  if (!py::isinstance<py::iterable>(objects) || py::isinstance<py::str>(objects))
+  {
+    throw py::type_error{"objects must be an iterable of Brush handles"};
+  }
+
+  auto brushes = std::vector<mdl::BrushNode*>{};
+  for (const auto object : py::reinterpret_borrow<py::iterable>(objects))
+  {
+    auto value = py::reinterpret_borrow<py::object>(object);
+    if (py::isinstance<BrushHandle>(value))
+    {
+      auto& brush = py::cast<BrushHandle&>(value);
+      if (brush.document != &document)
+      {
+        throw py::value_error{"Brush belongs to a different document"};
+      }
+      brushes.push_back(&brush.get());
+    }
+    else if (allowEntities && py::isinstance<EntityHandle>(value))
+    {
+      auto& entity = py::cast<EntityHandle&>(value);
+      if (entity.document != &document)
+      {
+        throw py::value_error{"Entity belongs to a different document"};
+      }
+      for (auto brush : entityBrushes(entity))
+      {
+        brushes.push_back(&brush.get());
+      }
+    }
+    else
+    {
+      throw py::type_error{
+        allowEntities ? "objects must contain only Brush or Entity handles"
+                      : "objects must contain only Brush handles"};
+    }
+  }
+  return brushes;
+}
+
+EntityHandle tieBrushesToEntity(const std::string& classname, const py::object& brushes)
+{
+  auto& document = currentDocument().get();
+  auto tied = automation::tieBrushesToEntity(
+    document.map(), classname, brushNodesFromPython(brushes, document, false));
+  if (tied.entity == nullptr)
+  {
+    throw py::value_error{tied.error.toStdString()};
+  }
+  return EntityHandle{
+    &document,
+    PythonHandleRegistry::instance().documentGeneration(&document),
+    tied.entity,
+    PythonHandleRegistry::instance().nodeGeneration(tied.entity)};
+}
+
+std::vector<BrushHandle> untieBrushesFromEntity(const py::object& objects)
+{
+  auto& document = currentDocument().get();
+  auto untied = automation::untieBrushesFromEntity(
+    document.map(), brushNodesFromPython(objects, document, true));
+  if (!untied.error.isEmpty())
+  {
+    throw py::value_error{untied.error.toStdString()};
+  }
+
+  const auto documentGeneration =
+    PythonHandleRegistry::instance().documentGeneration(&document);
+  auto result = std::vector<BrushHandle>{};
+  result.reserve(untied.brushes.size());
+  for (auto* brush : untied.brushes)
+  {
+    result.push_back(BrushHandle{
+      &document,
+      documentGeneration,
+      brush,
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(brush)});
+  }
+  return result;
+}
+
 EntityHandle placeAsset(
   const std::string& path,
   const std::string_view expectedExtension,
@@ -5487,6 +5575,12 @@ void defineModule(py::module_& module)
     py::arg("properties") = py::dict{},
     py::arg("origin") = py::none(),
     py::arg("select") = true);
+  entities.def(
+    "tie_brushes",
+    tieBrushesToEntity,
+    py::arg("classname"),
+    py::arg("brushes") = py::none());
+  entities.def("untie_brushes", untieBrushesFromEntity, py::arg("objects") = py::none());
   entities.def("delete", deleteEntity, py::arg("entity"));
   entities.def(
     "update",

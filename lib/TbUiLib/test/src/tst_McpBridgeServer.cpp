@@ -10639,6 +10639,7 @@ TEST_CASE("McpBridgeServer checked entity batch", "[McpBridgeServer]")
   map.entityDefinitionManager().setDefinitions({
     {"test_spawn", {}, "", {}, mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}}},
     {"test_light", {}, "", {}, mdl::PointEntityDefinition{vm::bbox3d{8.0}, {}, {}}},
+    {"test_func", {}, "", {}, std::nullopt},
   });
   auto history = std::vector<McpOperationRecord>{};
   auto nextOperationIndex = 1;
@@ -10735,6 +10736,63 @@ TEST_CASE("McpBridgeServer checked entity batch", "[McpBridgeServer]")
     CHECK(response.error.details.value("classname").toString() == "not_a_real_entity");
     CHECK(map.worldNode().descendantCount() == descendantCountBefore);
     CHECK(history.empty());
+  }
+
+  SECTION("ties and unties selected brushes through the shared automation service")
+  {
+    const auto descendantCountBefore = map.worldNode().descendantCount();
+    const auto createResponse = createBoxesBatchForMapResult(
+      map,
+      "brush_create_boxes_batch",
+      QJsonObject{
+        {"select", true},
+        {"boxes",
+         QJsonArray{
+           QJsonObject{{"min", QJsonArray{0, 0, 0}}, {"max", QJsonArray{64, 64, 64}}},
+           QJsonObject{{"min", QJsonArray{80, 0, 0}}, {"max", QJsonArray{144, 64, 64}}},
+         }},
+      },
+      history,
+      nextOperationIndex);
+    REQUIRE(createResponse.ok);
+    REQUIRE(map.selection().brushes.size() == 2u);
+
+    const auto tieResponse = tieBrushesForMapResult(
+      map,
+      "entity_tie_brushes",
+      QJsonObject{{"classname", "test_func"}, {"idsMode", "full"}},
+      history,
+      nextOperationIndex);
+    REQUIRE(tieResponse.ok);
+    CHECK(tieResponse.result.value("classname").toString() == "test_func");
+    CHECK(tieResponse.result.value("changedObjectIds").toArray().size() == 3);
+    CHECK(map.selection().brushes.size() == 2u);
+    CHECK(std::all_of(
+      map.selection().brushes.begin(),
+      map.selection().brushes.end(),
+      [](const auto* brush) {
+        return brush->entity()->entity().classname() == "test_func";
+      }));
+    REQUIRE(map.undoCommandName() != nullptr);
+    CHECK(QString::fromStdString(*map.undoCommandName()) == "Tie brushes to test_func");
+
+    const auto untieResponse = untieBrushesForMapResult(
+      map,
+      "entity_untie_brushes",
+      QJsonObject{{"idsMode", "full"}},
+      history,
+      nextOperationIndex);
+    REQUIRE(untieResponse.ok);
+    CHECK(untieResponse.result.value("changedObjectIds").toArray().size() == 2);
+    CHECK(map.selection().brushes.size() == 2u);
+    CHECK(std::all_of(
+      map.selection().brushes.begin(),
+      map.selection().brushes.end(),
+      [&](const auto* brush) { return brush->entity() == &map.worldNode(); }));
+    REQUIRE(map.undoCommandName() != nullptr);
+    CHECK(QString::fromStdString(*map.undoCommandName()) == "Untie brushes");
+    CHECK(history.size() == 3u);
+    CHECK(map.worldNode().descendantCount() == descendantCountBefore + 2u);
   }
 
   SECTION("updates and deletes entity properties by operation id")

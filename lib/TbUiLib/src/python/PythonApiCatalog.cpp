@@ -250,6 +250,16 @@ constexpr auto EntitiesSymbols = std::array{
     Function,
     "(classname, properties={}, origin=None, select=True) -> Entity",
     PythonApiValueType{PythonApiType::Entity}},
+  PythonApiSymbol{
+    "tie_brushes",
+    Function,
+    "(classname, brushes=None) -> Entity",
+    PythonApiValueType{PythonApiType::Entity}},
+  PythonApiSymbol{
+    "untie_brushes",
+    Function,
+    "(objects=None) -> list[Brush]",
+    PythonApiValueType{PythonApiType::Brush, 0u}},
   PythonApiSymbol{"delete", Function, "(entity)"},
   PythonApiSymbol{"update", Function, "(entity, properties={}, remove_keys=[])"},
   PythonApiSymbol{

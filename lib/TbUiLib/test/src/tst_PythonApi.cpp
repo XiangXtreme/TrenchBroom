@@ -130,6 +130,7 @@ TEST_CASE("PythonApi")
   auto window = MapWindow{appController, std::move(document)};
   window.document().map().entityDefinitionManager().setDefinitions({
     {"test_spawn", {}, "", {}, mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}}},
+    {"test_func", {}, "", {}, std::nullopt},
   });
 
   SECTION("runs Python API smoke script")
@@ -291,6 +292,7 @@ schema = tb.entities.schema("test_spawn")
 assert schema["classname"] == "test_spawn"
 assert schema["type"] == "point"
 assert schema["bounds"] is not None
+assert tb.entities.schema("test_func")["type"] == "brush"
 schema_entity = tb.entities.create_from_schema(
     "test_spawn", {"targetname": "schema"}, (144, 32, 48), select=False)
 assert schema_entity["targetname"] == "schema"
@@ -345,6 +347,22 @@ assert group["child_count"] == 1
 assert tb.groups.inspect_selected()[0]["name"] == "python-api-group"
 assert tb.groups.rename_selected("python-api-group-renamed")[0]["name"] == "python-api-group-renamed"
 assert tb.groups.ungroup_selected()["brush_count"] == 1
+tie_brushes = tb.brushes.create_boxes_batch([
+    {"min": (224, 0, 0), "max": (256, 32, 32)},
+    {"min": (264, 0, 0), "max": (296, 32, 32)},
+], select=False)
+tied_entity = tb.entities.tie_brushes("test_func", tie_brushes)
+assert tied_entity.classname == "test_func"
+assert len(tied_entity.brushes) == 2
+assert all(brush.entity.id == tied_entity.id for brush in tied_entity.brushes)
+untied_brushes = tb.entities.untie_brushes([tied_entity])
+assert len(untied_brushes) == 2
+assert all(brush.entity.classname == "worldspawn" for brush in untied_brushes)
+try:
+    tb.entities.tie_brushes("test_spawn", untied_brushes)
+    raise AssertionError("point entity accepted brush tie")
+except ValueError:
+    pass
 with doc.transaction("Python API smoke"):
     pass
 with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:

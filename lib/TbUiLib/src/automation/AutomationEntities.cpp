@@ -7,13 +7,25 @@
 #include "ui/automation/AutomationEntities.h"
 
 #include "base/Color.h"
+#include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityDefinitionManager.h"
 #include "mdl/EntityNode.h"
 #include "mdl/EntityProperties.h"
 #include "mdl/Map.h"
+#include "mdl/Map_Entities.h"
+#include "mdl/Map_Nodes.h"
+#include "mdl/Map_Selection.h"
+#include "mdl/ModelUtils.h"
+#include "mdl/WorldNode.h"
+#include "ui/automation/AutomationTransaction.h"
 
+#include "kd/vector_utils.h"
+
+#include <algorithm>
+#include <map>
+#include <ranges>
 #include <type_traits>
 
 namespace tb::ui::automation
@@ -133,6 +145,22 @@ int removeEmptyProperties(mdl::Entity& entity)
   return static_cast<int>(keys.size());
 }
 
+std::vector<mdl::BrushNode*> normalizeBrushes(
+  std::vector<mdl::BrushNode*> brushes, const mdl::Map& map)
+{
+  brushes.erase(
+    std::remove_if(
+      brushes.begin(),
+      brushes.end(),
+      [&](const auto* brush) {
+        return brush == nullptr || !brush->isDescendantOf(map.worldNode());
+      }),
+    brushes.end());
+  std::ranges::sort(brushes);
+  brushes.erase(std::unique(brushes.begin(), brushes.end()), brushes.end());
+  return brushes;
+}
+
 } // namespace
 
 void deletePointEntityNodes(std::vector<mdl::EntityNode*>& nodes)
@@ -206,6 +234,97 @@ std::optional<QJsonObject> entityDefinitionSchema(const mdl::Map& map, const QSt
   {
     result.insert("bounds", boundsToJson(pointDefinition->bounds));
   }
+  return result;
+}
+
+AutomationBrushEntityResult tieBrushesToEntity(
+  mdl::Map& map, const std::string& classname, std::vector<mdl::BrushNode*> brushes)
+{
+  auto result = AutomationBrushEntityResult{};
+  if (classname.empty())
+  {
+    result.error = "classname must not be empty";
+    return result;
+  }
+  const auto* definition = map.entityDefinitionManager().definition(classname);
+  if (definition == nullptr)
+  {
+    result.error = QString{"FGD does not define entity classname: %1"}.arg(
+      QString::fromStdString(classname));
+    return result;
+  }
+  if (mdl::getType(*definition) != mdl::EntityDefinitionType::Brush)
+  {
+    result.error =
+      QString{"entity must be a brush entity: %1"}.arg(QString::fromStdString(classname));
+    return result;
+  }
+
+  brushes = normalizeBrushes(std::move(brushes), map);
+  if (brushes.empty())
+  {
+    result.error = "brushes must not be empty";
+    return result;
+  }
+
+  auto transaction = AutomationTransaction{map, "Tie brushes to " + classname};
+  mdl::deselectAll(map);
+  mdl::selectNodes(map, kdl::vec_static_cast<mdl::Node*>(brushes));
+  auto* entity = mdl::createBrushEntity(map, *definition);
+  if (entity == nullptr)
+  {
+    transaction.cancel();
+    result.error = "Could not tie brushes to entity";
+    return result;
+  }
+  if (!transaction.commit())
+  {
+    result.error = "Could not commit tied brushes";
+    return result;
+  }
+
+  result.entity = entity;
+  result.brushes = std::move(brushes);
+  return result;
+}
+
+AutomationBrushEntityResult untieBrushesFromEntity(
+  mdl::Map& map, std::vector<mdl::BrushNode*> brushes)
+{
+  auto result = AutomationBrushEntityResult{};
+  brushes = normalizeBrushes(std::move(brushes), map);
+  brushes.erase(
+    std::remove_if(
+      brushes.begin(),
+      brushes.end(),
+      [&](const auto* brush) { return brush->entity() == &map.worldNode(); }),
+    brushes.end());
+  if (brushes.empty())
+  {
+    result.error = "No brush entity brushes supplied";
+    return result;
+  }
+
+  const auto nodes = kdl::vec_static_cast<mdl::Node*>(brushes);
+  auto& parent = mdl::parentForNodes(map, nodes);
+  auto transaction = AutomationTransaction{map, "Untie brushes"};
+  // Reparenting can remove an empty brush entity. Clear child selection first so its
+  // cached ancestor selection counts remain consistent while that parent is removed.
+  mdl::deselectAll(map);
+  if (!mdl::reparentNodes(map, {{&parent, nodes}}))
+  {
+    transaction.cancel();
+    result.error = "Could not untie brushes";
+    return result;
+  }
+  mdl::selectNodes(map, nodes);
+  if (!transaction.commit())
+  {
+    result.error = "Could not commit untied brushes";
+    return result;
+  }
+
+  result.brushes = std::move(brushes);
   return result;
 }
 

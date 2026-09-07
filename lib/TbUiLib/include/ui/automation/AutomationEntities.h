@@ -19,6 +19,7 @@
 
 namespace tb::mdl
 {
+class BrushNode;
 class EntityNode;
 class Map;
 } // namespace tb::mdl
@@ -42,6 +43,13 @@ struct AutomationPointEntityBuildResult
   QString error;
 };
 
+struct AutomationBrushEntityResult
+{
+  mdl::EntityNode* entity = nullptr;
+  std::vector<mdl::BrushNode*> brushes;
+  QString error;
+};
+
 /**
  * Validates FGD point entity definitions and creates unattached entity nodes.
  * The caller owns all returned nodes until it passes them to addNodes.
@@ -57,5 +65,18 @@ QJsonArray listEntityDefinitionSummaries(
 
 /** Returns the full FGD schema for an active entity classname, if present. */
 std::optional<QJsonObject> entityDefinitionSchema(const mdl::Map& map, const QString& classname);
+
+/**
+ * Ties the supplied live brushes to an FGD brush entity through the native map command.
+ * The caller must resolve and validate document-bound node handles before this boundary.
+ */
+AutomationBrushEntityResult tieBrushesToEntity(
+  mdl::Map& map, const std::string& classname, std::vector<mdl::BrushNode*> brushes);
+
+/**
+ * Moves brush-entity brushes back to their native parent through the native map command.
+ */
+AutomationBrushEntityResult untieBrushesFromEntity(
+  mdl::Map& map, std::vector<mdl::BrushNode*> brushes);
 
 } // namespace tb::ui::automation

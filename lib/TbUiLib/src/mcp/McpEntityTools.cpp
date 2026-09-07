@@ -1518,17 +1518,14 @@ McpBridgeToolResult tieBrushesForMapResult(
       targetSourceDetails("brushes"));
   }
 
-  mdl::deselectAll(map);
-  mdl::selectNodes(map, kdl::vec_static_cast<mdl::Node*>(*brushes));
-  const auto* entityNode = mdl::createBrushEntity(map, *definition);
-  if (!entityNode)
+  auto tied = automation::tieBrushesToEntity(map, classname.toStdString(), *brushes);
+  if (!tied.entity)
   {
-    return McpBridgeToolResult::failure(
-      mcp::McpErrorCode::InternalError, "Failed to tie brushes to entity");
+    return McpBridgeToolResult::failure(mcp::McpErrorCode::InternalError, tied.error);
   }
 
-  auto changedObjectIds = QJsonArray{nodePathId(*entityNode, map.worldNode())};
-  for (const auto* brush : *brushes)
+  auto changedObjectIds = QJsonArray{nodePathId(*tied.entity, map.worldNode())};
+  for (const auto* brush : tied.brushes)
   {
     changedObjectIds.push_back(nodePathId(*brush, map.worldNode()));
   }
@@ -1643,12 +1640,10 @@ McpBridgeToolResult untieBrushesForMapResult(
     changedObjectIds.push_back(nodePathId(*brush, map.worldNode()));
   }
 
-  const auto nodes = kdl::vec_static_cast<mdl::Node*>(brushes);
-  auto& parent = mdl::parentForNodes(map, nodes);
-  if (!mdl::reparentNodes(map, {{&parent, nodes}}))
+  auto untied = automation::untieBrushesFromEntity(map, brushes);
+  if (!untied.error.isEmpty())
   {
-    return McpBridgeToolResult::failure(
-      mcp::McpErrorCode::InternalError, "Failed to untie brushes");
+    return McpBridgeToolResult::failure(mcp::McpErrorCode::InternalError, untied.error);
   }
 
   auto result = QJsonObject{};
