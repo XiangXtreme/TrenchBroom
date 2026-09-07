@@ -49,7 +49,6 @@
 #include "mdl/NodeHandles.h"
 #include "mdl/PatchNode.h"
 #include "mdl/Selection.h"
-#include "mdl/Transaction.h"
 #include "mdl/UpdateBrushFaceAttributes.h"
 #include "mdl/WorldNode.h"
 #include "ui/Action.h"
@@ -58,6 +57,7 @@
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
+#include "ui/automation/AutomationTransaction.h"
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonExecutionContext.h"
 #include "ui/python/PythonHandleRegistry.h"
@@ -323,7 +323,7 @@ struct TransactionHandle
   MapDocument* document = nullptr;
   size_t generation = 0;
   std::string name;
-  std::unique_ptr<mdl::Transaction> transaction;
+  std::unique_ptr<automation::AutomationTransaction> transaction;
 
   TransactionHandle(
     MapDocument* i_document, const size_t i_generation, std::string i_name)
@@ -340,7 +340,7 @@ struct TransactionHandle
       throw std::runtime_error{"Transaction already started"};
     }
     auto& doc = DocumentHandle{document, generation}.get();
-    transaction = std::make_unique<mdl::Transaction>(doc.map(), name);
+    transaction = std::make_unique<automation::AutomationTransaction>(doc.map(), name);
     ++g_activePythonTransactions[&doc];
     return *this;
   }
@@ -380,7 +380,7 @@ class ScopedPythonTransaction
 {
 private:
   MapDocument& m_document;
-  std::unique_ptr<mdl::Transaction> m_transaction;
+  std::unique_ptr<automation::AutomationTransaction> m_transaction;
 
 public:
   ScopedPythonTransaction(MapDocument& document, std::string name)
@@ -388,8 +388,8 @@ public:
   {
     if (g_activePythonTransactions[&m_document] == 0u)
     {
-      m_transaction =
-        std::make_unique<mdl::Transaction>(m_document.map(), std::move(name));
+      m_transaction = std::make_unique<automation::AutomationTransaction>(
+        m_document.map(), std::move(name));
     }
   }
 
@@ -3439,7 +3439,7 @@ bool installPythonApiModule()
 
 struct PythonDocumentTransaction::Impl
 {
-  std::unique_ptr<mdl::Transaction> transaction;
+  std::unique_ptr<automation::AutomationTransaction> transaction;
 };
 
 PythonDocumentTransaction::PythonDocumentTransaction(
@@ -3449,8 +3449,8 @@ PythonDocumentTransaction::PythonDocumentTransaction(
 {
   if (g_activePythonTransactions[m_document] == 0u)
   {
-    m_impl->transaction =
-      std::make_unique<mdl::Transaction>(m_document->map(), std::move(name));
+    m_impl->transaction = std::make_unique<automation::AutomationTransaction>(
+      m_document->map(), std::move(name));
   }
   ++g_activePythonTransactions[m_document];
 }

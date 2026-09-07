@@ -25,6 +25,7 @@
 
 #include "mdl/Map.h"
 #include "mdl/Transaction.h"
+#include "ui/automation/AutomationTransaction.h"
 #include "ui/mcp/McpBridgeServer.h"
 
 #include <cmath>
@@ -124,7 +125,8 @@ inline std::optional<McpQualityPolicy> qualityPolicyFromJson(
 inline bool executeTransaction(
   mdl::Map& map, const QString& transactionName, const std::function<bool()>& operation)
 {
-  auto transaction = mdl::Transaction{map, transactionName.toStdString()};
+  auto transaction =
+    automation::AutomationTransaction{map, transactionName.toStdString()};
   if (!operation())
   {
     transaction.cancel();

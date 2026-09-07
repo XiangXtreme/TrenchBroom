@@ -13,6 +13,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ActionMenu.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AnimationManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AppController.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationTransaction.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AppInfoPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetBrowserModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetPreviewProvider.cpp
@@ -382,6 +383,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ModelBrowserView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ModelInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MousePreferencePane.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationTransaction.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpBridgeServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpHttpServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpObjectRegistry.h
