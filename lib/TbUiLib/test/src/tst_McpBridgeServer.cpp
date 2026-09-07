@@ -196,6 +196,28 @@ TEST_CASE(
   CHECK(
     inspectEntities.result.value("filters").toObject().value("exactTypeOnly").toBool());
 
+  const auto history = server.dispatchRequest(mcp::McpBridgeRequest{
+    "history", "tb_history", QJsonObject{{"action", "status"}}, mcp::McpMode::ReadOnly});
+  REQUIRE(history.ok);
+  CHECK(history.result.contains("historyCount"));
+
+  const auto validation = server.dispatchRequest(mcp::McpBridgeRequest{
+    "validate", "tb_validate", QJsonObject{{"action", "map"}}, mcp::McpMode::ReadOnly});
+  REQUIRE(validation.ok);
+  CHECK(validation.result.contains("passed"));
+
+  const auto capture = server.dispatchRequest(mcp::McpBridgeRequest{
+    "capture",
+    "tb_capture",
+    QJsonObject{{"action", "scene"}, {"scope", "selection"}, {"detail", "summary"}},
+    mcp::McpMode::ReadOnly,
+  });
+  REQUIRE(capture.ok);
+  CHECK(capture.result.value("tool").toString() == "render_review_current_scene");
+  CHECK(capture.result.value("targetObjectCount").toInt() == 0);
+  CHECK(capture.result.value("captureCount").toInt() == 0);
+  CHECK(capture.result.value("warnings").toArray().contains("noReviewTargets"));
+
   const auto api = server.dispatchRequest(mcp::McpBridgeRequest{
     "api",
     "tb_api",
