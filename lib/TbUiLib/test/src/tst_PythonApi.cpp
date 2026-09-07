@@ -185,6 +185,17 @@ except ValueError:
     pass
 assert isinstance(tb.actions.list(), list)
 assert tb.modules.list() == []
+ir = {"operations": [{"type": "box", "size": [64, 64, 64]}]}
+ir_validation = tb.ir.validate(ir)
+assert ir_validation["ir"]["schemaVersion"] == 1
+assert "legacyUnversionedIr" in ir_validation["warnings"]
+assert ir_validation["preview"]["irHash"].startswith("sha256:")
+assert tb.ir.preview(ir)["preview"]["estimatedBrushCount"] == 1
+try:
+    tb.ir.validate({"schemaVersion": 2, "operations": [{"type": "box"}]})
+    raise AssertionError("IR validation accepted an unsupported schema version")
+except ValueError:
+    pass
 try:
     tb.modules.inspect("missing-module")
     raise AssertionError("module inspection accepted a missing module")

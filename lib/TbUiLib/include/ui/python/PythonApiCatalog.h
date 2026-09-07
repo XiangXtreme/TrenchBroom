@@ -20,6 +20,7 @@ enum class PythonApiType
   Materials,
   Groups,
   Modules,
+  Ir,
   History,
   Assets,
   Actions,

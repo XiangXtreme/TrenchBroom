@@ -18,6 +18,7 @@ constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::Materials, "materials"},
   PythonApiTypeInfo{PythonApiType::Groups, "groups"},
   PythonApiTypeInfo{PythonApiType::Modules, "modules"},
+  PythonApiTypeInfo{PythonApiType::Ir, "ir"},
   PythonApiTypeInfo{PythonApiType::History, "history"},
   PythonApiTypeInfo{PythonApiType::Assets, "assets"},
   PythonApiTypeInfo{PythonApiType::Actions, "actions"},
@@ -63,6 +64,7 @@ constexpr auto ModuleSymbols = std::array{
     "groups", Property, "groups", PythonApiValueType{PythonApiType::Groups}},
   PythonApiSymbol{
     "modules", Property, "modules", PythonApiValueType{PythonApiType::Modules}},
+  PythonApiSymbol{"ir", Property, "ir", PythonApiValueType{PythonApiType::Ir}},
   PythonApiSymbol{
     "history", Property, "history", PythonApiValueType{PythonApiType::History}},
   PythonApiSymbol{
@@ -300,6 +302,11 @@ constexpr auto ModulesSymbols = std::array{
   PythonApiSymbol{"select", Function, "(module_id) -> dict"},
   PythonApiSymbol{"compact", Function, "(module_id) -> dict"},
   PythonApiSymbol{"forget", Function, "(module_id)"},
+};
+
+constexpr auto IrSymbols = std::array{
+  PythonApiSymbol{"validate", Function, "(ir) -> dict"},
+  PythonApiSymbol{"preview", Function, "(ir) -> dict"},
 };
 
 constexpr auto AssetsSymbols = std::array{
@@ -598,6 +605,8 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
     return GroupsSymbols;
   case PythonApiType::Modules:
     return ModulesSymbols;
+  case PythonApiType::Ir:
+    return IrSymbols;
   case PythonApiType::History:
     return HistorySymbols;
   case PythonApiType::Assets:

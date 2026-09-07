@@ -68,6 +68,7 @@
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationAssets.h"
 #include "ui/automation/AutomationDocuments.h"
+#include "ui/automation/AutomationIr.h"
 #include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/automation/AutomationValidation.h"
@@ -1343,6 +1344,97 @@ py::object jsonValueToPython(const QJsonValue& value)
     result[py::str{it.key().toStdString()}] = jsonValueToPython(it.value());
   }
   return std::move(result);
+}
+
+QJsonValue jsonValueFromPython(const py::handle value, const size_t depth = 0u)
+{
+  constexpr auto MaxJsonDepth = size_t{64u};
+  constexpr auto MaxSafeJsonInteger = 9'007'199'254'740'991LL;
+  if (depth > MaxJsonDepth)
+  {
+    throw py::value_error{"JSON input exceeds the maximum nesting depth of 64"};
+  }
+  if (value.is_none())
+  {
+    return QJsonValue{QJsonValue::Null};
+  }
+  if (PyBool_Check(value.ptr()))
+  {
+    return QJsonValue{value.cast<bool>()};
+  }
+  if (PyLong_Check(value.ptr()))
+  {
+    const auto integer = value.cast<long long>();
+    if (integer < -MaxSafeJsonInteger || integer > MaxSafeJsonInteger)
+    {
+      throw py::value_error{"JSON integer exceeds the exact IEEE-754 range"};
+    }
+    return QJsonValue{static_cast<double>(integer)};
+  }
+  if (PyFloat_Check(value.ptr()))
+  {
+    const auto number = value.cast<double>();
+    if (!std::isfinite(number))
+    {
+      throw py::value_error{"JSON numbers must be finite"};
+    }
+    return QJsonValue{number};
+  }
+  if (PyUnicode_Check(value.ptr()))
+  {
+    return QJsonValue{QString::fromUtf8(value.cast<std::string>())};
+  }
+  if (PyList_Check(value.ptr()) || PyTuple_Check(value.ptr()))
+  {
+    auto result = QJsonArray{};
+    for (const auto& item : value)
+    {
+      result.append(jsonValueFromPython(item, depth + 1u));
+    }
+    return result;
+  }
+  if (PyDict_Check(value.ptr()))
+  {
+    auto result = QJsonObject{};
+    const auto dictionary = py::reinterpret_borrow<py::dict>(value);
+    for (const auto& [key, nestedValue] : dictionary)
+    {
+      if (!PyUnicode_Check(key.ptr()))
+      {
+        throw py::value_error{"JSON object keys must be strings"};
+      }
+      result.insert(
+        QString::fromUtf8(key.cast<std::string>()),
+        jsonValueFromPython(nestedValue, depth + 1u));
+    }
+    return result;
+  }
+  throw py::value_error{"Expected a JSON-compatible value"};
+}
+
+QJsonObject jsonObjectFromPython(const py::object& value)
+{
+  const auto result = jsonValueFromPython(value);
+  if (!result.isObject())
+  {
+    throw py::value_error{"IR must be a JSON object"};
+  }
+  return result.toObject();
+}
+
+py::dict validateAutomationIrFromPython(const py::object& value)
+{
+  const auto parsed =
+    automation::parseAutomationIr(QJsonObject{{"ir", jsonObjectFromPython(value)}});
+  if (!parsed.ir)
+  {
+    throw py::value_error{parsed.error.toStdString()};
+  }
+  auto result = py::dict{};
+  result["ir"] = jsonValueToPython(*parsed.ir);
+  result["warnings"] = jsonValueToPython(parsed.warnings);
+  result["preview"] = jsonValueToPython(automation::previewAutomationIr(*parsed.ir));
+  return result;
 }
 
 std::vector<mdl::Node*> moduleNodes(
@@ -4752,6 +4844,10 @@ void defineModule(py::module_& module)
   modules.def("select", selectModule, py::arg("module_id"));
   modules.def("compact", compactModule, py::arg("module_id"));
   modules.def("forget", forgetModule, py::arg("module_id"));
+
+  auto ir = module.def_submodule("ir", "IR validation and compact preview operations.");
+  ir.def("validate", validateAutomationIrFromPython, py::arg("ir"));
+  ir.def("preview", validateAutomationIrFromPython, py::arg("ir"));
 
   auto placeModel = [](
                       const std::string& path,
