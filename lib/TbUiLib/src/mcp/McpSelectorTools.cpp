@@ -47,6 +47,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationIr.h"
+#include "ui/automation/AutomationTransaction.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include "vm/bbox.h"
@@ -3777,14 +3778,14 @@ McpBridgeToolResult irApplyForMapResult(
     const auto requested = ir->value("name").toString().trimmed();
     return requested.isEmpty() ? QString{"MCP: Apply IR"} : requested;
   }();
-  auto transaction = mdl::Transaction{map, transactionName.toStdString()};
+  auto transaction = automation::AutomationTransaction{map, transactionName.toStdString()};
   const auto cancelAndFail = [&](
                                const mcp::McpErrorCode code,
                                const QString& stage,
                                const QString& message,
                                const QString& recoveryAction,
                                QJsonObject details = {}) {
-    if (transaction.state() == mdl::Transaction::State::Running)
+    if (transaction.active())
     {
       transaction.cancel();
     }
