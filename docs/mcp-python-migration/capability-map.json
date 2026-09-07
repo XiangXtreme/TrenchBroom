@@ -1,0 +1,1294 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "d98f869503f331809cd6727712438534c16c8c9e",
+  "baselineCatalogCount": 142,
+  "effectiveCapabilityCount": 140,
+  "finalTools": [
+    "tb_inspect",
+    "tb_api",
+    "tb_execute_python",
+    "tb_history",
+    "tb_validate",
+    "tb_capture"
+  ],
+  "entries": [
+    {
+      "legacyTool": "tb_status",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "tb_doctor",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_open",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_open_verified",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_activate",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_save",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_save_current",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_save_as",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_close",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "documents_export",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "document_snapshot",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "map_snapshot",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "map_search",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "selection_get",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "selection_inspect",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_link_chain_inspect",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "selection_set",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "selection_filter",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "selection_by_bounds",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "selection_grow",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_focus",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_clear_marks",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_layout_get",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_layout_set",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_camera_frame_bounds",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_camera_set",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "actions_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "action_execute",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "overlay_set",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "overlay_clear",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_capture_current",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_capture_3d",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_capture_2d",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "viewport_capture_scene_review",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "render_review_targets",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "render_review_current_scene",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "render_review_operation",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "selector_preview",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "objects_select_by_selector",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "objects_delete_by_selector",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "render_review_selector",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "module_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "module_inspect",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "module_select",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "module_render_review",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "module_validate",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "module_compact",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_create",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_update",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_properties_update",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_properties_delete",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_delete",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "fgd_entities_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_schema",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_create_from_schema",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_create_checked",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_create_checked_batch",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_tie_brushes",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "entity_untie_brushes",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_types_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "shape_library_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_box",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_boxes_batch",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_polygon_batch",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_wedge",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_cylinder",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_cone",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_pipe",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_sphere",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_pyramid",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_tetrahedron",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_from_planes",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_prism",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_cylinder_sector",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_create_arch",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "placeholder"
+    },
+    {
+      "legacyTool": "brush_create_torus",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "placeholder"
+    },
+    {
+      "legacyTool": "history_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "history_status",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "operation_inspect",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "operation_select",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "operation_validate",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "history_undo_mcp",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "history_undo_to_operation",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "history_redo_mcp",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "asset_search",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "asset_place_model",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "asset_place_sprite",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "asset_place_sound",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "textures_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "texture_search",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "texture_lock_get",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "texture_lock_set",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "texture_apply",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "texture_apply_by_filter",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "texture_replace",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "texture_align_face",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "texture_copy_from_face",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "face_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "face_select",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "face_texture_set",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "objects_delete",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "objects_delete_by_filter",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "objects_delete_by_operation",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "objects_transform",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "group_create_from_selection",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "group_inspect",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "group_rename_selected",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "group_ungroup_selected",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "map_validate",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "problems_check",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "problems_fix",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "map_fix_all_safe",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "compile_profiles_list",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "compile_run",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "compile_log_tail",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "leaks_load_pointfile",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "blockout_create_batch",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "python_generate_blockout",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "heightmap_import_grayscale",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "heightmap_preview_grayscale",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "ir_validate",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "ir_compile_preview",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "ir_compile_preview_from_file",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "ir_apply",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "ir_apply_from_file",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "blockout_create_curved_corridor",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "blockout_validate",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "blockout_create_spiral_stairs",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "geometry_analyze_selection",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "geometry_csg_selection",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "geometry_analyze_slopes",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "geometry_analyze_route_continuity",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "geometry_analyze_shell_seams",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_metadata_set",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "brush_metadata_get",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "selection_by_metadata",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "kz_distance_analyze_chain",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "route_geometry_analyze_chain",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "blockout_validate_spiral_stairs",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    },
+    {
+      "legacyTool": "tb_tools_search",
+      "actualCapability": "Catalogued legacy MCP capability; detailed semantic mapping pending G0 audit.",
+      "replacementType": "planned",
+      "replacementSymbols": [],
+      "tests": [],
+      "scenarioId": null,
+      "status": "planned"
+    }
+  ]
+}

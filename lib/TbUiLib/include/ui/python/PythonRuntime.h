@@ -1,5 +1,9 @@
 #pragma once
 
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QString>
+
 #include "ui/python/PythonCompletionEngine.h"
 #include "ui/python/PythonExecutionContext.h"
 
@@ -13,6 +17,28 @@ namespace tb::ui
 {
 class PythonPluginSession;
 struct PythonRuntimeState;
+
+struct PythonMcpExecutionRequest
+{
+  QString source;
+  QString filename;
+  QJsonObject arguments;
+  QString transactionName = "MCP Python";
+  int timeoutMs = 30'000;
+  bool transactional = true;
+};
+
+struct PythonMcpExecutionResult
+{
+  bool ok = false;
+  QJsonValue value;
+  QString error;
+  bool executed = false;
+  bool committed = false;
+  bool mutatedDocument = false;
+  bool rolledBack = false;
+  bool timedOut = false;
+};
 
 class PythonRuntime
 {
@@ -28,6 +54,8 @@ public:
     const PythonExecutionContext& context, const std::filesystem::path& path);
   bool runScript(PythonPluginSession& session);
   bool runConsoleCommand(const PythonExecutionContext& context, std::string_view source);
+  PythonMcpExecutionResult runMcpScript(
+    const PythonExecutionContext& context, const PythonMcpExecutionRequest& request);
   PythonCompletionRoot consoleCompletionRoot(
     MapWindow& mapWindow, std::string_view name) const;
   void runCallback(PythonPluginSession& session, void* callback);

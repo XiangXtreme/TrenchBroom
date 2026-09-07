@@ -159,6 +159,87 @@ with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
     CHECK(env.loadFile("python-api-smoke-ok.txt") == "worldspawn");
   }
 
+  SECTION("runs isolated MCP Python globals and rolls back invalid results")
+  {
+    auto context = PythonExecutionContext{};
+    context.mapWindow = &window;
+    context.document = &window.document();
+    context.appController = &window.appController();
+    context.currentMapView = window.currentMapViewBase();
+    context.logger = &window.pythonLogger();
+
+    auto& runtime = PythonRuntime::instance();
+    const auto first = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "result = {'answer': arguments['value']}\nprivate_value = 42",
+        "<mcp-python:first>",
+        QJsonObject{{"value", 42}},
+      });
+    REQUIRE(first.ok);
+    CHECK(first.value.toObject().value("answer").toInt() == 42);
+    CHECK_FALSE(first.mutatedDocument);
+
+    const auto second = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "result = globals().get('private_value')",
+        "<mcp-python:second>",
+        {},
+      });
+    REQUIRE(second.ok);
+    CHECK(second.value.isNull());
+
+    const auto beforeInvalidResult = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\nresult = "
+        "len(tb.current_document().entities[0].brushes)",
+        "<mcp-python:before-invalid>",
+        {},
+      });
+    REQUIRE(beforeInvalidResult.ok);
+    const auto invalid = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "tb.create_brush([(-16,-16,-16),(16,-16,-16),(16,16,-16),(-16,16,-16),"
+        "(-16,-16,16),(16,-16,16),(16,16,16),(-16,16,16)])\n"
+        "result = object()",
+        "<mcp-python:rollback>",
+        {},
+      });
+    CHECK_FALSE(invalid.ok);
+    CHECK(invalid.rolledBack);
+    const auto afterInvalidResult = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\nresult = "
+        "len(tb.current_document().entities[0].brushes)",
+        "<mcp-python:after-invalid>",
+        {},
+      });
+    REQUIRE(afterInvalidResult.ok);
+    CHECK(afterInvalidResult.value == beforeInvalidResult.value);
+
+    const auto timedOut = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "try:\n"
+        "    while True:\n"
+        "        pass\n"
+        "except TimeoutError:\n"
+        "    result = 'caught'",
+        "<mcp-python:timeout>",
+        {},
+        "MCP Python timeout",
+        1,
+      });
+    CHECK_FALSE(timedOut.ok);
+    CHECK(timedOut.timedOut);
+    CHECK(timedOut.rolledBack);
+  }
+
   SECTION("keeps the public API catalog synchronized with trenchbroom bindings")
   {
     auto env = fs::TestEnvironment{};
@@ -285,8 +366,8 @@ print("hello stderr", file=sys.stderr)
     REQUIRE(runtime.runConsoleCommand(context, "console_value + 1"));
     CHECK(logger.messages.back() == "=> 42");
 
-    REQUIRE(
-      runtime.runConsoleCommand(context, "trenchbroom.current_document().entities[0].classname"));
+    REQUIRE(runtime.runConsoleCommand(
+      context, "trenchbroom.current_document().entities[0].classname"));
     CHECK(logger.messages.back() == "=> 'worldspawn'");
 
     REQUIRE(runtime.runConsoleCommand(context, "doc.entities[0].classname"));
@@ -530,8 +611,8 @@ import trenchbroom as tb
 
 tb._cached_brush.faces()
 )");
-    CHECK_FALSE(
-      PythonRuntime::instance().runScript(context, env.dir() / "api_use_cached_brush.py"));
+    CHECK_FALSE(PythonRuntime::instance().runScript(
+      context, env.dir() / "api_use_cached_brush.py"));
     CHECK(
       PythonRuntime::instance().lastError().find("Brush is no longer valid")
       != std::string::npos);
@@ -806,7 +887,8 @@ panel.add_button_callback("Write", lambda: open("fields-ok.txt", "w", encoding="
     const auto panels = pluginPanels(window);
     REQUIRE_FALSE(panels.empty());
     auto* panel = panels.back();
-    auto* label = panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
+    auto* label =
+      panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
     REQUIRE(label != nullptr);
     CHECK(label->text() == QStringLiteral("Updated"));
     auto* button = panel->findChild<QPushButton*>();
@@ -1614,7 +1696,8 @@ assert face.surface_value == 3.5
     CHECK(brushNode->brush().face(0).uvAttributes().scale == vm::vec2f{1.0f, 1.0f});
 
     analyzeButton->click();
-    auto* status = panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
+    auto* status =
+      panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
     REQUIRE(status != nullptr);
     CAPTURE(status->text().toStdString());
     CHECK(status->text().contains(QStringLiteral("6 faces")));
@@ -1641,7 +1724,8 @@ assert face.surface_value == 3.5
     const auto panels = pluginPanels(window);
     REQUIRE_FALSE(panels.empty());
     auto* panel = panels.back();
-    auto* find = panel->findChild<QLineEdit*>(QStringLiteral("trenchbroom_panel_text_find"));
+    auto* find =
+      panel->findChild<QLineEdit*>(QStringLiteral("trenchbroom_panel_text_find"));
     auto* replace =
       panel->findChild<QLineEdit*>(QStringLiteral("trenchbroom_panel_text_replace"));
     REQUIRE(find != nullptr);
@@ -1660,7 +1744,8 @@ assert face.surface_value == 3.5
     }
     REQUIRE(button != nullptr);
     button->click();
-    auto* status = panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
+    auto* status =
+      panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
     REQUIRE(status != nullptr);
     CAPTURE(status->text().toStdString());
     CHECK(brushNode->brush().face(0).materialName() == "new");
@@ -1692,7 +1777,8 @@ assert face.surface_value == 3.5
     const auto panels = pluginPanels(window);
     REQUIRE_FALSE(panels.empty());
     auto* panel = panels.back();
-    auto* status = panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
+    auto* status =
+      panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
     REQUIRE(status != nullptr);
     const auto text = status->text();
     CAPTURE(text.toStdString());
@@ -1762,7 +1848,8 @@ assert face.surface_value == 3.5
     REQUIRE(sendButton != nullptr);
     REQUIRE(applyButton != nullptr);
     REQUIRE(splitButton != nullptr);
-    auto* status = panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
+    auto* status =
+      panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
     REQUIRE(status != nullptr);
 
     sendButton->click();
@@ -1930,13 +2017,16 @@ assert face.surface_value == 3.5
     REQUIRE(updateButton != nullptr);
     updateButton->click();
 
-    auto* name = panel->findChild<QLineEdit*>(QStringLiteral("trenchbroom_panel_text_name"));
+    auto* name =
+      panel->findChild<QLineEdit*>(QStringLiteral("trenchbroom_panel_text_name"));
     auto* message =
       panel->findChild<QTextEdit*>(QStringLiteral("trenchbroom_panel_text_area_message"));
     auto* table =
       panel->findChild<QTableWidget*>(QStringLiteral("trenchbroom_panel_table_table"));
-    auto* tree = panel->findChild<QTreeWidget*>(QStringLiteral("trenchbroom_panel_tree_tree"));
-    auto* status = panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
+    auto* tree =
+      panel->findChild<QTreeWidget*>(QStringLiteral("trenchbroom_panel_tree_tree"));
+    auto* status =
+      panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_status"));
     REQUIRE(name != nullptr);
     REQUIRE(message != nullptr);
     REQUIRE(table != nullptr);
@@ -2072,7 +2162,8 @@ panel.set_html_view("history", '<a href="tb://history/456">Updated</a>')
     REQUIRE(colorButton != nullptr);
 
     dotButton->click();
-    auto* result = panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_result"));
+    auto* result =
+      panel->findChild<QLabel*>(QStringLiteral("trenchbroom_panel_label_result"));
     REQUIRE(result != nullptr);
     CHECK(result->text().contains(QStringLiteral("Dot Product")));
 
@@ -2092,8 +2183,7 @@ panel.set_html_view("history", '<a href="tb://history/456">Updated</a>')
     mdl::addNodes(map, {{&mdl::parentForNodes(map), {brushNode}}});
     mdl::selectNodes(map, {brushNode});
 
-    const auto pluginDir =
-      std::filesystem::path{"python/examples/plane_selection_demo"};
+    const auto pluginDir = std::filesystem::path{"python/examples/plane_selection_demo"};
     REQUIRE(std::filesystem::exists(pluginDir / "trenchbroom-plugin.json"));
 
     auto manager = PythonPluginManager{};
@@ -2186,8 +2276,7 @@ panel.set_html_view("history", '<a href="tb://history/456">Updated</a>')
     mdl::addNodes(map, brushNodesToAdd);
     mdl::selectNodes(map, {entityNode});
 
-    const auto pluginDir =
-      std::filesystem::path{"python/examples/generator_spin_entity"};
+    const auto pluginDir = std::filesystem::path{"python/examples/generator_spin_entity"};
     REQUIRE(std::filesystem::exists(pluginDir / "trenchbroom-plugin.json"));
 
     CAPTURE(PythonRuntime::instance().lastError());
@@ -2412,8 +2501,7 @@ panel.set_html_view("history", '<a href="tb://history/456">Updated</a>')
     mdl::selectNodes(map, {entityNode});
 
     const auto oldOffset = brushNode->brush().face(0).uvAttributes().offset;
-    const auto pluginDir =
-      std::filesystem::path{"python/examples/entity_brush_modifier"};
+    const auto pluginDir = std::filesystem::path{"python/examples/entity_brush_modifier"};
     REQUIRE(std::filesystem::exists(pluginDir / "trenchbroom-plugin.json"));
 
     CAPTURE(PythonRuntime::instance().lastError());

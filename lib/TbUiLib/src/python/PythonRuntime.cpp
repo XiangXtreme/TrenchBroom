@@ -1,11 +1,12 @@
 #include "ui/python/PythonRuntime.h"
 
 #include "base/Logger.h"
+#include "mdl/Map.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
 #include "ui/python/PythonApiCatalog.h"
-#include "ui/python/PythonPluginSession.h"
 #include "ui/python/PythonApiModule.h"
+#include "ui/python/PythonPluginSession.h"
 
 #include "kd/invoke.h"
 
@@ -13,8 +14,15 @@
 #undef slots
 #endif
 
+#include <QElapsedTimer>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonValue>
+
 #include <Python.h>
 
+#include <cmath>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -108,6 +116,260 @@ public:
     }
   }
 };
+
+struct McpExecutionDeadline
+{
+  QElapsedTimer timer;
+  int timeoutMs = 0;
+  bool timedOut = false;
+};
+
+int mcpExecutionDeadlineTrace(PyObject* object, PyFrameObject*, int, PyObject*)
+{
+  auto* deadline = static_cast<McpExecutionDeadline*>(
+    PyCapsule_GetPointer(object, "trenchbroom.mcpExecutionDeadline"));
+  if (deadline == nullptr)
+  {
+    return -1;
+  }
+  if (!deadline->timer.hasExpired(deadline->timeoutMs))
+  {
+    return 0;
+  }
+
+  deadline->timedOut = true;
+  PyErr_SetString(
+    PyExc_TimeoutError, "MCP Python execution exceeded its cooperative timeout");
+  return -1;
+}
+
+class ScopedMcpExecutionDeadline
+{
+private:
+  McpExecutionDeadline m_deadline;
+  PyObject* m_sys = nullptr;
+  PyObject* m_previousTrace = nullptr;
+  bool m_installed = false;
+
+public:
+  explicit ScopedMcpExecutionDeadline(const int timeoutMs)
+  {
+    m_deadline.timeoutMs = timeoutMs;
+    m_deadline.timer.start();
+    m_sys = PyImport_ImportModule("sys");
+    if (m_sys == nullptr)
+    {
+      return;
+    }
+    m_previousTrace = PyObject_CallMethod(m_sys, "gettrace", nullptr);
+    if (m_previousTrace == nullptr)
+    {
+      return;
+    }
+    auto* capsule =
+      PyCapsule_New(&m_deadline, "trenchbroom.mcpExecutionDeadline", nullptr);
+    if (capsule == nullptr)
+    {
+      return;
+    }
+    PyEval_SetTrace(mcpExecutionDeadlineTrace, capsule);
+    Py_DECREF(capsule);
+    m_installed = !PyErr_Occurred();
+  }
+
+  ~ScopedMcpExecutionDeadline()
+  {
+    if (m_installed)
+    {
+      PyEval_SetTrace(nullptr, nullptr);
+      auto* result = PyObject_CallMethod(m_sys, "settrace", "O", m_previousTrace);
+      Py_XDECREF(result);
+      PyErr_Clear();
+    }
+    Py_XDECREF(m_previousTrace);
+    Py_XDECREF(m_sys);
+  }
+
+  bool valid() const { return m_installed; }
+  bool hasExpired()
+  {
+    m_deadline.timedOut =
+      m_deadline.timedOut || m_deadline.timer.hasExpired(m_deadline.timeoutMs);
+    return m_deadline.timedOut;
+  }
+};
+
+PyObject* pythonObjectFromJson(const QJsonValue& value)
+{
+  if (value.isNull() || value.isUndefined())
+  {
+    Py_RETURN_NONE;
+  }
+  if (value.isBool())
+  {
+    return PyBool_FromLong(value.toBool() ? 1 : 0);
+  }
+  if (value.isDouble())
+  {
+    return PyFloat_FromDouble(value.toDouble());
+  }
+  if (value.isString())
+  {
+    const auto utf8 = value.toString().toUtf8();
+    return PyUnicode_FromStringAndSize(utf8.constData(), utf8.size());
+  }
+  if (value.isArray())
+  {
+    const auto array = value.toArray();
+    auto* result = PyList_New(array.size());
+    if (result == nullptr)
+    {
+      return nullptr;
+    }
+    for (auto i = 0; i < array.size(); ++i)
+    {
+      auto* item = pythonObjectFromJson(array.at(i));
+      if (item == nullptr)
+      {
+        Py_DECREF(result);
+        return nullptr;
+      }
+      PyList_SET_ITEM(result, i, item);
+    }
+    return result;
+  }
+
+  auto* result = PyDict_New();
+  if (result == nullptr)
+  {
+    return nullptr;
+  }
+  const auto object = value.toObject();
+  for (auto it = object.begin(); it != object.end(); ++it)
+  {
+    auto* item = pythonObjectFromJson(it.value());
+    if (item == nullptr)
+    {
+      Py_DECREF(result);
+      return nullptr;
+    }
+    const auto key = it.key().toUtf8();
+    const auto inserted = PyDict_SetItemString(result, key.constData(), item);
+    Py_DECREF(item);
+    if (inserted != 0)
+    {
+      Py_DECREF(result);
+      return nullptr;
+    }
+  }
+  return result;
+}
+
+std::optional<QJsonValue> jsonValueFromPython(
+  PyObject* object, const int depth, QString& error)
+{
+  if (depth > 32)
+  {
+    error = "Python result exceeds the supported nesting depth";
+    return std::nullopt;
+  }
+  if (object == Py_None)
+  {
+    return QJsonValue{QJsonValue::Null};
+  }
+  if (PyBool_Check(object))
+  {
+    return QJsonValue{object == Py_True};
+  }
+  if (PyLong_Check(object))
+  {
+    const auto value = PyLong_AsLongLong(object);
+    if (PyErr_Occurred())
+    {
+      PyErr_Clear();
+      error = "Python integer result is outside the JSON number range";
+      return std::nullopt;
+    }
+    return QJsonValue{static_cast<double>(value)};
+  }
+  if (PyFloat_Check(object))
+  {
+    const auto value = PyFloat_AsDouble(object);
+    if (!std::isfinite(value))
+    {
+      error = "Python result contains a non-finite number";
+      return std::nullopt;
+    }
+    return QJsonValue{value};
+  }
+  if (PyUnicode_Check(object))
+  {
+    auto size = Py_ssize_t{0};
+    const auto* value = PyUnicode_AsUTF8AndSize(object, &size);
+    if (value == nullptr)
+    {
+      PyErr_Clear();
+      error = "Python string result cannot be encoded as UTF-8";
+      return std::nullopt;
+    }
+    return QJsonValue{QString::fromUtf8(value, static_cast<qsizetype>(size))};
+  }
+  if (PyList_Check(object) || PyTuple_Check(object))
+  {
+    const auto size = PySequence_Size(object);
+    auto array = QJsonArray{};
+    for (auto i = Py_ssize_t{0}; i < size; ++i)
+    {
+      auto* item = PySequence_GetItem(object, i);
+      if (item == nullptr)
+      {
+        error = "Python sequence result could not be read";
+        return std::nullopt;
+      }
+      const auto json = jsonValueFromPython(item, depth + 1, error);
+      Py_DECREF(item);
+      if (!json)
+      {
+        return std::nullopt;
+      }
+      array.push_back(*json);
+    }
+    return QJsonValue{array};
+  }
+  if (PyDict_Check(object))
+  {
+    auto result = QJsonObject{};
+    auto position = Py_ssize_t{0};
+    PyObject* key = nullptr;
+    PyObject* value = nullptr;
+    while (PyDict_Next(object, &position, &key, &value))
+    {
+      if (!PyUnicode_Check(key))
+      {
+        error = "Python result object keys must be strings";
+        return std::nullopt;
+      }
+      auto keySize = Py_ssize_t{0};
+      const auto* keyText = PyUnicode_AsUTF8AndSize(key, &keySize);
+      if (keyText == nullptr)
+      {
+        PyErr_Clear();
+        error = "Python result object key cannot be encoded as UTF-8";
+        return std::nullopt;
+      }
+      const auto json = jsonValueFromPython(value, depth + 1, error);
+      if (!json)
+      {
+        return std::nullopt;
+      }
+      result.insert(QString::fromUtf8(keyText, static_cast<qsizetype>(keySize)), *json);
+    }
+    return QJsonValue{result};
+  }
+
+  error = "Python result must be JSON-compatible";
+  return std::nullopt;
+}
 
 class ScopedStdStreamRedirect
 {
@@ -561,6 +823,159 @@ bool PythonRuntime::runConsoleCommand(
 
   Py_DECREF(result);
   return true;
+}
+
+PythonMcpExecutionResult PythonRuntime::runMcpScript(
+  const PythonExecutionContext& context, const PythonMcpExecutionRequest& request)
+{
+  auto execution = PythonMcpExecutionResult{};
+  if (context.mapWindow == nullptr || context.document == nullptr)
+  {
+    execution.error = "MCP Python execution requires an active map document";
+    return execution;
+  }
+  if (request.source.isEmpty())
+  {
+    execution.error = "MCP Python source is empty";
+    return execution;
+  }
+  if (request.timeoutMs < 1 || request.timeoutMs > 90'000)
+  {
+    execution.error = "MCP Python timeout must be between 1 and 90000 ms";
+    return execution;
+  }
+  if (!ensureInitialized())
+  {
+    execution.error = "Python API initialization failed";
+    return execution;
+  }
+
+  const auto modifiedBefore = context.document->map().modified();
+
+  auto transaction = request.transactional
+                       ? std::make_optional(PythonDocumentTransaction{
+                           *context.document, request.transactionName.toStdString()})
+                       : std::nullopt;
+  auto cancel = [&]() {
+    if (transaction)
+    {
+      transaction->cancel();
+      execution.rolledBack = true;
+    }
+  };
+
+  auto gil = PyGILState_Ensure();
+  auto releaseGil = kdl::invoke_later{[&]() { PyGILState_Release(gil); }};
+  auto scopedContext = ScopedExecutionContext{context};
+  auto scopedStdStreamRedirect = ScopedStdStreamRedirect{};
+  auto* globals = PyDict_New();
+  if (globals == nullptr)
+  {
+    cancel();
+    execution.error = "Could not create Python execution globals";
+    return execution;
+  }
+  auto releaseGlobals = kdl::invoke_later{[&]() { Py_DECREF(globals); }};
+
+  PyDict_SetItemString(globals, "__builtins__", PyEval_GetBuiltins());
+  auto* arguments = pythonObjectFromJson(request.arguments);
+  if (arguments == nullptr || PyDict_SetItemString(globals, "arguments", arguments) != 0)
+  {
+    Py_XDECREF(arguments);
+    cancel();
+    execution.error = "Could not prepare MCP Python arguments";
+    return execution;
+  }
+  Py_DECREF(arguments);
+
+  const auto filename =
+    request.filename.isEmpty() ? QString{"<mcp-python>"} : request.filename;
+  const auto filenameUtf8 = filename.toUtf8();
+  auto* filenameObject =
+    PyUnicode_FromStringAndSize(filenameUtf8.constData(), filenameUtf8.size());
+  if (
+    filenameObject == nullptr
+    || PyDict_SetItemString(globals, "__file__", filenameObject) != 0)
+  {
+    Py_XDECREF(filenameObject);
+    cancel();
+    execution.error = "Could not prepare MCP Python filename";
+    return execution;
+  }
+  Py_DECREF(filenameObject);
+
+  const auto scriptInfo = QFileInfo{filename};
+  auto scriptPath = std::optional<ScopedSysPath>{};
+  if (scriptInfo.isAbsolute())
+  {
+    scriptPath.emplace(std::filesystem::path{scriptInfo.absolutePath().toStdWString()});
+  }
+  auto deadline = ScopedMcpExecutionDeadline{request.timeoutMs};
+  if (!deadline.valid())
+  {
+    PyErr_Clear();
+    cancel();
+    execution.error = "Could not install the MCP Python timeout guard";
+    return execution;
+  }
+
+  const auto source = request.source.toUtf8();
+  auto* result =
+    PyRun_StringFlags(source.constData(), Py_file_input, globals, globals, nullptr);
+  execution.executed = true;
+  if (result == nullptr)
+  {
+    cancel();
+    execution.timedOut = deadline.hasExpired();
+    execution.error = execution.timedOut
+                        ? "MCP Python execution exceeded its cooperative timeout"
+                        : QString::fromStdString(formatCurrentException());
+    return execution;
+  }
+  Py_DECREF(result);
+
+  if (deadline.hasExpired())
+  {
+    cancel();
+    execution.timedOut = true;
+    execution.error = "MCP Python execution exceeded its cooperative timeout";
+    return execution;
+  }
+
+  auto* resultObject = PyDict_GetItemString(globals, "result");
+  auto conversionError = QString{};
+  const auto jsonResult = resultObject != nullptr
+                            ? jsonValueFromPython(resultObject, 0, conversionError)
+                            : std::optional<QJsonValue>{QJsonValue{QJsonValue::Null}};
+  if (!jsonResult)
+  {
+    cancel();
+    execution.error = conversionError;
+    return execution;
+  }
+  const auto compactResult =
+    QJsonDocument{
+      jsonResult->isObject() ? jsonResult->toObject()
+                             : QJsonObject{{"result", *jsonResult}}}
+      .toJson(QJsonDocument::Compact);
+  if (compactResult.size() > 1024 * 1024)
+  {
+    cancel();
+    execution.error = "Python result exceeds the 1 MiB response limit";
+    return execution;
+  }
+
+  if (transaction && !transaction->commit())
+  {
+    execution.rolledBack = true;
+    execution.error = "Could not commit the MCP Python transaction";
+    return execution;
+  }
+  execution.ok = true;
+  execution.committed = transaction.has_value();
+  execution.mutatedDocument = !modifiedBefore && context.document->map().modified();
+  execution.value = *jsonResult;
+  return execution;
 }
 
 PythonCompletionRoot PythonRuntime::consoleCompletionRoot(

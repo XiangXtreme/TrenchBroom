@@ -60,9 +60,35 @@ TEST_CASE("McpToolCatalog")
       implementedCount += tool.implemented ? 1u : 0u;
     }
 
-    CHECK(catalog.size() == 142u);
-    CHECK(implementedCount == 140u);
+    CHECK(catalog.size() == 148u);
+    CHECK(implementedCount == 146u);
     CHECK(toolsListJson(McpMode::Edit, true, McpToolProfile::Modeling).size() == 53);
+  }
+
+  SECTION("registers the Python migration entry points with bounded schemas")
+  {
+    const auto inspect = findToolDefinition("tb_inspect");
+    const auto api = findToolDefinition("tb_api");
+    const auto execute = findToolDefinition("tb_execute_python");
+    const auto history = findToolDefinition("tb_history");
+    const auto validate = findToolDefinition("tb_validate");
+    const auto capture = findToolDefinition("tb_capture");
+
+    REQUIRE(inspect);
+    REQUIRE(api);
+    REQUIRE(execute);
+    REQUIRE(history);
+    REQUIRE(validate);
+    REQUIRE(capture);
+    CHECK(inspect->requiredMode == McpMode::ReadOnly);
+    CHECK(api->requiredMode == McpMode::ReadOnly);
+    CHECK(execute->requiredMode == McpMode::Edit);
+    CHECK(execute->mutatesDocument);
+    CHECK(history->requiredMode == McpMode::ReadOnly);
+    CHECK(validate->requiredMode == McpMode::ReadOnly);
+    CHECK(capture->requiredMode == McpMode::ReadOnly);
+    CHECK(execute->inputSchema.value("properties").toObject().contains("document"));
+    CHECK(execute->inputSchema.value("properties").toObject().contains("timeoutMs"));
   }
 
   SECTION("all mutating tools expose path and fingerprint guards")
@@ -775,8 +801,8 @@ TEST_CASE("McpToolCatalog")
     const auto required = tool->inputSchema.value("required").toArray();
     CHECK(required.contains("script"));
 
-    const auto tools =
-      toolsSearchJson("python", "", "schema", McpMode::Edit, McpToolProfile::Core);
+    const auto tools = toolsSearchJson(
+      "python_generate_blockout", "", "schema", McpMode::Edit, McpToolProfile::Core);
     auto found = QJsonObject{};
     for (const auto& entry : tools)
     {

@@ -107,6 +107,53 @@ void processEventsFor(const int durationMs)
 
 } // namespace
 
+TEST_CASE("McpBridgeServer applies action-level history permissions", "[McpBridgeServer]")
+{
+  auto handlerCalls = 0;
+  auto server = McpBridgeServer{[&](const QString&, const QJsonObject&) {
+    ++handlerCalls;
+    return McpBridgeToolResult::success();
+  }};
+  REQUIRE(
+    server.start(mcp::McpBridgeConfig{uniqueBridgePipeName(), mcp::McpMode::ReadOnly}));
+
+  const auto denied = server.dispatchRequest(mcp::McpBridgeRequest{
+    "undo-read-only",
+    "tb_history",
+    QJsonObject{{"action", "undo"}},
+    mcp::McpMode::ReadOnly,
+  });
+  CHECK_FALSE(denied.ok);
+  REQUIRE(denied.error);
+  CHECK(denied.error->code == mcp::McpErrorCode::Forbidden);
+  CHECK(handlerCalls == 0);
+
+  const auto status = server.dispatchRequest(mcp::McpBridgeRequest{
+    "status-read-only",
+    "tb_history",
+    QJsonObject{{"action", "status"}},
+    mcp::McpMode::ReadOnly,
+  });
+  CHECK(status.ok);
+  CHECK(handlerCalls == 1);
+
+  auto editServer = McpBridgeServer{[&](const QString&, const QJsonObject&) {
+    ++handlerCalls;
+    return McpBridgeToolResult::success();
+  }};
+  REQUIRE(
+    editServer.start(mcp::McpBridgeConfig{uniqueBridgePipeName(), mcp::McpMode::Edit}));
+  const auto downgraded = editServer.dispatchRequest(mcp::McpBridgeRequest{
+    "undo-downgraded",
+    "tb_history",
+    QJsonObject{{"action", "undo"}},
+    mcp::McpMode::ReadOnly,
+  });
+  CHECK_FALSE(downgraded.ok);
+  REQUIRE(downgraded.error);
+  CHECK(downgraded.error->code == mcp::McpErrorCode::Forbidden);
+}
+
 TEST_CASE(
   "McpBridgeServer bounds local transport input", "[McpBridgeServer][McpBridgeTransport]")
 {

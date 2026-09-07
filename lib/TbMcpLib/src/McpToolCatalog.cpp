@@ -621,6 +621,113 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
 {
   static const auto Catalog = std::vector<McpToolDefinition>{
     {
+      "tb_inspect",
+      "Inspect bounded TrenchBroom process, document, map, selection, and action state.",
+      McpMode::ReadOnly,
+      false,
+      true,
+      objectSchema({
+        {"view",
+         stringProperty(
+           "status, document, map, selection, or actions. Defaults to status.")},
+      }),
+      "core",
+    },
+    {
+      "tb_api",
+      "Search the public trenchbroom Python API or inspect one exact API symbol.",
+      McpMode::ReadOnly,
+      false,
+      true,
+      objectSchema({
+        {"query", stringProperty("Optional case-insensitive API keyword search.")},
+        {"symbol", stringProperty("Optional exact symbol, for example Document.path.")},
+      }),
+      "python",
+    },
+    {
+      "tb_execute_python",
+      "Run trusted Python against one guarded map document in a single native "
+      "transaction.",
+      McpMode::Edit,
+      true,
+      true,
+      objectSchema(
+        {
+          {"executionId",
+           stringProperty("Caller-generated id used for execution recovery.")},
+          {"code",
+           stringProperty("Inline Python source. Provide exactly one of code or path.")},
+          {"path",
+           stringProperty(
+             "Absolute Python script path. Provide exactly one of code or path.")},
+          {"arguments",
+           withDescription(
+             QJsonObject{{"type", "object"}, {"additionalProperties", true}},
+             "JSON object exposed to the script as arguments.")},
+          {"document",
+           withDescription(
+             QJsonObject{
+               {"type", "object"},
+               {"additionalProperties", false},
+               {"properties",
+                QJsonObject{
+                  {"fingerprint",
+                   stringProperty("Document fingerprint from tb_inspect.")},
+                  {"path", stringProperty("Saved document path from tb_inspect.")}}}},
+             "Target document identity. Transaction mode requires fingerprint.")},
+          {"mode", stringProperty("transaction only during the migration foundation.")},
+          {"name", stringProperty("Native transaction name. Defaults to MCP Python.")},
+          {"timeoutMs",
+           integerProperty(
+             "Cooperative Python budget from 1 to 90000 ms. Defaults to 30000.")},
+        },
+        {"executionId"}),
+      "python",
+    },
+    {
+      "tb_history",
+      "Inspect MCP/native operation history, or undo and redo in Edit mode.",
+      McpMode::ReadOnly,
+      false,
+      true,
+      objectSchema({
+        {"action",
+         stringProperty("status, list, inspect, undo, or redo. Defaults to status.")},
+        {"operationId", stringProperty("Operation id for inspect when required.")},
+      }),
+      "operation",
+    },
+    {
+      "tb_validate",
+      "Validate the map, problems, slopes, route continuity, or shell seams.",
+      McpMode::ReadOnly,
+      false,
+      true,
+      objectSchema({
+        {"action",
+         stringProperty(
+           "map, problems, slopes, route, or shell_seams. Defaults to map.")},
+        {"objectIds",
+         arrayProperty("Optional object targets for the selected validation.")},
+        {"detail", summaryFullDetailProperty()},
+      }),
+      "geometry",
+    },
+    {
+      "tb_capture",
+      "Capture the current viewport or bounded review evidence without mutating the map.",
+      McpMode::ReadOnly,
+      false,
+      true,
+      objectSchema({
+        {"action", stringProperty("current, 2d, 3d, or scene. Defaults to current.")},
+        {"objectIds", arrayProperty("Optional object targets for scene review.")},
+        {"edgeMode", stringProperty("all or silhouette for scene review.")},
+      }),
+      "viewport",
+    },
+    {
       "tb_status",
       "Return TrenchBroom MCP bridge status and active document summary.",
       McpMode::ReadOnly,

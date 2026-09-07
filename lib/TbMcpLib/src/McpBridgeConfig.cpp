@@ -123,6 +123,7 @@ McpBridgeConfig defaultBridgeConfig()
     "127.0.0.1",
     37666,
     McpToolProfile::Modeling,
+    2,
   };
 }
 
@@ -135,6 +136,7 @@ QJsonObject toJson(const McpBridgeConfig& config)
     {"httpHost", config.httpHost},
     {"httpPort", int(config.httpPort)},
     {"toolProfile", toolProfileName(config.toolProfile)},
+    {"configVersion", config.configVersion},
   };
 }
 
@@ -249,6 +251,21 @@ std::optional<McpBridgeConfig> bridgeConfigFromJson(
     toolProfile = *parsedProfile;
   }
 
+  auto configVersion = 1;
+  const auto configVersionValue = json.value("configVersion");
+  if (!configVersionValue.isUndefined())
+  {
+    if (!configVersionValue.isDouble() || configVersionValue.toInt() != 2)
+    {
+      if (error)
+      {
+        *error = "MCP configVersion is unsupported";
+      }
+      return std::nullopt;
+    }
+    configVersion = 2;
+  }
+
   return McpBridgeConfig{
     pipeName.toString(),
     *mode,
@@ -256,6 +273,7 @@ std::optional<McpBridgeConfig> bridgeConfigFromJson(
     httpHost,
     httpPort,
     toolProfile,
+    configVersion,
   };
 }
 
@@ -325,15 +343,19 @@ std::optional<McpBridgeConfig> readOrCreateBridgeConfig(
       return std::nullopt;
     }
 
-    if (json->contains("token"))
+    if (json->contains("token") || config->configVersion < 2)
     {
+      auto migrated = *config;
+      // A configuration from before trusted Python existed must be re-enabled explicitly.
+      migrated.mode = McpMode::Off;
+      migrated.configVersion = 2;
       auto migrationError = QString{};
-      if (!writeBridgeConfig(*config, filePath, &migrationError))
+      if (!writeBridgeConfig(migrated, filePath, &migrationError))
       {
-        qWarning().noquote()
-          << QString{"Could not remove the legacy token from MCP config: %1"}.arg(
-               migrationError);
+        qWarning().noquote() << QString{"Could not migrate MCP config: %1"}.arg(
+          migrationError);
       }
+      return migrated;
     }
     return config;
   }

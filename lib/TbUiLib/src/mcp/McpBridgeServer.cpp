@@ -19,7 +19,11 @@
 
 #include "ui/mcp/McpBridgeServer.h"
 
+#include <QCryptographicHash>
 #include <QDateTime>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonObject>
 #include <QLocalServer>
 #include <QUuid>
@@ -32,6 +36,8 @@
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/python/PythonApiCatalog.h"
+#include "ui/python/PythonRuntime.h"
 
 #include <utility>
 
@@ -109,6 +115,354 @@ McpBridgeServer::McpBridgeServer(
                m_config.toolProfile)},
             {"toolProfile", mcp::toolProfileName(m_config.toolProfile)},
           });
+        }
+        if (toolName == "tb_inspect")
+        {
+          const auto view = params.value("view").toString("status").trimmed().toLower();
+          if (view == "status")
+          {
+            auto status = makeStatus(
+              appController,
+              m_config,
+              m_bridgeInstanceId,
+              m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
+              &m_objectRegistry);
+            status.insert("sessionState", m_session.diagnosticsJson());
+            return McpBridgeToolResult::success(std::move(status));
+          }
+          if (view == "document")
+          {
+            return McpBridgeToolResult::success(activeDocumentJson(
+              appController,
+              m_bridgeInstanceId,
+              m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
+              m_config.httpPort,
+              &m_objectRegistry));
+          }
+          if (view == "map")
+          {
+            return McpBridgeToolResult::success(mapSnapshotJson(
+              appController,
+              m_bridgeInstanceId,
+              m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
+              m_config.httpPort,
+              &m_objectRegistry));
+          }
+          if (view == "selection")
+          {
+            return McpBridgeToolResult::success(selectionJson(appController));
+          }
+          if (view == "actions")
+          {
+            return McpBridgeToolResult::success(actionsListJson(appController));
+          }
+          return invalidParamsFailure(
+            "tb_inspect view must be status, document, map, selection, or actions");
+        }
+        if (toolName == "tb_api")
+        {
+          const auto query = params.value("query").toString().trimmed().toLower();
+          const auto exact = params.value("symbol").toString().trimmed();
+          auto symbols = QJsonArray{};
+          for (const auto& type : pythonApiTypes())
+          {
+            for (const auto& symbol : pythonApiSymbols(type.type))
+            {
+              const auto qualified = QString{"%1.%2"}.arg(
+                QString::fromUtf8(type.name), QString::fromUtf8(symbol.name));
+              if (!exact.isEmpty() && exact != qualified)
+              {
+                continue;
+              }
+              if (
+                exact.isEmpty() && !query.isEmpty()
+                && !qualified.toLower().contains(query)
+                && !QString::fromUtf8(symbol.detail).toLower().contains(query))
+              {
+                continue;
+              }
+              symbols.push_back(QJsonObject{
+                {"symbol", qualified},
+                {"kind", static_cast<int>(symbol.kind)},
+                {"signature", QString::fromUtf8(symbol.detail)},
+              });
+              if (exact.isEmpty() && symbols.size() == 8)
+              {
+                return McpBridgeToolResult::success(QJsonObject{
+                  {"symbols", symbols},
+                  {"truncated", true},
+                  {"limit", 8},
+                });
+              }
+            }
+          }
+          return McpBridgeToolResult::success(QJsonObject{
+            {"symbols", symbols},
+            {"truncated", false},
+          });
+        }
+        if (toolName == "tb_execute_python")
+        {
+          const auto executionId = params.value("executionId").toString().trimmed();
+          if (executionId.isEmpty())
+          {
+            return invalidParamsFailure("tb_execute_python requires executionId");
+          }
+          const auto hasCode = params.value("code").isString();
+          const auto hasPath = params.value("path").isString();
+          if (hasCode == hasPath)
+          {
+            return invalidParamsFailure("Provide exactly one of code or path");
+          }
+          auto source = QString{};
+          auto filename = QString{"<mcp-python:%1>"}.arg(executionId);
+          if (hasCode)
+          {
+            source = params.value("code").toString();
+          }
+          else
+          {
+            const auto path = params.value("path").toString();
+            const auto info = QFileInfo{path};
+            if (!info.isAbsolute() || !info.isFile())
+            {
+              return invalidParamsFailure(
+                "MCP Python path must be an existing absolute file");
+            }
+            auto file = QFile{info.absoluteFilePath()};
+            if (!file.open(QIODevice::ReadOnly))
+            {
+              return invalidParamsFailure("Could not read MCP Python file");
+            }
+            source = QString::fromUtf8(file.readAll());
+            filename = info.absoluteFilePath();
+          }
+          if (source.isEmpty() || source.toUtf8().size() > 256 * 1024)
+          {
+            return invalidParamsFailure(
+              "MCP Python source must be non-empty and at most 256 KiB");
+          }
+          if (params.value("arguments").isUndefined())
+          {
+            // The execution request defaults arguments to an empty JSON object.
+          }
+          else if (!params.value("arguments").isObject())
+          {
+            return invalidParamsFailure("MCP Python arguments must be an object");
+          }
+          const auto mode =
+            params.value("mode").toString("transaction").trimmed().toLower();
+          if (mode != "transaction")
+          {
+            return invalidParamsFailure("MCP Python action mode is not implemented yet");
+          }
+          const auto timeoutMs = params.value("timeoutMs").toInt(30'000);
+          if (timeoutMs < 1 || timeoutMs > 90'000)
+          {
+            return invalidParamsFailure(
+              "MCP Python timeoutMs must be between 1 and 90000");
+          }
+          const auto document = params.value("document");
+          if (!document.isObject())
+          {
+            return invalidParamsFailure("MCP Python transaction mode requires document");
+          }
+          auto* mapWindow = appController.mapWindowManager().topMapWindow();
+          if (mapWindow == nullptr)
+          {
+            return noActiveDocumentFailure();
+          }
+          const auto active = activeDocumentJson(
+            appController,
+            m_bridgeInstanceId,
+            m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
+            m_config.httpPort,
+            &m_objectRegistry);
+          const auto requested = document.toObject();
+          const auto expectedFingerprint =
+            requested.value("fingerprint").toString().trimmed();
+          const auto actualFingerprint = active.value("documentFingerprint").toString();
+          if (expectedFingerprint.isEmpty() || expectedFingerprint != actualFingerprint)
+          {
+            return McpBridgeToolResult::failure(
+              mcp::McpErrorCode::Forbidden,
+              "MCP Python document fingerprint does not match the active document",
+              QJsonObject{
+                {"mutatedDocument", false},
+                {"retrySafe", true},
+                {"expectedFingerprint", expectedFingerprint},
+                {"actualFingerprint", actualFingerprint},
+              });
+          }
+          const auto expectedPath = requested.value("path").toString().trimmed();
+          const auto actualPath = active.value("path").toString();
+          if (!expectedPath.isEmpty() && expectedPath != actualPath)
+          {
+            return McpBridgeToolResult::failure(
+              mcp::McpErrorCode::Forbidden,
+              "MCP Python document path does not match the active document",
+              QJsonObject{
+                {"mutatedDocument", false},
+                {"retrySafe", true},
+                {"expectedPath", expectedPath},
+                {"actualPath", actualPath},
+              });
+          }
+          auto context = PythonExecutionContext{};
+          context.mapWindow = mapWindow;
+          context.document = &mapWindow->document();
+          context.appController = &appController;
+          context.currentMapView = mapWindow->currentMapViewBase();
+          context.logger = &mapWindow->pythonLogger();
+          auto elapsed = QElapsedTimer{};
+          elapsed.start();
+          const auto execution = PythonRuntime::instance().runMcpScript(
+            context,
+            PythonMcpExecutionRequest{
+              source,
+              filename,
+              params.value("arguments").toObject(),
+              params.value("name").toString("MCP Python"),
+              timeoutMs,
+              true,
+            });
+          const auto sourceHash = QString::fromLatin1(
+            QCryptographicHash::hash(source.toUtf8(), QCryptographicHash::Sha256)
+              .toHex());
+          auto receipt = QJsonObject{
+            {"executionId", executionId},
+            {"bridgeInstanceId", m_bridgeInstanceId},
+            {"sourceHash", sourceHash},
+            {"document", active},
+            {"durationMs", elapsed.elapsed()},
+            {"mutatedDocument", execution.mutatedDocument},
+            {"partialMutation", false},
+            {"rolledBack", execution.rolledBack},
+            {"retrySafe", !execution.executed},
+          };
+          if (!execution.ok)
+          {
+            receipt.insert("error", execution.error);
+            return McpBridgeToolResult::failure(
+              mcp::McpErrorCode::InternalError, "MCP Python execution failed", receipt);
+          }
+          receipt.insert("result", execution.value);
+          return McpBridgeToolResult::success(std::move(receipt));
+        }
+        if (toolName == "tb_history")
+        {
+          const auto action =
+            params.value("action").toString("status").trimmed().toLower();
+          if (action == "status")
+          {
+            return historyStatusResult(
+              appController,
+              m_operationHistory,
+              m_objectRegistry,
+              m_bridgeInstanceId,
+              m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs));
+          }
+          if (action == "list")
+          {
+            return historyListResult(appController, m_operationHistory, m_objectRegistry);
+          }
+          if (action == "inspect")
+          {
+            return operationInspectResult(
+              appController, m_operationHistory, params, m_objectRegistry);
+          }
+          if (action == "undo")
+          {
+            return historyUndoResult(
+              appController,
+              m_operationHistory,
+              m_objectRegistry,
+              &m_brushMetadata,
+              &m_modules);
+          }
+          if (action == "redo")
+          {
+            return historyRedoResult(
+              appController,
+              m_operationHistory,
+              m_objectRegistry,
+              &m_brushMetadata,
+              &m_modules);
+          }
+          return invalidParamsFailure(
+            "tb_history action must be status, list, inspect, undo, or redo");
+        }
+        if (toolName == "tb_validate")
+        {
+          const auto action = params.value("action").toString("map").trimmed().toLower();
+          if (action == "map")
+          {
+            return mapValidateResult(appController, params);
+          }
+          if (action == "problems")
+          {
+            return problemsCheckResult(appController, params);
+          }
+          if (action == "slopes")
+          {
+            return geometryAnalyzeSlopesResult(
+              appController,
+              params,
+              m_operationHistory,
+              &m_objectRegistry,
+              &m_brushMetadata,
+              &m_modules);
+          }
+          if (action == "route")
+          {
+            return geometryAnalyzeRouteContinuityResult(
+              appController,
+              params,
+              m_operationHistory,
+              &m_objectRegistry,
+              &m_brushMetadata,
+              &m_modules);
+          }
+          if (action == "shell_seams")
+          {
+            return geometryAnalyzeShellSeamsResult(
+              appController,
+              params,
+              m_operationHistory,
+              &m_objectRegistry,
+              &m_brushMetadata,
+              &m_modules);
+          }
+          return invalidParamsFailure(
+            "tb_validate action must be map, problems, slopes, route, or shell_seams");
+        }
+        if (toolName == "tb_capture")
+        {
+          const auto action =
+            params.value("action").toString("current").trimmed().toLower();
+          if (action == "current")
+          {
+            return viewportCaptureCurrentResult(appController, params);
+          }
+          if (action == "3d")
+          {
+            return viewportCapture3DResult(appController, params);
+          }
+          if (action == "2d")
+          {
+            return viewportCapture2DResult(appController, params);
+          }
+          if (action == "scene")
+          {
+            return renderReviewCurrentSceneResult(
+              appController,
+              params,
+              m_operationHistory,
+              &m_objectRegistry,
+              &m_brushMetadata);
+          }
+          return invalidParamsFailure(
+            "tb_capture action must be current, 2d, 3d, or scene");
         }
         if (toolName == "documents_list")
         {

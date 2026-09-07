@@ -38,6 +38,7 @@ struct McpBridgeConfig
   QString httpHost = "127.0.0.1";
   quint16 httpPort = 37666;
   McpToolProfile toolProfile = McpToolProfile::Modeling;
+  int configVersion = 2;
 };
 
 QString defaultConfigDirectory();

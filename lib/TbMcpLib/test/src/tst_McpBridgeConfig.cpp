@@ -58,6 +58,7 @@ TEST_CASE("McpBridgeConfig")
     CHECK(parsed->httpHost == config.httpHost);
     CHECK(parsed->httpPort == config.httpPort);
     CHECK(parsed->toolProfile == config.toolProfile);
+    CHECK(parsed->configVersion == 2);
   }
 
   SECTION("legacy token is ignored and omitted when rewritten")
@@ -166,10 +167,11 @@ TEST_CASE("McpBridgeConfig")
     REQUIRE(file.open(QIODevice::ReadOnly));
     const auto migrated = QJsonDocument::fromJson(file.readAll()).object();
     CHECK_FALSE(migrated.contains("token"));
-    CHECK(migrated.value("mode").toString() == "ReadOnly");
+    CHECK(migrated.value("mode").toString() == "Off");
+    CHECK(migrated.value("configVersion").toInt() == 2);
   }
 
-  SECTION("a failed legacy token cleanup does not reject a valid config")
+  SECTION("a failed configuration migration remains disabled for this process")
   {
     auto tempDir = QTemporaryDir{};
     REQUIRE(tempDir.isValid());
@@ -191,10 +193,38 @@ TEST_CASE("McpBridgeConfig")
     REQUIRE(config);
     CHECK(error.isEmpty());
     CHECK(config->pipeName == "test-pipe");
-    CHECK(config->mode == McpMode::ReadOnly);
+    CHECK(config->mode == McpMode::Off);
 
     REQUIRE(
       QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+  }
+
+  SECTION("upgrades an unversioned trusted-Python-era configuration to Off")
+  {
+    auto tempDir = QTemporaryDir{};
+    REQUIRE(tempDir.isValid());
+
+    const auto path = QDir{tempDir.path()}.filePath("config.json");
+    auto file = QFile{path};
+    REQUIRE(file.open(QIODevice::WriteOnly));
+    file.write(QJsonDocument{
+      QJsonObject{
+        {"pipeName", "test-pipe"},
+        {"mode", "Edit"},
+        {"httpEnabled", false},
+        {"httpHost", "127.0.0.1"},
+        {"httpPort", 37700},
+      }}.toJson());
+    file.close();
+
+    auto error = QString{};
+    const auto upgraded = readOrCreateBridgeConfig(path, &error);
+    REQUIRE(upgraded);
+    CHECK(error.isEmpty());
+    CHECK(upgraded->mode == McpMode::Off);
+    CHECK_FALSE(upgraded->httpEnabled);
+    CHECK(upgraded->httpPort == 37700);
+    CHECK(upgraded->configVersion == 2);
   }
 }
 
