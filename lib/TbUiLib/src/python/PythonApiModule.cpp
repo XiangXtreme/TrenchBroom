@@ -1225,6 +1225,14 @@ py::dict selectionSnapshot(SelectionHandle selection)
   result["entity_count"] = py::int_(mapSelection.entities.size());
   result["brush_count"] = py::int_(mapSelection.brushes.size());
   result["face_count"] = py::int_(mapSelection.brushFaces.size());
+  if (const auto& bounds = selection.getDocument().map().selectionBounds())
+  {
+    result["bounds"] = boundsSnapshot(*bounds);
+  }
+  else
+  {
+    result["bounds"] = py::none();
+  }
   result["entities"] = selectedEntities(selection);
   auto brushes = std::vector<BrushHandle>{};
   brushes.reserve(mapSelection.brushes.size());
@@ -1239,6 +1247,12 @@ py::dict selectionSnapshot(SelectionHandle selection)
   result["brushes"] = std::move(brushes);
   result["faces"] = selectedBrushFaces(selection);
   return result;
+}
+
+py::object selectedObjectBounds(SelectionHandle selection)
+{
+  const auto& bounds = selection.getDocument().map().selectionBounds();
+  return bounds ? py::object{boundsSnapshot(*bounds)} : py::none();
 }
 
 std::vector<BrushHandle> entityBrushes(EntityHandle& entity)
@@ -4240,6 +4254,8 @@ void defineModule(py::module_& module)
   auto objects = module.def_submodule("objects", "Selection-backed object operations.");
   objects.def("selection", [currentSelection]() { return currentSelection(); });
   objects.def("snapshot", []() { return documentSnapshot(currentDocument()); });
+  objects.def(
+    "bounds", [currentSelection]() { return selectedObjectBounds(currentSelection()); });
   objects.def("inspect", [currentSelection]() {
     auto selection = currentSelection();
     return selectionSnapshot(selection);

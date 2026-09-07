@@ -187,6 +187,7 @@ constexpr auto ObjectsSymbols = std::array{
     "() -> Selection",
     PythonApiValueType{PythonApiType::Selection}},
   PythonApiSymbol{"snapshot", Function, "() -> dict"},
+  PythonApiSymbol{"bounds", Function, "() -> dict | None"},
   PythonApiSymbol{"inspect", Function, "() -> dict"},
   PythonApiSymbol{"translate", Function, "(...)"},
   PythonApiSymbol{"rotate", Function, "(...)"},

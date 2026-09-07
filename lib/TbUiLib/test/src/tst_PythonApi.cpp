@@ -200,6 +200,8 @@ assert tb.faces.list()[0].material == "python-api-material"
 assert tb.documents.snapshot()["brush_count"] >= 1
 assert tb.documents.snapshot()["content_bounds"] is not None
 assert tb.objects.inspect()["brush_count"] >= 1
+assert tb.objects.inspect()["bounds"] == tb.objects.bounds()
+assert tb.objects.bounds() is not None
 created_entity = tb.entities.create(
     "info_player_start", {"targetname": "python-api-entity"}, (16, 32, 48))
 assert created_entity.classname == "info_player_start"
