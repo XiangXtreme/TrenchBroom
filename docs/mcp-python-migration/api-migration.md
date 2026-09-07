@@ -54,6 +54,12 @@ JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它�
 过渡期 MCP 的 `box`、`stepped_mass` 和 `support_posts_between` 批量生成分支复用同一
 服务。该服务只构造未附加的原生节点；事务、选择和历史发布仍由调用适配层负责。
 
+`tb.brushes.create_prism(points2d, min_z, max_z, material=None, select=True)` 与
+`tb.brushes.create_polygon_batch(polygons, material=None, select=True)` 使用同一凸多边形
+棱柱构建器。批量项需包含 `points2d`、`min_z` 和 `max_z`，并可覆盖 `material`。服务会
+拒绝非凸、退化、非有限或上下界颠倒的棱柱；所有项在附加到地图前构建完成，因此失败不会
+留下部分 batch。过渡期 MCP 的所有 prism 生成路径也使用这个构建器。
+
 ## 文件 IR 预览
 
 `tb.ir.compile_preview_from_file(path)` 只接受绝对路径，读取受 10 MiB 上限约束的 JSON

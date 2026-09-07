@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "mdl/Brush.h"
 #include "vm/bbox.h"
 
 #include <QString>
@@ -17,6 +18,7 @@
 namespace tb::mdl
 {
 class BrushNode;
+class BrushBuilder;
 class Map;
 } // namespace tb::mdl
 
@@ -38,5 +40,14 @@ struct AutomationBoxSpec
  */
 std::optional<std::vector<mdl::BrushNode*>> createBoxNodes(
   const mdl::Map& map, const std::vector<AutomationBoxSpec>& boxes, QString& error);
+
+/** Builds one strictly convex vertical prism from its 2D footprint. */
+std::optional<mdl::Brush> createPrismBrush(
+  const mdl::BrushBuilder& builder,
+  std::vector<vm::vec2d> points,
+  double minZ,
+  double maxZ,
+  const std::string& material,
+  QString& error);
 
 } // namespace tb::ui::automation

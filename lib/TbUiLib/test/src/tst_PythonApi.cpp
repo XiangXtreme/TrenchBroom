@@ -244,6 +244,16 @@ try:
 except ValueError:
     pass
 assert len(tb.brushes.list()) == box_count_before_invalid_batch
+prism = tb.brushes.create_prism(
+    [(64, 0), (96, 0), (96, 32), (64, 32)], -32, 32, "python-api-prism", select=False)
+assert prism.faces()[0].material == "python-api-prism"
+polygons = tb.brushes.create_polygon_batch([
+    {"points2d": [(112, 0), (144, 0), (128, 32)], "min_z": -32, "max_z": 32},
+    {"points2d": [(160, 0), (192, 0), (192, 32), (160, 32)], "min_z": -32, "max_z": 32,
+     "material": "python-api-polygon"},
+], select=False)
+assert len(polygons) == 2
+assert polygons[1].faces()[0].material == "python-api-polygon"
 assert doc.id.startswith("doc:")
 assert all_brushes[0].id.startswith("mcp:")
 all_faces = tb.faces.list()

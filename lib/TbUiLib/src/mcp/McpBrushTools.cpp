@@ -2024,40 +2024,8 @@ std::optional<mdl::Brush> createPrismBrush(
   const std::string& material,
   QString& error)
 {
-  if (!std::isfinite(minZ) || !std::isfinite(maxZ) || minZ >= maxZ)
-  {
-    error = "minZ must be smaller than maxZ";
-    return std::nullopt;
-  }
-  if (!isStrictlyConvexPolygon(points))
-  {
-    error = "points2d must form a strictly convex polygon";
-    return std::nullopt;
-  }
-
-  if (polygonSignedArea(points) < 0.0)
-  {
-    std::reverse(points.begin(), points.end());
-  }
-
-  auto vertices = std::vector<vm::vec3d>{};
-  vertices.reserve(points.size() * 2u);
-  for (const auto& point : points)
-  {
-    vertices.emplace_back(point.x(), point.y(), minZ);
-  }
-  for (const auto& point : points)
-  {
-    vertices.emplace_back(point.x(), point.y(), maxZ);
-  }
-
-  auto brush = builder.createBrush(vertices, material);
-  if (brush.is_error())
-  {
-    error = "Could not create prism brush from points2d";
-    return std::nullopt;
-  }
-  return std::move(brush).value();
+  return automation::createPrismBrush(
+    builder, std::move(points), minZ, maxZ, material, error);
 }
 
 std::optional<std::vector<vm::vec2d>> sectorPolygon(

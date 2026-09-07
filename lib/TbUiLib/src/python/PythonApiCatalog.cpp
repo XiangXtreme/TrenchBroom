@@ -268,6 +268,16 @@ constexpr auto BrushesSymbols = std::array{
     Function,
     "(boxes, material=None, select=True) -> list[Brush]",
     PythonApiValueType{PythonApiType::Brush, 1u}},
+  PythonApiSymbol{
+    "create_prism",
+    Function,
+    "(points2d, min_z, max_z, material=None, select=True) -> Brush",
+    PythonApiValueType{PythonApiType::Brush}},
+  PythonApiSymbol{
+    "create_polygon_batch",
+    Function,
+    "(polygons, material=None, select=True) -> list[Brush]",
+    PythonApiValueType{PythonApiType::Brush, 1u}},
 };
 
 constexpr auto FacesSymbols = std::array{

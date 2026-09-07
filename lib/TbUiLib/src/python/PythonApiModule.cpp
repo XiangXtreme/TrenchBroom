@@ -3342,6 +3342,160 @@ std::vector<BrushHandle> createBoxesBatch(
     "Python API Create Box Batch");
 }
 
+struct PythonPrismSpec
+{
+  std::vector<vm::vec2d> points;
+  double minZ = 0.0;
+  double maxZ = 0.0;
+  std::string material;
+};
+
+std::vector<vm::vec2d> prismPointsFromPython(const py::iterable& pointObjects)
+{
+  auto points = std::vector<vm::vec2d>{};
+  for (const auto& object : pointObjects)
+  {
+    auto sequence = py::reinterpret_borrow<py::sequence>(object);
+    if (sequence.size() != 2)
+    {
+      throw py::type_error{"points2d must contain 2-item sequences"};
+    }
+    const auto x = py::cast<double>(sequence[0]);
+    const auto y = py::cast<double>(sequence[1]);
+    if (!std::isfinite(x) || !std::isfinite(y))
+    {
+      throw py::value_error{"points2d values must be finite"};
+    }
+    points.emplace_back(x, y);
+  }
+  return points;
+}
+
+PythonPrismSpec prismSpecFromPython(
+  const py::iterable& points,
+  const double minZ,
+  const double maxZ,
+  const std::string& material)
+{
+  return {.points = prismPointsFromPython(points), .minZ = minZ, .maxZ = maxZ, .material = material};
+}
+
+std::vector<PythonPrismSpec> prismSpecsFromPython(
+  const py::iterable& polygons, const std::string& defaultMaterial)
+{
+  auto result = std::vector<PythonPrismSpec>{};
+  for (const auto& item : polygons)
+  {
+    if (!PyDict_Check(item.ptr()))
+    {
+      throw py::type_error{"Each polygon must be a dict with points2d, min_z, and max_z"};
+    }
+    const auto polygon = py::reinterpret_borrow<py::dict>(item);
+    if (!polygon.contains("points2d") || !polygon.contains("min_z") || !polygon.contains("max_z"))
+    {
+      throw py::value_error{"Each polygon requires points2d, min_z, and max_z"};
+    }
+    const auto material = polygon.contains("material")
+                            ? py::cast<std::string>(polygon["material"])
+                            : defaultMaterial;
+    result.push_back(prismSpecFromPython(
+      py::reinterpret_borrow<py::iterable>(polygon["points2d"]),
+      py::cast<double>(polygon["min_z"]),
+      py::cast<double>(polygon["max_z"]),
+      material));
+  }
+  if (result.empty())
+  {
+    throw py::value_error{"polygons must not be empty"};
+  }
+  return result;
+}
+
+std::vector<BrushHandle> createAutomationPrisms(
+  const std::vector<PythonPrismSpec>& prisms,
+  const bool select,
+  const std::string& transactionName)
+{
+  auto& document = currentDocument().get();
+  auto& map = document.map();
+  const auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+  auto createdNodes = std::vector<mdl::BrushNode*>{};
+  createdNodes.reserve(prisms.size());
+  for (const auto& prism : prisms)
+  {
+    auto error = QString{};
+    auto brush = automation::createPrismBrush(
+      builder, prism.points, prism.minZ, prism.maxZ, prism.material, error);
+    if (!brush)
+    {
+      for (auto* node : createdNodes)
+      {
+        delete node;
+      }
+      throw py::value_error{error.toStdString()};
+    }
+    createdNodes.push_back(new mdl::BrushNode{std::move(*brush)});
+  }
+
+  auto nodes = std::vector<mdl::Node*>{};
+  nodes.reserve(createdNodes.size());
+  for (auto* node : createdNodes)
+  {
+    nodes.push_back(node);
+  }
+  auto transaction = ScopedPythonTransaction{document, transactionName};
+  if (!automation::addNodes(map, nodes, select))
+  {
+    transaction.cancel();
+    for (auto* node : createdNodes)
+    {
+      delete node;
+    }
+    throw std::runtime_error{"Could not add prism brushes"};
+  }
+  if (!transaction.commit())
+  {
+    throw std::runtime_error{"Could not create prism brushes"};
+  }
+
+  const auto documentGeneration = PythonHandleRegistry::instance().documentGeneration(&document);
+  auto result = std::vector<BrushHandle>{};
+  result.reserve(createdNodes.size());
+  for (auto* node : createdNodes)
+  {
+    result.push_back(BrushHandle{
+      &document,
+      documentGeneration,
+      node,
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(node)});
+  }
+  return result;
+}
+
+BrushHandle createPrism(
+  const py::iterable& points,
+  const double minZ,
+  const double maxZ,
+  const py::object& materialName,
+  const bool select)
+{
+  auto& map = currentDocument().get().map();
+  auto prisms = std::vector<PythonPrismSpec>{};
+  prisms.push_back(prismSpecFromPython(
+    points, minZ, maxZ, boxMaterialFromPython(materialName, map)));
+  return createAutomationPrisms(prisms, select, "Python API Create Prism").front();
+}
+
+std::vector<BrushHandle> createPolygonBatch(
+  const py::iterable& polygons, const py::object& materialName, const bool select)
+{
+  auto& map = currentDocument().get().map();
+  return createAutomationPrisms(
+    prismSpecsFromPython(polygons, boxMaterialFromPython(materialName, map)),
+    select,
+    "Python API Create Polygon Batch");
+}
+
 void executeAction(const std::string& actionPath)
 {
   auto& context = requireContext();
@@ -5153,6 +5307,20 @@ void defineModule(py::module_& module)
     "create_boxes_batch",
     createBoxesBatch,
     py::arg("boxes"),
+    py::arg("material") = py::none(),
+    py::arg("select") = true);
+  brushes.def(
+    "create_prism",
+    createPrism,
+    py::arg("points2d"),
+    py::arg("min_z"),
+    py::arg("max_z"),
+    py::arg("material") = py::none(),
+    py::arg("select") = true);
+  brushes.def(
+    "create_polygon_batch",
+    createPolygonBatch,
+    py::arg("polygons"),
     py::arg("material") = py::none(),
     py::arg("select") = true);
 
