@@ -47,6 +47,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationIr.h"
+#include "ui/automation/AutomationNodes.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
@@ -1158,22 +1159,14 @@ std::optional<QJsonArray> removeNodesWithTransaction(
     return std::nullopt;
   }
 
-  auto nodesByParent = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
   auto removedIds = QJsonArray{};
   for (auto* node : nodes)
   {
-    auto* parent = node->parent();
-    if (!parent || !parent->canRemoveChild(*node))
-    {
-      return std::nullopt;
-    }
-    nodesByParent[parent].push_back(node);
     removedIds.push_back(mcpNodePathId(*node, map.worldNode()));
   }
 
   const auto ok = executeTransaction(map, transactionName, [&]() {
-    mdl::deselectNodes(map, nodes);
-    return map.executeAndStore(mdl::AddRemoveNodesCommand::remove(nodesByParent));
+    return automation::removeNodes(map, nodes);
   });
 
   return ok ? std::optional{removedIds} : std::nullopt;

@@ -23,4 +23,7 @@ namespace tb::ui::automation
  */
 bool addNodes(mdl::Map& map, const std::vector<mdl::Node*>& nodes, bool selectCreated);
 
+/** Removes top-level removable nodes through the caller's native transaction. */
+bool removeNodes(mdl::Map& map, std::vector<mdl::Node*> nodes);
+
 } // namespace tb::ui::automation
