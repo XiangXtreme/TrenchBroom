@@ -19,21 +19,14 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QStringList>
 
 #include "McpBridgeServerTools.h"
 #include "McpResponseUtils.h"
 #include "McpToolSupport.h"
 #include "mcp/McpError.h"
-#include "mdl/BrushNode.h"
-#include "mdl/EntityNode.h"
-#include "mdl/GroupNode.h"
 #include "mdl/Issue.h"
 #include "mdl/IssueQuickFix.h"
-#include "mdl/LayerNode.h"
 #include "mdl/Map.h"
-#include "mdl/Node.h"
-#include "mdl/PatchNode.h"
 #include "mdl/Transaction.h"
 #include "mdl/WorldNode.h"
 #include "ui/AppController.h"
@@ -41,8 +34,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
-
-#include "kd/overload.h"
+#include "ui/automation/AutomationValidation.h"
 
 #include <algorithm>
 #include <functional>
@@ -56,50 +48,6 @@ namespace mcp = tb::mcp;
 
 namespace
 {
-
-QString nodePathId(const mdl::Node& node, const mdl::WorldNode& worldNode)
-{
-  if (&node == &worldNode)
-  {
-    return "node:world";
-  }
-
-  auto parts = QStringList{};
-  for (const auto index : node.pathFrom(worldNode).indices)
-  {
-    parts.push_back(QString::number(index));
-  }
-  return QString{"node:%1"}.arg(parts.join('/'));
-}
-
-QString nodeTypeName(const mdl::Node& node)
-{
-  if (dynamic_cast<const mdl::WorldNode*>(&node) != nullptr)
-  {
-    return "world";
-  }
-  if (dynamic_cast<const mdl::LayerNode*>(&node) != nullptr)
-  {
-    return "layer";
-  }
-  if (dynamic_cast<const mdl::GroupNode*>(&node) != nullptr)
-  {
-    return "group";
-  }
-  if (dynamic_cast<const mdl::EntityNode*>(&node) != nullptr)
-  {
-    return "entity";
-  }
-  if (dynamic_cast<const mdl::BrushNode*>(&node) != nullptr)
-  {
-    return "brush";
-  }
-  if (dynamic_cast<const mdl::PatchNode*>(&node) != nullptr)
-  {
-    return "patch";
-  }
-  return "node";
-}
 
 QString makeOperationId(int& nextOperationIndex)
 {
@@ -197,155 +145,51 @@ std::optional<std::vector<QString>> requiredStringListFromJson(
   return values;
 }
 
-QString problemId(const mdl::Issue& issue, const mdl::WorldNode& worldNode)
-{
-  auto id = QString{"issue:%1:%2:%3"}
-              .arg(QString::number(issue.type()))
-              .arg(nodePathId(issue.node(), worldNode))
-              .arg(QString::number(issue.lineNumber()));
-  if (const auto* faceIssue = dynamic_cast<const mdl::BrushFaceIssue*>(&issue))
-  {
-    id += QString{":face:%1"}.arg(QString::number(faceIssue->faceIndex()));
-  }
-  if (const auto* propertyIssue = dynamic_cast<const mdl::EntityPropertyIssue*>(&issue))
-  {
-    id +=
-      QString{":property:%1"}.arg(QString::fromStdString(propertyIssue->propertyKey()));
-  }
-  return id;
-}
-
-QString problemStableKey(const mdl::Issue& issue, const mdl::WorldNode& worldNode)
-{
-  auto key = QString{"issue:%1:%2"}
-               .arg(QString::number(issue.type()))
-               .arg(nodePathId(issue.node(), worldNode));
-  if (const auto* faceIssue = dynamic_cast<const mdl::BrushFaceIssue*>(&issue))
-  {
-    key += QString{":face:%1"}.arg(QString::number(faceIssue->faceIndex()));
-  }
-  if (const auto* propertyIssue = dynamic_cast<const mdl::EntityPropertyIssue*>(&issue))
-  {
-    key +=
-      QString{":property:%1"}.arg(QString::fromStdString(propertyIssue->propertyKey()));
-  }
-  return key;
-}
-
-bool isSafeQuickFixDescription(const QString& description)
-{
-  static const auto SafeDescriptions = std::set<QString>{
-    "Delete Property",
-    "Remove Mod",
-    "Replace \" with '",
-    "Reset UV Scale",
-    "Snap Vertices",
-    "Truncate Property Values",
-  };
-  return SafeDescriptions.contains(description);
-}
-
-QJsonArray safeQuickFixDescriptions(
-  const mdl::WorldNode& worldNode, const mdl::Issue& issue)
-{
-  auto result = QJsonArray{};
-  for (const auto* quickFix : worldNode.quickFixes(issue.type()))
-  {
-    const auto description = QString::fromStdString(quickFix->description());
-    if (isSafeQuickFixDescription(description))
-    {
-      result.push_back(description);
-    }
-  }
-  return result;
-}
-
-QJsonObject issueJson(const mdl::Issue& issue, const mdl::WorldNode& worldNode)
+QJsonObject issueJson(const AutomationValidationIssue& issue)
 {
   auto result = QJsonObject{
-    {"id", problemId(issue, worldNode)},
-    {"stableKey", problemStableKey(issue, worldNode)},
-    {"type", issue.type()},
+    {"id", QString::fromStdString(issue.id)},
+    {"stableKey", QString::fromStdString(issue.stableKey)},
+    {"type", issue.type},
     {"severity", "warning"},
-    {"message", QString::fromStdString(issue.description())},
-    {"objectId", nodePathId(issue.node(), worldNode)},
-    {"objectType", nodeTypeName(issue.node())},
-    {"lineNumber", static_cast<int>(issue.lineNumber())},
-    {"hidden", issue.hidden()},
-    {"safeQuickFixes", safeQuickFixDescriptions(worldNode, issue)},
+    {"message", QString::fromStdString(issue.message)},
+    {"objectId", QString::fromStdString(issue.objectId)},
+    {"objectType", QString::fromStdString(issue.objectType)},
+    {"lineNumber", static_cast<int>(issue.lineNumber)},
+    {"hidden", issue.hidden},
   };
 
-  if (const auto* faceIssue = dynamic_cast<const mdl::BrushFaceIssue*>(&issue))
+  auto safeQuickFixes = QJsonArray{};
+  for (const auto& quickFix : issue.safeQuickFixes)
   {
-    result.insert("faceIndex", static_cast<int>(faceIssue->faceIndex()));
+    safeQuickFixes.push_back(QString::fromStdString(quickFix));
   }
-  if (const auto* propertyIssue = dynamic_cast<const mdl::EntityPropertyIssue*>(&issue))
+  result.insert("safeQuickFixes", safeQuickFixes);
+
+  if (issue.faceIndex)
   {
-    result.insert("propertyKey", QString::fromStdString(propertyIssue->propertyKey()));
+    result.insert("faceIndex", static_cast<int>(*issue.faceIndex));
+  }
+  if (issue.propertyKey)
+  {
+    result.insert("propertyKey", QString::fromStdString(*issue.propertyKey));
   }
   return result;
-}
-
-QJsonObject issueBoundsJson(const mdl::Issue& issue)
-{
-  const auto& bounds = issue.node().logicalBounds();
-  return QJsonObject{
-    {"min", QJsonArray{bounds.min.x(), bounds.min.y(), bounds.min.z()}},
-    {"max", QJsonArray{bounds.max.x(), bounds.max.y(), bounds.max.z()}},
-  };
-}
-
-std::vector<const mdl::Issue*> collectMapIssues(
-  mdl::Map& map, const bool includeHidden, const size_t limit = 0)
-{
-  const auto validators = map.worldNode().registeredValidators();
-  auto issues = std::vector<const mdl::Issue*>{};
-  const auto collectIssues = [&](auto& node) {
-    for (const auto* issue : node.issues(validators))
-    {
-      if ((includeHidden || !issue->hidden()) && (limit == 0 || issues.size() < limit))
-      {
-        issues.push_back(issue);
-      }
-    }
-  };
-
-  map.worldNode().accept(kdl::overload(
-    [&](auto&& thisLambda, mdl::WorldNode& worldNode) {
-      collectIssues(worldNode);
-      worldNode.visitChildren(thisLambda);
-    },
-    [&](auto&& thisLambda, mdl::LayerNode& layerNode) {
-      collectIssues(layerNode);
-      layerNode.visitChildren(thisLambda);
-    },
-    [&](auto&& thisLambda, mdl::GroupNode& groupNode) {
-      collectIssues(groupNode);
-      groupNode.visitChildren(thisLambda);
-    },
-    [&](auto&& thisLambda, mdl::EntityNode& entityNode) {
-      collectIssues(entityNode);
-      entityNode.visitChildren(thisLambda);
-    },
-    [&](mdl::BrushNode& brushNode) { collectIssues(brushNode); },
-    [&](mdl::PatchNode& patchNode) { collectIssues(patchNode); }));
-
-  return issues;
 }
 
 QJsonObject problemsJson(mdl::Map& map, const QJsonObject& params)
 {
   const auto includeHidden = mcpOptionalBool(params, "includeHidden", false);
   const auto limit = optionalSize(params, "limit", 500);
-  const auto issues = collectMapIssues(map, includeHidden);
+  const auto issues = collectAutomationValidationIssues(map, includeHidden);
   const auto returnedCount = std::min(limit, issues.size());
 
   auto results = QJsonArray{};
   auto safeFixableCount = 0;
   for (auto i = size_t{0}; i < returnedCount; ++i)
   {
-    const auto* issue = issues[i];
-    const auto json = issueJson(*issue, map.worldNode());
+    const auto& issue = issues[i];
+    const auto json = issueJson(issue);
     if (!json.value("safeQuickFixes").toArray().empty())
     {
       ++safeFixableCount;
@@ -379,17 +223,20 @@ QJsonArray groupedIssuesJson(mdl::Map& map, const bool includeHidden)
   };
 
   auto groups = std::map<QString, Group>{};
-  for (const auto* issue : collectMapIssues(map, includeHidden))
+  for (const auto& issue : collectAutomationValidationIssues(map, includeHidden))
   {
-    const auto message = QString::fromStdString(issue->description());
-    const auto key = QString{"%1|%2"}.arg(QString::number(issue->type()), message);
+    const auto message = QString::fromStdString(issue.message);
+    const auto key = QString{"%1|%2"}.arg(QString::number(issue.type), message);
     auto& group = groups[key];
     ++group.count;
     group.message = message;
     if (group.sampleObjectIds.size() < 5)
     {
-      group.sampleObjectIds.push_back(nodePathId(issue->node(), map.worldNode()));
-      group.sampleBounds.push_back(issueBoundsJson(*issue));
+      group.sampleObjectIds.push_back(QString::fromStdString(issue.objectId));
+      group.sampleBounds.push_back(QJsonObject{
+        {"min", QJsonArray{issue.boundsMin[0], issue.boundsMin[1], issue.boundsMin[2]}},
+        {"max", QJsonArray{issue.boundsMax[0], issue.boundsMax[1], issue.boundsMax[2]}},
+      });
     }
   }
 
@@ -407,7 +254,7 @@ QJsonArray groupedIssuesJson(mdl::Map& map, const bool includeHidden)
   return result;
 }
 
-std::vector<const mdl::Issue*> findIssuesByIds(
+std::vector<AutomationValidationIssue> findIssuesByIds(
   mdl::Map& map,
   const std::vector<QString>& problemIds,
   const bool includeHidden,
@@ -415,10 +262,10 @@ std::vector<const mdl::Issue*> findIssuesByIds(
 {
   const auto wantedIds = std::set<QString>{std::begin(problemIds), std::end(problemIds)};
   auto foundIds = std::set<QString>{};
-  auto result = std::vector<const mdl::Issue*>{};
-  for (const auto* issue : collectMapIssues(map, includeHidden))
+  auto result = std::vector<AutomationValidationIssue>{};
+  for (const auto& issue : collectAutomationValidationIssues(map, includeHidden))
   {
-    const auto id = problemId(*issue, map.worldNode());
+    const auto id = QString::fromStdString(issue.id);
     if (wantedIds.contains(id))
     {
       foundIds.insert(id);
@@ -446,7 +293,7 @@ const mdl::IssueQuickFix* findSafeQuickFix(
   const std::vector<const mdl::Issue*>& issues,
   const QString& description)
 {
-  if (!isSafeQuickFixDescription(description))
+  if (!isAutomationSafeQuickFixDescription(description.toStdString()))
   {
     return nullptr;
   }
@@ -575,7 +422,18 @@ McpBridgeToolResult problemsFixForMapResult(
         QJsonObject{{"targetSource", "problemIds"}}, "refresh_problems_then_retry"));
   }
 
-  const auto* quickFix = findSafeQuickFix(map.worldNode(), issues, quickFixDescription);
+  auto sourceIssues = std::vector<const mdl::Issue*>{};
+  sourceIssues.reserve(issues.size());
+  auto changedObjectIds = QJsonArray{};
+  for (const auto& issue : issues)
+  {
+    sourceIssues.push_back(issue.source);
+    changedObjectIds.push_back(QString::fromStdString(issue.objectId));
+  }
+
+  const auto transactionName = QString{"MCP: Fix problems (%1)"}.arg(quickFixDescription);
+  const auto* quickFix =
+    findSafeQuickFix(map.worldNode(), sourceIssues, quickFixDescription);
   if (!quickFix)
   {
     return McpBridgeToolResult::failure(
@@ -585,16 +443,8 @@ McpBridgeToolResult problemsFixForMapResult(
         QJsonObject{{"quickFix", quickFixDescription}},
         "choose_safe_applicable_quick_fix"));
   }
-
-  auto changedObjectIds = QJsonArray{};
-  for (const auto* issue : issues)
-  {
-    changedObjectIds.push_back(nodePathId(issue->node(), map.worldNode()));
-  }
-
-  const auto transactionName = QString{"MCP: Fix problems (%1)"}.arg(quickFixDescription);
   const auto ok = executeTransaction(map, transactionName, [&]() {
-    quickFix->apply(map, issues);
+    quickFix->apply(map, sourceIssues);
     return true;
   });
   if (!ok)
@@ -651,26 +501,26 @@ McpBridgeToolResult mapFixAllSafeForMapResult(
     auto appliedAny = false;
     for (auto pass = 0; pass < 8; ++pass)
     {
-      auto issues = collectMapIssues(map, includeHidden);
+      auto issues = collectAutomationValidationIssues(map, includeHidden);
       auto didApply = false;
-      for (const auto* issue : issues)
+      for (const auto& issue : issues)
       {
-        const auto safeFixes = safeQuickFixDescriptions(map.worldNode(), *issue);
-        if (safeFixes.empty())
+        if (issue.safeQuickFixes.empty())
         {
           continue;
         }
 
-        const auto quickFixDescription = safeFixes.first().toString();
+        const auto quickFixDescription =
+          QString::fromStdString(issue.safeQuickFixes.front());
         const auto* quickFix =
-          findSafeQuickFix(map.worldNode(), {issue}, quickFixDescription);
+          findSafeQuickFix(map.worldNode(), {issue.source}, quickFixDescription);
         if (!quickFix)
         {
           continue;
         }
 
-        changedObjectIds.push_back(nodePathId(issue->node(), map.worldNode()));
-        quickFix->apply(map, {issue});
+        changedObjectIds.push_back(QString::fromStdString(issue.objectId));
+        quickFix->apply(map, {issue.source});
         appliedFixes.push_back(quickFixDescription);
         ++fixedCount;
         didApply = true;

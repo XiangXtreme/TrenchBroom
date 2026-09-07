@@ -68,6 +68,7 @@
 #include "ui/automation/AutomationDocuments.h"
 #include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationTransaction.h"
+#include "ui/automation/AutomationValidation.h"
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonExecutionContext.h"
 #include "ui/python/PythonHandleRegistry.h"
@@ -1254,6 +1255,56 @@ py::object selectedObjectBounds(SelectionHandle selection)
 {
   const auto& bounds = selection.getDocument().map().selectionBounds();
   return bounds ? py::object{boundsSnapshot(*bounds)} : py::none();
+}
+
+py::dict validationCheck(const bool includeHidden, const size_t limit)
+{
+  auto document = currentDocument();
+  const auto issues =
+    collectAutomationValidationIssues(document.get().map(), includeHidden);
+  const auto returnedCount = std::min(limit, issues.size());
+
+  auto result = py::dict{};
+  auto summaries = py::list{};
+  auto safeFixableCount = size_t{0u};
+  for (auto index = size_t{0u}; index < returnedCount; ++index)
+  {
+    const auto& issue = issues[index];
+    auto summary = py::dict{};
+    summary["id"] = issue.id;
+    summary["stable_key"] = issue.stableKey;
+    summary["type"] = issue.type;
+    summary["severity"] = "warning";
+    summary["message"] = issue.message;
+    summary["object_id"] = issue.objectId;
+    summary["object_type"] = issue.objectType;
+    summary["line_number"] = issue.lineNumber;
+    summary["hidden"] = issue.hidden;
+    auto bounds = py::dict{};
+    bounds["min"] =
+      py::make_tuple(issue.boundsMin[0], issue.boundsMin[1], issue.boundsMin[2]);
+    bounds["max"] =
+      py::make_tuple(issue.boundsMax[0], issue.boundsMax[1], issue.boundsMax[2]);
+    summary["bounds"] = std::move(bounds);
+    summary["safe_quick_fixes"] = issue.safeQuickFixes;
+    summary["face_index"] = issue.faceIndex ? py::cast(*issue.faceIndex) : py::none();
+    summary["property_key"] =
+      issue.propertyKey ? py::cast(*issue.propertyKey) : py::none();
+    if (!issue.safeQuickFixes.empty())
+    {
+      ++safeFixableCount;
+    }
+    summaries.append(std::move(summary));
+  }
+
+  result["valid"] = issues.empty();
+  result["passed"] = issues.empty();
+  result["count"] = returnedCount;
+  result["total_count"] = issues.size();
+  result["truncated"] = returnedCount < issues.size();
+  result["safe_fixable_count"] = safeFixableCount;
+  result["issues"] = std::move(summaries);
+  return result;
 }
 
 py::dict groupSummary(const mdl::GroupNode& group)
@@ -4552,6 +4603,10 @@ void defineModule(py::module_& module)
     module.def_submodule("actions", "Native action discovery and execution.");
   actions.def("list", listActions);
   actions.def("execute", executeAction, py::arg("action_id"));
+
+  auto validation = module.def_submodule("validation", "Map validation operations.");
+  validation.def(
+    "check", validationCheck, py::arg("include_hidden") = false, py::arg("limit") = 500u);
 
   auto apiCatalog = py::dict{};
   for (const auto& typeInfo : pythonApiTypes())

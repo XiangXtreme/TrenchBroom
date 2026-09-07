@@ -20,6 +20,7 @@ constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::History, "history"},
   PythonApiTypeInfo{PythonApiType::Assets, "assets"},
   PythonApiTypeInfo{PythonApiType::Actions, "actions"},
+  PythonApiTypeInfo{PythonApiType::Validation, "validation"},
   PythonApiTypeInfo{PythonApiType::Vec3, "Vec3"},
   PythonApiTypeInfo{PythonApiType::Plane, "Plane"},
   PythonApiTypeInfo{PythonApiType::Document, "Document"},
@@ -65,6 +66,8 @@ constexpr auto ModuleSymbols = std::array{
     "assets", Property, "assets", PythonApiValueType{PythonApiType::Assets}},
   PythonApiSymbol{
     "actions", Property, "actions", PythonApiValueType{PythonApiType::Actions}},
+  PythonApiSymbol{
+    "validation", Property, "validation", PythonApiValueType{PythonApiType::Validation}},
   PythonApiSymbol{
     "selected_brushes",
     Function,
@@ -309,6 +312,10 @@ constexpr auto AssetsSymbols = std::array{
 constexpr auto ActionsSymbols = std::array{
   PythonApiSymbol{"list", Function, "() -> list[str]"},
   PythonApiSymbol{"execute", Function, "(action_id)"},
+};
+
+constexpr auto ValidationSymbols = std::array{
+  PythonApiSymbol{"check", Function, "(include_hidden=False, limit=500) -> dict"},
 };
 
 constexpr auto Vec3Symbols = std::array{
@@ -583,6 +590,8 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
     return AssetsSymbols;
   case PythonApiType::Actions:
     return ActionsSymbols;
+  case PythonApiType::Validation:
+    return ValidationSymbols;
   case PythonApiType::Vec3:
     return Vec3Symbols;
   case PythonApiType::Plane:

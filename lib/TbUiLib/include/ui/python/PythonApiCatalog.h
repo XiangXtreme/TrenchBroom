@@ -22,6 +22,7 @@ enum class PythonApiType
   History,
   Assets,
   Actions,
+  Validation,
   Vec3,
   Plane,
   Document,

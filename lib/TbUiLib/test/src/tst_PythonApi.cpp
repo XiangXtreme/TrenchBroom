@@ -183,6 +183,10 @@ try:
 except ValueError:
     pass
 assert isinstance(tb.actions.list(), list)
+validation = tb.validation.check()
+assert validation["valid"] == (validation["total_count"] == 0)
+assert validation["count"] <= validation["total_count"]
+assert len(validation["issues"]) == validation["count"]
 history = tb.history.status()
 assert {"can_undo", "can_redo", "undo_name", "redo_name"} <= set(history)
 brush = tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(16,16,-16),

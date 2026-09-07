@@ -17,6 +17,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationDocuments.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationObjectRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationTransaction.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationValidation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AppInfoPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetBrowserModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetPreviewProvider.cpp
@@ -389,6 +390,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationDocuments.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationObjectRegistry.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationTransaction.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationValidation.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpBridgeServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpHttpServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpObjectRegistry.h
