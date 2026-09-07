@@ -49,6 +49,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationBrushes.h"
 #include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationNodes.h"
 #include "ui/mcp/McpObjectRegistry.h"
@@ -3738,26 +3739,27 @@ std::optional<QJsonObject> validateBlockoutParams(
 }
 
 std::vector<mdl::Node*> brushNodesFromBounds(
-  const mdl::BrushBuilder& builder,
+  const mdl::Map& map,
   const std::vector<vm::bbox3d>& boundsList,
   const std::string& material,
   QString& error)
 {
-  auto result = std::vector<mdl::Node*>{};
-  result.reserve(boundsList.size());
+  auto boxes = std::vector<automation::AutomationBoxSpec>{};
+  boxes.reserve(boundsList.size());
   for (const auto& bounds : boundsList)
   {
-    auto brush = builder.createCuboid(bounds, material);
-    if (brush.is_error())
-    {
-      for (auto* node : result)
-      {
-        delete node;
-      }
-      error = "Could not create one or more blockout brushes";
-      return {};
-    }
-    result.push_back(new mdl::BrushNode{std::move(brush).value()});
+    boxes.push_back({bounds, material});
+  }
+  auto createdNodes = automation::createBoxNodes(map, boxes, error);
+  if (!createdNodes)
+  {
+    return {};
+  }
+  auto result = std::vector<mdl::Node*>{};
+  result.reserve(createdNodes->size());
+  for (auto* node : *createdNodes)
+  {
+    result.push_back(node);
   }
   return result;
 }
@@ -5088,7 +5090,7 @@ std::vector<mdl::Node*> compileBatchOperation(
     {
       return {};
     }
-    return brushNodesFromBounds(builder, {*snappedBounds}, material, error);
+    return brushNodesFromBounds(map, {*snappedBounds}, material, error);
   }
 
   if (type == "cylinder")
@@ -5147,7 +5149,7 @@ std::vector<mdl::Node*> compileBatchOperation(
     {
       return {};
     }
-    return brushNodesFromBounds(builder, *massBounds, material, error);
+    return brushNodesFromBounds(map, *massBounds, material, error);
   }
 
   if (type == "support_posts_between")
@@ -5167,7 +5169,7 @@ std::vector<mdl::Node*> compileBatchOperation(
     {
       return {};
     }
-    return brushNodesFromBounds(builder, *postBounds, material, error);
+    return brushNodesFromBounds(map, *postBounds, material, error);
   }
 
   if (type == "ramp_between")

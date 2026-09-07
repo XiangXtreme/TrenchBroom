@@ -14,6 +14,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AnimationManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AppController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationAssets.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationBrushes.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationDocuments.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationGeometry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationIr.cpp
@@ -390,6 +391,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ModelInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MousePreferencePane.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationAssets.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationBrushes.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationDocuments.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationGeometry.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationIr.h

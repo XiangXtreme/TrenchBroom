@@ -69,6 +69,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationAssets.h"
+#include "ui/automation/AutomationBrushes.h"
 #include "ui/automation/AutomationDocuments.h"
 #include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationIr.h"
@@ -3225,6 +3226,122 @@ BrushHandle createBrush(const py::iterable& pointObjects, py::object materialNam
     PythonHandleRegistry::instance().nodeLifetimeGeneration(brushNode)};
 }
 
+std::string boxMaterialFromPython(const py::object& materialName, const mdl::Map& map)
+{
+  return materialName.is_none() ? map.currentMaterialName()
+                                : py::cast<std::string>(materialName);
+}
+
+automation::AutomationBoxSpec boxSpecFromPython(
+  const py::object& minObject,
+  const py::object& maxObject,
+  const std::string& material)
+{
+  const auto min = toVmVec3(vec3FromObject(minObject));
+  const auto max = toVmVec3(vec3FromObject(maxObject));
+  return {.bounds = vm::bbox3d{min, max}, .material = material};
+}
+
+std::vector<automation::AutomationBoxSpec> boxSpecsFromPython(
+  const py::iterable& boxes, const std::string& defaultMaterial)
+{
+  auto result = std::vector<automation::AutomationBoxSpec>{};
+  for (const auto& item : boxes)
+  {
+    if (!PyDict_Check(item.ptr()))
+    {
+      throw py::type_error{"Each box must be a dict with min and max"};
+    }
+    const auto box = py::reinterpret_borrow<py::dict>(item);
+    if (!box.contains("min") || !box.contains("max"))
+    {
+      throw py::value_error{"Each box requires min and max"};
+    }
+    const auto material = box.contains("material")
+                            ? py::cast<std::string>(box["material"])
+                            : defaultMaterial;
+    result.push_back(boxSpecFromPython(box["min"], box["max"], material));
+  }
+  if (result.empty())
+  {
+    throw py::value_error{"boxes must not be empty"};
+  }
+  return result;
+}
+
+std::vector<BrushHandle> createAutomationBoxes(
+  std::vector<automation::AutomationBoxSpec> boxes,
+  const bool select,
+  const std::string& transactionName)
+{
+  auto& document = currentDocument().get();
+  auto& map = document.map();
+  auto error = QString{};
+  auto createdNodes = automation::createBoxNodes(map, boxes, error);
+  if (!createdNodes)
+  {
+    throw py::value_error{error.toStdString()};
+  }
+
+  auto nodes = std::vector<mdl::Node*>{};
+  nodes.reserve(createdNodes->size());
+  for (auto* node : *createdNodes)
+  {
+    nodes.push_back(node);
+  }
+
+  auto transaction = ScopedPythonTransaction{document, transactionName};
+  if (!automation::addNodes(map, nodes, select))
+  {
+    transaction.cancel();
+    for (auto* node : *createdNodes)
+    {
+      delete node;
+    }
+    throw std::runtime_error{"Could not add box brushes"};
+  }
+  if (!transaction.commit())
+  {
+    throw std::runtime_error{"Could not create box brushes"};
+  }
+
+  const auto documentGeneration = PythonHandleRegistry::instance().documentGeneration(&document);
+  auto result = std::vector<BrushHandle>{};
+  result.reserve(createdNodes->size());
+  for (auto* node : *createdNodes)
+  {
+    result.push_back(BrushHandle{
+      &document,
+      documentGeneration,
+      node,
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(node)});
+  }
+  return result;
+}
+
+BrushHandle createBox(
+  const py::object& minObject,
+  const py::object& maxObject,
+  const py::object& materialName,
+  const bool select)
+{
+  auto& map = currentDocument().get().map();
+  auto boxes = std::vector<automation::AutomationBoxSpec>{};
+  boxes.push_back(boxSpecFromPython(
+    minObject, maxObject, boxMaterialFromPython(materialName, map)));
+  return createAutomationBoxes(std::move(boxes), select, "Python API Create Box").front();
+}
+
+std::vector<BrushHandle> createBoxesBatch(
+  const py::iterable& boxes, const py::object& materialName, const bool select)
+{
+  auto& map = currentDocument().get().map();
+  return createAutomationBoxes(
+    boxSpecsFromPython(boxes, boxMaterialFromPython(materialName, map)),
+    select,
+    "Python API Create Box Batch");
+}
+
 void executeAction(const std::string& actionPath)
 {
   auto& context = requireContext();
@@ -5025,6 +5142,19 @@ void defineModule(py::module_& module)
   });
   brushes.def("selected", selectedBrushes);
   brushes.def("create", createBrush, py::arg("points"), py::arg("material") = py::none());
+  brushes.def(
+    "create_box",
+    createBox,
+    py::arg("min"),
+    py::arg("max"),
+    py::arg("material") = py::none(),
+    py::arg("select") = true);
+  brushes.def(
+    "create_boxes_batch",
+    createBoxesBatch,
+    py::arg("boxes"),
+    py::arg("material") = py::none(),
+    py::arg("select") = true);
 
   auto faces = module.def_submodule("faces", "Face collection operations.");
   faces.def("list", []() {

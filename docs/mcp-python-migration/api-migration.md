@@ -42,6 +42,18 @@ result = {"path": document.path, "argument": arguments.get("name")}
 JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它不验证 BSP、游戏碰撞或
 视觉质量。
 
+## 批量盒体
+
+`tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，
+`tb.brushes.create_boxes_batch(boxes, material=None, select=True)` 在一个原生事务中创建
+多个盒体。每个 `boxes` 项是带 `min`、`max` 和可选 `material` 的字典；项目级
+`material` 是没有逐项材质时的默认值。所有盒体先由 automation 服务完成原生构建，
+任何一项坐标非有限或任一轴的 `min >= max` 都会在写入前失败，因而不会留下前面已
+构建的盒体。
+
+过渡期 MCP 的 `box`、`stepped_mass` 和 `support_posts_between` 批量生成分支复用同一
+服务。该服务只构造未附加的原生节点；事务、选择和历史发布仍由调用适配层负责。
+
 ## 文件 IR 预览
 
 `tb.ir.compile_preview_from_file(path)` 只接受绝对路径，读取受 10 MiB 上限约束的 JSON

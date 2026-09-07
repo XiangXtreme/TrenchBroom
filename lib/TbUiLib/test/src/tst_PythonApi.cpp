@@ -225,6 +225,25 @@ assert geometry["bounds"] is not None
 all_brushes = tb.brushes.list()
 assert len(all_brushes) >= 1
 assert len(all_brushes[0].faces()) > 0
+box = tb.brushes.create_box(
+    (-192, -64, -32), (-128, 0, 32), "python-api-box", select=False)
+assert box.faces()[0].material == "python-api-box"
+boxes = tb.brushes.create_boxes_batch([
+    {"min": (-96, -64, -32), "max": (-64, -32, 32)},
+    {"min": (-48, -64, -32), "max": (-16, -32, 32), "material": "python-api-box-2"},
+], select=False)
+assert len(boxes) == 2
+assert boxes[1].faces()[0].material == "python-api-box-2"
+box_count_before_invalid_batch = len(tb.brushes.list())
+try:
+    tb.brushes.create_boxes_batch([
+        {"min": (16, 16, 16), "max": (48, 48, 48)},
+        {"min": (64, 64, 64), "max": (64, 96, 96)},
+    ], select=False)
+    raise AssertionError("box batch accepted collapsed bounds")
+except ValueError:
+    pass
+assert len(tb.brushes.list()) == box_count_before_invalid_batch
 assert doc.id.startswith("doc:")
 assert all_brushes[0].id.startswith("mcp:")
 all_faces = tb.faces.list()
