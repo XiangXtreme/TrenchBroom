@@ -17,7 +17,7 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ui/mcp/McpObjectRegistry.h"
+#include "ui/automation/AutomationObjectRegistry.h"
 
 #include <QJsonArray>
 
@@ -37,7 +37,7 @@
 #include <algorithm>
 #include <functional>
 
-namespace tb::ui
+namespace tb::ui::automation
 {
 namespace
 {
@@ -194,7 +194,7 @@ QString nodeFingerprint(const mdl::Node& node, const QString& legacyPathId)
 
 mdl::Node* resolveLegacyObjectId(mdl::Map& map, const QString& objectId)
 {
-  const auto path = McpObjectRegistry::parseLegacyObjectId(objectId);
+  const auto path = AutomationObjectRegistry::parseLegacyObjectId(objectId);
   if (!path)
   {
     return nullptr;
@@ -284,7 +284,7 @@ QJsonValue walkObjectIds(
 
 } // namespace
 
-void McpObjectRegistry::clear()
+void AutomationObjectRegistry::clear()
 {
   ++m_documentEpoch;
   m_nextSequence = 1;
@@ -294,7 +294,7 @@ void McpObjectRegistry::clear()
   m_legacyToStable.clear();
 }
 
-size_t McpObjectRegistry::retainDocumentFingerprints(
+size_t AutomationObjectRegistry::retainDocumentFingerprints(
   const QStringList& documentFingerprints)
 {
   const auto oldSize = m_records.size();
@@ -307,12 +307,12 @@ size_t McpObjectRegistry::retainDocumentFingerprints(
   return oldSize - m_records.size();
 }
 
-size_t McpObjectRegistry::recordCount() const
+size_t AutomationObjectRegistry::recordCount() const
 {
   return m_records.size();
 }
 
-int McpObjectRegistry::documentEpoch(mdl::Map& map) const
+int AutomationObjectRegistry::documentEpoch(mdl::Map& map) const
 {
   const auto mapAddress = reinterpret_cast<quintptr>(&map);
   const auto worldAddress = reinterpret_cast<quintptr>(&map.worldNode());
@@ -332,7 +332,7 @@ int McpObjectRegistry::documentEpoch(mdl::Map& map) const
   return m_documentEpoch;
 }
 
-QString McpObjectRegistry::documentFingerprint(mdl::Map& map) const
+QString AutomationObjectRegistry::documentFingerprint(mdl::Map& map) const
 {
   auto hash = qHash(QString::fromStdString(map.filename()));
   const auto documentPath = map.path().empty() ? QString{} : pathAsQString(map.path());
@@ -344,7 +344,7 @@ QString McpObjectRegistry::documentFingerprint(mdl::Map& map) const
   return QString{"doc:%1"}.arg(static_cast<quint64>(hash), 16, 16, QLatin1Char{'0'});
 }
 
-QString McpObjectRegistry::registerNode(mdl::Map& map, mdl::Node& node) const
+QString AutomationObjectRegistry::registerNode(mdl::Map& map, mdl::Node& node) const
 {
   const auto epoch = documentEpoch(map);
   const auto legacyPathId = nodePathId(node, map.worldNode());
@@ -376,7 +376,7 @@ QString McpObjectRegistry::registerNode(mdl::Map& map, mdl::Node& node) const
   return stableId;
 }
 
-QString McpObjectRegistry::externalIdForLegacy(
+QString AutomationObjectRegistry::externalIdForLegacy(
   mdl::Map& map, const QString& legacyPathId) const
 {
   if (!isLegacyObjectId(legacyPathId))
@@ -405,7 +405,7 @@ QString McpObjectRegistry::externalIdForLegacy(
   return registerNode(map, *node);
 }
 
-McpObjectRegistry::ResolveResult McpObjectRegistry::resolveExternalId(
+AutomationObjectRegistry::ResolveResult AutomationObjectRegistry::resolveExternalId(
   mdl::Map& map, const QString& objectId) const
 {
   if (isLegacyObjectId(objectId))
@@ -602,7 +602,7 @@ McpObjectRegistry::ResolveResult McpObjectRegistry::resolveExternalId(
   };
 }
 
-QJsonObject McpObjectRegistry::liveStateJson(
+QJsonObject AutomationObjectRegistry::liveStateJson(
   mdl::Map& map,
   const QStringList& objectIds,
   const bool undone,
@@ -670,7 +670,7 @@ QJsonObject McpObjectRegistry::liveStateJson(
   return result;
 }
 
-std::optional<QJsonObject> McpObjectRegistry::internalizeParams(
+std::optional<QJsonObject> AutomationObjectRegistry::internalizeParams(
   mdl::Map& map, const QJsonObject& params, QString& error) const
 {
   const auto translate = [&](const QString& value) -> QJsonValue {
@@ -695,7 +695,7 @@ std::optional<QJsonObject> McpObjectRegistry::internalizeParams(
   return converted;
 }
 
-QJsonObject McpObjectRegistry::externalizeResult(
+QJsonObject AutomationObjectRegistry::externalizeResult(
   mdl::Map& map, const QJsonObject& result) const
 {
   auto diagnostics = QJsonArray{};
@@ -736,17 +736,17 @@ QJsonObject McpObjectRegistry::externalizeResult(
   return converted;
 }
 
-bool McpObjectRegistry::isStableObjectId(const QString& id)
+bool AutomationObjectRegistry::isStableObjectId(const QString& id)
 {
   return id.startsWith("mcp:");
 }
 
-bool McpObjectRegistry::isLegacyObjectId(const QString& id)
+bool AutomationObjectRegistry::isLegacyObjectId(const QString& id)
 {
   return id == "node:world" || id.startsWith("node:");
 }
 
-std::optional<mdl::NodePath> McpObjectRegistry::parseLegacyObjectId(const QString& id)
+std::optional<mdl::NodePath> AutomationObjectRegistry::parseLegacyObjectId(const QString& id)
 {
   static const auto Prefix = QString{"node:"};
   if (id == "node:world")
@@ -772,4 +772,4 @@ std::optional<mdl::NodePath> McpObjectRegistry::parseLegacyObjectId(const QStrin
   return path;
 }
 
-} // namespace tb::ui
+} // namespace tb::ui::automation

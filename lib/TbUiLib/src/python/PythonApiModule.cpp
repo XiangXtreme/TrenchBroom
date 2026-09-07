@@ -63,6 +63,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonExecutionContext.h"
@@ -650,6 +651,37 @@ PythonExecutionContext& requireContext()
     throw std::runtime_error{"No active Python execution context"};
   }
   return *context;
+}
+
+automation::AutomationObjectRegistry& objectRegistry()
+{
+  auto& context = requireContext();
+  if (context.objectRegistry != nullptr)
+  {
+    return *context.objectRegistry;
+  }
+
+  // Console and plugin execution have no MCP session owner. The local service
+  // still enforces map switching and stale-node detection for their handles.
+  static auto registry = automation::AutomationObjectRegistry{};
+  return registry;
+}
+
+std::string documentId(DocumentHandle& document)
+{
+  return objectRegistry().documentFingerprint(document.get().map()).toStdString();
+}
+
+std::string nodeId(MapDocument& document, mdl::Node& node)
+{
+  return objectRegistry().registerNode(document.map(), node).toStdString();
+}
+
+std::string faceId(FaceHandle& face)
+{
+  auto& brush = face.getBrushNode();
+  return "face:" + nodeId(DocumentHandle{face.document, face.generation}.get(), brush)
+         + ":" + std::to_string(face.faceIndex);
 }
 
 DocumentHandle currentDocument()
@@ -2489,6 +2521,7 @@ void defineModule(py::module_& module)
     });
 
   py::class_<DocumentHandle>(module, "Document")
+    .def_property_readonly("id", documentId)
     .def_property_readonly(
       "path",
       [](DocumentHandle& self) -> py::object {
@@ -2720,6 +2753,10 @@ void defineModule(py::module_& module)
 
   py::class_<EntityHandle>(module, "Entity")
     .def_property_readonly(
+      "id", [](EntityHandle& self) {
+        return nodeId(DocumentHandle{self.document, self.generation}.get(), self.get());
+      })
+    .def_property_readonly(
       "classname", [](EntityHandle& self) { return self.get().entity().classname(); })
     .def_property_readonly("brushes", entityBrushes)
     .def_property_readonly(
@@ -2844,6 +2881,10 @@ void defineModule(py::module_& module)
     });
 
   py::class_<BrushHandle>(module, "Brush")
+    .def_property_readonly(
+      "id", [](BrushHandle& self) {
+        return nodeId(DocumentHandle{self.document, self.generation}.get(), self.get());
+      })
     .def_property_readonly("entity", brushEntity)
     .def(
       "faces",
@@ -2883,6 +2924,7 @@ void defineModule(py::module_& module)
     });
 
   py::class_<FaceHandle>(module, "Face")
+    .def_property_readonly("id", faceId)
     .def_property_readonly("vertices", faceVertices)
     .def_property_readonly("uv_loops", faceUVLoops)
     .def_property(

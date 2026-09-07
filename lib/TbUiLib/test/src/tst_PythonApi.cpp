@@ -182,8 +182,11 @@ brush = tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(16,16,-16),
 all_brushes = tb.brushes.list()
 assert len(all_brushes) >= 1
 assert len(all_brushes[0].faces()) > 0
+assert doc.id.startswith("doc:")
+assert all_brushes[0].id.startswith("mcp:")
 all_faces = tb.faces.list()
 assert len(all_faces) >= 1
+assert all_faces[0].id.startswith("face:mcp:")
 tb.faces.set_material([all_faces[0], all_faces[0]], "python-api-material")
 assert tb.faces.list()[0].material == "python-api-material"
 assert tb.documents.snapshot()["brush_count"] >= 1
@@ -192,6 +195,7 @@ assert tb.objects.inspect()["brush_count"] >= 1
 created_entity = tb.entities.create(
     "info_player_start", {"targetname": "python-api-entity"}, (16, 32, 48))
 assert created_entity.classname == "info_player_start"
+assert created_entity.id.startswith("mcp:")
 assert created_entity["targetname"] == "python-api-entity"
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 1
 tb.entities.update(created_entity, {"health": "100"}, ["targetname"])

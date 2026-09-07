@@ -289,6 +289,7 @@ constexpr auto PlaneSymbols = std::array{
 };
 
 constexpr auto DocumentSymbols = std::array{
+  PythonApiSymbol{"id", Property, "str"},
   PythonApiSymbol{"path", Property, "str | None"},
   PythonApiSymbol{
     "entities", Property, "list[Entity]", PythonApiValueType{PythonApiType::Entity, 1u}},
@@ -363,6 +364,7 @@ constexpr auto SelectionSymbols = std::array{
 };
 
 constexpr auto EntitySymbols = std::array{
+  PythonApiSymbol{"id", Property, "str"},
   PythonApiSymbol{"classname", Property, "str"},
   PythonApiSymbol{
     "brushes", Property, "list[Brush]", PythonApiValueType{PythonApiType::Brush, 1u}},
@@ -376,6 +378,7 @@ constexpr auto EntitySymbols = std::array{
 };
 
 constexpr auto BrushSymbols = std::array{
+  PythonApiSymbol{"id", Property, "str"},
   PythonApiSymbol{
     "entity", Property, "Entity", PythonApiValueType{PythonApiType::Entity}},
   PythonApiSymbol{
@@ -383,6 +386,7 @@ constexpr auto BrushSymbols = std::array{
 };
 
 constexpr auto FaceSymbols = std::array{
+  PythonApiSymbol{"id", Property, "str"},
   PythonApiSymbol{
     "vertices", Property, "list[Vec3]", PythonApiValueType{PythonApiType::Vec3, 1u}},
   PythonApiSymbol{"uv_loops", Property, "list"},

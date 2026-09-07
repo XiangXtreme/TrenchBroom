@@ -19,81 +19,15 @@
 
 #pragma once
 
-#include <QJsonObject>
-#include <QJsonValue>
-#include <QString>
-#include <QStringList>
-
-#include <map>
-#include <optional>
-
-namespace tb::mdl
-{
-class Map;
-class Node;
-struct NodePath;
-} // namespace tb::mdl
+#include "ui/automation/AutomationObjectRegistry.h"
 
 namespace tb::ui
 {
 
-class McpObjectRegistry
+// Compatibility wrapper for MCP headers that still forward-declare this type.
+// New automation code uses the protocol-neutral base service directly.
+class McpObjectRegistry : public automation::AutomationObjectRegistry
 {
-public:
-  struct ResolveResult
-  {
-    bool ok = false;
-    QString objectId;
-    QString legacyPathId;
-    QString error;
-    QJsonObject diagnostic;
-  };
-
-private:
-  struct Record
-  {
-    QString stableId;
-    QString legacyPathId;
-    QString type;
-    int documentEpoch = 0;
-    QString documentFingerprint;
-    QString creationFingerprint;
-    quintptr nodeAddress = 0;
-    QJsonObject summary;
-  };
-
-  mutable int m_documentEpoch = 1;
-  mutable int m_nextSequence = 1;
-  mutable quintptr m_currentMapAddress = 0;
-  mutable quintptr m_currentWorldAddress = 0;
-  mutable std::map<QString, Record> m_records;
-  mutable std::map<QString, QString> m_legacyToStable;
-
-public:
-  void clear();
-  size_t retainDocumentFingerprints(const QStringList& documentFingerprints);
-  size_t recordCount() const;
-
-  int documentEpoch(mdl::Map& map) const;
-  QString documentFingerprint(mdl::Map& map) const;
-
-  QString registerNode(mdl::Map& map, mdl::Node& node) const;
-  QString externalIdForLegacy(mdl::Map& map, const QString& legacyPathId) const;
-
-  ResolveResult resolveExternalId(mdl::Map& map, const QString& objectId) const;
-  QJsonObject liveStateJson(
-    mdl::Map& map,
-    const QStringList& objectIds,
-    bool undone,
-    bool includeDiagnostics = false) const;
-
-  std::optional<QJsonObject> internalizeParams(
-    mdl::Map& map, const QJsonObject& params, QString& error) const;
-  QJsonObject externalizeResult(mdl::Map& map, const QJsonObject& result) const;
-
-  static bool isStableObjectId(const QString& id);
-  static bool isLegacyObjectId(const QString& id);
-  static std::optional<mdl::NodePath> parseLegacyObjectId(const QString& id);
 };
 
 } // namespace tb::ui

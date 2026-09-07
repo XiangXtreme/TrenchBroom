@@ -9,6 +9,10 @@ class AppController;
 class MapDocument;
 class MapViewBase;
 class MapWindow;
+namespace automation
+{
+class AutomationObjectRegistry;
+}
 } // namespace tb::ui
 
 namespace tb
@@ -29,6 +33,7 @@ struct PythonExecutionContext
   std::filesystem::path scriptPath;
   std::filesystem::path pluginDirectory;
   std::string pluginId;
+  automation::AutomationObjectRegistry* objectRegistry = nullptr;
   bool mcpExecution = false;
   bool allowNonTransactionalActions = true;
   bool allowPersistentUi = true;

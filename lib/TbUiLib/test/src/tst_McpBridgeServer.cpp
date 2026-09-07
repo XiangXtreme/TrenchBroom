@@ -252,7 +252,9 @@ TEST_CASE(
     "tb_execute_python",
     QJsonObject{
       {"executionId", "python-replay"},
-      {"code", "result = {'answer': arguments['answer']}"},
+      {"code",
+       "import trenchbroom as tb\n"
+       "result = {'answer': arguments['answer'], 'documentId': tb.current_document().id}"},
       {"arguments", QJsonObject{{"answer", 42}}},
       {"document", document},
     },
@@ -260,6 +262,9 @@ TEST_CASE(
   const auto first = server.dispatchRequest(request);
   REQUIRE(first.ok);
   CHECK(first.result.value("result").toObject().value("answer").toInt() == 42);
+  CHECK(
+    first.result.value("result").toObject().value("documentId").toString()
+    == document.value("fingerprint").toString());
   CHECK_FALSE(first.result.value("historicalReplay").toBool());
   CHECK(first.result.value("logs").isObject());
 
