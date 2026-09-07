@@ -907,7 +907,8 @@ TEST_CASE("ExtrudeTool")
       face.setUvAttributes(mdl::UvAttributes{
         vm::vec2f{float(i) + 0.25f, float(i) + 0.5f},
         vm::vec2f{0.5f + float(i) * 0.125f, 1.25f + float(i) * 0.125f},
-        15.0f + float(i) * 7.0f});
+        15.0f + float(i) * 7.0f})
+        | kdl::ignore();
       auto surfaceAttributes = face.surfaceAttributes();
       surfaceAttributes.flags = int(i) + 1;
       face.setSurfaceAttributes(surfaceAttributes);
@@ -1018,7 +1019,8 @@ TEST_CASE("ExtrudeTool")
       face.setUvAttributes(mdl::UvAttributes{
         vm::vec2f{float(i) + 0.25f, float(i) + 0.5f},
         vm::vec2f{0.5f + float(i) * 0.125f, 1.25f + float(i) * 0.125f},
-        15.0f + float(i) * 7.0f});
+        15.0f + float(i) * 7.0f})
+        | kdl::ignore();
     }
 
     auto* brushNode = new mdl::BrushNode{std::move(brush)};
@@ -1093,7 +1095,8 @@ TEST_CASE("ExtrudeTool")
     sourceSide.restoreUvCoordSystemSnapshot(
       mdl::UvCoordSystemSnapshot{vm::vec3d{1, 0, 0}, vm::vec3d{0.5, 0, 1}});
     sourceSide.setUvAttributes(
-      mdl::UvAttributes{vm::vec2f{13.0f, -7.0f}, vm::vec2f{1.0f, 1.0f}, 0.0f});
+      mdl::UvAttributes{vm::vec2f{13.0f, -7.0f}, vm::vec2f{1.0f, 1.0f}, 0.0f})
+      | kdl::ignore();
 
     const auto sourceSkew =
       mdl::measureUvSkew(sourceSide.uAxis(), sourceSide.vAxis(), sourceSide.normal());
