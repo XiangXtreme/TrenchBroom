@@ -553,7 +553,7 @@ McpBridgeServer::McpBridgeServer(
           context.currentMapView = mapWindow->currentMapViewBase();
           context.logger = &mapWindow->pythonLogger();
           context.objectRegistry = &m_objectRegistry;
-          context.moduleStore = &m_modules;
+          context.moduleStore = &appController.automationState().modules;
           context.mcpExecution = true;
           context.allowNonTransactionalActions = mode == "action";
           context.allowPersistentUi = false;
