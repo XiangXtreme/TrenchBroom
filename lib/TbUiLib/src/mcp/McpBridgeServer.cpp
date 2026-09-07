@@ -149,6 +149,7 @@ QString pythonApiExample(const PythonApiTypeInfo& type, const PythonApiSymbol& s
   case PythonApiType::Brushes:
   case PythonApiType::Faces:
   case PythonApiType::Materials:
+  case PythonApiType::Ir:
   case PythonApiType::Actions:
     return QString{"import trenchbroom as tb\nvalue = tb.%1.%2"}.arg(
       QString::fromUtf8(type.name), name);
@@ -176,6 +177,7 @@ QString pythonApiQualifiedName(
   case PythonApiType::Brushes:
   case PythonApiType::Faces:
   case PythonApiType::Materials:
+  case PythonApiType::Ir:
   case PythonApiType::Actions:
     return QString{"trenchbroom.%1.%2"}.arg(typeName, symbolName);
   default:

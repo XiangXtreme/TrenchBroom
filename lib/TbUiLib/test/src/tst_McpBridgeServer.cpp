@@ -248,6 +248,22 @@ TEST_CASE(
     namespacedSymbols.first().toObject().value("example").toString()
     == "import trenchbroom as tb\nvalue = tb.documents.current");
 
+  const auto irApi = server.dispatchRequest(mcp::McpBridgeRequest{
+    "api-ir",
+    "tb_api",
+    QJsonObject{{"symbol", "trenchbroom.ir.validate"}},
+    mcp::McpMode::ReadOnly,
+  });
+  REQUIRE(irApi.ok);
+  const auto irSymbols = irApi.result.value("symbols").toArray();
+  REQUIRE(irSymbols.size() == 1);
+  const auto irSymbol = irSymbols.first().toObject();
+  CHECK(irSymbol.value("parameters").toString() == "(ir)");
+  CHECK(irSymbol.value("returns").toString() == "dict");
+  CHECK(
+    irSymbol.value("example").toString()
+    == "import trenchbroom as tb\nvalue = tb.ir.validate");
+
   const auto request = mcp::McpBridgeRequest{
     "execute",
     "tb_execute_python",
