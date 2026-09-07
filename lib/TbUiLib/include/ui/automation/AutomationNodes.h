@@ -1,0 +1,26 @@
+/*
+ Copyright (C) 2026 XiangXtreme
+
+ This file is part of TrenchBroom.
+ */
+
+#pragma once
+
+#include <vector>
+
+namespace tb::mdl
+{
+class Map;
+class Node;
+} // namespace tb::mdl
+
+namespace tb::ui::automation
+{
+
+/**
+ * Adds nodes through the native undo command inside the caller's transaction.
+ * The caller retains ownership when this function returns false.
+ */
+bool addNodes(mdl::Map& map, const std::vector<mdl::Node*>& nodes, bool selectCreated);
+
+} // namespace tb::ui::automation

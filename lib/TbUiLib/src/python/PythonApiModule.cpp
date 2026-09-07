@@ -72,6 +72,7 @@
 #include "ui/automation/AutomationDocuments.h"
 #include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationIr.h"
+#include "ui/automation/AutomationNodes.h"
 #include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationStateStore.h"
 #include "ui/automation/AutomationTransaction.h"
@@ -3212,13 +3213,12 @@ BrushHandle createBrush(const py::iterable& pointObjects, py::object materialNam
   }
 
   auto* brushNode = new mdl::BrushNode{std::move(brush).value()};
-  const auto addedNodes = mdl::addNodes(map, {{&mdl::parentForNodes(map), {brushNode}}});
-  if (addedNodes.empty())
+  if (!automation::addNodes(map, {brushNode}, true))
   {
     transaction.cancel();
+    delete brushNode;
     throw std::runtime_error{"Could not add brush"};
   }
-  mdl::selectNodes(map, {brushNode});
   if (!transaction.commit())
   {
     throw std::runtime_error{"Could not create brush"};
