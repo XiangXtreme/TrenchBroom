@@ -15,6 +15,8 @@
 
 #include <map>
 
+#include <cstddef>
+
 namespace tb::ui::automation
 {
 
@@ -27,6 +29,9 @@ namespace tb::ui::automation
 class AutomationStateStore
 {
 public:
+  static constexpr auto MaxIrPreviews = size_t{64u};
+  static constexpr auto IrPreviewTtlMs = qint64{10 * 60 * 1000};
+
   std::map<QString, AutomationObjectMetadataRecord> objectMetadata;
   std::map<QString, AutomationModuleRecord> modules;
   std::map<QString, AutomationIrPreviewRecord> irPreviews;

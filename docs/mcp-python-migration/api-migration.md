@@ -41,3 +41,12 @@ result = {"path": document.path, "argument": arguments.get("name")}
 该接口和过渡期的 `geometry_analyze_selection` 共享 automation 服务，服务层不依赖 MCP
 JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它不验证 BSP、游戏碰撞或
 视觉质量。
+
+## 文件 IR 预览
+
+`tb.ir.compile_preview_from_file(path)` 只接受绝对路径，读取受 10 MiB 上限约束的 JSON
+IR 文件，并复用与 MCP 相同的 schema 校验。成功时返回已规范化的 `ir`、兼容性
+`warnings` 和 `preview`。preview 包含 `python-ir-preview-*` ID、canonical source path、
+当前文档 fingerprint 和十分钟的过期信息；预览缓存由 `AppController` 的 automation state
+管理，最多保留 64 项。该操作不修改地图，也不执行 IR；文件 apply 与 replace guard 仍在
+迁移中，不能将预览成功当作可提交的地图操作。

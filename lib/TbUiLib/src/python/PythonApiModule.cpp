@@ -4,7 +4,9 @@
 #include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDoubleSpinBox>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGroupBox>
@@ -71,6 +73,7 @@
 #include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationIr.h"
 #include "ui/automation/AutomationObjectRegistry.h"
+#include "ui/automation/AutomationStateStore.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/automation/AutomationValidation.h"
 #include "ui/python/PythonApiCatalog.h"
@@ -1505,6 +1508,73 @@ py::dict validateAutomationIrFromPython(const py::object& value)
   result["ir"] = jsonValueToPython(*parsed.ir);
   result["warnings"] = jsonValueToPython(parsed.warnings);
   result["preview"] = jsonValueToPython(automation::previewAutomationIr(*parsed.ir));
+  return result;
+}
+
+py::dict compileAutomationIrPreviewFromFile(const std::string& path)
+{
+  const auto absolutePath = absolutePathFromPython(path);
+  const auto sourcePath = pathAsQString(absolutePath);
+  const auto parsed = automation::parseAutomationIrFile(sourcePath);
+  if (!parsed.ir)
+  {
+    throw py::value_error{parsed.error.toStdString()};
+  }
+
+  auto document = currentDocument();
+  auto& context = requireContext();
+  if (context.appController == nullptr)
+  {
+    throw std::runtime_error{"IR preview requires an application controller"};
+  }
+
+  const auto nowMs = QDateTime::currentMSecsSinceEpoch();
+  auto& state = context.appController->automationState();
+  std::erase_if(state.irPreviews, [nowMs](const auto& entry) {
+    return entry.second.expiresAtMs <= nowMs;
+  });
+  while (state.irPreviews.size() >= automation::AutomationStateStore::MaxIrPreviews)
+  {
+    const auto oldest = std::ranges::min_element(
+      state.irPreviews, {}, [](const auto& entry) { return entry.second.createdAtMs; });
+    state.irPreviews.erase(oldest);
+  }
+
+  auto preview = automation::previewAutomationIr(*parsed.ir);
+  const auto previewId = QString{"python-ir-preview-%1"}.arg(state.nextIrPreviewIndex++);
+  const auto fingerprint = objectRegistry().documentFingerprint(document.get().map());
+  const auto activeDocumentPath = document.get().map().path().empty()
+                                   ? QString{}
+                                   : pathAsQString(document.get().map().path());
+  preview.insert("previewId", previewId);
+  preview.insert("sourcePath", QFileInfo{sourcePath}.canonicalFilePath());
+  preview.insert("documentFingerprint", fingerprint);
+  preview.insert("activeDocumentPath", activeDocumentPath);
+  preview.insert("createdAtMs", QString::number(nowMs));
+  preview.insert(
+    "expiresAtMs",
+    QString::number(nowMs + automation::AutomationStateStore::IrPreviewTtlMs));
+  preview.insert(
+    "expiresAfterSeconds",
+    static_cast<int>(automation::AutomationStateStore::IrPreviewTtlMs / 1000));
+
+  state.irPreviews.insert_or_assign(
+    previewId,
+    automation::AutomationIrPreviewRecord{
+      .previewId = previewId,
+      .sourcePath = preview.value("sourcePath").toString(),
+      .irHash = preview.value("irHash").toString(),
+      .documentFingerprint = fingerprint,
+      .activeDocumentPath = activeDocumentPath,
+      .createdAtMs = nowMs,
+      .expiresAtMs = nowMs + automation::AutomationStateStore::IrPreviewTtlMs,
+      .preview = preview,
+    });
+
+  auto result = py::dict{};
+  result["ir"] = jsonValueToPython(*parsed.ir);
+  result["warnings"] = jsonValueToPython(parsed.warnings);
+  result["preview"] = jsonValueToPython(preview);
   return result;
 }
 
@@ -4994,6 +5064,7 @@ void defineModule(py::module_& module)
   auto ir = module.def_submodule("ir", "IR validation and compact preview operations.");
   ir.def("validate", validateAutomationIrFromPython, py::arg("ir"));
   ir.def("preview", validateAutomationIrFromPython, py::arg("ir"));
+  ir.def("compile_preview_from_file", compileAutomationIrPreviewFromFile, py::arg("path"));
 
   auto geometry = module.def_submodule("geometry", "Native geometry analysis operations.");
   geometry.def(

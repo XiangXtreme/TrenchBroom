@@ -315,6 +315,7 @@ constexpr auto ModulesSymbols = std::array{
 constexpr auto IrSymbols = std::array{
   PythonApiSymbol{"validate", Function, "(ir) -> dict"},
   PythonApiSymbol{"preview", Function, "(ir) -> dict"},
+  PythonApiSymbol{"compile_preview_from_file", Function, "(path) -> dict"},
 };
 
 constexpr auto GeometrySymbols = std::array{

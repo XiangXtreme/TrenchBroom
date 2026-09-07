@@ -135,6 +135,7 @@ TEST_CASE("PythonApi")
     env.createFile(
       "api_smoke.py",
       R"(
+import json
 import os
 import trenchbroom as tb
 
@@ -191,6 +192,13 @@ assert ir_validation["ir"]["schemaVersion"] == 1
 assert "legacyUnversionedIr" in ir_validation["warnings"]
 assert ir_validation["preview"]["irHash"].startswith("sha256:")
 assert tb.ir.preview(ir)["preview"]["estimatedBrushCount"] == 1
+ir_file_path = os.path.abspath("python-api-ir.json")
+with open(ir_file_path, "w", encoding="utf-8") as ir_file:
+    json.dump(ir, ir_file)
+file_preview = tb.ir.compile_preview_from_file(ir_file_path)
+assert file_preview["preview"]["previewId"].startswith("python-ir-preview-")
+assert file_preview["preview"]["documentFingerprint"] == doc.id
+assert os.path.samefile(file_preview["preview"]["sourcePath"], ir_file_path)
 try:
     tb.ir.validate({"schemaVersion": 2, "operations": [{"type": "box"}]})
     raise AssertionError("IR validation accepted an unsupported schema version")
