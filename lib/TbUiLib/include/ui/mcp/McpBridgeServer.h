@@ -144,10 +144,12 @@ private:
 public:
   static constexpr auto MaxOperationRecords = size_t{1024};
   static constexpr auto MaxReviewResources = size_t{128};
-  static constexpr auto MaxIrPreviews = size_t{64};
+  // Kept for legacy MCP tests and callers. The automation state owns this
+  // resource budget because Python and MCP share the same preview records.
+  static constexpr auto MaxIrPreviews = automation::AutomationStateStore::MaxIrPreviews;
   static constexpr auto MaxDocumentFingerprints = qsizetype{4};
   static constexpr auto MaxResourcesPerPage = qsizetype{100};
-  static constexpr auto IrPreviewTtlMs = qint64{10 * 60 * 1000};
+  static constexpr auto IrPreviewTtlMs = automation::AutomationStateStore::IrPreviewTtlMs;
 
   McpSessionState();
   explicit McpSessionState(automation::AutomationStateStore& automationState);
