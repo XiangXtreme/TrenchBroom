@@ -175,6 +175,13 @@ assert len(all_brushes[0].faces()) > 0
 assert tb.documents.snapshot()["brush_count"] >= 1
 assert tb.documents.snapshot()["content_bounds"] is not None
 assert tb.objects.inspect()["brush_count"] >= 1
+created_entity = tb.entities.create(
+    "info_player_start", {"targetname": "python-api-entity"}, (16, 32, 48))
+assert created_entity.classname == "info_player_start"
+assert created_entity["targetname"] == "python-api-entity"
+assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 1
+tb.entities.delete(created_entity)
+assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 0
 with doc.transaction("Python API smoke"):
     pass
 with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:

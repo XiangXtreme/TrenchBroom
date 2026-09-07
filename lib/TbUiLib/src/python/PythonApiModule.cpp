@@ -1631,6 +1631,78 @@ void removeEntityProperty(EntityHandle& entity, const std::string& key)
   entity.nodeGeneration = PythonHandleRegistry::instance().nodeGeneration(entity.entity);
 }
 
+EntityHandle createEntity(
+  const std::string& classname,
+  const py::dict& properties,
+  const py::object& origin,
+  const bool select)
+{
+  if (classname.empty())
+  {
+    throw py::value_error{"classname must not be empty"};
+  }
+
+  auto& document = currentDocument().get();
+  auto& map = document.map();
+  auto entity = mdl::Entity{{{mdl::EntityPropertyKeys::Classname, classname}}};
+  for (const auto& item : properties)
+  {
+    const auto key = py::cast<std::string>(item.first);
+    if (key != mdl::EntityPropertyKeys::Classname)
+    {
+      entity.addOrUpdateProperty(key, py::cast<std::string>(item.second));
+    }
+  }
+  if (!origin.is_none())
+  {
+    entity.setOrigin(toVmVec3(vec3FromObject(origin)));
+  }
+
+  auto transaction = ScopedPythonTransaction{document, "Python API Create Entity"};
+  auto* entityNode = new mdl::EntityNode{std::move(entity)};
+  try
+  {
+    const auto addedNodes =
+      mdl::addNodes(map, {{&mdl::parentForNodes(map), {entityNode}}});
+    if (addedNodes.empty())
+    {
+      delete entityNode;
+      throw std::runtime_error{"Could not add entity"};
+    }
+    if (select)
+    {
+      mdl::selectNodes(map, {entityNode});
+    }
+    if (!transaction.commit())
+    {
+      throw std::runtime_error{"Could not create entity"};
+    }
+  }
+  catch (...)
+  {
+    transaction.cancel();
+    throw;
+  }
+
+  return EntityHandle{
+    &document,
+    PythonHandleRegistry::instance().documentGeneration(&document),
+    entityNode,
+    PythonHandleRegistry::instance().nodeGeneration(entityNode)};
+}
+
+void deleteEntity(EntityHandle& entity)
+{
+  auto& document = DocumentHandle{entity.document, entity.generation}.get();
+  auto* entityNode = &entity.get();
+  withPreservedSelection(document, "Python API Delete Entity", [&](auto& map) {
+    mdl::deselectAll(map);
+    mdl::selectNodes(map, {entityNode});
+    mdl::removeSelectedNodes(map);
+    return true;
+  });
+}
+
 bool setSelectionProperty(
   SelectionHandle& selection,
   const std::string& key,
@@ -3661,6 +3733,14 @@ void defineModule(py::module_& module)
     return allEntities(document.get());
   });
   entities.def("selected", selectedEntities, py::arg("include_brushes") = false);
+  entities.def(
+    "create",
+    createEntity,
+    py::arg("classname"),
+    py::arg("properties") = py::dict{},
+    py::arg("origin") = py::none(),
+    py::arg("select") = false);
+  entities.def("delete", deleteEntity, py::arg("entity"));
   entities.def(
     "find",
     [](

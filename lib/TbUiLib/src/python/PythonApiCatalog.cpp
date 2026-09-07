@@ -175,6 +175,12 @@ constexpr auto EntitiesSymbols = std::array{
     "(include_brushes=False) -> list[Entity]",
     PythonApiValueType{PythonApiType::Entity, 1u}},
   PythonApiSymbol{
+    "create",
+    Function,
+    "(classname, properties={}, origin=None, select=False) -> Entity",
+    PythonApiValueType{PythonApiType::Entity}},
+  PythonApiSymbol{"delete", Function, "(entity)"},
+  PythonApiSymbol{
     "find",
     Function,
     "(classname=None, property=None, value=None) -> list[Entity]",
