@@ -53,6 +53,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationEntities.h"
 #include "ui/automation/AutomationNodes.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
@@ -1553,20 +1554,22 @@ McpBridgeToolResult createEntityCheckedBatchForMapResult(
       origin = *parsedOrigin;
     }
 
-    auto entity =
-      mdl::Entity{{{mdl::EntityPropertyKeys::Classname, classname.toStdString()}}};
-    mdl::setDefaultProperties(*definition, entity, mdl::SetDefaultPropertyMode::SetAll);
-    entity.setOrigin(origin);
-    for (const auto& [key, value] : *properties)
+    auto built = automation::buildCheckedPointEntities(
+      map,
+      {{
+        .classname = classname.toStdString(),
+        .properties = *properties,
+        .origin = origin,
+      }});
+    if (!built.error.isEmpty() || built.nodes.size() != 1u)
     {
-      if (!value.empty())
-      {
-        entity.addOrUpdateProperty(key, value);
-      }
+      cleanupNodes();
+      return McpBridgeToolResult::failure(
+        mcp::McpErrorCode::InternalError, "Could not construct checked point entity");
     }
-    removedEmptyPropertyCount += removeEmptyEntityProperties(entity);
-
-    nodes.push_back(new mdl::EntityNode{std::move(entity)});
+    removedEmptyPropertyCount += built.removedEmptyPropertyCount;
+    nodes.push_back(built.nodes.front());
+    built.nodes.clear();
     createdClassnames.push_back(classname);
   }
 
