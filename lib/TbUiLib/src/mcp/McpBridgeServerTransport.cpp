@@ -264,6 +264,8 @@ void McpBridgeServer::clearSessionState()
 {
   m_overlayState = QJsonObject{};
   m_session.clear();
+  m_pythonExecutionReplays.clear();
+  m_pythonExecutionReplayOrder.clear();
 }
 
 void McpBridgeServer::stop()

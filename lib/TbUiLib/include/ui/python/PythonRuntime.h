@@ -38,6 +38,9 @@ struct PythonMcpExecutionResult
   bool mutatedDocument = false;
   bool rolledBack = false;
   bool timedOut = false;
+  QByteArray stdoutText;
+  QByteArray stderrText;
+  qsizetype discardedLogBytes = 0;
 };
 
 class PythonRuntime

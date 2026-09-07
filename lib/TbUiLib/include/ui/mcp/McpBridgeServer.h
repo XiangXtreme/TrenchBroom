@@ -73,6 +73,12 @@ struct McpBridgeToolResult
     mcp::McpErrorCode code, QString message, QJsonObject details);
 };
 
+struct McpPythonExecutionReplay
+{
+  QByteArray requestHash;
+  McpBridgeToolResult response;
+};
+
 struct McpOperationRecord
 {
   QString operationId;
@@ -212,6 +218,8 @@ private:
   std::map<QString, McpIrPreviewCacheRecord>& m_irPreviewCache = m_session.irPreviewCache;
   int& m_nextIrPreviewIndex = m_session.nextIrPreviewIndex;
   McpObjectRegistry& m_objectRegistry = m_session.objectRegistry;
+  mutable std::map<QString, McpPythonExecutionReplay> m_pythonExecutionReplays;
+  mutable QStringList m_pythonExecutionReplayOrder;
   std::unique_ptr<McpToolRegistry> m_toolRegistry;
   mutable bool m_dispatchInProgress = false;
   QString m_bridgeInstanceId;

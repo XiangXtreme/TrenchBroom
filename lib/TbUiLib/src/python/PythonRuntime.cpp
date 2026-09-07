@@ -22,6 +22,7 @@
 
 #include <Python.h>
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <optional>
@@ -40,6 +41,39 @@ namespace
 {
 thread_local PythonExecutionContext* g_currentExecutionContext = nullptr;
 thread_local PythonPluginSession* g_currentPluginSession = nullptr;
+
+struct PythonMcpLogCapture
+{
+  static constexpr auto MaxBytes = qsizetype{1024 * 1024};
+
+  PythonMcpExecutionResult& execution;
+
+  void append(const char* text, const qsizetype size, const bool isError)
+  {
+    const auto retainedBytes = execution.stdoutText.size() + execution.stderrText.size();
+    const auto appendBytes = std::clamp(MaxBytes - retainedBytes, qsizetype{0}, size);
+    auto& destination = isError ? execution.stderrText : execution.stdoutText;
+    destination.append(text, appendBytes);
+    execution.discardedLogBytes += size - appendBytes;
+  }
+};
+
+thread_local PythonMcpLogCapture* g_currentMcpLogCapture = nullptr;
+
+class ScopedMcpLogCapture
+{
+private:
+  PythonMcpLogCapture* m_previous = nullptr;
+
+public:
+  explicit ScopedMcpLogCapture(PythonMcpLogCapture& capture)
+    : m_previous{g_currentMcpLogCapture}
+  {
+    g_currentMcpLogCapture = &capture;
+  }
+
+  ~ScopedMcpLogCapture() { g_currentMcpLogCapture = m_previous; }
+};
 
 struct PyRuntimeLogWriter
 {
@@ -452,6 +486,12 @@ PyObject* logWriterWrite(PyObject* self, PyObject* args)
   }
 
   auto message = std::string_view{utf8, static_cast<size_t>(size)};
+  auto* writer = reinterpret_cast<PyRuntimeLogWriter*>(self);
+  if (g_currentMcpLogCapture != nullptr)
+  {
+    g_currentMcpLogCapture->append(
+      utf8, static_cast<qsizetype>(size), writer->isError != 0);
+  }
   while (!message.empty() && (message.back() == '\n' || message.back() == '\r'))
   {
     message.remove_suffix(1);
@@ -459,7 +499,6 @@ PyObject* logWriterWrite(PyObject* self, PyObject* args)
 
   if (!message.empty())
   {
-    auto* writer = reinterpret_cast<PyRuntimeLogWriter*>(self);
     auto* context = currentPythonExecutionContext();
     if (context != nullptr && context->logger != nullptr)
     {
@@ -867,6 +906,8 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   auto gil = PyGILState_Ensure();
   auto releaseGil = kdl::invoke_later{[&]() { PyGILState_Release(gil); }};
   auto scopedContext = ScopedExecutionContext{context};
+  auto logCapture = PythonMcpLogCapture{execution};
+  auto scopedLogCapture = ScopedMcpLogCapture{logCapture};
   auto scopedStdStreamRedirect = ScopedStdStreamRedirect{};
   auto* globals = PyDict_New();
   if (globals == nullptr)

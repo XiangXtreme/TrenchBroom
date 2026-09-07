@@ -172,13 +172,20 @@ with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
     const auto first = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{
-        "result = {'answer': arguments['value']}\nprivate_value = 42",
+        "import sys\n"
+        "print('mcp stdout')\n"
+        "print('mcp stderr', file=sys.stderr)\n"
+        "result = {'answer': arguments['value']}\n"
+        "private_value = 42",
         "<mcp-python:first>",
         QJsonObject{{"value", 42}},
       });
     REQUIRE(first.ok);
     CHECK(first.value.toObject().value("answer").toInt() == 42);
     CHECK_FALSE(first.mutatedDocument);
+    CHECK(first.stdoutText.contains("mcp stdout"));
+    CHECK(first.stderrText.contains("mcp stderr"));
+    CHECK(first.discardedLogBytes == 0);
 
     const auto second = runtime.runMcpScript(
       context,

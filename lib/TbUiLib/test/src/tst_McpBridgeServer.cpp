@@ -155,6 +155,61 @@ TEST_CASE("McpBridgeServer applies action-level history permissions", "[McpBridg
 }
 
 TEST_CASE(
+  "McpBridgeServer replays guarded Python executions", "[McpBridgeServer][PythonApi]")
+{
+  auto appControllerFixture = AppControllerFixture{
+    [](const auto&) {},
+    AppControllerOptions{
+      .enableBackgroundServices = false,
+      .showMapWindows = false,
+      .enableGlResourceProcessing = false,
+    }};
+  auto& appController = appControllerFixture.appController();
+  REQUIRE(appController.mapWindowManager().createDocument(
+    mdl::QuakeGameInfo, mdl::MapFormat::Valve, vm::bbox3d{8192.0}));
+
+  auto server = McpBridgeServer{appController};
+  REQUIRE(server.start(mcp::McpBridgeConfig{uniqueBridgePipeName(), mcp::McpMode::Edit}));
+
+  const auto inspect = server.dispatchRequest(mcp::McpBridgeRequest{
+    "inspect", "tb_inspect", QJsonObject{{"view", "document"}}, mcp::McpMode::ReadOnly});
+  REQUIRE(inspect.ok);
+  const auto document = inspect.result;
+  REQUIRE(document.value("fingerprint").isString());
+  CHECK(document.value("fingerprint") == document.value("documentFingerprint"));
+
+  const auto request = mcp::McpBridgeRequest{
+    "execute",
+    "tb_execute_python",
+    QJsonObject{
+      {"executionId", "python-replay"},
+      {"code", "result = {'answer': arguments['answer']}"},
+      {"arguments", QJsonObject{{"answer", 42}}},
+      {"document", document},
+    },
+    mcp::McpMode::Edit};
+  const auto first = server.dispatchRequest(request);
+  REQUIRE(first.ok);
+  CHECK(first.result.value("result").toObject().value("answer").toInt() == 42);
+  CHECK_FALSE(first.result.value("historicalReplay").toBool());
+  CHECK(first.result.value("logs").isObject());
+
+  const auto replay = server.dispatchRequest(request);
+  REQUIRE(replay.ok);
+  CHECK(replay.result.value("historicalReplay").toBool());
+  CHECK(replay.result.value("result") == first.result.value("result"));
+
+  auto conflictingParams = request.params;
+  conflictingParams.insert("code", "result = {'answer': 7}");
+  const auto conflict = server.dispatchRequest(mcp::McpBridgeRequest{
+    "conflict", "tb_execute_python", conflictingParams, mcp::McpMode::Edit});
+  CHECK_FALSE(conflict.ok);
+  REQUIRE(conflict.error);
+  CHECK(conflict.error->code == mcp::McpErrorCode::InvalidParams);
+  CHECK_FALSE(conflict.error->details.value("retrySafe").toBool(true));
+}
+
+TEST_CASE(
   "McpBridgeServer bounds local transport input", "[McpBridgeServer][McpBridgeTransport]")
 {
   const auto makeServer = [](const McpBridgeTransportLimits limits) {

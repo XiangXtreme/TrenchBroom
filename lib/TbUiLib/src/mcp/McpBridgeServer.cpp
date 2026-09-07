@@ -24,6 +24,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalServer>
 #include <QUuid>
@@ -132,12 +133,14 @@ McpBridgeServer::McpBridgeServer(
           }
           if (view == "document")
           {
-            return McpBridgeToolResult::success(activeDocumentJson(
+            auto document = activeDocumentJson(
               appController,
               m_bridgeInstanceId,
               m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
               m_config.httpPort,
-              &m_objectRegistry));
+              &m_objectRegistry);
+            document.insert("fingerprint", document.value("documentFingerprint"));
+            return McpBridgeToolResult::success(std::move(document));
           }
           if (view == "map")
           {
@@ -267,6 +270,43 @@ McpBridgeServer::McpBridgeServer(
           {
             return invalidParamsFailure("MCP Python transaction mode requires document");
           }
+          const auto requested = document.toObject();
+          const auto sourceHash = QString::fromLatin1(
+            QCryptographicHash::hash(source.toUtf8(), QCryptographicHash::Sha256)
+              .toHex());
+          const auto requestHash = QCryptographicHash::hash(
+            QJsonDocument{QJsonObject{
+                            {"sourceHash", sourceHash},
+                            {"filename", filename},
+                            {"arguments", params.value("arguments").toObject()},
+                            {"document", requested},
+                            {"mode", mode},
+                            {"name", params.value("name").toString("MCP Python")},
+                            {"timeoutMs", timeoutMs},
+                          }}
+              .toJson(QJsonDocument::Compact),
+            QCryptographicHash::Sha256);
+          if (const auto it = m_pythonExecutionReplays.find(executionId);
+              it != m_pythonExecutionReplays.end())
+          {
+            if (it->second.requestHash != requestHash)
+            {
+              return McpBridgeToolResult::failure(
+                mcp::McpErrorCode::InvalidParams,
+                "executionId was already used with different request content",
+                QJsonObject{{"executionId", executionId}, {"retrySafe", false}});
+            }
+            auto replay = it->second.response;
+            if (replay.ok)
+            {
+              replay.result.insert("historicalReplay", true);
+            }
+            else
+            {
+              replay.error.details.insert("historicalReplay", true);
+            }
+            return replay;
+          }
           auto* mapWindow = appController.mapWindowManager().topMapWindow();
           if (mapWindow == nullptr)
           {
@@ -278,7 +318,6 @@ McpBridgeServer::McpBridgeServer(
             m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
             m_config.httpPort,
             &m_objectRegistry);
-          const auto requested = document.toObject();
           const auto expectedFingerprint =
             requested.value("fingerprint").toString().trimmed();
           const auto actualFingerprint = active.value("documentFingerprint").toString();
@@ -326,9 +365,6 @@ McpBridgeServer::McpBridgeServer(
               timeoutMs,
               true,
             });
-          const auto sourceHash = QString::fromLatin1(
-            QCryptographicHash::hash(source.toUtf8(), QCryptographicHash::Sha256)
-              .toHex());
           auto receipt = QJsonObject{
             {"executionId", executionId},
             {"bridgeInstanceId", m_bridgeInstanceId},
@@ -339,15 +375,36 @@ McpBridgeServer::McpBridgeServer(
             {"partialMutation", false},
             {"rolledBack", execution.rolledBack},
             {"retrySafe", !execution.executed},
+            {"logs",
+             QJsonObject{
+               {"stdoutBytes", execution.stdoutText.size()},
+               {"stderrBytes", execution.stderrText.size()},
+               {"discardedBytes", execution.discardedLogBytes},
+               {"truncated", execution.discardedLogBytes > 0},
+             }},
+          };
+          const auto cacheExecutionResponse = [&](const McpBridgeToolResult& response) {
+            constexpr auto MaxReplays = qsizetype{1024};
+            while (m_pythonExecutionReplayOrder.size() >= MaxReplays)
+            {
+              m_pythonExecutionReplays.erase(m_pythonExecutionReplayOrder.takeFirst());
+            }
+            m_pythonExecutionReplayOrder.push_back(executionId);
+            m_pythonExecutionReplays.emplace(
+              executionId, McpPythonExecutionReplay{requestHash, response});
           };
           if (!execution.ok)
           {
             receipt.insert("error", execution.error);
-            return McpBridgeToolResult::failure(
+            const auto response = McpBridgeToolResult::failure(
               mcp::McpErrorCode::InternalError, "MCP Python execution failed", receipt);
+            cacheExecutionResponse(response);
+            return response;
           }
           receipt.insert("result", execution.value);
-          return McpBridgeToolResult::success(std::move(receipt));
+          const auto response = McpBridgeToolResult::success(std::move(receipt));
+          cacheExecutionResponse(response);
+          return response;
         }
         if (toolName == "tb_history")
         {
