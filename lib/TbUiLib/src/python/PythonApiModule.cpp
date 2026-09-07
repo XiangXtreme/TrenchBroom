@@ -3390,6 +3390,60 @@ void defineModule(py::module_& module)
   module.def("clear_interval", clearInterval);
   module.def("set_timeout", setTimeout);
 
+  auto documents = module.def_submodule("documents", "Document lifecycle operations.");
+  documents.def("current", currentDocument);
+
+  auto objects = module.def_submodule("objects", "Selection-backed object operations.");
+  objects.def("selection", [currentSelection]() { return currentSelection(); });
+  objects.def("translate", translateHelper);
+  objects.def("rotate", rotateHelper);
+  objects.def("scale", scaleHelper);
+  objects.def("duplicate", duplicateHelper);
+  objects.def("delete_selection", deleteSelectionHelper);
+  objects.def("deselect_all", deselectAllHelper);
+
+  auto entities = module.def_submodule("entities", "Entity collection operations.");
+  entities.def("selected", selectedEntities, py::arg("include_brushes") = false);
+
+  auto brushes =
+    module.def_submodule("brushes", "Brush collection and creation operations.");
+  brushes.def("selected", selectedBrushes);
+  brushes.def("create", createBrush, py::arg("points"), py::arg("material") = py::none());
+
+  auto faces = module.def_submodule("faces", "Face collection operations.");
+  faces.def("selected", selectedFaces);
+
+  auto listMaterials = []() {
+    auto document = currentDocument();
+    auto result = std::vector<MaterialHandle>{};
+    const auto& materials = document.get().map().materialManager().materials();
+    result.reserve(materials.size());
+    for (const auto* material : materials)
+    {
+      result.push_back(MaterialHandle{material});
+    }
+    return result;
+  };
+  auto listMaterialCollections = []() {
+    auto document = currentDocument();
+    auto result = std::vector<MaterialCollectionHandle>{};
+    const auto& collections = document.get().map().materialManager().collections();
+    result.reserve(collections.size());
+    for (const auto& collection : collections)
+    {
+      result.push_back(MaterialCollectionHandle{&collection});
+    }
+    return result;
+  };
+  auto materials = module.def_submodule("materials", "Material collection operations.");
+  materials.def("list", listMaterials);
+  materials.def("collections", listMaterialCollections);
+
+  auto actions =
+    module.def_submodule("actions", "Native action discovery and execution.");
+  actions.def("list", listActions);
+  actions.def("execute", executeAction, py::arg("action_id"));
+
   auto apiCatalog = py::dict{};
   for (const auto& typeInfo : pythonApiTypes())
   {

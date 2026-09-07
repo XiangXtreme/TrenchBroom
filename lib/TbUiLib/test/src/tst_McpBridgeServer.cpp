@@ -193,6 +193,17 @@ TEST_CASE(
   CHECK(apiSymbol.value("effect").toString() == "read");
   CHECK(apiSymbol.value("example").toString().contains("tb.current_document()"));
 
+  const auto namespacedApi = server.dispatchRequest(mcp::McpBridgeRequest{
+    "api-namespaced",
+    "tb_api",
+    QJsonObject{{"symbol", "trenchbroom.documents.current"}},
+    mcp::McpMode::ReadOnly,
+  });
+  REQUIRE(namespacedApi.ok);
+  const auto namespacedSymbols = namespacedApi.result.value("symbols").toArray();
+  REQUIRE(namespacedSymbols.size() == 1);
+  CHECK(namespacedSymbols.first().toObject().value("returns").toString() == "Document");
+
   const auto request = mcp::McpBridgeRequest{
     "execute",
     "tb_execute_python",

@@ -10,6 +10,13 @@ using enum PythonApiSymbolKind;
 
 constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::Module, "trenchbroom"},
+  PythonApiTypeInfo{PythonApiType::Documents, "documents"},
+  PythonApiTypeInfo{PythonApiType::Objects, "objects"},
+  PythonApiTypeInfo{PythonApiType::Entities, "entities"},
+  PythonApiTypeInfo{PythonApiType::Brushes, "brushes"},
+  PythonApiTypeInfo{PythonApiType::Faces, "faces"},
+  PythonApiTypeInfo{PythonApiType::Materials, "materials"},
+  PythonApiTypeInfo{PythonApiType::Actions, "actions"},
   PythonApiTypeInfo{PythonApiType::Vec3, "Vec3"},
   PythonApiTypeInfo{PythonApiType::Plane, "Plane"},
   PythonApiTypeInfo{PythonApiType::Document, "Document"},
@@ -36,6 +43,19 @@ constexpr auto ModuleSymbols = std::array{
   PythonApiSymbol{"MaterialCollection", Class, "handle"},
   PythonApiSymbol{"Transaction", Class, "context manager"},
   PythonApiSymbol{"PluginPanel", Class, "handle"},
+  PythonApiSymbol{
+    "documents", Property, "documents", PythonApiValueType{PythonApiType::Documents}},
+  PythonApiSymbol{
+    "objects", Property, "objects", PythonApiValueType{PythonApiType::Objects}},
+  PythonApiSymbol{
+    "entities", Property, "entities", PythonApiValueType{PythonApiType::Entities}},
+  PythonApiSymbol{
+    "brushes", Property, "brushes", PythonApiValueType{PythonApiType::Brushes}},
+  PythonApiSymbol{"faces", Property, "faces", PythonApiValueType{PythonApiType::Faces}},
+  PythonApiSymbol{
+    "materials", Property, "materials", PythonApiValueType{PythonApiType::Materials}},
+  PythonApiSymbol{
+    "actions", Property, "actions", PythonApiValueType{PythonApiType::Actions}},
   PythonApiSymbol{
     "selected_brushes",
     Function,
@@ -113,6 +133,72 @@ constexpr auto ModuleSymbols = std::array{
   PythonApiSymbol{"set_interval", Function, "(callback, milliseconds) -> int"},
   PythonApiSymbol{"clear_interval", Function, "(token)"},
   PythonApiSymbol{"set_timeout", Function, "(callback, milliseconds) -> int"},
+};
+
+constexpr auto DocumentsSymbols = std::array{
+  PythonApiSymbol{
+    "current", Function, "() -> Document", PythonApiValueType{PythonApiType::Document}},
+};
+
+constexpr auto ObjectsSymbols = std::array{
+  PythonApiSymbol{
+    "selection",
+    Function,
+    "() -> Selection",
+    PythonApiValueType{PythonApiType::Selection}},
+  PythonApiSymbol{"translate", Function, "(...)"},
+  PythonApiSymbol{"rotate", Function, "(...)"},
+  PythonApiSymbol{"scale", Function, "(...)"},
+  PythonApiSymbol{"duplicate", Function, "(target=None)"},
+  PythonApiSymbol{"delete_selection", Function, "() -> bool"},
+  PythonApiSymbol{"deselect_all", Function, "()"},
+};
+
+constexpr auto EntitiesSymbols = std::array{
+  PythonApiSymbol{
+    "selected",
+    Function,
+    "(include_brushes=False) -> list[Entity]",
+    PythonApiValueType{PythonApiType::Entity, 1u}},
+};
+
+constexpr auto BrushesSymbols = std::array{
+  PythonApiSymbol{
+    "selected",
+    Function,
+    "() -> list[Brush]",
+    PythonApiValueType{PythonApiType::Brush, 1u}},
+  PythonApiSymbol{
+    "create",
+    Function,
+    "(points, material=None) -> Brush",
+    PythonApiValueType{PythonApiType::Brush}},
+};
+
+constexpr auto FacesSymbols = std::array{
+  PythonApiSymbol{
+    "selected",
+    Function,
+    "() -> list[Face]",
+    PythonApiValueType{PythonApiType::Face, 1u}},
+};
+
+constexpr auto MaterialsSymbols = std::array{
+  PythonApiSymbol{
+    "list",
+    Function,
+    "() -> list[Material]",
+    PythonApiValueType{PythonApiType::Material, 1u}},
+  PythonApiSymbol{
+    "collections",
+    Function,
+    "() -> list[MaterialCollection]",
+    PythonApiValueType{PythonApiType::MaterialCollection, 1u}},
+};
+
+constexpr auto ActionsSymbols = std::array{
+  PythonApiSymbol{"list", Function, "() -> list[str]"},
+  PythonApiSymbol{"execute", Function, "(action_id)"},
 };
 
 constexpr auto Vec3Symbols = std::array{
@@ -360,6 +446,20 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
   {
   case PythonApiType::Module:
     return ModuleSymbols;
+  case PythonApiType::Documents:
+    return DocumentsSymbols;
+  case PythonApiType::Objects:
+    return ObjectsSymbols;
+  case PythonApiType::Entities:
+    return EntitiesSymbols;
+  case PythonApiType::Brushes:
+    return BrushesSymbols;
+  case PythonApiType::Faces:
+    return FacesSymbols;
+  case PythonApiType::Materials:
+    return MaterialsSymbols;
+  case PythonApiType::Actions:
+    return ActionsSymbols;
   case PythonApiType::Vec3:
     return Vec3Symbols;
   case PythonApiType::Plane:

@@ -145,13 +145,35 @@ QString pythonApiExample(const PythonApiTypeInfo& type, const PythonApiSymbol& s
     .arg(QString::fromUtf8(type.name), name);
 }
 
+QString pythonApiQualifiedName(
+  const PythonApiTypeInfo& type, const PythonApiSymbol& symbol)
+{
+  const auto typeName = QString::fromUtf8(type.name);
+  const auto symbolName = QString::fromUtf8(symbol.name);
+  if (type.type == PythonApiType::Module)
+  {
+    return QString{"%1.%2"}.arg(typeName, symbolName);
+  }
+  switch (type.type)
+  {
+  case PythonApiType::Documents:
+  case PythonApiType::Objects:
+  case PythonApiType::Entities:
+  case PythonApiType::Brushes:
+  case PythonApiType::Faces:
+  case PythonApiType::Materials:
+  case PythonApiType::Actions:
+    return QString{"trenchbroom.%1.%2"}.arg(typeName, symbolName);
+  default:
+    return QString{"%1.%2"}.arg(typeName, symbolName);
+  }
+}
+
 QJsonObject pythonApiSymbolJson(
   const PythonApiTypeInfo& type, const PythonApiSymbol& symbol)
 {
-  const auto qualified =
-    QString{"%1.%2"}.arg(QString::fromUtf8(type.name), QString::fromUtf8(symbol.name));
   return QJsonObject{
-    {"symbol", qualified},
+    {"symbol", pythonApiQualifiedName(type, symbol)},
     {"kind", static_cast<int>(symbol.kind)},
     {"signature", QString::fromUtf8(symbol.detail)},
     {"parameters", pythonApiParameters(symbol)},
@@ -288,8 +310,7 @@ McpBridgeServer::McpBridgeServer(
           {
             for (const auto& symbol : pythonApiSymbols(type.type))
             {
-              const auto qualified = QString{"%1.%2"}.arg(
-                QString::fromUtf8(type.name), QString::fromUtf8(symbol.name));
+              const auto qualified = pythonApiQualifiedName(type, symbol);
               if (!exact.isEmpty() && exact != qualified)
               {
                 continue;

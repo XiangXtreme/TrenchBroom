@@ -141,6 +141,14 @@ assert doc is not None
 assert len(doc.entities) >= 1
 assert isinstance(doc.materials, list)
 assert isinstance(doc.material_collections, list)
+assert tb.documents.current().path == doc.path
+assert tb.objects.selection().brushes == []
+assert tb.entities.selected() == []
+assert tb.brushes.selected() == []
+assert tb.faces.selected() == []
+assert isinstance(tb.materials.list(), list)
+assert isinstance(tb.materials.collections(), list)
+assert isinstance(tb.actions.list(), list)
 with doc.transaction("Python API smoke"):
     pass
 with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:

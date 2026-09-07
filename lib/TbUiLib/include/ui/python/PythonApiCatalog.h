@@ -12,6 +12,13 @@ namespace tb::ui
 enum class PythonApiType
 {
   Module,
+  Documents,
+  Objects,
+  Entities,
+  Brushes,
+  Faces,
+  Materials,
+  Actions,
   Vec3,
   Plane,
   Document,
