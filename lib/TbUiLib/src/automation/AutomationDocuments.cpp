@@ -12,8 +12,10 @@
 #include "ui/automation/AutomationDocuments.h"
 
 #include "fs/DiskIO.h"
+#include "mdl/ExportOptions.h"
 #include "mdl/GameInfo.h"
 #include "mdl/GameManager.h"
+#include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/MapHeader.h"
 #include "ui/AppController.h"
@@ -101,6 +103,23 @@ Result<void> openAutomationDocument(
 
   return appController.mapWindowManager().loadDocument(
     *gameInfo, mapFormat, MapDocument::DefaultWorldBounds, path);
+}
+
+Result<void> saveAutomationDocument(
+  mdl::Map& map, const std::optional<std::filesystem::path> path)
+{
+  return path ? map.saveAs(*path) : map.save();
+}
+
+Result<void> exportAutomationDocument(
+  const mdl::Map& map, const std::filesystem::path& path, const bool stripTbProperties)
+{
+  return map.exportAs(mdl::MapExportOptions{
+    path,
+    stripTbProperties,
+    std::nullopt,
+    std::nullopt,
+  });
 }
 
 } // namespace tb::ui

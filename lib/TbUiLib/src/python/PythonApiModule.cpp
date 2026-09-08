@@ -769,13 +769,14 @@ void requirePythonActionMode(const char* const action)
 void saveDocument(DocumentHandle& document)
 {
   requirePythonActionMode("save");
-  throwIfError(document.get().map().save());
+  throwIfError(saveAutomationDocument(document.get().map()));
 }
 
 void saveDocumentAs(DocumentHandle& document, const std::string& path)
 {
   requirePythonActionMode("save_as");
-  throwIfError(document.get().map().saveAs(absolutePathFromPython(path)));
+  throwIfError(saveAutomationDocument(
+    document.get().map(), std::make_optional(absolutePathFromPython(path))));
 }
 
 void exportDocument(
@@ -787,12 +788,8 @@ void exportDocument(
   {
     throw py::value_error{"export path must not overwrite the document"};
   }
-  throwIfError(document.get().map().exportAs(mdl::MapExportOptions{
-    exportPath,
-    stripTbProperties,
-    std::nullopt,
-    std::nullopt,
-  }));
+  throwIfError(
+    exportAutomationDocument(document.get().map(), exportPath, stripTbProperties));
 }
 
 MapWindow& mapWindowForDocument(DocumentHandle& document)

@@ -828,7 +828,8 @@ McpBridgeToolResult documentSaveResult(
     return invalidParamsFailure("Transient documents require absolute path");
   }
 
-  const auto result = savePath.empty() ? map.save() : map.saveAs(savePath);
+  const auto result = saveAutomationDocument(
+    map, savePath.empty() ? std::nullopt : std::make_optional(savePath));
   if (!result)
   {
     return McpBridgeToolResult::failure(
@@ -893,13 +894,8 @@ McpBridgeToolResult documentExportResult(
   }
 
   const auto stripTbProperties = mcpOptionalBool(params, "stripTbProperties", true);
-  const auto options = mdl::MapExportOptions{
-    exportPath,
-    stripTbProperties,
-    std::nullopt,
-    std::nullopt,
-  };
-  const auto result = mapWindow->document().map().exportAs(options);
+  const auto result =
+    exportAutomationDocument(mapWindow->document().map(), exportPath, stripTbProperties);
   if (!result)
   {
     return McpBridgeToolResult::failure(

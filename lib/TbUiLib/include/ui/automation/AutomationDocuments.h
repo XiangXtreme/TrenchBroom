@@ -14,11 +14,13 @@
 #include "base/Result.h"
 
 #include <filesystem>
+#include <optional>
 
 namespace tb::mdl
 {
 struct GameInfo;
-}
+class Map;
+} // namespace tb::mdl
 
 namespace tb::ui
 {
@@ -32,5 +34,11 @@ Result<void> openAutomationDocument(
   AppController& appController,
   std::filesystem::path path,
   const mdl::GameInfo* fallbackGameInfo = nullptr);
+
+/** Shared non-interactive persistence operations for automation adapters. */
+Result<void> saveAutomationDocument(
+  mdl::Map& map, std::optional<std::filesystem::path> path = std::nullopt);
+Result<void> exportAutomationDocument(
+  const mdl::Map& map, const std::filesystem::path& path, bool stripTbProperties);
 
 } // namespace tb::ui
