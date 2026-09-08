@@ -19,6 +19,11 @@ namespace tb::mdl
 class Map;
 } // namespace tb::mdl
 
+namespace tb::gl
+{
+class Material;
+} // namespace tb::gl
+
 namespace tb::ui::automation
 {
 
@@ -73,6 +78,15 @@ std::vector<mdl::BrushFaceHandle> filterBrushFaceHandles(
   std::vector<mdl::BrushFaceHandle> faces,
   const AutomationFaceFilter& filter,
   std::string& error);
+
+/**
+ * Returns loaded materials in material-manager order. Searches use the same
+ * case-insensitive name and relative-path matching for both automation
+ * adapters.
+ */
+std::vector<const gl::Material*> listMaterials(const mdl::Map& map);
+std::vector<const gl::Material*> searchMaterials(
+  const mdl::Map& map, const std::string& query, size_t limit);
 
 AutomationTextureLocks textureLocks(const mdl::Map& map);
 AutomationTextureLocks setTextureLocks(

@@ -6215,7 +6215,7 @@ void defineModule(py::module_& module)
   auto listMaterials = []() {
     auto document = currentDocument();
     auto result = std::vector<MaterialHandle>{};
-    const auto& materials = document.get().map().materialManager().materials();
+    const auto materials = automation::listMaterials(document.get().map());
     result.reserve(materials.size());
     for (const auto* material : materials)
     {
@@ -6234,22 +6234,13 @@ void defineModule(py::module_& module)
     }
     return result;
   };
-  auto searchMaterials = [listMaterials](const std::string& query, const size_t limit) {
+  auto searchMaterials = [](const std::string& query, const size_t limit) {
     auto result = std::vector<MaterialHandle>{};
-    if (limit == 0u)
+    const auto document = currentDocument();
+    for (const auto* material :
+         automation::searchMaterials(document.get().map(), query, limit))
     {
-      return result;
-    }
-    for (auto material : listMaterials())
-    {
-      if (containsCaseInsensitive(material.get().name(), query))
-      {
-        result.push_back(std::move(material));
-        if (result.size() == limit)
-        {
-          break;
-        }
-      }
+      result.push_back(MaterialHandle{material});
     }
     return result;
   };

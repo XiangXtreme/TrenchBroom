@@ -575,33 +575,19 @@ McpBridgeToolResult textureSearchForMapResult(mdl::Map& map, const QJsonObject& 
   auto materialNames = QJsonArray{};
   auto sampleMaterials = QJsonArray{};
 
-  const auto& materials = map.materialManager().materials();
-  for (const auto* material : materials)
+  for (const auto* material : automation::listMaterials(map))
   {
-    if (!material)
-    {
-      continue;
-    }
     if (sampleMaterials.size() < std::min(limit, 12))
     {
       sampleMaterials.push_back(QString::fromStdString(material->name()));
     }
-    const auto name = QString::fromStdString(material->name());
-    const auto relativePath = genericPathToQString(material->relativePath());
-    if (
-      !query.isEmpty() && !name.contains(query, Qt::CaseInsensitive)
-      && !relativePath.contains(query, Qt::CaseInsensitive))
-    {
-      continue;
-    }
-
+  }
+  for (const auto* material :
+       automation::searchMaterials(map, query.toStdString(), static_cast<size_t>(limit)))
+  {
     const auto json = materialJson(*material);
     results.push_back(json);
     materialNames.push_back(json.value("name").toString());
-    if (results.size() >= limit)
-    {
-      break;
-    }
   }
 
   return McpBridgeToolResult::success(QJsonObject{

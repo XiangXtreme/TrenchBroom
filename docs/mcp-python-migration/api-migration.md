@@ -83,6 +83,10 @@ face 后应用材质。它不接受旧 MCP 的 JSON selector；对象选择必�
 uv_lock=None)` 至少设置其一，并同步编辑上下文与持久偏好。过渡 MCP `texture_lock_get` 和
 `texture_lock_set` 复用同一 typed automation 状态。
 
+`tb.materials.list()` 和 `tb.materials.search(query, limit=50)` 与过渡 MCP 的
+`textures_list`、`texture_search` 共用同一已加载材料枚举和名称／相对路径匹配规则；材料对象仍可
+继续读取其名称、集合、路径和 usage count。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

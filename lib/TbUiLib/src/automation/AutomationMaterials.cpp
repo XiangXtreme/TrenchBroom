@@ -7,6 +7,8 @@
 #include "ui/automation/AutomationMaterials.h"
 
 #include "base/PreferenceManager.h"
+#include "gl/Material.h"
+#include "gl/MaterialManager.h"
 #include "mdl/BrushFace.h"
 #include "mdl/EditorContext.h"
 #include "mdl/Map.h"
@@ -179,6 +181,59 @@ std::vector<mdl::BrushFaceHandle> filterBrushFaceHandles(
                             : "face_semantic matched no brush faces";
   }
   return faces;
+}
+
+std::vector<const gl::Material*> listMaterials(const mdl::Map& map)
+{
+  const auto& materials = map.materialManager().materials();
+  auto result = std::vector<const gl::Material*>{};
+  result.reserve(materials.size());
+  for (const auto* material : materials)
+  {
+    if (material != nullptr)
+    {
+      result.push_back(material);
+    }
+  }
+  return result;
+}
+
+std::vector<const gl::Material*> searchMaterials(
+  const mdl::Map& map, const std::string& query, const size_t limit)
+{
+  if (limit == 0u)
+  {
+    return {};
+  }
+
+  auto lowerQuery = query;
+  std::ranges::transform(lowerQuery, lowerQuery.begin(), [](const auto character) {
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+  });
+  auto result = std::vector<const gl::Material*>{};
+  for (const auto* material : listMaterials(map))
+  {
+    auto name = material->name();
+    auto relativePath = material->relativePath().generic_string();
+    std::ranges::transform(name, name.begin(), [](const auto character) {
+      return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    });
+    std::ranges::transform(relativePath, relativePath.begin(), [](const auto character) {
+      return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    });
+    if (
+      !lowerQuery.empty() && name.find(lowerQuery) == std::string::npos
+      && relativePath.find(lowerQuery) == std::string::npos)
+    {
+      continue;
+    }
+    result.push_back(material);
+    if (result.size() == limit)
+    {
+      break;
+    }
+  }
+  return result;
 }
 
 AutomationTextureLocks textureLocks(const mdl::Map& map)
