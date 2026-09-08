@@ -1,0 +1,1054 @@
+--- a/lib/TbAppLib/src/ExtrudeTool.cpp
++++ b/lib/TbAppLib/src/ExtrudeTool.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -362,6 +363,7 @@
+ bool splitBrushesOutward(
+   mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragState)
+ {
++  tb::profile::Scope profileScope{"splitBrushesOutward"};
+   const auto& worldBounds = map.worldBounds();
+   const bool lockAlignment = pref(Preferences::AlignmentLock);
+ 
+@@ -387,7 +389,7 @@
+              const auto dragFaceIndex = dragHandle.faceHandle.faceIndex();
+              const auto newDragFaceNormal = dragHandle.faceNormal();
+ 
+-             auto newBrush = oldBrush;
++             auto newBrush = tb::profile::measure("Brush.copy", [&] { return oldBrush; });
+              return newBrush.moveBoundary(
+                       worldBounds, dragFaceIndex, delta, lockAlignment)
+                     | kdl::and_then([&]() {
+@@ -440,6 +442,7 @@
+ bool splitBrushesInward(
+   mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragState)
+ {
++  tb::profile::Scope profileScope{"splitBrushesInward"};
+   const auto& worldBounds = map.worldBounds();
+   const bool lockAlignment = pref(Preferences::AlignmentLock);
+ 
+@@ -467,8 +470,8 @@
+     auto* brushNode = dragHandle.faceHandle.node();
+ 
+     // "Front" means the part closer to the drag handles at the drag start
+-    auto frontBrush = dragHandle.brushAtDragStart;
+-    auto backBrush = dragHandle.brushAtDragStart;
++    auto frontBrush = tb::profile::measure("Brush.copy", [&] { return dragHandle.brushAtDragStart; });
++    auto backBrush = tb::profile::measure("Brush.copy", [&] { return dragHandle.brushAtDragStart; });
+ 
+     auto clipFace = frontBrush.face(dragHandle.faceHandle.faceIndex());
+ 
+@@ -977,6 +980,7 @@
+ 
+ bool ExtrudeTool::extrude(const vm::vec3d& handleDelta, ExtrudeDragState& dragState)
+ {
++  tb::profile::Scope profileScope{"ExtrudeTool::extrude"};
+   contract_pre(m_dragging);
+ 
+   auto& map = m_document.map();
+--- a/lib/TbAppLib/src/MapDocument.cpp
++++ b/lib/TbAppLib/src/MapDocument.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -426,6 +427,7 @@
+ void MapDocument::transactionDone(
+   const std::string&, const bool observable, const bool isModification)
+ {
++  tb::profile::Scope profileScope{"MapDocument::transactionDone"};
+   if (observable && isModification)
+   {
+     documentDidChangeNotifier();
+@@ -435,6 +437,7 @@
+ void MapDocument::transactionUndone(
+   const std::string&, const bool observable, const bool isModification)
+ {
++  tb::profile::Scope profileScope{"MapDocument::transactionUndone"};
+   if (observable && isModification)
+   {
+     documentDidChangeNotifier();
+--- /dev/null
++++ b/lib/TbBaseLib/include/base/ExtrudeProfile.h
+@@ -0,0 +1,66 @@
++
++#pragma once
++#include <chrono>
++#include <fstream>
++#include <iomanip>
++#include <map>
++#include <string>
++namespace tb::profile
++{
++using Clock = std::chrono::steady_clock;
++struct Value
++{
++  long long calls = 0;
++  double inclusive = 0, exclusive = 0;
++};
++inline thread_local bool enabled = false;
++inline thread_local std::map<std::string, Value> values;
++struct Scope;
++inline thread_local Scope* current = nullptr;
++struct Scope
++{
++  bool active;
++  const char* name;
++  Scope* parent;
++  Clock::time_point start;
++  double children = 0;
++  explicit Scope(const char* n)
++    : active(enabled)
++    , name(n)
++    , parent(current)
++  {
++    if (active)
++    {
++      current = this;
++      start = Clock::now();
++    }
++  }
++  ~Scope()
++  {
++    if (!active)
++      return;
++    const auto elapsed =
++      std::chrono::duration<double, std::milli>(Clock::now() - start).count();
++    auto& v = values[name];
++    ++v.calls;
++    v.inclusive += elapsed;
++    v.exclusive += elapsed - children;
++    if (parent)
++      parent->children += elapsed;
++    current = parent;
++  }
++};
++inline void dump(const std::string& path)
++{
++  std::ofstream out(path);
++  out << "scope,calls,inclusive_ms,exclusive_ms\n" << std::setprecision(12);
++  for (const auto& [name, v] : values)
++    out << name << ',' << v.calls << ',' << v.inclusive << ',' << v.exclusive << '\n';
++}
++template <class F>
++auto measure(const char* name, F&& f)
++{
++  Scope s(name);
++  return f();
++}
++} // namespace tb::profile
+--- a/lib/TbMdlLib/src/AddRemoveNodesUtils.cpp
++++ b/lib/TbMdlLib/src/AddRemoveNodesUtils.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2025 Kristian Duske
+ 
+@@ -31,6 +32,7 @@
+ 
+ void addNodesAndNotify(const std::map<Node*, std::vector<Node*>>& nodes, Map& map)
+ {
++  tb::profile::Scope profileScope{"addNodesAndNotify"};
+   auto addedNodes = std::vector<Node*>{};
+   for (const auto& [parent, children] : nodes)
+   {
+@@ -43,6 +45,7 @@
+ 
+ void removeNodesAndNotify(const std::map<Node*, std::vector<Node*>>& nodes, Map& map)
+ {
++  tb::profile::Scope profileScope{"removeNodesAndNotify"};
+   const auto allChildren =
+     nodes | std::views::values | std::views::join | kdl::ranges::to<std::vector>();
+ 
+--- a/lib/TbMdlLib/src/Brush.cpp
++++ b/lib/TbMdlLib/src/Brush.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -137,11 +138,12 @@
+ Brush::Brush() {}
+ 
+ Brush::Brush(const Brush& other)
+-  : m_faces{other.m_faces}
+-  , m_geometry{
+-      other.m_geometry
+-        ? std::make_unique<BrushGeometry>(*other.m_geometry, CopyCallback())
+-        : nullptr}
++  : m_faces{tb::profile::measure("Brush.copy.faces", [&] { return other.m_faces; })}
++  , m_geometry{tb::profile::measure("Brush.copy.geometry", [&] {
++    return other.m_geometry
++             ? std::make_unique<BrushGeometry>(*other.m_geometry, CopyCallback())
++             : nullptr;
++  })}
+ {
+   if (m_geometry)
+   {
+@@ -402,6 +404,7 @@
+ 
+ Result<void> Brush::clip(const vm::bbox3d& worldBounds, BrushFace face)
+ {
++  tb::profile::Scope profileScope{"Brush::clip"};
+   m_faces.push_back(std::move(face));
+   return updateGeometryFromFaces(worldBounds);
+ }
+@@ -412,6 +415,7 @@
+   const vm::vec3d& delta,
+   const bool lockMaterial)
+ {
++  tb::profile::Scope profileScope{"Brush::moveBoundary"};
+   contract_pre(faceIndex < faceCount());
+ 
+   return m_faces[faceIndex].transform(vm::translation_matrix(delta), lockMaterial)
+--- a/lib/TbMdlLib/src/CommandProcessor.cpp
++++ b/lib/TbMdlLib/src/CommandProcessor.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -222,6 +223,7 @@
+ 
+ void CommandProcessor::rollbackTransaction()
+ {
++  tb::profile::Scope profileScope{"CommandProcessor::rollbackTransaction"};
+   contract_pre(!m_transactionStack.empty());
+ 
+   auto& transaction = m_transactionStack.back();
+@@ -260,6 +262,7 @@
+ 
+ bool CommandProcessor::execute(std::unique_ptr<Command> command)
+ {
++  tb::profile::Scope profileScope{"CommandProcessor::execute"};
+   const auto result = executeCommand(*command);
+   if (result)
+   {
+@@ -271,6 +274,7 @@
+ 
+ bool CommandProcessor::executeAndStore(std::unique_ptr<UndoableCommand> command)
+ {
++  tb::profile::Scope profileScope{"CommandProcessor::executeAndStore"};
+   return executeAndStoreCommand(std::move(command), true).commandResult;
+ }
+ 
+@@ -352,6 +356,7 @@
+ 
+ bool CommandProcessor::undoCommand(UndoableCommand& command)
+ {
++  tb::profile::Scope profileScope{"CommandProcessor::undoCommand"};
+   notifyCommandIfNotType<TransactionCommand>(commandUndoNotifier, command);
+   const auto result = command.performUndo(m_map);
+   if (result)
+--- a/lib/TbMdlLib/src/Map.cpp
++++ b/lib/TbMdlLib/src/Map.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2025 Kristian Duske
+ 
+@@ -1554,6 +1555,7 @@
+ 
+ void Map::rollbackTransaction()
+ {
++  tb::profile::Scope profileScope{"Map::rollbackTransaction"};
+   logger().debug() << "Rolling back transaction";
+   m_commandProcessor->rollbackTransaction();
+   m_repeatStack->rollbackTransaction();
+@@ -1695,6 +1697,7 @@
+ 
+ void Map::nodesWereAdded(const std::vector<Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"Map::nodesWereAdded"};
+   setHasPendingChanges(collectGroups(nodes), false);
+   setEntityDefinitions(nodes);
+   setEntityModels(nodes);
+@@ -1709,6 +1712,7 @@
+ 
+ void Map::nodesWillBeRemoved(const std::vector<Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"Map::nodesWillBeRemoved"};
+   removeEntityLinks(nodes, true);
+   removeFromNodeIndex(nodes, true);
+   clearNodeTags(nodes);
+@@ -1716,6 +1720,7 @@
+ 
+ void Map::nodesWereRemoved(const std::vector<Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"Map::nodesWereRemoved"};
+   unsetEntityModels(nodes);
+   unsetEntityDefinitions(nodes);
+   unsetMaterials(nodes);
+@@ -1726,12 +1731,14 @@
+ 
+ void Map::nodesWillChange(const std::vector<Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"Map::nodesWillChange"};
+   removeEntityLinks(nodes, false);
+   removeFromNodeIndex(nodes, false);
+ }
+ 
+ void Map::nodesDidChange(const std::vector<Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"Map::nodesDidChange"};
+   setEntityDefinitions(nodes);
+   setEntityModels(nodes);
+   setMaterials(nodes);
+@@ -1755,6 +1762,7 @@
+ 
+ void Map::selectionWillChange()
+ {
++  tb::profile::Scope profileScope{"Map::selectionWillChange"};
+   if (const auto currentSelectionBounds = selectionBounds())
+   {
+     m_lastSelectionBounds = currentSelectionBounds;
+@@ -1763,6 +1771,7 @@
+ 
+ void Map::selectionDidChange(const SelectionChange& selectionChange)
+ {
++  tb::profile::Scope profileScope{"Map::selectionDidChange"};
+   m_repeatStack->clearOnNextPush();
+   m_selection.update(selectionChange);
+   m_cachedSelectionBounds = std::nullopt;
+--- a/lib/TbMdlLib/src/Map_Geometry.cpp
++++ b/lib/TbMdlLib/src/Map_Geometry.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2025 Kristian Duske
+ 
+@@ -1121,6 +1122,7 @@
+ bool extrudeBrushes(
+   Map& map, const std::vector<vm::polygon3d>& faces, const vm::vec3d& delta)
+ {
++  tb::profile::Scope profileScope{"extrudeBrushes"};
+   const auto nodes = map.selection().nodes;
+   return applyAndSwap(
+     map,
+--- a/lib/TbMdlLib/src/Map_Nodes.cpp
++++ b/lib/TbMdlLib/src/Map_Nodes.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2025 Kristian Duske
+ 
+@@ -304,6 +305,7 @@
+ 
+ std::vector<Node*> addNodes(Map& map, const std::map<Node*, std::vector<Node*>>& nodes)
+ {
++  tb::profile::Scope profileScope{"addNodes"};
+   contract_assert(std::ranges::all_of(nodes, [&](const auto& parentAndChildren) {
+     const auto& [parent, children] = parentAndChildren;
+     return parent == &map.worldNode() || parent->isDescendantOf(map.worldNode());
+@@ -594,6 +596,7 @@
+ 
+ void removeNodes(Map& map, const std::vector<Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"removeNodes"};
+   auto removableNodes = parentChildrenMap(removeImplicitelyRemovedNodes(nodes));
+ 
+   auto transaction = Transaction{map, "Remove Objects"};
+@@ -629,6 +632,7 @@
+   std::vector<std::pair<Node*, NodeContents>> nodesToSwap,
+   std::vector<GroupNode*> changedLinkedGroups)
+ {
++  tb::profile::Scope profileScope{"updateNodeContents"};
+ 
+   if (!checkLinkedGroupsToUpdate(changedLinkedGroups))
+   {
+@@ -652,6 +656,7 @@
+   const std::string& commandName,
+   std::vector<std::pair<Node*, NodeContents>> nodesToSwap)
+ {
++  tb::profile::Scope profileScope{"updateNodeContents"};
+   auto changedLinkedGroups = collectContainingGroups(
+     nodesToSwap | std::views::elements<0> | kdl::ranges::to<std::vector>());
+ 
+--- a/lib/TbMdlLib/src/Map_Selection.cpp
++++ b/lib/TbMdlLib/src/Map_Selection.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2025 Kristian Duske
+ 
+@@ -59,6 +60,7 @@
+ 
+ void selectNodes(Map& map, const std::vector<Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"selectNodes"};
+   map.executeAndStore(SelectionCommand::select(nodes));
+ }
+ 
+@@ -423,6 +425,7 @@
+ 
+ void deselectAll(Map& map)
+ {
++  tb::profile::Scope profileScope{"deselectAll"};
+   if (map.selection().hasAny())
+   {
+     map.executeAndStore(SelectionCommand::deselectAll());
+--- a/lib/TbMdlLib/src/SelectionCommand.cpp
++++ b/lib/TbMdlLib/src/SelectionCommand.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -62,7 +63,7 @@
+ 
+   auto selectionChange = SelectionChange{};
+   selectionChange.deselectedNodes = deselected;
+-  map.selectionDidChangeNotifier(selectionChange);
++  tb::profile::measure("notify.selectionDidChange", [&] { map.selectionDidChangeNotifier(selectionChange); });
+ }
+ 
+ void doDeselectBrushFaces(const std::vector<BrushFaceHandle>& faces, Map& map)
+@@ -91,7 +92,7 @@
+ 
+   auto selectionChange = SelectionChange{};
+   selectionChange.deselectedBrushFaces = deselected;
+-  map.selectionDidChangeNotifier(selectionChange);
++  tb::profile::measure("notify.selectionDidChange", [&] { map.selectionDidChangeNotifier(selectionChange); });
+ 
+   // Selection change is done. Next, update implicit locking of linked groups.
+   // The strategy is to figure out what needs to be locked given selection().brushFaces,
+@@ -156,7 +157,7 @@
+ 
+   auto selectionChange = SelectionChange{};
+   selectionChange.selectedNodes = selected;
+-  map.selectionDidChangeNotifier(selectionChange);
++  tb::profile::measure("notify.selectionDidChange", [&] { map.selectionDidChangeNotifier(selectionChange); });
+ }
+ 
+ void doSelectBrushFaces(const std::vector<BrushFaceHandle>& faces, Map& map)
+@@ -189,7 +190,7 @@
+ 
+   auto selectionChange = SelectionChange{};
+   selectionChange.selectedBrushFaces = selected;
+-  map.selectionDidChangeNotifier(selectionChange);
++  tb::profile::measure("notify.selectionDidChange", [&] { map.selectionDidChangeNotifier(selectionChange); });
+ }
+ 
+ void doSelectAllNodes(Map& map)
+--- a/lib/TbMdlLib/src/SwapNodeContentsCommand.cpp
++++ b/lib/TbMdlLib/src/SwapNodeContentsCommand.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -73,6 +74,7 @@
+ void doSwapNodeContents(
+   std::vector<std::pair<Node*, NodeContents>>& nodesToSwap, Map& map)
+ {
++  tb::profile::Scope profileScope{"doSwapNodeContents"};
+   const auto nodes = nodesToSwap
+                      | std::views::transform([](const auto& pair) { return pair.first; })
+                      | kdl::ranges::to<std::vector>();
+--- a/lib/TbRenderLib/src/BrushRenderer.cpp
++++ b/lib/TbRenderLib/src/BrushRenderer.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -270,6 +271,7 @@
+ 
+ void BrushRenderer::invalidate()
+ {
++  tb::profile::Scope profileScope{"BrushRenderer::invalidate"};
+   for (auto* brushNode : m_allBrushes)
+   {
+     // this will also invalidate already invalid brushes, which
+@@ -510,6 +512,7 @@
+ 
+ void BrushRenderer::validate()
+ {
++  tb::profile::Scope profileScope{"BrushRenderer::validate"};
+   contract_pre(!valid());
+ 
+   m_coloredEdgeVertices.clear();
+@@ -599,6 +602,7 @@
+ 
+ void BrushRenderer::validateBrush(const mdl::BrushNode& brushNode)
+ {
++  tb::profile::Scope profileScope{"BrushRenderer::validateBrush"};
+   contract_pre(m_allBrushes.find(&brushNode) != std::end(m_allBrushes));
+   contract_pre(m_invalidBrushes.find(&brushNode) != std::end(m_invalidBrushes));
+   contract_pre(m_brushInfo.find(&brushNode) == std::end(m_brushInfo));
+@@ -803,6 +807,7 @@
+ 
+ void BrushRenderer::addBrush(const mdl::BrushNode& brushNode)
+ {
++  tb::profile::Scope profileScope{"BrushRenderer::addBrush"};
+   // i.e. insert the brush as "invalid" if it's not already present.
+   // if it is present, its validity is unchanged.
+   if (m_allBrushes.insert(&brushNode).second)
+@@ -819,6 +824,7 @@
+ 
+ void BrushRenderer::removeBrush(const mdl::BrushNode& brushNode)
+ {
++  tb::profile::Scope profileScope{"BrushRenderer::removeBrush"};
+   // update m_brushValid
+   if (m_allBrushes.erase(&brushNode) == 0u)
+   {
+--- a/lib/TbRenderLib/src/MapRenderer.cpp
++++ b/lib/TbRenderLib/src/MapRenderer.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -642,6 +643,7 @@
+  */
+ void MapRenderer::invalidateRenderers(const Renderer renderers)
+ {
++  tb::profile::Scope profileScope{"MapRenderer::invalidateRenderers"};
+   if (int(renderers) & int(Renderer::Default))
+   {
+     m_defaultRenderer->invalidate();
+@@ -715,6 +717,7 @@
+ 
+ void MapRenderer::nodesWereAdded(const std::vector<mdl::Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"MapRenderer::nodesWereAdded"};
+   for (auto* node : nodes)
+   {
+     // The nodes passed in don't include recursive children, so we need to visit them
+@@ -727,6 +730,7 @@
+ 
+ void MapRenderer::nodesWereRemoved(const std::vector<mdl::Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"MapRenderer::nodesWereRemoved"};
+   for (auto* node : nodes)
+   {
+     // The nodes passed in don't include recursive children, so we need to visit them
+@@ -739,6 +743,7 @@
+ 
+ void MapRenderer::nodesDidChange(const std::vector<mdl::Node*>& nodes)
+ {
++  tb::profile::Scope profileScope{"MapRenderer::nodesDidChange"};
+   for (auto* node : mdl::collectNodesAndAncestors(nodes))
+   {
+     // We update the ancestors along with the nodes, i.e. the world node. So, don't update
+@@ -785,6 +790,7 @@
+ 
+ void MapRenderer::selectionDidChange(const mdl::SelectionChange& selectionChange)
+ {
++  tb::profile::Scope profileScope{"MapRenderer::selectionDidChange"};
+   for (const auto& face : selectionChange.deselectedBrushFaces)
+   {
+     updateAndInvalidateNode(*face.node());
+--- a/lib/TbUiLib/src/EntityPropertyEditor.cpp
++++ b/lib/TbUiLib/src/EntityPropertyEditor.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -81,6 +82,7 @@
+ 
+ void EntityPropertyEditor::updateDocumentationAndSmartEditor()
+ {
++  tb::profile::Scope profileScope{"EntityPropertyEditor::updateDocumentationAndSmartEditor"};
+   const auto& propertyKey = m_propertyGrid->selectedRowName();
+ 
+   m_smartEditorManager->switchEditor(
+--- a/lib/TbUiLib/src/EntityPropertyGrid.cpp
++++ b/lib/TbUiLib/src/EntityPropertyGrid.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -399,6 +400,7 @@
+ 
+ void EntityPropertyGrid::updateControls()
+ {
++  tb::profile::Scope profileScope{"EntityPropertyGrid::updateControls"};
+   // When you change the selected entity in the map, there's a brief intermediate state
+   // where worldspawn is selected. If we call this directly, it'll cause the table to be
+   // rebuilt based on that intermediate state. Everything is fine except you lose the
+--- a/lib/TbUiLib/src/FaceAttribsEditor.cpp
++++ b/lib/TbUiLib/src/FaceAttribsEditor.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -776,6 +777,7 @@
+ 
+ void FaceAttribsEditor::updateControls()
+ {
++  tb::profile::Scope profileScope{"FaceAttribsEditor::updateControls"};
+   // block signals emitted when updating the editor values
+   const auto blockXOffsetEditor = QSignalBlocker{m_xOffsetEditor};
+   const auto blockYOffsetEditor = QSignalBlocker{m_yOffsetEditor};
+--- a/lib/TbUiLib/src/MapViewBase.cpp
++++ b/lib/TbUiLib/src/MapViewBase.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -263,6 +264,7 @@
+  */
+ void MapViewBase::createActionsAndUpdatePicking()
+ {
++  tb::profile::Scope profileScope{"MapViewBase::createActionsAndUpdatePicking"};
+   createActions();
+   updateActionStates();
+   updatePickResult();
+@@ -285,6 +287,7 @@
+ 
+ void MapViewBase::selectionDidChange(const mdl::SelectionChange&)
+ {
++  tb::profile::Scope profileScope{"MapViewBase::selectionDidChange"};
+   closeSmartFaceSelection();
+   updatePickResult();
+   updateActionStates();
+@@ -361,6 +364,7 @@
+ 
+ void MapViewBase::createActions()
+ {
++  tb::profile::Scope profileScope{"MapViewBase::createActions"};
+   // Destroy existing QShortcuts via the weak references in m_shortcuts
+   for (auto& [shortcut, action] : m_shortcuts)
+   {
+@@ -395,6 +399,7 @@
+ 
+ void MapViewBase::updateActionBindings()
+ {
++  tb::profile::Scope profileScope{"MapViewBase::updateActionBindings"};
+   for (auto& [shortcut, action] : m_shortcuts)
+   {
+     shortcut->setKeys(
+@@ -405,6 +410,7 @@
+ 
+ void MapViewBase::updateActionStates()
+ {
++  tb::profile::Scope profileScope{"MapViewBase::updateActionStates"};
+   auto* mapWindow = dynamic_cast<MapWindow*>(window());
+   auto context = ActionExecutionContext{m_appController, mapWindow, this};
+   for (auto& [shortcut, action] : m_shortcuts)
+@@ -1110,6 +1116,7 @@
+ 
+ void MapViewBase::renderContents(gl::Gl& gl)
+ {
++  tb::profile::Scope profileScope{"MapViewBase::renderContents"};
+   preRender();
+ 
+   const auto& fontPath = pref(Preferences::RendererFontPath);
+--- a/lib/TbUiLib/src/MapWindow.cpp
++++ b/lib/TbUiLib/src/MapWindow.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -409,6 +410,7 @@
+ 
+ void MapWindow::updateActionState()
+ {
++  tb::profile::Scope profileScope{"MapWindow::updateActionState"};
+   auto context = ActionExecutionContext{m_appController, this, currentMapViewBase()};
+   for (auto [tAction, qAction] : m_actionMap)
+   {
+@@ -851,6 +853,7 @@
+ 
+ void MapWindow::updateStatusBar()
+ {
++  tb::profile::Scope profileScope{"MapWindow::updateStatusBar"};
+   m_statusBarLabel->setText(QString{describeSelection(m_document->map())});
+ }
+ 
+@@ -1058,6 +1061,7 @@
+ 
+ void MapWindow::selectionDidChange(const mdl::SelectionChange&)
+ {
++  tb::profile::Scope profileScope{"MapWindow::selectionDidChange"};
+   updateActionStateDelayed();
+   updateStatusBarDelayed();
+   PythonRuntime::instance().emitEvent("selection_changed", *this, false);
+--- a/lib/TbUiLib/src/RenderView.cpp
++++ b/lib/TbUiLib/src/RenderView.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -170,6 +171,7 @@
+ 
+ void RenderView::paintGL()
+ {
++  tb::profile::Scope profileScope{"RenderView::paintGL"};
+   render();
+ 
+   // Update stats
+@@ -228,6 +230,7 @@
+ 
+ void RenderView::render()
+ {
++  tb::profile::Scope profileScope{"RenderView::render"};
+   auto gl = GlQt{glFunctions()};
+ 
+   processInput();
+--- a/lib/TbUiLib/src/ToolBoxConnector.cpp
++++ b/lib/TbUiLib/src/ToolBoxConnector.cpp
+@@ -1,3 +1,4 @@
++#include "base/ExtrudeProfile.h"
+ /*
+  Copyright (C) 2010 Kristian Duske
+ 
+@@ -76,6 +77,7 @@
+ 
+ void ToolBoxConnector::updatePickResult()
+ {
++  tb::profile::Scope profileScope{"ToolBoxConnector::updatePickResult"};
+   contract_pre(m_toolBox != nullptr);
+ 
+   m_inputState.setPickRequest(pickRequest(m_inputState.mouseX(), m_inputState.mouseY()));
+@@ -374,6 +376,7 @@
+ 
+ void ToolBoxConnector::processDrag(const MouseEvent& event)
+ {
++  tb::profile::Scope profileScope{"ToolBoxConnector::processDrag"};
+   mouseMoved(event.posX, event.posY);
+   updatePickResult();
+   if (m_toolBox->dragging() && !m_toolBox->mouseDrag(m_inputState))
+--- a/lib/TbUiLib/src/outliner/OutlinerEntityPropertyEditor.cpp
++++ b/lib/TbUiLib/src/outliner/OutlinerEntityPropertyEditor.cpp
+@@ -1,3 +1,5 @@
++#include <cstdlib>
++#include "base/ExtrudeProfile.h"
+ #include "ui/outliner/OutlinerEntityPropertyEditor.h"
+ 
+ #include <QApplication>
+@@ -594,6 +596,8 @@
+ 
+ void OutlinerEntityPropertyEditor::updateFromSelection()
+ {
++  tb::profile::Scope profileScope{"OutlinerEntityPropertyEditor::updateFromSelection"};
++  if(tb::profile::enabled && std::getenv("TB_PROFILE_SKIP_PROPERTIES")) return;
+   if (m_comboPopupVisible)
+   {
+     m_updateDeferred = true;
+@@ -617,6 +621,7 @@
+ 
+ void OutlinerEntityPropertyEditor::refreshVisiblePropertyValues()
+ {
++  tb::profile::Scope profileScope{"OutlinerEntityPropertyEditor::refreshVisiblePropertyValues"};
+   const auto entityNodes = m_document.map().selection().allEntities();
+   if (entityNodes.empty())
+   {
+@@ -693,6 +698,7 @@
+ 
+ void OutlinerEntityPropertyEditor::refreshEmbeddedEditors()
+ {
++  tb::profile::Scope profileScope{"OutlinerEntityPropertyEditor::refreshEmbeddedEditors"};
+   const auto entityNodes = m_document.map().selection().allEntities();
+   if (m_embeddedWadEditor)
+   {
+@@ -707,6 +713,7 @@
+ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
+   const std::vector<mdl::EntityNodeBase*>& entityNodes)
+ {
++  tb::profile::Scope profileScope{"OutlinerEntityPropertyEditor::rebuildPropertyRows"};
+   m_embeddedWadEditorContainer = nullptr;
+   m_embeddedWadEditor = nullptr;
+   m_embeddedSkyboxEditorContainer = nullptr;
+--- a/lib/TbUiLib/src/outliner/OutlinerTreeWidget.cpp
++++ b/lib/TbUiLib/src/outliner/OutlinerTreeWidget.cpp
+@@ -1,3 +1,5 @@
++#include <cstdlib>
++#include "base/ExtrudeProfile.h"
+ #include "ui/outliner/OutlinerTreeWidget.h"
+ 
+ #include <QApplication>
+@@ -777,6 +779,7 @@
+ 
+ void OutlinerTreeWidget::setupTreeItem(QTreeWidgetItem* item, mdl::Node* node)
+ {
++  tb::profile::Scope profileScope{"OutlinerTreeWidget::setupTreeItem"};
+   if (!item || !node)
+     return;
+ 
+@@ -977,6 +980,7 @@
+ 
+ void OutlinerTreeWidget::refreshTreeParents(std::vector<mdl::Node*> parents)
+ {
++  tb::profile::Scope profileScope{"OutlinerTreeWidget::refreshTreeParents"};
+   parents = kdl::vec_sort_and_remove_duplicates(std::move(parents));
+   if (parents.empty())
+   {
+@@ -1088,6 +1092,7 @@
+ 
+ void OutlinerTreeWidget::updateTree()
+ {
++  tb::profile::Scope profileScope{"OutlinerTreeWidget::updateTree"};
+   const auto updatesWereEnabled = updatesEnabled();
+   setUpdatesEnabled(false);
+ 
+@@ -1623,6 +1628,8 @@
+ 
+ void OutlinerTreeWidget::syncSelectionFromDocument()
+ {
++  tb::profile::Scope profileScope{"OutlinerTreeWidget::syncSelectionFromDocument"};
++  if(tb::profile::enabled && std::getenv("TB_PROFILE_SKIP_TREE")) return;
+   const auto wasSyncing = m_syncingSelection;
+   m_syncingSelection = true;
+ 
+@@ -1895,6 +1902,7 @@
+ void OutlinerTreeWidget::onDocumentSelectionChanged(
+   const mdl::SelectionChange& /*change*/)
+ {
++  tb::profile::Scope profileScope{"OutlinerTreeWidget::onDocumentSelectionChanged"};
+   if (m_syncingSelection)
+   {
+     return;
+--- a/lib/TbUiLib/test/CMakeLists.txt
++++ b/lib/TbUiLib/test/CMakeLists.txt
+@@ -117,3 +117,5 @@
+ 
+ include(Catch)
+ catch_discover_tests(TbUiLibTest)
++
++target_sources(TbUiLibTest PRIVATE ${PROJECT_SOURCE_DIR}/app/TrenchBroom/src/ApplicationStyle.cpp)
+--- a/lib/TbUiLib/test/src/RunAllTests.cpp
++++ b/lib/TbUiLib/test/src/RunAllTests.cpp
+@@ -46,6 +46,29 @@
+ 
+ } // namespace
+ 
++
++#include "base/ExtrudeProfile.h"
++#include <QEvent>
++class ProfileApplication : public QApplication {
++public:
++  using QApplication::QApplication;
++  bool notify(QObject* receiver,QEvent* event) override {
++    const char* name=nullptr;
++    switch(event->type()) {
++    case QEvent::LayoutRequest: name="Qt.LayoutRequest"; break;
++    case QEvent::Paint: name="Qt.Paint"; break;
++    case QEvent::UpdateRequest: name="Qt.UpdateRequest"; break;
++    case QEvent::PolishRequest: name="Qt.PolishRequest"; break;
++    case QEvent::Polish: name="Qt.Polish"; break;
++    case QEvent::Timer: name="Qt.Timer"; break;
++    case QEvent::MetaCall: name="Qt.MetaCall"; break;
++    case QEvent::DeferredDelete: name="Qt.DeferredDelete"; break;
++    default: return QApplication::notify(receiver,event);
++    }
++    tb::profile::Scope scope(name);
++    return QApplication::notify(receiver,event);
++  }
++};
+ int main(int argc, char** argv)
+ {
+   kd::set_contract_violation_handler(contractViolated);
+@@ -58,7 +81,8 @@
+   tb::PreferenceManager::createInstance(
+     std::make_unique<tb::TestPreferenceStore>(), K(saveInstantly));
+ 
+-  auto app = QApplication{argc, argv};
++  QGuiApplication::setAttribute(Qt::AA_UseStyleSheetPropagationInWidgetStyles);
++  auto app = ProfileApplication{argc, argv};
+ 
+   return Catch::Session().run(argc, argv);
+ }
+--- a/lib/TbUiLib/test/src/tst_MapWindow.cpp
++++ b/lib/TbUiLib/test/src/tst_MapWindow.cpp
+@@ -844,3 +844,189 @@
+ }
+ 
+ } // namespace tb::ui
++
++#include <QOpenGLWidget>
++#include <QSettings>
++#include <QTemporaryDir>
++
++#include "../../../../app/TrenchBroom/src/ApplicationStyle.h"
++#include "base/ExtrudeProfile.h"
++#include "gl/PerspectiveCamera.h"
++#include "mdl/Map_Picking.h"
++#include "mdl/PickResult.h"
++#include "ui/ExtrudeTool.h"
++#include "ui/ExtrudeToolController.h"
++#include "ui/GestureTracker.h"
++#include "ui/InputState.h"
++#include "ui/PickRequest.h"
++#include "ui/ToolController.h"
++
++#include <cstdlib>
++#include <iostream>
++
++namespace tb::ui
++{
++TEST_CASE("Extrude drag profile", "[.][profile]")
++{
++  QTemporaryDir settingsDir;
++  REQUIRE(settingsDir.isValid());
++  QSettings::setDefaultFormat(QSettings::IniFormat);
++  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir.path());
++  setPref(Preferences::DefaultPluginPaths, "");
++  setPref(Preferences::PythonPluginDirectories, "");
++  if (std::getenv("TB_PROFILE_STYLE"))
++  {
++    QString error;
++    REQUIRE(installApplicationStyle(*qApp, QStringLiteral("dark"), &error));
++  }
++  auto fixture = AppControllerFixture{};
++  auto& app = fixture.appController();
++  auto document = MapDocument::createDocument(
++                    app.environmentConfig(),
++                    mdl::QuakeGameInfo,
++                    mdl::MapFormat::Valve,
++                    vm::bbox3d{8192.0},
++                    app.taskManager(),
++                    app.glManager().resourceManager())
++                  | kdl::value();
++  auto* doc = document.get();
++  std::unique_ptr<MapWindow> window;
++  const std::string mode =
++    std::getenv("TB_PROFILE_MODE") ? std::getenv("TB_PROFILE_MODE") : "window";
++  if (mode != "model")
++  {
++    window = std::make_unique<MapWindow>(app, std::move(document));
++    window->setAttribute(Qt::WA_DontShowOnScreen);
++    window->resize(1440, 900);
++    window->switchToInspectorPage(InspectorPage::Outliner);
++    window->show();
++    QApplication::processEvents();
++  }
++  auto& map = doc->map();
++  deselectAll(map);
++  auto initial = map.worldNode().defaultLayer()->children();
++  if (!initial.empty())
++    removeNodes(map, initial);
++  const int count =
++    std::getenv("TB_PROFILE_BRUSHES") ? std::atoi(std::getenv("TB_PROFILE_BRUSHES")) : 1;
++  auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
++  std::vector<mdl::Node*> nodes;
++  for (int i = 0; i < count; ++i)
++  {
++    const auto x = double(i % 32) * 96.0, y = double(i / 32) * 96.0;
++    nodes.push_back(new mdl::BrushNode{
++      builder.createCuboid(
++        vm::bbox3d{{x - 32, y - 32, -32}, {x + 32, y + 32, 32}}, "__TB_empty")
++      | kdl::value()});
++  }
++  addNodes(map, {{map.worldNode().defaultLayer(), nodes}});
++  auto* brush = static_cast<mdl::BrushNode*>(nodes.front());
++  const auto pump = [&] {
++    if (window)
++    {
++      QApplication::processEvents();
++      // Optional framebuffer readback also forces an extra render. The main experiment
++      // disables it.
++      if (!std::getenv("TB_PROFILE_EVENTS_ONLY"))
++        for (auto* view : window->findChildren<MapViewBase*>())
++          if (view->isVisible())
++            view->grabFramebuffer();
++      QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
++    }
++  };
++  pump();
++  for (const std::string kind : {"normal", "outward", "inward"})
++  {
++    deselectAll(map);
++    selectNodes(map, {brush});
++    auto tool = ExtrudeTool{*doc};
++
++    if (map.grid().snap())
++      map.grid().toggleSnap();
++    const auto origin = vm::vec3d{0, -128, 128};
++    auto camera = gl::PerspectiveCamera{
++      90.0f,
++      1.0f,
++      8000.0f,
++      gl::Camera::Viewport{0, 0, 1440, 900},
++      vm::vec3f{origin},
++      vm::normalize(vm::vec3f{0, 128, -96}),
++      vm::vec3f{0, 0, 1}};
++    auto extrudeController = ExtrudeToolController3D{tool};
++    auto& controller = static_cast<ToolController&>(extrudeController);
++    auto input = InputState{0, 0};
++    input.setModifierKeys(
++      kind == "normal" ? ModifierKeys::Shift
++                       : ModifierKeys::Shift | ModifierKeys::CtrlCmd);
++    input.mouseDown(MouseButtons::Left);
++    const auto repick = [&](double delta) {
++      tb::profile::Scope p{"input.pick"};
++      auto ray = vm::ray3d{origin, vm::normalize(vm::vec3d{0, 0, 32 + delta} - origin)};
++      input.setPickRequest(PickRequest{ray, camera});
++      auto picked = mdl::PickResult::byDistance();
++      mdl::pick(map, ray, picked);
++      controller.pick(input, picked);
++      input.setPickResult(std::move(picked));
++    };
++    repick(0);
++    auto tracker = controller.acceptMouseDrag(input);
++    REQUIRE(tracker != nullptr);
++    REQUIRE(tool.proposedDragHandles().size() == 1);
++    input.setAnyToolDragging(true);
++    const auto step = [&](int i) {
++      const auto delta = (kind == "inward" ? -1.0 : 1.0) * double(8 + i % 16);
++      repick(delta);
++      REQUIRE(tracker->update(input));
++      const auto selected = map.selection().brushes;
++      REQUIRE(!selected.empty());
++      // Assert the controller actually applied this sample (and did not deny the drag).
++      auto* moving = kind == "normal" ? brush : selected.back();
++      REQUIRE(std::abs(moving->logicalBounds().max.z() - (32 + delta)) < 0.001);
++    };
++    for (int i = 0; i < 20; ++i)
++    {
++      step(i);
++      pump();
++    }
++    std::vector<std::array<double, 3>> samples;
++    samples.reserve(120);
++    tb::profile::values.clear();
++    tb::profile::enabled = true;
++    for (int i = 0; i < 120; ++i)
++    {
++
++      const auto begin = tb::profile::Clock::now();
++      tb::profile::Scope frame{"frame"};
++      {
++        tb::profile::Scope drag{"drag"};
++        step(i);
++      }
++      const auto afterDrag = tb::profile::Clock::now();
++      {
++        tb::profile::Scope events{"events_and_render"};
++        pump();
++      }
++      const auto end = tb::profile::Clock::now();
++      const auto ms = [](auto a, auto z) {
++        return std::chrono::duration<double, std::milli>(z - a).count();
++      };
++      samples.push_back({ms(begin, end), ms(begin, afterDrag), ms(afterDrag, end)});
++    }
++    tb::profile::enabled = false;
++    const auto output = std::string(std::getenv("TB_PROFILE_OUTPUT")) + "/" + mode + "-"
++                        + std::to_string(count) + "-" + kind + ".csv";
++
++    tb::profile::dump(output);
++    std::ofstream sampleFile(output + ".samples.csv");
++    sampleFile << "frame_ms,drag_ms,events_ms\n";
++    for (const auto& sample : samples)
++      sampleFile << sample[0] << ',' << sample[1] << ',' << sample[2] << '\n';
++    std::cout << output << " frame_ms=" << tb::profile::values["frame"].inclusive / 120.0
++              << '\n';
++    tracker->cancel();
++    pump();
++    REQUIRE(brush->logicalBounds() == vm::bbox3d{{-32, -32, -32}, {32, 32, 32}});
++    REQUIRE(map.worldNode().defaultLayer()->childCount() == size_t(count));
++  }
++}
++} // namespace tb::ui
