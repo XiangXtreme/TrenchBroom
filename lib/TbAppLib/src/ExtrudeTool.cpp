@@ -348,183 +348,189 @@ std::vector<ExtrudeDragHandle> getDragHandles(
          | kdl::ranges::to<std::vector>();
 }
 
-/**
- * Splits off new brush "outward" from the drag handles.
- *
- * Returns false if the given delta isn't suitable for splitting "outward".
- *
- * Otherwise:
- * - rolls back the transaction
- * - applies a split outward with the given delta
- * - sets m_totalDelta to the given delta
- * - returns true
- */
+struct SplitBrush
+{
+  std::optional<mdl::Brush> original;
+  std::optional<mdl::Brush> split;
+};
+
+bool applySplitBrushes(
+  mdl::Map& map,
+  const vm::vec3d& delta,
+  ExtrudeDragState& dragState,
+  std::vector<SplitBrush> brushes,
+  const bool outward)
+{
+  const auto& handles = dragState.initialDragHandles;
+  contract_assert(brushes.size() == handles.size());
+
+  // Keep preview identity and selection stable while its direction and set of
+  // surviving pieces stay the same. Consecutive content swaps collate in the
+  // existing drag transaction, retaining the first state for undo/cancel.
+  auto reuseNodes =
+    dragState.splitBrushNodes.size() == handles.size()
+    && (vm::dot(handles.front().faceNormal(), dragState.totalDelta) > 0.0) == outward;
+  for (size_t i = 0; reuseNodes && i < brushes.size(); ++i)
+  {
+    reuseNodes =
+      brushes[i].split.has_value() == (dragState.splitBrushNodes[i] != nullptr);
+  }
+
+  if (!reuseNodes)
+  {
+    dragState.currentDragFaces.clear();
+    dragState.splitBrushNodes.clear();
+    map.rollbackTransaction();
+    dragState.totalDelta = vm::vec3d::zero();
+  }
+
+  auto nodesToUpdate = std::vector<std::pair<mdl::Node*, mdl::NodeContents>>{};
+  for (size_t i = 0; i < brushes.size(); ++i)
+  {
+    if (brushes[i].original)
+    {
+      nodesToUpdate.emplace_back(
+        handles[i].faceHandle.node(), std::move(*brushes[i].original));
+    }
+    if (reuseNodes && brushes[i].split)
+    {
+      nodesToUpdate.emplace_back(
+        dragState.splitBrushNodes[i], std::move(*brushes[i].split));
+    }
+  }
+  if (
+    !nodesToUpdate.empty()
+    && !updateNodeContents(map, "Resize Brushes", std::move(nodesToUpdate)))
+  {
+    return false;
+  }
+
+  if (!reuseNodes)
+  {
+    auto newNodes = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+    auto splitNodes = std::vector<mdl::BrushNode*>(brushes.size(), nullptr);
+    for (size_t i = 0; i < brushes.size(); ++i)
+    {
+      if (brushes[i].split)
+      {
+        auto* node = new mdl::BrushNode{std::move(*brushes[i].split)};
+        newNodes[handles[i].faceHandle.node()->parent()].push_back(node);
+        splitNodes[i] = node;
+      }
+    }
+
+    if (outward)
+    {
+      deselectAll(map);
+    }
+    // addNodes transfers ownership to its command, including on commit failure.
+    const auto addedNodes = addNodes(map, newNodes);
+    if (!newNodes.empty() && addedNodes.empty())
+    {
+      map.rollbackTransaction();
+      return false;
+    }
+    selectNodes(map, addedNodes);
+    dragState.splitBrushNodes = std::move(splitNodes);
+  }
+
+  dragState.currentDragFaces.clear();
+  for (size_t i = 0; i < handles.size(); ++i)
+  {
+    if (auto* node = dragState.splitBrushNodes[i])
+    {
+      if (const auto faceIndex = node->brush().findFace(handles[i].faceNormal()))
+      {
+        dragState.currentDragFaces.emplace_back(node, *faceIndex);
+      }
+    }
+  }
+  dragState.totalDelta = delta;
+  return true;
+}
+
+/** Builds outward pieces from the initial brushes, then updates the split preview. */
 bool splitBrushesOutward(
   mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragState)
 {
   const auto& worldBounds = map.worldBounds();
   const bool lockAlignment = pref(Preferences::AlignmentLock);
 
-  // First ensure that the drag can be applied at all. For this, check whether each drag
-  // handle is moved "up" along its normal.
   for (const auto& dragHandle : dragState.initialDragHandles)
   {
-    const auto& normal = dragHandle.faceNormal();
-    if (vm::dot(normal, delta) <= double{0})
+    if (vm::dot(dragHandle.faceNormal(), delta) <= 0.0)
     {
       return false;
     }
   }
 
-  auto newDragFaces = std::vector<mdl::BrushFaceHandle>{};
-  auto newNodes = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
-
-  return dragState.initialDragHandles
-         | std::views::transform([&](const auto& dragHandle) {
-             auto* brushNode = dragHandle.faceHandle.node();
-
-             const auto& oldBrush = dragHandle.brushAtDragStart;
-             const auto dragFaceIndex = dragHandle.faceHandle.faceIndex();
-             const auto newDragFaceNormal = dragHandle.faceNormal();
-
-             auto newBrush = oldBrush;
-             return newBrush.moveBoundary(
-                      worldBounds, dragFaceIndex, delta, lockAlignment)
-                    | kdl::and_then([&]() {
-                        auto clipFace = oldBrush.face(dragFaceIndex);
-                        clipFace.invert();
-                        return newBrush.clip(worldBounds, std::move(clipFace));
-                      })
-                    | kdl::transform([&]() {
-                        auto* newBrushNode = new mdl::BrushNode(std::move(newBrush));
-                        newNodes[brushNode->parent()].push_back(newBrushNode);
-
-                        // Look up the new face index of the new drag handle
-                        if (
-                          const auto newDragFaceIndex =
-                            newBrushNode->brush().findFace(newDragFaceNormal))
-                        {
-                          newDragFaces.push_back(
-                            mdl::BrushFaceHandle(newBrushNode, *newDragFaceIndex));
-                        }
-                      });
-           })
-         | kdl::fold | kdl::transform([&]() {
-             // Apply the changes calculated above
-             map.rollbackTransaction();
-
-             deselectAll(map);
-             const auto addedNodes = addNodes(map, newNodes);
-             selectNodes(map, addedNodes);
-             dragState.currentDragFaces = std::move(newDragFaces);
-             dragState.totalDelta = delta;
-           })
-         | kdl::transform_error([&](auto e) {
-             map.logger().error() << "Could not extrude brush: " << e;
-             kdl::map_clear_and_delete(newNodes);
-           })
-         | kdl::is_success();
+  auto brushes = std::vector<SplitBrush>{};
+  for (const auto& dragHandle : dragState.initialDragHandles)
+  {
+    const auto& oldBrush = dragHandle.brushAtDragStart;
+    const auto dragFaceIndex = dragHandle.faceHandle.faceIndex();
+    auto newBrush = oldBrush;
+    auto result = newBrush.moveBoundary(worldBounds, dragFaceIndex, delta, lockAlignment)
+                  | kdl::and_then([&]() {
+                      auto clipFace = oldBrush.face(dragFaceIndex);
+                      clipFace.invert();
+                      return newBrush.clip(worldBounds, std::move(clipFace));
+                    });
+    if (result.is_error())
+    {
+      result | kdl::if_error([&](const auto& e) {
+        map.logger().error() << "Could not extrude brush: " << e;
+      }) | kdl::ignore();
+      return false;
+    }
+    brushes.push_back({std::nullopt, std::move(newBrush)});
+  }
+  return applySplitBrushes(map, delta, dragState, std::move(brushes), true);
 }
 
-/**
- * Splits brushes "inwards" effectively clipping the selected brushes into two halves.
- *
- * Returns false if the given delta isn't suitable for splitting inward.
- *
- * Otherwise:
- * - rolls back the transaction
- * - applies a split inward with the given delta
- * - sets m_totalDelta to the given delta
- * - returns true
- */
+/** Builds the front/back pieces from the initial brushes, then updates the preview. */
 bool splitBrushesInward(
   mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragState)
 {
   const auto& worldBounds = map.worldBounds();
   const bool lockAlignment = pref(Preferences::AlignmentLock);
 
-  // First ensure that the drag can be applied at all. For this, check whether each drag
-  // handle is moved "down" along its normal.
   for (const auto& dragHandle : dragState.initialDragHandles)
   {
-    const auto& normal = dragHandle.faceNormal();
-    if (vm::dot(normal, delta) > double{0})
+    if (vm::dot(dragHandle.faceNormal(), delta) > 0.0)
     {
       return false;
     }
   }
 
-  auto newDragFaces = std::vector<mdl::BrushFaceHandle>{};
-  // This map is to handle the case when the brushes being
-  // extruded have different parents (e.g. different brush entities),
-  // so each newly created brush should be made a sibling of the brush it was cloned
-  // from.
-  auto newNodes = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
-  auto nodesToUpdate = std::vector<std::pair<mdl::Node*, mdl::NodeContents>>{};
-
+  auto brushes = std::vector<SplitBrush>{};
   for (const auto& dragHandle : dragState.initialDragHandles)
   {
-    auto* brushNode = dragHandle.faceHandle.node();
-
-    // "Front" means the part closer to the drag handles at the drag start
     auto frontBrush = dragHandle.brushAtDragStart;
     auto backBrush = dragHandle.brushAtDragStart;
-
     auto clipFace = frontBrush.face(dragHandle.faceHandle.faceIndex());
 
     if (clipFace.transform(vm::translation_matrix(delta), lockAlignment).is_error())
     {
       map.logger().error() << "Could not extrude inwards: Error transforming face";
-      kdl::map_clear_and_delete(newNodes);
       return false;
     }
-
     auto clipFaceInverted = clipFace;
     clipFaceInverted.invert();
-
-    // Front brush should always be valid
     if (frontBrush.clip(worldBounds, clipFaceInverted).is_error())
     {
       map.logger().error() << "Could not extrude inwards: Front brush is empty";
-      kdl::map_clear_and_delete(newNodes);
       return false;
     }
 
-    nodesToUpdate.emplace_back(brushNode, std::move(frontBrush));
-
-    // Back brush
+    auto split = std::optional<mdl::Brush>{};
     if (backBrush.clip(worldBounds, clipFace))
     {
-      auto* newBrushNode = new mdl::BrushNode(std::move(backBrush));
-      newNodes[brushNode->parent()].push_back(newBrushNode);
-
-      // Look up the new face index of the new drag handle
-      if (const auto newDragFaceIndex = newBrushNode->brush().findFace(clipFace.normal()))
-      {
-        newDragFaces.emplace_back(newBrushNode, *newDragFaceIndex);
-      }
+      split = std::move(backBrush);
     }
+    brushes.push_back({std::move(frontBrush), std::move(split)});
   }
-
-  // Apply changes calculated above
-
-  dragState.currentDragFaces.clear();
-  map.rollbackTransaction();
-
-  // FIXME: deal with linked group update failure (needed for #3647)
-  const bool success = updateNodeContents(map, "Resize Brushes", nodesToUpdate);
-  unused(success);
-
-  // Add the newly split off brushes and select them (keeping the original brushes
-  // selected).
-  // FIXME: deal with linked group update failure (needed for #3647)
-  const auto addedNodes = addNodes(map, newNodes);
-  selectNodes(map, addedNodes);
-
-  dragState.currentDragFaces = std::move(newDragFaces);
-  dragState.totalDelta = delta;
-
-  return true;
+  return applySplitBrushes(map, delta, dragState, std::move(brushes), false);
 }
 
 void copyFaceAttributesWrapped(
@@ -982,15 +988,42 @@ bool ExtrudeTool::extrude(const vm::vec3d& handleDelta, ExtrudeDragState& dragSt
   auto& map = m_document.map();
   if (dragState.splitBrushes)
   {
+    if (vm::is_zero(handleDelta, vm::Cd::almost_zero()))
+    {
+      dragState.currentDragFaces.clear();
+      dragState.splitBrushNodes.clear();
+      map.rollbackTransaction();
+      dragState.currentDragFaces = getDragFaces(dragState.initialDragHandles);
+      dragState.totalDelta = vm::vec3d::zero();
+      return true;
+    }
+
+    const auto previousDelta = dragState.totalDelta;
     if (
       splitBrushesOutward(map, handleDelta, dragState)
       || splitBrushesInward(map, handleDelta, dragState))
     {
       return true;
     }
+
+    // A topology change must revert the previous preview before applying new
+    // commands. Restore that last valid position if the replacement failed.
+    if (dragState.totalDelta != previousDelta)
+    {
+      if (!splitBrushesOutward(map, previousDelta, dragState))
+      {
+        splitBrushesInward(map, previousDelta, dragState);
+      }
+    }
+    if (dragState.splitBrushNodes.empty())
+    {
+      dragState.currentDragFaces = getDragFaces(dragState.initialDragHandles);
+    }
+    return false;
   }
   else
   {
+    dragState.splitBrushNodes.clear();
     map.rollbackTransaction();
     if (extrudeBrushes(map, getPolygons(dragState.initialDragHandles), handleDelta))
     {

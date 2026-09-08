@@ -84,6 +84,9 @@ struct ExtrudeDragState
   /** The total drag distance so far. */
   vm::vec3d totalDelta = {0, 0, 0};
 
+  /** Split preview nodes in initial-handle order; null for a fully clipped back part. */
+  std::vector<mdl::BrushNode*> splitBrushNodes = {};
+
   kdl_reflect_decl(
     ExtrudeDragState, initialDragHandles, currentDragFaces, splitBrushes, totalDelta);
 };

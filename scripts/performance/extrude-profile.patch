@@ -5,7 +5,7 @@
  /*
   Copyright (C) 2010 Kristian Duske
  
-@@ -362,6 +363,7 @@
+@@ -453,6 +454,7 @@
  bool splitBrushesOutward(
    mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragState)
  {
@@ -13,16 +13,16 @@
    const auto& worldBounds = map.worldBounds();
    const bool lockAlignment = pref(Preferences::AlignmentLock);
  
-@@ -387,7 +389,7 @@
-              const auto dragFaceIndex = dragHandle.faceHandle.faceIndex();
-              const auto newDragFaceNormal = dragHandle.faceNormal();
- 
--             auto newBrush = oldBrush;
-+             auto newBrush = tb::profile::measure("Brush.copy", [&] { return oldBrush; });
-              return newBrush.moveBoundary(
-                       worldBounds, dragFaceIndex, delta, lockAlignment)
-                     | kdl::and_then([&]() {
-@@ -440,6 +442,7 @@
+@@ -469,7 +471,7 @@
+   {
+     const auto& oldBrush = dragHandle.brushAtDragStart;
+     const auto dragFaceIndex = dragHandle.faceHandle.faceIndex();
+-    auto newBrush = oldBrush;
++    auto newBrush = tb::profile::measure("Brush.copy", [&] { return oldBrush; });
+     auto result = newBrush.moveBoundary(worldBounds, dragFaceIndex, delta, lockAlignment)
+                   | kdl::and_then([&]() {
+                       auto clipFace = oldBrush.face(dragFaceIndex);
+@@ -492,6 +494,7 @@
  bool splitBrushesInward(
    mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragState)
  {
@@ -30,18 +30,18 @@
    const auto& worldBounds = map.worldBounds();
    const bool lockAlignment = pref(Preferences::AlignmentLock);
  
-@@ -467,8 +470,8 @@
-     auto* brushNode = dragHandle.faceHandle.node();
- 
-     // "Front" means the part closer to the drag handles at the drag start
+@@ -506,8 +509,8 @@
+   auto brushes = std::vector<SplitBrush>{};
+   for (const auto& dragHandle : dragState.initialDragHandles)
+   {
 -    auto frontBrush = dragHandle.brushAtDragStart;
 -    auto backBrush = dragHandle.brushAtDragStart;
 +    auto frontBrush = tb::profile::measure("Brush.copy", [&] { return dragHandle.brushAtDragStart; });
 +    auto backBrush = tb::profile::measure("Brush.copy", [&] { return dragHandle.brushAtDragStart; });
- 
      auto clipFace = frontBrush.face(dragHandle.faceHandle.faceIndex());
  
-@@ -977,6 +980,7 @@
+     if (clipFace.transform(vm::translation_matrix(delta), lockAlignment).is_error())
+@@ -983,6 +986,7 @@
  
  bool ExtrudeTool::extrude(const vm::vec3d& handleDelta, ExtrudeDragState& dragState)
  {

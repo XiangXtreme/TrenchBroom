@@ -32,10 +32,14 @@
 #include "mdl/BrushFaceHandle.h"
 #include "mdl/BrushNode.h"
 #include "mdl/CatchConfig.h"
+#include "mdl/CommandProcessor.h"
 #include "mdl/EditorContext.h"
 #include "mdl/EntityNode.h"
+#include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
+#include "mdl/Map_Geometry.h"
+#include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Picking.h"
 #include "mdl/Map_Selection.h"
@@ -709,6 +713,56 @@ TEST_CASE("ExtrudeTool")
       false,
       vm::vec3d{0, 0, 0}};
 
+    SECTION("reuse split pieces under different parents as pieces disappear and return")
+    {
+      dragState.splitBrushes = true;
+      const auto initialSelection = map.selection().nodes;
+      tool.beginExtrude();
+      for (const auto distance : {-16.0, -32.0, -48.0, -56.0, -32.0, 8.0, 16.0})
+      {
+        CAPTURE(distance);
+        REQUIRE(tool.extrude({0, distance, 0}, dragState));
+        REQUIRE(dragState.splitBrushNodes.size() == 2);
+        for (size_t i = 0; i < dragState.initialDragHandles.size(); ++i)
+        {
+          const auto& handle = dragState.initialDragHandles[i];
+          const auto initialBounds = handle.brushAtDragStart.bounds();
+          auto* source = handle.faceHandle.node();
+          auto* preview = dragState.splitBrushNodes[i];
+          const auto cut = initialBounds.max.y() + distance;
+          if (cut <= initialBounds.min.y())
+          {
+            CHECK(preview == nullptr);
+            CHECK(source->logicalBounds() == initialBounds);
+          }
+          else
+          {
+            REQUIRE(preview != nullptr);
+            CHECK(preview->parent() == source->parent());
+            auto expectedPreview = initialBounds;
+            expectedPreview.max[1] = cut;
+            if (distance > 0.0)
+            {
+              expectedPreview.min[1] = initialBounds.max.y();
+            }
+            CHECK(preview->logicalBounds() == expectedPreview);
+            auto expectedSource = initialBounds;
+            if (distance < 0.0)
+            {
+              expectedSource.min[1] = cut;
+            }
+            CHECK(source->logicalBounds() == expectedSource);
+          }
+        }
+      }
+      tool.cancel();
+      CHECK(map.selection().nodes == initialSelection);
+      for (const auto& handle : dragState.initialDragHandles)
+      {
+        CHECK(handle.faceHandle.node()->brush() == handle.brushAtDragStart);
+      }
+    }
+
     SECTION("split brushes inwards 32 units towards -Y")
     {
       const auto delta = vm::vec3d(0, -32, 0);
@@ -886,6 +940,249 @@ TEST_CASE("ExtrudeTool")
         }) | kdl::ranges::to<std::vector>(),
         AllDifferent<std::vector<std::string>>());
     }
+  }
+
+  SECTION("split preview reuses nodes and collates updates")
+  {
+    auto& document = fixture.create();
+    auto& map = document.map();
+    auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+    auto* source = new mdl::BrushNode{
+      builder.createCuboid(vm::bbox3d{32.0}, "material") | kdl::value()};
+    addNodes(map, {{map.editorContext().currentLayer(), {source}}});
+    selectNodes(map, {source});
+
+    const auto inward = GENERATE(false, true);
+    const auto cancel = GENERATE(false, true);
+    CAPTURE(inward, cancel);
+    auto tool = ExtrudeTool{document};
+    performPick(map, tool, vm::ray3d{{0, 0, 64}, {0, 0, -1}});
+    auto state = ExtrudeDragState{
+      tool.proposedDragHandles(),
+      ExtrudeTool::getDragFaces(tool.proposedDragHandles()),
+      true};
+    const auto initialCount = source->parent()->childCount();
+    const auto initialModificationCount = map.modificationCount();
+    const auto delta = [&](const double distance) {
+      return vm::vec3d{0, 0, inward ? -distance : distance};
+    };
+    tool.beginExtrude();
+    REQUIRE(tool.extrude(delta(8), state));
+    auto* preview = state.currentDragFaces.front().node();
+    REQUIRE(preview != source);
+    const auto selection = map.selection().nodes;
+    const auto linkId = preview->linkId();
+
+    auto added = 0;
+    auto removed = 0;
+    auto selectionChanges = 0;
+    auto contentChanges = 0;
+    auto rollbacks = 0;
+    auto connection = NotifierConnection{};
+    connection += map.nodesWereAddedNotifier.connect([&](const auto&) { ++added; });
+    connection += map.nodesWereRemovedNotifier.connect([&](const auto&) { ++removed; });
+    connection +=
+      map.selectionDidChangeNotifier.connect([&](const auto&) { ++selectionChanges; });
+    connection +=
+      map.nodesDidChangeNotifier.connect([&](const auto&) { ++contentChanges; });
+    connection += map.commandProcessor().transactionUndoneNotifier.connect(
+      [&](const auto&, const auto, const auto) { ++rollbacks; });
+
+    for (int i = 0; i < 100; ++i)
+    {
+      const auto distance = double(9 + i % 16);
+      REQUIRE(tool.extrude(delta(distance), state));
+      REQUIRE(state.currentDragFaces.size() == 1);
+      CHECK(state.currentDragFaces.front().node() == preview);
+      CHECK(preview->logicalBounds().max.z() == 32.0 + delta(distance).z());
+      CHECK(preview->linkId() == linkId);
+      CHECK(map.selection().nodes == selection);
+    }
+    CHECK(added == 0);
+    CHECK(removed == 0);
+    CHECK(selectionChanges == 0);
+    CHECK(rollbacks == 0);
+    CHECK(contentChanges == 100);
+
+    const auto finalPreview = preview->brush();
+    const auto finalSource = source->brush();
+    contentChanges = 0;
+    if (cancel)
+    {
+      tool.cancel();
+    }
+    else
+    {
+      tool.commit(state);
+      map.undoCommand();
+    }
+    // Undo work stays bounded even after a long drag.
+    CHECK(contentChanges <= 2);
+    CHECK(source->logicalBounds() == vm::bbox3d{32.0});
+    CHECK(source->parent()->childCount() == initialCount);
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{source});
+    CHECK(map.modificationCount() == initialModificationCount);
+    if (!cancel)
+    {
+      map.redoCommand();
+      CHECK(source->parent()->childCount() == initialCount + 1);
+      CHECK(map.selection().nodes == selection);
+      CHECK(preview->brush() == finalPreview);
+      CHECK(source->brush() == finalSource);
+    }
+  }
+
+  SECTION("split preview handles direction changes, clipping and invalid positions")
+  {
+    auto& document = fixture.create();
+    auto& map = document.map();
+    auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+    auto* source = new mdl::BrushNode{
+      builder.createCuboid(vm::bbox3d{32.0}, "material") | kdl::value()};
+    addNodes(map, {{map.editorContext().currentLayer(), {source}}});
+    selectNodes(map, {source});
+    auto tool = ExtrudeTool{document};
+    performPick(map, tool, vm::ray3d{{0, 0, 64}, {0, 0, -1}});
+    auto state = ExtrudeDragState{
+      tool.proposedDragHandles(),
+      ExtrudeTool::getDragFaces(tool.proposedDragHandles()),
+      true};
+    const auto initialCount = source->parent()->childCount();
+    tool.beginExtrude();
+    for (const auto distance : {8.0, 16.0, -8.0, -16.0, -64.0, -72.0, -8.0, 8.0})
+    {
+      CAPTURE(distance);
+      REQUIRE(tool.extrude({0, 0, distance}, state));
+      if (distance <= -64.0)
+      {
+        CHECK(state.currentDragFaces.empty());
+        CHECK(source->parent()->childCount() == initialCount);
+        CHECK(source->logicalBounds() == vm::bbox3d{32.0});
+      }
+      else
+      {
+        REQUIRE(state.currentDragFaces.size() == 1);
+        CHECK(source->parent()->childCount() == initialCount + 1);
+        const auto* preview = state.currentDragFaces.front().node();
+        CHECK(preview->logicalBounds().max.z() == 32.0 + distance);
+        CHECK(
+          source->logicalBounds().min.z() == (distance < 0.0 ? 32.0 + distance : -32.0));
+      }
+    }
+
+    const auto faces = state.currentDragFaces;
+    const auto selection = map.selection().nodes;
+    REQUIRE_FALSE(tool.extrude({0, 0, 1e9}, state));
+    CHECK(state.currentDragFaces == faces);
+    CHECK(state.totalDelta == vm::vec3d{0, 0, 8});
+    CHECK(map.selection().nodes == selection);
+    CHECK(faces.front().node()->logicalBounds().max.z() == 40.0);
+
+    REQUIRE(tool.extrude(vm::vec3d::zero(), state));
+    CHECK(source->parent()->childCount() == initialCount);
+    CHECK(source->logicalBounds() == vm::bbox3d{32.0});
+    CHECK(state.totalDelta == vm::vec3d::zero());
+    CHECK(state.splitBrushNodes.empty());
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{source});
+    tool.commit(state);
+  }
+
+  SECTION("split preview propagates content changes to linked groups")
+  {
+    auto& document = fixture.create();
+    auto& map = document.map();
+    auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+    auto* source = new mdl::BrushNode{
+      builder.createCuboid(vm::bbox3d{32.0}, "material") | kdl::value()};
+    addNodes(map, {{map.editorContext().currentLayer(), {source}}});
+    selectNodes(map, {source});
+    auto* group = groupSelectedNodes(map, "source");
+    REQUIRE(group != nullptr);
+    auto* linked = createLinkedDuplicate(map);
+    REQUIRE(linked != nullptr);
+    deselectAll(map);
+    openGroup(map, *group);
+    selectNodes(map, {source});
+    auto tool = ExtrudeTool{document};
+    performPick(map, tool, vm::ray3d{{0, 0, 64}, {0, 0, -1}});
+    auto state = ExtrudeDragState{
+      tool.proposedDragHandles(),
+      ExtrudeTool::getDragFaces(tool.proposedDragHandles()),
+      true};
+    REQUIRE(state.initialDragHandles.size() == 1);
+    const auto inward = GENERATE(false, true);
+    const auto bounds = [](const mdl::GroupNode* node) {
+      return mdl::filterBrushNodes(node->children())
+             | std::views::transform(
+               [](const auto* brush) { return brush->logicalBounds(); })
+             | kdl::ranges::to<std::vector>();
+    };
+    tool.beginExtrude();
+    for (const auto distance : {8.0, 16.0, 24.0})
+    {
+      REQUIRE(tool.extrude({0, 0, inward ? -distance : distance}, state));
+      REQUIRE(group->childCount() == 2);
+      CHECK_THAT(bounds(linked), UnorderedRangeEquals(bounds(group)));
+    }
+    tool.commit(state);
+    map.undoCommand();
+    CHECK(group->childCount() == 1);
+    CHECK_THAT(bounds(linked), UnorderedRangeEquals(bounds(group)));
+    map.redoCommand();
+    CHECK(group->childCount() == 2);
+    CHECK_THAT(bounds(linked), UnorderedRangeEquals(bounds(group)));
+  }
+
+  SECTION("split preview preserves the last valid state when a linked update fails")
+  {
+    auto& document = fixture.create();
+    auto& map = document.map();
+    auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+    auto* source = new mdl::BrushNode{
+      builder.createCuboid(vm::bbox3d{32.0}, "material") | kdl::value()};
+    addNodes(map, {{map.editorContext().currentLayer(), {source}}});
+    selectNodes(map, {source});
+    auto* group = groupSelectedNodes(map, "source");
+    REQUIRE(group != nullptr);
+    auto* linked = createLinkedDuplicate(map);
+    REQUIRE(linked != nullptr);
+    deselectAll(map);
+    selectNodes(map, {linked});
+    REQUIRE(translateSelection(map, {0, 0, map.worldBounds().max.z() - 48.0}));
+    deselectAll(map);
+    openGroup(map, *group);
+    selectNodes(map, {source});
+    auto tool = ExtrudeTool{document};
+    performPick(map, tool, vm::ray3d{{0, 0, 64}, {0, 0, -1}});
+    auto state = ExtrudeDragState{
+      tool.proposedDragHandles(),
+      ExtrudeTool::getDragFaces(tool.proposedDragHandles()),
+      true};
+    REQUIRE(state.initialDragHandles.size() == 1);
+    const auto previousDistance = GENERATE(0.0, 8.0, -8.0);
+    CAPTURE(previousDistance);
+    tool.beginExtrude();
+    REQUIRE(tool.extrude({0, 0, previousDistance}, state));
+    const auto previousBrush = state.currentDragFaces.front().node()->brush();
+    const auto previousSource = source->brush();
+    const auto previousLinkedBounds = linked->logicalBounds();
+    const auto previousCount = group->childCount();
+    // Valid in the source group, but the linked piece would exceed world bounds.
+    REQUIRE_FALSE(tool.extrude({0, 0, 24}, state));
+    CHECK(state.totalDelta == vm::vec3d{0, 0, previousDistance});
+    REQUIRE(state.currentDragFaces.size() == 1);
+    CHECK(state.currentDragFaces.front().node()->brush() == previousBrush);
+    CHECK(source->brush() == previousSource);
+    CHECK(linked->logicalBounds() == previousLinkedBounds);
+    CHECK(group->childCount() == previousCount);
+    CHECK(linked->childCount() == previousCount);
+    REQUIRE(tool.extrude({0, 0, 12}, state));
+    CHECK(state.currentDragFaces.front().node()->logicalBounds().max.z() == 44.0);
+    tool.cancel();
+    CHECK(group->childCount() == 1);
+    CHECK(linked->childCount() == 1);
+    CHECK(source->logicalBounds() == vm::bbox3d{32.0});
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{source});
   }
 
   SECTION("stamp")
