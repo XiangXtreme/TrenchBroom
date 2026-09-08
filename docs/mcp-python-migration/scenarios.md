@@ -1,29 +1,40 @@
-# MCP Python 迁移场景
+# MCP Python 核心验收场景
 
-本文件定义 capability-map 中 `S-*` 场景的最低验收事实。`planned` 表示
-G3 尚未实现，不能被实现 Agent 当作通过；场景在对应 API、目录和真实 Release
-进程都留下回执、地图和原始日志后才可改为 `passed`。
+这些场景定义六入口交付的闭环，按 [开发规范](development.md) 执行。
+一个场景覆盖多个旧工具。场景脚本通过 tb_api 确认已有符号，通过
+tb_execute_python 调用原生编辑 API；循环和函数承担重复结构与批量工作流。
 
-| 场景 | 覆盖领域 | 最低验收事实 |
-| --- | --- | --- |
-| S-inspect | 状态与 API 发现 | 以 Off、ReadOnly、Edit 分别查询状态和 API，确认无 Python 求值且结果受 16 KiB 预算约束。 |
-| S-documents | 文档生命周期 | 在隔离配置中打开、绑定、保存、导出并关闭一次性地图；错误 fingerprint 或 path 不得改变任何文档。 |
-| S-objects | 查询、选择、对象和分组 | 用 selector、bounds 和属性查询定位对象，执行选择、变换、删除和 undo/redo，核对稳定对象身份。 |
-| S-viewport | 视口与 overlay | 查询和设置受支持视口状态，验证 overlay 不改变地图 dirty 状态，也不残留到下一次 MCP 执行。 |
-| S-review | 截图与 Review | 生成 selection、object、module 与 operation 隔离 Review，检查 manifest、资源 URI、silhouette/all 两种边线模式。 |
-| S-actions | 原生动作 | 仅以 action 模式执行有明确文档绑定的 action；失败回执必须列出已完成动作和 `partialMutation`。 |
-| S-modules | 模块与 selector | 创建带 moduleId 的内容，精确 preview guard 替换，验证过期 guard 拒绝和父操作撤销。 |
-| S-entities | 实体与 FGD | 批量创建、更新、删除、绑定/解绑实体 brush，并验证 FGD schema 和失败输入不会提交。 |
-| S-brushes | 原语与批量几何 | 创建 box、polygon、wedge、cylinder 和 planes brush，验证几何事实、对象身份和一次父事务。 |
-| S-history | 历史恢复 | 交错插入人工编辑、控制台和 Python 操作，查询对应关系并验证不会越过人工编辑静默恢复。 |
-| S-assets | GoldSrc 资产 | 搜索并放置 model、sprite、sound，验证资源识别、实体属性与未找到资源的错误边界。 |
-| S-materials | 材质与 UV | 搜索/替换材质并设置 face UV，随后重载材质、undo/redo，确认所有句柄生命周期检查有效。 |
-| S-faces | Face 选择与纹理 | 选择 face、读取属性、写入纹理属性和 UV，验证不匹配面与非法 UV 的回滚。 |
-| S-validation | 地图问题与泄漏 | 检查并修复安全问题、加载 pointfile，验证问题增量而非仅截图或通过布尔值。 |
-| S-compile | 编译 | 在测试环境保存并运行指定 profile，读取日志尾部，记录输出文件和 crash log 清单。 |
-| S-ir | IR、blockout 与 recipe | 验证/预览/应用文件 IR，执行模块精确替换；确认 Recipe 仅产出 IR，未直接编辑地图。 |
-| S-heightmaps | Heightmap | 预览并导入灰度图，验证 brush 数、bounds、材质和失败路径不会写入地图。 |
-| S-geometry | CSG、坡度与路线 | 执行 CSG，检查 slope、route continuity、shell seam 和 spiral stair 的几何事实，不把 Review 作为几何验收。 |
+## 必需场景
 
-每个场景的最终记录应至少包含输入、目标文档引用、执行回执、前后问题摘要、几何或
-文件事实、输出资源和运行前后的 crash log 清单。测试 handler 或可读截图不能替代该记录。
+| 场景 | 最低验收事实 |
+| --- | --- |
+| C1 发现与授权 | 默认 Edit 6 项、ReadOnly 5 项、Off 0 项；requestedMode 只能降权；ReadOnly 无 Python 求值；tb_history 写 action 受 Edit 保护；最终所有 profile 相同，旧名称实际调用失败；实测发现载荷。 |
+| C2 文档闭环 | 打开一次性地图，取得文档身份，查询/保存/另存并关闭；action 与 transaction 边界有效；错误 fingerprint/path 不改动任何地图；未保存修改不能被静默丢弃。 |
+| C3 Python 组合建模 | 一段脚本用循环/函数创建重复盒体、凸棱柱和实体，批量设置属性，返回紧凑 counts/bounds；检查实际几何与属性；整段一次 undo 清除，一次 redo 恢复。无需专用场景工具或 IR。 |
+| C4 查询与编辑 | 读取用户选择或查询对象，用句柄完成选择、变换、删除和分组；验证跨文档、删除/重载/undo/redo 后的句柄处理；跨次用稳定 ID 或重新查询恢复目标。 |
+| C5 材质与 CSG | 设置和读取 face 材质/UV，执行一次选择 CSG；对照原生几何、面属性和 undo/redo；非法 UV 或选择失败不提交部分地图修改。 |
+| C6 执行失败与恢复 | 在地图修改之后触发异常、SystemExit/KeyboardInterrupt、被捕获的协作超时、非法/超限结果及提交失败；核对地图、dirty、选择、历史和保留元数据；检查日志预算、executionId 重放/冲突、断连后历史查询和 retrySafe。主要由自动化测试覆盖，真实 Release 至少复现成功、异常回滚和错误文档拒绝。 |
+| C7 验证与截图 | 修改前后查询原生问题，比较增量；截图取得可读图像与资源路径；保存、截图、地图验证、BSP/碰撞状态分开报告；验收期间没有新 crash log。 |
+| C8 既有 Python 使用 | 运行 PythonApi、PythonPluginManifest 及受影响的控制台、面板、timer 回归；旧 MCP 删除不破坏插件 API 或原生 UI 仍在使用的能力。 |
+
+## 保留功能的附加验证
+
+以下场景由最终保留的公开能力触发。功能没有进入本次范围时记录其归属和限制，
+不为补齐旧目录而实现它。已保留功能若涉及修改或状态恢复，必须覆盖其相应安全边界。
+
+| 功能 | 保留时所需证据 |
+| --- | --- |
+| IR 与 module replacement | 支持的版本/操作、preview guard、过期或篡改拒绝、单父事务及元数据 undo/redo；明确拒绝未支持的 replace_module，不能降级成无 guard 的替换。 |
+| 高级 Review/路线分析 | 保留模式的 manifest 与资源、几何事实及不可评估项；截图不能证明路线可走、BSP 正确或游戏碰撞正确。 |
+| GoldSrc 资产放置 | 搜索/放置后核对路径、实体属性及错误输入边界；复用已有测试。 |
+| Heightmap、path sweep、编译 | 仅验证仍公开并承诺支持的操作，检查输出、失败边界和日志；脚本组合使用核心原语时按 C3 验证。 |
+| 历史状态 | 混入人工编辑和控制台操作，恢复时不得越过未经确认的人工编辑；任何保留的对象/模块状态与原生历史同步。 |
+
+## 证据与状态
+
+每个核心场景记录源码 commit、执行方式、输入脚本、目标身份、回执、前后地图或文件
+事实、输出资源和 crash log 检查。测试结果与真实 Release 结果分别标明；未执行项
+标为未验证，不能用代码已存在或截图非空代替通过。
+
+capability-map 中原 S-*、T3-* 标识是历史索引，可以映射到上述场景并复用有效证据。
+其 planned 状态不表示必须扩展对应领域 API，脚本门禁的 passed 也不能代替场景结果。

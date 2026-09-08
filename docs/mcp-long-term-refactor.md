@@ -1,5 +1,11 @@
 # MCP Long-Term Refactor Blueprint
 
+> Historical design, superseded for implementation on 2026-09-08 by the
+> [Python migration delivery plan](mcp-python-migration/development.md) and
+> [current governance](mcp-development-governance.md). The body records the earlier
+> IR/tool architecture and completed work; its future tasks, compatibility rules
+> and tool lists are not the active backlog. Use the current plan's three batches.
+
 This document describes the target shape for a long-term TrenchBroom MCP
 refactor. It is a design roadmap, not an implementation plan for one patch.
 

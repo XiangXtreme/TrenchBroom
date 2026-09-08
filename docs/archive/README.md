@@ -6,10 +6,14 @@ source of truth for MCP development or Agent workflow decisions.
 
 Current MCP guidance lives in:
 
-- `../mcp-development-governance.md`
-- `../mcp-lightweight-roadmap.md`
-- `../mcp-moderate-lightweight-design.md`
-- `../mcp-agent-workflow.md`
+- [MCP governance](../mcp-development-governance.md)
+- [Python migration delivery plan](../mcp-python-migration/development.md)
+- [Core acceptance scenarios](../mcp-python-migration/scenarios.md)
+- [Agent workflow](../mcp-agent-workflow.md)
+
+The lightweight, moderate and long-term MCP designs in the parent directory also
+remain historical references. Their earlier compatibility and IR migration tasks
+are superseded by the active Python delivery plan.
 
 Archived documents should not be used to justify new C++ MCP prefab tools or
 default profile expansion. If an archived note conflicts with current guidance,

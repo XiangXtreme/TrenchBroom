@@ -1,5 +1,11 @@
 # MCP Moderate Lightweight Design
 
+> Historical design, superseded for implementation on 2026-09-08 by the
+> [Python migration delivery plan](mcp-python-migration/development.md) and
+> [current governance](mcp-development-governance.md). The body records the earlier
+> IR/tool architecture and completed work; its future tasks, compatibility rules
+> and tool lists are not the active backlog. Use the current plan's three batches.
+
 ## Summary
 
 The right lightweight direction is not to make TrenchBroom MCP weaker. It is to make

@@ -149,15 +149,16 @@
 - When using web or external research for GoldSrc formats, prefer primary/simple references and record the practical decision in code or docs. Avoid copying large third-party implementations or license-sensitive code.
 
 ## MCP development governance
-- Before adding or changing TrenchBroom MCP tools, read and follow `docs/mcp-development-governance.md`.
-- C++ MCP is the guarded editor execution kernel. Do not add scene prefab tools such as `create_temple`, `create_courtyard`, `create_kz_route`, `create_racetrack`, `create_house`, or similar layout-specific generators.
-- Put prefab-like composition, gameplay/domain judgement, and reusable scene families into skill recipes that emit IR files. MCP should preview/apply the IR, recover targets, validate geometry, and render reviews.
+- Before MCP work, read `docs/mcp-development-governance.md` and the active delivery plan `docs/mcp-python-migration/development.md`. Historical lightweight/moderate/long-term roadmaps are references, not implementation backlogs.
+- MCP is converging on six entry points with trusted Python as the editing execution layer. C++ retains native commands, document guards, object lifetime, undo, validation and rendering. Put scene composition and repeated edits into composable Python scripts using `trenchbroom`.
+- Scripts executed through `tb_execute_python` may call the public Python API under its document and transaction guards. Existing IR recipes may keep producing IR; full IR/module parity is not a prerequisite for the six-entry cutover.
+- Implement the active plan in coherent capability-family batches: core Python workflows/default discovery, complete old-tool removal, final acceptance. Classify old capabilities as native, Python composition or retired; do not create a Python symbol for every old tool. Reuse existing native owners and extract automation services only for real shared behavior or state.
 - The canonical TrenchBroom MCP workflow skill source is `skills\trenchbroom-mcp-scene-workflow`; sync it to the local runtime copy at `C:\Users\Trh\.cc-switch\skills\trenchbroom-mcp-scene-workflow` with `scripts\sync-trenchbroom-mcp-skill.ps1`.
 - After changing the TrenchBroom MCP workflow skill or recipes, run `python skills\trenchbroom-mcp-scene-workflow\scripts\validate_recipes.py` and `powershell -ExecutionPolicy Bypass -File scripts\sync-trenchbroom-mcp-skill.ps1 -Check`.
-- Add a C++ MCP capability only when it needs TrenchBroom internals such as document guards, undo transactions, selection/object identity, live map geometry, validation, or review rendering.
+- Add a native Python capability only when a core workflow needs editor internals that existing APIs cannot express. Keep the MCP surface within the six-entry contract.
 - After MCP C++ source, catalog, bridge, config, or UI integration changes, build the Release `TrenchBroom` target before declaring the work done, in addition to focused MCP tests.
 - New high-volume MCP outputs must be compact by default (`idsMode:"count"` or `"sample"`, `detail:"summary"` style behavior) with full ids/details opt-in.
-- Modeling profile growth requires justification. Prefer hidden/searchable expert tools over visible duplicate convenience aliases.
+- Final Core/Modeling/Full configurations normalize to the same permission-filtered six-entry catalog. Remove old schemas, registrations, dispatch and hidden aliases; preserve shared native functionality used by the UI or existing Python plugins.
 - For dense old maps or ambiguous brush ownership, prefer user selection plus selection-aware MCP tools instead of complex automatic brush matching.
 
 ## Test structure and code coverage

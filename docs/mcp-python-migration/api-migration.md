@@ -1,5 +1,10 @@
 # MCP Python API 迁移说明
 
+本文记录源码核查点 `f713d9f14` 已有接口及其支持范围。当前交付计划见
+[开发规范](development.md)，核心验收见 [scenarios.md](scenarios.md)。下文的旧 MCP
+对应关系用于理解已有实现；后续按能力族收敛和删除旧入口，复杂行为可以通过 Python
+组合，退役工具不需要同名 API。这里描述的 IR 和模块能力是可选路径。
+
 ## 文档打开
 
 `tb.documents.open(path)` 与 `open_verified(path)` 只接受绝对的现有地图路径。它们和过渡 MCP
@@ -40,9 +45,9 @@ result = {"path": document.path, "argument": arguments.get("name")}
 精确 `symbol`（如 `Document.path`）才展开对应符号。现有 public Python API 的目录
 由 `PythonApiCatalog` 维护，并有测试确保它和模块绑定同步。
 
-旧 MCP 工具仍处于过渡目录。它们不构成推荐的新组合接口，也不得由新的 Python API
-通过 JSON 反调。完整替代关系与阶段状态见 `capability-map.json`；该文件在 G0 的
-逐能力审计完成前只表达计划，不表达能力对等。
+旧 MCP 工具仍处于过渡目录，Python API 不得通过 JSON 反调旧 handler。
+`capability-map.json` 保留旧目录审计信息，现有 planned/replacementSymbols 不能
+当作逐项开发清单或已验证的能力。其后续结构按开发规范表达原生能力、Python 组合和退役。
 
 ## 地图快照
 
@@ -196,5 +201,5 @@ IR 文件，并复用与 MCP 相同的 schema 校验。成功时返回已规范�
 操作、实体或原生提交失败时，不会留下此次请求的几何或实体。成功结果同时包含规范化 IR、预览、
 brush/entity 计数和可继续传给 `tb.objects`、`tb.brushes` 或 `tb.entities` 的句柄。
 
-`replace_module` 及其 preview guard、完整 blockout 操作集合仍在服务迁移中。当前它们会在
-写入前明确拒绝，不能以普通 `create` 代替其版本和内容 hash guard。
+当前 Python IR 路径在写入前明确拒绝 `replace_module` 和不支持的 blockout 操作。
+其扩展按独立需求决定；普通 `create` 不能代替已有模块替换的版本和内容 hash guard。

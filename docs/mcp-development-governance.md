@@ -1,466 +1,220 @@
 # MCP Development Governance
 
-This document is the hard rule set for future TrenchBroom MCP development.
-It is normative. If another MCP roadmap, workflow note, or implementation idea
-conflicts with this document, follow this document first and update the older
-text.
+## Current Contract
 
-The goal is to keep C++ MCP as a small, reliable execution kernel while skill
-recipes and Agent workflows handle scene intent and prefab-like composition.
+MCP exposes a small entry surface around trusted Python execution and native
+editor inspection. Scene composition and repeated editing belong in Python;
+TrenchBroom retains document identity, native commands, transactions, validation,
+rendering, and object lifetime checks.
 
-## Layer Contract
+This is the normative architecture contract. The active delivery plan is
+[MCP Python migration](mcp-python-migration/development.md), with
+[core acceptance scenarios](mcp-python-migration/scenarios.md).
+The older lightweight, moderate, and long-term roadmaps are historical references.
+Their tool inventories and IR-first workflows do not authorize new migration work.
 
-### C++ MCP Owns
+The migration deliberately retires the old MCP catalog in capability-family
+batches. Native capabilities, Python composition, and retirement are all valid
+outcomes. Completion requires working core scenarios and removal of old entry
+points; it does not require one Python replacement for every old tool.
 
-C++ MCP may own a capability only when it needs at least one of these
-TrenchBroom-specific responsibilities:
+## Layer Ownership
 
-- active document identity, `expectedDocumentPath`, or document fingerprint
-- undoable map mutation through TrenchBroom transactions
-- selection state, native groups, object identity, or stale/live object recovery
-- selector/module resolution against the current map
-- map validation, problem checks, geometry facts, slope analysis, or route
-  continuity
-- review rendering, isolated screenshots, manifests, or capture paths
-- entity, texture, face, object, or brush edits that must touch live map state
-
-### Skill Recipes Own
-
-Skill recipe scripts own reusable scene composition and domain intent:
-
-- temple, courtyard, house, industrial, terrain pass, track, route, KZ, bhop,
-  surf, slide, or other prefab-like layouts
-- repeated architectural grammar, decorative structures, and aesthetic choices
-- gameplay interpretation, difficulty judgement, and route intent narratives
-- parameterized scene families that can emit deterministic IR
-
-Recipes must emit IR JSON files. They must not call TrenchBroom, MCP, or `trenchbroom`
-directly, and they must not edit `.map` files.
-
-### IR Owns
-
-IR is the boundary format between recipe intent and C++ execution:
-
-- large operation transport
-- deterministic recipe output
-- preview before mutation
-- transaction-backed apply through MCP
-- metadata attachment such as `moduleId`, `part`, `role`, `routeId`, `order`,
-  and `generatedBy`
-
-## Hard Rules
-
-### Rule 1: No Scene Prefab Tools In C++ MCP
-
-Do not add C++ tools such as:
-
-- `create_temple`
-- `create_courtyard`
-- `create_kz_route`
-- `create_racetrack`
-- `create_house`
-- `create_industrial_room`
-- `create_bhop_chain`
-
-If the feature name describes a finished scene, game mode, architectural style,
-or domain-specific layout, it belongs in a skill recipe.
-
-### Rule 2: Start In Recipe Unless C++ Is Clearly Required
-
-When a request can be expressed as existing IR operations plus metadata, implement
-it in a recipe or skill workflow first. Promote it to C++ only after real use
-shows that it is a generic editor primitive or validator.
-
-Promotion to C++ requires all of these:
-
-1. At least two independent recipes or workflows need the capability.
-2. The behavior cannot be expressed cleanly with existing IR operations.
-3. The behavior needs TrenchBroom internals, undo/document safety, live object
-   identity, geometry validation, or review rendering.
-4. The output can be compact by default.
-5. The Modeling profile does not become noisier without a separate justification.
-
-### Rule 3: Generic Primitives Are Allowed, Scene Semantics Are Not
-
-Allowed C++ examples:
-
-- `arc_ramp`
-- `path_ribbon`
-- `ramp_between`
-- `brush_create_polygon_batch`
-- `geometry_analyze_slopes`
-- `geometry_analyze_route_continuity`
-- selector/module/group/transform/review tools
-
-Not allowed as C++ examples:
-
-- "KZ beginner route"
-- "temple courtyard"
-- "ascending loop track with rails"
-- "industrial room kit"
-- "bhop challenge chain"
-
-A primitive may be useful for routes or buildings, but its name and schema must
-describe geometry or editor state, not a finished scene concept.
-
-### Rule 4: Existing Borderline Tools Are Compatibility, Not Expansion Points
-
-Legacy or convenience tools may remain for compatibility, but do not expand them
-into richer scene systems.
-
-Current classifications:
-
-| Tool or path | Status |
+| Layer | Responsibility |
 | --- | --- |
-| `blockout_create_batch` | Generic batch geometry, keep. |
-| `ir_compile_preview_from_file` / `ir_apply_from_file` | Recipe transport boundary, keep. |
-| `blockout_create_spiral_stairs` | Generic stair primitive, keep but do not turn into route prefab logic. |
-| `blockout_create_room/corridor/stairs/ramp/doorway/cover/sky_shell` | Direct tool surface removed. `room`, `corridor`, `stairs`, `doorway`, `cover`, and `sky_shell` batch types moved to skill recipes; legacy `ramp` remains only for compatibility pending separate review. |
-| `python_generate_blockout` | Legacy/script bridge. Prefer skill recipes that emit IR. |
-| KZ/temple/courtyard/track/house layouts | Recipe candidates, not C++ MCP tools. |
-
-### Rule 5: Default Responses Must Be Compact
-
-Every new or changed high-volume tool must support compact output by default:
-
-- use `idsMode:"count"` or `idsMode:"sample"` for generated ids
-- make full ids opt-in with `idsMode:"full"`
-- make full face/seam/object listings opt-in with `detail:"full"`
-- return counts, samples, bounds, warnings, and resource paths before long arrays
-- do not return hundreds of ids in the default path
-
-If a response cannot be made compact, redesign the tool before adding it.
-
-### Rule 6: Selectors And Modules Are The Agent Target System
-
-New workflows must prefer:
-
-- `moduleId`, `part`, `role`, `routeId`, `order`, `generatedBy`
-- structured JSON selectors
-- native groups only for human-visible organization and manual selection
-
-Do not make Agents carry long object id lists across turns when a selector,
-module, operation id, or current user selection is enough.
-
-For dense old maps and ambiguous ownership, prefer user selection over complex
-automatic brush matching.
-
-### Rule 7: Review Is Evidence, Not Validation
-
-Visual review must stay readable and bounded:
-
-- contact sheets default to at most two panels
-- individual captures remain available in the manifest
-- dense labels must auto-hide or stride
-- review paths should be absolute or directly openable
-- `edgeMode:"all"` may expose construction seams; `edgeMode:"silhouette"` should
-  isolate the projected outer boundary without internal Brush edges
-
-Route, ramp, stair, surf, slide, and terrain claims must be backed by geometry
-validation, not screenshots alone. Review is optional evidence and must not change
-`acceptancePassed`. If review was not run, responses and reports must say so rather
-than imply a visual verdict.
-
-### Rule 8: Validation Semantics Must Be Explicit
-
-Route-like validation must declare intent with modes such as:
-
-- `continuous`
-- `stepped`
-- `jump_chain`
-- `spiral`
-- `closed_loop`
-
-Do not infer a closed loop just because a route looks circular. Use
-`closedLoop:true` only when the final surface is meant to connect to the first.
-
-If a smooth slope is intended, `geometry_analyze_slopes` must report at least one
-slope. `slopeCount=0` is a failed build for ramp/surf/slide/ascending intent.
-
-Route and curve tools use `qualityPolicy.intent` with `draft`, `balanced`, or
-`smooth`. `balanced` is the default. Quality overruns warn for `draft` and
-`balanced`; only an explicitly selected `smooth` policy turns them into a failed
-acceptance. Threshold overrides must be positive finite numbers.
-
-Continuity output must distinguish topology and walkability from curve quality:
-
-- use `seamRelation`, `positiveGap`, and `overlapDepth` for gap/touch/overlap facts
-- retain legacy endpoint-distance fields only for compatibility
-- use `walkableContinuous`, `qualityStatus`, and `acceptancePassed` for new flows
-- state unavailable metrics and facts outside scope, including aesthetic intent,
-  BSP compile behavior, and game collision
-
-Centerline direction change is a polyline metric, not a claim of mathematical
-tangent continuity or visual beauty.
-
-### Rule 9: Modeling Profile Growth Requires Justification
-
-Before adding a default-visible Modeling tool, answer:
-
-1. Is this on the common Agent path?
-2. Is it safer or clearer than an existing visible tool?
-3. Would a skill rule be enough instead?
-4. Can the tool be hidden but searchable?
-
-Default-visible tools should cover status/open, IR preview/apply, selector/module
-recovery, transform/delete, validation, review, and common atomic creation/editing.
-Debug, viewport, low-level, legacy, and duplicate convenience entries should be
-hidden but searchable.
-
-The active MCP tool profiles are `Core`, `Modeling`, and `Full`. `Core` is for
-compact discovery and smoke checks, `Modeling` is the recommended Agent default,
-and `Full` is for expert/debug use. Legacy config strings such as `Balanced` may
-parse as `Modeling`, but new docs, UI, and tool output must not advertise a
-separate balanced profile.
-
-### Rule 10: Tests And Real TB Acceptance Are Required
-
-Every non-trivial MCP change must include:
-
-- focused catalog tests when schema/profile/search behavior changes
-- focused bridge tests when tool behavior changes
-- compact-output tests for high-volume responses
-- real TB disposable-map smoke when the change touches mutation, review,
-  validation, document guards, or startup behavior
-- no new crash logs during acceptance
-
-Documentation-only governance changes need static checks, not a Release rebuild.
-
-### Rule 11: Discovery Problems Are Not Tool Requests
-
-When an Agent cannot find or choose the right workflow, fix discovery before
-adding tools:
-
-- improve skill routing, tool descriptions, `tb_status` / `tb_doctor` hints, or
-  `tb_tools_search`
-- add or update local docs/searchable guidance
-- add catalog contract tests for tool additions, removals, profile visibility,
-  schemas, and initialization instructions
-
-Do not add alias, prefab, convenience, or arbitrary-execution tools just to make
-behavior easier to remember. Do not add generic escape hatches such as
-`execute_trenchbroom_code`, `run_tb_script`, or `run_cpp` unless a separate
-security design makes them hidden, expert-only, document-guarded, and audited.
-
-### Rule 12: IR Compatibility Must Be Intentional
-
-IR is a public boundary between recipes and C++ MCP. Changes to IR shape must be
-version-aware:
-
-- keep old accepted fields working when practical
-- add new fields as optional first
-- return warnings for deprecated fields before removing them
-- reject unknown or unsupported schema versions with a structured error
-- document any breaking IR change in the governance/roadmap docs and recipe
-  validation path
-
-Recipes should include a schema/version marker once the IR shape changes beyond
-small additive fields.
-
-The current IR version is `schemaVersion:1`. New recipes must emit it. The C++
-kernel accepts an unversioned document as v1 with a `legacyUnversionedIr` warning,
-and rejects non-integer versions, versions below 1, and future versions before mutation.
-`qualityPolicy`, `applyMode`, and `requireMaterialAvailable` are additive IR v1
-fields and do not require a schema-version bump.
-
-### Rule 13: Tool Lifecycle Must Be Explicit
-
-Every MCP tool should fit one lifecycle state:
-
-- `stable`: default for commonly used tools
-- `experimental`: hidden/searchable until real workflows prove it
-- `legacy`: kept for compatibility, with replacement guidance
-- `deprecated`: replacement exists; no new workflow should use it
-
-Do not remove a tool immediately unless it is unsafe. Hide or deprecate first,
-keep exact-name search working, and add replacement text in the schema. Changing
-default profile visibility counts as a compatibility change and needs catalog
-test coverage.
-
-### Rule 14: Performance Budgets Must Be Clear
-
-MCP tools should have predictable cost. New high-volume tools must define:
-
-- expected input size and target count
-- default timeout or practical runtime expectation
-- maximum returned id/detail volume in default mode
-- behavior when work is too large: summarize, paginate, write a resource, warn,
-  or reject before mutation
-
-Review and validation tools should prefer bounded summaries, small samples, and
-resource paths over huge inline payloads.
-
-The bridge uses fixed response budgets by cost class: Fast 10 seconds, Normal 30
-seconds, and Long 120 seconds. Connection and write waits remain 5 seconds. A
-timeout must report the tool, request id, timeout, unknown mutation state, unsafe
-retry status, and history-inspection recovery steps.
-
-Session state is bounded: 1024 operation records, 128 review resources, 64 IR
-previews with a 10-minute TTL, and the current plus three recent document
-fingerprints. `tb_status` and `tb_doctor` must expose limits, counts, and eviction
-counters. Reads of evicted resources must return recovery guidance.
-
-### Rule 15: Failure Recovery Must Be Structured
-
-Mutating tools must either commit one clear transaction or fail before mutation.
-Partial mutation is allowed only when explicitly documented and reported.
-
-Failures should return structured diagnostics that tell the Agent:
-
-- whether the document was mutated
-- whether retrying is safe
-- whether the active document/path/fingerprint mismatched
-- whether ids were stale or selectors matched nothing
-- whether validation failed before commit or rollback happened
-- which recovery path to use: retry, refresh status, inspect detail, undo, or
-  rebuild
-
-Crash, wrong-map write, data loss, and unclear mutation state are P0 issues.
-
-IR apply is one native transaction. Geometry, entities, history, metadata,
-modules, preview state, counters, and object identity must either commit together
-or remain unchanged. A successful aggregate apply returns a parent operation and
-compatible child-operation ids; `undoOperationId` / the parent is the only undo
-target, while child/audit ids are diagnostic detail.
-
-Generated-module iteration should use `applyMode:"replace_module"`, not an
-unguarded delete/create sequence. Inline replacement must match preview IR hash,
-module revision, module content hash, and the exact canonical live object set.
-File replacement must use its cached `previewId`. Any mismatch must fail before
-mutation and request a new preview. Undo/redo must restore map content and affected
-session metadata/module identity together, then reconcile aliases and stale ids.
-
-Material names are editor facts, not proof that a WAD is loaded. Default behavior
-may preserve a missing requested name with a warning; `requireMaterialAvailable:true`
-must reject the full mutation during preflight. Successful mutations must report a
-`completionState` that keeps save, visual review, and BSP compile status explicit.
-
-### Rule 16: Local Transport Uses Explicit Local Trust
-
-HTTP listens only on loopback and does not authenticate requests. Enabling MCP in
-`ReadOnly` or `Edit` mode explicitly trusts processes running as the local user to
-connect to `/mcp`. The UI and client setup must state this trust boundary clearly;
-do not add shared tokens, authorization headers, or credentials to `config.json`.
-
-CORS may echo only an allowed loopback request origin. Request size, connection,
-timeout, mode, document guard, transaction, and undo/redo controls remain mandatory.
-MCP stays `Off` by default, and users should disable it when local-process trust is
-not acceptable.
-
-The opt-in stdio shim and TrenchBroom must read the same config path. JSON-RPC requests
-must declare `jsonrpc:"2.0"`; params must be an object; initialize advertises only
-the supported `2025-06-18` protocol. The effective mode is the stricter of the
-configured mode and `requestedMode`.
-
-## New Capability Decision Checklist
-
-Use this checklist before implementing a request:
-
-1. Can it be expressed with existing IR operations plus metadata?
-   - Yes: implement it in a recipe or skill workflow.
-2. Does it need undo, document guard, selection state, object identity, validation
-   geometry, or review rendering?
-   - Yes: C++ MCP may be appropriate.
-3. Is it a scene, route family, building style, gameplay object, or aesthetic
-   pattern?
-   - Yes: keep it in skill recipe.
-4. Would it make the Modeling profile noisier?
-   - Yes: hide it by default or put guidance in the skill.
-5. Can output be summarized by default?
-   - No: redesign before implementation.
-6. Is this a repeated need across independent workflows?
-   - No: keep it in recipe or workflow until the pattern proves itself.
-
-When unsure, start in a recipe. Promote to C++ only after repeated real workflows
-prove the need.
-
-## Required Change Template
-
-For any MCP feature proposal, record these answers in the implementation plan,
-commit message, PR text, or matching design doc:
-
-```text
-Layer decision:
-- Owner layer:
-- Why not recipe:
-- Why not existing MCP tools:
-- Required TrenchBroom internals:
-- Default output mode:
-- Modeling profile visibility:
-- Compatibility/lifecycle:
-- Performance budget:
-- Failure recovery behavior:
-- Validation path:
-- Real TB acceptance plan:
-```
-
-## Skill Synchronization Rules
-
-The project-owned skill source lives at
-`skills/trenchbroom-mcp-scene-workflow`. The local runtime copy is
-`C:\Users\Trh\.cc-switch\skills\trenchbroom-mcp-scene-workflow`; update it with
-`scripts\sync-trenchbroom-mcp-skill.ps1` after editing the project copy.
-
-When C++ MCP behavior changes, update the skill only for workflow decisions:
-
-- which tool to call by default
-- when to use recipes instead of direct MCP
-- which validation mode to choose
-- how to keep responses compact
-- how to recover targets through selector/module/group/user selection
-
-Do not put long C++ schema copies into the skill. MCP schema remains the source
-for parameter details; the skill owns routing and judgment.
-
-When adding a recipe, update the skill recipe manifest, examples, validator, and
-recommended MCP validation path. Run
-`python skills\trenchbroom-mcp-scene-workflow\scripts\validate_recipes.py`
-before syncing the runtime copy. Do not add a matching C++ prefab tool.
-
-## Skill Development Rules
-
-Skill constraints get stricter the closer they move to the editor kernel, and
-softer the closer they move to creative intent.
-
-- Workflow skills may choose tool order, validation order, recovery paths, and
-  when to use recipes.
-- Recipe scripts may encode prefab-like composition, but must emit deterministic
-  IR only.
-- Domain skills may judge style, gameplay, difficulty, or route intent, but
-  must not claim editor facts that MCP did not validate.
-- Skills must not mutate maps directly, call TrenchBroom internals, edit `.map`
-  files, or bypass MCP document guards and undo transactions.
-- When a skill needs new MCP support, describe it as a generic primitive,
-  selector/module operation, validator, review feature, compact-output
-  improvement, or failure-recovery improvement.
-- Skills should express policies more than procedures: goals, constraints,
-  validation requirements, recovery strategies, and heuristics.
-- Avoid rigid step-by-step procedures unless editor safety, compatibility,
-  deterministic recipe output, validation gates, or failure recovery require
-  them.
-- Prefer soft routing language such as "usually", "recommend",
-  "common pattern", and "may". Reserve "must", "always", and exact sequences
-  for safety, compatibility, deterministic output, validation, and recovery.
-- Creative rules may be flexible. Mutation, validation, compatibility,
-  performance, and recovery rules are strict.
-
-## Review Checklist
-
-Before merging or committing MCP work, verify:
-
-- no scene-prefab C++ tool was added
-- new primitives are generic and reusable
-- large outputs are compact by default
-- hidden/default profile behavior is intentional
-- selectors/modules/groups remain the recovery path
-- route/slope semantics are validated by geometry tools
-- review images remain readable
-- docs and skill routing are updated when workflow changes
-- discovery issues are fixed through docs/search/skill hints before new tools
-- IR compatibility and tool lifecycle are intentional
-- tool catalog/profile/schema/instruction changes are covered by contract tests
-- performance and failure behavior are documented for high-volume tools
-- focused tests and real TB acceptance match the change risk
-
-This is the guardrail that keeps MCP useful without letting it become a pile of
-scene generators.
+| MCP | Local transport, permissions, bounded discovery, execution dispatch, receipts and resources; six public entry points. |
+| Python runtime | Trusted code in the existing process and Qt main thread, fresh globals, document-bound execution and result conversion. |
+| trenchbroom API | Composable objects, named parameters, collections and useful batches over native editor operations. |
+| Native modules / automation | Map commands, undo/redo, valid object identity, geometry, validation and rendering; shared state where actually needed. |
+| Python scripts / skills | Loops, functions, scene generation, reusable arrangements, domain intent and workflow judgment. |
+
+The default edit path is MCP -> Python runtime -> trenchbroom API -> native
+commands. Read-only inspection, history, validation and capture may call native
+services directly.
+
+Reuse existing automation services when they remove real duplication or own
+necessary shared state. A binding that calls an existing native command does not
+need another forwarding service. Extraction is driven by ownership and actual
+dependencies, not by a checklist requiring every old tool to move to automation.
+Automation must not depend on Python or JSON-RPC. Python must not call old MCP
+handlers through JSON, tool names, or a generic call-old-tool adapter.
+
+C++ additions must be generic native editor capabilities required by a concrete
+core workflow, such as brush construction or CSG. Finished scenes, stair/room
+arrangements, gameplay interpretation, and repeated layouts belong in Python
+scripts. Keep one implementation of native geometry and command algorithms.
+
+## Public Surface And Tool Retirement
+
+The final Edit catalog contains only tb_inspect, tb_api, tb_execute_python,
+tb_history, tb_validate and tb_capture. ReadOnly excludes tb_execute_python.
+Off exposes no callable tools or resources. History mutations require Edit.
+
+Existing profile strings may be accepted for configuration migration, but must
+normalize to the same permission-filtered final catalog. Full and exact-name
+lookup must not retain a second tool surface. After cutover, old schemas,
+registrations, dispatch branches, hidden aliases and unused dedicated wrappers
+are deleted. Retained native helpers may be reused by the six entry points.
+Do not move the entire old catalog into an action parameter table or accept an
+arbitrary old tool name through the six entry points. Keep only the operations
+needed for each entry's responsibility; compose edits in Python.
+
+Record a disposition for each old capability family and test affected core
+workflows. Remove a family once its useful behavior is provided by native APIs or
+Python composition, or explicitly retired in the migration record. There is no
+mandatory hide/deprecate waiting period for this authorized catalog replacement.
+
+Keep existing public Python plugin/console APIs and native UI functionality
+working. Removing an MCP entry point is not permission to remove a shared
+algorithm still used by those clients. Existing focused tests provide regression
+coverage; retain or adapt tests for the surviving behavior.
+
+Discovery uses tb_inspect for current editor facts and tb_api for actual Python
+bindings. Improve symbol descriptions and script examples before adding native
+APIs. The public tool count is bounded even when Python capabilities grow.
+
+## Scripts, IR And Targeting
+
+Trusted scene scripts may import trenchbroom and call its public API when executed
+through tb_execute_python, with the same document and transaction guards as inline
+code. They may also compute data outside the editor and submit it to that execution
+path. Skills do not edit live .map files or bypass native commands and undo.
+
+IR is an optional data format for existing import/preview workflows. New scene
+scripts can compose native Python APIs directly. Full IR operation parity,
+module replacement, dedicated route generators and heightmap/compile automation
+are extension decisions, not prerequisites for the six-entry delivery.
+
+Retained IR support remains versioned: schemaVersion:1 is current; unversioned
+input may be accepted as v1 with legacyUnversionedIr, and malformed or unsupported
+versions fail before mutation. Document supported operations and reject unsupported
+ones explicitly. Do not replace a guarded operation with a weaker fallback.
+
+Retained replace_module paths must check IR hash, module revision/content hash
+and the exact canonical live object set; file replacement uses its previewId.
+Failures occur before mutation. Parent undo restores map content and any retained
+metadata/module identity together. These requirements apply only where that
+capability remains callable; they do not require building new module machinery.
+
+Within an execution, prefer object handles and collections. Across executions,
+recover by stable ID, a fresh query or user selection. Native groups are useful
+for human-visible organization. JSON selectors and module metadata are optional.
+Dense old maps with ambiguous ownership should use user selection.
+
+## Execution And Failure Semantics
+
+Keep the existing trusted-Python execution contract in the migration plan:
+
+- Python runs only in Edit, on the Qt main thread, with fresh globals per request.
+- Bind execution to the requested document fingerprint and saved path. Do not
+  follow a changed active window during execution.
+- Default transaction mode commits one native parent operation. Exceptions,
+  cooperative timeout, invalid/oversized results and commit failures cancel it,
+  restore selection and discard staged state.
+- Document lifecycle, persistence and general editor actions use explicit action
+  mode and report completed actions and partialMutation on failure.
+- Preserve handle checks for deleted, reloaded, cross-document and reused objects,
+  including after undo/redo.
+- Reject nested MCP execution and background-thread editor access. Transient
+  scripts cannot leave persistent callbacks, timers or panels.
+- A cooperative timeout cannot forcibly interrupt a blocking native call. Do not
+  use processEvents, thread termination or interpreter killing to simulate it.
+- Once trusted code runs, external side effects may exist even after map rollback.
+  Only rejection before execution may claim retrySafe:true.
+- Preserve executionId replay/conflict handling, source identity, bounded logs,
+  result resources and truthful mutation/rollback receipts.
+
+Crash, wrong-map write, data loss and unclear mutation state remain P0 issues.
+History must respect intervening manual edits. A timeout or disconnection requires
+receipt/history inspection before retry. Never claim a map rollback undid file or
+process effects.
+
+## Output, Performance And Evidence
+
+Ordinary structured summaries plus compatibility text are bounded to 16 KiB.
+Python source is limited to 256 KiB, requests to 4 MiB, complete JSON results to
+1 MiB and captured stdout/stderr to 1 MiB with discarded-byte counts. Python
+cooperative budgets default to 30 seconds and are capped at 90 seconds.
+Execution receipts retain 1024 entries; execution resources are bounded to
+128 groups and 128 MiB. Only application-owned registered cache files are evicted.
+
+Existing native tool response budgets remain Fast 10 seconds, Normal 30 seconds,
+Long 120 seconds, with 5-second connection/write waits. Retained session structures
+remain bounded: 1024 operation records, 128 review resources, 64 IR previews with
+10-minute TTL, and current plus three recent document fingerprints. tb_inspect
+exposes applicable limits, counts and evictions. Evicted resources return recovery
+guidance. These bounds do not require retaining an otherwise retired subsystem.
+
+Large results return counts, samples, bounds, warnings and resource paths first.
+Full IDs, object listings and face/seam details are opt-in. Capture paths must be
+absolute or directly openable. Review contact sheets default to at most two panels;
+keep individual captures and bounded labels.
+
+Review is optional visual evidence and never changes static acceptancePassed.
+Report save, review, validation, BSP and game-collision status separately.
+Material names are not proof a WAD or texture is loaded. Retained
+requireMaterialAvailable checks fail during preflight when requested.
+
+For retained route validation, declare continuous/stepped/jump_chain/spiral or
+closed_loop intent; closedLoop must be explicit. Smooth ascending intent with
+zero detected slopes fails. Report seamRelation, positiveGap, overlapDepth,
+walkableContinuous and unavailable facts separately from curve quality.
+qualityPolicy draft/balanced overruns warn; explicit smooth may fail acceptance;
+thresholds must be positive finite numbers. Polyline direction metrics do not
+prove mathematical tangent continuity, aesthetics, BSP or collision.
+
+## Local Trust And Protocol
+
+HTTP listens only on loopback and has no shared credential. Enabling ReadOnly or
+Edit trusts local-user processes to connect to /mcp; Edit additionally permits
+trusted Python with the user's process privileges. Python execution is not a
+sandbox. Keep MCP Off by default and migrate old configuration to Off.
+
+CORS echoes only accepted loopback origins. Requests declare jsonrpc:"2.0" with
+object params; initialize advertises the supported 2025-06-18 protocol.
+The stdio shim and application use the same config. requestedMode can only lower
+effective permissions. Keep request, connection and output limits.
+
+Task authorization applies to the relevant script actions. Reuse authorization
+already given; ask only when an action exceeds it. Enabling Edit does not grant an
+Agent unrelated filesystem or external-program actions.
+
+## Delivery And Verification
+
+Implement the three batches in the active migration plan: core Python workflows
+and default discovery, complete old-tool cutover, then final Release acceptance.
+Each batch may span several capability families. Source and relevant tests belong
+in the same coherent change; do not split every helper or status update into a
+separate delivery.
+
+Build focused tests before running them, and build Release TrenchBroom for MCP
+source/catalog/bridge/config/integration changes. Use disposable real maps for
+mutation, identity, rollback, validation and capture acceptance. Keep original
+evidence and check for new crash logs.
+
+Test what survives and what is retired: six-entry permissions, actual failure of
+all old names after cutover, core Python workflows, plugin/console regressions,
+and retained extension guards. Update migration gate scripts to these assertions.
+The historical capability-map and its structural gate do not prove delivery.
+
+After required checks pass, move to the next batch. Repeat or expand testing only
+for new changes, failures or unresolved risks. Final matrix requirements and
+conditional Skill/manual/UI checks are specified in the migration plan.
+Documentation-only governance changes require static checks, not a Release build.
+
+## Skill And Documentation Maintenance
+
+The project skill source is skills/trenchbroom-mcp-scene-workflow; synchronize
+runtime copies through scripts/sync-trenchbroom-mcp-skill.ps1. Update discovery and
+execution routing with the catalog cutover. Existing IR recipe scripts may retain
+their data-generation interface; skills route supported output through the current
+execution layer. Native Python composition may use script files directly.
+
+When skill/recipes change, run their validator and synchronization check. Any
+validator assumptions about IR-only output must be scoped to IR recipes when
+direct Python examples are introduced. This does not weaken editor guards.
+
+Skills own intent, API discovery, compact results and recovery judgment. Tool
+schemas and Python symbol metadata own parameter details. Use current governance
+and the active migration plan for implementation; installed workflow copies and
+historical documents do not reintroduce retired-tool migration requirements.
