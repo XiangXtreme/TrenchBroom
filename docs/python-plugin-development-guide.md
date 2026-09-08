@@ -112,7 +112,7 @@ import trenchbroom as tb
 
 ```python
 # 获取当前活动的地图文档
-doc = tb.current_document()
+doc = tb.documents.current()
 
 # 安全事务上下文管理器
 with doc.transaction("My Custom Operation"):
@@ -173,7 +173,7 @@ sel.set_property("targetname", "box_01", create_if_missing=True)
 
 ### 对象句柄生命周期
 
-`Document`、`Entity`、`Brush` 和 `Face` 是指向当前编辑器状态的句柄。文档关闭或重新加载、节点删除后，相关句柄会失效；Brush 几何发生变化后，此前取得的 `Face` 句柄也会失效。访问失效句柄会抛出 `RuntimeError`。不要在长期回调中永久缓存这些对象；应从 `trenchbroom.current_document()`、当前选区或父对象重新获取。
+`Document`、`Entity`、`Brush` 和 `Face` 是指向当前编辑器状态的句柄。文档关闭或重新加载、节点删除后，相关句柄会失效；Brush 几何发生变化后，此前取得的 `Face` 句柄也会失效。访问失效句柄会抛出 `RuntimeError`。不要在长期回调中永久缓存这些对象；应从 `trenchbroom.documents.current()`、当前选区或父对象重新获取。
 
 ---
 
@@ -261,7 +261,7 @@ projected_point = plane.project(tb.Vec3(10, 10, 50))
 import trenchbroom as tb
 
 def on_run_clicked():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     with doc.transaction("Plugin Action"):
         doc.selection.translate(0, 0, 64)
 
@@ -327,7 +327,7 @@ panel.add_button("执行平移", on_run_clicked)
 ### 编辑器事件
 ```python
 def on_selection_changed():
-    print(f"Selected related entities: {len(tb.selection().all_entities)}")
+    print(f"Selected related entities: {len(tb.documents.current().selection.all_entities)}")
 
 callback_id = tb.register_callback("selection_changed", on_selection_changed)
 
@@ -335,7 +335,7 @@ callback_id = tb.register_callback("selection_changed", on_selection_changed)
 tb.unregister_callback(callback_id)
 ```
 
-当前编辑器发出的事件为 `selection_changed`、`document_loaded` 和 `document_saved`。回调不接收参数，可在回调中通过 `trenchbroom.current_document()` 获取最新状态。
+当前编辑器发出的事件为 `selection_changed`、`document_loaded` 和 `document_saved`。回调不接收参数，可在回调中通过 `trenchbroom.documents.current()` 获取最新状态。
 
 ### 异步定时任务
 ```python
@@ -362,10 +362,10 @@ tb.clear_interval(interval_id)
 
 ```python
 # 列出所有可用的编辑器 Action ID
-actions = tb.list_actions()
+actions = tb.actions.list()
 
 # 触发指定动作（如取消全选、网格切换等）
-tb.execute_action("Menu/Edit/Deselect All")
+tb.actions.execute("Menu/Edit/Deselect All")
 ```
 
 ---
@@ -381,7 +381,7 @@ tb.execute_action("Menu/Edit/Deselect All")
 import trenchbroom as tb
 
 def print_light_positions_above_selected():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     brushes = doc.selection.brushes
     if not brushes:
         print("[警告] 请先在编辑器中选中至少一个 Brush！")
@@ -440,7 +440,7 @@ import trenchbroom as tb
 panel = None
 
 def generate_array():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     if not doc.selection.brushes and not doc.selection.entities:
         panel.set_label_text("status", "错误：请先选中要复制的 Brush 或实体！")
         return

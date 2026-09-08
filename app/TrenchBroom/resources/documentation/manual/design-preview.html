@@ -656,7 +656,7 @@
             </div>
             <pre><code>import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 with doc.transaction("Duplicate & Array"):
     for _ in range(5):
         doc.selection.duplicate()
@@ -674,7 +674,7 @@ with doc.transaction("Duplicate & Array"):
           <div class="s-panel-title">⚡ 快速参数参考 (Quick Specs)</div>
           <div class="s-pill-list">
             <div class="s-pill">
-              <span><code>current_document()</code></span>
+              <span><code>documents.current()</code></span>
               <span style="font-size:11px; color:var(--primary)">-&gt; Document</span>
             </div>
             <div class="s-pill">

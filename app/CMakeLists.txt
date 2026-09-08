@@ -1,4 +1,5 @@
 add_subdirectory(CmdTool)
+add_subdirectory(DumpPythonApi)
 add_subdirectory(DumpShortcuts)
 add_subdirectory(TbPerf)
 add_subdirectory(TrenchBroom)

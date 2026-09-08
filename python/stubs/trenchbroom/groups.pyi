@@ -1,0 +1,13 @@
+"""
+Native group organization operations.
+"""
+from __future__ import annotations
+__all__: list[str] = ['create_from_selection', 'inspect_selected', 'rename_selected', 'ungroup_selected']
+def create_from_selection(arg0: str) -> dict:
+    ...
+def inspect_selected() -> list:
+    ...
+def rename_selected(arg0: str) -> list:
+    ...
+def ungroup_selected() -> dict:
+    ...

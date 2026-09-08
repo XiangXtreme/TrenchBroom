@@ -75,89 +75,6 @@ constexpr auto ModuleSymbols = std::array{
   PythonApiSymbol{
     "viewport", Property, "viewport", PythonApiValueType{PythonApiType::Viewport}},
   PythonApiSymbol{
-    "selected_brushes",
-    Function,
-    "() -> list[Brush]",
-    PythonApiValueType{PythonApiType::Brush, 1u},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "selectedBrushes",
-    Function,
-    "() -> list[Brush]",
-    PythonApiValueType{PythonApiType::Brush, 1u},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "selected_entities",
-    Function,
-    "(include_brushes=False) -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "selectedEntities",
-    Function,
-    "(include_brushes=False) -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "selected_all_entities",
-    Function,
-    "() -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "selectedAllEntities",
-    Function,
-    "() -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "selection",
-    Function,
-    "() -> Selection",
-    PythonApiValueType{PythonApiType::Selection},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "selected_faces",
-    Function,
-    "() -> list[Face]",
-    PythonApiValueType{PythonApiType::Face, 1u},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "selectedFaces",
-    Function,
-    "() -> list[Face]",
-    PythonApiValueType{PythonApiType::Face, 1u},
-    PythonApiEffect::Read},
-  PythonApiSymbol{"translate", Function, "(...)"},
-  PythonApiSymbol{"rotate", Function, "(...)"},
-  PythonApiSymbol{"scale", Function, "(...)"},
-  PythonApiSymbol{"duplicate", Function, "(target=None)"},
-  PythonApiSymbol{"delete_selection", Function, "()"},
-  PythonApiSymbol{"deleteSelection", Function, "()"},
-  PythonApiSymbol{"deselect_all", Function, "()"},
-  PythonApiSymbol{"deselectAll", Function, "()"},
-  PythonApiSymbol{
-    "current_document",
-    Function,
-    "() -> Document",
-    PythonApiValueType{PythonApiType::Document},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "document",
-    Function,
-    "() -> Document",
-    PythonApiValueType{PythonApiType::Document},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "execute_action", Function, "(action_id)", std::nullopt, PythonApiEffect::Action},
-  PythonApiSymbol{
-    "list_actions", Function, "() -> list[str]", std::nullopt, PythonApiEffect::Read},
-  PythonApiSymbol{
-    "create_brush",
-    Function,
-    "(points, material=None) -> Brush",
-    PythonApiValueType{PythonApiType::Brush}},
-  PythonApiSymbol{
     "create_plugin_panel",
     Function,
     "(title) -> PluginPanel",
@@ -209,12 +126,6 @@ constexpr auto DocumentsSymbols = std::array{
     PythonApiValueType{PythonApiType::Document},
     PythonApiEffect::Action},
   PythonApiSymbol{
-    "open_verified",
-    Function,
-    "(path) -> Document",
-    PythonApiValueType{PythonApiType::Document},
-    PythonApiEffect::Action},
-  PythonApiSymbol{
     "activate",
     Function,
     "(document) -> Document",
@@ -239,12 +150,6 @@ constexpr auto DocumentsSymbols = std::array{
     PythonApiValueType{PythonApiType::Document},
     PythonApiEffect::Action},
   PythonApiSymbol{
-    "save_current",
-    Function,
-    "(path=None) -> Document",
-    PythonApiValueType{PythonApiType::Document},
-    PythonApiEffect::Action},
-  PythonApiSymbol{
     "export",
     Function,
     "(path, strip_tb_properties=True) -> Document",
@@ -253,24 +158,17 @@ constexpr auto DocumentsSymbols = std::array{
 };
 
 constexpr auto ObjectsSymbols = std::array{
+  PythonApiSymbol{"translate", Function, "(targets, offset) -> bool"},
   PythonApiSymbol{
-    "selection",
+    "rotate", Function, "(targets, axis, angle_degrees, *, center=None) -> bool"},
+  PythonApiSymbol{
+    "scale", Function, "(targets, factors, *, center=None) -> bool"},
+  PythonApiSymbol{
+    "duplicate",
     Function,
-    "() -> Selection",
-    PythonApiValueType{PythonApiType::Selection},
-    PythonApiEffect::Read},
-  PythonApiSymbol{
-    "snapshot", Function, "() -> dict", std::nullopt, PythonApiEffect::Read},
-  PythonApiSymbol{
-    "bounds", Function, "() -> dict | None", std::nullopt, PythonApiEffect::Read},
-  PythonApiSymbol{"inspect", Function, "() -> dict", std::nullopt, PythonApiEffect::Read},
-  PythonApiSymbol{"translate", Function, "(...)"},
-  PythonApiSymbol{"rotate", Function, "(...)"},
-  PythonApiSymbol{"scale", Function, "(...)"},
-  PythonApiSymbol{"duplicate", Function, "(target=None)"},
-  PythonApiSymbol{"delete_selection", Function, "() -> bool"},
-  PythonApiSymbol{"deselect_all", Function, "()"},
-  PythonApiSymbol{"set_selection", Function, "(objects)"},
+    "(targets, *, select=False) -> list[Entity | Brush]",
+    std::nullopt},
+  PythonApiSymbol{"delete", Function, "(targets) -> bool"},
 };
 
 constexpr auto EntitiesSymbols = std::array{
@@ -292,12 +190,12 @@ constexpr auto EntitiesSymbols = std::array{
     "(classname, properties={}, origin=None, select=False) -> Entity",
     PythonApiValueType{PythonApiType::Entity}},
   PythonApiSymbol{
-    "create_checked_batch",
+    "create_from_schema_batch",
     Function,
     "(entities, select=False) -> list[Entity]",
     PythonApiValueType{PythonApiType::Entity, 1u}},
   PythonApiSymbol{
-    "entities_list",
+    "definitions",
     Function,
     "(type='', query='', limit=200) -> list[dict]",
     std::nullopt,
@@ -314,12 +212,7 @@ constexpr auto EntitiesSymbols = std::array{
   PythonApiSymbol{
     "create_from_schema",
     Function,
-    "(classname, properties={}, origin=None, select=True) -> Entity",
-    PythonApiValueType{PythonApiType::Entity}},
-  PythonApiSymbol{
-    "create_checked",
-    Function,
-    "(classname, properties={}, origin=None, select=True) -> Entity",
+    "(classname, properties={}, origin=None, select=False) -> Entity",
     PythonApiValueType{PythonApiType::Entity}},
   PythonApiSymbol{
     "tie_brushes",
@@ -334,8 +227,7 @@ constexpr auto EntitiesSymbols = std::array{
   PythonApiSymbol{"delete", Function, "(entity)"},
   PythonApiSymbol{"update", Function, "(entity, properties={}, remove_keys=[])"},
   PythonApiSymbol{
-    "properties_update", Function, "(entities, properties={}, remove_keys=[])"},
-  PythonApiSymbol{"properties_delete", Function, "(entities, keys)"},
+    "update_many", Function, "(entities, properties={}, remove_keys=[])"},
   PythonApiSymbol{
     "find",
     Function,
@@ -360,27 +252,27 @@ constexpr auto BrushesSymbols = std::array{
   PythonApiSymbol{
     "create",
     Function,
-    "(points, material=None) -> Brush",
+    "(points, material=None, select=False) -> Brush",
     PythonApiValueType{PythonApiType::Brush}},
   PythonApiSymbol{
     "create_box",
     Function,
-    "(min, max, material=None, select=True) -> Brush",
+    "(min, max, material=None, select=False) -> Brush",
     PythonApiValueType{PythonApiType::Brush}},
   PythonApiSymbol{
-    "create_boxes_batch",
+    "create_boxes",
     Function,
-    "(boxes, material=None, select=True) -> list[Brush]",
+    "(boxes, material=None, select=False) -> list[Brush]",
     PythonApiValueType{PythonApiType::Brush, 1u}},
   PythonApiSymbol{
     "create_prism",
     Function,
-    "(points2d, min_z, max_z, material=None, select=True) -> Brush",
+    "(points2d, min_z, max_z, material=None, select=False) -> Brush",
     PythonApiValueType{PythonApiType::Brush}},
   PythonApiSymbol{
-    "create_polygon_batch",
+    "create_prisms",
     Function,
-    "(polygons, material=None, select=True) -> list[Brush]",
+    "(polygons, material=None, select=False) -> list[Brush]",
     PythonApiValueType{PythonApiType::Brush, 1u}},
 };
 
@@ -647,14 +539,17 @@ constexpr auto SelectionSymbols = std::array{
     PythonApiEffect::Read},
   PythonApiSymbol{
     "triangle_uvs", Method, "() -> dict", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "bounds", Method, "() -> dict | None", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{"inspect", Method, "() -> dict", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{"set", Method, "(objects)"},
   PythonApiSymbol{"add", Method, "(objects)"},
   PythonApiSymbol{"deselect_all", Method, "()"},
   PythonApiSymbol{"clear", Method, "()"},
   PythonApiSymbol{"duplicate", Method, "()"},
-  PythonApiSymbol{"translate", Method, "(dx, dy, dz)"},
-  PythonApiSymbol{"rotate", Method, "(axis_x, axis_y, axis_z, angle, ...)"},
-  PythonApiSymbol{"scale", Method, "(scale_x, scale_y, scale_z, ...)"},
+  PythonApiSymbol{"translate", Method, "(offset) -> bool"},
+  PythonApiSymbol{"rotate", Method, "(axis, angle_degrees, *, center=None) -> bool"},
+  PythonApiSymbol{"scale", Method, "(factors, *, center=None) -> bool"},
   PythonApiSymbol{"chamfer_vertices", Method, "(distance)"},
   PythonApiSymbol{"chamfer_edges", Method, "(distance, segments=1)"},
 };
@@ -855,29 +750,7 @@ constexpr auto PluginPanelSymbols = std::array{
   PythonApiSymbol{"clear", Method, "()", std::nullopt, PythonApiEffect::Plugin},
 };
 
-constexpr auto ConsoleHelperNames = std::array<std::string_view, 24>{
-  "selected_brushes",
-  "selectedBrushes",
-  "selected_entities",
-  "selectedEntities",
-  "selected_faces",
-  "selectedFaces",
-  "translate",
-  "rotate",
-  "scale",
-  "duplicate",
-  "delete_selection",
-  "deleteSelection",
-  "deselect_all",
-  "deselectAll",
-  "current_document",
-  "document",
-  "selection",
-  "selected_all_entities",
-  "selectedAllEntities",
-  "create_brush",
-  "execute_action",
-  "list_actions",
+constexpr auto ConsoleHelperNames = std::array<std::string_view, 2>{
   "Vec3",
   "Plane",
 };

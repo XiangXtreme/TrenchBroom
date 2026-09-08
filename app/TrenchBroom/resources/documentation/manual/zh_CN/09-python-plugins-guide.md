@@ -15,22 +15,14 @@
 
 ### 零样板全局快捷函数与变量 {#console_global_helpers}
 
-为了使关卡设计与几何变换的操作尽可能高效便捷，Python 控制台会自动将当前活动文档、选区、数学原语以及高频空间变换函数直接注入全局命名空间，无需手动 import 或包裹事务：
+Python 控制台会自动将当前活动文档、选区和数学原语注入全局命名空间。领域模块和显式对象编辑请导入 `trenchbroom`：
 
 - **全局对象**：
   - `doc`：当前活动地图文档 `Document` 句柄。
   - `sel`：当前活动选区 `Selection` 句柄。
   - `Vec3`, `Plane`：3D 向量与平面几何数学类。
-- **全局快捷变换函数**：
-  - `selected_brushes()` / `selectedBrushes()`：返回当前选中的所有 `Brush` 列表。
-  - `selected_entities()` / `selectedEntities()`：返回直接选中的 `Entity` 列表；传入 `include_brushes=True` 时，还会包含选中 Brush 和单独选中面的父实体。
-  - `selected_faces()` / `selectedFaces()`：返回单独选中的 `Face` 列表；选中整个 Brush 不会展开为它的全部面。
-  - `translate(dx, dy, dz)` 或 `translate(object, dx, dy, dz)`：移动活动选区或指定对象。
-  - `rotate(rx, ry, rz)` 或 `rotate(object, rx, ry, rz)` 或 `rotate(ax, ay, az, angle)`：旋转活动选区或指定对象。
-  - `scale(s)` 或 `scale(sx, sy, sz)` 或 `scale(object, sx, sy, sz)`：缩放活动选区或指定对象。
-  - `duplicate()` 或 `duplicate(object)`：复制选区或指定对象。
-  - `delete_selection()` / `deleteSelection()`：删除当前选中的所有几何体与实体。
-  - `deselect_all()` / `deselectAll()`：清除当前选区。
+- **选区操作**：`sel.brushes`、`sel.entities`、`sel.brush_faces`、`sel.translate((x, y, z))`、`sel.rotate((x, y, z), degrees)`、`sel.scale(factors)` 与 `sel.duplicate()`。
+- **显式对象操作**：`trenchbroom.objects.translate(targets, offset)`、`rotate`、`scale`、`duplicate` 与 `delete`。它们保留无关选区。
 
 ### 快捷键与历史记录 {#console_shortcuts_and_history}
 
@@ -47,7 +39,7 @@
 
 ### 实用控制台操作示例 {#console_examples}
 
-以下示例可以直接粘贴到控制台。访问列表中的对象时，应先使用 `[0]` 取得一个元素，或者使用 `for` 循环逐个处理；例如 `selected_brushes()[0].entity` 表示第一个选中 Brush 所属的实体。
+以下示例可以直接粘贴到控制台。访问列表中的对象时，应先使用 `[0]` 取得一个元素，或者使用 `for` 循环逐个处理；例如 `sel.brushes[0].entity` 表示第一个选中 Brush 所属的实体。
 
 #### 常用只读命令 {#example_common_queries}
 
@@ -69,7 +61,7 @@ else:
     print("Select one brush first")
 
 # Print materials used by selected faces / 打印选中面的材质
-for face in selected_faces():
+for face in sel.brush_faces:
     print(face.material)
 ```
 
@@ -77,18 +69,18 @@ for face in selected_faces():
 
 ```python
 # Rotate the first selected brush by 45 degrees around the Z axis
-first_brush = selected_brushes()[0]
-rotate(first_brush, 0, 0, 45)
+first_brush = sel.brushes[0]
+trenchbroom.objects.rotate(first_brush, (0, 0, 1), 45)
 
 # Duplicate the active selection and translate it 64 units up
-duplicate()
-translate(0, 0, 64)
+sel.duplicate()
+sel.translate((0, 0, 64))
 ```
 
 #### 检查选区与打印 Brush 详细信息 {#example_inspect_selection}
 
 ```python
-brushes = selected_brushes()
+brushes = sel.brushes
 print(f"Selected {len(brushes)} brush(es):")
 for i, brush in enumerate(brushes):
     faces = brush.faces()
@@ -101,15 +93,15 @@ for i, brush in enumerate(brushes):
 
 ```python
 for _ in range(8):
-    duplicate()
-    translate(64, 0, 16)
+    sel.duplicate()
+    sel.translate((64, 0, 16))
 ```
 
 #### 创建基础几何体 Brush {#example_create_brush}
 
 ```python
 # Create a 64x64x64 cube brush centered at origin and select it
-b = create_brush([
+b = trenchbroom.brushes.create([
     (-32, -32, -32), (32, -32, -32), (32, 32, -32), (-32, 32, -32),
     (-32, -32, 32), (32, -32, 32), (32, 32, 32), (-32, 32, 32)
 ])
@@ -119,7 +111,7 @@ sel.set([b])
 #### 批量赋予表面材质 {#example_batch_face_materials}
 
 ```python
-for face in selected_faces():
+for face in sel.brush_faces:
     face.set_material("common/caulk")
 ```
 
@@ -181,7 +173,7 @@ TrenchBroom 区分两种插件类型：
 
 所有 Python 脚本和插件均通过内置的 `trenchbroom` 模块（`import trenchbroom as tb`）访问 TrenchBroom。核心组件包括：
 
-- `trenchbroom.current_document()`：返回代表当前打开地图的活动 `Document` 句柄。
+- `trenchbroom.documents.current()`：返回代表当前打开地图的活动 `Document` 句柄。
 - `doc.transaction(name)`：事务上下文管理器（`with doc.transaction("Action Name"):`），将修改合并为一个撤销/重做步骤，并在发生 Python 异常时自动回滚。
 - `doc.selection`：用于查询选中对象（`entity`、`brush`、`entities`、`all_entities`、`brushes`、`brush_faces`）的 `Selection` 句柄；`sel[key]` 从首个相关实体读取，`sel[key] = value` 写入全部相关实体；同时支持 `translate`、`rotate`、`scale`、`duplicate`、`chamfer_vertices` 和 `chamfer_edges` 等几何变换。只有面被选中时，`entity` 与 `all_entities` 会返回该面的父实体；空选区返回 `None` 或空结果。
 - `doc.entities`：地图中所有 `Entity` 对象的列表。使用 `.get(key, default)` 和 `.set(key, value)` 访问属性。
@@ -208,7 +200,7 @@ UI 插件使用 `trenchbroom.create_plugin_panel(title)` 在 **Plugins** 检查�
 import trenchbroom as tb
 
 def on_selection_changed():
-    print(len(tb.selection().all_entities))
+    print(len(tb.documents.current().selection.all_entities))
 
 token = tb.register_callback("selection_changed", on_selection_changed)
 # tb.unregister_callback(token)  # Stop early when needed.
@@ -226,7 +218,7 @@ import trenchbroom as tb
 panel = None
 
 def on_generate():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     if not doc.selection.brushes and not doc.selection.entities:
         panel.set_label_text("status", "Please select at least one brush or entity.")
         return

@@ -15,22 +15,14 @@ The console features a modern side-by-side split workspace:
 
 ### Zero-Boilerplate Global Helpers {#console_global_helpers}
 
-To make interactive mapping and geometry transformations as fast as possible, the Python console automatically binds the active document, active selection, math primitives, and high-level transform functions into the global namespace without needing imports or manual transaction wrapping:
+The Python console automatically binds the active document, active selection, and math primitives into the global namespace. Import `trenchbroom` for domain modules and explicit-object edits:
 
 - **Global Objects**:
   - `doc`: The active `Document` handle.
   - `sel`: The active `Selection` handle.
   - `Vec3`, `Plane`: 3D vector and plane mathematics classes.
-- **Global Helper Functions**:
-  - `selected_brushes()` / `selectedBrushes()`: Returns a list of all currently selected `Brush` objects.
-  - `selected_entities()` / `selectedEntities()`: Returns directly selected `Entity` objects. Pass `include_brushes=True` to include parent entities of selected brushes and individually selected faces.
-  - `selected_faces()` / `selectedFaces()`: Returns individually selected `Face` objects; selecting a whole brush does not expand it into all faces.
-  - `translate(dx, dy, dz)` or `translate(object, dx, dy, dz)`: Translates the active selection or a specific object.
-  - `rotate(rx, ry, rz)` or `rotate(object, rx, ry, rz)` or `rotate(ax, ay, az, angle)`: Rotates the active selection or a specific object.
-  - `scale(s)` or `scale(sx, sy, sz)` or `scale(object, sx, sy, sz)`: Scales the active selection or a specific object.
-  - `duplicate()` or `duplicate(object)`: Duplicates the selection or object and selects the new copies.
-  - `delete_selection()` / `deleteSelection()`: Deletes all currently selected geometry and entities.
-  - `deselect_all()` / `deselectAll()`: Clears the current selection.
+- **Selection operations**: `sel.brushes`, `sel.entities`, `sel.brush_faces`, `sel.translate((x, y, z))`, `sel.rotate((x, y, z), degrees)`, `sel.scale(factors)`, and `sel.duplicate()`.
+- **Explicit-object operations**: `trenchbroom.objects.translate(targets, offset)`, `rotate`, `scale`, `duplicate`, and `delete`. They preserve an unrelated selection.
 
 ### Keyboard Shortcuts and History {#console_shortcuts_and_history}
 
@@ -47,7 +39,7 @@ All output from `print(...)` and evaluation results are logged to the output vie
 
 ### Practical Console Examples {#console_examples}
 
-These examples can be pasted directly into the console. Before accessing an object in a list, use `[0]` to retrieve one element or a `for` loop to process each element; for example, `selected_brushes()[0].entity` is the owning entity of the first selected brush.
+These examples can be pasted directly into the console. Before accessing an object in a list, use `[0]` to retrieve one element or a `for` loop to process each element; for example, `sel.brushes[0].entity` is the owning entity of the first selected brush.
 
 #### Common Read-Only Commands {#example_common_queries}
 
@@ -69,7 +61,7 @@ else:
     print("Select one brush first")
 
 # Print materials used by selected faces / 打印选中面的材质
-for face in selected_faces():
+for face in sel.brush_faces:
     print(face.material)
 ```
 
@@ -77,18 +69,18 @@ for face in selected_faces():
 
 ```python
 # Rotate the first selected brush by 45 degrees around the Z axis
-first_brush = selected_brushes()[0]
-rotate(first_brush, 0, 0, 45)
+first_brush = sel.brushes[0]
+trenchbroom.objects.rotate(first_brush, (0, 0, 1), 45)
 
 # Duplicate the active selection and translate it 64 units up
-duplicate()
-translate(0, 0, 64)
+sel.duplicate()
+sel.translate((0, 0, 64))
 ```
 
 #### Inspecting Selection and Brush Information {#example_inspect_selection}
 
 ```python
-brushes = selected_brushes()
+brushes = sel.brushes
 print(f"Selected {len(brushes)} brush(es):")
 for i, brush in enumerate(brushes):
     faces = brush.faces()
@@ -101,15 +93,15 @@ for i, brush in enumerate(brushes):
 
 ```python
 for _ in range(8):
-    duplicate()
-    translate(64, 0, 16)
+    sel.duplicate()
+    sel.translate((64, 0, 16))
 ```
 
 #### Creating a Base Brush {#example_create_brush}
 
 ```python
 # Create a 64x64x64 cube brush centered at origin and select it
-b = create_brush([
+b = trenchbroom.brushes.create([
     (-32, -32, -32), (32, -32, -32), (32, 32, -32), (-32, 32, -32),
     (-32, -32, 32), (32, -32, 32), (32, 32, 32), (-32, 32, 32)
 ])
@@ -119,7 +111,7 @@ sel.set([b])
 #### Batch Applying Face Materials {#example_batch_face_materials}
 
 ```python
-for face in selected_faces():
+for face in sel.brush_faces:
     face.set_material("common/caulk")
 ```
 
@@ -181,7 +173,7 @@ The manifest fields are defined as follows:
 
 All Python scripts and plugins access TrenchBroom through the embedded `trenchbroom` module (`import trenchbroom as tb`). Key components include:
 
-- `trenchbroom.current_document()`: Returns the active `Document` handle representing the open map.
+- `trenchbroom.documents.current()`: Returns the active `Document` handle representing the open map.
 - `doc.transaction(name)`: A context manager (`with doc.transaction("Action Name"):`) that groups modifications into a single undo/redo step and automatically rolls back on Python exceptions.
 - `doc.selection`: The `Selection` handle for querying selected objects (`entity`, `brush`, `entities`, `all_entities`, `brushes`, `brush_faces`), reading the first relevant entity with `sel[key]`, writing all relevant entities with `sel[key] = value`, and applying transformations (`translate`, `rotate`, `scale`, `duplicate`, `chamfer_vertices`, `chamfer_edges`). Face-only selections expose the face's parent entity through `entity` and `all_entities`; an empty selection returns `None`/empty results.
 - `doc.entities`: List of all `Entity` objects in the map. Access properties using `.get(key, default)` and `.set(key, value)`.
@@ -208,7 +200,7 @@ Persistent UI plugins can react to editor events:
 import trenchbroom as tb
 
 def on_selection_changed():
-    print(len(tb.selection().all_entities))
+    print(len(tb.documents.current().selection.all_entities))
 
 token = tb.register_callback("selection_changed", on_selection_changed)
 # tb.unregister_callback(token)  # Stop early when needed.
@@ -226,7 +218,7 @@ import trenchbroom as tb
 panel = None
 
 def on_generate():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     if not doc.selection.brushes and not doc.selection.entities:
         panel.set_label_text("status", "Please select at least one brush or entity.")
         return
