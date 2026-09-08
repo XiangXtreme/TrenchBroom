@@ -115,6 +115,12 @@ Python 返回可继续使用的 `Entity` 句柄，旧 MCP 保持历史和 JSON �
 服务枚举和调度注册动作。执行仍需 `mode:"action"`，服务返回未知或 disabled 状态，Python 与 MCP
 各自转换为其公开的错误语义。
 
+## 地图问题
+
+`tb.validation.check(include_hidden=False, limit=500)` 与过渡 MCP `problems_check` 共用
+`collectAutomationValidationIssues`。两者读取同一原生 validator 集、稳定问题 ID、对象和 bounds
+事实及安全 quick-fix 描述；Python 采用 snake_case 字段和显式 `total_count`，MCP 保留协议回执。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，
