@@ -508,6 +508,12 @@ constexpr auto ValidationSymbols = std::array{
 constexpr auto ViewportSymbols = std::array{
   PythonApiSymbol{"state", Function, "() -> dict", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{
+    "set_options",
+    Function,
+    "(options: dict) -> dict",
+    std::nullopt,
+    PythonApiEffect::Action},
+  PythonApiSymbol{
     "set_camera",
     Function,
     "(position, target, up=(0, 0, 1)) -> dict",

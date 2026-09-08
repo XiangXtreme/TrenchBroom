@@ -44,6 +44,26 @@ flowchart TD
 50 项，单页不超过 16 KiB。旧 `parameters`、`returns` 和自动拼接的 `example`
 字段移除；调用信息以实际 `signature` 为准。
 
+绑定处手写的单位说明、字典结构和最小示例通过 `description` 返回，与真实签名分开。
+例如 `Face.set_uv_loops` 使用纹理像素坐标；256×128 贴图的完整 UV 范围为
+`(0,0)..(256,128)`。不从函数名自动推导示例或另建一份函数签名表。
+
+## 问题检查
+
+`tb_inspect(view="problems")` 默认 `detail="summary"`，只返回按原生 validator 名称
+分类的计数。默认尊重编辑器中单独隐藏的问题和 Issue Browser 的类型过滤器；
+`includeHidden=true` 可重新查看。节点隐藏与问题隐藏含义不同。
+
+`ignoreTypes` 使用摘要中的精确类型名，例如 `Non-integer vertices`；只过滤本次
+请求，不修改地图或原生问题隐藏状态。`types` 可进一步选择需要阅读的类型。
+返回的 `totalCount` 是全部原生问题数，`hiddenCount`、`ignoredCount`、`filteredCount`
+依次记录各步排除数量，`count` 是最终匹配数。忽略不表示已修复，不据此声称地图无问题。
+
+`detail="issues"` 返回详情页，`limit` 默认 20、范围 1–100，`offset` 和 `nextOffset`
+用于继续读取同一过滤条件下的结果。每页不超过 16 KiB，长描述标记
+`messageTruncated`；异常长标识符明确标记 `idOmitted`，不返回可能被误用的截断 ID。
+地图变化后应从第一页重新检查，不维护 MCP 专属问题缓存或隐藏状态。
+
 `McpPythonExecutor` 管理执行源、请求去重和回执；读取脚本前检查大小，并限制实际
 读取量。`PythonRuntime` 继续管理主线程执行、协作超时、结果转换及原生事务。
 异常回执带有限 stdout/stderr 预览和丢弃字节数。
@@ -60,6 +80,13 @@ flowchart TD
 `focus_selection()` 使用 action 模式，激活 3D 视图，停止旧相机动画并同步设置视角。
 非法、重合或平行参数在视图改变前拒绝。它们不进入地图 undo 栈，失败回执通过
 `completedActions` 如实报告已完成的视角操作。
+
+`viewport.state()["options"]` 返回原生显示选项；action 模式下通过
+`viewport.set_options({...})` 幂等地设置部分选项。布尔开关、贴图模式
+`face_render_mode`（`textured/flat/skip`）和连线模式 `entity_link_mode`
+（`all/transitive/direct/none`）均先验证整个输入再修改。选项复用共享的原生应用
+偏好设置，只有 `show_grid` 属于当前文档；调用方可保存 options 字典并随后恢复。
+不创建 MCP 专属渲染配置，2D 视图强制边线等原生渲染规则仍然适用。
 
 截图仍由当前原生视口生成，回执包含文档路径、投影类型、位置、方向、up、zoom 和
 视口大小。截图只证明渲染结果；BSP 编译、碰撞和游戏内路线仍需要对应验收。

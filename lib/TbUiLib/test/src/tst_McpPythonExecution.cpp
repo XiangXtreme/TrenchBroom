@@ -7,6 +7,7 @@
 
 #include "fs/TestEnvironment.h"
 #include "gl/GlManager.h"
+#include "mdl/EmptyPropertyValueValidator.h"
 #include "mdl/EntityDefinitionManager.h"
 #include "mdl/GameConfigFixture.h"
 #include "mdl/GroupNode.h"
@@ -15,12 +16,15 @@
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
+#include "mdl/NonIntegerVerticesValidator.h"
 #include "mdl/WorldNode.h"
 #include "ui/AppControllerFixture.h"
+#include "ui/IssueBrowserView.h"
 #include "ui/MapDocument.h"
 #include "ui/MapViewport.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/automation/AutomationValidation.h"
 #include "ui/mcp/McpBridgeServer.h"
 #include "ui/python/PythonRuntime.h"
 
@@ -134,7 +138,195 @@ TEST_CASE("McpPythonExecution", "[McpBridgeServer][PythonApi]")
       symbol("tb.entities.update").value("signature").toString().contains("remove_keys"));
     CHECK(
       symbol("tb.assets.place_model").value("signature").toString().contains("property"));
+    CHECK(symbol("Face.set_uv_loops")
+            .value("description")
+            .toString()
+            .contains("texture pixel"));
+    CHECK(
+      symbol("Face.uv_loops").value("description").toString().contains("not normalized"));
+    CHECK(symbol("brushes.create_boxes_batch")
+            .value("description")
+            .toString()
+            .contains("'min'"));
+    CHECK(symbol("brushes.create_polygon_batch")
+            .value("description")
+            .toString()
+            .contains("'points2d'"));
+    CHECK(symbol("viewport.set_options").value("effect") == "action");
+    CHECK(symbol("viewport.set_options")
+            .value("description")
+            .toString()
+            .contains("face_render_mode"));
     CHECK_FALSE(server.dispatchRequest({"api", "tb_api", {{"offset", -1}}, {}}).ok);
+  }
+
+  SECTION("problem summaries omit ignored issues and details page within the byte budget")
+  {
+    map.worldNode().unregisterAllValidators();
+    map.worldNode().registerValidator(
+      std::make_unique<mdl::NonIntegerVerticesValidator>());
+    map.worldNode().registerValidator(
+      std::make_unique<mdl::EmptyPropertyValueValidator>());
+    REQUIRE(server
+              .dispatchRequest(request(
+                "issue-fixture",
+                R"(
+tb.brushes.create_boxes_batch([
+    {'min': (i*64+.25, 0, 0), 'max': (i*64+32.25, 32, 32)} for i in range(45)
+], select=False)
+world = tb.entities.find(classname='worldspawn')[0]
+world.set('message', '')
+world.set('very_long_key_' + 'x'*20000, '')
+)",
+                "transaction"))
+              .ok);
+    const auto inspect = [&](QJsonObject params) {
+      params.insert("view", "problems");
+      return server.dispatchRequest({"inspect", "tb_inspect", std::move(params), {}});
+    };
+    const auto before = map.modificationCount();
+    const auto summary = inspect({});
+    REQUIRE(summary.ok);
+    CHECK_FALSE(summary.result.contains("issues"));
+    CHECK(summary.result.value("count").toInt() >= 47);
+    CHECK(summary.result.value("types").toArray().size() == 2);
+    auto ids = QSet<QString>{};
+    auto offset = 0;
+    while (true)
+    {
+      const auto page = inspect(
+        {{"detail", "issues"},
+         {"limit", 13},
+         {"offset", offset},
+         {"types", QJsonArray{"Non-integer vertices"}}});
+      REQUIRE(page.ok);
+      CHECK(
+        QJsonDocument{page.result}.toJson(QJsonDocument::Compact).size() <= 16 * 1024);
+      CHECK(page.result.value("count").toInt() == 45);
+      const auto items = page.result.value("issues").toArray();
+      REQUIRE_FALSE(items.empty());
+      CHECK(items.size() <= 13);
+      for (const auto& item : items)
+      {
+        const auto id = item.toObject().value("id").toString();
+        CHECK_FALSE(ids.contains(id));
+        ids.insert(id);
+      }
+      if (!page.result.value("truncated").toBool())
+      {
+        CHECK(page.result.value("nextOffset").isNull());
+        break;
+      }
+      const auto next = page.result.value("nextOffset").toInt();
+      REQUIRE(next > offset);
+      offset = next;
+    }
+    CHECK(ids.size() == 45);
+    const auto ignored = inspect(
+      {{"detail", "issues"}, {"ignoreTypes", QJsonArray{"Non-integer vertices"}}});
+    REQUIRE(ignored.ok);
+    CHECK(ignored.result.value("ignoredCount").toInt() == 45);
+    CHECK(
+      ignored.result.value("count").toInt()
+      == summary.result.value("count").toInt() - 45);
+    CHECK(
+      QJsonDocument{ignored.result}.toJson(QJsonDocument::Compact).size() <= 16 * 1024);
+    auto longMessageTruncated = false;
+    for (const auto& item : ignored.result.value("issues").toArray())
+      longMessageTruncated |= item.toObject().value("messageTruncated").toBool();
+    CHECK(longMessageTruncated);
+    CHECK(map.modificationCount() == before);
+
+    const auto issues = collectAutomationValidationIssues(map, true);
+    REQUIRE_FALSE(issues.empty());
+    map.setIssueHidden(*issues.front().source, true);
+    // Native hiding applies to this node's issue type: both empty world properties.
+    CHECK(inspect({}).result.value("hiddenCount").toInt() == 2);
+    CHECK(
+      inspect({{"includeHidden", true}}).result.value("count")
+      == summary.result.value("count"));
+
+    auto* browser = window->findChild<IssueBrowserView*>();
+    REQUIRE(browser);
+    auto mask = 0;
+    for (const auto& issue : issues)
+      mask |= issue.type;
+    browser->setHiddenIssueTypes(mask);
+    CHECK(inspect({}).result.value("count").toInt() == 0);
+    CHECK(
+      inspect({{"includeHidden", true}}).result.value("count")
+      == summary.result.value("count"));
+    const auto stillIgnored = inspect(
+      {{"includeHidden", true}, {"ignoreTypes", QJsonArray{"Non-integer vertices"}}});
+    CHECK(stillIgnored.result.value("ignoredCount").toInt() == 45);
+    CHECK_FALSE(inspect({{"ignoreTypes", QJsonArray{"unknown validator"}}}).ok);
+    CHECK_FALSE(inspect({{"limit", 0}}).ok);
+    CHECK_FALSE(inspect({{"limit", 101}}).ok);
+    CHECK_FALSE(inspect({{"limit", "20"}}).ok);
+    CHECK_FALSE(inspect({{"offset", -1}}).ok);
+    CHECK_FALSE(inspect({{"detail", "all"}}).ok);
+  }
+
+  SECTION("viewport options are idempotent and invalid patches have no side effects")
+  {
+    const auto before = mapViewportOptions(*window);
+    const auto restore =
+      kdl::invoke_later{[&] { setMapViewportOptions(*window, before); }};
+    const auto modificationCount = map.modificationCount();
+    const auto response = server.dispatchRequest(request(
+      "view-options",
+      R"(
+options = dict(tb.viewport.state()['options'])
+changed = tb.viewport.set_options({'show_edges': False, 'show_grid': False,
+    'face_render_mode': 'textured', 'entity_link_mode': 'none'})
+assert changed['options']['show_edges'] is False
+assert changed['options']['show_grid'] is False
+assert changed['options']['face_render_mode'] == 'textured'
+assert changed['options']['entity_link_mode'] == 'none'
+assert tb.viewport.set_options({'show_edges': False, 'show_grid': False}) == changed
+for invalid in [{'show_grid': True, 'unknown': False},
+                {'show_grid': True, 'face_render_mode': 'invalid'},
+                {'show_grid': True, 'show_edges': 1}]:
+    try:
+        tb.viewport.set_options(invalid)
+    except (ValueError, TypeError):
+        pass
+    else:
+        raise AssertionError('Accepted invalid options')
+    assert tb.viewport.state() == changed
+for mode, label in [('all', 'Show all entity links'),
+                    ('transitive', 'Show transitively selected entity links'),
+                    ('direct', 'Show directly selected entity links'),
+                    ('none', 'Hide entity links')]:
+    tb.actions.execute('Controls/Map view/View Filter > ' + label)
+    state = tb.viewport.state()['options']
+    assert state['entity_link_mode'] == mode
+    assert state['face_render_mode'] == 'textured'
+tb.viewport.set_options(options)
+)",
+      "action"));
+    INFO(QJsonDocument{response.error ? response.error->details : response.result}
+           .toJson()
+           .toStdString());
+    REQUIRE(response.ok);
+    CHECK(map.modificationCount() == modificationCount);
+    CHECK(mapViewportOptions(*window) == before);
+    CHECK_FALSE(server
+                  .dispatchRequest(request(
+                    "view-options-transaction",
+                    "tb.viewport.set_options({'show_edges': False})",
+                    "transaction"))
+                  .ok);
+    CHECK(mapViewportOptions(*window) == before);
+    const auto failed = server.dispatchRequest(request(
+      "view-options-failure",
+      "tb.viewport.set_options({'show_edges': False})\nraise RuntimeError('after "
+      "options')",
+      "action"));
+    REQUIRE(failed.error);
+    CHECK(failed.error->details.value("completedActions")
+            .toObject()
+            .contains("viewport.set_options"));
   }
 
   SECTION("property edits preserve handles and selection through delete and history")

@@ -8,6 +8,8 @@ namespace tb::ui
 {
 class MapWindow;
 QJsonObject mapViewportState(MapWindow& window);
+QJsonObject mapViewportOptions(MapWindow& window);
+void setMapViewportOptions(MapWindow& window, const QJsonObject& options);
 void setMapViewportCamera(
   MapWindow& window,
   const vm::vec3f& position,

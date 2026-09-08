@@ -4369,7 +4369,11 @@ void defineModule(py::module_& module)
     .def_property_readonly(
       "normal", [](FaceHandle& self) { return vec3ToTuple(self.get().normal()); })
     .def_property_readonly("vertices", faceVertices)
-    .def_property_readonly("uv_loops", faceUVLoops)
+    .def_property_readonly(
+      "uv_loops",
+      faceUVLoops,
+      "Per-vertex texture pixel coordinates, not normalized UVs. Each item is "
+      "{'vertex': index, 'uv': (u, v)}; indices address Face.vertices.")
     .def_property(
       "texture_name",
       [](FaceHandle& self) { return self.get().materialName(); },
@@ -4411,7 +4415,14 @@ void defineModule(py::module_& module)
         return value ? py::cast(*value) : py::none();
       },
       setFaceSurfaceValue)
-    .def("set_uv_loops", setFaceUVLoops)
+    .def(
+      "set_uv_loops",
+      setFaceUVLoops,
+      py::arg("loops"),
+      "Set all face vertices using texture pixel coordinates, not normalized UVs. "
+      "Each item is {'vertex': index, 'uv': (u, v)}; supply every Face.vertices index. "
+      "For a 256x128 texture, one full image spans (0, 0) to (256, 128). "
+      "Returns False when the UV fit cannot be represented by the face mapping.")
     .def("set_material", setFaceMaterial)
     .def(
       "__repr__",
@@ -5574,7 +5585,11 @@ void defineModule(py::module_& module)
     createBoxesBatch,
     py::arg("boxes"),
     py::arg("material") = py::none(),
-    py::arg("select") = true);
+    py::arg("select") = true,
+    "Create boxes in map units. Each item is {'min': (x,y,z), 'max': (x,y,z), "
+    "'material': 'name'}; material is optional and overrides the batch material. "
+    "Example: tb.brushes.create_boxes_batch([{'min': (0,0,0), 'max': (64,64,16)}], "
+    "material='stone', select=False). Returns the created brush handles.");
   brushes.def(
     "create_prism",
     createPrism,
@@ -5582,13 +5597,18 @@ void defineModule(py::module_& module)
     py::arg("min_z"),
     py::arg("max_z"),
     py::arg("material") = py::none(),
-    py::arg("select") = true);
+    py::arg("select") = true,
+    "Extrude a convex XY polygon from min_z to max_z, all in map units. "
+    "points2d is a sequence of (x, y) pairs, e.g. [(0,0), (64,0), (32,64)].");
   brushes.def(
     "create_polygon_batch",
     createPolygonBatch,
     py::arg("polygons"),
     py::arg("material") = py::none(),
-    py::arg("select") = true);
+    py::arg("select") = true,
+    "Each item is {'points2d': [(x,y), ...], 'min_z': z0, 'max_z': z1, "
+    "'material': 'name'} describing a convex XY prism in map units. "
+    "The per-item material is optional and overrides the batch material.");
 
   auto faces = module.def_submodule("faces", "Face collection operations.");
   faces.def("list", []() {
@@ -5778,11 +5798,47 @@ void defineModule(py::module_& module)
 
   auto viewport = module.def_submodule(
     "viewport", "Current document viewport state and synchronous 3D camera control.");
-  viewport.def("state", []() {
-    auto document = currentDocument();
-    return py::cast<py::dict>(
-      jsonValueToPython(mapViewportState(mapWindowForDocument(document))));
-  });
+  viewport.def(
+    "state",
+    []() {
+      auto document = currentDocument();
+      return py::cast<py::dict>(
+        jsonValueToPython(mapViewportState(mapWindowForDocument(document))));
+    },
+    "Read camera state and an options dict. Options are native view preferences "
+    "shared across documents, except show_grid which belongs to this document. "
+    "Save options to restore them later with set_options; 2D rendering may force edges.");
+  viewport.def(
+    "set_options",
+    [](const py::dict& options) {
+      requirePythonActionMode("viewport.set_options");
+      auto document = currentDocument();
+      auto& window = mapWindowForDocument(document);
+      auto patch = QJsonObject{};
+      for (const auto& item : options)
+      {
+        if (!py::isinstance<py::str>(item.first))
+          throw py::type_error{"Viewport option names must be strings"};
+        const auto key = QString::fromStdString(py::cast<std::string>(item.first));
+        if (py::isinstance<py::bool_>(item.second))
+          patch.insert(key, py::cast<bool>(item.second));
+        else if (py::isinstance<py::str>(item.second))
+          patch.insert(key, QString::fromStdString(py::cast<std::string>(item.second)));
+        else
+          throw py::type_error{"Viewport option values must be bool or str"};
+      }
+      setMapViewportOptions(window, patch);
+      recordCompletedPythonAction("viewport.set_options");
+      return py::cast<py::dict>(jsonValueToPython(mapViewportState(window)));
+    },
+    py::arg("options"),
+    "Set a partial options dict idempotently in action mode. Discover keys and current "
+    "values in viewport.state()['options']. face_render_mode: textured|flat|skip; "
+    "entity_link_mode: all|transitive|direct|none; all other values are bool. "
+    "Unknown keys or invalid values reject the whole patch before changes. "
+    "Example: tb.viewport.set_options({'show_edges': False, 'entity_link_mode': "
+    "'none'}). "
+    "These are shared native preferences, except the document's show_grid; no map undo.");
   viewport.def(
     "set_camera",
     [](const py::object& position, const py::object& target, const py::object& up) {

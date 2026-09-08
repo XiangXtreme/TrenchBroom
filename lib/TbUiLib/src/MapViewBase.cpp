@@ -977,22 +977,22 @@ void MapViewBase::toggleShowEdges()
 
 void MapViewBase::showAllEntityLinks()
 {
-  setPref(Preferences::FaceRenderMode, Preferences::EntityLinkModeAll);
+  setPref(Preferences::EntityLinkMode, Preferences::EntityLinkModeAll);
 }
 
 void MapViewBase::showTransitivelySelectedEntityLinks()
 {
-  setPref(Preferences::FaceRenderMode, Preferences::EntityLinkModeTransitive);
+  setPref(Preferences::EntityLinkMode, Preferences::EntityLinkModeTransitive);
 }
 
 void MapViewBase::showDirectlySelectedEntityLinks()
 {
-  setPref(Preferences::FaceRenderMode, Preferences::EntityLinkModeDirect);
+  setPref(Preferences::EntityLinkMode, Preferences::EntityLinkModeDirect);
 }
 
 void MapViewBase::hideAllEntityLinks()
 {
-  setPref(Preferences::FaceRenderMode, Preferences::EntityLinkModeNone);
+  setPref(Preferences::EntityLinkMode, Preferences::EntityLinkModeNone);
 }
 
 bool MapViewBase::event(QEvent* event)

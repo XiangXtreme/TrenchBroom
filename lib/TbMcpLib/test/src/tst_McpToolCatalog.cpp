@@ -56,6 +56,20 @@ TEST_CASE("McpToolCatalog")
     CHECK(canCallTool(*found, McpMode::Edit));
     CHECK_FALSE(canCallTool(*found, McpMode::ReadOnly));
   }
+
+  SECTION("problem inspection advertises its summary and filtering controls")
+  {
+    const auto found = findToolDefinition("tb_inspect");
+    REQUIRE(found);
+    CHECK(canCallTool(*found, McpMode::ReadOnly));
+    const auto properties = found->inputSchema.value("properties").toObject();
+    for (const auto* name :
+         {"detail", "limit", "offset", "includeHidden", "types", "ignoreTypes"})
+      CHECK(properties.contains(name));
+    CHECK(
+      properties.value("ignoreTypes").toObject().value("items").toObject().value("type")
+      == "string");
+  }
 }
 
 } // namespace tb::mcp

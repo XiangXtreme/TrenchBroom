@@ -56,7 +56,30 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
       false,
       objectSchema({
         {"view", stringProperty("status, document, map, selection, or problems.")},
-        {"limit", integerProperty("Optional bounded result limit.")},
+        {"detail", stringProperty("problems: summary (default) or paginated issues.")},
+        {"limit",
+         integerProperty(
+           "problems issues page size 1..100, default 20; at most 16 KiB.")},
+        {"offset", integerProperty("problems issues offset; continue with nextOffset.")},
+        {"includeHidden",
+         QJsonObject{
+           {"type", "boolean"},
+           {"description",
+            "problems: include editor-hidden issues and filtered types; default "
+            "false."}}},
+        {"types",
+         QJsonObject{
+           {"type", "array"},
+           {"items", QJsonObject{{"type", "string"}}},
+           {"description",
+            "problems: only these exact type names from the summary; default all."}}},
+        {"ignoreTypes",
+         QJsonObject{
+           {"type", "array"},
+           {"items", QJsonObject{{"type", "string"}}},
+           {"description",
+            "problems: omit these exact type names from the summary, e.g. Non-integer "
+            "vertices. Request-only; does not edit the map."}}},
       }),
       McpToolCostClass::Fast,
     },

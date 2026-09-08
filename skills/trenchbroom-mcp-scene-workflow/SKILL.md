@@ -36,6 +36,9 @@ does not extend the MCP catalog.
    the native binding; properties report `writable`, and `effect` distinguishes
    read, edit, action, plugin, and value operations. Action requires MCP action
    mode; plugin operations belong to persistent plugins, not transient scripts.
+   Read `description` when present: it explains units, structured argument shapes,
+   and examples authored alongside the native binding. Face UV loops use texture
+   pixels, not normalized coordinates.
 3. Compose ordinary Python with `import trenchbroom as tb`. Put loops,
    geometry composition, entity policy, validation, and undo/redo calls in the
    script, using only symbols returned by `tb_api`.
@@ -47,6 +50,24 @@ does not extend the MCP catalog.
 5. Inspect map facts and native problems again. Use `tb_capture` for visual
    evidence when it helps; a screenshot does not prove map validity, BSP
    compilation, collision, or gameplay.
+
+## Problem Triage
+
+`tb_inspect(view="problems")` defaults to a compact summary with counts by type.
+It respects both individually hidden issues and the editor Issue Browser's type
+filter. Use `includeHidden:true` to inspect those too. Hidden map objects are a
+different concept from hidden issues.
+
+Read details only for relevant types: pass `detail:"issues"`, optionally
+`types:["Non-integer vertices"]`, and use `nextOffset` with the same filters to
+continue. Details default to 20 items, allow 1–100, and stay within 16 KiB;
+oversized messages are explicitly marked as truncated.
+
+When a type is acceptable for the current task, pass its exact summary name in
+`ignoreTypes`. This is a request-only filter; it does not hide or fix map issues.
+Ignored and editor-hidden counts remain visible. Do not read or automatically fix
+every warning just to reach a zero count, and do not report ignored problems as
+fixed. Judge acceptance using the task's geometry, material, and engine needs.
 
 ## Safety
 
@@ -84,6 +105,13 @@ view and applies the pose synchronously. Position and target must differ, and
 up must not be parallel to their direction. `focus_selection()` immediately
 frames the current selection in 3D. These actions stop the previous camera
 animation and report their completion; they do not modify map geometry.
+
+`state()["options"]` reads view settings. In action mode, use
+`tb.viewport.set_options({"show_edges": False, "entity_link_mode": "none"})`
+to set desired values directly. Discover supported keys and enums with `tb_api`.
+Save the options dict first if you intend to restore it. Settings share the native
+application preferences across documents, except `show_grid`, which is local to
+the document. Invalid patches are rejected before any changes.
 
 Call `tb_capture` afterward. Its response includes the actual camera state and
 document path, so an orthographic capture cannot be mistaken for a 3D view.

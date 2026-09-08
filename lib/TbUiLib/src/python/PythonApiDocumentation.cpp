@@ -70,6 +70,9 @@ void initializePythonApiDocumentation(const py::module_& module)
         entry.insert("writable", writable);
         entry.insert("effect", writable ? effectName(symbol.effect) : "read");
         signatures = docString(binding.attr("fget"));
+        const auto description = docString(binding).trimmed();
+        if (!description.isEmpty())
+          entry.insert("description", description);
       }
       else if (symbol.kind == PythonApiSymbolKind::Property)
       {
@@ -85,6 +88,16 @@ void initializePythonApiDocumentation(const py::module_& module)
       else
       {
         signatures = docString(binding);
+      }
+      // Keep actual pybind signatures, with authored binding documentation in
+      // its own field. Preserve the complete signature block for overloads.
+      const auto separator = signatures.indexOf("\n\n");
+      if (separator >= 0 && !signatures.contains("Overloaded function."))
+      {
+        const auto description = signatures.mid(separator + 2).trimmed();
+        if (!description.isEmpty())
+          entry.insert("description", description);
+        signatures = signatures.left(separator);
       }
       entry.insert("signature", signatures.trimmed());
       result.append(entry);
