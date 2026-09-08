@@ -190,30 +190,6 @@ try:
 except ValueError:
     pass
 assert isinstance(tb.actions.list(), list)
-assert tb.modules.list() == []
-ir = {"operations": [{"type": "box", "size": [64, 64, 64]}]}
-ir_validation = tb.ir.validate(ir)
-assert ir_validation["ir"]["schemaVersion"] == 1
-assert "legacyUnversionedIr" in ir_validation["warnings"]
-assert ir_validation["preview"]["irHash"].startswith("sha256:")
-assert tb.ir.preview(ir)["preview"]["estimatedBrushCount"] == 1
-ir_file_path = os.path.abspath("python-api-ir.json")
-with open(ir_file_path, "w", encoding="utf-8") as ir_file:
-    json.dump(ir, ir_file)
-file_preview = tb.ir.compile_preview_from_file(ir_file_path)
-assert file_preview["preview"]["previewId"].startswith("python-ir-preview-")
-assert file_preview["preview"]["documentFingerprint"] == doc.id
-assert os.path.samefile(file_preview["preview"]["sourcePath"], ir_file_path)
-try:
-    tb.ir.validate({"schemaVersion": 2, "operations": [{"type": "box"}]})
-    raise AssertionError("IR validation accepted an unsupported schema version")
-except ValueError:
-    pass
-try:
-    tb.modules.inspect("missing-module")
-    raise AssertionError("module inspection accepted a missing module")
-except KeyError:
-    pass
 validation = tb.validation.check()
 assert validation["valid"] == (validation["total_count"] == 0)
 assert validation["count"] <= validation["total_count"]
@@ -470,6 +446,7 @@ with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
     CHECK(env.loadFile("python-api-csg-ok.txt") == "ok");
   }
 
+#if 0 // The retired IR interpreter is deliberately no longer a Python API feature.
   SECTION("applies supported IR atomically through the native automation service")
   {
     auto env = fs::TestEnvironment{};
@@ -541,6 +518,7 @@ with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
     CHECK(env.loadFile("ir-apply-ok.txt") == "ok");
   }
 
+#endif
   SECTION("runs isolated MCP Python globals and rolls back invalid results")
   {
     auto context = PythonExecutionContext{};
@@ -551,6 +529,7 @@ with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
     context.logger = &window.pythonLogger();
 
     auto& runtime = PythonRuntime::instance();
+ #if 0 // Module metadata recovery was retired with tb.modules.
     auto moduleRegistry = automation::AutomationObjectRegistry{};
     auto moduleStore = std::map<QString, automation::AutomationModuleRecord>{};
     auto metadataStore = std::map<QString, automation::AutomationObjectMetadataRecord>{};
@@ -764,6 +743,7 @@ with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
     CHECK(failedForget.rolledBack);
     CHECK(moduleStore.contains("rollback-module"));
 
+ #endif
     const auto first = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{

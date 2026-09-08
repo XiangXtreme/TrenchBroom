@@ -20,8 +20,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationEntities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationGeometry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationGroups.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationIr.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationIrExecution.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationMapSnapshot.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationMaterials.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationNodes.cpp
@@ -143,32 +141,12 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ModelBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ModelInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MousePreferencePane.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpActionTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpAssetTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpBrushTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpCompileTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpCsgTools.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpCapture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpDocumentTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpEntityTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpHistoryTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpHistoryTools.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpHeightmapTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpIrTools.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpRouteTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpObjectTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpProblemTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpPythonTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpReviewRenderTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpSelectorTools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpSelectionQuery.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpSelectionQuery.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpSessionState.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpSelectionViewportTools.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpInspect.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpBridgeServer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpBridgeServerTransport.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpBridgeServerTools.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpHttpServer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpTextureTools.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolRegistry.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolSupport.h
@@ -401,14 +379,10 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationDocuments.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationEntities.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationGeometry.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationIr.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationIrExecution.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationMapSnapshot.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationMaterials.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationNodes.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationObjectRegistry.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationStateRecords.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationStateStore.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationTransaction.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationValidation.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpBridgeServer.h

@@ -24,7 +24,7 @@
 #include <QJsonObject>
 #include <QStringList>
 
-#include "McpBridgeServerTools.h"
+#include "McpThinBridgeTools.h"
 #include "fs/DiskIO.h"
 #include "mcp/McpError.h"
 #include "mcp/McpToolCatalog.h"

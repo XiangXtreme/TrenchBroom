@@ -17,9 +17,7 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <QCoreApplication>
 #include <QDateTime>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalServer>
@@ -27,13 +25,8 @@
 #include <QTimer>
 #include <QUuid>
 
-#include "McpBridgeServerTools.h"
 #include "mcp/McpToolCatalog.h"
-#include "mdl/Map.h"
-#include "ui/QPathUtils.h"
 #include "ui/mcp/McpBridgeServer.h"
-
-#include <algorithm>
 
 namespace tb::ui
 {
@@ -56,138 +49,6 @@ mcp::McpBridgeResponse makeFailure(
 {
   return mcp::McpBridgeResponse::failure(
     request.id, mcp::McpError{code, message, std::move(details)});
-}
-
-void applyDocumentIdentityToOperation(
-  McpOperationRecord& operation,
-  mdl::Map& map,
-  const McpObjectRegistry& objectRegistry,
-  const QJsonObject& result)
-{
-  operation.documentPath = result.value("activeDocumentPath").toString();
-  if (operation.documentPath.isEmpty() && !map.path().empty())
-  {
-    operation.documentPath = pathAsQString(map.path());
-  }
-
-  operation.documentFingerprint = result.value("documentFingerprint").toString();
-  if (operation.documentFingerprint.isEmpty())
-  {
-    operation.documentFingerprint = objectRegistry.documentFingerprint(map);
-  }
-}
-
-void syncOneOperationHistoryWithExternalResult(
-  std::vector<McpOperationRecord>& history,
-  const QString& operationId,
-  mdl::Map& map,
-  const McpObjectRegistry& objectRegistry,
-  const QJsonObject& result)
-{
-  if (operationId.isEmpty())
-  {
-    return;
-  }
-
-  const auto it = std::ranges::find_if(
-    history, [&](const auto& operation) { return operation.operationId == operationId; });
-  if (it == history.end())
-  {
-    auto operation = McpOperationRecord{};
-    operation.operationId = operationId;
-    operation.toolName = result.value("toolName").toString();
-    operation.transactionName = result.value("transactionName").toString();
-    operation.operationKind = result.value("operationKind").toString("mutation");
-    operation.setChangedObjectIds(result.value("changedObjectIds").toArray());
-    operation.setDeletedObjectIds(result.value("deletedObjectIds").toArray());
-    operation.setSummary(result);
-    applyDocumentIdentityToOperation(operation, map, objectRegistry, result);
-    appendMcpOperationRecord(history, std::move(operation));
-    return;
-  }
-
-  const auto changedObjectIds = result.value("changedObjectIds").toArray();
-  if (!changedObjectIds.isEmpty())
-  {
-    it->setChangedObjectIds(changedObjectIds);
-  }
-  const auto deletedObjectIds = result.value("deletedObjectIds").toArray();
-  if (!deletedObjectIds.isEmpty())
-  {
-    it->setDeletedObjectIds(deletedObjectIds);
-  }
-  it->setSummary(result);
-  applyDocumentIdentityToOperation(*it, map, objectRegistry, result);
-}
-
-void syncOperationHistoryWithExternalResult(
-  std::vector<McpOperationRecord>& history,
-  mdl::Map& map,
-  const McpObjectRegistry& objectRegistry,
-  const QJsonObject& result)
-{
-  syncOneOperationHistoryWithExternalResult(
-    history, result.value("operationId").toString(), map, objectRegistry, result);
-
-  if (!result.value("parentOperationId").toString().isEmpty())
-  {
-    return;
-  }
-
-  const auto operationIds = result.value("operationIds").toArray();
-  for (const auto& operationId : operationIds)
-  {
-    syncOneOperationHistoryWithExternalResult(
-      history, operationId.toString(), map, objectRegistry, result);
-  }
-}
-
-QString mutationUndoOperationId(const QJsonObject& result)
-{
-  for (const auto& key : {"undoOperationId", "parentOperationId", "operationId"})
-  {
-    const auto value = result.value(key).toString().trimmed();
-    if (!value.isEmpty())
-    {
-      return value;
-    }
-  }
-  return result.value("operation").toObject().value("operationId").toString().trimmed();
-}
-
-QJsonArray mutationAuditOperationIds(
-  const QJsonObject& result, const QString& undoOperationId)
-{
-  auto ids = QStringList{};
-  for (const auto& key : {"auditOperationIds", "childOperationIds", "operationIds"})
-  {
-    for (const auto& value : result.value(key).toArray())
-    {
-      const auto id = value.toString().trimmed();
-      if (!id.isEmpty())
-      {
-        ids.push_back(id);
-      }
-    }
-    if (!ids.isEmpty())
-    {
-      break;
-    }
-  }
-  if (!undoOperationId.isEmpty())
-  {
-    ids.push_back(undoOperationId);
-  }
-  ids.removeDuplicates();
-  return QJsonArray::fromStringList(ids);
-}
-
-bool operationIsUndoable(
-  const std::vector<McpOperationRecord>& history, const QString& operationId)
-{
-  const auto it = std::ranges::find_if(
-    history, [&](const auto& operation) { return operation.operationId == operationId; });
-  return it == history.end() ? !operationId.isEmpty() : it->undoable;
 }
 
 } // namespace
@@ -260,14 +121,6 @@ bool McpBridgeServer::start(const mcp::McpBridgeConfig& config, QString* error)
   return true;
 }
 
-void McpBridgeServer::clearSessionState()
-{
-  m_overlayState = QJsonObject{};
-  m_session.clear();
-  m_pythonExecutionReplays.clear();
-  m_pythonExecutionReplayOrder.clear();
-}
-
 void McpBridgeServer::stop()
 {
   const auto connections = m_connections.values();
@@ -285,7 +138,8 @@ void McpBridgeServer::stop()
     QLocalServer::removeServer(m_config.pipeName);
     m_server.reset();
   }
-  clearSessionState();
+  m_pythonExecutionReplays.clear();
+  m_pythonExecutionReplayOrder.clear();
 }
 
 bool McpBridgeServer::isListening() const
@@ -305,97 +159,7 @@ mcp::McpMode McpBridgeServer::mode() const
 
 const QJsonObject& McpBridgeServer::overlayState() const
 {
-  return m_overlayState;
-}
-
-namespace
-{
-
-QJsonObject resourceObject(
-  const McpOperationRecord& operation, const std::optional<QJsonObject>& liveState)
-{
-  auto result = QJsonObject{
-    {"operationId", operation.operationId},
-    {"toolName", operation.toolName},
-    {"transactionName", operation.transactionName},
-    {"operationKind", operation.operationKind},
-    {"documentPath", operation.documentPath},
-    {"documentFingerprint", operation.documentFingerprint},
-    {"createdAt", operation.createdAt},
-    {"createdAtMs", operation.createdAtMs},
-    {"changedObjectCount", operation.changedObjectIds.size()},
-    {"deletedObjectCount", operation.deletedObjectIds.size()},
-    {"undone", operation.undone},
-    {"undoable", operation.undoable},
-    {"parentOperationId", operation.parentOperationId},
-    {"childOperationIds", QJsonArray::fromStringList(operation.childOperationIds)},
-    {"summary", operation.summary()},
-    {"detail", operation.detail()},
-  };
-  result.insert(
-    "idsDetail",
-    "compact; use operation_inspect(detail=ids) or operation_inspect(detail=full) "
-    "for changedObjectIds/deletedObjectIds");
-  if (liveState)
-  {
-    for (auto it = liveState->begin(); it != liveState->end(); ++it)
-    {
-      result.insert(it.key(), it.value());
-    }
-  }
-  return result;
-}
-
-} // namespace
-
-std::optional<QJsonObject> McpBridgeServer::readResource(const QString& uri) const
-{
-  static const auto ReviewPrefix = QString{"tbmcp://review/"};
-  if (uri.startsWith(ReviewPrefix))
-  {
-    const auto it = m_session.reviewResources.find(uri);
-    if (it != m_session.reviewResources.end())
-    {
-      return it->second.resource;
-    }
-    return m_session.evictedResourceHint(uri);
-  }
-
-  static const auto Prefix = QString{"tbmcp://operation/"};
-  if (!uri.startsWith(Prefix))
-  {
-    return std::nullopt;
-  }
-
-  const auto operationId = uri.mid(Prefix.size());
-  const auto it = std::ranges::find_if(
-    m_session.operationHistory,
-    [&](const auto& operation) { return operation.operationId == operationId; });
-  if (it == m_session.operationHistory.end())
-  {
-    return m_session.evictedResourceHint(uri);
-  }
-
-  if (m_activeMapProvider)
-  {
-    if (auto* map = m_activeMapProvider())
-    {
-      return m_session.objectRegistry.externalizeResult(
-        *map,
-        resourceObject(
-          *it,
-          m_session.objectRegistry.liveStateJson(
-            *map, it->changedObjectIds, it->undone)));
-    }
-  }
-
-  return resourceObject(*it, std::nullopt);
-}
-
-std::optional<QJsonObject> McpBridgeServer::listResources(
-  const QString& cursor, QString* error) const
-{
-  return m_session.listResources(cursor, error);
+  return m_emptyOverlayState;
 }
 
 mcp::McpBridgeResponse McpBridgeServer::dispatchToolCall(
@@ -444,155 +208,9 @@ mcp::McpBridgeResponse McpBridgeServer::dispatchToolCall(
 
   const auto dispatchGuard = DispatchGuard{m_dispatchInProgress};
 
-  auto params = request.params;
-  auto* map = m_activeMapProvider ? m_activeMapProvider() : nullptr;
-  if (tool->mutatesDocument)
-  {
-    const auto expectedDocumentPath =
-      params.value("expectedDocumentPath").toString().trimmed();
-    if (!expectedDocumentPath.isEmpty())
-    {
-      const auto actualDocumentPath =
-        map != nullptr && !map->path().empty() ? pathAsQString(map->path()) : QString{};
-      if (actualDocumentPath != expectedDocumentPath)
-      {
-        return makeFailure(
-          request,
-          mcp::McpErrorCode::Forbidden,
-          QString{"Active document does not match expectedDocumentPath. Expected '%1', "
-                  "actual '%2'."}
-            .arg(expectedDocumentPath, actualDocumentPath),
-          QJsonObject{
-            {"expectedDocumentPath", expectedDocumentPath},
-            {"actualDocumentPath", actualDocumentPath},
-            {"mutatedDocument", false},
-            {"retrySafe", true},
-            {"recoveryAction", "activate_expected_document_then_retry"},
-            {"processId", static_cast<int>(QCoreApplication::applicationPid())},
-            {"bridgeInstanceId", m_bridgeInstanceId},
-            {"bridgeStartedAt", m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs)},
-            {"httpPort", static_cast<int>(m_config.httpPort)},
-          });
-      }
-    }
-
-    const auto expectedDocumentFingerprint =
-      params.value("expectedDocumentFingerprint").toString().trimmed();
-    if (!expectedDocumentFingerprint.isEmpty())
-    {
-      const auto actualDocumentFingerprint =
-        map != nullptr ? m_session.objectRegistry.documentFingerprint(*map) : QString{};
-      if (actualDocumentFingerprint != expectedDocumentFingerprint)
-      {
-        return makeFailure(
-          request,
-          mcp::McpErrorCode::Forbidden,
-          QString{"Active document does not match expectedDocumentFingerprint. "
-                  "Expected '%1', actual '%2'."}
-            .arg(expectedDocumentFingerprint, actualDocumentFingerprint),
-          QJsonObject{
-            {"expectedDocumentFingerprint", expectedDocumentFingerprint},
-            {"actualDocumentFingerprint", actualDocumentFingerprint},
-            {"actualDocumentPath",
-             map != nullptr && !map->path().empty() ? pathAsQString(map->path())
-                                                    : QString{}},
-            {"mutatedDocument", false},
-            {"retrySafe", true},
-            {"recoveryAction", "refresh_status_or_activate_expected_document"},
-            {"processId", static_cast<int>(QCoreApplication::applicationPid())},
-            {"bridgeInstanceId", m_bridgeInstanceId},
-            {"bridgeStartedAt", m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs)},
-            {"httpPort", static_cast<int>(m_config.httpPort)},
-          });
-      }
-    }
-  }
-  if (map != nullptr)
-  {
-    auto error = QString{};
-    const auto internalParams =
-      m_session.objectRegistry.internalizeParams(*map, params, error);
-    if (!internalParams)
-    {
-      return makeFailure(request, mcp::McpErrorCode::InvalidParams, error);
-    }
-    params = *internalParams;
-  }
-
-  const auto requestDocumentFingerprint =
-    map != nullptr ? m_session.objectRegistry.documentFingerprint(*map) : QString{};
-  m_session.rememberDocumentFingerprint(requestDocumentFingerprint);
-
-  const auto metadataBefore = tool->mutatesDocument
-                                ? m_session.brushMetadata
-                                : std::map<QString, McpBrushMetadataRecord>{};
-  const auto modulesBefore =
-    tool->mutatesDocument ? m_session.modules : std::map<QString, McpModuleRecord>{};
-  auto result = m_toolHandler(request.tool, params);
-  if (result.ok)
-  {
-    auto* resultMap = m_activeMapProvider ? m_activeMapProvider() : nullptr;
-    if (resultMap != nullptr)
-    {
-      if (tool->mutatesDocument && result.result.value("mutatedDocument").toBool(true))
-      {
-        const auto undoOperationId = mutationUndoOperationId(result.result);
-        reconcileMcpSessionForMap(
-          *resultMap,
-          m_session.brushMetadata,
-          m_session.modules,
-          m_session.objectRegistry,
-          undoOperationId);
-        const auto historyToolManagesSessionDelta =
-          request.tool == "history_undo_mcp"
-          || request.tool == "history_undo_to_operation"
-          || request.tool == "history_redo_mcp";
-        if (!undoOperationId.isEmpty() && !historyToolManagesSessionDelta)
-        {
-          attachMcpSessionDelta(
-            m_session.operationHistory,
-            undoOperationId,
-            metadataBefore,
-            modulesBefore,
-            m_session.brushMetadata,
-            m_session.modules);
-        }
-        result.result.insert("undoOperationId", undoOperationId);
-        result.result.insert(
-          "undoable",
-          !undoOperationId.isEmpty()
-            && operationIsUndoable(m_session.operationHistory, undoOperationId));
-        result.result.insert(
-          "auditOperationIds", mutationAuditOperationIds(result.result, undoOperationId));
-      }
-      if (tool->mutatesDocument)
-      {
-        const auto documentModified = result.result.value("mutatedDocument").toBool(true);
-        result.result.insert(
-          "completionState",
-          QJsonObject{
-            {"documentModified", documentModified},
-            {"saveRequired", documentModified},
-            {"visualReview", "not_run"},
-            {"bspCompile", "not_run"},
-          });
-      }
-      auto externalResult =
-        m_session.objectRegistry.externalizeResult(*resultMap, result.result);
-      syncOperationHistoryWithExternalResult(
-        m_session.operationHistory, *resultMap, m_session.objectRegistry, externalResult);
-      const auto activeDocumentFingerprint =
-        m_session.objectRegistry.documentFingerprint(*resultMap);
-      m_session.cacheReviewResource(externalResult, activeDocumentFingerprint);
-      m_session.prune(activeDocumentFingerprint, QDateTime::currentMSecsSinceEpoch());
-      return mcp::McpBridgeResponse::success(request.id, std::move(externalResult));
-    }
-    m_session.cacheReviewResource(result.result);
-    m_session.prune({}, QDateTime::currentMSecsSinceEpoch());
-    return mcp::McpBridgeResponse::success(request.id, result.result);
-  }
-  m_session.prune(requestDocumentFingerprint, QDateTime::currentMSecsSinceEpoch());
-  return mcp::McpBridgeResponse::failure(request.id, result.error);
+  const auto result = m_toolHandler(request.tool, request.params);
+  return result.ok ? mcp::McpBridgeResponse::success(request.id, result.result)
+                   : mcp::McpBridgeResponse::failure(request.id, result.error);
 }
 
 void McpBridgeServer::startRequestDeadline(QLocalSocket& socket)
@@ -643,34 +261,10 @@ mcp::McpBridgeResponse McpBridgeServer::dispatchRequest(
     return dispatchToolCall(request);
   }
 
-  if (request.type == mcp::McpBridgeRequestType::ResourcesList)
-  {
-    const auto cursorValue = request.params.value("cursor");
-    if (!cursorValue.isUndefined() && !cursorValue.isString())
-    {
-      return makeFailure(
-        request, mcp::McpErrorCode::InvalidParams, "Resource cursor must be a string");
-    }
-    auto error = QString{};
-    const auto result = listResources(cursorValue.toString(), &error);
-    return result ? mcp::McpBridgeResponse::success(request.id, *result)
-                  : makeFailure(request, mcp::McpErrorCode::InvalidParams, error);
-  }
-
-  const auto uriValue = request.params.value("uri");
-  if (!uriValue.isString() || uriValue.toString().trimmed().isEmpty())
-  {
-    return makeFailure(
-      request,
-      mcp::McpErrorCode::InvalidParams,
-      "Resource read requires a non-empty uri");
-  }
-  const auto resource = readResource(uriValue.toString());
-  return resource ? mcp::McpBridgeResponse::success(request.id, *resource)
-                  : makeFailure(
-                      request,
-                      mcp::McpErrorCode::InvalidParams,
-                      QString{"Resource not found: %1"}.arg(uriValue.toString()));
+  return makeFailure(
+    request,
+    mcp::McpErrorCode::InvalidRequest,
+    "MCP resources are not supported by the thin Python bridge");
 }
 
 void McpBridgeServer::handleNewConnection()

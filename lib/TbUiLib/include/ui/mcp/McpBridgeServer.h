@@ -33,14 +33,11 @@
 #include "mcp/McpBridgeConfig.h"
 #include "mcp/McpBridgeMessages.h"
 #include "mcp/McpError.h"
-#include "ui/automation/AutomationStateRecords.h"
-#include "ui/automation/AutomationStateStore.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include <functional>
 #include <map>
 #include <memory>
-#include <vector>
 
 class QLocalSocket;
 class QTimer;
@@ -81,102 +78,6 @@ struct McpPythonExecutionReplay
   McpBridgeToolResult response;
 };
 
-struct McpOperationRecord
-{
-  QString operationId;
-  QString toolName;
-  QString transactionName;
-  QString operationKind;
-  QString documentPath;
-  QString documentFingerprint;
-  QStringList changedObjectIds;
-  QStringList deletedObjectIds;
-  QString createdAt;
-  qint64 createdAtMs = 0;
-  QByteArray summaryJson;
-  QByteArray detailJson;
-  bool undone = false;
-  bool undoable = true;
-  bool redoable = false;
-  QString parentOperationId;
-  QStringList childOperationIds;
-  QByteArray sessionBeforeJson;
-  QByteArray sessionAfterJson;
-
-  McpOperationRecord();
-  void setChangedObjectIds(const QJsonArray& ids);
-  void setDeletedObjectIds(const QJsonArray& ids);
-  QJsonArray changedObjectIdsJson() const;
-  QJsonArray deletedObjectIdsJson() const;
-  void setSummary(const QJsonObject& value);
-  QJsonObject summary() const;
-  void setDetail(const QJsonObject& value);
-  QJsonObject detail() const;
-};
-
-// Compatibility names for legacy MCP adapter code. New services use the
-// automation names above and must not depend on this bridge header.
-using McpBrushMetadataRecord = automation::AutomationObjectMetadataRecord;
-using McpModuleRecord = automation::AutomationModuleRecord;
-using McpIrPreviewCacheRecord = automation::AutomationIrPreviewRecord;
-
-struct McpReviewResourceRecord
-{
-  QJsonObject resource;
-  QString documentFingerprint;
-  qint64 createdAtMs = 0;
-};
-
-struct McpSessionEvictionCounters
-{
-  quint64 operationRecords = 0;
-  quint64 reviewResources = 0;
-  quint64 irPreviews = 0;
-  quint64 documentFingerprints = 0;
-  quint64 objectRegistryRecords = 0;
-};
-
-class McpSessionState
-{
-private:
-  std::unique_ptr<automation::AutomationStateStore> m_ownedAutomationState;
-
-public:
-  static constexpr auto MaxOperationRecords = size_t{1024};
-  static constexpr auto MaxReviewResources = size_t{128};
-  // Kept for legacy MCP tests and callers. The automation state owns this
-  // resource budget because Python and MCP share the same preview records.
-  static constexpr auto MaxIrPreviews = automation::AutomationStateStore::MaxIrPreviews;
-  static constexpr auto MaxDocumentFingerprints = qsizetype{4};
-  static constexpr auto MaxResourcesPerPage = qsizetype{100};
-  static constexpr auto IrPreviewTtlMs = automation::AutomationStateStore::IrPreviewTtlMs;
-
-  McpSessionState();
-  explicit McpSessionState(automation::AutomationStateStore& automationState);
-
-  int nextOperationIndex = 1;
-  std::vector<McpOperationRecord> operationHistory;
-  std::map<QString, McpBrushMetadataRecord>& brushMetadata;
-  std::map<QString, McpModuleRecord>& modules;
-  std::map<QString, McpIrPreviewCacheRecord>& irPreviewCache;
-  std::map<QString, McpReviewResourceRecord> reviewResources;
-  int& nextIrPreviewIndex;
-  McpObjectRegistry objectRegistry;
-  QStringList recentDocumentFingerprints;
-  McpSessionEvictionCounters evictions;
-  std::map<QString, QJsonObject> evictedResourceHints;
-
-  void clear();
-  void rememberDocumentFingerprint(const QString& documentFingerprint);
-  void prune(const QString& activeDocumentFingerprint, qint64 nowMs);
-  void cacheReviewResource(
-    const QJsonObject& resource, const QString& documentFingerprint = {});
-  std::optional<QJsonObject> listResources(
-    const QString& cursor, QString* error = nullptr) const;
-  std::optional<QJsonObject> evictedResourceHint(const QString& uri) const;
-  QJsonObject diagnosticsJson() const;
-};
-
 class McpToolRegistry;
 
 class McpBridgeServer : public QObject
@@ -192,15 +93,8 @@ private:
   McpBridgeTransportLimits m_transportLimits;
   ToolHandler m_toolHandler;
   ActiveMapProvider m_activeMapProvider;
-  QJsonObject m_overlayState;
-  mutable McpSessionState m_session;
-  int& m_nextOperationIndex = m_session.nextOperationIndex;
-  std::vector<McpOperationRecord>& m_operationHistory = m_session.operationHistory;
-  std::map<QString, McpBrushMetadataRecord>& m_brushMetadata = m_session.brushMetadata;
-  std::map<QString, McpModuleRecord>& m_modules = m_session.modules;
-  std::map<QString, McpIrPreviewCacheRecord>& m_irPreviewCache = m_session.irPreviewCache;
-  int& m_nextIrPreviewIndex = m_session.nextIrPreviewIndex;
-  McpObjectRegistry& m_objectRegistry = m_session.objectRegistry;
+  McpObjectRegistry m_objectRegistry;
+  QJsonObject m_emptyOverlayState;
   mutable std::map<QString, McpPythonExecutionReplay> m_pythonExecutionReplays;
   mutable QStringList m_pythonExecutionReplayOrder;
   std::unique_ptr<McpToolRegistry> m_toolRegistry;
@@ -244,19 +138,8 @@ public:
   int duplicateToolRegistrationCount() const;
 
   mcp::McpBridgeResponse dispatchRequest(const mcp::McpBridgeRequest& request) const;
-  std::optional<QJsonObject> listResources(
-    const QString& cursor, QString* error = nullptr) const;
-  std::optional<QJsonObject> readResource(const QString& uri) const;
-
 private:
-  McpBridgeServer(
-    ToolHandler toolHandler,
-    McpBridgeTransportLimits transportLimits,
-    automation::AutomationStateStore& automationState,
-    QObject* parent);
-
   mcp::McpBridgeResponse dispatchToolCall(const mcp::McpBridgeRequest& request) const;
-  void clearSessionState();
   void startRequestDeadline(QLocalSocket& socket);
   void restartRequestDeadline(QLocalSocket& socket);
   void rejectAndDisconnect(QLocalSocket& socket, const QString& message) const;

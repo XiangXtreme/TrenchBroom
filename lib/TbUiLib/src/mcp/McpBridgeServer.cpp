@@ -30,7 +30,7 @@
 #include <QStringList>
 #include <QUuid>
 
-#include "McpBridgeServerTools.h"
+#include "McpThinBridgeTools.h"
 #include "McpToolRegistry.h"
 #include "mcp/McpError.h"
 #include "mcp/McpToolCatalog.h"
@@ -257,7 +257,6 @@ McpBridgeServer::McpBridgeServer(
               m_bridgeInstanceId,
               m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
               &m_objectRegistry);
-            status.insert("sessionState", m_session.diagnosticsJson());
             return McpBridgeToolResult::success(std::move(status));
           }
           if (view == "document")
@@ -481,8 +480,6 @@ McpBridgeServer::McpBridgeServer(
           context.currentMapView = mapWindow->currentMapViewBase();
           context.logger = &mapWindow->pythonLogger();
           context.objectRegistry = &m_objectRegistry;
-          context.metadataStore = &appController.automationState().objectMetadata;
-          context.moduleStore = &appController.automationState().modules;
           context.mcpExecution = true;
           context.allowNonTransactionalActions = mode == "action";
           context.allowPersistentUi = false;
@@ -562,9 +559,7 @@ McpBridgeServer::McpBridgeServer(
           mcp::McpErrorCode::ToolNotFound,
           QString{"MCP tool is registered but not wired yet: %1"}.arg(toolName));
       },
-      std::move(transportLimits),
-      appController.automationState(),
-      parent}
+      std::move(transportLimits), parent}
 {
   auto legacyDispatcher = std::make_shared<ToolHandler>(std::move(m_toolHandler));
   m_toolRegistry = std::make_unique<McpToolRegistry>();
@@ -607,17 +602,6 @@ McpBridgeServer::McpBridgeServer(
 {
 }
 
-McpBridgeServer::McpBridgeServer(
-  ToolHandler toolHandler,
-  McpBridgeTransportLimits transportLimits,
-  automation::AutomationStateStore& automationState,
-  QObject* parent)
-  : QObject{parent}
-  , m_transportLimits{std::move(transportLimits)}
-  , m_toolHandler{std::move(toolHandler)}
-  , m_session{automationState}
-{
-}
 
 McpBridgeServer::McpBridgeServer(
   ToolHandler toolHandler, ActiveMapProvider activeMapProvider, QObject* parent)

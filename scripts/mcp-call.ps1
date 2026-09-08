@@ -230,7 +230,8 @@ try {
     $requestParams = Read-JsonValue -Json $ParamsJson -Path $ParamsPath -DefaultValue @{}
   } else {
     if ([string]::IsNullOrWhiteSpace($Tool)) {
-      $Tool = "tb_status"
+      $Tool = "tb_inspect"
+      $ArgumentsJson = '{"view":"status"}'
     }
     $requestMethod = "tools/call"
     $arguments = Read-JsonValue -Json $ArgumentsJson -Path $ArgumentsPath -DefaultValue @{}
@@ -280,7 +281,7 @@ try {
     if ($null -ne $statusProcessId -and $mcpPortOwners.Count -gt 0) {
       $matchesOwner = Test-McpPortOwnerMatch -Owners $mcpPortOwners -ProcessId ([int] $statusProcessId)
       $color = if ($matchesOwner) { [ConsoleColor]::Green } else { [ConsoleColor]::Yellow }
-      Write-Status "tb_status.processId=$statusProcessId; portOwnerMatch=$matchesOwner" $color
+      Write-Status "tb_inspect.processId=$statusProcessId; portOwnerMatch=$matchesOwner" $color
     }
   }
   if ($RawStructured -and $null -ne $structuredContent) {

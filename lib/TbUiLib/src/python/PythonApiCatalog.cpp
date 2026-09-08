@@ -17,8 +17,6 @@ constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::Faces, "faces"},
   PythonApiTypeInfo{PythonApiType::Materials, "materials"},
   PythonApiTypeInfo{PythonApiType::Groups, "groups"},
-  PythonApiTypeInfo{PythonApiType::Modules, "modules"},
-  PythonApiTypeInfo{PythonApiType::Ir, "ir"},
   PythonApiTypeInfo{PythonApiType::Geometry, "geometry"},
   PythonApiTypeInfo{PythonApiType::History, "history"},
   PythonApiTypeInfo{PythonApiType::Assets, "assets"},
@@ -63,9 +61,6 @@ constexpr auto ModuleSymbols = std::array{
     "materials", Property, "materials", PythonApiValueType{PythonApiType::Materials}},
   PythonApiSymbol{
     "groups", Property, "groups", PythonApiValueType{PythonApiType::Groups}},
-  PythonApiSymbol{
-    "modules", Property, "modules", PythonApiValueType{PythonApiType::Modules}},
-  PythonApiSymbol{"ir", Property, "ir", PythonApiValueType{PythonApiType::Ir}},
   PythonApiSymbol{
     "geometry", Property, "geometry", PythonApiValueType{PythonApiType::Geometry}},
   PythonApiSymbol{
@@ -688,10 +683,6 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
     return MaterialsSymbols;
   case PythonApiType::Groups:
     return GroupsSymbols;
-  case PythonApiType::Modules:
-    return ModulesSymbols;
-  case PythonApiType::Ir:
-    return IrSymbols;
   case PythonApiType::Geometry:
     return GeometrySymbols;
   case PythonApiType::History:

@@ -75,13 +75,10 @@
 #include "ui/automation/AutomationEntities.h"
 #include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationGroups.h"
-#include "ui/automation/AutomationIr.h"
-#include "ui/automation/AutomationIrExecution.h"
 #include "ui/automation/AutomationMapSnapshot.h"
 #include "ui/automation/AutomationMaterials.h"
 #include "ui/automation/AutomationNodes.h"
 #include "ui/automation/AutomationObjectRegistry.h"
-#include "ui/automation/AutomationStateStore.h"
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/automation/AutomationValidation.h"
 #include "ui/python/PythonApiCatalog.h"
@@ -1506,6 +1503,7 @@ QJsonObject jsonObjectFromPython(const py::object& value)
   return result.toObject();
 }
 
+#if 0 // Retired MCP IR and module state have no public Python compatibility path.
 py::dict validateAutomationIrFromPython(const py::object& value)
 {
   const auto parsed =
@@ -1972,6 +1970,8 @@ py::dict compactModule(const std::string& moduleId)
   result["removed_stale_object_id_count"] = before - objectIds.size();
   return result;
 }
+
+#endif
 
 py::dict groupSummary(const mdl::GroupNode& group)
 {
@@ -6090,33 +6090,6 @@ void defineModule(py::module_& module)
   groups.def("ungroup_selected", [currentSelection]() {
     return ungroupSelectedGroups(currentSelection());
   });
-
-  auto modules = module.def_submodule("modules", "Generated map module queries.");
-  modules.def(
-    "list",
-    modulesForCurrentDocument,
-    py::arg("include_stale") = false,
-    py::arg("include_empty") = false);
-  modules.def("inspect", inspectModule, py::arg("module_id"));
-  modules.def("select", selectModule, py::arg("module_id"));
-  modules.def("compact", compactModule, py::arg("module_id"));
-  modules.def("forget", forgetModule, py::arg("module_id"));
-
-  auto ir = module.def_submodule("ir", "IR validation and compact preview operations.");
-  ir.def("validate", validateAutomationIrFromPython, py::arg("ir"));
-  ir.def("preview", validateAutomationIrFromPython, py::arg("ir"));
-  ir.def(
-    "compile_preview_from_file", compileAutomationIrPreviewFromFile, py::arg("path"));
-  ir.def(
-    "apply",
-    applyAutomationIrFromPython,
-    py::arg("ir"),
-    py::arg("name") = "Python API Apply IR");
-  ir.def(
-    "apply_from_file",
-    applyAutomationIrFromFile,
-    py::arg("path"),
-    py::arg("name") = "Python API Apply IR");
 
   auto geometry =
     module.def_submodule("geometry", "Native geometry analysis operations.");
