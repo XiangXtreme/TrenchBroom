@@ -3128,29 +3128,57 @@ std::vector<BrushHandle> untieBrushesFromEntity(const py::object& objects)
 
 EntityHandle placeAsset(
   const std::string& path,
-  const std::string_view expectedExtension,
+  const BrowserCellType type,
   const std::string& classname,
   const std::string& property,
   const py::object& origin,
   const bool select)
 {
-  auto extension = std::filesystem::path{path}.extension().string();
-  std::ranges::transform(extension, extension.begin(), [](const unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
-  if (extension != expectedExtension)
+  auto placementOrigin = vm::vec3d{};
+  if (!origin.is_none())
   {
-    throw py::value_error{
-      "asset path must have the " + std::string{expectedExtension} + " extension"};
+    placementOrigin = toVmVec3(vec3FromObject(origin));
   }
-  if (property.empty())
+  auto error = QString{};
+  auto entityNode = buildAutomationAssetEntity(
+    AutomationAssetPlacementSpec{
+      .path = std::filesystem::path{path},
+      .type = type,
+      .classname = classname,
+      .property = property,
+      .origin = placementOrigin,
+    },
+    error);
+  if (!entityNode)
   {
-    throw py::value_error{"property must not be empty"};
+    throw py::value_error{error.toStdString()};
   }
 
-  auto properties = py::dict{};
-  properties[py::str{property}] = py::str{path};
-  return createEntity(classname, properties, origin, select);
+  auto& document = currentDocument().get();
+  auto transaction = ScopedPythonTransaction{document, "Python API Place Asset"};
+  auto* entityNodeRaw = entityNode.get();
+  try
+  {
+    if (!automation::addNodes(document.map(), {entityNodeRaw}, select))
+    {
+      throw std::runtime_error{"Could not add asset entity"};
+    }
+    entityNode.release();
+    if (!transaction.commit())
+    {
+      throw std::runtime_error{"Could not place asset entity"};
+    }
+  }
+  catch (...)
+  {
+    transaction.cancel();
+    throw;
+  }
+  return EntityHandle{
+    &document,
+    PythonHandleRegistry::instance().documentGeneration(&document),
+    entityNodeRaw,
+    PythonHandleRegistry::instance().nodeGeneration(entityNodeRaw)};
 }
 
 std::string assetTypeName(const BrowserCellType type)
@@ -6162,7 +6190,7 @@ void defineModule(py::module_& module)
                       const std::string& classname,
                       const std::string& property,
                       const bool select) {
-    return placeAsset(path, ".mdl", classname, property, origin, select);
+    return placeAsset(path, BrowserCellType::Model, classname, property, origin, select);
   };
   auto placeSprite = [](
                        const std::string& path,
@@ -6170,7 +6198,7 @@ void defineModule(py::module_& module)
                        const std::string& classname,
                        const std::string& property,
                        const bool select) {
-    return placeAsset(path, ".spr", classname, property, origin, select);
+    return placeAsset(path, BrowserCellType::Sprite, classname, property, origin, select);
   };
   auto placeSound = [](
                       const std::string& path,
@@ -6178,7 +6206,7 @@ void defineModule(py::module_& module)
                       const std::string& classname,
                       const std::string& property,
                       const bool select) {
-    return placeAsset(path, ".wav", classname, property, origin, select);
+    return placeAsset(path, BrowserCellType::Sound, classname, property, origin, select);
   };
   auto assets = module.def_submodule("assets", "GoldSrc asset placement operations.");
   assets.def(

@@ -453,53 +453,53 @@ McpBridgeToolResult placeAssetForMapResult(
     transactionLabel = "sound";
   }
 
-  const auto actualType =
-    assetTypeForExtension(std::filesystem::path{path.toStdString()});
-  if (actualType != assetType)
+  auto origin = vm::vec3d{};
+  if (const auto originValue = params.value("origin"); !originValue.isUndefined())
   {
-    return McpBridgeToolResult::failure(
-      mcp::McpErrorCode::InvalidParams,
-      QString{"path does not match %1 asset type"}.arg(browserCellTypeName(assetType)),
-      preMutationFailureDetails(
-        QJsonObject{
-          {"path", path},
-          {"expectedAssetType", browserCellTypeName(assetType)},
-          {"actualAssetType", browserCellTypeName(actualType)},
-        },
-        "choose_matching_asset_place_tool_or_path"));
-  }
-
-  auto error = QString{};
-  auto entity = mdl::Entity{
-    {{mdl::EntityPropertyKeys::Classname,
-      optionalString(params, "classname", defaultClassname)}}};
-  entity.addOrUpdateProperty(
-    optionalString(params, "property", defaultProperty), path.toStdString());
-
-  if (const auto origin = params.value("origin"); !origin.isUndefined())
-  {
-    const auto originVec = vec3FromJson(params, "origin", error);
-    if (!originVec)
+    auto parseError = QString{};
+    const auto parsedOrigin = vec3FromJson(params, "origin", parseError);
+    if (!parsedOrigin)
     {
       return McpBridgeToolResult::failure(
         mcp::McpErrorCode::InvalidParams,
-        error,
+        parseError,
         preMutationFailureDetails(
           QJsonObject{{"targetSource", "origin"}}, "provide_valid_origin_then_retry"));
     }
-    entity.setOrigin(*originVec);
+    origin = *parsedOrigin;
   }
 
-  auto* entityNode = new mdl::EntityNode{std::move(entity)};
+  auto buildError = QString{};
+  auto entityNode = buildAutomationAssetEntity(
+    AutomationAssetPlacementSpec{
+      .path = std::filesystem::path{path.toStdString()},
+      .type = assetType,
+      .classname = optionalString(params, "classname", defaultClassname),
+      .property = optionalString(params, "property", defaultProperty),
+      .origin = origin,
+    },
+    buildError);
+  if (!entityNode)
+  {
+    return McpBridgeToolResult::failure(
+      mcp::McpErrorCode::InvalidParams,
+      buildError,
+      preMutationFailureDetails(
+        QJsonObject{
+          {"path", path}, {"expectedAssetType", browserCellTypeName(assetType)}},
+        "choose_matching_asset_place_tool_or_path"));
+  }
+
+  auto* entityNodeRaw = entityNode.get();
   const auto transactionName = QString{"MCP: Place %1 asset"}.arg(transactionLabel);
   const auto changedObjectIds = addNodesWithTransaction(
-    map, transactionName, {entityNode}, optionalBool(params, "select", true));
+    map, transactionName, {entityNodeRaw}, optionalBool(params, "select", true));
   if (!changedObjectIds)
   {
-    delete entityNode;
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::InternalError, "Could not place asset entity");
   }
+  entityNode.release();
 
   auto result = QJsonObject{};
   recordOperation(
@@ -511,7 +511,7 @@ McpBridgeToolResult placeAssetForMapResult(
     *changedObjectIds,
     result,
     mcpIdsModeFromParams(params));
-  result.insert("entity", nodeSummaryJson(*entityNode, map.worldNode()));
+  result.insert("entity", nodeSummaryJson(*entityNodeRaw, map.worldNode()));
   result.insert("assetPath", path);
   return McpBridgeToolResult::success(std::move(result));
 }

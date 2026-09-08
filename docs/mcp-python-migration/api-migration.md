@@ -87,6 +87,14 @@ uv_lock=None)` 至少设置其一，并同步编辑上下文与持久偏好。�
 `textures_list`、`texture_search` 共用同一已加载材料枚举和名称／相对路径匹配规则；材料对象仍可
 继续读取其名称、集合、路径和 usage count。
 
+## GoldSrc 资产
+
+`tb.assets.search(query="", type=None, limit=50)` 使用资产浏览器的启用 mod 过滤，返回模型、
+sprite 和音频的紧凑路径摘要。`tb.assets.place_model`、`tb.assets.place_sprite` 与
+`tb.assets.place_sound` 分别创建对应的 point entity；它们同过渡 MCP 的资产放置工具共享扩展名
+校验、classname、属性和 origin 的未附加节点构造。适配层各自拥有原生事务和选择策略，因此
+Python 返回可继续使用的 `Entity` 句柄，旧 MCP 保持历史和 JSON 回执。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

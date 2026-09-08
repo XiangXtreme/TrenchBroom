@@ -13,6 +13,9 @@
 
 #include "fs/PathMatcher.h"
 #include "fs/TraversalMode.h"
+#include "mdl/Entity.h"
+#include "mdl/EntityNode.h"
+#include "mdl/EntityProperties.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Assets.h"
@@ -104,6 +107,36 @@ std::optional<std::vector<BrowserAsset>> searchAutomationAssets(
   }
 
   return results;
+}
+
+std::unique_ptr<mdl::EntityNode> buildAutomationAssetEntity(
+  const AutomationAssetPlacementSpec& spec, QString& error)
+{
+  if (spec.path.empty())
+  {
+    error = "asset path must not be empty";
+    return nullptr;
+  }
+  if (assetTypeForExtension(spec.path) != spec.type)
+  {
+    error = "asset path does not match the requested asset type";
+    return nullptr;
+  }
+  if (spec.classname.empty())
+  {
+    error = "asset classname must not be empty";
+    return nullptr;
+  }
+  if (spec.property.empty())
+  {
+    error = "asset property must not be empty";
+    return nullptr;
+  }
+
+  auto entity = mdl::Entity{{{mdl::EntityPropertyKeys::Classname, spec.classname}}};
+  entity.addOrUpdateProperty(spec.property, spec.path.generic_string());
+  entity.setOrigin(spec.origin);
+  return std::make_unique<mdl::EntityNode>(std::move(entity));
 }
 
 } // namespace tb::ui
