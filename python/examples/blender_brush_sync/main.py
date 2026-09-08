@@ -157,7 +157,7 @@ class BlenderBrushSync:
         self.panel.set_label_text("status", message)
 
     def selected_brushes(self):
-        selection = tb.current_document().selection
+        selection = tb.documents.current().selection
         brushes = list(selection.brushes)
         if brushes:
             return brushes
@@ -167,7 +167,7 @@ class BlenderBrushSync:
         return brushes
 
     def selected_faces(self):
-        return list(tb.current_document().selection.brush_faces)
+        return list(tb.documents.current().selection.brush_faces)
 
     def export_faces(self, faces, brush_index):
         brush_id = f"brush{brush_index}"
@@ -223,7 +223,7 @@ class BlenderBrushSync:
 
     def rebuild_cache(self, payload):
         candidates = []
-        for entity in tb.current_document().entities:
+        for entity in tb.documents.current().entities:
             for brush in entity.brushes:
                 for face in brush.faces():
                     points = [_as_vec3(point) for point in face.vertices]
@@ -318,7 +318,7 @@ class BlenderBrushSync:
                 "schema": SCHEMA,
                 "sessionId": self.session_id,
                 "createdAt": time.time(),
-                "wadPaths": _wad_paths(tb.current_document()),
+                "wadPaths": _wad_paths(tb.documents.current()),
                 "selectionMode": "faces" if selected_faces else "brushes",
                 "brushes": (
                     [
@@ -383,7 +383,7 @@ class BlenderBrushSync:
             pending_updates = []
             non_affine = []
             skipped = 0
-            doc = tb.current_document()
+            doc = tb.documents.current()
 
             for face_payload in response.get("faces", []):
                 brush_id = face_payload.get("brushId")

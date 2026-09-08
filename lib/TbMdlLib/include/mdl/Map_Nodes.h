@@ -44,6 +44,12 @@ std::vector<Node*> addNodes(Map& map, const std::map<Node*, std::vector<Node*>>&
 
 void duplicateSelectedNodes(Map& map);
 
+/**
+ * Duplicates the supplied nodes. The returned nodes are the top-level clones that
+ * correspond to the supplied targets. Selection is changed only when requested.
+ */
+std::vector<Node*> duplicateNodes(Map& map, const std::vector<Node*>& nodes, bool select);
+
 bool reparentNodes(Map& map, const std::map<Node*, std::vector<Node*>>& nodesToAdd);
 
 /**

@@ -49,7 +49,7 @@ class TransformTool:
         self.panel.set_label_text("status", self.status_text())
 
     def record_pivot(self):
-        vertices = tb.current_document().vertex_tool_vertices()
+        vertices = tb.documents.current().vertex_tool_vertices()
         if not vertices:
             self.refresh_status("No selected vertex handles")
             return
@@ -76,7 +76,7 @@ class TransformTool:
         return len(selection.all_entities) > 0
 
     def chamfer_vertices(self):
-        doc = tb.current_document()
+        doc = tb.documents.current()
         distance = float(self.panel.get_float_field("chamfer_dist"))
         with doc.transaction("Python API: Chamfer Vertex Handles"):
             ok = doc.selection.chamfer_vertices(distance)
@@ -87,7 +87,7 @@ class TransformTool:
             self.refresh_status("Record a pivot first")
             return
 
-        doc = tb.current_document()
+        doc = tb.documents.current()
         selection = doc.selection
         if not self.has_target_selection(selection):
             self.refresh_status("Selection is empty")
@@ -105,15 +105,9 @@ class TransformTool:
         with doc.transaction("Python API: Duplicate And Rotate"):
             for _ in range(duplicate_count):
                 selection.duplicate()
-                selection.translate(step_x, step_y, step_z)
+                selection.translate((step_x, step_y, step_z))
                 selection.rotate(
-                    axis_x,
-                    axis_y,
-                    axis_z,
-                    rotate_deg,
-                    self.pivot.x,
-                    self.pivot.y,
-                    self.pivot.z,
+                    (axis_x, axis_y, axis_z), rotate_deg, center=self.pivot
                 )
 
         self.refresh_status("Duplicate + rotate complete")

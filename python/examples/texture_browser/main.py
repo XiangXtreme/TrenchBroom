@@ -2,7 +2,7 @@ import trenchbroom as tb
 
 
 def create_texture_browser():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     panel = tb.create_plugin_panel("Texture Browser")
     panel.clear()
     panel.add_label_named("status", "")

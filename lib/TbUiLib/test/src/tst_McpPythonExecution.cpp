@@ -144,11 +144,11 @@ TEST_CASE("McpPythonExecution", "[McpBridgeServer][PythonApi]")
             .contains("texture pixel"));
     CHECK(
       symbol("Face.uv_loops").value("description").toString().contains("not normalized"));
-    CHECK(symbol("brushes.create_boxes_batch")
+    CHECK(symbol("brushes.create_boxes")
             .value("description")
             .toString()
             .contains("'min'"));
-    CHECK(symbol("brushes.create_polygon_batch")
+    CHECK(symbol("brushes.create_prisms")
             .value("description")
             .toString()
             .contains("'points2d'"));
@@ -157,6 +157,22 @@ TEST_CASE("McpPythonExecution", "[McpBridgeServer][PythonApi]")
             .value("description")
             .toString()
             .contains("face_render_mode"));
+    const auto descriptionSearch =
+      server.dispatchRequest({"api", "tb_api", {{"query", "texture pixel"}}, {}});
+    REQUIRE(descriptionSearch.ok);
+    const auto descriptionMatches = descriptionSearch.result.value("symbols").toArray();
+    REQUIRE_FALSE(descriptionMatches.isEmpty());
+    CHECK(std::ranges::all_of(descriptionMatches, [](const auto& value) {
+      const auto entry = value.toObject();
+      return entry.value("description").toString().contains("texture pixel");
+    }));
+    const auto namedSearch =
+      server.dispatchRequest({"api", "tb_api", {{"query", "create boxes"}}, {}});
+    REQUIRE(namedSearch.ok);
+    REQUIRE_FALSE(namedSearch.result.value("symbols").toArray().isEmpty());
+    CHECK(
+      namedSearch.result.value("symbols").toArray().first().toObject().value("symbol")
+      == "trenchbroom.brushes.create_boxes");
     CHECK_FALSE(server.dispatchRequest({"api", "tb_api", {{"offset", -1}}, {}}).ok);
   }
 
@@ -171,7 +187,7 @@ TEST_CASE("McpPythonExecution", "[McpBridgeServer][PythonApi]")
               .dispatchRequest(request(
                 "issue-fixture",
                 R"(
-tb.brushes.create_boxes_batch([
+tb.brushes.create_boxes([
     {'min': (i*64+.25, 0, 0), 'max': (i*64+32.25, 32, 32)} for i in range(45)
 ], select=False)
 world = tb.entities.find(classname='worldspawn')[0]
@@ -348,9 +364,9 @@ assert [b.id for b in tb.brushes.selected()] == before
 entity = tb.entities.tie_brushes("test_trigger", [brush])
 alias = tb.entities.find(classname="test_trigger")[0]
 entity.set("targetname", "checkpoint")
-tb.entities.properties_update([entity], {"speed": "100"})
+tb.entities.update_many([entity], {"speed": "100"})
 assert alias.get("speed") == "100"
-tb.objects.set_selection([entity.brushes[0], keep])
+tb.documents.current().selection.set([entity.brushes[0], keep])
 tb.entities.delete(entity)
 assert [b.id for b in tb.brushes.selected()] == [keep.id]
 assert tb.documents.snapshot()["selected_node_count"] == 1
@@ -359,7 +375,7 @@ try:
     raise AssertionError("Deleted entity remained live")
 except RuntimeError:
     pass
-tb.deselect_all()
+tb.documents.current().selection.clear()
 )",
       "transaction"));
     INFO(QJsonDocument{response.error ? response.error->details : response.result}
@@ -418,13 +434,13 @@ assert entity.get("message") is None
     context.appController = &app;
     context.logger = &otherWindow.pythonLogger();
     REQUIRE(PythonRuntime::instance().runConsoleCommand(
-      context, "import trenchbroom as tb; tb._foreign_document = tb.current_document()"));
+      context, "import trenchbroom as tb; tb._foreign_document = tb.documents.current()"));
     const auto otherBefore = otherWindow.document().map().modificationCount();
     const auto response = server.dispatchRequest(request(
       "foreign-handle",
       R"(
 try:
-    assert tb._foreign_document.id != tb.current_document().id
+    assert tb._foreign_document.id != tb.documents.current().id
     tb._foreign_document.entities[0].set("message", "wrong document")
 finally:
     del tb._foreign_document
@@ -524,12 +540,12 @@ try:
     raise AssertionError("Deleted worldspawn")
 except ValueError:
     pass
-brush = tb.brushes.create_box((-16,-16,-16), (16,16,16))
-tb.selection().set_property("message", "course")
+brush = tb.brushes.create_box((-16,-16,-16), (16,16,16), select=True)
+tb.documents.current().selection.set_property("message", "course")
 assert tb.entities.find(classname="worldspawn")[0].get("message") == "course"
 assert tb.documents.snapshot()["selected_node_count"] == 1
 assert len(tb.brushes.selected()) == 1
-tb.deselect_all()
+tb.documents.current().selection.clear()
 assert tb.documents.snapshot()["selected_node_count"] == 0
 )",
       "transaction"));
@@ -548,7 +564,7 @@ brush = tb.brushes.list()[0]
 entity = tb.entities.tie_brushes("test_trigger", [brush])
 assert len(entity.brushes) == 1
 assert entity.brushes[0].entity.classname == "test_trigger"
-tb.deselect_all()
+tb.documents.current().selection.clear()
 )",
       "transaction"));
     INFO(QJsonDocument{tied.error ? tied.error->details : tied.result}
@@ -646,7 +662,7 @@ tb.deselect_all()
     const auto path = env.dir() / "saved.map";
     auto call = request(
       "save",
-      "tb.current_document().save_as(arguments['path'])\nraise RuntimeError('after "
+      "tb.documents.current().save_as(arguments['path'])\nraise RuntimeError('after "
       "save')",
       "action");
     call.params.insert(
@@ -668,7 +684,7 @@ tb.deselect_all()
   {
     const auto response = server.dispatchRequest(request(
       "close",
-      "tb.current_document().close(discard_changes=True)\nraise RuntimeError('after "
+      "tb.documents.current().close(discard_changes=True)\nraise RuntimeError('after "
       "close')",
       "action"));
     REQUIRE(response.error);

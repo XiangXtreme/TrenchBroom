@@ -2,7 +2,7 @@ import trenchbroom as tb
 
 
 def modify_entity_brushes():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     selection = doc.selection
     count = 0
 

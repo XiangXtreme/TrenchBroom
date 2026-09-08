@@ -54,6 +54,7 @@
 #include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
+#include "mdl/ModelUtils.h"
 #include "mdl/NodeHandles.h"
 #include "mdl/PatchNode.h"
 #include "mdl/Selection.h"
@@ -1002,19 +1003,32 @@ bool redoDocument(DocumentHandle& document)
 
 Vec3 vec3FromObject(const py::handle& object)
 {
+  auto result = Vec3{};
   if (py::isinstance<Vec3>(object))
   {
-    return py::cast<Vec3>(object);
+    result = py::cast<Vec3>(object);
   }
-  auto sequence = py::reinterpret_borrow<py::sequence>(object);
-  if (sequence.size() != 3)
+  else
   {
-    throw py::type_error{"Expected Vec3 or a 3-item sequence"};
+    if (!py::isinstance<py::sequence>(object) || py::isinstance<py::str>(object))
+    {
+      throw py::type_error{"Expected Vec3 or a 3-item sequence"};
+    }
+    auto sequence = py::reinterpret_borrow<py::sequence>(object);
+    if (sequence.size() != 3)
+    {
+      throw py::type_error{"Expected Vec3 or a 3-item sequence"};
+    }
+    result = Vec3{
+      py::cast<double>(sequence[0]),
+      py::cast<double>(sequence[1]),
+      py::cast<double>(sequence[2])};
   }
-  return Vec3{
-    py::cast<double>(sequence[0]),
-    py::cast<double>(sequence[1]),
-    py::cast<double>(sequence[2])};
+  if (!std::isfinite(result.x) || !std::isfinite(result.y) || !std::isfinite(result.z))
+  {
+    throw py::value_error{"Vector values must be finite"};
+  }
+  return result;
 }
 
 std::vector<vm::vec3d> pointsFromObjects(const py::iterable& objects)
@@ -1897,6 +1911,79 @@ std::vector<mdl::Node*> selectableNodesFromObjects(
   return result;
 }
 
+std::vector<mdl::Node*> objectNodesFromPython(MapDocument& document, const py::object& targets)
+{
+  if (targets.is_none())
+  {
+    throw py::type_error{"targets must be an Entity, Brush, or iterable of them"};
+  }
+  auto values = py::list{};
+  if (py::isinstance<EntityHandle>(targets) || py::isinstance<BrushHandle>(targets))
+  {
+    values.append(targets);
+  }
+  else if (py::isinstance<py::iterable>(targets) && !py::isinstance<py::str>(targets))
+  {
+    for (const auto value : py::reinterpret_borrow<py::iterable>(targets))
+    {
+      values.append(value);
+    }
+  }
+  else
+  {
+    throw py::type_error{"targets must be an Entity, Brush, or iterable of them"};
+  }
+
+  auto nodes = selectableNodesFromObjects(document, values);
+  std::ranges::sort(nodes);
+  nodes.erase(std::unique(nodes.begin(), nodes.end()), nodes.end());
+  nodes.erase(
+    std::remove_if(nodes.begin(), nodes.end(), [&](const auto* node) {
+      return std::ranges::any_of(nodes, [&](const auto* other) {
+        return node != other && node->isDescendantOf(*other);
+      });
+    }),
+    nodes.end());
+  return nodes;
+}
+
+vm::vec3d centerForNodes(const std::vector<mdl::Node*>& nodes)
+{
+  if (nodes.empty())
+  {
+    throw py::value_error{"targets must not be empty"};
+  }
+  const auto bounds = mdl::computeLogicalBounds(nodes);
+  return bounds.min + bounds.size() / 2.0;
+}
+
+std::vector<py::object> objectHandlesFromNodes(MapDocument& document, const std::vector<mdl::Node*>& nodes)
+{
+  const auto generation = PythonHandleRegistry::instance().documentGeneration(&document);
+  auto result = std::vector<py::object>{};
+  result.reserve(nodes.size());
+  for (auto* node : nodes)
+  {
+    if (auto* entity = dynamic_cast<mdl::EntityNodeBase*>(node))
+    {
+      result.push_back(py::cast(EntityHandle{
+        &document,
+        generation,
+        entity,
+        PythonHandleRegistry::instance().nodeLifetimeGeneration(entity)}));
+    }
+    else if (auto* brush = dynamic_cast<mdl::BrushNode*>(node))
+    {
+      result.push_back(py::cast(BrushHandle{
+        &document,
+        generation,
+        brush,
+        PythonHandleRegistry::instance().nodeLifetimeGeneration(brush)}));
+    }
+  }
+  return result;
+}
+
 vm::vec3d selectionCenter(mdl::Map& map)
 {
   const auto bounds = map.selectionBounds();
@@ -2067,6 +2154,202 @@ bool scaleSelection(
     {
       transaction.cancel();
       return false;
+    }
+    return true;
+  }
+  catch (...)
+  {
+    transaction.cancel();
+    throw;
+  }
+}
+
+bool translateSelectionByOffset(SelectionHandle& selection, const py::object& offset)
+{
+  const auto value = vec3FromObject(offset);
+  return translateSelection(selection, value.x, value.y, value.z);
+}
+
+bool rotateSelectionByAxis(
+  SelectionHandle& selection,
+  const py::object& axis,
+  const double angleDegrees,
+  const py::object& center)
+{
+  const auto direction = vec3FromObject(axis);
+  if (length(direction) == 0.0)
+  {
+    throw py::value_error{"axis must not be zero"};
+  }
+  if (center.is_none())
+  {
+    return rotateSelection(
+      selection,
+      direction.x,
+      direction.y,
+      direction.z,
+      angleDegrees,
+      std::nullopt,
+      std::nullopt,
+      std::nullopt);
+  }
+  const auto pivot = vec3FromObject(center);
+  return rotateSelection(
+    selection,
+    direction.x,
+    direction.y,
+    direction.z,
+    angleDegrees,
+    pivot.x,
+    pivot.y,
+    pivot.z);
+}
+
+bool scaleSelectionByFactors(
+  SelectionHandle& selection, const py::object& factors, const py::object& center)
+{
+  const auto value = py::isinstance<py::float_>(factors) || py::isinstance<py::int_>(factors)
+                       ? Vec3{py::cast<double>(factors), py::cast<double>(factors), py::cast<double>(factors)}
+                       : vec3FromObject(factors);
+  if (!std::isfinite(value.x) || !std::isfinite(value.y) || !std::isfinite(value.z))
+  {
+    throw py::value_error{"scale factors must be finite"};
+  }
+  if (center.is_none())
+  {
+    return scaleSelection(
+      selection, value.x, value.y, value.z, std::nullopt, std::nullopt, std::nullopt);
+  }
+  const auto pivot = vec3FromObject(center);
+  return scaleSelection(selection, value.x, value.y, value.z, pivot.x, pivot.y, pivot.z);
+}
+
+bool transformObjectNodes(
+  MapDocument& document,
+  const std::vector<mdl::Node*>& nodes,
+  const std::string& name,
+  const vm::mat4x4d& transformation)
+{
+  if (nodes.empty())
+  {
+    return false;
+  }
+  auto transaction = ScopedPythonTransaction{document, name};
+  try
+  {
+    if (!mdl::transformNodes(document.map(), nodes, name, transformation) || !transaction.commit())
+    {
+      transaction.cancel();
+      throw std::runtime_error{"Native object transformation failed"};
+    }
+    return true;
+  }
+  catch (...)
+  {
+    transaction.cancel();
+    throw;
+  }
+}
+
+bool translateObjects(const py::object& targets, const py::object& offset)
+{
+  auto& document = currentDocument().get();
+  const auto nodes = objectNodesFromPython(document, targets);
+  const auto value = vec3FromObject(offset);
+  return transformObjectNodes(
+    document, nodes, "Python API Translate Objects", vm::translation_matrix(toVmVec3(value)));
+}
+
+bool rotateObjects(
+  const py::object& targets,
+  const py::object& axis,
+  const double angleDegrees,
+  const py::object& center)
+{
+  auto& document = currentDocument().get();
+  const auto nodes = objectNodesFromPython(document, targets);
+  if (nodes.empty())
+  {
+    return false;
+  }
+  const auto direction = vec3FromObject(axis);
+  if (length(direction) == 0.0)
+  {
+    throw py::value_error{"axis must not be zero"};
+  }
+  const auto pivot = center.is_none() ? centerForNodes(nodes) : toVmVec3(vec3FromObject(center));
+  constexpr auto Pi = 3.1415926535897932384626433832795;
+  const auto transformation = vm::translation_matrix(pivot)
+                              * vm::rotation_matrix(toVmVec3(direction), angleDegrees * (Pi / 180.0))
+                              * vm::translation_matrix(-pivot);
+  return transformObjectNodes(document, nodes, "Python API Rotate Objects", transformation);
+}
+
+bool scaleObjects(
+  const py::object& targets, const py::object& factors, const py::object& center)
+{
+  auto& document = currentDocument().get();
+  const auto nodes = objectNodesFromPython(document, targets);
+  if (nodes.empty())
+  {
+    return false;
+  }
+  const auto value = py::isinstance<py::float_>(factors) || py::isinstance<py::int_>(factors)
+                       ? Vec3{py::cast<double>(factors), py::cast<double>(factors), py::cast<double>(factors)}
+                       : vec3FromObject(factors);
+  const auto pivot = center.is_none() ? centerForNodes(nodes) : toVmVec3(vec3FromObject(center));
+  const auto transformation = vm::translation_matrix(pivot)
+                              * vm::scaling_matrix(toVmVec3(value))
+                              * vm::translation_matrix(-pivot);
+  return transformObjectNodes(document, nodes, "Python API Scale Objects", transformation);
+}
+
+py::list duplicateObjects(const py::object& targets, const bool select)
+{
+  auto& document = currentDocument().get();
+  const auto nodes = objectNodesFromPython(document, targets);
+  if (nodes.empty())
+  {
+    return py::list{};
+  }
+  auto transaction = ScopedPythonTransaction{document, "Python API Duplicate Objects"};
+  try
+  {
+    const auto clones = mdl::duplicateNodes(document.map(), nodes, select);
+    if (clones.empty() || !transaction.commit())
+    {
+      transaction.cancel();
+      throw std::runtime_error{"Could not duplicate objects"};
+    }
+    auto result = py::list{};
+    for (const auto& handle : objectHandlesFromNodes(document, clones))
+    {
+      result.append(handle);
+    }
+    return result;
+  }
+  catch (...)
+  {
+    transaction.cancel();
+    throw;
+  }
+}
+
+bool deleteObjects(const py::object& targets)
+{
+  auto& document = currentDocument().get();
+  const auto nodes = objectNodesFromPython(document, targets);
+  if (nodes.empty())
+  {
+    return false;
+  }
+  auto transaction = ScopedPythonTransaction{document, "Python API Delete Objects"};
+  try
+  {
+    if (!automation::removeNodes(document.map(), nodes) || !transaction.commit())
+    {
+      transaction.cancel();
+      throw std::runtime_error{"Could not delete objects"};
     }
     return true;
   }
@@ -3394,7 +3677,8 @@ void setFaceSurfaceValue(FaceHandle& face, const py::object& value)
         value.is_none() ? std::nullopt : std::make_optional(py::cast<float>(value))}});
 }
 
-BrushHandle createBrush(const py::iterable& pointObjects, py::object materialName)
+BrushHandle createBrush(
+  const py::iterable& pointObjects, py::object materialName, const bool select)
 {
   auto& document = currentDocument().get();
   auto& map = document.map();
@@ -3411,7 +3695,7 @@ BrushHandle createBrush(const py::iterable& pointObjects, py::object materialNam
   }
 
   auto* brushNode = new mdl::BrushNode{std::move(brush).value()};
-  if (!automation::addNodes(map, {brushNode}, true))
+  if (!automation::addNodes(map, {brushNode}, select))
   {
     transaction.cancel();
     delete brushNode;
@@ -4116,31 +4400,33 @@ void defineModule(py::module_& module)
       py::arg("create_if_missing") = true)
     .def("brush_vertices", selectedBrushVertices)
     .def("triangle_uvs", selectedTriangleUVs)
+    .def("bounds", selectedObjectBounds)
+    .def("inspect", selectionSnapshot)
     .def("set", setSelection)
     .def("add", addSelection)
     .def("deselect_all", deselectAllSelection)
     .def("clear", deselectAllSelection)
     .def("duplicate", duplicateSelection)
-    .def("translate", translateSelection, py::arg("x"), py::arg("y"), py::arg("z"))
+    .def(
+      "translate",
+      translateSelectionByOffset,
+      py::arg("offset"),
+      "Translate the current selection by a map-unit Vec3.")
     .def(
       "rotate",
-      rotateSelection,
-      py::arg("axis_x"),
-      py::arg("axis_y"),
-      py::arg("axis_z"),
+      rotateSelectionByAxis,
+      py::arg("axis"),
       py::arg("angle_degrees"),
-      py::arg("center_x") = std::nullopt,
-      py::arg("center_y") = std::nullopt,
-      py::arg("center_z") = std::nullopt)
+      py::kw_only(),
+      py::arg("center") = py::none(),
+      "Rotate the current selection around an axis in degrees. center defaults to selection bounds.")
     .def(
       "scale",
-      scaleSelection,
-      py::arg("scale_x"),
-      py::arg("scale_y"),
-      py::arg("scale_z"),
-      py::arg("center_x") = std::nullopt,
-      py::arg("center_y") = std::nullopt,
-      py::arg("center_z") = std::nullopt)
+      scaleSelectionByFactors,
+      py::arg("factors"),
+      py::kw_only(),
+      py::arg("center") = py::none(),
+      "Scale the current selection by a scalar or map-unit Vec3. center defaults to selection bounds.")
     .def("chamfer_vertices", chamferSelectionVertices, py::arg("distance"))
     .def(
       "chamfer_edges",
@@ -5051,7 +5337,7 @@ void defineModule(py::module_& module)
     return selectedBrushFaces(selection);
   };
 
-  auto translateHelper = [currentSelection](const py::args& args) {
+  [[maybe_unused]] auto translateHelper = [currentSelection](const py::args& args) {
     auto selection = currentSelection();
     if (args.size() == 1)
     {
@@ -5096,7 +5382,7 @@ void defineModule(py::module_& module)
     throw py::type_error{"translate() takes 1, 2, 3, or 4 arguments"};
   };
 
-  auto rotateHelper = [currentSelection](const py::args& args) {
+  [[maybe_unused]] auto rotateHelper = [currentSelection](const py::args& args) {
     auto selection = currentSelection();
     if (args.size() == 3)
     {
@@ -5241,7 +5527,7 @@ void defineModule(py::module_& module)
     throw py::type_error{"rotate() takes 3, 4, 5, 7, or 8 arguments"};
   };
 
-  auto scaleHelper = [currentSelection](const py::args& args) {
+  [[maybe_unused]] auto scaleHelper = [currentSelection](const py::args& args) {
     auto selection = currentSelection();
     if (args.size() == 1)
     {
@@ -5300,7 +5586,7 @@ void defineModule(py::module_& module)
     throw py::type_error{"scale() takes 1, 2, 3, or 4 arguments"};
   };
 
-  auto duplicateHelper = [currentSelection,
+  [[maybe_unused]] auto duplicateHelper = [currentSelection,
                           selectedBrushes](const py::args& args) -> py::object {
     auto selection = currentSelection();
     if (args.size() == 1)
@@ -5327,7 +5613,7 @@ void defineModule(py::module_& module)
     return py::cast(tb::ui::selectedEntities(selection));
   };
 
-  auto deleteSelectionHelper = [currentSelection]() {
+  [[maybe_unused]] auto deleteSelectionHelper = [currentSelection]() {
     auto selection = currentSelection();
     auto& document = selection.getDocument();
     auto nodes = document.map().selection().nodes;
@@ -5352,54 +5638,11 @@ void defineModule(py::module_& module)
     }
   };
 
-  auto deselectAllHelper = [currentSelection]() {
+  [[maybe_unused]] auto deselectAllHelper = [currentSelection]() {
     auto selection = currentSelection();
     return deselectAllSelection(selection);
   };
 
-  module.def("selected_brushes", selectedBrushes);
-  module.def("selectedBrushes", selectedBrushes);
-  module.def("selected_entities", selectedEntities, py::arg("include_brushes") = false);
-  module.def("selectedEntities", selectedEntities, py::arg("include_brushes") = false);
-  module.def("selected_all_entities", [currentSelection]() {
-    auto selection = currentSelection();
-    return selectedAllEntities(selection);
-  });
-  module.def("selectedAllEntities", [currentSelection]() {
-    auto selection = currentSelection();
-    return selectedAllEntities(selection);
-  });
-  module.def("selection", [currentSelection]() { return currentSelection(); });
-  module.def("selected_faces", selectedFaces);
-  module.def("selectedFaces", selectedFaces);
-  module.def(
-    "translate",
-    translateHelper,
-    "translate(vector) or translate(x, y, z); optionally prepend a target handle or "
-    "iterable.");
-  module.def(
-    "rotate",
-    rotateHelper,
-    "rotate(x, y, z) for Euler degrees or rotate(axis_x, axis_y, axis_z, degrees[, "
-    "center_x, center_y, center_z]); optionally prepend targets. Default center is the "
-    "selection center.");
-  module.def(
-    "scale",
-    scaleHelper,
-    "scale(factor), scale(vector), or scale(x, y, z); optionally prepend a target handle "
-    "or iterable. Uses the selection center.");
-  module.def("duplicate", duplicateHelper);
-  module.def("delete_selection", deleteSelectionHelper);
-  module.def("deleteSelection", deleteSelectionHelper);
-  module.def("deselect_all", deselectAllHelper);
-  module.def("deselectAll", deselectAllHelper);
-
-  module.def("current_document", currentDocument);
-  module.def("document", currentDocument);
-  module.def("execute_action", executeAction);
-  module.def("list_actions", listActions);
-  module.def(
-    "create_brush", createBrush, py::arg("points"), py::arg("material") = py::none());
   module.def("create_plugin_panel", createPluginPanel);
   module.def("register_callback", registerCallback);
   module.def("unregister_callback", unregisterCallback);
@@ -5411,8 +5654,11 @@ void defineModule(py::module_& module)
   documents.def("current", currentDocument);
   documents.def("list", openDocuments);
   documents.def("snapshot", []() { return documentSnapshot(currentDocument()); });
-  documents.def("open", openDocument, py::arg("path"));
-  documents.def("open_verified", openVerifiedDocument, py::arg("path"));
+  documents.def(
+    "open",
+    openVerifiedDocument,
+    py::arg("path"),
+    "Open an absolute map path and verify that the active document matches it. Action mode.");
   documents.def("activate", activateDocument, py::arg("document"));
   documents.def(
     "close", closeDocument, py::arg("document"), py::arg("discard_changes") = false);
@@ -5434,7 +5680,6 @@ void defineModule(py::module_& module)
     saveDocumentAs(document, path);
     return document;
   });
-  documents.def("save_current", saveCurrentDocument, py::arg("path") = py::none());
   documents.def(
     "export",
     [](const std::string& path, const bool stripTbProperties) {
@@ -5445,39 +5690,38 @@ void defineModule(py::module_& module)
     py::arg("path"),
     py::arg("strip_tb_properties") = true);
 
-  auto objects = module.def_submodule("objects", "Selection-backed object operations.");
-  objects.def("selection", [currentSelection]() { return currentSelection(); });
-  objects.def("snapshot", []() { return documentSnapshot(currentDocument()); });
-  objects.def(
-    "bounds", [currentSelection]() { return selectedObjectBounds(currentSelection()); });
-  objects.def("inspect", [currentSelection]() {
-    auto selection = currentSelection();
-    return selectionSnapshot(selection);
-  });
+  auto objects = module.def_submodule("objects", "Explicit object editing operations.");
   objects.def(
     "translate",
-    translateHelper,
-    "translate(vector) or translate(x, y, z); optionally prepend a target handle or "
-    "iterable.");
+    translateObjects,
+    py::arg("targets"),
+    py::arg("offset"),
+    "Translate explicit Entity or Brush targets by a map-unit Vec3 without changing selection.");
   objects.def(
     "rotate",
-    rotateHelper,
-    "rotate(x, y, z) for Euler degrees or rotate(axis_x, axis_y, axis_z, degrees[, "
-    "center_x, center_y, center_z]); optionally prepend targets. Default center is the "
-    "selection center.");
+    rotateObjects,
+    py::arg("targets"),
+    py::arg("axis"),
+    py::arg("angle_degrees"),
+    py::kw_only(),
+    py::arg("center") = py::none(),
+    "Rotate explicit targets around an axis in degrees. center defaults to their bounds center.");
   objects.def(
     "scale",
-    scaleHelper,
-    "scale(factor), scale(vector), or scale(x, y, z); optionally prepend a target handle "
-    "or iterable. Uses the selection center.");
-  objects.def("duplicate", duplicateHelper);
-  objects.def("delete_selection", deleteSelectionHelper);
-  objects.def("deselect_all", deselectAllHelper);
-  objects.def("set_selection", [currentSelection](const py::iterable& objects) {
-    auto selection = currentSelection();
-    setSelection(selection, objects);
-  });
-
+    scaleObjects,
+    py::arg("targets"),
+    py::arg("factors"),
+    py::kw_only(),
+    py::arg("center") = py::none(),
+    "Scale explicit targets by a scalar or Vec3. center defaults to their bounds center.");
+  objects.def(
+    "duplicate",
+    duplicateObjects,
+    py::arg("targets"),
+    py::kw_only(),
+    py::arg("select") = false,
+    "Duplicate explicit targets and return their clones. select defaults to false.");
+  objects.def("delete", deleteObjects, py::arg("targets"));
   auto entities = module.def_submodule("entities", "Entity collection operations.");
   entities.def("list", []() {
     auto document = currentDocument();
@@ -5490,14 +5734,16 @@ void defineModule(py::module_& module)
     py::arg("classname"),
     py::arg("properties") = py::dict{},
     py::arg("origin") = py::none(),
-    py::arg("select") = false);
+    py::arg("select") = false,
+    "Create a point entity in map units. select defaults to false and preserves selection.");
   entities.def(
-    "create_checked_batch",
+    "create_from_schema_batch",
     createCheckedPointEntities,
     py::arg("entities"),
-    py::arg("select") = false);
+    py::arg("select") = false,
+    "Create entities after validating their game definitions. select defaults to false.");
   entities.def(
-    "entities_list",
+    "definitions",
     listEntityDefinitions,
     py::arg("type") = "",
     py::arg("query") = "",
@@ -5518,14 +5764,8 @@ void defineModule(py::module_& module)
     py::arg("classname"),
     py::arg("properties") = py::dict{},
     py::arg("origin") = py::none(),
-    py::arg("select") = true);
-  entities.def(
-    "create_checked",
-    createEntityFromSchema,
-    py::arg("classname"),
-    py::arg("properties") = py::dict{},
-    py::arg("origin") = py::none(),
-    py::arg("select") = true);
+    py::arg("select") = false,
+    "Create a game-definition-validated point entity. select defaults to false.");
   entities.def(
     "tie_brushes",
     tieBrushesToEntity,
@@ -5540,18 +5780,11 @@ void defineModule(py::module_& module)
     py::arg("properties") = py::dict{},
     py::arg("remove_keys") = std::vector<std::string>{});
   entities.def(
-    "properties_update",
+    "update_many",
     updateEntityProperties,
     py::arg("entities"),
     py::arg("properties") = py::dict{},
     py::arg("remove_keys") = std::vector<std::string>{});
-  entities.def(
-    "properties_delete",
-    [](const py::iterable& entities, const std::vector<std::string>& keys) {
-      updateEntityProperties(entities, py::dict{}, keys);
-    },
-    py::arg("entities"),
-    py::arg("keys"));
   entities.def(
     "find",
     [](
@@ -5572,23 +5805,29 @@ void defineModule(py::module_& module)
     return allBrushes(document.get());
   });
   brushes.def("selected", selectedBrushes);
-  brushes.def("create", createBrush, py::arg("points"), py::arg("material") = py::none());
+  brushes.def(
+    "create",
+    createBrush,
+    py::arg("points"),
+    py::arg("material") = py::none(),
+    py::arg("select") = false,
+    "Create a convex brush from map-unit points. select defaults to false.");
   brushes.def(
     "create_box",
     createBox,
     py::arg("min"),
     py::arg("max"),
     py::arg("material") = py::none(),
-    py::arg("select") = true);
+    py::arg("select") = false);
   brushes.def(
-    "create_boxes_batch",
+    "create_boxes",
     createBoxesBatch,
     py::arg("boxes"),
     py::arg("material") = py::none(),
-    py::arg("select") = true,
+    py::arg("select") = false,
     "Create boxes in map units. Each item is {'min': (x,y,z), 'max': (x,y,z), "
     "'material': 'name'}; material is optional and overrides the batch material. "
-    "Example: tb.brushes.create_boxes_batch([{'min': (0,0,0), 'max': (64,64,16)}], "
+    "Example: tb.brushes.create_boxes([{'min': (0,0,0), 'max': (64,64,16)}], "
     "material='stone', select=False). Returns the created brush handles.");
   brushes.def(
     "create_prism",
@@ -5597,15 +5836,15 @@ void defineModule(py::module_& module)
     py::arg("min_z"),
     py::arg("max_z"),
     py::arg("material") = py::none(),
-    py::arg("select") = true,
+    py::arg("select") = false,
     "Extrude a convex XY polygon from min_z to max_z, all in map units. "
     "points2d is a sequence of (x, y) pairs, e.g. [(0,0), (64,0), (32,64)].");
   brushes.def(
-    "create_polygon_batch",
+    "create_prisms",
     createPolygonBatch,
     py::arg("polygons"),
     py::arg("material") = py::none(),
-    py::arg("select") = true,
+    py::arg("select") = false,
     "Each item is {'points2d': [(x,y), ...], 'min_z': z0, 'max_z': z1, "
     "'material': 'name'} describing a convex XY prism in map units. "
     "The per-item material is optional and overrides the batch material.");

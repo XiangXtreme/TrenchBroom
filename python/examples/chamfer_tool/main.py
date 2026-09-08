@@ -21,13 +21,13 @@ class ChamferTool:
         self.panel.set_label_text("status", f"Status: {text}")
 
     def chamfer_edges(self):
-        doc = tb.current_document()
+        doc = tb.documents.current()
         with doc.transaction("Python API: Chamfer Edges"):
             ok = doc.selection.chamfer_edges(self._distance(), self._segments())
         self._set_status("Edges chamfered" if ok else "No selected edge handles")
 
     def chamfer_vertices(self):
-        doc = tb.current_document()
+        doc = tb.documents.current()
         with doc.transaction("Python API: Chamfer Vertices"):
             ok = doc.selection.chamfer_vertices(self._distance())
         self._set_status("Vertices chamfered" if ok else "No selected vertex handles")

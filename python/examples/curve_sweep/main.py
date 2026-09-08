@@ -49,7 +49,7 @@ class CurveSweepTool:
         self.panel.set_label_text("status", f"{message}\nPath points: {len(self.points)}")
 
     def record_path(self):
-        self.points = list(tb.current_document().vertex_tool_vertices())
+        self.points = list(tb.documents.current().vertex_tool_vertices())
         self.refresh("Path recorded." if len(self.points) >= 2 else "Need at least 2 points.")
 
     def values(self):
@@ -88,7 +88,7 @@ class CurveSweepTool:
         width, height, material = self.values()
         sections = [self.section(i, width, height) for i in range(len(self.points))]
         for i in range(len(sections) - 1):
-            tb.create_brush(sections[i] + sections[i + 1], material)
+            tb.brushes.create(sections[i] + sections[i + 1], material)
         self.refresh(f"Built {len(sections) - 1} connected brush segments.")
         return True
 
@@ -101,7 +101,7 @@ class CurveSweepTool:
 
     def preview_sweep(self):
         self.cancel_preview()
-        self.preview = tb.current_document().transaction("Python API: Curve Sweep Preview")
+        self.preview = tb.documents.current().transaction("Python API: Curve Sweep Preview")
         self.preview.__enter__()
         self.preview_values = self.values()
         if not self.build_sweep():
@@ -115,7 +115,7 @@ class CurveSweepTool:
             self.refresh("Preview applied.")
             return
 
-        with tb.current_document().transaction("Python API: Curve Sweep"):
+        with tb.documents.current().transaction("Python API: Curve Sweep"):
             self.build_sweep()
 
     def tick(self):

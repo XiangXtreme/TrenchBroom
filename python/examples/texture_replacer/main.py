@@ -10,7 +10,7 @@ panel.add_label_named("status", "Ready")
 
 def replace_textures():
     try:
-        doc = tb.current_document()
+        doc = tb.documents.current()
         find_name = panel.get_text_field("find")
         replace_name = panel.get_text_field("replace")
         if not find_name or not replace_name:

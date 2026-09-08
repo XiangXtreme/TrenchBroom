@@ -806,7 +806,8 @@ bool PythonRuntime::runConsoleCommand(
   auto* trenchbroomModule = PyImport_ImportModule("trenchbroom");
   if (trenchbroomModule != nullptr)
   {
-    auto* docFunc = PyObject_GetAttrString(trenchbroomModule, "current_document");
+    auto* documents = PyObject_GetAttrString(trenchbroomModule, "documents");
+    auto* docFunc = documents == nullptr ? nullptr : PyObject_GetAttrString(documents, "current");
     if (docFunc != nullptr)
     {
       auto* docObj = PyObject_CallNoArgs(docFunc);
@@ -827,6 +828,7 @@ bool PythonRuntime::runConsoleCommand(
       }
       Py_DECREF(docFunc);
     }
+    Py_XDECREF(documents);
     Py_DECREF(trenchbroomModule);
   }
 

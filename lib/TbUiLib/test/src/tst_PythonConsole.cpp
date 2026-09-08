@@ -177,16 +177,16 @@ TEST_CASE("PythonConsole")
   console.insertCompletion(QStringLiteral("translate"));
   CHECK(input->toPlainText() == QStringLiteral("sel.translate"));
 
-  input->setPlainText(QStringLiteral("selected_b"));
+  input->setPlainText(QStringLiteral("sel.brush"));
   cursor = input->textCursor();
   cursor.movePosition(QTextCursor::End);
   input->setTextCursor(cursor);
   const auto [base3, prefix3] = console.completionContextUnderCursor();
-  CHECK(base3.isEmpty());
-  CHECK(prefix3 == QStringLiteral("selected_b"));
+  CHECK(base3 == QStringLiteral("sel"));
+  CHECK(prefix3 == QStringLiteral("brush"));
   console.updateCompleter(true);
-  console.insertCompletion(QStringLiteral("selected_brushes"));
-  CHECK(input->toPlainText() == QStringLiteral("selected_brushes"));
+  console.insertCompletion(QStringLiteral("brushes"));
+  CHECK(input->toPlainText() == QStringLiteral("sel.brushes"));
 
   // Test chained and indexed expression completion
   input->setPlainText(QStringLiteral("sel.brush.entity.prop"));
@@ -269,7 +269,7 @@ TEST_CASE("PythonConsole")
   labels = completionLabels();
   CHECK(std::ranges::find(labels, QStringLiteral("entity")) != labels.end());
 
-  input->setPlainText(QStringLiteral("selected_brushes()[0]."));
+  input->setPlainText(QStringLiteral("sel.brushes[0]."));
   cursor = input->textCursor();
   cursor.movePosition(QTextCursor::End);
   input->setTextCursor(cursor);
@@ -300,7 +300,7 @@ TEST_CASE("PythonConsole")
     return PythonCompletionRoot{};
   });
 
-  input->setPlainText(QStringLiteral("api.current_document().selection."));
+  input->setPlainText(QStringLiteral("api.documents.current().selection."));
   cursor = input->textCursor();
   cursor.movePosition(QTextCursor::End);
   input->setTextCursor(cursor);

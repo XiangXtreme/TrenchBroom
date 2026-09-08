@@ -492,7 +492,8 @@ void configurePythonConsoleSnapshot(QWidget& targetWidget)
     input != nullptr && runButton != nullptr
     && !mapWindow->property("uiSnapshotPythonConsoleExecuted").toBool())
   {
-    input->setPlainText(QStringLiteral("trenchbroom.current_document().entities[0].classname"));
+    input->setPlainText(
+      QStringLiteral("trenchbroom.documents.current().entities[0].classname"));
     runButton->click();
     mapWindow->setProperty("uiSnapshotPythonConsoleExecuted", true);
   }

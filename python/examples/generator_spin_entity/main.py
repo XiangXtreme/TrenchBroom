@@ -1,7 +1,7 @@
 import trenchbroom as tb
 
 
-doc = tb.current_document()
+doc = tb.documents.current()
 selection = doc.selection
 entities = [entity for entity in selection.all_entities if entity.classname != "worldspawn"]
 
@@ -25,6 +25,6 @@ else:
     with doc.transaction("Python API: Spin Entity"):
         for _ in range(count):
             selection.duplicate()
-            selection.rotate(axis[0], axis[1], axis[2], step_angle, pivot[0], pivot[1], pivot[2])
+            selection.rotate(axis, step_angle, center=pivot)
 
     print(f"Generated {count} copies around {pivot}")

@@ -76,10 +76,27 @@ bool transformSelection(
     return transformVertices(map, selectedVertexPositions, transformation).success;
   }
 
+  const auto success =
+    transformNodes(map, map.selection().nodes, commandName, transformation);
+  if (success)
+  {
+    map.pushRepeatableCommand([&, commandName, transformation]() {
+      transformSelection(map, commandName, transformation);
+    });
+  }
+  return success;
+}
+
+bool transformNodes(
+  Map& map,
+  const std::vector<Node*>& nodes,
+  const std::string& commandName,
+  const vm::mat4x4d& transformation)
+{
   auto nodesToTransform = std::vector<Node*>{};
   auto entitiesToTransform = std::unordered_map<EntityNodeBase*, size_t>{};
 
-  for (auto* node : map.selection().nodes)
+  for (auto* node : nodes)
   {
     node->accept(kdl::overload(
       [&](
@@ -169,16 +186,9 @@ bool transformSelection(
                              map,
                              commandName,
                              std::move(nodesToUpdate),
-                             collectContainingGroups(map.selection().nodes));
+                             collectContainingGroups(nodes));
                          })
                        | kdl::value_or(false);
-
-  if (success)
-  {
-    map.pushRepeatableCommand([&, commandName, transformation]() {
-      transformSelection(map, commandName, transformation);
-    });
-  }
 
   return success;
 }

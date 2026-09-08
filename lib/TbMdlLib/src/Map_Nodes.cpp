@@ -332,13 +332,13 @@ std::vector<Node*> addNodes(Map& map, const std::map<Node*, std::vector<Node*>>&
   return addedNodes;
 }
 
-void duplicateSelectedNodes(Map& map)
+std::vector<Node*> duplicateNodes(Map& map, const std::vector<Node*>& nodes, const bool select)
 {
   auto nodesToAdd = std::map<Node*, std::vector<Node*>>{};
   auto nodesToSelect = std::vector<Node*>{};
   auto newParentMap = std::map<Node*, Node*>{};
 
-  for (auto* original : map.selection().nodes)
+  for (auto* original : nodes)
   {
     auto& suggestedParent = parentForNodes(map, {original});
     auto* clone = original->cloneRecursively(map.worldBounds());
@@ -378,23 +378,42 @@ void duplicateSelectedNodes(Map& map)
 
   {
     auto transaction = Transaction{map, "Duplicate Objects"};
-    deselectAll(map);
+    if (select)
+    {
+      deselectAll(map);
+    }
 
     if (addNodes(map, nodesToAdd).empty())
     {
       transaction.cancel();
-      return;
+      return {};
     }
 
-    selectNodes(map, nodesToSelect);
+    if (select)
+    {
+      selectNodes(map, nodesToSelect);
+    }
     if (!transaction.commit())
     {
-      return;
+      return {};
     }
   }
 
-  map.triggerVisualEffectNotifier(VisualEffect::FlashSelection);
+  if (select)
+  {
+    map.triggerVisualEffectNotifier(VisualEffect::FlashSelection);
+  }
 
+  return nodesToSelect;
+}
+
+void duplicateSelectedNodes(Map& map)
+{
+  const auto nodes = map.selection().nodes;
+  if (duplicateNodes(map, nodes, true).empty())
+  {
+    return;
+  }
   map.pushRepeatableCommand([&]() { duplicateSelectedNodes(map); });
 }
 

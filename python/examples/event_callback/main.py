@@ -3,7 +3,7 @@ import trenchbroom as tb
 
 def on_selection_changed():
     try:
-        doc = tb.current_document()
+        doc = tb.documents.current()
         selection = doc.selection
         entities = selection.all_entities
         brushes = selection.brushes

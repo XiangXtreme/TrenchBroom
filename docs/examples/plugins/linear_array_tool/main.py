@@ -9,7 +9,7 @@ import trenchbroom as tb
 panel = None
 
 def generate_array():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     if not doc.selection.brushes and not doc.selection.entities:
         panel.set_label_text("status", "Status: Please select at least one brush or entity.")
         return
@@ -26,7 +26,7 @@ def generate_array():
     with doc.transaction(f"Linear Array ({count} copies)"):
         for _ in range(count):
             doc.selection.duplicate()
-            doc.selection.translate(dx, dy, dz)
+            doc.selection.translate((dx, dy, dz))
 
     panel.set_label_text("status", f"Status: Created {count} array copies successfully.")
 

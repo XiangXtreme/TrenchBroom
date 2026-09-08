@@ -1,7 +1,7 @@
 import trenchbroom as tb
 
 
-doc = tb.current_document()
+doc = tb.documents.current()
 vertices = doc.vertex_tool_vertices()
 print(f"selected vertex handles: {len(vertices)}")
 

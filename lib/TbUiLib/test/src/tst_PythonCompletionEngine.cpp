@@ -26,19 +26,18 @@ TEST_CASE("PythonCompletionEngine")
 
   SECTION("requires indexing before completing sequence elements")
   {
-    CHECK(pythonCompletionTypeForExpression("selected_brushes()") == brushListType);
-    CHECK(pythonCompletionTypeForExpression("selected_brushes()[0]") == brushType);
+    CHECK(pythonCompletionTypeForExpression("sel.brushes") == brushListType);
+    CHECK(pythonCompletionTypeForExpression("sel.brushes[0]") == brushType);
     CHECK(
-      pythonCompletionTypeForExpression("selected_brushes()[0].faces()[0]") == faceType);
+      pythonCompletionTypeForExpression("sel.brushes[0].faces()[0]") == faceType);
     CHECK(pythonCompletionTypeForExpression("sel.brush_vertices()[0][0]") == vec3Type);
-    CHECK_FALSE(pythonCompletionTypeForExpression("selected_brushes().entity"));
-    CHECK_FALSE(pythonCompletionTypeForExpression("selected_brushes[0]"));
+    CHECK_FALSE(pythonCompletionTypeForExpression("sel.brushes.entity"));
   }
 
   SECTION("resolves module calls and rejects unknown members")
   {
     CHECK(
-      pythonCompletionTypeForExpression("trenchbroom.current_document().selection.brush")
+      pythonCompletionTypeForExpression("trenchbroom.documents.current().selection.brush")
       == brushType);
     CHECK(
       pythonCompletionTypeForExpression(
@@ -69,7 +68,7 @@ TEST_CASE("PythonCompletionEngine")
     }};
 
     CHECK(
-      pythonCompletionTypeForExpression("api.current_document().selection", provider)
+      pythonCompletionTypeForExpression("api.documents.current().selection", provider)
       == PythonApiValueType{PythonApiType::Selection});
     CHECK(pythonCompletionTypeForExpression("x.entity", provider) == entityType);
     CHECK_FALSE(pythonCompletionTypeForExpression("e", provider));

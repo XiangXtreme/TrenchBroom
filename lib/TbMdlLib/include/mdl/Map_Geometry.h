@@ -34,9 +34,20 @@
 namespace tb::mdl
 {
 class Map;
+class Node;
 
 bool transformSelection(
   Map& map, const std::string& commandName, const vm::mat4x4d& transformation);
+
+/**
+ * Transforms the supplied nodes without changing the map selection. The caller owns
+ * the target set and must keep it free of duplicate ancestor/descendant pairs.
+ */
+bool transformNodes(
+  Map& map,
+  const std::vector<Node*>& nodes,
+  const std::string& commandName,
+  const vm::mat4x4d& transformation);
 
 bool translateSelection(Map& map, const vm::vec3d& delta);
 bool rotateSelection(

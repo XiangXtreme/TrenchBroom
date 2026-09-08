@@ -2,7 +2,7 @@ import trenchbroom as tb
 
 
 distance = 8.0
-doc = tb.current_document()
+doc = tb.documents.current()
 
 with doc.transaction(f"Python API: Chamfer Edges ({distance})"):
     ok = doc.selection.chamfer_edges(distance)

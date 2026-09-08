@@ -487,7 +487,7 @@ class GitManager:
         threading.Thread(target=worker, daemon=True).start()
 
     def get_repo_dir(self):
-        doc = tb.current_document()
+        doc = tb.documents.current()
         if not doc:
             return None
         try:
@@ -1198,7 +1198,7 @@ class GitManager:
         self.refresh()
 
     def on_commit(self):
-        doc = tb.current_document()
+        doc = tb.documents.current()
         if doc:
             try:
                 doc.save()
@@ -1317,7 +1317,7 @@ class GitManager:
         self.refresh()
 
     def reload_map(self):
-        doc = tb.current_document()
+        doc = tb.documents.current()
         if doc:
             try:
                 doc.reload()

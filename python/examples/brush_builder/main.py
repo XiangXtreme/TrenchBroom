@@ -2,7 +2,7 @@ import trenchbroom as tb
 
 
 half = 64
-brush = tb.create_brush(
+brush = tb.brushes.create(
     [
         tb.Vec3(-half, -half, -half),
         tb.Vec3(half, -half, -half),
@@ -14,6 +14,7 @@ brush = tb.create_brush(
         tb.Vec3(-half, half, half),
     ],
     "common/caulk",
+    select=True,
 )
 
 faces = brush.faces()

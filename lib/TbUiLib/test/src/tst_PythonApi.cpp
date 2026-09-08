@@ -143,7 +143,7 @@ import json
 import os
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 assert doc is not None
 assert len(doc.entities) >= 1
 assert isinstance(doc.materials, list)
@@ -160,20 +160,20 @@ assert snapshot["content_bounds"] is None
 assert snapshot["node_count"] >= 1
 assert isinstance(snapshot["worldspawn"], dict)
 assert snapshot["selected_node_count"] == 0
-assert "grid_size" in tb.objects.snapshot()
-assert "has_selection" in tb.objects.inspect()
+assert "grid_size" in tb.documents.snapshot()
+assert "has_selection" in doc.selection.inspect()
 save_path = os.path.abspath("python-api-save.map")
 assert tb.documents.save_as(save_path).path == save_path
 assert os.path.isfile(save_path)
-assert tb.documents.save_current().path == save_path
+assert tb.documents.save().path == save_path
 export_path = os.path.abspath("python-api-export.map")
 assert tb.documents.export(export_path).path == save_path
 assert os.path.isfile(export_path)
 assert len(tb.entities.find(classname="worldspawn")) == 1
 assert len(tb.entities.find(property="classname", value="world")) == 1
 assert len(tb.brushes.list()) == 0
-assert tb.objects.selection().brushes == []
-tb.objects.set_selection([])
+assert tb.documents.current().selection.brushes == []
+doc.selection.set([])
 assert tb.entities.list()[0].classname == "worldspawn"
 assert tb.entities.selected() == []
 assert tb.brushes.selected() == []
@@ -197,6 +197,8 @@ history = tb.history.status()
 assert {"can_undo", "can_redo", "undo_name", "redo_name"} <= set(history)
 brush = tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(16,16,-16),
                            (-16,-16,16),(16,-16,16),(16,16,16),(-16,16,16)])
+assert doc.selection.brushes == []
+doc.selection.set([brush])
 geometry = tb.geometry.analyze_selection(detail="full")
 assert geometry["brush_count"] >= 1
 assert geometry["invalid_brush_count"] == 0
@@ -208,7 +210,7 @@ assert len(all_brushes[0].faces()) > 0
 box = tb.brushes.create_box(
     (-192, -64, -32), (-128, 0, 32), "python-api-box", select=False)
 assert box.faces()[0].material == "python-api-box"
-boxes = tb.brushes.create_boxes_batch([
+boxes = tb.brushes.create_boxes([
     {"min": (-96, -64, -32), "max": (-64, -32, 32)},
     {"min": (-48, -64, -32), "max": (-16, -32, 32), "material": "python-api-box-2"},
 ], select=False)
@@ -216,7 +218,7 @@ assert len(boxes) == 2
 assert boxes[1].faces()[0].material == "python-api-box-2"
 box_count_before_invalid_batch = len(tb.brushes.list())
 try:
-    tb.brushes.create_boxes_batch([
+    tb.brushes.create_boxes([
         {"min": (16, 16, 16), "max": (48, 48, 48)},
         {"min": (64, 64, 64), "max": (64, 96, 96)},
     ], select=False)
@@ -227,7 +229,7 @@ assert len(tb.brushes.list()) == box_count_before_invalid_batch
 prism = tb.brushes.create_prism(
     [(64, 0), (96, 0), (96, 32), (64, 32)], -32, 32, "python-api-prism", select=False)
 assert prism.faces()[0].material == "python-api-prism"
-polygons = tb.brushes.create_polygon_batch([
+polygons = tb.brushes.create_prisms([
     {"points2d": [(112, 0), (144, 0), (128, 32)], "min_z": -32, "max_z": 32},
     {"points2d": [(160, 0), (192, 0), (192, 32), (160, 32)], "min_z": -32, "max_z": 32,
      "material": "python-api-polygon"},
@@ -243,26 +245,38 @@ tb.faces.set_material([all_faces[0], all_faces[0]], "python-api-material")
 assert tb.faces.list()[0].material == "python-api-material"
 assert tb.documents.snapshot()["brush_count"] >= 1
 assert tb.documents.snapshot()["content_bounds"] is not None
-assert tb.objects.inspect()["brush_count"] >= 1
-assert tb.objects.inspect()["bounds"] == tb.objects.bounds()
-assert tb.objects.bounds() is not None
+assert doc.selection.inspect()["brush_count"] >= 1
+assert doc.selection.inspect()["bounds"] == doc.selection.bounds()
+assert doc.selection.bounds() is not None
+selection_before_explicit_edit = [item.id for item in doc.selection.brushes]
+assert tb.objects.translate(box, (8, 0, 0))
+assert [item.id for item in doc.selection.brushes] == selection_before_explicit_edit
+copies = tb.objects.duplicate([box, box], select=False)
+assert len(copies) == 1
+assert [item.id for item in doc.selection.brushes] == selection_before_explicit_edit
+assert tb.objects.delete(copies)
+assert [item.id for item in doc.selection.brushes] == selection_before_explicit_edit
 created_entity = tb.entities.create(
     "info_player_start", {"targetname": "python-api-entity"}, (16, 32, 48))
 assert created_entity.classname == "info_player_start"
 assert created_entity.id.startswith("object:")
 assert created_entity["targetname"] == "python-api-entity"
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 1
-checked_entities = tb.entities.create_checked_batch([
+mixed_copies = tb.objects.duplicate([box, created_entity], select=False)
+assert len(mixed_copies) == 2
+assert [item.id for item in doc.selection.brushes] == selection_before_explicit_edit
+assert tb.objects.delete(mixed_copies)
+checked_entities = tb.entities.create_from_schema_batch([
     {"classname": "test_spawn", "origin": (96, 32, 48), "properties": {"targetname": "checked"}},
     {"classname": "test_spawn", "origin": (128, 32, 48)},
 ])
 assert len(checked_entities) == 2
 assert checked_entities[0]["targetname"] == "checked"
-definitions = tb.entities.entities_list(type="point", query="test_spawn")
+definitions = tb.entities.definitions(type="point", query="test_spawn")
 assert len(definitions) == 1
 assert definitions[0]["classname"] == "test_spawn"
 assert definitions[0]["type"] == "point"
-assert tb.entities.entities_list(type="brush", query="test_spawn") == []
+assert tb.entities.definitions(type="brush", query="test_spawn") == []
 schema = tb.entities.schema("test_spawn")
 assert schema["classname"] == "test_spawn"
 assert schema["type"] == "point"
@@ -271,10 +285,10 @@ assert tb.entities.schema("test_func")["type"] == "brush"
 schema_entity = tb.entities.create_from_schema(
     "test_spawn", {"targetname": "schema"}, (144, 32, 48), select=False)
 assert schema_entity["targetname"] == "schema"
-checked_entity = tb.entities.create_checked("test_spawn", select=False)
+checked_entity = tb.entities.create_from_schema("test_spawn", select=False)
 assert checked_entity.classname == "test_spawn"
 try:
-    tb.entities.entities_list(type="invalid")
+    tb.entities.definitions(type="invalid")
     raise AssertionError("entity definition listing accepted invalid type")
 except ValueError:
     pass
@@ -285,7 +299,7 @@ except KeyError:
     pass
 checked_count = len(tb.entities.find(classname="test_spawn"))
 try:
-    tb.entities.create_checked_batch([{"classname": "test_spawn"}, {"classname": "missing"}])
+    tb.entities.create_from_schema_batch([{"classname": "test_spawn"}, {"classname": "missing"}])
     raise AssertionError("checked entity batch accepted unknown class")
 except ValueError:
     pass
@@ -293,11 +307,11 @@ assert len(tb.entities.find(classname="test_spawn")) == checked_count
 tb.entities.update(created_entity, {"health": "100"}, ["targetname"])
 assert created_entity["health"] == "100"
 assert "targetname" not in created_entity
-tb.entities.properties_update(
+tb.entities.update_many(
     [created_entity, created_entity], {"targetname": "python-api-entity", "armor": "50"})
 updated_entity = tb.entities.find(property="targetname", value="python-api-entity")[0]
 assert updated_entity["armor"] == "50"
-tb.entities.properties_delete([updated_entity], ["armor"])
+tb.entities.update_many([updated_entity], remove_keys=["armor"])
 created_entity = tb.entities.find(property="targetname", value="python-api-entity")[0]
 assert "armor" not in created_entity
 model_entity = tb.assets.place_model("models/python-api.mdl", (1, 2, 3))
@@ -315,7 +329,7 @@ except ValueError:
     pass
 tb.entities.delete(created_entity)
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 0
-tb.objects.set_selection([all_brushes[0]])
+doc.selection.set([all_brushes[0]])
 group = tb.groups.create_from_selection("python-api-group")
 assert group["name"] == "python-api-group"
 assert group["child_count"] == 1
@@ -335,7 +349,7 @@ tb.entities.create("path_corner", {"targetname": "python-link-2"})
 ambiguous_link_chain = tb.entities.link_chain_inspect(link_start, classname="path_corner")
 assert not ambiguous_link_chain["chain_complete"]
 assert ambiguous_link_chain["failures"][0]["status"] == "duplicate_targetname"
-tie_brushes = tb.brushes.create_boxes_batch([
+tie_brushes = tb.brushes.create_boxes([
     {"min": (224, 0, 0), "max": (256, 32, 32)},
     {"min": (264, 0, 0), "max": (296, 32, 32)},
 ], select=False)
@@ -357,7 +371,7 @@ with open("python-api-smoke-ok.txt", "w", encoding="utf-8") as f:
     f.write(next(entity.classname for entity in doc.entities if entity.classname == "worldspawn"))
 opened = tb.documents.open(save_path)
 assert opened.path == save_path
-assert tb.documents.open_verified(save_path).path == save_path
+assert tb.documents.open(save_path).path == save_path
 assert tb.documents.activate(opened).id == opened.id
 assert len(tb.documents.list()) == 1
 )");
@@ -386,9 +400,10 @@ assert len(tb.documents.list()) == 1
       R"(
 import trenchbroom as tb
 
+doc = tb.documents.current()
 left = tb.brushes.create_box((0, 0, 0), (96, 96, 96), select=False)
 right = tb.brushes.create_box((32, 32, 32), (128, 128, 128), select=False)
-tb.objects.set_selection([left, right])
+doc.selection.set([left, right])
 csg = tb.geometry.csg_selection("intersect")
 assert csg["operation"] == "intersect"
 assert csg["transaction_name"] == "Python API CSG Intersect"
@@ -420,7 +435,7 @@ try:
     raise AssertionError("CSG accepted an invalid operation")
 except ValueError:
     pass
-tb.objects.deselect_all()
+doc.selection.clear()
 try:
     tb.geometry.csg_selection("hollow")
     raise AssertionError("CSG accepted an empty selection")
@@ -486,7 +501,7 @@ with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
       context,
       PythonMcpExecutionRequest{
         "import trenchbroom as tb\nresult = "
-        "len(tb.current_document().entities[0].brushes)",
+        "len(tb.documents.current().entities[0].brushes)",
         "<mcp-python:before-invalid>",
         {},
       });
@@ -495,7 +510,7 @@ with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
       context,
       PythonMcpExecutionRequest{
         "import trenchbroom as tb\n"
-        "tb.create_brush([(-16,-16,-16),(16,-16,-16),(16,16,-16),(-16,16,-16),"
+        "tb.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(-16,16,-16),"
         "(-16,-16,16),(16,-16,16),(16,16,16),(-16,16,16)])\n"
         "result = object()",
         "<mcp-python:rollback>",
@@ -507,7 +522,7 @@ with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
       context,
       PythonMcpExecutionRequest{
         "import trenchbroom as tb\nresult = "
-        "len(tb.current_document().entities[0].brushes)",
+        "len(tb.documents.current().entities[0].brushes)",
         "<mcp-python:after-invalid>",
         {},
       });
@@ -519,7 +534,7 @@ with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
       PythonMcpExecutionRequest{
         "import trenchbroom as tb\n"
         "result = {'brushes': len(tb.brushes.list()), "
-        "'selectedBrushes': len(tb.objects.selection().brushes)}",
+        "'selectedBrushes': len(tb.documents.current().selection.brushes)}",
         "<mcp-python:before-rollback-state>",
         {},
       });
@@ -531,7 +546,7 @@ with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
         PythonMcpExecutionRequest{
           "import trenchbroom as tb\n"
           "result = {'brushes': len(tb.brushes.list()), "
-          "'selectedBrushes': len(tb.objects.selection().brushes)}",
+          "'selectedBrushes': len(tb.documents.current().selection.brushes)}",
           "<mcp-python:rollback-state>",
           {},
         });
@@ -736,29 +751,29 @@ print("hello stderr", file=sys.stderr)
     CHECK(logger.messages.back() == "=> 42");
 
     REQUIRE(runtime.runConsoleCommand(
-      context, "trenchbroom.current_document().entities[0].classname"));
+      context, "trenchbroom.documents.current().entities[0].classname"));
     CHECK(logger.messages.back() == "=> 'worldspawn'");
 
     REQUIRE(runtime.runConsoleCommand(context, "doc.entities[0].classname"));
     CHECK(logger.messages.back() == "=> 'worldspawn'");
 
-    REQUIRE(runtime.runConsoleCommand(context, "len(selected_brushes())"));
+    REQUIRE(runtime.runConsoleCommand(context, "len(doc.selection.brushes)"));
     CHECK(logger.messages.back() == "=> 0");
 
-    REQUIRE(runtime.runConsoleCommand(context, "len(selectedBrushes())"));
+    REQUIRE(runtime.runConsoleCommand(context, "len(doc.selection.brushes)"));
     CHECK(logger.messages.back() == "=> 0");
 
     REQUIRE(runtime.runConsoleCommand(
       context,
       "b = "
-      "create_brush([(-32,-32,-32),(32,-32,-32),(32,32,-32),(-32,32,-32),(-32,-32,32),("
+      "trenchbroom.brushes.create([(-32,-32,-32),(32,-32,-32),(32,32,-32),(-32,32,-32),(-32,-32,32),("
       "32,-32,32),(32,32,32),(-32,32,32)])"));
     REQUIRE(runtime.runConsoleCommand(context, "sel.set([b])"));
-    REQUIRE(runtime.runConsoleCommand(context, "len(selected_brushes())"));
+    REQUIRE(runtime.runConsoleCommand(context, "len(doc.selection.brushes)"));
     CHECK(logger.messages.back() == "=> 1");
 
     REQUIRE(runtime.runConsoleCommand(context, "import trenchbroom as api"));
-    REQUIRE(runtime.runConsoleCommand(context, "brush_list = selected_brushes()"));
+    REQUIRE(runtime.runConsoleCommand(context, "brush_list = trenchbroom.brushes.selected()"));
     REQUIRE(runtime.runConsoleCommand(context, "e = 1"));
     const auto apiRoot = runtime.consoleCompletionRoot(window, "api");
     CHECK(apiRoot.exists);
@@ -775,20 +790,20 @@ print("hello stderr", file=sys.stderr)
     CHECK_FALSE(unsupportedRoot.type);
     CHECK_FALSE(runtime.consoleCompletionRoot(window, "missing").exists);
 
-    REQUIRE(runtime.runConsoleCommand(context, "translate(0, 0, 64)"));
-    REQUIRE(runtime.runConsoleCommand(context, "rotate(0, 0, 90)"));
-    REQUIRE(runtime.runConsoleCommand(context, "duplicate()"));
-    REQUIRE(runtime.runConsoleCommand(context, "len(selected_brushes())"));
+    REQUIRE(runtime.runConsoleCommand(context, "sel.translate((0, 0, 64))"));
+    REQUIRE(runtime.runConsoleCommand(context, "sel.rotate((0, 0, 1), 90)"));
+    REQUIRE(runtime.runConsoleCommand(context, "sel.duplicate()"));
+    REQUIRE(runtime.runConsoleCommand(context, "len(doc.selection.brushes)"));
     CHECK(logger.messages.back() == "=> 1");
 
-    REQUIRE(runtime.runConsoleCommand(context, "delete_selection()"));
-    REQUIRE(runtime.runConsoleCommand(context, "len(selected_brushes())"));
+    REQUIRE(runtime.runConsoleCommand(context, "trenchbroom.objects.delete(doc.selection.brushes)"));
+    REQUIRE(runtime.runConsoleCommand(context, "len(doc.selection.brushes)"));
     CHECK(logger.messages.back() == "=> 0");
 
     REQUIRE(runtime.runConsoleCommand(
       context,
       "b2 = "
-      "create_brush([(-16,-16,-16),(16,-16,-16),(16,16,-16),(-16,16,-16),(-16,-16,16),("
+      "trenchbroom.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(-16,16,-16),(-16,-16,16),("
       "16,-16,16),(16,16,16),(-16,16,16)])"));
     REQUIRE(runtime.runConsoleCommand(context, "sel.set([b2])"));
     REQUIRE(runtime.runConsoleCommand(
@@ -797,8 +812,8 @@ print("hello stderr", file=sys.stderr)
     REQUIRE(runtime.runConsoleCommand(
       context,
       "for _ in range(8):\n"
-      "    duplicate()\n"
-      "    translate(64, 0, 16)\n"));
+      "    sel.duplicate()\n"
+      "    sel.translate((64, 0, 16))\n"));
     REQUIRE(runtime.runConsoleCommand(
       context, "len(doc.entities[0].brushes) == initial_brush_count + 8"));
     CHECK(logger.messages.back() == "=> True");
@@ -858,7 +873,7 @@ explode()
       R"(
 import trenchbroom as tb
 
-tb._cached_document = tb.current_document()
+tb._cached_document = tb.documents.current()
 )");
 
     auto context = PythonExecutionContext{};
@@ -895,7 +910,7 @@ tb._cached_document.entities
       R"(
 import trenchbroom as tb
 
-tb._cached_entity = tb.current_document().entities[0]
+tb._cached_entity = tb.documents.current().entities[0]
 )");
 
     auto context = PythonExecutionContext{};
@@ -944,7 +959,7 @@ tb._cached_entity.classname
       R"(
 import trenchbroom as tb
 
-tb._cached_entity = next(e for e in tb.current_document().entities if e.classname == "func_detail")
+tb._cached_entity = next(e for e in tb.documents.current().entities if e.classname == "func_detail")
 tb._cached_brush = tb._cached_entity.brushes[0]
 tb._cached_face = tb._cached_brush.faces()[0]
 )");
@@ -1014,7 +1029,7 @@ tb._cached_face.material
       R"(
 import trenchbroom as tb
 
-tb._cached_brush = tb.current_document().entities[0].brushes[0]
+tb._cached_brush = tb.documents.current().entities[0].brushes[0]
 tb._cached_face = tb._cached_brush.faces()[0]
 )");
 
@@ -1315,7 +1330,7 @@ assert panel.get_color_field("color") == (1, 2, 3)
       R"(
 import trenchbroom as tb
 
-entity = tb.current_document().entities[0]
+entity = tb.documents.current().entities[0]
 entity.set("message", "hello")
 assert entity.get("message") == "hello"
 assert tb.documents.snapshot()["selected_node_count"] == 0
@@ -1351,7 +1366,7 @@ assert tb.documents.snapshot()["selected_node_count"] == 0
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 entity = doc.entities[0]
 
 # Subscript access and assignment
@@ -1379,7 +1394,7 @@ if entity.brushes:
     assert "Brush(" in repr(brush)
 
 # Selection helpers
-sel = tb.selection()
+sel = tb.documents.current().selection
 assert sel is not None
 assert "Selection(" in repr(sel)
 assert "Document(" in repr(doc)
@@ -1396,9 +1411,9 @@ assert "test_sel_key" in sel
 sel.entity.remove("test_sel_key")
 assert "test_sel_key" not in sel
 
-all_ents = tb.selected_all_entities()
+all_ents = sel.all_entities
 assert isinstance(all_ents, list)
-inc_ents = tb.selected_entities(include_brushes=True)
+inc_ents = tb.entities.selected(include_brushes=True)
 assert isinstance(inc_ents, list)
 
 entity = sel.entity
@@ -1429,12 +1444,12 @@ assert tb.documents.snapshot()["selected_brush_count"] == 1
       R"(
 import trenchbroom as tb
 
-sel = tb.current_document().selection
+sel = tb.documents.current().selection
 assert sel.entity is None
 assert sel.properties is None
 assert sel.classname is None
 assert sel.all_entities == []
-assert tb.selected_all_entities() == []
+assert tb.documents.current().selection.all_entities == []
 assert "classname" not in sel
 assert not sel.set_property("empty_selection_key", "value")
 try:
@@ -1475,7 +1490,7 @@ else:
       R"(
 import trenchbroom as tb
 
-sel = tb.current_document().selection
+sel = tb.documents.current().selection
 assert sel.entity.classname == "func_detail"
 assert sel.classname == "func_detail"
 assert sel.properties["message"] == "face owner"
@@ -1507,7 +1522,7 @@ assert sel["face_selection_key"] == "value"
       R"PY(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 assert repr(doc) == "Document(name='\u5730\u56fe.map')"
 assert str(doc) == "Document(name='\u5730\u56fe.map')"
 )PY");
@@ -1534,8 +1549,8 @@ assert str(doc) == "Document(name='\u5730\u56fe.map')"
       R"(
 import trenchbroom as tb
 
-entity = tb.current_document().entities[0]
-with tb.current_document().transaction("rollback entity"):
+entity = tb.documents.current().entities[0]
+with tb.documents.current().transaction("rollback entity"):
     entity.set("message", "temporary")
     raise RuntimeError("rollback me")
 )");
@@ -1566,7 +1581,7 @@ with tb.current_document().transaction("rollback entity"):
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 brush = doc.entities[0].brushes[0]
 doc.select([brush])
 assert len(doc.selection.brushes) == 1
@@ -1614,7 +1629,7 @@ assert len(doc.selection.brushes) == 0
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 payload = doc.selection.triangle_uvs()
 triangles = payload["triangles"]
 assert len(triangles) == 1, f"triangle count: {len(triangles)}"
@@ -1660,7 +1675,7 @@ assert [loop["uv"] for loop in updated["loops"]] == uvs, updated
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 face = doc.selection.brushes[0].faces()[0]
 assert len(face.vertices) == 4, face.vertices
 loops = face.uv_loops
@@ -1705,7 +1720,7 @@ assert [loop["uv"] for loop in face.uv_loops] == uvs, face.uv_loops
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 faces = doc.selection.brush_faces
 assert len(faces) == 2, len(faces)
 
@@ -1779,7 +1794,7 @@ assert len(doc.selection.brushes) == 2, len(doc.selection.brushes)
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 assert len(doc.vertex_tool_vertices()) == 1
 assert tuple(doc.vertex_tool_vertices()[0]) == (1.0, 2.0, 3.0)
 
@@ -1816,7 +1831,7 @@ assert all(isinstance(v, tb.Vec3) for v in verts_by_brush[0])
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 world = doc.entities[0]
 brush_a = world.brushes[0]
 brush_b = world.brushes[1]
@@ -1829,9 +1844,9 @@ doc.selection.deselect_all()
 assert len(doc.selection.brushes) == 0
 
 doc.selection.set([brush_a])
-assert doc.selection.translate(128, 0, 0)
-assert doc.selection.rotate(0, 0, 1, 90, 0, 0, 0)
-assert doc.selection.scale(1, 1, 1, 0, 0, 0)
+assert doc.selection.translate((128, 0, 0))
+assert doc.selection.rotate((0, 0, 1), 90, center=(0, 0, 0))
+assert doc.selection.scale((1, 1, 1), center=(0, 0, 0))
 doc.selection.duplicate()
 assert len(doc.selection.brushes) == 1
 )");
@@ -1873,7 +1888,7 @@ assert len(doc.selection.brushes) == 1
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 doc.selection.set([doc.entities[0].brushes[0]])
 assert doc.selection.chamfer_vertices(4.0)
 )");
@@ -1903,7 +1918,7 @@ assert doc.selection.chamfer_vertices(4.0)
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 doc.selection.set([doc.entities[0].brushes[1]])
 assert doc.selection.chamfer_edges(4.0, 2)
 )");
@@ -1930,7 +1945,7 @@ assert doc.selection.chamfer_edges(4.0, 2)
       R"(
 import trenchbroom as tb
 
-brush = tb.current_document().entities[0].brushes[0]
+brush = tb.documents.current().entities[0].brushes[0]
 face = brush.faces()[0]
 face.set_material("changed")
 )");
@@ -1958,7 +1973,7 @@ face.set_material("changed")
 import trenchbroom as tb
 
 half = 32
-brush = tb.create_brush([
+brush = tb.brushes.create([
     tb.Vec3(-half, -half, -half),
     tb.Vec3( half, -half, -half),
     tb.Vec3( half,  half, -half),
@@ -1967,7 +1982,7 @@ brush = tb.create_brush([
     tb.Vec3( half, -half,  half),
     tb.Vec3( half,  half,  half),
     tb.Vec3(-half,  half,  half),
-], "original")
+], "original", select=True)
 face = brush.faces()[0]
 face.texture_name = "changed"
 face.offset = (12.0, 24.0)
@@ -2464,7 +2479,7 @@ for handle in (cached_material, cached_collection):
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 assert doc.path is None or isinstance(doc.path, str)
 assert callable(doc.save)
 assert callable(doc.reload)

@@ -9,7 +9,7 @@ panel.add_label_named("plane_info", "Select 3 vertex handles, then create a plan
 
 
 def create_plane_from_vertices():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     vertices = doc.vertex_tool_vertices()
     if len(vertices) < 3:
         panel.set_label_text("plane_info", "Need at least 3 selected vertex handles.")
@@ -32,7 +32,7 @@ panel.add_label_named("selection_info", "No brush vertices inspected.")
 
 
 def inspect_selected_brush_vertices():
-    doc = tb.current_document()
+    doc = tb.documents.current()
     brush_vertices = doc.selection.brush_vertices()
     total_vertices = sum(len(vertices) for vertices in brush_vertices)
     panel.set_label_text(

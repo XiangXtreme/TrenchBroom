@@ -256,7 +256,7 @@ TEST_CASE("MapWindow")
     runButton->click();
     input->setPlainText(QStringLiteral("console_value + 1"));
     runButton->click();
-    input->setPlainText(QStringLiteral("trenchbroom.current_document().entities[0].classname"));
+    input->setPlainText(QStringLiteral("trenchbroom.documents.current().entities[0].classname"));
     runButton->click();
 
     QTRY_VERIFY_WITH_TIMEOUT(output->toPlainText().contains(QStringLiteral("42")), 500);
@@ -556,7 +556,7 @@ TEST_CASE("MapWindow")
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 assert doc is not None
 assert len(doc.entities) >= 1
 assert isinstance(doc.materials, list)
@@ -583,7 +583,7 @@ with open("python-smoke-ok.txt", "w", encoding="utf-8") as f:
       R"(
 import trenchbroom as tb
 
-doc = tb.current_document()
+doc = tb.documents.current()
 entity = doc.entities[0]
 with doc.transaction("python smoke transaction"):
     entity.set("codex_python_smoke", "ok")
@@ -646,14 +646,14 @@ callback_token = tb.register_callback("selection_changed", on_selection_changed)
       R"(
 import trenchbroom as tb
 
-actions = tb.list_actions()
+actions = tb.actions.list()
 assert len(actions) > 0
 assert any("Menu/" in action or "View/" in action for action in actions)
 
-tb.execute_action("Menu/View/Grid/Set Grid Size 8")
+tb.actions.execute("Menu/View/Grid/Set Grid Size 8")
 
 try:
-    tb.execute_action("Codex/Missing/Action")
+    tb.actions.execute("Codex/Missing/Action")
 except KeyError:
     with open("python-actions-ok.txt", "w", encoding="utf-8") as f:
         f.write("ok")

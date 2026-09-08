@@ -167,7 +167,7 @@ class DistributeTool:
         self.panel.add_button_callback("Distribute Selected Objects", self.distribute)
 
     def current_document(self):
-        return tb.current_document()
+        return tb.documents.current()
 
     def entity_origin(self, entity):
         origin = entity.get("origin")
@@ -475,27 +475,14 @@ class DistributeTool:
                 final_center = vec3_add(vec3_add(target_position, jitter), base_offset)
 
                 move = vec3_sub(final_center, current_center)
-                selection.translate(move[0], move[1], move[2])
+                selection.translate(move)
                 selection.rotate(
-                    0.0,
-                    0.0,
-                    1.0,
-                    final_yaw - current_yaw,
-                    final_center[0],
-                    final_center[1],
-                    final_center[2],
+                    (0.0, 0.0, 1.0), final_yaw - current_yaw, center=final_center
                 )
 
                 scale = 1.0 + random.uniform(-random_scale, random_scale)
                 if abs(scale - 1.0) > 0.001:
-                    selection.scale(
-                        scale,
-                        scale,
-                        scale,
-                        final_center[0],
-                        final_center[1],
-                        final_center[2],
-                    )
+                    selection.scale(scale, center=final_center)
 
                 current_center = final_center
                 current_yaw = final_yaw

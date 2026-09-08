@@ -56,7 +56,7 @@ panel.add_color_field("color", "Select Color", (255, 0, 0))
 def apply_color():
     color = panel.get_color_field("color")
     color_str = f"{color[0] / 255.0} {color[1] / 255.0} {color[2] / 255.0}"
-    doc = tb.current_document()
+    doc = tb.documents.current()
     if not doc.selection.all_entities:
         panel.set_label_text("status", "Status: No entities selected")
         return

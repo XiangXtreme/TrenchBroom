@@ -51,16 +51,18 @@ class BrushManager:
             offset + tb.Vec3(-half, half, half),
         ]
 
-        doc = tb.current_document()
+        doc = tb.documents.current()
         with doc.transaction("Python API: Create Cube"):
-            brush = tb.create_brush(points, self.panel.get_combo_box_text("material"))
+            brush = tb.brushes.create(
+                points, self.panel.get_combo_box_text("material"), select=True
+            )
         if brush:
             self.log(f"Created cube at {offset}")
         else:
             self.log("Failed to create brush.")
 
     def selected_brushes(self):
-        selection = tb.current_document().selection
+        selection = tb.documents.current().selection
         brushes = list(selection.brushes)
         if brushes:
             return brushes
@@ -72,7 +74,7 @@ class BrushManager:
         material = self.panel.get_combo_box_text("material")
         scale = float(self.panel.get_float_field("tex_scale"))
         count = 0
-        doc = tb.current_document()
+        doc = tb.documents.current()
 
         with doc.transaction("Python API: Apply Material"):
             for brush in self.selected_brushes():
@@ -84,7 +86,7 @@ class BrushManager:
         self.log(f"Updated {count} faces.")
 
     def analyze_selection(self):
-        selection = tb.current_document().selection
+        selection = tb.documents.current().selection
         brushes = self.selected_brushes()
         face_count = sum(len(brush.faces()) for brush in brushes)
         self.log(
