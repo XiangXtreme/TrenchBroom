@@ -66,9 +66,7 @@ bool alignBrushFaceAxes(
     break;
   }
 
-  mdl::deselectAll(map);
-  mdl::selectBrushFaces(map, faces);
-  return mdl::setBrushFaceAttributes(map, update);
+  return mdl::setBrushFaceAttributes(map, faces, update);
 }
 
 bool copyBrushFaceAttributes(
@@ -82,9 +80,7 @@ bool copyBrushFaceAttributes(
   }
 
   const auto sourceFace = source.face();
-  mdl::deselectAll(map);
-  mdl::selectBrushFaces(map, targets);
-  return mdl::setBrushFaceAttributes(map, mdl::copyAll(sourceFace));
+  return mdl::setBrushFaceAttributes(map, targets, mdl::copyAll(sourceFace));
 }
 
 bool setBrushFaceMaterial(
@@ -97,9 +93,7 @@ bool setBrushFaceMaterial(
     return false;
   }
 
-  mdl::deselectAll(map);
-  mdl::selectBrushFaces(map, faces);
-  return mdl::setBrushFaceAttributes(map, {.materialName = material});
+  return mdl::setBrushFaceAttributes(map, faces, {.materialName = material});
 }
 
 std::vector<mdl::BrushFaceHandle> filterBrushFaceHandles(

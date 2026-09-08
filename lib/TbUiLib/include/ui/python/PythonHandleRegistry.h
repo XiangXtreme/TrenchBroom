@@ -23,10 +23,6 @@ public:
   size_t documentGeneration(MapDocument* document);
   void invalidateDocument(MapDocument* document);
 
-  size_t nodeGeneration(mdl::Node* node);
-  void invalidateNode(mdl::Node* node);
-  void invalidateNodes(const std::vector<mdl::Node*>& nodes);
-
   size_t nodeLifetimeGeneration(mdl::Node* node);
   void invalidateNodeLifetimes(const std::vector<mdl::Node*>& nodes);
 };

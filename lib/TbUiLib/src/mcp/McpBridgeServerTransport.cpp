@@ -25,6 +25,7 @@
 #include <QTimer>
 #include <QUuid>
 
+#include "McpPythonExecutor.h"
 #include "mcp/McpToolCatalog.h"
 #include "ui/mcp/McpBridgeServer.h"
 
@@ -128,8 +129,10 @@ void McpBridgeServer::stop()
     QLocalServer::removeServer(m_config.pipeName);
     m_server.reset();
   }
-  m_pythonExecutionReplays.clear();
-  m_pythonExecutionReplayOrder.clear();
+  if (m_pythonExecutor)
+  {
+    m_pythonExecutor->clear();
+  }
 }
 
 bool McpBridgeServer::isListening() const

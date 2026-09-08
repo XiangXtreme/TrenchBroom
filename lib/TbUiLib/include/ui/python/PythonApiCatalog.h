@@ -24,6 +24,7 @@ enum class PythonApiType
   Assets,
   Actions,
   Validation,
+  Viewport,
   Vec3,
   Plane,
   Document,
@@ -45,6 +46,15 @@ enum class PythonApiSymbolKind
   Method,
 };
 
+enum class PythonApiEffect
+{
+  Read,
+  Edit,
+  Action,
+  Plugin,
+  Value,
+};
+
 struct PythonApiValueType
 {
   PythonApiType type;
@@ -59,6 +69,7 @@ struct PythonApiSymbol
   PythonApiSymbolKind kind;
   std::string_view detail;
   std::optional<PythonApiValueType> resultType = std::nullopt;
+  PythonApiEffect effect = PythonApiEffect::Edit;
 };
 
 struct PythonApiTypeInfo

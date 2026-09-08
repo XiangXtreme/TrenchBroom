@@ -13,6 +13,8 @@ namespace automation
 class AutomationObjectRegistry;
 }
 
+McpBridgeToolResult pythonApiResult(const QJsonObject& params);
+
 McpBridgeToolResult noActiveDocumentFailure();
 McpBridgeToolResult invalidParamsFailure(const QString& message);
 QJsonObject makeStatus(

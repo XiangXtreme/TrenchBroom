@@ -383,13 +383,20 @@ bool createBrush(Map& map, const std::vector<vm::vec3d>& points)
 
 bool setBrushFaceAttributes(Map& map, const UpdateBrushFaceAttributes& update)
 {
-  return applyAndSwap(
-    map, "Change Face Attributes", map.selection().allBrushFaces(), [&](auto& brushFace) {
-      return evaluate(update, brushFace) | kdl::if_error([&](auto e) {
-               map.logger().error() << "Could not set face attributes: " << e.msg;
-             })
-             | kdl::is_success();
-    });
+  return setBrushFaceAttributes(map, map.selection().allBrushFaces(), update);
+}
+
+bool setBrushFaceAttributes(
+  Map& map,
+  const std::vector<BrushFaceHandle>& faces,
+  const UpdateBrushFaceAttributes& update)
+{
+  return applyAndSwap(map, "Change Face Attributes", faces, [&](auto& brushFace) {
+    return evaluate(update, brushFace) | kdl::if_error([&](auto e) {
+             map.logger().error() << "Could not set face attributes: " << e.msg;
+           })
+           | kdl::is_success();
+  });
 }
 
 bool setTriangleUVs(Map& map, const std::vector<TriangleUVUpdate>& updates)

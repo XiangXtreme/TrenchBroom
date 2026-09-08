@@ -125,6 +125,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapView3D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewActivationTracker.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewBar.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewBase.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewContainer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewToolBox.cpp
@@ -141,6 +142,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ModelBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ModelInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MousePreferencePane.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpPythonExecutor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpApi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpCapture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpDocumentTools.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpInspect.cpp
@@ -171,6 +174,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PythonConsole.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PythonPluginManagerDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/python/PythonApiCatalog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/python/PythonApiDocumentation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/python/PythonCompletionEngine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/python/PythonHandleRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/python/PythonPluginManifest.cpp

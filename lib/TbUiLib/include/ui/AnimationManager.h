@@ -51,6 +51,7 @@ private:
 public:
   explicit AnimationManager(QObject* parent);
   void runAnimation(std::unique_ptr<Animation> animation, bool replace);
+  void stopAnimation(Animation::Type type);
 
 private:
   void onTimerTick();

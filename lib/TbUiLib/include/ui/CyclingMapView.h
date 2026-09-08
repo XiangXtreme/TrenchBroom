@@ -64,7 +64,7 @@ private:
   void createGui(AppController& appController, MapViewToolBox& toolBox, int views);
   void addMapView(MapViewBase* mapView);
 
-private:
+public:
   void switchToMapView(MapViewBase* mapView);
 
 public: // implement MapView interface

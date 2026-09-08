@@ -10,8 +10,11 @@
 #include <QUuid>
 
 #include "McpThinBridgeTools.h"
+#include "mdl/Map.h"
 #include "ui/AppController.h"
+#include "ui/MapDocument.h"
 #include "ui/MapViewBase.h"
+#include "ui/MapViewport.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 
@@ -70,10 +73,12 @@ McpBridgeToolResult viewportCaptureCurrentResult(
   }
 
   const auto image = mapWindow->currentMapViewBase()->grabFramebuffer();
-  if (image.isNull() || image.width() < 1 || image.height() < 1 || !hasVisiblePixels(image))
+  if (
+    image.isNull() || image.width() < 1 || image.height() < 1 || !hasVisiblePixels(image))
   {
     return McpBridgeToolResult::failure(
-      mcp::McpErrorCode::InternalError, "Current viewport did not produce a readable image");
+      mcp::McpErrorCode::InternalError,
+      "Current viewport did not produce a readable image");
   }
   if (!image.save(path, "PNG"))
   {
@@ -87,13 +92,16 @@ McpBridgeToolResult viewportCaptureCurrentResult(
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::InternalError, "Saved viewport capture is not readable");
   }
-  return McpBridgeToolResult::success(
-    QJsonObject{{"path", info.absoluteFilePath()},
-                {"format", "png"},
-                {"width", saved.width()},
-                {"height", saved.height()},
-                {"readable", true},
-                {"mutatedDocument", false}});
+  return McpBridgeToolResult::success(QJsonObject{
+    {"path", info.absoluteFilePath()},
+    {"format", "png"},
+    {"width", saved.width()},
+    {"height", saved.height()},
+    {"readable", true},
+    {"viewport", mapViewportState(*mapWindow)},
+    {"documentPath",
+     QString::fromStdWString(mapWindow->document().map().path().wstring())},
+    {"mutatedDocument", false}});
 }
 
 } // namespace tb::ui

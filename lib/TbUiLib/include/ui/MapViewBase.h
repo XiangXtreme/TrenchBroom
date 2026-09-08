@@ -146,6 +146,7 @@ public:
   void setIsCurrent(bool isCurrent);
 
   virtual gl::Camera& camera() = 0;
+  void stopCameraAnimation();
   void showPieMenu();
 
 protected:

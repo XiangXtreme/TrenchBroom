@@ -68,6 +68,8 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
       objectSchema({
         {"query", stringProperty("Case-insensitive symbol search.")},
         {"symbol", stringProperty("Exact qualified symbol name.")},
+        {"offset", integerProperty("Result offset; use nextOffset to continue.")},
+        {"limit", integerProperty("Page size 1..50, default 8; at most 16 KiB.")},
       }),
       McpToolCostClass::Fast,
     },

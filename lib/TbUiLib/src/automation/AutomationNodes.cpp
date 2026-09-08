@@ -7,6 +7,8 @@
 #include "ui/automation/AutomationNodes.h"
 
 #include "mdl/AddRemoveNodesCommand.h"
+#include "mdl/BrushFaceHandle.h"
+#include "mdl/BrushNode.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
@@ -79,7 +81,17 @@ bool removeNodes(mdl::Map& map, std::vector<mdl::Node*> nodes)
     }
     nodesByParent[parent].push_back(node);
   }
-  mdl::deselectNodes(map, nodes);
+  const auto removed = [&](const mdl::Node* candidate) {
+    return std::ranges::any_of(nodes, [&](const auto* node) {
+      return candidate == node || candidate->isDescendantOf(*node);
+    });
+  };
+  auto selectedNodes = map.selection().nodes;
+  std::erase_if(selectedNodes, [&](const auto* node) { return !removed(node); });
+  auto selectedFaces = map.selection().brushFaces;
+  std::erase_if(selectedFaces, [&](const auto& face) { return !removed(face.node()); });
+  mdl::deselectBrushFaces(map, selectedFaces);
+  mdl::deselectNodes(map, selectedNodes);
   return map.executeAndStore(mdl::AddRemoveNodesCommand::remove(nodesByParent));
 }
 

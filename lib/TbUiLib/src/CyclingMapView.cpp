@@ -94,6 +94,7 @@ void CyclingMapView::addMapView(MapViewBase* mapView)
 
 void CyclingMapView::switchToMapView(MapViewBase* mapView)
 {
+  contract_pre(std::ranges::find(m_mapViews, mapView) != m_mapViews.end());
   m_currentMapView = mapView;
 
   m_layout->setCurrentWidget(m_currentMapView);

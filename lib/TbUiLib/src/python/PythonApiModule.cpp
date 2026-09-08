@@ -65,6 +65,7 @@
 #include "ui/AppController.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
+#include "ui/MapViewport.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
@@ -82,6 +83,7 @@
 #include "ui/automation/AutomationTransaction.h"
 #include "ui/automation/AutomationValidation.h"
 #include "ui/python/PythonApiCatalog.h"
+#include "ui/python/PythonApiDocumentation.h"
 #include "ui/python/PythonExecutionContext.h"
 #include "ui/python/PythonHandleRegistry.h"
 #include "ui/python/PythonMcpExecutionState.h"
@@ -224,8 +226,18 @@ struct DocumentHandle
   MapDocument* document = nullptr;
   size_t generation = 0;
 
-  MapDocument& get() const
+  MapDocument& get(const bool requireTarget = true) const
   {
+    const auto* context = currentPythonExecutionContext();
+    if (context == nullptr)
+    {
+      throw std::runtime_error{
+        "Editor handles require an active Python execution context"};
+    }
+    if (requireTarget && context->mcpExecution && document != context->document)
+    {
+      throw std::runtime_error{"Handle belongs to another MCP document"};
+    }
     if (
       document == nullptr
       || generation != PythonHandleRegistry::instance().documentGeneration(document))
@@ -248,14 +260,15 @@ struct EntityHandle
   MapDocument* document = nullptr;
   size_t generation = 0;
   mdl::EntityNodeBase* entity = nullptr;
-  size_t nodeGeneration = 0;
+  size_t nodeLifetimeGeneration = 0;
 
   mdl::EntityNodeBase& get() const
   {
     DocumentHandle{document, generation}.get();
     if (
       entity == nullptr
-      || nodeGeneration != PythonHandleRegistry::instance().nodeGeneration(entity))
+      || nodeLifetimeGeneration
+           != PythonHandleRegistry::instance().nodeLifetimeGeneration(entity))
     {
       throw std::runtime_error{"Entity is no longer valid"};
     }
@@ -318,10 +331,18 @@ struct FaceHandle
 
 struct MaterialHandle
 {
-  const gl::Material* material = nullptr;
+  DocumentHandle document;
+  std::string name;
+
+  MaterialHandle(DocumentHandle owner, const gl::Material* material)
+    : document{owner}
+    , name{material->name()}
+  {
+  }
 
   const gl::Material& get() const
   {
+    const auto* material = document.get().map().materialManager().material(name);
     if (material == nullptr)
     {
       throw std::runtime_error{"Material is no longer valid"};
@@ -332,11 +353,21 @@ struct MaterialHandle
 
 struct MaterialCollectionHandle
 {
-  const gl::MaterialCollection* collection = nullptr;
+  DocumentHandle document;
+  std::filesystem::path path;
+
+  MaterialCollectionHandle(DocumentHandle owner, const gl::MaterialCollection* collection)
+    : document{owner}
+    , path{collection->path()}
+  {
+  }
 
   const gl::MaterialCollection& get() const
   {
-    if (collection == nullptr)
+    const auto& collections = document.get().map().materialManager().collections();
+    const auto collection = std::ranges::find_if(
+      collections, [&](const auto& candidate) { return candidate.path() == path; });
+    if (collection == collections.end())
     {
       throw std::runtime_error{"Material collection is no longer valid"};
     }
@@ -686,7 +717,7 @@ automation::AutomationObjectRegistry& objectRegistry()
 
 std::string documentId(DocumentHandle& document)
 {
-  return objectRegistry().documentFingerprint(document.get().map()).toStdString();
+  return objectRegistry().documentFingerprint(document.get(false).map()).toStdString();
 }
 
 std::string nodeId(MapDocument& document, mdl::Node& node)
@@ -793,7 +824,7 @@ void exportDocument(
   recordCompletedPythonAction("export");
 }
 
-MapWindow& mapWindowForDocument(DocumentHandle& document)
+MapWindow& mapWindowForDocument(DocumentHandle& document, const bool requireTarget = true)
 {
   auto& context = requireContext();
   if (context.appController == nullptr)
@@ -801,7 +832,7 @@ MapWindow& mapWindowForDocument(DocumentHandle& document)
     throw std::runtime_error{"No application controller in Python execution context"};
   }
 
-  auto& targetDocument = document.get();
+  auto& targetDocument = document.get(requireTarget);
   for (auto* mapWindow : context.appController->mapWindowManager().mapWindows())
   {
     if (mapWindow != nullptr && &mapWindow->document() == &targetDocument)
@@ -883,7 +914,7 @@ DocumentHandle openVerifiedDocument(const std::string& path)
   const auto requestedPath = absolutePathFromPython(path);
   auto document = openDocument(path);
   auto pathError = std::error_code{};
-  const auto& openedPath = document.get().map().path();
+  const auto& openedPath = document.get(false).map().path();
   if (
     openedPath.empty()
     || !std::filesystem::equivalent(openedPath, requestedPath, pathError))
@@ -901,11 +932,11 @@ DocumentHandle activateDocument(DocumentHandle& document)
   {
     throw std::runtime_error{"No application controller in Python execution context"};
   }
-  if (&document.get() == context.document)
+  if (&document.get(false) == context.document)
   {
     return document;
   }
-  auto& window = mapWindowForDocument(document);
+  auto& window = mapWindowForDocument(document, false);
   if (!activateAutomationDocument(*context.appController, window))
   {
     throw std::runtime_error{"Document window is no longer available"};
@@ -1066,7 +1097,7 @@ std::vector<EntityHandle> allEntities(MapDocument& document)
       &document,
       generation,
       entity,
-      PythonHandleRegistry::instance().nodeGeneration(entity)});
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(entity)});
   }
   return handles;
 }
@@ -1555,7 +1586,7 @@ EntityHandle brushEntity(BrushHandle& self)
     self.document,
     self.generation,
     entityNode,
-    PythonHandleRegistry::instance().nodeGeneration(entityNode)};
+    PythonHandleRegistry::instance().nodeLifetimeGeneration(entityNode)};
 }
 
 std::vector<EntityHandle> selectedEntities(SelectionHandle& selection)
@@ -1569,7 +1600,7 @@ std::vector<EntityHandle> selectedEntities(SelectionHandle& selection)
       &document,
       generation,
       entity,
-      PythonHandleRegistry::instance().nodeGeneration(entity)});
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(entity)});
   }
   return result;
 }
@@ -1612,7 +1643,7 @@ std::vector<EntityHandle> selectedAllEntities(SelectionHandle& selection)
       &document,
       generation,
       entity,
-      PythonHandleRegistry::instance().nodeGeneration(entity)});
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(entity)});
   }
   return result;
 }
@@ -1829,7 +1860,8 @@ std::vector<FaceHandle> allFaces(MapDocument& document)
   return result;
 }
 
-std::vector<mdl::Node*> selectableNodesFromObjects(const py::iterable& objects)
+std::vector<mdl::Node*> selectableNodesFromObjects(
+  MapDocument& document, const py::iterable& objects)
 {
   auto result = std::vector<mdl::Node*>{};
   for (const auto object : objects)
@@ -1838,11 +1870,23 @@ std::vector<mdl::Node*> selectableNodesFromObjects(const py::iterable& objects)
     if (py::isinstance<EntityHandle>(pyObject))
     {
       auto& entity = py::cast<EntityHandle&>(pyObject);
+      if (entity.document != &document)
+      {
+        throw py::value_error{"Selection objects must belong to the target document"};
+      }
+      if (&entity.get() == &document.map().worldNode())
+      {
+        throw py::value_error{"worldspawn cannot be selected"};
+      }
       result.push_back(&entity.get());
     }
     else if (py::isinstance<BrushHandle>(pyObject))
     {
       auto& brush = py::cast<BrushHandle&>(pyObject);
+      if (brush.document != &document)
+      {
+        throw py::value_error{"Selection objects must belong to the target document"};
+      }
       result.push_back(&brush.get());
     }
     else
@@ -1889,14 +1933,16 @@ bool updateSelection(
 bool setSelection(SelectionHandle& selection, const py::iterable& objects)
 {
   return updateSelection(
-    selection, selectableNodesFromObjects(objects), "Python API Set Selection");
+    selection,
+    selectableNodesFromObjects(selection.getDocument(), objects),
+    "Python API Set Selection");
 }
 
 bool addSelection(SelectionHandle& selection, const py::iterable& objects)
 {
   auto& document = selection.getDocument();
   auto nodes = document.map().selection().nodes;
-  auto nodesToAdd = selectableNodesFromObjects(objects);
+  auto nodesToAdd = selectableNodesFromObjects(document, objects);
   nodes.insert(nodes.end(), nodesToAdd.begin(), nodesToAdd.end());
   nodes = kdl::vec_sort_and_remove_duplicates(std::move(nodes));
   return updateSelection(selection, nodes, "Python API Add Selection");
@@ -2087,14 +2133,12 @@ bool chamferSelectionEdges(
   }
 }
 
-void withPreservedSelection(
+void editDocument(
   MapDocument& document,
   std::string transactionName,
   const std::function<bool(mdl::Map&)>& operation)
 {
   auto& map = document.map();
-  const auto previousNodes = map.selection().nodes;
-  const auto previousBrushFaces = map.selection().brushFaces;
 
   auto transaction = ScopedPythonTransaction{document, std::move(transactionName)};
   try
@@ -2102,16 +2146,6 @@ void withPreservedSelection(
     if (!operation(map))
     {
       throw std::runtime_error{"Python API edit failed"};
-    }
-
-    mdl::deselectAll(map);
-    if (!previousNodes.empty())
-    {
-      mdl::selectNodes(map, previousNodes);
-    }
-    if (!previousBrushFaces.empty())
-    {
-      mdl::selectBrushFaces(map, previousBrushFaces);
     }
 
     if (!transaction.commit())
@@ -2195,7 +2229,7 @@ EntityHandle createEntity(
     &document,
     PythonHandleRegistry::instance().documentGeneration(&document),
     entityNode,
-    PythonHandleRegistry::instance().nodeGeneration(entityNode)};
+    PythonHandleRegistry::instance().nodeLifetimeGeneration(entityNode)};
 }
 
 std::vector<automation::AutomationPointEntitySpec> checkedPointEntitySpecsFromPython(
@@ -2281,7 +2315,7 @@ std::vector<EntityHandle> createCheckedPointEntities(
       &document,
       documentGeneration,
       node,
-      PythonHandleRegistry::instance().nodeGeneration(node)});
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(node)});
   }
   return result;
 }
@@ -2386,7 +2420,7 @@ py::dict inspectEntityLinkChain(
       &document,
       documentGeneration,
       mutableNode,
-      PythonHandleRegistry::instance().nodeGeneration(mutableNode)};
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(mutableNode)};
   };
   auto nodes = std::vector<EntityHandle>{};
   nodes.reserve(chain.nodes.size());
@@ -2508,7 +2542,7 @@ EntityHandle tieBrushesToEntity(const std::string& classname, const py::object& 
     &document,
     PythonHandleRegistry::instance().documentGeneration(&document),
     tied.entity,
-    PythonHandleRegistry::instance().nodeGeneration(tied.entity)};
+    PythonHandleRegistry::instance().nodeLifetimeGeneration(tied.entity)};
 }
 
 std::vector<BrushHandle> untieBrushesFromEntity(const py::object& objects)
@@ -2588,7 +2622,7 @@ EntityHandle placeAsset(
     &document,
     PythonHandleRegistry::instance().documentGeneration(&document),
     entityNodeRaw,
-    PythonHandleRegistry::instance().nodeGeneration(entityNodeRaw)};
+    PythonHandleRegistry::instance().nodeLifetimeGeneration(entityNodeRaw)};
 }
 
 std::string assetTypeName(const BrowserCellType type)
@@ -2677,9 +2711,7 @@ void deleteEntity(EntityHandle& entity)
   {
     throw py::value_error{"Cannot delete worldspawn"};
   }
-  withPreservedSelection(document, "Python API Delete Entity", [&](auto& map) {
-    mdl::deselectAll(map);
-    mdl::selectNodes(map, {entityNode});
+  editDocument(document, "Python API Delete Entity", [&](auto& map) {
     return automation::removeNodes(map, {entityNode});
   });
 }
@@ -2713,13 +2745,12 @@ void updateEntity(
   auto& document = DocumentHandle{entity.document, entity.generation}.get();
   auto* entityNode = &entity.get();
   auto replacement = updatedEntity(entityNode->entity(), properties, removeKeys);
-  withPreservedSelection(document, "Python API Update Entity", [&](auto& map) {
+  editDocument(document, "Python API Update Entity", [&](auto& map) {
     return mdl::updateNodeContents(
       map,
       "Python API Update Entity",
       {{entityNode, mdl::NodeContents{std::move(replacement)}}});
   });
-  entity.nodeGeneration = PythonHandleRegistry::instance().nodeGeneration(entity.entity);
 }
 
 void updateEntityProperties(
@@ -2760,7 +2791,7 @@ void updateEntityProperties(
       mdl::NodeContents{updatedEntity(entityNode->entity(), properties, removeKeys)});
   }
 
-  withPreservedSelection(document, "Python API Update Entity Properties", [&](auto& map) {
+  editDocument(document, "Python API Update Entity Properties", [&](auto& map) {
     return mdl::updateNodeContents(
       map, "Python API Update Entity Properties", std::move(replacements));
   });
@@ -2792,7 +2823,7 @@ bool setSelectionProperty(
     replacement.addOrUpdateProperty(key, value);
     replacements.emplace_back(entityNode, mdl::NodeContents{std::move(replacement)});
   }
-  withPreservedSelection(document, "Python API Set Selection Property", [&](auto& map) {
+  editDocument(document, "Python API Set Selection Property", [&](auto& map) {
     return mdl::updateNodeContents(
       map, "Python API Set Selection Property", std::move(replacements));
   });
@@ -2988,10 +3019,11 @@ void setFaceMaterial(FaceHandle& face, const std::string& materialName)
   auto& document = DocumentHandle{face.document, face.generation}.get();
   auto& brushNode = face.getBrushNode();
 
-  withPreservedSelection(document, "Python API Set Face Material", [&](auto& map) {
-    mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, {mdl::BrushFaceHandle{&brushNode, face.faceIndex}});
-    return mdl::setBrushFaceAttributes(map, {.materialName = materialName});
+  editDocument(document, "Python API Set Face Material", [&](auto& map) {
+    return mdl::setBrushFaceAttributes(
+      map,
+      {mdl::BrushFaceHandle{&brushNode, face.faceIndex}},
+      {.materialName = materialName});
   });
 }
 
@@ -3031,7 +3063,7 @@ size_t setFacesMaterial(const py::iterable& faces, const std::string& materialNa
     brushFaces.emplace_back(&brushNode, face.faceIndex);
   }
 
-  withPreservedSelection(document, "Python API Set Face Materials", [&](auto& map) {
+  editDocument(document, "Python API Set Face Materials", [&](auto& map) {
     return automation::setBrushFaceMaterial(map, brushFaces, materialName);
   });
   return brushFaces.size();
@@ -3093,7 +3125,7 @@ size_t applyMaterialByFilter(
     throw py::value_error{error};
   }
 
-  withPreservedSelection(document, "Python API Apply Material by Filter", [&](auto& map) {
+  editDocument(document, "Python API Apply Material by Filter", [&](auto& map) {
     return automation::setBrushFaceMaterial(map, faces, materialName);
   });
   return faces.size();
@@ -3199,7 +3231,7 @@ size_t alignFaces(const py::iterable& faces, const std::string& mode)
     brushFaces.emplace_back(&brushNode, face.faceIndex);
   }
 
-  withPreservedSelection(document, "Python API Align Face Texture", [&](auto& map) {
+  editDocument(document, "Python API Align Face Texture", [&](auto& map) {
     return automation::alignBrushFaceAxes(map, brushFaces, *alignment);
   });
   return brushFaces.size();
@@ -3244,7 +3276,7 @@ size_t copyFaceAttributes(FaceHandle& source, const py::iterable& targets)
     brushFaces.emplace_back(&brushNode, target.faceIndex);
   }
 
-  withPreservedSelection(document, "Python API Copy Face Texture", [&](auto& map) {
+  editDocument(document, "Python API Copy Face Texture", [&](auto& map) {
     return automation::copyBrushFaceAttributes(map, sourceHandle, brushFaces);
   });
   return brushFaces.size();
@@ -3295,7 +3327,7 @@ size_t replaceMaterial(
     throw py::value_error{"No faces use the requested material"};
   }
 
-  withPreservedSelection(document, "Python API Replace Texture", [&](auto& targetMap) {
+  editDocument(document, "Python API Replace Texture", [&](auto& targetMap) {
     return automation::setBrushFaceMaterial(targetMap, candidates, replace);
   });
   return candidates.size();
@@ -3306,10 +3338,9 @@ void updateFace(FaceHandle& face, mdl::UpdateBrushFaceAttributes update)
   auto& document = DocumentHandle{face.document, face.generation}.get();
   auto& brushNode = face.getBrushNode();
 
-  withPreservedSelection(document, "Python API Set Face Attributes", [&](auto& map) {
-    mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, {mdl::BrushFaceHandle{&brushNode, face.faceIndex}});
-    return mdl::setBrushFaceAttributes(map, update);
+  editDocument(document, "Python API Set Face Attributes", [&](auto& map) {
+    return mdl::setBrushFaceAttributes(
+      map, {mdl::BrushFaceHandle{&brushNode, face.faceIndex}}, update);
   });
 }
 
@@ -3931,7 +3962,7 @@ void defineModule(py::module_& module)
     .def_property_readonly(
       "path",
       [](DocumentHandle& self) -> py::object {
-        const auto& path = self.get().map().path();
+        const auto& path = self.get(false).map().path();
         if (path.empty())
         {
           return py::none();
@@ -3951,7 +3982,7 @@ void defineModule(py::module_& module)
         result.reserve(materials.size());
         for (const auto* material : materials)
         {
-          result.push_back(MaterialHandle{material});
+          result.push_back(MaterialHandle{self, material});
         }
         return result;
       })
@@ -3963,7 +3994,7 @@ void defineModule(py::module_& module)
         result.reserve(collections.size());
         for (const auto& collection : collections)
         {
-          result.push_back(MaterialCollectionHandle{&collection});
+          result.push_back(MaterialCollectionHandle{self, &collection});
         }
         return result;
       })
@@ -3998,7 +4029,7 @@ void defineModule(py::module_& module)
       "select",
       [](DocumentHandle& self, const py::iterable& objects) {
         auto& document = self.get();
-        auto nodes = selectableNodesFromObjects(objects);
+        auto nodes = selectableNodesFromObjects(document, objects);
         auto transaction = ScopedPythonTransaction{document, "Python API Select"};
         try
         {
@@ -4090,7 +4121,7 @@ void defineModule(py::module_& module)
     .def("deselect_all", deselectAllSelection)
     .def("clear", deselectAllSelection)
     .def("duplicate", duplicateSelection)
-    .def("translate", translateSelection)
+    .def("translate", translateSelection, py::arg("x"), py::arg("y"), py::arg("z"))
     .def(
       "rotate",
       rotateSelection,
@@ -4216,8 +4247,8 @@ void defineModule(py::module_& module)
       },
       py::arg("key"),
       py::arg("default") = py::none())
-    .def("set", setEntityProperty)
-    .def("remove", removeEntityProperty)
+    .def("set", setEntityProperty, py::arg("key"), py::arg("value"))
+    .def("remove", removeEntityProperty, py::arg("key"))
     .def(
       "__getitem__",
       [](EntityHandle& self, const std::string& key) {
@@ -4422,7 +4453,7 @@ void defineModule(py::module_& module)
       result.reserve(materials.size());
       for (const auto& material : materials)
       {
-        result.push_back(MaterialHandle{&material});
+        result.push_back(MaterialHandle{self.document, &material});
       }
       return result;
     });
@@ -5330,9 +5361,22 @@ void defineModule(py::module_& module)
   module.def("selection", [currentSelection]() { return currentSelection(); });
   module.def("selected_faces", selectedFaces);
   module.def("selectedFaces", selectedFaces);
-  module.def("translate", translateHelper);
-  module.def("rotate", rotateHelper);
-  module.def("scale", scaleHelper);
+  module.def(
+    "translate",
+    translateHelper,
+    "translate(vector) or translate(x, y, z); optionally prepend a target handle or "
+    "iterable.");
+  module.def(
+    "rotate",
+    rotateHelper,
+    "rotate(x, y, z) for Euler degrees or rotate(axis_x, axis_y, axis_z, degrees[, "
+    "center_x, center_y, center_z]); optionally prepend targets. Default center is the "
+    "selection center.");
+  module.def(
+    "scale",
+    scaleHelper,
+    "scale(factor), scale(vector), or scale(x, y, z); optionally prepend a target handle "
+    "or iterable. Uses the selection center.");
   module.def("duplicate", duplicateHelper);
   module.def("delete_selection", deleteSelectionHelper);
   module.def("deleteSelection", deleteSelectionHelper);
@@ -5399,9 +5443,22 @@ void defineModule(py::module_& module)
     auto selection = currentSelection();
     return selectionSnapshot(selection);
   });
-  objects.def("translate", translateHelper);
-  objects.def("rotate", rotateHelper);
-  objects.def("scale", scaleHelper);
+  objects.def(
+    "translate",
+    translateHelper,
+    "translate(vector) or translate(x, y, z); optionally prepend a target handle or "
+    "iterable.");
+  objects.def(
+    "rotate",
+    rotateHelper,
+    "rotate(x, y, z) for Euler degrees or rotate(axis_x, axis_y, axis_z, degrees[, "
+    "center_x, center_y, center_z]); optionally prepend targets. Default center is the "
+    "selection center.");
+  objects.def(
+    "scale",
+    scaleHelper,
+    "scale(factor), scale(vector), or scale(x, y, z); optionally prepend a target handle "
+    "or iterable. Uses the selection center.");
   objects.def("duplicate", duplicateHelper);
   objects.def("delete_selection", deleteSelectionHelper);
   objects.def("deselect_all", deselectAllHelper);
@@ -5628,7 +5685,7 @@ void defineModule(py::module_& module)
     result.reserve(materials.size());
     for (const auto* material : materials)
     {
-      result.push_back(MaterialHandle{material});
+      result.push_back(MaterialHandle{document, material});
     }
     return result;
   };
@@ -5639,7 +5696,7 @@ void defineModule(py::module_& module)
     result.reserve(collections.size());
     for (const auto& collection : collections)
     {
-      result.push_back(MaterialCollectionHandle{&collection});
+      result.push_back(MaterialCollectionHandle{document, &collection});
     }
     return result;
   };
@@ -5649,7 +5706,7 @@ void defineModule(py::module_& module)
     for (const auto* material :
          automation::searchMaterials(document.get().map(), query, limit))
     {
-      result.push_back(MaterialHandle{material});
+      result.push_back(MaterialHandle{document, material});
     }
     return result;
   };
@@ -5719,6 +5776,39 @@ void defineModule(py::module_& module)
   validation.def(
     "check", validationCheck, py::arg("include_hidden") = false, py::arg("limit") = 500u);
 
+  auto viewport = module.def_submodule(
+    "viewport", "Current document viewport state and synchronous 3D camera control.");
+  viewport.def("state", []() {
+    auto document = currentDocument();
+    return py::cast<py::dict>(
+      jsonValueToPython(mapViewportState(mapWindowForDocument(document))));
+  });
+  viewport.def(
+    "set_camera",
+    [](const py::object& position, const py::object& target, const py::object& up) {
+      requirePythonActionMode("viewport.set_camera");
+      auto document = currentDocument();
+      auto& window = mapWindowForDocument(document);
+      setMapViewportCamera(
+        window,
+        vm::vec3f{toVmVec3(vec3FromObject(position))},
+        vm::vec3f{toVmVec3(vec3FromObject(target))},
+        vm::vec3f{toVmVec3(vec3FromObject(up))});
+      recordCompletedPythonAction("viewport.set_camera");
+      return py::cast<py::dict>(jsonValueToPython(mapViewportState(window)));
+    },
+    py::arg("position"),
+    py::arg("target"),
+    py::arg("up") = py::make_tuple(0, 0, 1));
+  viewport.def("focus_selection", []() {
+    requirePythonActionMode("viewport.focus_selection");
+    auto document = currentDocument();
+    auto& window = mapWindowForDocument(document);
+    focusMapViewportSelection(window);
+    recordCompletedPythonAction("viewport.focus_selection");
+    return py::cast<py::dict>(jsonValueToPython(mapViewportState(window)));
+  });
+
   auto apiCatalog = py::dict{};
   for (const auto& typeInfo : pythonApiTypes())
   {
@@ -5730,6 +5820,7 @@ void defineModule(py::module_& module)
     apiCatalog[std::string{typeInfo.name}.c_str()] = std::move(symbols);
   }
   module.attr("_api_catalog") = std::move(apiCatalog);
+  initializePythonApiDocumentation(module);
 
   module.def("_emit_event", emitEvent);
   module.def("_has_event_callbacks", hasEventCallbacks);

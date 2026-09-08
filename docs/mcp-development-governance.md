@@ -37,6 +37,25 @@ catalog behind an action parameter or JSON forwarding API.
 
 ## Native API Ownership
 
+The bridge server owns transport dispatch and permissions. `McpPythonExecutor`
+owns source checks, document guards and bounded execution receipts; the shared
+Python runtime owns execution and native transaction lifetime. `McpApi` handles
+bounded queries over `PythonApiDocumentation`, captured once from registered
+pybind11 descriptors before user scripts run. Semantic effects are declared in
+the API catalog, not inferred from spelling. The console catalog continues to
+provide static completion types; it is not the source of MCP call signatures.
+
+`MapViewport` operates on the existing map views and cameras, shared by Python
+camera actions and capture metadata. Camera changes are synchronous action-mode
+operations, with completed-action receipts on later script failure.
+
+Property edits target native nodes or faces directly. They must not temporarily
+select unrelated objects. Node handles follow object lifetime, not content
+revision; removal invalidates descendant handles and clears their selection.
+Document-handle access checks execution context and MCP target before touching
+editor state. Reading document ids/paths and explicit activation may identify
+another document; its contents need a new guarded execution.
+
 The editing path is MCP -> Python runtime -> trenchbroom API -> native commands.
 Inspection, API discovery and screenshot capture may use their native owners
 directly. C++ owns document identity, object validity, geometry algorithms and

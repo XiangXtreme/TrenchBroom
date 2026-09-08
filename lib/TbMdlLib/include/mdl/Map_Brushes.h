@@ -62,6 +62,10 @@ enum class UvFitDirection
 bool createBrush(Map& map, const std::vector<vm::vec3d>& points);
 
 bool setBrushFaceAttributes(Map& map, const UpdateBrushFaceAttributes& update);
+bool setBrushFaceAttributes(
+  Map& map,
+  const std::vector<BrushFaceHandle>& faces,
+  const UpdateBrushFaceAttributes& update);
 
 struct TriangleUVUpdate
 {

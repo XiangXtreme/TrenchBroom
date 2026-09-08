@@ -34,9 +34,10 @@ namespace ui
 {
 class CameraAnimation : public Animation
 {
-private:
+public:
   static const Type AnimationType;
 
+private:
   gl::Camera& m_camera;
 
   const vm::vec3f m_startPosition;

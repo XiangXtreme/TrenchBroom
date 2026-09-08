@@ -92,6 +92,7 @@
 #include "ui/CompilationDialog.h"
 #include "ui/Console.h"
 #include "ui/CrashReporter.h"
+#include "ui/CyclingMapView.h"
 #include "ui/EdgeTool.h"
 #include "ui/FaceInspector.h"
 #include "ui/FaceTool.h"
@@ -900,13 +901,10 @@ void MapWindow::connectObservers()
     this, &MapWindow::mapModificationStateDidChange);
   m_notifierConnection +=
     m_document->selectionDidChangeNotifier.connect(this, &MapWindow::selectionDidChange);
-  m_notifierConnection += m_document->nodesDidChangeNotifier.connect(
-    [](const auto& nodes) { PythonHandleRegistry::instance().invalidateNodes(nodes); });
   m_notifierConnection +=
     m_document->nodesWillBeRemovedNotifier.connect([](const auto& nodes) {
       const auto removedNodes = mdl::collectNodesAndDescendants(nodes);
       auto& registry = PythonHandleRegistry::instance();
-      registry.invalidateNodes(removedNodes);
       registry.invalidateNodeLifetimes(removedNodes);
     });
   m_notifierConnection += m_document->currentLayerDidChangeNotifier.connect(
@@ -2725,6 +2723,23 @@ MapView3D* MapWindow::currentOrFirstVisible3DMapView()
   }
 
   return nullptr;
+}
+
+MapView3D& MapWindow::activate3DMapView()
+{
+  const auto views = m_mapView->findChildren<MapView3D*>();
+  if (views.empty())
+  {
+    throw std::runtime_error{"No 3D viewport is available"};
+  }
+  auto* view = views.front();
+  if (auto* cycling = qobject_cast<CyclingMapView*>(view->parentWidget()))
+  {
+    cycling->switchToMapView(view);
+  }
+  m_currentMapView = view;
+  view->setFocus();
+  return *view;
 }
 
 MapViewBase* MapWindow::currentMapViewBase()

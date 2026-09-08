@@ -887,7 +887,7 @@ tb._cached_document.entities
       != std::string::npos);
   }
 
-  SECTION("invalidates entity handles when nodes change")
+  SECTION("invalidates entity handles when node lifetimes end")
   {
     auto env = fs::TestEnvironment{};
     env.createFile(
@@ -909,7 +909,7 @@ tb._cached_entity = tb.current_document().entities[0]
     REQUIRE(PythonRuntime::instance().runScript(context, context.scriptPath));
     auto* worldNode = static_cast<mdl::Node*>(&window.document().map().worldNode());
     auto nodes = std::vector<mdl::Node*>{worldNode};
-    PythonHandleRegistry::instance().invalidateNodes(nodes);
+    PythonHandleRegistry::instance().invalidateNodeLifetimes(nodes);
 
     env.createFile(
       "api_use_cached_entity.py",
@@ -2123,6 +2123,40 @@ assert face.surface_value == 3.5
     CAPTURE(status->text().toStdString());
     CHECK(brushNode->brush().face(0).materialName() == "new");
     manager.unloadPlugins(window);
+  }
+
+  SECTION("material handles resolve through the live document after collection unload")
+  {
+    auto materials = std::vector<gl::Material>{};
+    materials.emplace_back(
+      "example/stone", gl::createTextureResource(gl::Texture{64u, 32u}));
+    auto collections = std::vector<gl::MaterialCollection>{};
+    collections.emplace_back(
+      std::filesystem::path{"textures/example"}, std::move(materials));
+    auto& manager = window.document().map().materialManager();
+    manager.setMaterialCollections(std::move(collections));
+    auto context = PythonExecutionContext{};
+    context.mapWindow = &window;
+    context.document = &window.document();
+    context.appController = &appController;
+    context.logger = &window.pythonLogger();
+    auto& runtime = PythonRuntime::instance();
+    REQUIRE(runtime.runConsoleCommand(context, R"(
+import trenchbroom as tb
+cached_material = tb.materials.list()[0]
+cached_collection = tb.materials.collections()[0]
+assert cached_material.width == 64
+assert cached_collection.materials[0].height == 32
+)"));
+    manager.clear();
+    REQUIRE(runtime.runConsoleCommand(context, R"(
+for handle in (cached_material, cached_collection):
+    try:
+        handle.name
+        raise AssertionError("Unloaded material handle was dereferenced")
+    except RuntimeError as error:
+        assert "no longer valid" in str(error)
+)"));
   }
 
   SECTION("loads Python API texture browser example plugin")

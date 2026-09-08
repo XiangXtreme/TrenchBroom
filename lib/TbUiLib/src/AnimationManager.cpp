@@ -57,6 +57,16 @@ void AnimationManager::runAnimation(
   }
 }
 
+void AnimationManager::stopAnimation(const Animation::Type type)
+{
+  m_animations.erase(type);
+  if (m_animations.empty())
+  {
+    m_timer->stop();
+    m_elapsedTimer.invalidate();
+  }
+}
+
 void AnimationManager::onTimerTick()
 {
   contract_pre(m_elapsedTimer.isValid());

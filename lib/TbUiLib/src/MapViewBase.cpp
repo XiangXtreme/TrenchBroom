@@ -82,6 +82,7 @@
 #include "ui/ActionManager.h"
 #include "ui/AnimationManager.h"
 #include "ui/AppController.h"
+#include "ui/CameraAnimation.h"
 #include "ui/EnableDisableTagCallback.h"
 #include "ui/FlashSelectionAnimation.h"
 #include "ui/MapDocument.h"
@@ -113,6 +114,11 @@
 namespace tb::ui
 {
 const int MapViewBase::DefaultCameraAnimationDuration = 250;
+
+void MapViewBase::stopCameraAnimation()
+{
+  m_animationManager->stopAnimation(CameraAnimation::AnimationType);
+}
 
 namespace
 {

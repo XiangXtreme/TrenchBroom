@@ -72,13 +72,8 @@ struct McpBridgeToolResult
     mcp::McpErrorCode code, QString message, QJsonObject details);
 };
 
-struct McpPythonExecutionReplay
-{
-  QByteArray requestHash;
-  McpBridgeToolResult response;
-};
-
 class McpToolRegistry;
+class McpPythonExecutor;
 
 class McpBridgeServer : public QObject
 {
@@ -94,8 +89,7 @@ private:
   ToolHandler m_toolHandler;
   ActiveMapProvider m_activeMapProvider;
   automation::AutomationObjectRegistry m_objectRegistry;
-  mutable std::map<QString, McpPythonExecutionReplay> m_pythonExecutionReplays;
-  mutable QStringList m_pythonExecutionReplayOrder;
+  std::unique_ptr<McpPythonExecutor> m_pythonExecutor;
   std::unique_ptr<McpToolRegistry> m_toolRegistry;
   mutable bool m_dispatchInProgress = false;
   QString m_bridgeInstanceId;

@@ -1,10 +1,12 @@
 #include <QJsonDocument>
 #include <QLocalSocket>
 #include <QPointer>
+#include <QSet>
 #include <QTest>
 #include <QUuid>
 
 #include "fs/TestEnvironment.h"
+#include "gl/GlManager.h"
 #include "mdl/EntityDefinitionManager.h"
 #include "mdl/GameConfigFixture.h"
 #include "mdl/GroupNode.h"
@@ -16,11 +18,14 @@
 #include "mdl/WorldNode.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/MapDocument.h"
+#include "ui/MapViewport.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/mcp/McpBridgeServer.h"
+#include "ui/python/PythonRuntime.h"
 
 #include "kd/invoke.h"
+#include "kd/result.h"
 
 #include "vm/mat_ext.h"
 
@@ -81,6 +86,232 @@ TEST_CASE("McpPythonExecution", "[McpBridgeServer][PythonApi]")
       {}};
   };
   const auto create = QString{"tb.brushes.create_box((-16,-16,-16), (16,16,16))\n"};
+
+  SECTION("API discovery has complete bounded pages and actual binding metadata")
+  {
+    auto names = QSet<QString>{};
+    auto offset = 0;
+    auto total = 0;
+    do
+    {
+      const auto page = server.dispatchRequest(
+        {"api", "tb_api", {{"offset", offset}, {"limit", 50}}, {}});
+      REQUIRE(page.ok);
+      CHECK(
+        QJsonDocument{page.result}.toJson(QJsonDocument::Compact).size() <= 16 * 1024);
+      total = page.result.value("total").toInt();
+      const auto symbols = page.result.value("symbols").toArray();
+      REQUIRE_FALSE(symbols.isEmpty());
+      for (const auto& value : symbols)
+      {
+        const auto symbol = value.toObject();
+        const auto name = symbol.value("symbol").toString();
+        CHECK_FALSE(names.contains(name));
+        names.insert(name);
+        CHECK_FALSE(symbol.value("signature").toString().isEmpty());
+      }
+      if (!page.result.value("truncated").toBool())
+        break;
+      const auto next = page.result.value("nextOffset").toInt();
+      REQUIRE(next > offset);
+      offset = next;
+    } while (offset < total);
+    CHECK(names.size() == total);
+    const auto symbol = [&](const QString& name) {
+      const auto response =
+        server.dispatchRequest({"api", "tb_api", {{"symbol", name}}, {}});
+      REQUIRE(response.ok);
+      const auto entries = response.result.value("symbols").toArray();
+      REQUIRE(entries.size() == 1);
+      return entries.first().toObject();
+    };
+    CHECK(symbol("Face.material").value("writable").toBool());
+    CHECK_FALSE(symbol("Face.vertices").value("writable").toBool());
+    CHECK(symbol("tb.entities.tie_brushes").value("effect") == "edit");
+    CHECK(symbol("tb.history.undo").value("effect") == "action");
+    CHECK(symbol("tb.assets.search").value("effect") == "read");
+    CHECK(
+      symbol("tb.entities.update").value("signature").toString().contains("remove_keys"));
+    CHECK(
+      symbol("tb.assets.place_model").value("signature").toString().contains("property"));
+    CHECK_FALSE(server.dispatchRequest({"api", "tb_api", {{"offset", -1}}, {}}).ok);
+  }
+
+  SECTION("property edits preserve handles and selection through delete and history")
+  {
+    map.entityDefinitionManager().setDefinitions(
+      {{"test_trigger", {}, "", {}, std::nullopt}});
+    const auto response = server.dispatchRequest(request(
+      "composition",
+      R"(
+world = tb.entities.find(classname="worldspawn")[0]
+other_world = tb.entities.find(classname="worldspawn")[0]
+world.set("message", "route")
+assert other_world.get("message") == "route"
+brush = tb.brushes.create_box((-32,-32,-32), (32,32,32))
+keep = tb.brushes.create_box((128,0,0), (160,32,32), select=False)
+before = [b.id for b in tb.brushes.selected()]
+brush.faces()[0].material = "updated"
+assert [b.id for b in tb.brushes.selected()] == before
+entity = tb.entities.tie_brushes("test_trigger", [brush])
+alias = tb.entities.find(classname="test_trigger")[0]
+entity.set("targetname", "checkpoint")
+tb.entities.properties_update([entity], {"speed": "100"})
+assert alias.get("speed") == "100"
+tb.objects.set_selection([entity.brushes[0], keep])
+tb.entities.delete(entity)
+assert [b.id for b in tb.brushes.selected()] == [keep.id]
+assert tb.documents.snapshot()["selected_node_count"] == 1
+try:
+    alias.classname
+    raise AssertionError("Deleted entity remained live")
+except RuntimeError:
+    pass
+tb.deselect_all()
+)",
+      "transaction"));
+    INFO(QJsonDocument{response.error ? response.error->details : response.result}
+           .toJson()
+           .toStdString());
+    REQUIRE(response.ok);
+    REQUIRE(
+      server.dispatchRequest(request("undo-composition", "tb.history.undo()", "action"))
+        .ok);
+    REQUIRE(
+      server.dispatchRequest(request("redo-composition", "tb.history.redo()", "action"))
+        .ok);
+    CHECK_FALSE(map.selection().hasAny());
+  }
+
+  SECTION("cached editor handles reject worker thread access")
+  {
+    const auto response = server.dispatchRequest(request(
+      "thread-handles",
+      R"(
+import threading
+entity = tb.entities.find(classname="worldspawn")[0]
+errors = []
+def worker():
+    try:
+        entity.set("message", "wrong thread")
+    except RuntimeError as error:
+        errors.append(str(error))
+thread = threading.Thread(target=worker)
+thread.start()
+thread.join()
+assert len(errors) == 1 and "execution context" in errors[0]
+assert entity.get("message") is None
+)",
+      "transaction"));
+    INFO(QJsonDocument{response.error ? response.error->details : response.result}
+           .toJson()
+           .toStdString());
+    REQUIRE(response.ok);
+  }
+
+  SECTION("foreign document handles cannot escape the guarded transaction")
+  {
+    auto otherDocument = MapDocument::createDocument(
+                           app.environmentConfig(),
+                           mdl::QuakeGameInfo,
+                           mdl::MapFormat::Valve,
+                           vm::bbox3d{8192.0},
+                           app.taskManager(),
+                           app.glManager().resourceManager())
+                         | kdl::value();
+    auto otherWindow = MapWindow{app, std::move(otherDocument)};
+    auto context = PythonExecutionContext{};
+    context.mapWindow = &otherWindow;
+    context.document = &otherWindow.document();
+    context.appController = &app;
+    context.logger = &otherWindow.pythonLogger();
+    REQUIRE(PythonRuntime::instance().runConsoleCommand(
+      context, "import trenchbroom as tb; tb._foreign_document = tb.current_document()"));
+    const auto otherBefore = otherWindow.document().map().modificationCount();
+    const auto response = server.dispatchRequest(request(
+      "foreign-handle",
+      R"(
+try:
+    assert tb._foreign_document.id != tb.current_document().id
+    tb._foreign_document.entities[0].set("message", "wrong document")
+finally:
+    del tb._foreign_document
+)",
+      "transaction"));
+    REQUIRE_FALSE(response.ok);
+    REQUIRE(response.error);
+    CHECK(
+      response.error->details.value("error").toString().contains("another MCP document"));
+    CHECK(response.error->details.value("rolledBack").toBool());
+    CHECK(otherWindow.document().map().modificationCount() == otherBefore);
+  }
+
+  SECTION("viewport changes are synchronous actions with truthful receipts")
+  {
+    const auto before = map.modificationCount();
+    const auto camera = server.dispatchRequest(request(
+      "camera",
+      R"(
+state = tb.viewport.set_camera((256, -256, 192), (0, 0, 0))
+assert state["projection"] == "perspective"
+assert state["position"] == [256, -256, 192]
+assert tb.viewport.state() == state
+result = state
+)",
+      "action"));
+    INFO(QJsonDocument{camera.error ? camera.error->details : camera.result}
+           .toJson()
+           .toStdString());
+    REQUIRE(camera.ok);
+    CHECK(map.modificationCount() == before);
+    CHECK_FALSE(camera.result.value("mutatedDocument").toBool());
+    const auto state = mapViewportState(*window);
+    const auto invalid = server.dispatchRequest(
+      request("bad-camera", "tb.viewport.set_camera((0,0,0), (0,0,0))", "action"));
+    CHECK_FALSE(invalid.ok);
+    CHECK(mapViewportState(*window) == state);
+    const auto transactional = server.dispatchRequest(request(
+      "camera-transaction", "tb.viewport.set_camera((1,2,3), (0,0,0))", "transaction"));
+    CHECK_FALSE(transactional.ok);
+    CHECK(mapViewportState(*window) == state);
+    const auto failed = server.dispatchRequest(request(
+      "camera-failure",
+      "tb.viewport.set_camera((512,-256,192),(0,0,0))\nraise RuntimeError('after "
+      "camera')",
+      "action"));
+    REQUIRE(failed.error);
+    CHECK(failed.error->details.value("completedActions")
+            .toObject()
+            .contains("viewport.set_camera"));
+  }
+
+  SECTION("large replay payloads expire without repeating edits")
+  {
+    const auto before = map.modificationCount();
+    const auto oversizedId =
+      server.dispatchRequest(request(QString(257, 'x'), create, "transaction"));
+    REQUIRE_FALSE(oversizedId.ok);
+    CHECK(map.modificationCount() == before);
+    const auto code = create + "print('created')\nresult = 'x' * 900000";
+    for (int index = 0; index < 20; ++index)
+    {
+      const auto response = server.dispatchRequest(
+        request(QString{"large-%1"}.arg(index), code, "transaction"));
+      REQUIRE(response.ok);
+      CHECK(response.result.value("logs").toObject().value("stdout") == "created\n");
+    }
+    const auto after = map.modificationCount();
+    const auto expired = server.dispatchRequest(request("large-0", code, "transaction"));
+    REQUIRE(expired.error);
+    CHECK(expired.error->details.value("historicalReplay").toBool());
+    CHECK(expired.error->details.value("status") == "receipt_expired");
+    CHECK_FALSE(expired.error->details.value("retrySafe").toBool());
+    const auto retained =
+      server.dispatchRequest(request("large-19", code, "transaction"));
+    REQUIRE(retained.ok);
+    CHECK(retained.result.value("historicalReplay").toBool());
+    CHECK(map.modificationCount() == after);
+  }
 
   SECTION("worldspawn property edits preserve selection before subsequent brush edits")
   {

@@ -9,7 +9,6 @@ namespace tb::ui
 namespace
 {
 std::unordered_map<MapDocument*, size_t> g_documentGenerations;
-std::unordered_map<mdl::Node*, size_t> g_nodeGenerations;
 std::unordered_map<mdl::Node*, size_t> g_nodeLifetimeGenerations;
 } // namespace
 
@@ -35,31 +34,6 @@ void PythonHandleRegistry::invalidateDocument(MapDocument* document)
   if (document != nullptr)
   {
     ++g_documentGenerations[document];
-  }
-}
-
-size_t PythonHandleRegistry::nodeGeneration(mdl::Node* node)
-{
-  if (node == nullptr)
-  {
-    return 0;
-  }
-  return g_nodeGenerations[node];
-}
-
-void PythonHandleRegistry::invalidateNode(mdl::Node* node)
-{
-  if (node != nullptr)
-  {
-    ++g_nodeGenerations[node];
-  }
-}
-
-void PythonHandleRegistry::invalidateNodes(const std::vector<mdl::Node*>& nodes)
-{
-  for (auto* node : nodes)
-  {
-    invalidateNode(node);
   }
 }
 

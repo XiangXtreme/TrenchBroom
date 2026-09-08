@@ -22,6 +22,7 @@ constexpr auto ApiTypes = std::array{
   PythonApiTypeInfo{PythonApiType::Assets, "assets"},
   PythonApiTypeInfo{PythonApiType::Actions, "actions"},
   PythonApiTypeInfo{PythonApiType::Validation, "validation"},
+  PythonApiTypeInfo{PythonApiType::Viewport, "viewport"},
   PythonApiTypeInfo{PythonApiType::Vec3, "Vec3"},
   PythonApiTypeInfo{PythonApiType::Plane, "Plane"},
   PythonApiTypeInfo{PythonApiType::Document, "Document"},
@@ -72,50 +73,61 @@ constexpr auto ModuleSymbols = std::array{
   PythonApiSymbol{
     "validation", Property, "validation", PythonApiValueType{PythonApiType::Validation}},
   PythonApiSymbol{
+    "viewport", Property, "viewport", PythonApiValueType{PythonApiType::Viewport}},
+  PythonApiSymbol{
     "selected_brushes",
     Function,
     "() -> list[Brush]",
-    PythonApiValueType{PythonApiType::Brush, 1u}},
+    PythonApiValueType{PythonApiType::Brush, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selectedBrushes",
     Function,
     "() -> list[Brush]",
-    PythonApiValueType{PythonApiType::Brush, 1u}},
+    PythonApiValueType{PythonApiType::Brush, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selected_entities",
     Function,
     "(include_brushes=False) -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u}},
+    PythonApiValueType{PythonApiType::Entity, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selectedEntities",
     Function,
     "(include_brushes=False) -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u}},
+    PythonApiValueType{PythonApiType::Entity, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selected_all_entities",
     Function,
     "() -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u}},
+    PythonApiValueType{PythonApiType::Entity, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selectedAllEntities",
     Function,
     "() -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u}},
+    PythonApiValueType{PythonApiType::Entity, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selection",
     Function,
     "() -> Selection",
-    PythonApiValueType{PythonApiType::Selection}},
+    PythonApiValueType{PythonApiType::Selection},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selected_faces",
     Function,
     "() -> list[Face]",
-    PythonApiValueType{PythonApiType::Face, 1u}},
+    PythonApiValueType{PythonApiType::Face, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selectedFaces",
     Function,
     "() -> list[Face]",
-    PythonApiValueType{PythonApiType::Face, 1u}},
+    PythonApiValueType{PythonApiType::Face, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{"translate", Function, "(...)"},
   PythonApiSymbol{"rotate", Function, "(...)"},
   PythonApiSymbol{"scale", Function, "(...)"},
@@ -128,11 +140,18 @@ constexpr auto ModuleSymbols = std::array{
     "current_document",
     Function,
     "() -> Document",
-    PythonApiValueType{PythonApiType::Document}},
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Read},
   PythonApiSymbol{
-    "document", Function, "() -> Document", PythonApiValueType{PythonApiType::Document}},
-  PythonApiSymbol{"execute_action", Function, "(action_id)"},
-  PythonApiSymbol{"list_actions", Function, "() -> list[str]"},
+    "document",
+    Function,
+    "() -> Document",
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Read},
+  PythonApiSymbol{
+    "execute_action", Function, "(action_id)", std::nullopt, PythonApiEffect::Action},
+  PythonApiSymbol{
+    "list_actions", Function, "() -> list[str]", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{
     "create_brush",
     Function,
@@ -142,56 +161,95 @@ constexpr auto ModuleSymbols = std::array{
     "create_plugin_panel",
     Function,
     "(title) -> PluginPanel",
-    PythonApiValueType{PythonApiType::PluginPanel}},
-  PythonApiSymbol{"register_callback", Function, "(event, callback) -> int"},
-  PythonApiSymbol{"unregister_callback", Function, "(token)"},
-  PythonApiSymbol{"set_interval", Function, "(callback, milliseconds) -> int"},
-  PythonApiSymbol{"clear_interval", Function, "(token)"},
-  PythonApiSymbol{"set_timeout", Function, "(callback, milliseconds) -> int"},
+    PythonApiValueType{PythonApiType::PluginPanel},
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "register_callback",
+    Function,
+    "(event, callback) -> int",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "unregister_callback", Function, "(token)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_interval",
+    Function,
+    "(callback, milliseconds) -> int",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "clear_interval", Function, "(token)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_timeout",
+    Function,
+    "(callback, milliseconds) -> int",
+    std::nullopt,
+    PythonApiEffect::Plugin},
 };
 
 constexpr auto DocumentsSymbols = std::array{
   PythonApiSymbol{
-    "current", Function, "() -> Document", PythonApiValueType{PythonApiType::Document}},
+    "current",
+    Function,
+    "() -> Document",
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "list",
     Function,
     "() -> list[Document]",
-    PythonApiValueType{PythonApiType::Document, 1u}},
-  PythonApiSymbol{"snapshot", Function, "() -> dict"},
+    PythonApiValueType{PythonApiType::Document, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
-    "open", Function, "(path) -> Document", PythonApiValueType{PythonApiType::Document}},
+    "snapshot", Function, "() -> dict", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "open",
+    Function,
+    "(path) -> Document",
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Action},
   PythonApiSymbol{
     "open_verified",
     Function,
     "(path) -> Document",
-    PythonApiValueType{PythonApiType::Document}},
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Action},
   PythonApiSymbol{
     "activate",
     Function,
     "(document) -> Document",
-    PythonApiValueType{PythonApiType::Document}},
-  PythonApiSymbol{"close", Function, "(document, discard_changes=False)"},
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Action},
+  PythonApiSymbol{
+    "close",
+    Function,
+    "(document, discard_changes=False)",
+    std::nullopt,
+    PythonApiEffect::Action},
   PythonApiSymbol{
     "save",
     Function,
     "(path=None) -> Document",
-    PythonApiValueType{PythonApiType::Document}},
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Action},
   PythonApiSymbol{
     "save_as",
     Function,
     "(path) -> Document",
-    PythonApiValueType{PythonApiType::Document}},
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Action},
   PythonApiSymbol{
     "save_current",
     Function,
     "(path=None) -> Document",
-    PythonApiValueType{PythonApiType::Document}},
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Action},
   PythonApiSymbol{
     "export",
     Function,
     "(path, strip_tb_properties=True) -> Document",
-    PythonApiValueType{PythonApiType::Document}},
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Action},
 };
 
 constexpr auto ObjectsSymbols = std::array{
@@ -199,10 +257,13 @@ constexpr auto ObjectsSymbols = std::array{
     "selection",
     Function,
     "() -> Selection",
-    PythonApiValueType{PythonApiType::Selection}},
-  PythonApiSymbol{"snapshot", Function, "() -> dict"},
-  PythonApiSymbol{"bounds", Function, "() -> dict | None"},
-  PythonApiSymbol{"inspect", Function, "() -> dict"},
+    PythonApiValueType{PythonApiType::Selection},
+    PythonApiEffect::Read},
+  PythonApiSymbol{
+    "snapshot", Function, "() -> dict", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "bounds", Function, "() -> dict | None", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{"inspect", Function, "() -> dict", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{"translate", Function, "(...)"},
   PythonApiSymbol{"rotate", Function, "(...)"},
   PythonApiSymbol{"scale", Function, "(...)"},
@@ -217,12 +278,14 @@ constexpr auto EntitiesSymbols = std::array{
     "list",
     Function,
     "() -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u}},
+    PythonApiValueType{PythonApiType::Entity, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selected",
     Function,
     "(include_brushes=False) -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u}},
+    PythonApiValueType{PythonApiType::Entity, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "create",
     Function,
@@ -234,13 +297,20 @@ constexpr auto EntitiesSymbols = std::array{
     "(entities, select=False) -> list[Entity]",
     PythonApiValueType{PythonApiType::Entity, 1u}},
   PythonApiSymbol{
-    "entities_list", Function, "(type='', query='', limit=200) -> list[dict]"},
-  PythonApiSymbol{"schema", Function, "(classname) -> dict"},
+    "entities_list",
+    Function,
+    "(type='', query='', limit=200) -> list[dict]",
+    std::nullopt,
+    PythonApiEffect::Read},
+  PythonApiSymbol{
+    "schema", Function, "(classname) -> dict", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{
     "link_chain_inspect",
     Function,
     "(start=None, classname='', name_key='targetname', next_key='target', "
-    "detail='summary', include_all_nodes=False) -> dict"},
+    "detail='summary', include_all_nodes=False) -> dict",
+    std::nullopt,
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "create_from_schema",
     Function,
@@ -260,7 +330,7 @@ constexpr auto EntitiesSymbols = std::array{
     "untie_brushes",
     Function,
     "(objects=None) -> list[Brush]",
-    PythonApiValueType{PythonApiType::Brush, 0u}},
+    PythonApiValueType{PythonApiType::Brush, 1u}},
   PythonApiSymbol{"delete", Function, "(entity)"},
   PythonApiSymbol{"update", Function, "(entity, properties={}, remove_keys=[])"},
   PythonApiSymbol{
@@ -270,17 +340,23 @@ constexpr auto EntitiesSymbols = std::array{
     "find",
     Function,
     "(classname=None, property=None, value=None) -> list[Entity]",
-    PythonApiValueType{PythonApiType::Entity, 1u}},
+    PythonApiValueType{PythonApiType::Entity, 1u},
+    PythonApiEffect::Read},
 };
 
 constexpr auto BrushesSymbols = std::array{
   PythonApiSymbol{
-    "list", Function, "() -> list[Brush]", PythonApiValueType{PythonApiType::Brush, 1u}},
+    "list",
+    Function,
+    "() -> list[Brush]",
+    PythonApiValueType{PythonApiType::Brush, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selected",
     Function,
     "() -> list[Brush]",
-    PythonApiValueType{PythonApiType::Brush, 1u}},
+    PythonApiValueType{PythonApiType::Brush, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "create",
     Function,
@@ -310,12 +386,17 @@ constexpr auto BrushesSymbols = std::array{
 
 constexpr auto FacesSymbols = std::array{
   PythonApiSymbol{
-    "list", Function, "() -> list[Face]", PythonApiValueType{PythonApiType::Face, 1u}},
+    "list",
+    Function,
+    "() -> list[Face]",
+    PythonApiValueType{PythonApiType::Face, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "selected",
     Function,
     "() -> list[Face]",
-    PythonApiValueType{PythonApiType::Face, 1u}},
+    PythonApiValueType{PythonApiType::Face, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{"set_material", Function, "(faces, material)"},
 };
 
@@ -324,25 +405,29 @@ constexpr auto MaterialsSymbols = std::array{
     "list",
     Function,
     "() -> list[Material]",
-    PythonApiValueType{PythonApiType::Material, 1u}},
+    PythonApiValueType{PythonApiType::Material, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "collections",
     Function,
     "() -> list[MaterialCollection]",
-    PythonApiValueType{PythonApiType::MaterialCollection, 1u}},
+    PythonApiValueType{PythonApiType::MaterialCollection, 1u},
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "search",
     Function,
     "(query, limit=50) -> list[Material]",
-    PythonApiValueType{PythonApiType::Material, 1u}},
-  PythonApiSymbol{"current", Function, "() -> str"},
+    PythonApiValueType{PythonApiType::Material, 1u},
+    PythonApiEffect::Read},
+  PythonApiSymbol{"current", Function, "() -> str", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{"apply", Function, "(faces, material) -> int"},
   PythonApiSymbol{
     "apply_by_filter",
     Function,
     "(brushes, material, face_semantic='all', normal=None, normal_tolerance=0.75) -> "
     "int"},
-  PythonApiSymbol{"lock_get", Function, "() -> dict"},
+  PythonApiSymbol{
+    "lock_get", Function, "() -> dict", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{"lock_set", Function, "(texture_lock=None, uv_lock=None) -> dict"},
   PythonApiSymbol{"align_face", Function, "(faces, mode) -> int"},
   PythonApiSymbol{"copy_from_face", Function, "(source, targets) -> int"},
@@ -350,14 +435,22 @@ constexpr auto MaterialsSymbols = std::array{
 };
 
 constexpr auto HistorySymbols = std::array{
-  PythonApiSymbol{"status", Function, "(document=None) -> dict"},
-  PythonApiSymbol{"undo", Function, "(document=None) -> bool"},
-  PythonApiSymbol{"redo", Function, "(document=None) -> bool"},
+  PythonApiSymbol{
+    "status", Function, "(document=None) -> dict", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "undo", Function, "(document=None) -> bool", std::nullopt, PythonApiEffect::Action},
+  PythonApiSymbol{
+    "redo", Function, "(document=None) -> bool", std::nullopt, PythonApiEffect::Action},
 };
 
 constexpr auto GroupsSymbols = std::array{
   PythonApiSymbol{"create_from_selection", Function, "(name) -> dict"},
-  PythonApiSymbol{"inspect_selected", Function, "() -> list[dict]"},
+  PythonApiSymbol{
+    "inspect_selected",
+    Function,
+    "() -> list[dict]",
+    std::nullopt,
+    PythonApiEffect::Read},
   PythonApiSymbol{"rename_selected", Function, "(name) -> list[dict]"},
   PythonApiSymbol{"ungroup_selected", Function, "() -> dict"},
 };
@@ -366,12 +459,19 @@ constexpr auto GeometrySymbols = std::array{
   PythonApiSymbol{
     "analyze_selection",
     Function,
-    "(grid=1.0, detail='summary', max_brushes=100) -> dict"},
+    "(grid=1.0, detail='summary', max_brushes=100) -> dict",
+    std::nullopt,
+    PythonApiEffect::Read},
   PythonApiSymbol{"csg_selection", Function, "(operation) -> dict"},
 };
 
 constexpr auto AssetsSymbols = std::array{
-  PythonApiSymbol{"search", Function, "(query='', type=None, limit=50) -> list[dict]"},
+  PythonApiSymbol{
+    "search",
+    Function,
+    "(query='', type=None, limit=50) -> list[dict]",
+    std::nullopt,
+    PythonApiEffect::Read},
   PythonApiSymbol{
     "place_model",
     Function,
@@ -390,39 +490,82 @@ constexpr auto AssetsSymbols = std::array{
 };
 
 constexpr auto ActionsSymbols = std::array{
-  PythonApiSymbol{"list", Function, "() -> list[str]"},
-  PythonApiSymbol{"execute", Function, "(action_id)"},
+  PythonApiSymbol{
+    "list", Function, "() -> list[str]", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "execute", Function, "(action_id)", std::nullopt, PythonApiEffect::Action},
 };
 
 constexpr auto ValidationSymbols = std::array{
-  PythonApiSymbol{"check", Function, "(include_hidden=False, limit=500) -> dict"},
+  PythonApiSymbol{
+    "check",
+    Function,
+    "(include_hidden=False, limit=500) -> dict",
+    std::nullopt,
+    PythonApiEffect::Read},
+};
+
+constexpr auto ViewportSymbols = std::array{
+  PythonApiSymbol{"state", Function, "() -> dict", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "set_camera",
+    Function,
+    "(position, target, up=(0, 0, 1)) -> dict",
+    std::nullopt,
+    PythonApiEffect::Action},
+  PythonApiSymbol{
+    "focus_selection", Function, "() -> dict", std::nullopt, PythonApiEffect::Action},
 };
 
 constexpr auto Vec3Symbols = std::array{
-  PythonApiSymbol{"x", Property, "float"},
-  PythonApiSymbol{"y", Property, "float"},
-  PythonApiSymbol{"z", Property, "float"},
-  PythonApiSymbol{"dot", Method, "(other) -> float"},
+  PythonApiSymbol{"x", Property, "float", std::nullopt, PythonApiEffect::Value},
+  PythonApiSymbol{"y", Property, "float", std::nullopt, PythonApiEffect::Value},
+  PythonApiSymbol{"z", Property, "float", std::nullopt, PythonApiEffect::Value},
   PythonApiSymbol{
-    "cross", Method, "(other) -> Vec3", PythonApiValueType{PythonApiType::Vec3}},
-  PythonApiSymbol{"length", Method, "() -> float"},
+    "dot", Method, "(other) -> float", std::nullopt, PythonApiEffect::Value},
   PythonApiSymbol{
-    "normalize", Method, "() -> Vec3", PythonApiValueType{PythonApiType::Vec3}},
+    "cross",
+    Method,
+    "(other) -> Vec3",
+    PythonApiValueType{PythonApiType::Vec3},
+    PythonApiEffect::Value},
+  PythonApiSymbol{"length", Method, "() -> float", std::nullopt, PythonApiEffect::Value},
   PythonApiSymbol{
-    "normalized", Method, "() -> Vec3", PythonApiValueType{PythonApiType::Vec3}},
+    "normalize",
+    Method,
+    "() -> Vec3",
+    PythonApiValueType{PythonApiType::Vec3},
+    PythonApiEffect::Value},
+  PythonApiSymbol{
+    "normalized",
+    Method,
+    "() -> Vec3",
+    PythonApiValueType{PythonApiType::Vec3},
+    PythonApiEffect::Value},
 };
 
 constexpr auto PlaneSymbols = std::array{
-  PythonApiSymbol{"normal", Property, "tuple[float, float, float]"},
-  PythonApiSymbol{"dist", Property, "float"},
+  PythonApiSymbol{
+    "normal",
+    Property,
+    "tuple[float, float, float]",
+    std::nullopt,
+    PythonApiEffect::Value},
+  PythonApiSymbol{"dist", Property, "float", std::nullopt, PythonApiEffect::Value},
   PythonApiSymbol{
     "from_points",
     Function,
     "(p1, p2, p3) -> Plane",
-    PythonApiValueType{PythonApiType::Plane}},
-  PythonApiSymbol{"distance", Method, "(point) -> float"},
+    PythonApiValueType{PythonApiType::Plane},
+    PythonApiEffect::Value},
   PythonApiSymbol{
-    "project", Method, "(point) -> Vec3", PythonApiValueType{PythonApiType::Vec3}},
+    "distance", Method, "(point) -> float", std::nullopt, PythonApiEffect::Value},
+  PythonApiSymbol{
+    "project",
+    Method,
+    "(point) -> Vec3",
+    PythonApiValueType{PythonApiType::Vec3},
+    PythonApiEffect::Value},
 };
 
 constexpr auto DocumentSymbols = std::array{
@@ -446,12 +589,19 @@ constexpr auto DocumentSymbols = std::array{
     "vertex_tool_vertices",
     Method,
     "() -> list[Vec3]",
-    PythonApiValueType{PythonApiType::Vec3, 1u}},
-  PythonApiSymbol{"save", Method, "()"},
-  PythonApiSymbol{"close", Method, "(discard_changes=False)"},
-  PythonApiSymbol{"save_as", Method, "(path)"},
-  PythonApiSymbol{"export", Method, "(path, strip_tb_properties=True)"},
-  PythonApiSymbol{"reload", Method, "()"},
+    PythonApiValueType{PythonApiType::Vec3, 1u},
+    PythonApiEffect::Read},
+  PythonApiSymbol{"save", Method, "()", std::nullopt, PythonApiEffect::Action},
+  PythonApiSymbol{
+    "close", Method, "(discard_changes=False)", std::nullopt, PythonApiEffect::Action},
+  PythonApiSymbol{"save_as", Method, "(path)", std::nullopt, PythonApiEffect::Action},
+  PythonApiSymbol{
+    "export",
+    Method,
+    "(path, strip_tb_properties=True)",
+    std::nullopt,
+    PythonApiEffect::Action},
+  PythonApiSymbol{"reload", Method, "()", std::nullopt, PythonApiEffect::Action},
   PythonApiSymbol{
     "transaction",
     Method,
@@ -487,8 +637,10 @@ constexpr auto SelectionSymbols = std::array{
     "brush_vertices",
     Method,
     "() -> list[list[Vec3]]",
-    PythonApiValueType{PythonApiType::Vec3, 2u}},
-  PythonApiSymbol{"triangle_uvs", Method, "() -> dict"},
+    PythonApiValueType{PythonApiType::Vec3, 2u},
+    PythonApiEffect::Read},
+  PythonApiSymbol{
+    "triangle_uvs", Method, "() -> dict", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{"set", Method, "(objects)"},
   PythonApiSymbol{"add", Method, "(objects)"},
   PythonApiSymbol{"deselect_all", Method, "()"},
@@ -507,10 +659,13 @@ constexpr auto EntitySymbols = std::array{
   PythonApiSymbol{
     "brushes", Property, "list[Brush]", PythonApiValueType{PythonApiType::Brush, 1u}},
   PythonApiSymbol{"properties", Property, "dict[str, str]"},
-  PythonApiSymbol{"keys", Method, "() -> list[str]"},
-  PythonApiSymbol{"values", Method, "() -> list[str]"},
-  PythonApiSymbol{"items", Method, "() -> list[tuple[str, str]]"},
-  PythonApiSymbol{"get", Method, "(key, default=None)"},
+  PythonApiSymbol{"keys", Method, "() -> list[str]", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "values", Method, "() -> list[str]", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "items", Method, "() -> list[tuple[str, str]]", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{
+    "get", Method, "(key, default=None)", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{"set", Method, "(key, value)"},
   PythonApiSymbol{"remove", Method, "(key)"},
 };
@@ -520,7 +675,11 @@ constexpr auto BrushSymbols = std::array{
   PythonApiSymbol{
     "entity", Property, "Entity", PythonApiValueType{PythonApiType::Entity}},
   PythonApiSymbol{
-    "faces", Method, "() -> list[Face]", PythonApiValueType{PythonApiType::Face, 1u}},
+    "faces",
+    Method,
+    "() -> list[Face]",
+    PythonApiValueType{PythonApiType::Face, 1u},
+    PythonApiEffect::Read},
 };
 
 constexpr auto FaceSymbols = std::array{
@@ -565,51 +724,129 @@ constexpr auto TransactionSymbols = std::array{
 };
 
 constexpr auto PluginPanelSymbols = std::array{
-  PythonApiSymbol{"add_label", Method, "(text)"},
-  PythonApiSymbol{"add_label_named", Method, "(key, text)"},
-  PythonApiSymbol{"set_label_text", Method, "(key, text)"},
+  PythonApiSymbol{"add_label", Method, "(text)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_label_named", Method, "(key, text)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_label_text", Method, "(key, text)", std::nullopt, PythonApiEffect::Plugin},
   PythonApiSymbol{
     "add_group",
     Method,
     "(key, title) -> PluginPanel",
-    PythonApiValueType{PythonApiType::PluginPanel}},
+    PythonApiValueType{PythonApiType::PluginPanel},
+    PythonApiEffect::Plugin},
   PythonApiSymbol{
     "add_row",
     Method,
     "(key) -> PluginPanel",
-    PythonApiValueType{PythonApiType::PluginPanel}},
+    PythonApiValueType{PythonApiType::PluginPanel},
+    PythonApiEffect::Plugin},
   PythonApiSymbol{
     "add_column",
     Method,
     "(key) -> PluginPanel",
-    PythonApiValueType{PythonApiType::PluginPanel}},
-  PythonApiSymbol{"set_widget_visible", Method, "(key, visible)"},
-  PythonApiSymbol{"add_button", Method, "(text, callback)"},
-  PythonApiSymbol{"add_button_callback", Method, "(text, callback)"},
-  PythonApiSymbol{"add_checkbox", Method, "(...)"},
-  PythonApiSymbol{"get_checkbox", Method, "(key) -> bool"},
-  PythonApiSymbol{"add_line_edit", Method, "(text, callback)"},
-  PythonApiSymbol{"add_text_field", Method, "(key, label, value='')"},
-  PythonApiSymbol{"get_text_field", Method, "(key) -> str"},
-  PythonApiSymbol{"set_text_field", Method, "(key, value)"},
-  PythonApiSymbol{"add_text_area", Method, "(key, label, value='')"},
-  PythonApiSymbol{"get_text_area", Method, "(key) -> str"},
-  PythonApiSymbol{"set_text_area", Method, "(key, value)"},
-  PythonApiSymbol{"add_int_field", Method, "(key, label, value=0, ...)"},
-  PythonApiSymbol{"get_int_field", Method, "(key) -> int"},
-  PythonApiSymbol{"add_float_field", Method, "(key, label, value=0.0, ...)"},
-  PythonApiSymbol{"get_float_field", Method, "(key) -> float"},
-  PythonApiSymbol{"add_combo_box", Method, "(...)"},
-  PythonApiSymbol{"get_combo_box_text", Method, "(key) -> str"},
-  PythonApiSymbol{"add_color_field", Method, "(key, label, color)"},
-  PythonApiSymbol{"get_color_field", Method, "(key) -> tuple[int, int, int]"},
-  PythonApiSymbol{"add_table_widget", Method, "(key, columns, rows, ...)"},
-  PythonApiSymbol{"set_table_widget_rows", Method, "(key, rows)"},
-  PythonApiSymbol{"add_tree_widget", Method, "(key, columns, rows, ...)"},
-  PythonApiSymbol{"set_tree_widget_items", Method, "(key, rows)"},
-  PythonApiSymbol{"add_html_view", Method, "(key, html, ...)"},
-  PythonApiSymbol{"set_html_view", Method, "(key, html)"},
-  PythonApiSymbol{"clear", Method, "()"},
+    PythonApiValueType{PythonApiType::PluginPanel},
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_widget_visible",
+    Method,
+    "(key, visible)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_button", Method, "(text, callback)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_button_callback",
+    Method,
+    "(text, callback)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{"add_checkbox", Method, "(...)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "get_checkbox", Method, "(key) -> bool", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_line_edit", Method, "(text, callback)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_text_field",
+    Method,
+    "(key, label, value='')",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "get_text_field", Method, "(key) -> str", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_text_field", Method, "(key, value)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_text_area",
+    Method,
+    "(key, label, value='')",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "get_text_area", Method, "(key) -> str", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_text_area", Method, "(key, value)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_int_field",
+    Method,
+    "(key, label, value=0, ...)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "get_int_field", Method, "(key) -> int", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_float_field",
+    Method,
+    "(key, label, value=0.0, ...)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "get_float_field", Method, "(key) -> float", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_combo_box", Method, "(...)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "get_combo_box_text", Method, "(key) -> str", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_color_field",
+    Method,
+    "(key, label, color)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "get_color_field",
+    Method,
+    "(key) -> tuple[int, int, int]",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_table_widget",
+    Method,
+    "(key, columns, rows, ...)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_table_widget_rows",
+    Method,
+    "(key, rows)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_tree_widget",
+    Method,
+    "(key, columns, rows, ...)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_tree_widget_items",
+    Method,
+    "(key, rows)",
+    std::nullopt,
+    PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "add_html_view", Method, "(key, html, ...)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{
+    "set_html_view", Method, "(key, html)", std::nullopt, PythonApiEffect::Plugin},
+  PythonApiSymbol{"clear", Method, "()", std::nullopt, PythonApiEffect::Plugin},
 };
 
 constexpr auto ConsoleHelperNames = std::array<std::string_view, 24>{
@@ -675,6 +912,8 @@ std::span<const PythonApiSymbol> pythonApiSymbols(const PythonApiType type)
     return ActionsSymbols;
   case PythonApiType::Validation:
     return ValidationSymbols;
+  case PythonApiType::Viewport:
+    return ViewportSymbols;
   case PythonApiType::Vec3:
     return Vec3Symbols;
   case PythonApiType::Plane:

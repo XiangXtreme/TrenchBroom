@@ -30,6 +30,12 @@ does not extend the MCP catalog.
    returned document fingerprint and, for saved maps, its path.
 2. Call `tb_api` before using a Python symbol that is not already known. Use
    `symbol` for an exact name or a short `query` for discovery.
+   Search responses include `total`, `truncated`, and `nextOffset`. Continue with
+   that `offset` and the same query; `limit` is 1–50 (default 8), with a 16 KiB
+   page budget. Qualified names start with `trenchbroom.`. `signature` comes from
+   the native binding; properties report `writable`, and `effect` distinguishes
+   read, edit, action, plugin, and value operations. Action requires MCP action
+   mode; plugin operations belong to persistent plugins, not transient scripts.
 3. Compose ordinary Python with `import trenchbroom as tb`. Put loops,
    geometry composition, entity policy, validation, and undo/redo calls in the
    script, using only symbols returned by `tb_api`.
@@ -55,6 +61,32 @@ does not extend the MCP catalog.
   permit it, but cannot undo external file or process side effects.
 - Report map facts, problem output, capture evidence, save status, and any
   untested engine behavior separately.
+- Entity handles survive property changes. Removed/reparented objects and
+  reloads can invalidate handles; reacquire them from their current owner.
+  Never select worldspawn. Edit its properties directly. Handles used from
+  background threads or a different guarded document are rejected.
+- After opening or activating another document, inspect it and start a new
+  guarded execution before editing its contents. Document ids and paths can
+  be read to identify a target, but the current execution stays bound to its
+  original document.
+- Receipts include bounded stdout/stderr previews. Deduplication retains up to
+  1024 request identities and 16 MiB of serialized receipt payloads. A retained
+  identity whose payload expired returns `receipt_expired` instead of running
+  again. After eviction, restart, timeout, or disconnection, inspect the editor
+  before deciding whether another execution is appropriate.
+
+## Viewport Evidence
+
+Discover `trenchbroom.viewport.state`, `set_camera`, and `focus_selection` with
+`tb_api`. `state()` reads the current camera. In action mode,
+`tb.viewport.set_camera(position, target, up=(0, 0, 1))` activates the native 3D
+view and applies the pose synchronously. Position and target must differ, and
+up must not be parallel to their direction. `focus_selection()` immediately
+frames the current selection in 3D. These actions stop the previous camera
+animation and report their completion; they do not modify map geometry.
+
+Call `tb_capture` afterward. Its response includes the actual camera state and
+document path, so an orthographic capture cannot be mistaken for a 3D view.
 
 ## Python Shape
 

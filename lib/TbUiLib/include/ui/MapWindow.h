@@ -461,6 +461,7 @@ public:
   void focusChange(QWidget* oldFocus, QWidget* newFocus);
 
   MapView3D* currentOrFirstVisible3DMapView();
+  MapView3D& activate3DMapView();
   MapViewBase* currentMapViewBase();
 
 private:
