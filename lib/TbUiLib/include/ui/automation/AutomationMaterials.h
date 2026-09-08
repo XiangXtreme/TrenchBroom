@@ -40,4 +40,9 @@ bool alignBrushFaceAxes(
   const std::vector<mdl::BrushFaceHandle>& faces,
   AutomationFaceAlignment alignment);
 
+bool copyBrushFaceAttributes(
+  mdl::Map& map,
+  const mdl::BrushFaceHandle& source,
+  const std::vector<mdl::BrushFaceHandle>& targets);
+
 } // namespace tb::ui::automation

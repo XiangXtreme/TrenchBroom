@@ -3640,6 +3640,51 @@ size_t alignFaces(const py::iterable& faces, const std::string& mode)
   return brushFaces.size();
 }
 
+size_t copyFaceAttributes(FaceHandle& source, const py::iterable& targets)
+{
+  auto& document = DocumentHandle{source.document, source.generation}.get();
+  auto& sourceBrush = source.getBrushNode();
+  const auto sourceHandle = mdl::BrushFaceHandle{&sourceBrush, source.faceIndex};
+
+  auto targetHandles = std::vector<FaceHandle>{};
+  for (const auto& target : targets)
+  {
+    targetHandles.push_back(py::cast<FaceHandle>(target));
+  }
+  std::ranges::sort(targetHandles, {}, [](const auto& face) {
+    return std::pair{face.brush, face.faceIndex};
+  });
+  targetHandles.erase(
+    std::unique(
+      targetHandles.begin(),
+      targetHandles.end(),
+      [](const auto& lhs, const auto& rhs) {
+        return lhs.brush == rhs.brush && lhs.faceIndex == rhs.faceIndex;
+      }),
+    targetHandles.end());
+  if (targetHandles.empty())
+  {
+    throw py::value_error{"targets must not be empty"};
+  }
+
+  auto brushFaces = std::vector<mdl::BrushFaceHandle>{};
+  brushFaces.reserve(targetHandles.size());
+  for (const auto& target : targetHandles)
+  {
+    if (target.document != &document)
+    {
+      throw py::value_error{"Source and targets must belong to the same document"};
+    }
+    auto& brushNode = target.getBrushNode();
+    brushFaces.emplace_back(&brushNode, target.faceIndex);
+  }
+
+  withPreservedSelection(document, "Python API Copy Face Texture", [&](auto& map) {
+    return automation::copyBrushFaceAttributes(map, sourceHandle, brushFaces);
+  });
+  return brushFaces.size();
+}
+
 void updateFace(FaceHandle& face, mdl::UpdateBrushFaceAttributes update)
 {
   auto& document = DocumentHandle{face.document, face.generation}.get();
@@ -6045,6 +6090,8 @@ void defineModule(py::module_& module)
   materials.def(
     "current", []() { return currentDocument().get().map().currentMaterialName(); });
   materials.def("align_face", alignFaces, py::arg("faces"), py::arg("mode"));
+  materials.def(
+    "copy_from_face", copyFaceAttributes, py::arg("source"), py::arg("targets"));
 
   auto historyDocument = [](const py::object& document) {
     return document.is_none() ? currentDocument() : py::cast<DocumentHandle>(document);

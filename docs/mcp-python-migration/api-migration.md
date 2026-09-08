@@ -61,6 +61,10 @@ JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它�
 恢复事务，调用不会改变用户原有选择；过渡 MCP `texture_align_face` 使用相同 automation 服务，但
 继续保留其历史记录和协议目标解析。
 
+`tb.materials.copy_from_face(source, targets)` 把一个 `Face` 的材质、UV 与 surface 属性复制到显式
+的目标 `Face` 集合，返回去重后的目标数。源和目标必须处于当前文档，空目标会在提交前失败。
+该接口与过渡 MCP `texture_copy_from_face` 复用同一个 automation 操作。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

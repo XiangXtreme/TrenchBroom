@@ -1629,13 +1629,10 @@ McpBridgeToolResult textureCopyFromFaceForMapResult(
         "provide_target_faces_or_select_brush_faces"));
   }
 
-  const auto sourceFace = source->face();
   const auto changedNodes = changedBrushIds(handles, map.worldNode());
   const auto transactionName = QString{"MCP: Copy face texture"};
   const auto ok = executeTransaction(map, transactionName, [&]() {
-    mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, handles);
-    return mdl::setBrushFaceAttributes(map, mdl::copyAll(sourceFace));
+    return automation::copyBrushFaceAttributes(map, *source, handles);
   });
   if (!ok)
   {

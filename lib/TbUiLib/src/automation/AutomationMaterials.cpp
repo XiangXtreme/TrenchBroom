@@ -6,6 +6,7 @@
 
 #include "ui/automation/AutomationMaterials.h"
 
+#include "mdl/BrushFace.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Brushes.h"
 #include "mdl/Map_Selection.h"
@@ -59,6 +60,22 @@ bool alignBrushFaceAxes(
   mdl::deselectAll(map);
   mdl::selectBrushFaces(map, faces);
   return mdl::setBrushFaceAttributes(map, update);
+}
+
+bool copyBrushFaceAttributes(
+  mdl::Map& map,
+  const mdl::BrushFaceHandle& source,
+  const std::vector<mdl::BrushFaceHandle>& targets)
+{
+  if (targets.empty())
+  {
+    return false;
+  }
+
+  const auto sourceFace = source.face();
+  mdl::deselectAll(map);
+  mdl::selectBrushFaces(map, targets);
+  return mdl::setBrushFaceAttributes(map, mdl::copyAll(sourceFace));
 }
 
 } // namespace tb::ui::automation

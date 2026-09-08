@@ -423,6 +423,10 @@ assert csg["selected_brush_count"] == 1
 assert len(csg["brushes"]) == 1
 assert tb.history.status()["undo_name"] == "Python API CSG Intersect"
 assert tb.materials.align_face(csg["brushes"][0].faces(), "world") == 6
+faces = csg["brushes"][0].faces()
+faces[0].material = "python-copy-source"
+assert tb.materials.copy_from_face(faces[0], [faces[1]]) == 1
+assert faces[1].material == "python-copy-source"
 try:
     tb.materials.align_face(csg["brushes"][0].faces(), "diagonal")
     raise AssertionError("face alignment accepted an invalid mode")

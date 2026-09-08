@@ -342,6 +342,7 @@ constexpr auto MaterialsSymbols = std::array{
     PythonApiValueType{PythonApiType::Material, 1u}},
   PythonApiSymbol{"current", Function, "() -> str"},
   PythonApiSymbol{"align_face", Function, "(faces, mode) -> int"},
+  PythonApiSymbol{"copy_from_face", Function, "(source, targets) -> int"},
 };
 
 constexpr auto HistorySymbols = std::array{
