@@ -1338,6 +1338,51 @@ py::dict analyzeSelectionGeometryFromPython(
   return result;
 }
 
+py::dict csgSelectionFromPython(const std::string& operation)
+{
+  auto& document = currentDocument().get();
+  const auto normalizedOperation = QString::fromStdString(operation).trimmed().toLower();
+  const auto csgOperation =
+    automation::automationCsgOperationFromString(normalizedOperation.toStdString());
+  if (!csgOperation)
+  {
+    throw py::value_error{
+      "operation must be convex_merge, subtract, intersect, or hollow"};
+  }
+
+  const auto transactionName =
+    "Python API " + automation::automationCsgTransactionName(*csgOperation);
+  const auto csgResult =
+    automation::applySelectionCsg(document.map(), *csgOperation, transactionName);
+  if (!csgResult.ok())
+  {
+    throw py::value_error{csgResult.error};
+  }
+
+  const auto documentGeneration =
+    PythonHandleRegistry::instance().documentGeneration(&document);
+  auto brushes = std::vector<BrushHandle>{};
+  brushes.reserve(csgResult.selectedBrushes.size());
+  for (auto* brush : csgResult.selectedBrushes)
+  {
+    brushes.push_back(BrushHandle{
+      &document,
+      documentGeneration,
+      brush,
+      PythonHandleRegistry::instance().nodeLifetimeGeneration(brush)});
+  }
+
+  auto result = py::dict{};
+  result["operation"] = csgResult.operation;
+  result["transaction_name"] = csgResult.transactionName;
+  result["selected_brush_count_before"] = csgResult.selectedBrushCountBefore;
+  result["selected_brush_face_count_before"] = csgResult.selectedBrushFaceCountBefore;
+  result["deleted_brush_count"] = csgResult.deletedBrushCount;
+  result["brushes"] = std::move(brushes);
+  result["selected_brush_count"] = csgResult.selectedBrushes.size();
+  return result;
+}
+
 py::dict validationCheck(const bool includeHidden, const size_t limit)
 {
   auto document = currentDocument();
@@ -1548,8 +1593,8 @@ py::dict compileAutomationIrPreviewFromFile(const std::string& path)
   const auto previewId = QString{"python-ir-preview-%1"}.arg(state.nextIrPreviewIndex++);
   const auto fingerprint = objectRegistry().documentFingerprint(document.get().map());
   const auto activeDocumentPath = document.get().map().path().empty()
-                                   ? QString{}
-                                   : pathAsQString(document.get().map().path());
+                                    ? QString{}
+                                    : pathAsQString(document.get().map().path());
   preview.insert("previewId", previewId);
   preview.insert("sourcePath", QFileInfo{sourcePath}.canonicalFilePath());
   preview.insert("documentFingerprint", fingerprint);
@@ -2801,7 +2846,8 @@ std::vector<EntityHandle> createCheckedPointEntities(
   {
     nodes.push_back(node);
   }
-  auto transaction = ScopedPythonTransaction{document, "Python API Create Checked Entities"};
+  auto transaction =
+    ScopedPythonTransaction{document, "Python API Create Checked Entities"};
   if (!automation::addNodes(map, nodes, select))
   {
     transaction.cancel();
@@ -2813,7 +2859,8 @@ std::vector<EntityHandle> createCheckedPointEntities(
     throw std::runtime_error{"Could not create checked point entities"};
   }
 
-  const auto documentGeneration = PythonHandleRegistry::instance().documentGeneration(&document);
+  const auto documentGeneration =
+    PythonHandleRegistry::instance().documentGeneration(&document);
   auto result = std::vector<EntityHandle>{};
   result.reserve(built.nodes.size());
   for (auto* node : built.nodes)
@@ -2880,7 +2927,7 @@ py::dict inspectEntityLinkChain(
         if (
           normalizedClassname.isEmpty()
           || QString::fromStdString(entity->entity().classname())
-               .compare(normalizedClassname, Qt::CaseInsensitive)
+                 .compare(normalizedClassname, Qt::CaseInsensitive)
                == 0)
         {
           selected.push_back(entity);
@@ -2909,13 +2956,18 @@ py::dict inspectEntityLinkChain(
   }
 
   const auto chain = automation::inspectEntityLinkChain(
-    document.map(), *startNode, normalizedClassname, normalizedNameKey, normalizedNextKey);
+    document.map(),
+    *startNode,
+    normalizedClassname,
+    normalizedNameKey,
+    normalizedNextKey);
   if (!chain.error.isEmpty())
   {
     throw py::value_error{chain.error.toStdString()};
   }
 
-  const auto documentGeneration = PythonHandleRegistry::instance().documentGeneration(&document);
+  const auto documentGeneration =
+    PythonHandleRegistry::instance().documentGeneration(&document);
   const auto makeHandle = [&](auto* node) {
     auto* mutableNode = const_cast<mdl::EntityNodeBase*>(node);
     return EntityHandle{
@@ -3642,9 +3694,7 @@ std::string boxMaterialFromPython(const py::object& materialName, const mdl::Map
 }
 
 automation::AutomationBoxSpec boxSpecFromPython(
-  const py::object& minObject,
-  const py::object& maxObject,
-  const std::string& material)
+  const py::object& minObject, const py::object& maxObject, const std::string& material)
 {
   const auto min = toVmVec3(vec3FromObject(minObject));
   const auto max = toVmVec3(vec3FromObject(maxObject));
@@ -3666,9 +3716,8 @@ std::vector<automation::AutomationBoxSpec> boxSpecsFromPython(
     {
       throw py::value_error{"Each box requires min and max"};
     }
-    const auto material = box.contains("material")
-                            ? py::cast<std::string>(box["material"])
-                            : defaultMaterial;
+    const auto material =
+      box.contains("material") ? py::cast<std::string>(box["material"]) : defaultMaterial;
     result.push_back(boxSpecFromPython(box["min"], box["max"], material));
   }
   if (result.empty())
@@ -3714,7 +3763,8 @@ std::vector<BrushHandle> createAutomationBoxes(
     throw std::runtime_error{"Could not create box brushes"};
   }
 
-  const auto documentGeneration = PythonHandleRegistry::instance().documentGeneration(&document);
+  const auto documentGeneration =
+    PythonHandleRegistry::instance().documentGeneration(&document);
   auto result = std::vector<BrushHandle>{};
   result.reserve(createdNodes->size());
   for (auto* node : *createdNodes)
@@ -3736,8 +3786,8 @@ BrushHandle createBox(
 {
   auto& map = currentDocument().get().map();
   auto boxes = std::vector<automation::AutomationBoxSpec>{};
-  boxes.push_back(boxSpecFromPython(
-    minObject, maxObject, boxMaterialFromPython(materialName, map)));
+  boxes.push_back(
+    boxSpecFromPython(minObject, maxObject, boxMaterialFromPython(materialName, map)));
   return createAutomationBoxes(std::move(boxes), select, "Python API Create Box").front();
 }
 
@@ -3786,7 +3836,11 @@ PythonPrismSpec prismSpecFromPython(
   const double maxZ,
   const std::string& material)
 {
-  return {.points = prismPointsFromPython(points), .minZ = minZ, .maxZ = maxZ, .material = material};
+  return {
+    .points = prismPointsFromPython(points),
+    .minZ = minZ,
+    .maxZ = maxZ,
+    .material = material};
 }
 
 std::vector<PythonPrismSpec> prismSpecsFromPython(
@@ -3800,7 +3854,9 @@ std::vector<PythonPrismSpec> prismSpecsFromPython(
       throw py::type_error{"Each polygon must be a dict with points2d, min_z, and max_z"};
     }
     const auto polygon = py::reinterpret_borrow<py::dict>(item);
-    if (!polygon.contains("points2d") || !polygon.contains("min_z") || !polygon.contains("max_z"))
+    if (
+      !polygon.contains("points2d") || !polygon.contains("min_z")
+      || !polygon.contains("max_z"))
     {
       throw py::value_error{"Each polygon requires points2d, min_z, and max_z"};
     }
@@ -3867,7 +3923,8 @@ std::vector<BrushHandle> createAutomationPrisms(
     throw std::runtime_error{"Could not create prism brushes"};
   }
 
-  const auto documentGeneration = PythonHandleRegistry::instance().documentGeneration(&document);
+  const auto documentGeneration =
+    PythonHandleRegistry::instance().documentGeneration(&document);
   auto result = std::vector<BrushHandle>{};
   result.reserve(createdNodes.size());
   for (auto* node : createdNodes)
@@ -3890,8 +3947,8 @@ BrushHandle createPrism(
 {
   auto& map = currentDocument().get().map();
   auto prisms = std::vector<PythonPrismSpec>{};
-  prisms.push_back(prismSpecFromPython(
-    points, minZ, maxZ, boxMaterialFromPython(materialName, map)));
+  prisms.push_back(
+    prismSpecFromPython(points, minZ, maxZ, boxMaterialFromPython(materialName, map)));
   return createAutomationPrisms(prisms, select, "Python API Create Prism").front();
 }
 
@@ -5810,7 +5867,8 @@ void defineModule(py::module_& module)
   auto ir = module.def_submodule("ir", "IR validation and compact preview operations.");
   ir.def("validate", validateAutomationIrFromPython, py::arg("ir"));
   ir.def("preview", validateAutomationIrFromPython, py::arg("ir"));
-  ir.def("compile_preview_from_file", compileAutomationIrPreviewFromFile, py::arg("path"));
+  ir.def(
+    "compile_preview_from_file", compileAutomationIrPreviewFromFile, py::arg("path"));
   ir.def(
     "apply",
     applyAutomationIrFromPython,
@@ -5822,13 +5880,15 @@ void defineModule(py::module_& module)
     py::arg("path"),
     py::arg("name") = "Python API Apply IR");
 
-  auto geometry = module.def_submodule("geometry", "Native geometry analysis operations.");
+  auto geometry =
+    module.def_submodule("geometry", "Native geometry analysis operations.");
   geometry.def(
     "analyze_selection",
     analyzeSelectionGeometryFromPython,
     py::arg("grid") = 1.0,
     py::arg("detail") = "summary",
     py::arg("max_brushes") = 100u);
+  geometry.def("csg_selection", csgSelectionFromPython, py::arg("operation"));
 
   auto placeModel = [](
                       const std::string& path,

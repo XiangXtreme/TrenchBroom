@@ -42,6 +42,17 @@ result = {"path": document.path, "argument": arguments.get("name")}
 JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它不验证 BSP、游戏碰撞或
 视觉质量。
 
+## 选择 CSG
+
+`tb.geometry.csg_selection(operation)` 对当前选择运行原生 CSG，其中 `operation` 为
+`convex_merge`、`subtract`、`intersect` 或 `hollow`。这是选择驱动的原子几何编辑：调用前可用
+`tb.objects.set_selection(...)` 设置明确的 `Brush` 集合，或保留用户在编辑器中的当前选择。
+操作本身产生一个原生可撤销父操作，成功返回新的选中 `Brush` 句柄、删除数量和事务名称。
+
+接口与过渡期 `geometry_csg_selection` 复用同一 automation 服务；该服务集中执行选择合法性
+检查和 CSG 调度，适配层不复制原生几何算法。选择不符合操作要求或原生 CSG 无法产生修改时，
+接口在写入前抛出 `ValueError`。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

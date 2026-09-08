@@ -238,7 +238,8 @@ constexpr auto EntitiesSymbols = std::array{
     Function,
     "(entities, select=False) -> list[Entity]",
     PythonApiValueType{PythonApiType::Entity, 1u}},
-  PythonApiSymbol{"entities_list", Function, "(type='', query='', limit=200) -> list[dict]"},
+  PythonApiSymbol{
+    "entities_list", Function, "(type='', query='', limit=200) -> list[dict]"},
   PythonApiSymbol{"schema", Function, "(classname) -> dict"},
   PythonApiSymbol{
     "link_chain_inspect",
@@ -375,7 +376,10 @@ constexpr auto IrSymbols = std::array{
 
 constexpr auto GeometrySymbols = std::array{
   PythonApiSymbol{
-    "analyze_selection", Function, "(grid=1.0, detail='summary', max_brushes=100) -> dict"},
+    "analyze_selection",
+    Function,
+    "(grid=1.0, detail='summary', max_brushes=100) -> dict"},
+  PythonApiSymbol{"csg_selection", Function, "(operation) -> dict"},
 };
 
 constexpr auto AssetsSymbols = std::array{

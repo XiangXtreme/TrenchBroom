@@ -402,6 +402,56 @@ assert len(tb.documents.list()) == 1
     CHECK(env.loadFile("python-api-smoke-ok.txt") == "worldspawn");
   }
 
+  SECTION("runs native CSG through the shared automation service")
+  {
+    auto env = fs::TestEnvironment{};
+    auto currentPathGuard = CurrentPathGuard{env.dir()};
+    env.createFile(
+      "api_csg_selection.py",
+      R"(
+import trenchbroom as tb
+
+left = tb.brushes.create_box((0, 0, 0), (96, 96, 96), select=False)
+right = tb.brushes.create_box((32, 32, 32), (128, 128, 128), select=False)
+tb.objects.set_selection([left, right])
+csg = tb.geometry.csg_selection("intersect")
+assert csg["operation"] == "intersect"
+assert csg["transaction_name"] == "Python API CSG Intersect"
+assert csg["selected_brush_count_before"] == 2
+assert csg["deleted_brush_count"] == 2
+assert csg["selected_brush_count"] == 1
+assert len(csg["brushes"]) == 1
+assert tb.history.status()["undo_name"] == "Python API CSG Intersect"
+try:
+    tb.geometry.csg_selection("invalid")
+    raise AssertionError("CSG accepted an invalid operation")
+except ValueError:
+    pass
+tb.objects.deselect_all()
+try:
+    tb.geometry.csg_selection("hollow")
+    raise AssertionError("CSG accepted an empty selection")
+except ValueError as error:
+    assert "requires" in str(error)
+with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
+    f.write("ok")
+)");
+
+    auto context = PythonExecutionContext{};
+    context.mapWindow = &window;
+    context.document = &window.document();
+    context.appController = &window.appController();
+    context.currentMapView = window.currentMapViewBase();
+    context.logger = &window.pythonLogger();
+    context.scriptPath = env.dir() / "api_csg_selection.py";
+
+    const auto scriptSucceeded =
+      PythonRuntime::instance().runScript(context, context.scriptPath);
+    CAPTURE(PythonRuntime::instance().lastError());
+    REQUIRE(scriptSucceeded);
+    CHECK(env.loadFile("python-api-csg-ok.txt") == "ok");
+  }
+
   SECTION("applies supported IR atomically through the native automation service")
   {
     auto env = fs::TestEnvironment{};

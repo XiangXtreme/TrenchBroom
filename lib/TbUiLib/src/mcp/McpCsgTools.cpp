@@ -26,7 +26,6 @@
 #include "mcp/McpError.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Map.h"
-#include "mdl/Map_Geometry.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/WorldNode.h"
 #include "ui/AppController.h"
@@ -34,6 +33,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationGeometry.h"
 
 namespace tb::ui
 {
@@ -105,55 +105,12 @@ McpBridgeToolResult csgSelectionFailure(
     });
 }
 
-QString transactionNameForOperation(const QString& operation)
-{
-  if (operation == "convex_merge")
-  {
-    return "MCP: CSG Convex Merge";
-  }
-  if (operation == "subtract")
-  {
-    return "MCP: CSG Subtract";
-  }
-  if (operation == "intersect")
-  {
-    return "MCP: CSG Intersect";
-  }
-  if (operation == "hollow")
-  {
-    return "MCP: CSG Hollow";
-  }
-  return {};
-}
-
 QString csgIdsModeFromParams(const QJsonObject& params)
 {
   const auto idsMode = mcpIdsModeFromParams(params);
   return idsMode == "count" && !params.contains("idsMode") && !params.contains("detail")
            ? QString{"sample"}
            : idsMode;
-}
-
-bool executeCsgOperation(
-  mdl::Map& map, const QString& operation, const QString& transactionName)
-{
-  if (operation == "convex_merge")
-  {
-    return mdl::csgConvexMerge(map, transactionName.toStdString());
-  }
-  if (operation == "subtract")
-  {
-    return mdl::csgSubtract(map, transactionName.toStdString());
-  }
-  if (operation == "intersect")
-  {
-    return mdl::csgIntersect(map, transactionName.toStdString());
-  }
-  if (operation == "hollow")
-  {
-    return mdl::csgHollow(map, transactionName.toStdString());
-  }
-  return false;
 }
 
 } // namespace
@@ -191,8 +148,9 @@ McpBridgeToolResult geometryCsgSelectionForMapResult(
   int& nextOperationIndex)
 {
   const auto operation = params.value("operation").toString().trimmed().toLower();
-  const auto transactionName = transactionNameForOperation(operation);
-  if (transactionName.isEmpty())
+  const auto csgOperation =
+    automation::automationCsgOperationFromString(operation.toStdString());
+  if (!csgOperation)
   {
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::InvalidParams,
@@ -206,72 +164,41 @@ McpBridgeToolResult geometryCsgSelectionForMapResult(
       });
   }
 
-  const auto& selection = map.selection();
-  const auto selectedBrushCountBefore = static_cast<int>(selection.brushes.size());
-  const auto selectedBrushFaceCountBefore = static_cast<int>(selection.brushFaces.size());
-
-  if (operation == "convex_merge")
+  const auto transactionName = QString::fromStdString(
+    "MCP: " + automation::automationCsgTransactionName(*csgOperation));
+  const auto deletedObjectIds = brushIdsJson(map, map.selection().brushes);
+  const auto csgResult =
+    automation::applySelectionCsg(map, *csgOperation, transactionName.toStdString());
+  if (!csgResult.ok())
   {
-    const auto canMerge =
-      (selection.hasBrushFaces() && selection.brushFaces.size() > 1u)
-      || (selection.hasOnlyBrushes() && selection.brushes.size() > 1u);
-    if (!canMerge)
+    if (csgResult.selectionFailure)
     {
       return csgSelectionFailure(
-        "convex_merge requires at least two selected brushes or brush faces",
-        "at least two selected brushes, or at least two selected brush faces",
-        selection);
+        QString::fromStdString(csgResult.error),
+        QString::fromStdString(csgResult.requiredSelection),
+        map.selection());
     }
-  }
-  else
-  {
-    if (!selection.hasOnlyBrushes())
-    {
-      return csgSelectionFailure(
-        QString{"%1 requires the current selection to contain only brushes"}.arg(
-          operation),
-        "selected brush nodes only",
-        selection);
-    }
-    if (operation == "intersect" && selection.brushes.size() < 2u)
-    {
-      return csgSelectionFailure(
-        "intersect requires at least two selected brushes",
-        "at least two selected brushes",
-        selection);
-    }
-    if ((operation == "subtract" || operation == "hollow") && selection.brushes.empty())
-    {
-      return csgSelectionFailure(
-        QString{"%1 requires at least one selected brush"}.arg(operation),
-        "at least one selected brush",
-        selection);
-    }
-  }
-
-  const auto deletedObjectIds = brushIdsJson(map, selection.brushes);
-  if (!executeCsgOperation(map, operation, transactionName))
-  {
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::InvalidParams,
-      QString{"CSG %1 did not produce a mutation"}.arg(operation),
+      QString::fromStdString(csgResult.error),
       QJsonObject{
         {"mutatedDocument", false},
         {"retrySafe", true},
         {"reason", "nativeCsgReturnedFalse"},
-        {"selectionSummary", selectionSummaryJson(selection)},
-        {"requiredSelection", "valid native CSG brush selection"},
+        {"selectionSummary", selectionSummaryJson(map.selection())},
+        {"requiredSelection", QString::fromStdString(csgResult.requiredSelection)},
         {"recoveryAction", "select_brushes_then_retry"},
       });
   }
 
-  const auto changedObjectIds = brushIdsJson(map, map.selection().brushes);
+  const auto changedObjectIds = brushIdsJson(map, csgResult.selectedBrushes);
   auto result = QJsonObject{
     {"mutatedDocument", true},
     {"operation", operation},
     {"transactionName", transactionName},
-    {"selectedBrushCountBefore", selectedBrushCountBefore},
-    {"selectedBrushFaceCountBefore", selectedBrushFaceCountBefore},
+    {"selectedBrushCountBefore", static_cast<int>(csgResult.selectedBrushCountBefore)},
+    {"selectedBrushFaceCountBefore",
+     static_cast<int>(csgResult.selectedBrushFaceCountBefore)},
     {"selectionAfter", selectionSummaryJson(map.selection())},
     {"deletedObjectCount", deletedObjectIds.size()},
   };

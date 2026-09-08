@@ -45,7 +45,39 @@ struct AutomationSelectionGeometryAnalysis
   std::optional<vm::bbox3d> bounds;
 };
 
+/** Native CSG operation names shared by editor automation adapters. */
+enum class AutomationCsgOperation
+{
+  ConvexMerge,
+  Subtract,
+  Intersect,
+  Hollow,
+};
+
+/** Result of a native CSG operation on the current map selection. */
+struct AutomationCsgSelectionResult
+{
+  std::vector<mdl::BrushNode*> selectedBrushes;
+  size_t deletedBrushCount = 0u;
+  size_t selectedBrushCountBefore = 0u;
+  size_t selectedBrushFaceCountBefore = 0u;
+  std::string operation;
+  std::string transactionName;
+  std::string error;
+  std::string requiredSelection;
+  bool selectionFailure = false;
+
+  [[nodiscard]] bool ok() const { return error.empty(); }
+};
+
 std::optional<AutomationSelectionGeometryAnalysis> analyzeSelectionGeometry(
   mdl::Map& map, double grid, std::string& error);
+
+std::optional<AutomationCsgOperation> automationCsgOperationFromString(
+  const std::string& operation);
+std::string automationCsgOperationName(AutomationCsgOperation operation);
+std::string automationCsgTransactionName(AutomationCsgOperation operation);
+AutomationCsgSelectionResult applySelectionCsg(
+  mdl::Map& map, AutomationCsgOperation operation, const std::string& transactionName);
 
 } // namespace tb::ui::automation
