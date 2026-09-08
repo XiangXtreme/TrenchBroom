@@ -75,6 +75,7 @@
 #include "ui/automation/AutomationGeometry.h"
 #include "ui/automation/AutomationIr.h"
 #include "ui/automation/AutomationIrExecution.h"
+#include "ui/automation/AutomationMaterials.h"
 #include "ui/automation/AutomationNodes.h"
 #include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/automation/AutomationStateStore.h"
@@ -3589,6 +3590,56 @@ void setFacesMaterial(const py::iterable& faces, const std::string& materialName
   });
 }
 
+size_t alignFaces(const py::iterable& faces, const std::string& mode)
+{
+  const auto normalizedMode = QString::fromStdString(mode).trimmed().toLower();
+  const auto alignment =
+    automation::automationFaceAlignmentFromString(normalizedMode.toStdString());
+  if (!alignment)
+  {
+    throw py::value_error{"mode must be reset, paraxial, world, parallel, or face"};
+  }
+
+  auto handles = std::vector<FaceHandle>{};
+  for (const auto& face : faces)
+  {
+    handles.push_back(py::cast<FaceHandle>(face));
+  }
+  std::ranges::sort(
+    handles, {}, [](const auto& face) { return std::pair{face.brush, face.faceIndex}; });
+  handles.erase(
+    std::unique(
+      handles.begin(),
+      handles.end(),
+      [](const auto& lhs, const auto& rhs) {
+        return lhs.brush == rhs.brush && lhs.faceIndex == rhs.faceIndex;
+      }),
+    handles.end());
+  if (handles.empty())
+  {
+    throw py::value_error{"faces must not be empty"};
+  }
+
+  auto& document =
+    DocumentHandle{handles.front().document, handles.front().generation}.get();
+  auto brushFaces = std::vector<mdl::BrushFaceHandle>{};
+  brushFaces.reserve(handles.size());
+  for (const auto& face : handles)
+  {
+    if (face.document != &document)
+    {
+      throw py::value_error{"All faces must belong to the same document"};
+    }
+    auto& brushNode = face.getBrushNode();
+    brushFaces.emplace_back(&brushNode, face.faceIndex);
+  }
+
+  withPreservedSelection(document, "Python API Align Face Texture", [&](auto& map) {
+    return automation::alignBrushFaceAxes(map, brushFaces, *alignment);
+  });
+  return brushFaces.size();
+}
+
 void updateFace(FaceHandle& face, mdl::UpdateBrushFaceAttributes update)
 {
   auto& document = DocumentHandle{face.document, face.generation}.get();
@@ -5993,6 +6044,7 @@ void defineModule(py::module_& module)
   materials.def("search", searchMaterials, py::arg("query"), py::arg("limit") = 50u);
   materials.def(
     "current", []() { return currentDocument().get().map().currentMaterialName(); });
+  materials.def("align_face", alignFaces, py::arg("faces"), py::arg("mode"));
 
   auto historyDocument = [](const py::object& document) {
     return document.is_none() ? currentDocument() : py::cast<DocumentHandle>(document);

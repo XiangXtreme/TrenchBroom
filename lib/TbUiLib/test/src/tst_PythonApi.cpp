@@ -422,6 +422,12 @@ assert csg["deleted_brush_count"] == 2
 assert csg["selected_brush_count"] == 1
 assert len(csg["brushes"]) == 1
 assert tb.history.status()["undo_name"] == "Python API CSG Intersect"
+assert tb.materials.align_face(csg["brushes"][0].faces(), "world") == 6
+try:
+    tb.materials.align_face(csg["brushes"][0].faces(), "diagonal")
+    raise AssertionError("face alignment accepted an invalid mode")
+except ValueError:
+    pass
 try:
     tb.geometry.csg_selection("invalid")
     raise AssertionError("CSG accepted an invalid operation")

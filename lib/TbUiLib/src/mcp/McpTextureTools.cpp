@@ -56,6 +56,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationMaterials.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include "kd/string_compare.h"
@@ -1511,20 +1512,9 @@ McpBridgeToolResult textureAlignFaceResult(
   const McpObjectRegistry& objectRegistry)
 {
   const auto mode = params.value("mode").toString().trimmed().toLower();
-  auto update = mdl::UpdateBrushFaceAttributes{};
-  if (mode == "reset")
-  {
-    update.axis = mdl::ResetAxis{};
-  }
-  else if (mode == "paraxial" || mode == "world")
-  {
-    update.axis = mdl::ToParaxial{};
-  }
-  else if (mode == "parallel" || mode == "face")
-  {
-    update.axis = mdl::ToParallel{};
-  }
-  else
+  const auto alignment =
+    automation::automationFaceAlignmentFromString(mode.toStdString());
+  if (!alignment)
   {
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::InvalidParams,
@@ -1556,9 +1546,7 @@ McpBridgeToolResult textureAlignFaceResult(
   const auto changedNodes = changedBrushIds(handles, map.worldNode());
   const auto transactionName = QString{"MCP: Align face texture"};
   const auto ok = executeTransaction(map, transactionName, [&]() {
-    mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, handles);
-    return mdl::setBrushFaceAttributes(map, update);
+    return automation::alignBrushFaceAxes(map, handles, *alignment);
   });
   if (!ok)
   {

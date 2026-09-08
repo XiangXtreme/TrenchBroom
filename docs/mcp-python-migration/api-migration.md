@@ -53,6 +53,14 @@ JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它�
 检查和 CSG 调度，适配层不复制原生几何算法。选择不符合操作要求或原生 CSG 无法产生修改时，
 接口在写入前抛出 `ValueError`。
 
+## UV 对齐
+
+`tb.materials.align_face(faces, mode)` 对给定的 `Face` 集合应用原生 UV 轴对齐，返回实际处理的
+去重 face 数。`mode` 可为 `reset`、`paraxial`（或 `world`）、`parallel`（或 `face`）。所有 face
+必须属于当前文档，空集合、跨文档句柄和未知模式会在事务开始前拒绝。Python 适配层使用既有选择
+恢复事务，调用不会改变用户原有选择；过渡 MCP `texture_align_face` 使用相同 automation 服务，但
+继续保留其历史记录和协议目标解析。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，
