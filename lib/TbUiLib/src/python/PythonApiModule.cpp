@@ -77,6 +77,7 @@
 #include "ui/automation/AutomationGroups.h"
 #include "ui/automation/AutomationIr.h"
 #include "ui/automation/AutomationIrExecution.h"
+#include "ui/automation/AutomationMapSnapshot.h"
 #include "ui/automation/AutomationMaterials.h"
 #include "ui/automation/AutomationNodes.h"
 #include "ui/automation/AutomationObjectRegistry.h"
@@ -1164,52 +1165,11 @@ py::dict boundsSnapshot(const vm::bbox3d& bounds)
   return result;
 }
 
-struct MapContentSummary
-{
-  int entityCount = 0;
-  int brushCount = 0;
-  int patchCount = 0;
-  std::optional<vm::bbox3d> bounds;
-};
-
-void collectMapContentSummary(const mdl::Node& node, MapContentSummary& summary)
-{
-  const auto contentNode = dynamic_cast<const mdl::EntityNode*>(&node) != nullptr
-                           || dynamic_cast<const mdl::BrushNode*>(&node) != nullptr
-                           || dynamic_cast<const mdl::PatchNode*>(&node) != nullptr;
-  if (dynamic_cast<const mdl::EntityNode*>(&node) != nullptr)
-  {
-    ++summary.entityCount;
-  }
-  else if (dynamic_cast<const mdl::BrushNode*>(&node) != nullptr)
-  {
-    ++summary.brushCount;
-  }
-  else if (dynamic_cast<const mdl::PatchNode*>(&node) != nullptr)
-  {
-    ++summary.patchCount;
-  }
-  if (contentNode)
-  {
-    summary.bounds = summary.bounds ? vm::merge(*summary.bounds, node.logicalBounds())
-                                    : node.logicalBounds();
-  }
-  for (const auto* child : node.children())
-  {
-    if (child != nullptr)
-    {
-      collectMapContentSummary(*child, summary);
-    }
-  }
-}
-
 py::dict documentSnapshot(DocumentHandle document)
 {
   auto& map = document.get().map();
-  const auto& selection = map.selection();
   const auto& path = map.path();
-  auto content = MapContentSummary{};
-  collectMapContentSummary(map.worldNode(), content);
+  const auto summary = collectAutomationMapSnapshot(map);
   auto worldspawn = py::dict{};
   for (const auto& property : map.worldNode().entity().properties())
   {
@@ -1220,28 +1180,28 @@ py::dict documentSnapshot(DocumentHandle document)
   result["persistent"] = map.persistent();
   result["modified"] = map.modified();
   result["entity_count"] = py::int_(allEntities(document.get()).size());
-  result["point_entity_count"] = content.entityCount;
-  result["brush_count"] = content.brushCount;
-  result["patch_count"] = content.patchCount;
-  result["node_count"] = py::int_(map.worldNode().descendantCount() + 1u);
+  result["point_entity_count"] = summary.pointEntityCount;
+  result["brush_count"] = summary.brushCount;
+  result["patch_count"] = summary.patchCount;
+  result["node_count"] = summary.nodeCount;
   result["worldspawn"] = std::move(worldspawn);
-  if (content.bounds)
+  if (summary.contentBounds)
   {
-    result["content_bounds"] = boundsSnapshot(*content.bounds);
+    result["content_bounds"] = boundsSnapshot(*summary.contentBounds);
   }
   else
   {
     result["content_bounds"] = py::none();
   }
   result["map_format"] = mdl::formatName(map.worldNode().mapFormat());
-  result["selected_node_count"] = py::int_(selection.nodes.size());
-  result["selected_entity_count"] = py::int_(selection.entities.size());
-  result["selected_brush_count"] = py::int_(selection.brushes.size());
-  result["selected_face_count"] = py::int_(selection.brushFaces.size());
-  result["grid_size"] = map.grid().size();
-  result["grid_actual_size"] = map.grid().actualSize();
-  result["grid_snap"] = map.grid().snap();
-  result["grid_visible"] = map.grid().visible();
+  result["selected_node_count"] = summary.selectedNodeCount;
+  result["selected_entity_count"] = summary.selectedEntityCount;
+  result["selected_brush_count"] = summary.selectedBrushCount;
+  result["selected_face_count"] = summary.selectedFaceCount;
+  result["grid_size"] = summary.gridSize;
+  result["grid_actual_size"] = summary.gridActualSize;
+  result["grid_snap"] = summary.gridSnap;
+  result["grid_visible"] = summary.gridVisible;
   return result;
 }
 

@@ -44,6 +44,10 @@ result = {"path": document.path, "argument": arguments.get("name")}
 通过 JSON 反调。完整替代关系与阶段状态见 `capability-map.json`；该文件在 G0 的
 逐能力审计完成前只表达计划，不表达能力对等。
 
+## 地图快照
+
+`tb.documents.snapshot()` 与 `tb.objects.snapshot()` 返回当前地图的紧凑原生摘要，包含持久化与修改状态、实体/brush/patch 计数、节点数、worldspawn、内容 bounds、选择计数和网格状态。它们与过渡 MCP 的 `document_snapshot` 和 `map_snapshot` 共享同一 automation 摘要服务；服务只读取 `mdl::Map`，不依赖 Python 或 MCP 序列化。Python 保持 snake_case 字段，MCP 保持既有 JSON 对象结构和文档身份字段。
+
 ## 选择几何分析
 
 `tb.geometry.analyze_selection(grid=1.0, detail="summary", max_brushes=100)` 读取当前

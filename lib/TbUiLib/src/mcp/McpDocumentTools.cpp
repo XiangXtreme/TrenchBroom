@@ -50,6 +50,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationDocuments.h"
+#include "ui/automation/AutomationMapSnapshot.h"
 
 #include "vm/bbox.h"
 
@@ -250,48 +251,6 @@ QJsonObject mcpNodeSummaryJson(const mdl::Node& node, const mdl::WorldNode& worl
   return result;
 }
 
-void collectMapCounts(const mdl::Node& node, int& entities, int& brushes, int& patches)
-{
-  if (dynamic_cast<const mdl::EntityNode*>(&node) != nullptr)
-  {
-    ++entities;
-  }
-  else if (dynamic_cast<const mdl::BrushNode*>(&node) != nullptr)
-  {
-    ++brushes;
-  }
-  else if (dynamic_cast<const mdl::PatchNode*>(&node) != nullptr)
-  {
-    ++patches;
-  }
-
-  for (const auto* child : node.children())
-  {
-    collectMapCounts(*child, entities, brushes, patches);
-  }
-}
-
-vm::bbox3d contentBounds(const mdl::WorldNode& worldNode)
-{
-  auto result = vm::bbox3d{};
-  auto hasBounds = false;
-
-  worldNode.visitChildren([&](auto&& thisLambda, const mdl::Node& node) {
-    if (
-      dynamic_cast<const mdl::EntityNode*>(&node) != nullptr
-      || dynamic_cast<const mdl::BrushNode*>(&node) != nullptr
-      || dynamic_cast<const mdl::PatchNode*>(&node) != nullptr)
-    {
-      result = hasBounds ? vm::merge(result, node.logicalBounds()) : node.logicalBounds();
-      hasBounds = true;
-    }
-
-    node.visitChildren(thisLambda);
-  });
-
-  return hasBounds ? result : vm::bbox3d{};
-}
-
 QJsonObject documentJson(
   const MapWindow& mapWindow,
   const int index,
@@ -453,13 +412,8 @@ QJsonObject mapSnapshotJson(
 QJsonObject mapSnapshotJsonForMap(const mdl::Map& map, const QJsonObject& document)
 {
   const auto& worldNode = map.worldNode();
-  const auto& grid = map.grid();
-
-  auto entities = 0;
-  auto brushes = 0;
-  auto patches = 0;
-  collectMapCounts(worldNode, entities, brushes, patches);
-  const auto mapContentBounds = contentBounds(worldNode);
+  const auto summary = collectAutomationMapSnapshot(map);
+  const auto mapContentBounds = summary.contentBounds.value_or(vm::bbox3d{});
 
   auto worldspawn = QJsonObject{};
   for (const auto& property : worldNode.entity().properties())
@@ -479,18 +433,18 @@ QJsonObject mapSnapshotJsonForMap(const mdl::Map& map, const QJsonObject& docume
     {"document", document},
     {"world", world},
     {"worldspawn", worldspawn},
-    {"entityCount", entities},
-    {"brushCount", brushes},
-    {"patchCount", patches},
-    {"nodeCount", static_cast<int>(worldNode.descendantCount() + 1)},
+    {"entityCount", summary.pointEntityCount},
+    {"brushCount", summary.brushCount},
+    {"patchCount", summary.patchCount},
+    {"nodeCount", summary.nodeCount},
     {"bounds", boundsToJson(mapContentBounds)},
     {"contentBounds", boundsToJson(mapContentBounds)},
     {"grid",
      QJsonObject{
-       {"size", grid.size()},
-       {"actualSize", grid.actualSize()},
-       {"snap", grid.snap()},
-       {"visible", grid.visible()},
+       {"size", summary.gridSize},
+       {"actualSize", summary.gridActualSize},
+       {"snap", summary.gridSnap},
+       {"visible", summary.gridVisible},
      }},
   };
 }
