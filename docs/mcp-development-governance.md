@@ -1,220 +1,154 @@
 # MCP Development Governance
 
-## Current Contract
+## Architecture
 
-MCP exposes a small entry surface around trusted Python execution and native
-editor inspection. Scene composition and repeated editing belong in Python;
-TrenchBroom retains document identity, native commands, transactions, validation,
-rendering, and object lifetime checks.
+MCP is a thin bridge for trusted Python execution over TrenchBroom's native editor
+API. The active contract is [Python execution delivery](mcp-python-migration/development.md);
+[core scenarios](mcp-python-migration/scenarios.md) define acceptance.
 
-This is the normative architecture contract. The active delivery plan is
-[MCP Python migration](mcp-python-migration/development.md), with
-[core acceptance scenarios](mcp-python-migration/scenarios.md).
-The older lightweight, moderate, and long-term roadmaps are historical references.
-Their tool inventories and IR-first workflows do not authorize new migration work.
+The local Blender reference implements receive -> queue -> main-thread dispatch
+-> exec with bpy -> output. TrenchBroom follows that division of responsibility,
+using its existing Python bindings and native transaction support. Scene
+composition is ordinary Python code.
 
-The migration deliberately retires the old MCP catalog in capability-family
-batches. Native capabilities, Python composition, and retirement are all valid
-outcomes. Completion requires working core scenarios and removal of old entry
-points; it does not require one Python replacement for every old tool.
+Old MCP tools, profiles, IR, module state, selector languages and operation
+history formats have no compatibility commitment in this replacement.
+Historical roadmaps and capability inventories do not authorize implementation
+work. APIs introduced during the migration are also subject to simplification.
 
-## Layer Ownership
+## Four Entry Points
 
-| Layer | Responsibility |
-| --- | --- |
-| MCP | Local transport, permissions, bounded discovery, execution dispatch, receipts and resources; six public entry points. |
-| Python runtime | Trusted code in the existing process and Qt main thread, fresh globals, document-bound execution and result conversion. |
-| trenchbroom API | Composable objects, named parameters, collections and useful batches over native editor operations. |
-| Native modules / automation | Map commands, undo/redo, valid object identity, geometry, validation and rendering; shared state where actually needed. |
-| Python scripts / skills | Loops, functions, scene generation, reusable arrangements, domain intent and workflow judgment. |
+| Entry | Responsibility | Permission |
+| --- | --- | --- |
+| tb_inspect | Bounded editor/document/selection facts and essential native problem summaries | ReadOnly |
+| tb_api | Discover actual public Python bindings | ReadOnly |
+| tb_execute_python | Execute inline code or a script, with arguments, results and logs | Edit |
+| tb_capture | Capture the current viewport | ReadOnly |
 
-The default edit path is MCP -> Python runtime -> trenchbroom API -> native
-commands. Read-only inspection, history, validation and capture may call native
-services directly.
+Edit exposes four entries, ReadOnly three, Off zero. Listing, exact lookup and
+dispatch share the same registered set. Retire standalone tb_history/tb_validate;
+Python already exposes native history and validation. Necessary ReadOnly problem
+inspection can call native validators without Python evaluation.
 
-Reuse existing automation services when they remove real duplication or own
-necessary shared state. A binding that calls an existing native command does not
-need another forwarding service. Extraction is driven by ownership and actual
-dependencies, not by a checklist requiring every old tool to move to automation.
-Automation must not depend on Python or JSON-RPC. Python must not call old MCP
-handlers through JSON, tool names, or a generic call-old-tool adapter.
+Delete tool profiles, old schemas, aliases, dispatch branches and wrappers.
+Old configuration uses new safe defaults (Off); retired fields can be ignored
+without profile mapping or a compatibility subsystem. Do not place the old tool
+catalog behind an action parameter or JSON forwarding API.
 
-C++ additions must be generic native editor capabilities required by a concrete
-core workflow, such as brush construction or CSG. Finished scenes, stair/room
-arrangements, gameplay interpretation, and repeated layouts belong in Python
-scripts. Keep one implementation of native geometry and command algorithms.
+## Native API Ownership
 
-## Public Surface And Tool Retirement
+The editing path is MCP -> Python runtime -> trenchbroom API -> native commands.
+Inspection, API discovery and screenshot capture may use their native owners
+directly. C++ owns document identity, object validity, geometry algorithms and
+undoable map commands. Python owns loops, functions and scene composition.
 
-The final Edit catalog contains only tb_inspect, tb_api, tb_execute_python,
-tb_history, tb_validate and tb_capture. ReadOnly excludes tb_execute_python.
-Off exposes no callable tools or resources. History mutations require Edit.
+Add a generic binding only when a core workflow cannot use existing APIs.
+Reuse native owners. Extract automation services only for real shared behavior
+or state; single-command bindings do not need another forwarding layer.
+Do not migrate all old handlers into automation before removing them.
+Python must not call old MCP handlers through JSON or tool names.
 
-Existing profile strings may be accepted for configuration migration, but must
-normalize to the same permission-filtered final catalog. Full and exact-name
-lookup must not retain a second tool surface. After cutover, old schemas,
-registrations, dispatch branches, hidden aliases and unused dedicated wrappers
-are deleted. Retained native helpers may be reused by the six entry points.
-Do not move the entire old catalog into an action parameter table or accept an
-arbitrary old tool name through the six entry points. Keep only the operations
-needed for each entry's responsibility; compose edits in Python.
+Existing native UI functionality, maps and user assets remain outside the removal
+scope. Console and plugin runtime mechanisms may use the same Python API.
+Old Python symbol names and migration wrappers are not compatibility gates:
+update repository-owned callers and examples when simplification changes them.
+Document third-party script breaks instead of adding aliases. Never delete user
+plugins or remove native algorithms that surviving UI/code still uses.
 
-Record a disposition for each old capability family and test affected core
-workflows. Remove a family once its useful behavior is provided by native APIs or
-Python composition, or explicitly retired in the migration record. There is no
-mandatory hide/deprecate waiting period for this authorized catalog replacement.
+## Retire Dedicated MCP State
 
-Keep existing public Python plugin/console APIs and native UI functionality
-working. Removing an MCP entry point is not permission to remove a shared
-algorithm still used by those clients. Existing focused tests provide regression
-coverage; retain or adapt tests for the surviving behavior.
+Remove the old MCP-only IR/blockout executor, preview caches, module revision/hash
+metadata, JSON selector DSL, operation-history mappings, audit children, isolated
+Review orchestration, old object-ID aliases and compatibility response machinery.
+Remove their migrated automation/Python wrappers as well if the new core does not
+need them. Directory relocation is not justification for retention.
 
-Discovery uses tb_inspect for current editor facts and tb_api for actual Python
-bindings. Improve symbol descriptions and script examples before adding native
-APIs. The public tool count is bounded even when Python capabilities grow.
+Retain document checks, live handles, native transactions and native undo/redo.
+If a shared class mixes these with retired state, simplify that class or use the
+existing native owner. Reusing an algorithm does not require its old schema,
+registry, metadata or history model.
 
-## Scripts, IR And Targeting
+Scene scripts may call the public trenchbroom API through tb_execute_python.
+Old data-only recipes may remain offline or be archived; they do not require IR
+support in the new bridge. New examples compose native APIs directly. Do not
+build an IR interpreter or adapter to preserve obsolete script contracts.
 
-Trusted scene scripts may import trenchbroom and call its public API when executed
-through tb_execute_python, with the same document and transaction guards as inline
-code. They may also compute data outside the editor and submit it to that execution
-path. Skills do not edit live .map files or bypass native commands and undo.
+## Execution Guarantees
 
-IR is an optional data format for existing import/preview workflows. New scene
-scripts can compose native Python APIs directly. Full IR operation parity,
-module replacement, dedicated route generators and heightmap/compile automation
-are extension decisions, not prerequisites for the six-entry delivery.
+Reuse the working execution foundation:
 
-Retained IR support remains versioned: schemaVersion:1 is current; unversioned
-input may be accepted as v1 with legacyUnversionedIr, and malformed or unsupported
-versions fail before mutation. Document supported operations and reject unsupported
-ones explicitly. Do not replace a guarded operation with a weaker fallback.
-
-Retained replace_module paths must check IR hash, module revision/content hash
-and the exact canonical live object set; file replacement uses its previewId.
-Failures occur before mutation. Parent undo restores map content and any retained
-metadata/module identity together. These requirements apply only where that
-capability remains callable; they do not require building new module machinery.
-
-Within an execution, prefer object handles and collections. Across executions,
-recover by stable ID, a fresh query or user selection. Native groups are useful
-for human-visible organization. JSON selectors and module metadata are optional.
-Dense old maps with ambiguous ownership should use user selection.
-
-## Execution And Failure Semantics
-
-Keep the existing trusted-Python execution contract in the migration plan:
-
-- Python runs only in Edit, on the Qt main thread, with fresh globals per request.
-- Bind execution to the requested document fingerprint and saved path. Do not
-  follow a changed active window during execution.
-- Default transaction mode commits one native parent operation. Exceptions,
-  cooperative timeout, invalid/oversized results and commit failures cancel it,
-  restore selection and discard staged state.
-- Document lifecycle, persistence and general editor actions use explicit action
-  mode and report completed actions and partialMutation on failure.
-- Preserve handle checks for deleted, reloaded, cross-document and reused objects,
-  including after undo/redo.
-- Reject nested MCP execution and background-thread editor access. Transient
-  scripts cannot leave persistent callbacks, timers or panels.
-- A cooperative timeout cannot forcibly interrupt a blocking native call. Do not
+- Trusted Python runs in Edit on the Qt main thread, with fresh globals.
+- Bind transaction execution to a document fingerprint and saved path, and keep
+  that target fixed throughout execution.
+- Use one native parent transaction for normal edits. Exception, cooperative
+  timeout, invalid/oversized result or commit failure cancels it and restores
+  selection. No retired module or audit state is part of the new transaction.
+- Lifecycle/persistence operations and native undo/redo use explicit action mode;
+  report completed actions and partial mutation on failure.
+- Check handles after deletion, reload, undo/redo, cross-document access and
+  address reuse. Keep native history separate from any MCP-only operation ledger.
+- Preserve request identity, results, errors, logs and truthful mutation/rollback
+  status. Existing executionId deduplication may remain a bounded request cache.
+- Reject nested MCP execution, background editor access and persistent callbacks,
+  timers or panels left by transient scripts.
+- Cooperative timeout cannot forcibly interrupt blocking native calls. Do not
   use processEvents, thread termination or interpreter killing to simulate it.
-- Once trusted code runs, external side effects may exist even after map rollback.
-  Only rejection before execution may claim retrySafe:true.
-- Preserve executionId replay/conflict handling, source identity, bounded logs,
-  result resources and truthful mutation/rollback receipts.
 
-Crash, wrong-map write, data loss and unclear mutation state remain P0 issues.
-History must respect intervening manual edits. A timeout or disconnection requires
-receipt/history inspection before retry. Never claim a map rollback undid file or
-process effects.
+Map rollback cannot undo external file/process effects. Once code runs, a failure
+must not claim a blind retry is safe. After timeout/disconnection, inspect the
+receipt and current editor facts. Crash, wrong-map write, data loss and unclear
+mutation state are P0 issues.
 
-## Output, Performance And Evidence
+## Bounded Output And Local Trust
 
-Ordinary structured summaries plus compatibility text are bounded to 16 KiB.
-Python source is limited to 256 KiB, requests to 4 MiB, complete JSON results to
-1 MiB and captured stdout/stderr to 1 MiB with discarded-byte counts. Python
-cooperative budgets default to 30 seconds and are capped at 90 seconds.
-Execution receipts retain 1024 entries; execution resources are bounded to
-128 groups and 128 MiB. Only application-owned registered cache files are evicted.
+Reuse source 256 KiB, request 4 MiB, JSON result 1 MiB, stdout/stderr 1 MiB limits,
+and Python cooperative budgets of 30 seconds by default, at most 90 seconds.
+Summaries are bounded to 16 KiB. Any retained result/log cache is bounded and
+only evicts its own registered resources; it does not require legacy history or
+review-resource formats. Do not add a new framework to reimplement these limits.
 
-Existing native tool response budgets remain Fast 10 seconds, Normal 30 seconds,
-Long 120 seconds, with 5-second connection/write waits. Retained session structures
-remain bounded: 1024 operation records, 128 review resources, 64 IR previews with
-10-minute TTL, and current plus three recent document fingerprints. tb_inspect
-exposes applicable limits, counts and evictions. Evicted resources return recovery
-guidance. These bounds do not require retaining an otherwise retired subsystem.
+HTTP remains loopback-only without shared credentials. MCP defaults to Off.
+ReadOnly cannot execute Python. requestedMode may only lower permissions.
+Edit runs trusted code with the application's user privileges, not a sandbox.
+Reuse task authorization; unrelated file or program actions require authorization.
 
-Large results return counts, samples, bounds, warnings and resource paths first.
-Full IDs, object listings and face/seam details are opt-in. Capture paths must be
-absolute or directly openable. Review contact sheets default to at most two panels;
-keep individual captures and bounded labels.
+Keep existing JSON-RPC validation, transport limits and supported protocol behavior.
+Replacing the editor API does not require rewriting the HTTP server or adding
+background editing processes, persistent Python sessions or task schedulers.
+Transport shims may remain only as thin transport adapters, with no old-tool layer.
 
-Review is optional visual evidence and never changes static acceptancePassed.
-Report save, review, validation, BSP and game-collision status separately.
-Material names are not proof a WAD or texture is loaded. Retained
-requireMaterialAvailable checks fail during preflight when requested.
+## Evidence And Delivery
 
-For retained route validation, declare continuous/stepped/jump_chain/spiral or
-closed_loop intent; closedLoop must be explicit. Smooth ascending intent with
-zero detected slopes fails. Report seamRelation, positiveGap, overlapDepth,
-walkableContinuous and unavailable facts separately from curve quality.
-qualityPolicy draft/balanced overruns warn; explicit smooth may fail acceptance;
-thresholds must be positive finite numbers. Polyline direction metrics do not
-prove mathematical tangent continuity, aesthetics, BSP or collision.
+Native validation reports editor facts. A screenshot is visual evidence, not
+proof of map validity, BSP compilation, game collision or route playability.
+Material names are not proof textures loaded. Report save, validation, capture
+and untested facts separately. Domain judgment belongs in scripts and skills.
 
-## Local Trust And Protocol
+Perform one complete architecture cutover, then final acceptance. Build Release
+TrenchBroom and affected tests; run the new core scenarios on disposable real maps.
+Remove or update tests whose sole purpose is the retired catalog/compatibility.
+Keep tests proving surviving native behavior and runtime correctness.
 
-HTTP listens only on loopback and has no shared credential. Enabling ReadOnly or
-Edit trusts local-user processes to connect to /mcp; Edit additionally permits
-trusted Python with the user's process privileges. Python execution is not a
-sandbox. Keep MCP Off by default and migrate old configuration to Off.
+Acceptance proves the four-entry set, mode checks, old-name rejection, Python
+composition, rollback, native undo/redo, object validity and capture. It does not
+require old capability parity, module recovery, IR round trips, advanced Review,
+route generators or old plugin symbol aliases.
 
-CORS echoes only accepted loopback origins. Requests declare jsonrpc:"2.0" with
-object params; initialize advertises the supported 2025-06-18 protocol.
-The stdio shim and application use the same config. requestedMode can only lower
-effective permissions. Keep request, connection and output limits.
+The old capability-map can be archived or removed. Update the migration gate to
+the new architecture or consolidate it into tests; historical structural checks
+are not delivery evidence. Use the delivery plan's final preflight and conditional
+Skill/manual/UI checks. Documentation-only changes require static validation.
 
-Task authorization applies to the relevant script actions. Reuse authorization
-already given; ask only when an action exceeds it. Enabling Edit does not grant an
-Agent unrelated filesystem or external-program actions.
+## Skills And Documentation
 
-## Delivery And Verification
+The project skill source is skills/trenchbroom-mcp-scene-workflow. Update and sync
+it with the new catalog using scripts/sync-trenchbroom-mcp-skill.ps1, and run the
+applicable validator and synchronization check.
 
-Implement the three batches in the active migration plan: core Python workflows
-and default discovery, complete old-tool cutover, then final Release acceptance.
-Each batch may span several capability families. Source and relevant tests belong
-in the same coherent change; do not split every helper or status update into a
-separate delivery.
+Skills discover actual Python symbols, compose scripts, use compact results and
+recover from concrete failures. Their examples must not invoke retired tools or
+require the new bridge to consume old IR. Data-only recipe validators may remain
+for archived/offline outputs; they are not new-MCP acceptance requirements.
 
-Build focused tests before running them, and build Release TrenchBroom for MCP
-source/catalog/bridge/config/integration changes. Use disposable real maps for
-mutation, identity, rollback, validation and capture acceptance. Keep original
-evidence and check for new crash logs.
-
-Test what survives and what is retired: six-entry permissions, actual failure of
-all old names after cutover, core Python workflows, plugin/console regressions,
-and retained extension guards. Update migration gate scripts to these assertions.
-The historical capability-map and its structural gate do not prove delivery.
-
-After required checks pass, move to the next batch. Repeat or expand testing only
-for new changes, failures or unresolved risks. Final matrix requirements and
-conditional Skill/manual/UI checks are specified in the migration plan.
-Documentation-only governance changes require static checks, not a Release build.
-
-## Skill And Documentation Maintenance
-
-The project skill source is skills/trenchbroom-mcp-scene-workflow; synchronize
-runtime copies through scripts/sync-trenchbroom-mcp-skill.ps1. Update discovery and
-execution routing with the catalog cutover. Existing IR recipe scripts may retain
-their data-generation interface; skills route supported output through the current
-execution layer. Native Python composition may use script files directly.
-
-When skill/recipes change, run their validator and synchronization check. Any
-validator assumptions about IR-only output must be scoped to IR recipes when
-direct Python examples are introduced. This does not weaken editor guards.
-
-Skills own intent, API discovery, compact results and recovery judgment. Tool
-schemas and Python symbol metadata own parameter details. Use current governance
-and the active migration plan for implementation; installed workflow copies and
-historical documents do not reintroduce retired-tool migration requirements.
+Record supported behavior and breaking changes concisely. Historical or installed
+workflow instructions do not restore old compatibility requirements.

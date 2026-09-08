@@ -150,15 +150,15 @@
 
 ## MCP development governance
 - Before MCP work, read `docs/mcp-development-governance.md` and the active delivery plan `docs/mcp-python-migration/development.md`. Historical lightweight/moderate/long-term roadmaps are references, not implementation backlogs.
-- MCP is converging on six entry points with trusted Python as the editing execution layer. C++ retains native commands, document guards, object lifetime, undo, validation and rendering. Put scene composition and repeated edits into composable Python scripts using `trenchbroom`.
-- Scripts executed through `tb_execute_python` may call the public Python API under its document and transaction guards. Existing IR recipes may keep producing IR; full IR/module parity is not a prerequisite for the six-entry cutover.
-- Implement the active plan in coherent capability-family batches: core Python workflows/default discovery, complete old-tool removal, final acceptance. Classify old capabilities as native, Python composition or retired; do not create a Python symbol for every old tool. Reuse existing native owners and extract automation services only for real shared behavior or state.
+- MCP uses four entry points: `tb_inspect`, `tb_api`, `tb_execute_python`, `tb_capture`. Python calls native editing, undo/redo and validation; C++ retains native commands, document guards, valid handles, transactions and rendering. Put scene composition into ordinary Python functions and loops.
+- Scripts executed through `tb_execute_python` call the public Python API under its document and transaction guards. Retire old MCP-specific IR, module/selector state, operation history, isolated Review orchestration and compatibility wrappers, including copies moved into automation/Python. Offline recipes do not require the new bridge to support old IR.
+- Implement one coherent architecture cutover and cleanup, then final acceptance. Do not migrate every old tool first or rebuild a 140-item replacement matrix. Reuse existing native owners and extract automation services only for real shared behavior or state.
 - The canonical TrenchBroom MCP workflow skill source is `skills\trenchbroom-mcp-scene-workflow`; sync it to the local runtime copy at `C:\Users\Trh\.cc-switch\skills\trenchbroom-mcp-scene-workflow` with `scripts\sync-trenchbroom-mcp-skill.ps1`.
 - After changing the TrenchBroom MCP workflow skill or recipes, run `python skills\trenchbroom-mcp-scene-workflow\scripts\validate_recipes.py` and `powershell -ExecutionPolicy Bypass -File scripts\sync-trenchbroom-mcp-skill.ps1 -Check`.
-- Add a native Python capability only when a core workflow needs editor internals that existing APIs cannot express. Keep the MCP surface within the six-entry contract.
+- Add a native Python capability only when a core workflow needs editor internals that existing APIs cannot express. Keep the MCP surface within the four-entry contract.
 - After MCP C++ source, catalog, bridge, config, or UI integration changes, build the Release `TrenchBroom` target before declaring the work done, in addition to focused MCP tests.
 - New high-volume MCP outputs must be compact by default (`idsMode:"count"` or `"sample"`, `detail:"summary"` style behavior) with full ids/details opt-in.
-- Final Core/Modeling/Full configurations normalize to the same permission-filtered six-entry catalog. Remove old schemas, registrations, dispatch and hidden aliases; preserve shared native functionality used by the UI or existing Python plugins.
+- Remove old profiles, schemas, registrations, dispatch, aliases and compatibility-only state. Old configuration uses new defaults (Off), without profile mappings. Old Python symbol names are not compatibility gates; update repository callers and document breaks. Keep native UI functionality and user maps/assets intact, and do not delete user plugins.
 - For dense old maps or ambiguous brush ownership, prefer user selection plus selection-aware MCP tools instead of complex automatic brush matching.
 
 ## Test structure and code coverage

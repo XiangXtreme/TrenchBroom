@@ -1,167 +1,147 @@
-# TrenchBroom MCP Python 迁移开发规范
+# TrenchBroom MCP Python 执行层交付规范
 
-## 目标与生效范围
+## 目标
 
-本次交付将 MCP 收敛为少量入口，通过受信任 Python 执行可组合的
-trenchbroom 编辑 API，并删除旧的高度封装工具目录及专用分发。复杂几何、
-场景组合和重复编辑由 Python 脚本表达；C++ 保留编辑器原生能力和执行安全边界。
+交付一个薄 MCP 桥接层，让 Agent 通过 Python 调用 trenchbroom 原生编辑 API。
+复杂编辑用脚本中的循环、函数和对象集合表达。旧 MCP 工具集及其专用兼容体系整体退役。
 
-本文件与 [MCP 治理规范](../mcp-development-governance.md) 是当前实施依据。
-旧 lightweight、moderate 和 long-term 路线图仅供历史查询。本文的三个交付批次
-取代原 G0–G5 顺序；历史阶段名称和 capability-map 的 planned 项不是新增任务授权。
+[MCP 治理规范](../mcp-development-governance.md) 与本文是当前实施依据。旧路线图、
+G0–G5 门禁及 capability-map 中的替代符号列表仅作历史资料。完成标准是新架构可用，
+不承担旧工具、旧脚本、旧 profile、旧 IR 或迁移期间新增封装的兼容承诺。
 
-迁移基线保持为 d98f869503f331809cd6727712438534c16c8c9e。本次文档修订的源码
-核查点为 f713d9f14，工作区干净。自首个迁移提交 e0bfbe750（2026-09-08
-00:30:50 +08:00）至核查点（10:58:07 +08:00），共 91 个提交，跨度为
-10 小时 27 分 17 秒。相对基线，lib 下新增 10,590 行、删除 1,828 行，包含测试。
-这些数字是一次源码审计记录，不代表持续更新的完成率或运行验收结果。
+## 参考实现与已有基础
 
-## 已有基础与下一步
+本次参考用户指定的 Blender addon.py：
+`C:/Users/Trh/AppData/Roaming/Blender Foundation/Blender/5.2/scripts/addons/addon.py`。
+文件自报 addon 1.6、protocol 5；这是对本地版本的审阅，不代表全部 Blender MCP 版本。
 
-在核查点，Python 执行器、API 检索、事务与回执已经实现；documents、objects、
-entities、brushes、faces、materials 等领域已有接口和测试。旧目录仍在，Modeling
-默认列表尚未包含六个新入口。capability-map 登记 48 项 implemented、92 项 planned、
-2 项 placeholder；verification 仅一项 passed，登记状态与新增实现不完全同步。
+| 实现位置 | 已确认的行为 | 对 TrenchBroom 的启示 |
+| --- | --- | --- |
+| _handle_client，684 行 | 接收 JSON，将 command/client 放入队列 | 传输只负责收发和调度 |
+| _drain_command_queue，654 行 | 主线程 timer 取请求、执行、返回 JSON | 编辑器对象只在主线程访问 |
+| _execute_command_internal，748 行 | 少量通用命令和可选资产接入分发 | 通用编辑交给代码执行入口 |
+| execute_code，1367 行 | 新建含 bpy 的 namespace，捕获 stdout，exec，返回输出或异常 | 编辑能力来自原生 Python API |
+| get_viewport_screenshot，1274 行 | 读取视口并生成图像 | 截图保留为独立能力 |
 
-下一位实现 Agent 从“批次 A：核心闭环与默认入口”开始，先运行已有核心场景找出
-真实缺口，然后成批修改。已完成的执行器和原生能力直接复用；抽取一个 helper、
-补一个 namespace 或更新一项迁移状态不构成独立交付目标。
+该文件还包含资产平台、遥测和场景快照等代码，不将其整体体量或命令数量作为目标。
+其 execute_code 没有实现整段自动事务回滚；TrenchBroom 复用已经实现的原生事务，
+而不是照搬这处行为。这里借鉴分层方式，不复制第三方实现。
 
-## 最终公开接口
+迁移基线保持 d98f869503f331809cd6727712438534c16c8c9e。源码核查点 f713d9f14 已有
+Python 执行器、对象绑定、原生事务、日志/结果处理、截图和检查能力。原生 Python
+history.status/undo/redo、validation.check 也已绑定，可直接用于组合工作流。
 
-Edit 的 tools/list 仅包含以下六项；ReadOnly 为其中除执行器外的五项：
+从首个迁移提交 e0bfbe750（2026-09-08 00:30:50 +08:00）到 f713d9f14
+（10:58:07 +08:00），91 个提交跨越 10 小时 27 分 17 秒。相对基线 lib 下新增
+10,590 行、删除 1,828 行，包含测试。这是审计记录，不是后续进度考核指标。
+
+## 四个公开入口
 
 | 工具 | 职责 | 权限 |
 | --- | --- | --- |
-| tb_inspect | 有界状态、文档、选择、对象、资产、视口与动作查询 | ReadOnly |
-| tb_api | 搜索和说明实际绑定的 Python API | ReadOnly |
-| tb_execute_python | 执行内联代码或绝对路径 Python 脚本 | Edit |
-| tb_history | 历史查询及原生 undo/redo | 查询 ReadOnly，变更 Edit |
-| tb_validate | 地图问题与保留的原生几何检查 | ReadOnly |
-| tb_capture | 当前视口截图与保留的原生 Review | ReadOnly |
+| tb_inspect | 有界状态、文档身份、选择和地图基本事实；必要的原生问题摘要 | ReadOnly |
+| tb_api | 搜索并说明实际绑定的 Python 符号 | ReadOnly |
+| tb_execute_python | 内联代码或绝对路径脚本，参数、结果、日志和执行状态 | Edit |
+| tb_capture | 当前视口截图及输出路径 | ReadOnly |
 
-Off 不公开可调用工具或资源。服务端以配置与 requestedMode 中较低权限授权，
-tb_history 的写 action 再次检查 Edit。旧 Core/Modeling/Full 配置可以继续解析，
-但最终都归一到按权限过滤的六入口集合，不能通过 Full 或精确名称恢复旧工具。
+最终 Edit 为四项、ReadOnly 为三项、Off 为零项。所有发现、精确查找与实际分发使用
+同一注册集合。独立 tb_history/tb_validate 入口与其余旧工具一同移除；undo/redo 和
+详细验证通过 Python 调用原生 API。ReadOnly 的必要问题摘要由 tb_inspect 直接读取，
+不运行 Python，也不重建完整验证工具家族。
 
-六入口之外的旧 schema、注册、分发、隐藏别名和专用兼容处理在批次 B 删除。
-保留的验证、截图或历史算法可继续由相应入口调用，其内部实现按实际依赖整理。
-六入口不接受任意旧工具名进行转发，也不把整份旧目录改成 action 参数表；
-只保留各入口职责内的必要操作，组合编辑统一使用 Python。
+移除 Core/Modeling/Full 工具 profile、旧别名、schema 和专用分发。不实现旧目录
+到新入口的代理，也不把旧名称编码为 action 参数。旧配置启动采用新默认值 Off，
+可忽略退役字段；不维护 profile 的解析、映射和兼容测试矩阵。
 
-## 能力归属与范围
+## 原生 API 与依赖边界
 
-对旧目录按能力族作一次归属决策，采用三类结果：
+目标路径是 MCP -> Python runtime -> trenchbroom API -> 原生命令。
+tb_inspect、tb_api 和 tb_capture 直接使用它们所需的只读原生能力。
 
-| 归属 | 实施要求 | 示例 |
+复用现有文档、选择、对象、brush、实体、材质/UV、CSG 和原生 undo/redo。仅当
+核心场景无法用现有 API 表达时补一个通用绑定。已实现的功能也必须按实际依赖判断，
+不能因曾经迁移过就要求保留。可以合并或删除迁移期间新增的重复 namespace 和包装。
+
+automation 服务只保留核心路径真实使用的共享状态或逻辑。无需先把旧 handler 全部
+抽成服务才能删除。Python 不反调旧 MCP JSON handler。原生几何/命令算法由已有
+owner 提供，避免为两个适配层保留两套实现。
+
+原生 UI、地图文件和用户资产不属于本次退役对象。控制台/插件可以继续使用同一个
+Python runtime；其旧 Python 名称和封装不构成新 MCP 的兼容约束。必要的 API
+调整同步修改仓库内调用方、示例和测试；第三方脚本的破坏性变化列入说明，不加兼容层。
+只移除确认无保留调用方的原生实现，不删除用户安装的插件或修改用户地图。
+
+## 直接退役的旧 MCP 设施
+
+旧 MCP 专用 IR/blockout 执行、preview cache、module metadata/revision/hash、
+JSON selector DSL、operationId 历史映射、审计子操作、隔离 Review/contact-sheet
+编排、旧对象 ID 别名及协议转发包装默认删除。与它们一同迁入 automation/Python 的
+专用状态和包装也在清理范围内，不因目录名改变而自动保留。
+
+地图编辑需要的文档身份、有效对象句柄、原生事务和原生 undo/redo 继续保留；若其
+实现混有旧模块或别名状态，裁掉该依赖。需要复用某个几何算法时直接保留原生算法，
+不连带保留其旧 MCP schema、元数据模型和兼容回执。
+
+现有纯数据 recipe 可作为离线脚本保留或归档，但不要求新架构执行旧 IR。
+新的可运行示例直接使用 Python API。移除 tb.ir/tb.modules 等迁移专用绑定时，
+同步清理目录、测试和第一方调用；不能为保留旧 recipe 新建 IR 到 Python 的解释器。
+
+capability-map.json 不再是门禁或逐项开发清单，可以归档或删除。只需按实际删除的
+子系统记录破坏性变化，不要求先重写 140 项替代关系才能开始删代码。
+scripts/mcp-migration-gates.ps1 改为新入口与核心场景检查，或并入现有测试后删除；
+不保留“旧目录必须存在”的检查。
+
+## 最小执行契约
+
+复用现有 Qt 主线程执行器，每次新 globals，以 `import trenchbroom as tb` 调用 API。
+默认整段地图事务；文档保存/打开/关闭和原生 undo/redo 使用明确的 action 模式。
+transaction 绑定目标 fingerprint，已保存文档同时检查 path；执行中不跟随活动窗口
+改变目标。所有句柄访问检查删除、重载、跨文档和 undo/redo 后的有效性。
+
+异常、协作超时、非法/超限结果和原生提交失败取消事务并恢复本次选择。
+action 失败如实报告已完成的动作和部分修改。保留请求身份、执行结果、错误、日志、
+地图是否修改/回滚等必要诊断；不要求生成旧 operationId、历史账本或模块审计资源。
+现有 executionId 去重可保留为有界请求缓存，与旧操作历史解耦。
+
+保留已有 source 256 KiB、request 4 MiB、JSON result 1 MiB、stdout/stderr 1 MiB
+和默认 30 秒/最大 90 秒协作预算。摘要最多 16 KiB；大型结果按需使用有界资源。
+这些保护复用当前实现，不为此次收敛另建预算框架或持久任务系统。
+
+ReadOnly 不运行 Python，MCP 默认 Off。执行的是受信任代码，地图回滚不能撤销外部
+文件或进程副作用；超时/断连后先检查已有回执和地图事实，不能盲目重跑。
+不引入后台编辑进程、持久 Python 会话、线程强杀或 processEvents 调度。
+原生调用阻塞时不承诺协作超时能强制中断。
+
+## 两个交付批次
+
+| 批次 | 工作 | 结束条件 |
 | --- | --- | --- |
-| 原生能力 | 复用已有绑定，或补齐核心场景确实缺少的通用 API | 文档、对象句柄、基础 brush、实体属性、CSG、材质/UV、undo/redo |
-| Python 组合 | 用已有 API 的循环、函数、集合和批量操作表达；保留代表性脚本即可 | 连续放置、楼梯/走廊组合、按属性筛选再修改、重复结构 |
-| 退役 | 记录用途与处理结果，删除旧入口及无人使用的专用实现 | 重复别名、旧脚本生成桥、专用 blockout 包装和未使用的便利入口 |
+| A：新执行层切换与清理 | 注册四入口；删除旧目录和专用依赖；复用/补齐核心 Python 原语；更新调用方、Skill、文档和测试 | 新入口权限正确；旧名称不可调用；核心编辑、回滚、原生撤销与截图可运行；Release 可构建 |
+| B：最终验收 | 在最终源码上执行核心场景和受影响回归，修复阻塞，记录破坏性变化和实际支持范围 | 四入口与真实 Release 证据齐全；无未解决 P0/P1；完成提交 |
 
-能力归属必须覆盖旧目录，验收以核心工作流为单位。一个工作流可以替代多个旧工具，
-退役项无需创建同名 Python API。已有 Python 插件、控制台和原生 UI 的公共能力需要
-保持兼容；删除旧 MCP 工具不授权删除它们仍在使用的底层实现。
+批次 A 应作为一个完整架构改动推进，允许跨目录大幅删除和调整依赖。无需先交付
+保留新旧两个目录的过渡版本。源码、测试、CMake 调整和 API 文档一起完成；
+普通实现选择与已授权的旧接口删除无需再次确认。必要时按可构建的边界拆分提交，
+不把每个 helper、API 符号或状态登记单独作为交付。
 
-首轮范围包括文档打开/查询/保存、对象查找/选择/变换/删除、盒体和凸棱柱批量创建、
-实体创建和属性修改、材质/UV、选择 CSG、原生 undo/redo、地图问题查询和截图。
-支持这些任务所需的通用能力优先于旧工具同名接口。
+进度只报告新架构已跑通的闭环、残留旧子系统、当前真实阻塞和下一步。
+不为已退役工具补语义对照测试，不以 capability-map 完成率驱动实现。
 
-IR、模块预览/替换、路线专用分析、heightmap、path sweep、编译自动化和高级 Review
-按现有可用程度作保留或退役决定。它们的完整 Python 迁移不阻塞六入口交付；缺失的
-扩展需求另行记录，不在本任务中扩建。仍可调用的路径保留其原有 guard 和回滚约束；
-无法满足约束的旧专用路径随入口退役。保留的公开功能必须如实说明支持范围。
+## 验收与交付
 
-capability-map.json 当前是旧目录审计资料。批次 A 一次性更新它的归属和证据结构，
-使机器可读状态表达上述三类结果。不要按现有 replacementSymbols 列表逐项开发。
-scripts/mcp-migration-gates.ps1 当前只检查目录/文档结构，且要求旧名称仍存在；
-其 passed 不是迁移验收。批次 A 将其改为当前批次的检查，批次 B 检查旧注册已删除。
+场景见 [scenarios.md](scenarios.md)。先构建相关 TbMcpLibTest/TbUiLibTest 再运行
+CTest；MCP 源码改动构建 Release TrenchBroom，同一 Ninja 树串行构建。保护现有
+控制台/插件运行机制的受影响回归，更新或删除仅断言退役 API/工具的测试。
 
-## 架构与执行边界
+最终使用独立 Release 进程、隔离配置和一次性地图验收。工具集合与分发集合精确匹配，
+参数化检查旧名称拒绝；默认发现载荷不超过 16 KiB 且不超过基线 Modeling 的 20%。
+只对新架构承诺的行为验收；不为消除旧测试失败复活兼容层。
 
-推荐调用路径为 MCP -> Python runtime -> trenchbroom API -> 原生命令。
-查询、验证、截图和历史入口可直接访问相应原生服务。
+最终运行一次 ci-preflight.ps1 -Full -BaseRef d98f869503f331809cd6727712438534c16c8c9e。
+Skill/recipe、手册或 UI 的修改分别运行其适用 validator/同步、GenerateManual/双语、
+样式治理/快照检查。旧脚本若依赖退役接口，先适配或删除对应检查。保留能验证原生
+编辑正确性的证据，不将旧自动化体系的全功能场景作为发布前提。
 
-现有 automation 服务用于真正共享的操作、对象身份和应用级状态。仅有一个调用方、
-只转发一次原生命令的行为可以留在其现有 owner；不要求所有函数经过新的服务层。
-按真实依赖抽取，禁止 Python 通过 JSON 反调旧 MCP handler。保留一份几何/命令算法，
-删除旧适配器时同步移除无人使用的包装，避免再建立一套完整 IR 执行框架。
-
-Python 使用命名参数、对象句柄、集合与必要批量操作。跨次执行可以用稳定 ID 或重新
-查询恢复目标；模块元数据和 JSON selector 是可选能力。所有句柄访问必须检查删除、
-重载、undo/redo、跨文档和节点地址复用后的有效性。
-
-受信任 Python 在现有进程的 Qt 主线程运行，每次使用独立 globals。默认整段地图
-事务；保存、打开/关闭、重载和通用编辑器 action 使用明确 action 模式。ReadOnly
-不执行 Python，旧配置升级为 Off。保持既有控制台与插件运行模式。
-
-所有编辑器访问受上下文与目标文档 guard 保护。拒绝嵌套 MCP 执行、后台线程编辑和
-瞬时脚本留下 callback、timer 或面板。不使用 processEvents、杀线程或强制终止解释器
-解决执行问题。超时是协作预算，不能承诺中断阻塞的原生调用。
-
-## 执行回执与预算
-
-tb_execute_python 接受 executionId、二选一的 code/path、arguments、document、
-mode、name 和 timeoutMs。脚本源最大 256 KiB，请求最大 4 MiB；arguments 默认
-为对象，mode 默认为 transaction，name 默认为 MCP Python，协作预算默认 30 秒、
-最大 90 秒。文件路径必须绝对，设置真实 `__file__` 并临时加入脚本目录。
-
-transaction 绑定 tb_inspect 返回的 fingerprint；已保存地图同时校验 path。
-执行期间不能随活动窗口变化改目标。脚本使用 `import trenchbroom as tb`，通过
-result 返回 JSON 兼容值，未设置时为 null。
-
-成功编辑提交一个原生父事务。异常、SystemExit、KeyboardInterrupt、协作超时、
-非法结果、结果超限或 native commit 失败时取消事务、恢复选择和暂存元数据。
-超时被脚本捕获也不能提交。action 逐步记录已完成动作，失败如实报告 partialMutation。
-
-回执保留 executionId、bridgeInstanceId、sourceHash、目标、状态、时长、
-mutatedDocument、partialMutation、rolledBack、retrySafe、operationId、result、
-日志摘要、截断标志与资源 URI。代码运行后的外部副作用无法由地图事务撤销，只有
-执行前拒绝可报告 retrySafe:true。重复 executionId 的回放和冲突检测继续有效。
-
-结构化摘要与兼容文本合计最多 16 KiB；完整 JSON 结果最大 1 MiB，提交前超限失败。
-stdout/stderr 合计保留最多 1 MiB，并记录丢弃量。回执保留 1024 条；资源最多
-128 组、128 MiB，只清理应用登记的缓存文件。缩小工具集不改变这些执行边界。
-
-## 三个交付批次
-
-每个批次是一个可构建、可验收的结果，允许跨多个能力族和文件实施。通常每批一个
-源码与测试一起完成的提交；仅因可回滚性或独立修复需要才拆分。完成一批后继续下一批，
-不把普通实现选择交还用户。遇到缺口先用现有 API 组合，仅核心场景阻塞才补原生 API。
-
-| 批次 | 工作 | 结束证据 |
-| --- | --- | --- |
-| A：核心闭环与默认入口 | 成组补齐核心脚本缺口；默认发现切换六入口；更新能力归属和门禁脚本 | 核心场景、权限/回滚测试通过；默认 Edit 6 / ReadOnly 5 / Off 0；列明仍注册的旧入口 |
-| B：旧工具整体下线 | 按归属删除全部旧 schema/注册/分发/隐藏别名；清理专用死代码；迁移客户端指引、脚本与 Skill | 所有 profile 归一；所有旧名称调用失败；保留路径无旧分发依赖；核心场景继续通过 |
-| C：最终验收与交付 | 在最终源码上完成 Release、集成场景和必要回归；修复交付阻塞 | 场景原始证据、载荷对比、源码审计和清洁提交；无未解决的 P0/P1 |
-
-批次 A 的 C1 验收检查默认发现和权限，C1 中所有 profile 归一及旧名称拒绝在批次 B
-完成。A/B 可以在同一实现阶段连续完成；无需为维持过渡期而新建兼容框架。
-
-批次 A/B 的源码修改均构建 Release TrenchBroom 和相关测试目标。构建同一 Ninja
-树时串行执行。一个批次完成必要测试后直接推进，不为只更新进度文字重复全量验证。
-只有新改动、失败或未解决风险才扩大或重跑检查。
-
-每次进度报告写明已跑通的核心场景、剩余旧入口数量、尚需验证的安全边界和下一批
-具体产物。提交数量、共享 helper 数量和迁移表标记数量不能替代交付证据。
-
-## 验收与交付物
-
-核心场景见 [scenarios.md](scenarios.md)。构建 TbMcpLibTest、TbUiLibTest 后运行
-对应 CTest，保留 PythonApi、PythonPluginManifest、控制台、面板和 timer 的受影响
-回归。执行器测试覆盖权限、文档 guard、异常/超时/结果错误回滚、预算、回执重放、
-断连恢复和对象有效性；保留的状态必须与地图同步撤销。
-
-最终在独立 Release 进程、隔离配置和一次性地图上跑核心场景。默认发现载荷实测
-不超过 16 KiB 且不超过基线 Modeling 的 20%。旧名称失败要通过实际调用验证，
-不能仅用源码字符串消失代替。静态检查同时确认专用注册、分发和别名已删除。
-
-批次 C 运行一次 `ci-preflight.ps1 -Full -BaseRef d98f869503f331809cd6727712438534c16c8c9e`。
-Skill/recipe 修改运行对应 validator 和同步检查；手册修改运行 GenerateManual 和双语
-验证；设置 UI 修改运行样式治理及 preferences-misc 矩阵。按实际修改触发这些检查。
-纯治理文档修订运行静态检查即可。
-
-证据写入 `build-release-codex/codex-logs/mcp-python-migration/<commit>/`，集中记录
-base/head/tested commit、工作区、环境、命令日志、核心场景结果、工具数量/载荷、
-保留与退役能力及已知限制。已有有效测试和场景证据可引用；最终证据须对应最终源码。
-日志、地图和截图不进 Git；只提交本次源码、测试与文档，不 push 或重写已有历史。
+纯文档修订做静态检查。源码批次通过必要验证后继续交付；仅新变化、失败或未解决
+风险触发重跑。日志/地图/截图写到 build-release-codex/codex-logs，记录最终 tested
+commit、输入、回执、地图事实与支持范围；它们不进 Git。只提交任务改动，不 push。

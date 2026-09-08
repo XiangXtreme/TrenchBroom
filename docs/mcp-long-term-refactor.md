@@ -4,7 +4,8 @@
 > [Python migration delivery plan](mcp-python-migration/development.md) and
 > [current governance](mcp-development-governance.md). The body records the earlier
 > IR/tool architecture and completed work; its future tasks, compatibility rules
-> and tool lists are not the active backlog. Use the current plan's three batches.
+> and tool lists are not the active backlog. Use the current plan's four-entry
+> Python bridge cutover and final acceptance.
 
 This document describes the target shape for a long-term TrenchBroom MCP
 refactor. It is a design roadmap, not an implementation plan for one patch.

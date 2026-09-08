@@ -1,103 +1,59 @@
-# TrenchBroom MCP Security Threat Model
+# TrenchBroom MCP Execution Boundaries
 
 ## Scope
 
-This document covers the local MCP HTTP server, the legacy stdio shim, bridge
-configuration, tool authorization, document targeting, map mutation, external
-process tools, trusted Python execution, and cached MCP resources. It assumes one
-desktop user and one active TrenchBroom MCP instance.
+This document covers the thin MCP bridge and trusted Python execution defined in
+[current governance](mcp-development-governance.md) and the
+[delivery plan](mcp-python-migration/development.md). Existing native map editing
+and user work remain protected while old MCP-specific compatibility state retires.
 
-The current architecture and delivery scope are defined by
-[MCP governance](mcp-development-governance.md) and the
-[Python migration plan](mcp-python-migration/development.md). Controls for IR and
-module replacement below apply to retained callable paths; they do not require
-recreating those capabilities as Python APIs. Legacy acceptance scripts must be
-adapted to the final catalog before being used as cutover evidence.
+## Local Trust
 
-## Protected Assets
+HTTP binds to loopback and has no shared credential. MCP is Off by default.
+Enabling ReadOnly permits native inspection/capture; Edit additionally permits
+trusted Python with the application's user privileges. Python is not sandboxed.
 
-- The active map and TrenchBroom undo/redo state.
-- Unsaved user work in every open document.
-- The local MCP configuration.
-- Stable object ids, operation history, metadata, modules, previews, and review
-  resources held in memory.
-- Local files read or written by IR, review, export, heightmap, and compile tools.
-- External commands launched by compile profiles or the legacy Python bridge.
+CORS accepts only allowed loopback origins. JSON-RPC version and params checks,
+transport limits and requestedMode privilege reduction remain in force. A transport
+shim may forward the current protocol, but does not preserve old tools or profiles.
 
-## Trust Boundaries
+Task authorization governs what an Agent does through Python. Reuse authorization
+already given; enabling Edit is not permission for unrelated file/process actions.
 
-The MCP client is outside the editor trust boundary. Loopback networking narrows
-exposure but does not authenticate callers: when MCP is enabled, any process running
-as the local user may connect to the endpoint. Enabling `ReadOnly` or `Edit` is an
-explicit decision to trust local processes at that privilege level.
+## Protected Boundaries
 
-The stdio shim is also outside the editor process. It reads the same TrenchBroom
-config and forwards requests through the local pipe. Data-only recipes may write
-IR for native validation and application. Trusted scripts submitted through
-`tb_execute_python` may call the public `trenchbroom` API under document and
-transaction guards. Python runs with the application's user privileges and is
-not a sandbox; map rollback does not undo filesystem or process effects.
-
-## Main Threats And Controls
-
-| Threat | Control |
+| Risk | Required behavior |
 | --- | --- |
-| Untrusted local process calls MCP | MCP is `Off` by default. Enabling `ReadOnly` or `Edit` explicitly trusts local-user processes; mode checks bound available operations and users should disable MCP when that trust is not acceptable. |
-| Browser-origin request abuses loopback | CORS echoes only accepted loopback origins and rejects non-loopback origins. Preflight permits only the protocol and content headers used by MCP. |
-| Local configuration is modified | Configuration contains no credential. Config writes still attempt owner read/write permissions, and startup validates loopback host, port, mode, and tool profile. |
-| Client requests more privilege than configured | The effective mode is the stricter of configured mode and `requestedMode`. Tool catalog mode checks run before dispatch. |
-| Write reaches the wrong map | Python execution binds `document.fingerprint` and, for saved maps, `document.path`. Retained legacy tools check `expectedDocumentPath` and `expectedDocumentFingerprint`; both must match when provided. |
-| Partial IR mutation leaves inconsistent editor/session state | `ir_apply` uses one outer native transaction and stages history, counters, metadata, modules, and object registry state. Any stage failure rolls back all state. |
-| Previewed IR or replacement target changes before apply | File preview records the IR hash. `replace_module` also guards module revision, content hash, and the exact canonical live object set; file replacement requires its cached `previewId`. Any mismatch fails before mutation. |
-| Unsupported IR version changes semantics | New IR uses integer `schemaVersion:1`. Invalid versions, versions below 1, and future versions fail before mutation. |
-| Missing material silently appears valid | Mutation responses distinguish requested/effective material and availability. `requireMaterialAvailable:true` rejects missing materials during preflight. |
-| Review image is treated as a safety or correctness gate | Review reports construction/silhouette interpretation and remains optional evidence. It cannot change static `acceptancePassed`, map validation, BSP, or collision status. |
-| Timeout causes unsafe blind retry | Tool cost classes use 10/30/120-second response waits. Timeout diagnostics report `mutatedDocument:"unknown"`, `retrySafe:false`, request identity, and history recovery steps. |
-| Unbounded session data exhausts memory | Retained session limits are 1024 operation records, 128 reviews, 64 previews with a 10-minute TTL, and four document fingerprints. `tb_inspect` exposes counts and evictions; Python result/log/resource budgets follow the migration contract. |
-| Stale or evicted resource is mistaken for live state | Resource reads return structured eviction and recovery guidance. Object resolution reports stale/live/mismatch state. |
-| Second instance steals an active bridge endpoint | Startup probes the pipe and HTTP listener. It refuses an active instance and removes only an inactive stale endpoint. |
-| Arbitrary local execution through compile or Python | Compile and Python require Edit; Python runs trusted code under the execution contract. Agent actions must remain within the user's task authorization; reuse authorization already given. Public editor API calls retain document, object and transaction guards. Scripts must not edit live `.map` files or bypass native commands. |
+| Wrong document | Bind transaction execution to document fingerprint and saved path; do not follow active-window changes during execution. |
+| Invalid object access | Check deletion, reload, cross-document access, undo/redo and address reuse before accessing native objects. |
+| Partial map edit | Use one native transaction; cancel on exception, cooperative timeout, result failure or commit failure; restore selection. |
+| Nontransactional action failure | Lifecycle, persistence and native undo/redo use action mode and report completed actions/partial modification. |
+| Unsafe retry | Return request identity, execution outcome and truthful mutation/rollback status; inspect receipts and map facts after timeout/disconnection. |
+| Excessive output | Reuse source/request/result/log bounds and cooperative execution budgets; keep any request/result cache bounded. |
+| Background editor access | Dispatch native object access to the Qt main thread; reject nested MCP execution and persistent UI callbacks from transient scripts. |
+| External Python effects | Map rollback does not undo file or process effects; never claim arbitrary trusted code is safe to retry after it ran. |
+| Loss of user work | Preserve native UI/map behavior, do not silently discard dirty documents, and respect intervening manual edits in native undo/redo. |
+| Misleading acceptance | Treat screenshots as visual evidence; report native validation, save and untested BSP/collision facts separately. |
 
-## Protocol Requirements
+These protections use native editor state and the existing executor. They do not
+require legacy IR previews, module metadata, operationId maps, isolated Review
+registries or old object-ID aliases. Remove compatibility-only state and the
+associated checks; retain the native safety checks needed by surviving operations.
 
-- Requests declare `jsonrpc:"2.0"`.
-- `params` must be an object; other values return `-32602`.
-- Initialize advertises only protocol `2025-06-18`.
-- HTTP listens on loopback only.
-- HTTP requests do not carry an authentication header or shared secret.
-- The stdio shim uses the TrenchBroom application config path, not a separate
-  `trenchbroom-mcp` config directory.
-
-## Residual Risks
-
-There is no caller authentication between local-user processes. Any such process can
-read map data in `ReadOnly` mode and can mutate maps in `Edit` mode while MCP is
-enabled. Loopback binding and Origin checks reduce network and browser exposure but
-do not isolate hostile local software. Keep MCP `Off` outside active sessions and use
-the least-privileged mode that supports the workflow.
-
-Compile profiles, trusted Python execution and any remaining legacy Python bridge
-can execute local programs. Mode checks do not make untrusted scripts safe.
-Agents check actions against the user's authorized task and ask only when an
-action exceeds it. Edit mode alone is not authorization for unrelated side effects.
-
-MCP history mirrors native undo/redo. Manual user edits can invalidate the expected
-stack order. Clients must refresh `tb_history` status after timeouts, manual edits, or
-unexpected validation results.
+Cooperative timeouts cannot forcibly interrupt blocking native calls. Do not use
+thread killing or processEvents to bypass that constraint.
 
 ## Verification
 
-Run the automated gates:
+Use the [core execution scenarios](mcp-python-migration/scenarios.md). Build focused
+test targets before running them, then validate the final Release application on
+disposable maps and isolated configuration.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build-filtered.ps1 -Target TbMcpLibTest -TestExe build-release-codex\lib\TbMcpLib\test\TbMcpLibTest.exe -TestFilter "*"
-powershell -ExecutionPolicy Bypass -File scripts\build-filtered.ps1 -Target TbUiLibTest -TestFilter "[McpBridgeServer]"
-powershell -ExecutionPolicy Bypass -File scripts\build-filtered.ps1 -Target TbUiLibTest -TestFilter "[McpHttpServer]"
-powershell -ExecutionPolicy Bypass -File scripts\mcp-reliability-acceptance.ps1
-```
+Verify the exact four-entry registration/dispatch set, permissions, wrong-target
+rejection, invalid handles, transaction rollback, action failure reporting, native
+undo/redo and screenshot output. Update affected console/plugin runtime tests to
+current APIs. Remove tests solely enforcing retired-tool compatibility.
 
-The real acceptance script uses disposable maps and checks tokenless loopback HTTP,
-atomic IR undo/redo, rollback after entity failure, preview tampering, document
-guards, review resource reads, review-resource eviction recovery, and crash-log
-counts. Pass `-IncludeStdio` only when the optional compatibility shim was built and
-a controlled stdio request should also be checked.
+Older reliability scripts and capability-map gates may invoke removed names.
+Adapt their relevant native-safety checks or replace them with core scenarios;
+do not restore a legacy catalog so those scripts pass.
