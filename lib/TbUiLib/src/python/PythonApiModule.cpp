@@ -2409,7 +2409,7 @@ bool updateSelection(
   auto transaction = ScopedPythonTransaction{document, name};
   try
   {
-    mdl::selectNodes(document.map(), nodes);
+    automation::replaceSelection(document.map(), nodes);
     if (!transaction.commit())
     {
       throw std::runtime_error{"Could not update selection"};

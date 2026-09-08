@@ -14,9 +14,8 @@
 #include "mdl/Node.h"
 #include "mdl/WorldNode.h"
 
-#include <map>
-
 #include <algorithm>
+#include <map>
 
 namespace tb::ui::automation
 {
@@ -55,12 +54,16 @@ bool removeNodes(mdl::Map& map, std::vector<mdl::Node*> nodes)
   std::ranges::sort(nodes);
   nodes.erase(std::unique(nodes.begin(), nodes.end()), nodes.end());
   nodes.erase(
-    std::remove_if(nodes.begin(), nodes.end(), [&](const auto* node) {
-      return node == nullptr || node == &map.worldNode()
-             || std::ranges::any_of(nodes, [&](const auto* other) {
-                  return node != other && other != nullptr && node->isDescendantOf(*other);
-                });
-    }),
+    std::remove_if(
+      nodes.begin(),
+      nodes.end(),
+      [&](const auto* node) {
+        return node == nullptr || node == &map.worldNode()
+               || std::ranges::any_of(nodes, [&](const auto* other) {
+                    return node != other && other != nullptr
+                           && node->isDescendantOf(*other);
+                  });
+      }),
     nodes.end());
   if (nodes.empty())
   {
@@ -78,6 +81,15 @@ bool removeNodes(mdl::Map& map, std::vector<mdl::Node*> nodes)
   }
   mdl::deselectNodes(map, nodes);
   return map.executeAndStore(mdl::AddRemoveNodesCommand::remove(nodesByParent));
+}
+
+void replaceSelection(mdl::Map& map, const std::vector<mdl::Node*>& nodes)
+{
+  mdl::deselectAll(map);
+  if (!nodes.empty())
+  {
+    mdl::selectNodes(map, nodes);
+  }
 }
 
 } // namespace tb::ui::automation

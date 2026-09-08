@@ -41,6 +41,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/automation/AutomationEntities.h"
+#include "ui/automation/AutomationNodes.h"
 
 #include <map>
 #include <set>
@@ -769,11 +770,7 @@ McpBridgeToolResult selectionSetForMapResult(mdl::Map& map, const QJsonObject& p
     nodes.push_back(node);
   }
 
-  mdl::deselectAll(map);
-  if (!nodes.empty())
-  {
-    mdl::selectNodes(map, nodes);
-  }
+  automation::replaceSelection(map, nodes);
 
   auto selectedIds = QJsonArray{};
   for (const auto* node : nodes)
