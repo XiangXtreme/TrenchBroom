@@ -2126,33 +2126,22 @@ void withPreservedSelection(
   }
 }
 
+void updateEntity(
+  EntityHandle& entity,
+  const py::dict& properties,
+  const std::vector<std::string>& removeKeys);
+
 void setEntityProperty(
   EntityHandle& entity, const std::string& key, const std::string& value)
 {
-  auto& document = DocumentHandle{entity.document, entity.generation}.get();
-  auto* entityNode = &entity.get();
-
-  withPreservedSelection(document, "Python API Set Entity Property", [&](auto& map) {
-    mdl::deselectAll(map);
-    mdl::selectNodes(map, {entityNode});
-    return mdl::setEntityProperty(map, key, value);
-  });
-
-  entity.nodeGeneration = PythonHandleRegistry::instance().nodeGeneration(entity.entity);
+  auto properties = py::dict{};
+  properties[py::str{key}] = value;
+  updateEntity(entity, properties, {});
 }
 
 void removeEntityProperty(EntityHandle& entity, const std::string& key)
 {
-  auto& document = DocumentHandle{entity.document, entity.generation}.get();
-  auto* entityNode = &entity.get();
-
-  withPreservedSelection(document, "Python API Remove Entity Property", [&](auto& map) {
-    mdl::deselectAll(map);
-    mdl::selectNodes(map, {entityNode});
-    return mdl::removeEntityProperty(map, key);
-  });
-
-  entity.nodeGeneration = PythonHandleRegistry::instance().nodeGeneration(entity.entity);
+  updateEntity(entity, py::dict{}, {key});
 }
 
 EntityHandle createEntity(
@@ -2684,6 +2673,10 @@ void deleteEntity(EntityHandle& entity)
 {
   auto& document = DocumentHandle{entity.document, entity.generation}.get();
   auto* entityNode = &entity.get();
+  if (entityNode == &document.map().worldNode())
+  {
+    throw py::value_error{"Cannot delete worldspawn"};
+  }
   withPreservedSelection(document, "Python API Delete Entity", [&](auto& map) {
     mdl::deselectAll(map);
     mdl::selectNodes(map, {entityNode});
@@ -2792,11 +2785,16 @@ bool setSelectionProperty(
     return false;
   }
 
-  const auto nodes = std::vector<mdl::Node*>{entityNodes.begin(), entityNodes.end()};
+  auto replacements = std::vector<std::pair<mdl::Node*, mdl::NodeContents>>{};
+  for (auto* entityNode : entityNodes)
+  {
+    auto replacement = entityNode->entity();
+    replacement.addOrUpdateProperty(key, value);
+    replacements.emplace_back(entityNode, mdl::NodeContents{std::move(replacement)});
+  }
   withPreservedSelection(document, "Python API Set Selection Property", [&](auto& map) {
-    mdl::deselectAll(map);
-    mdl::selectNodes(map, nodes);
-    return mdl::setEntityProperty(map, key, value);
+    return mdl::updateNodeContents(
+      map, "Python API Set Selection Property", std::move(replacements));
   });
   return true;
 }

@@ -141,10 +141,15 @@ void doSelectNodes(const std::vector<Node*>& nodes, Map& map)
     const auto nodesToSelect = initialNode->nodesRequiredForViewSelection();
     for (auto* node : nodesToSelect)
     {
-      if (!node->selected() /* && m_editorContext->selectable(node) remove check to allow issue objects to be selected */)
+      // World and layer nodes cannot be selected. Do not announce a selection
+      // that Node::select() will ignore, or Selection will retain phantom nodes.
+      if (!node->selected())
       {
         node->select();
-        selected.push_back(node);
+        if (node->selected())
+        {
+          selected.push_back(node);
+        }
       }
     }
   }

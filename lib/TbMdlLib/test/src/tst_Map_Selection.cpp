@@ -122,6 +122,25 @@ TEST_CASE("Map_Selection")
 
   SECTION("selectNodes")
   {
+    SECTION("World and layer nodes do not enter the selection")
+    {
+      auto* brushNode = createBrushNode(map);
+      addNodes(map, {{&parentForNodes(map), {brushNode}}});
+      selectNodes(map, {&map.worldNode(), map.worldNode().defaultLayer(), brushNode});
+      CHECK(map.selection().nodes == std::vector<Node*>{brushNode});
+      CHECK(map.selection().hasOnlyGeometryNodes());
+      CHECK_FALSE(map.worldNode().selected());
+      CHECK_FALSE(map.worldNode().defaultLayer()->selected());
+      deselectAll(map);
+      CHECK_FALSE(map.selection().hasAny());
+      map.undoCommand();
+      CHECK(map.selection().nodes == std::vector<Node*>{brushNode});
+      map.undoCommand();
+      CHECK_FALSE(map.selection().hasAny());
+      map.redoCommand();
+      CHECK(map.selection().nodes == std::vector<Node*>{brushNode});
+    }
+
     SECTION("Linked groups")
     {
       auto* entityNode = new EntityNode{Entity{}};

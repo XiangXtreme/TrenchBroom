@@ -313,6 +313,12 @@ AutomationBrushEntityResult tieBrushesToEntity(
   auto transaction = AutomationTransaction{map, "Tie brushes to " + classname};
   mdl::deselectAll(map);
   mdl::selectNodes(map, kdl::vec_static_cast<mdl::Node*>(brushes));
+  if (!map.selection().hasOnlyGeometryNodes())
+  {
+    transaction.cancel();
+    result.error = "Could not select only geometry for brush entity creation";
+    return result;
+  }
   auto* entity = mdl::createBrushEntity(map, *definition);
   if (entity == nullptr)
   {

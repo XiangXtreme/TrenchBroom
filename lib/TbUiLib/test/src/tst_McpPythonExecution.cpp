@@ -5,6 +5,7 @@
 #include <QUuid>
 
 #include "fs/TestEnvironment.h"
+#include "mdl/EntityDefinitionManager.h"
 #include "mdl/GameConfigFixture.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
@@ -80,6 +81,64 @@ TEST_CASE("McpPythonExecution", "[McpBridgeServer][PythonApi]")
       {}};
   };
   const auto create = QString{"tb.brushes.create_box((-16,-16,-16), (16,16,16))\n"};
+
+  SECTION("worldspawn property edits preserve selection before subsequent brush edits")
+  {
+    map.entityDefinitionManager().setDefinitions({
+      {"test_trigger", {}, "", {}, std::nullopt},
+    });
+    const auto properties = server.dispatchRequest(request(
+      "world-properties",
+      R"(
+world = tb.entities.find(classname="worldspawn")[0]
+for key in ["message", "skyname", "MaxRange"]:
+    world.set(key, "test")
+    assert tb.documents.snapshot()["selected_node_count"] == 0
+    world.remove(key)
+    assert tb.documents.snapshot()["selected_node_count"] == 0
+try:
+    tb.entities.delete(world)
+    raise AssertionError("Deleted worldspawn")
+except ValueError:
+    pass
+brush = tb.brushes.create_box((-16,-16,-16), (16,16,16))
+tb.selection().set_property("message", "course")
+assert tb.entities.find(classname="worldspawn")[0].get("message") == "course"
+assert tb.documents.snapshot()["selected_node_count"] == 1
+assert len(tb.brushes.selected()) == 1
+tb.deselect_all()
+assert tb.documents.snapshot()["selected_node_count"] == 0
+)",
+      "transaction"));
+    if (properties.error)
+    {
+      INFO(QJsonDocument{properties.error->details}.toJson().toStdString());
+      REQUIRE(properties.ok);
+    }
+    REQUIRE(properties.ok);
+    CHECK_FALSE(map.selection().hasAny());
+
+    const auto tied = server.dispatchRequest(request(
+      "tie-after-world-properties",
+      R"(
+brush = tb.brushes.list()[0]
+entity = tb.entities.tie_brushes("test_trigger", [brush])
+assert len(entity.brushes) == 1
+assert entity.brushes[0].entity.classname == "test_trigger"
+tb.deselect_all()
+)",
+      "transaction"));
+    INFO(QJsonDocument{tied.error ? tied.error->details : tied.result}
+           .toJson()
+           .toStdString());
+    REQUIRE(tied.ok);
+    CHECK_FALSE(map.selection().hasAny());
+    REQUIRE(
+      server.dispatchRequest(request("undo-tie", "tb.history.undo()", "action")).ok);
+    REQUIRE(
+      server.dispatchRequest(request("redo-tie", "tb.history.redo()", "action")).ok);
+    CHECK_FALSE(map.selection().hasAny());
+  }
 
   SECTION("action failure before editing has no mutation or completed actions")
   {

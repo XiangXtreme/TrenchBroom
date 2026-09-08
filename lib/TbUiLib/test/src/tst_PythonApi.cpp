@@ -1318,8 +1318,10 @@ import trenchbroom as tb
 entity = tb.current_document().entities[0]
 entity.set("message", "hello")
 assert entity.get("message") == "hello"
+assert tb.documents.snapshot()["selected_node_count"] == 0
 entity.remove("message")
 assert entity.get("message") is None
+assert tb.documents.snapshot()["selected_node_count"] == 0
 )");
 
     auto context = PythonExecutionContext{};
@@ -1402,6 +1404,8 @@ assert isinstance(inc_ents, list)
 entity = sel.entity
 del entity["message"]
 assert "message" not in entity
+assert tb.documents.snapshot()["selected_node_count"] == 1
+assert tb.documents.snapshot()["selected_brush_count"] == 1
 )");
 
     auto context = PythonExecutionContext{};
