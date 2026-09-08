@@ -159,18 +159,42 @@ Review 编排和 profile 兼容面不再接入执行链。批次 B 的最终 Rel
 `tb_capture` 产生可读取 PNG。事务异常返回 traceback 且 `rolledBack:true`；action 在原生
 undo 后抛错返回 `partialMutation:true`，随后 redo 恢复。
 
-最终工具发现的 Edit HTTP 回应为 11,275 bytes（小于 16 KiB），四项工具相对旧 Modeling
-53 项基线的目录数量比例为 7.55%。ReadOnly 实测为三项且拒绝执行，Off 进程没有监听
+工具发现采用相同 Qt 序列化口径测量：UTF-8 compact JSON-RPC `tools/list` 回应，
+`id=1`、Edit 模式、不含 HTTP 头。基线 d98f869 的默认 Modeling 目录为 100,402 bytes，
+当前四入口为 2,215 bytes，载荷比例为 2.21%，同时满足 16 KiB 和基线 20% 门禁。
+可在已配置 C++ 编译器、Windows SDK 与 Qt DLL 路径的环境运行
+`python scripts/measure-mcp-discovery.py --qt-prefix D:/Qtx/6.11.1/msvc2022_64`。
+脚本独立编译新旧目录源码；回应原文、源码 SHA-256 和报告写入
+`build-release-codex/codex-logs/mcp-discovery`。
+ReadOnly 实测为三项且拒绝执行，Off 进程没有监听
 socket。旧 `tb_history` 被拒绝；错误 fingerprint 和 executionId 内容冲突也均返回失败
 回执，精确重放返回 `historicalReplay:true`。
 
 破坏性变化：旧 MCP 工具、profile、IR、`tb.ir`、`tb.modules`、operationId 和 Review
 资源均不受支持。可靠性边界保持不变：协作超时与客户端断连不能强制打断一个阻塞的原生
-调用，客户端必须根据执行回执和随后 `tb_inspect` 的地图事实决定恢复动作。原生提交失败
-仍由生产路径处理；当前没有可安全注入该内部命令失败的夹具。
+调用，客户端必须根据执行回执和随后 `tb_inspect` 的地图事实决定恢复动作。
+
+`McpPythonExecution` 回归覆盖 action 编辑前失败、编辑后异常/非法结果/超限/超时、
+undo 后失败、保存后失败及关闭目标后的失败。`mutatedDocument` 在成功和失败出口均检查
+目标文档状态；action 还监听原生修改通知，避免 undo 后的新编辑恰好恢复相同修改计数时
+漏报。关闭/重载目标通过句柄代次检查，避免访问失效文档。`completedActions`
+返回本次执行已完成的原生生命周期、持久化、历史及 UI 动作类别计数；键集合固定，
+不保存跨执行账本。失败的 action 仅在目标状态改变或已有完成动作时报告
+`partialMutation:true`。例如保存后抛错可以是 `mutatedDocument:false`、
+`completedActions:{"save_as":1}`、`partialMutation:true`，表示文件保存已完成。
+
+提交失败通过不可逆链接组变换触发原生提交拒绝，检查回滚、修改计数与原有选择恢复。
+断连测试使用真实本地 socket，在节点创建期间由客户端断开，再重连重放同一 executionId；
+验证历史回执、地图数量不重复增加和冲突请求拒绝。后台测试线程只操作 socket，编辑仍在
+Qt 主线程执行。
 
 最终源码的 C5 回归增加了在已创建并选中对象后触发 `SystemExit`、
 `KeyboardInterrupt` 和 1 MiB 结果上限的断言；它们都确认事务回滚、地图 dirty 状态、
 选择与 brush 数量恢复，且异常回执保留原始异常类型。`20260908-154247-ci-preflight-full-d98.stdout.log`
 记录了相对 `d98f869503f331809cd6727712438534c16c8c9e` 的完整预检通过（严格编译 47
 个单元和受影响测试）。
+
+回执收尾修复通过 `mcp-receipts-final-preflight.log` 中相同 d98f869 基线的完整预检：
+严格编译 48 个单元，构建 Release TrenchBroom，全库 CTest 通过（UI 73 项）。
+新增 `McpPythonExecution` 单独运行通过 118 条断言。最终提交与源码/产物散列记录在
+`build-release-codex/codex-logs/mcp-receipts-validation/report.json`。

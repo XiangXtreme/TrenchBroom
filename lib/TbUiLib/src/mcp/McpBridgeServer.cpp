@@ -505,7 +505,10 @@ McpBridgeServer::McpBridgeServer(
                                   : "rejected"},
             {"durationMs", elapsed.elapsed()},
             {"mutatedDocument", execution.mutatedDocument},
-            {"partialMutation", mode == "action" && execution.executed && !execution.ok},
+            {"partialMutation",
+             mode == "action" && !execution.ok
+               && (execution.mutatedDocument || !execution.completedActions.isEmpty())},
+            {"completedActions", execution.completedActions},
             {"rolledBack", execution.rolledBack},
             {"retrySafe", !execution.executed},
             {"logs",

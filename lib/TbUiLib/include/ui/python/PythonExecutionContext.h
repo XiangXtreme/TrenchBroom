@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <string>
 
+class QJsonObject;
+
 namespace tb::ui
 {
 class AppController;
@@ -37,6 +39,7 @@ struct PythonExecutionContext
   bool mcpExecution = false;
   bool allowNonTransactionalActions = true;
   bool allowPersistentUi = true;
+  QJsonObject* completedActions = nullptr;
 };
 
 } // namespace tb::ui

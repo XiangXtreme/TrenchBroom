@@ -38,6 +38,7 @@ struct PythonMcpExecutionResult
   bool mutatedDocument = false;
   bool rolledBack = false;
   bool timedOut = false;
+  QJsonObject completedActions;
   QByteArray stdoutText;
   QByteArray stderrText;
   qsizetype discardedLogBytes = 0;
@@ -86,5 +87,6 @@ private:
 
 PythonExecutionContext* currentPythonExecutionContext();
 PythonPluginSession* currentPythonPluginSession();
+void recordCompletedPythonAction(const char* action);
 
 } // namespace tb::ui

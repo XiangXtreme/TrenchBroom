@@ -7,6 +7,7 @@
 #include "ui/automation/AutomationMaterials.h"
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonApiModule.h"
+#include "ui/python/PythonHandleRegistry.h"
 #include "ui/python/PythonMcpExecutionState.h"
 #include "ui/python/PythonPluginSession.h"
 
@@ -913,7 +914,31 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     return execution;
   }
 
-  const auto modificationCountBefore = context.document->map().modificationCount();
+  auto& targetMap = context.document->map();
+  const auto modificationCountBefore = targetMap.modificationCount();
+  auto actionModified = false;
+  auto actionChanges = NotifierConnection{};
+  if (!request.transactional)
+  {
+    actionChanges = targetMap.modificationStateDidChangeNotifier.connect([&]() {
+      // Undo followed by another edit can restore the same numeric count while
+      // leaving different contents. Remember native changes throughout action mode.
+      actionModified =
+        actionModified || targetMap.modificationCount() != modificationCountBefore;
+    });
+  }
+  const auto documentGeneration =
+    PythonHandleRegistry::instance().documentGeneration(context.document);
+  const auto finish = [&]() {
+    // A lifecycle action can destroy or reload the target. Check its generation
+    // before dereferencing it, and never follow a newly activated document.
+    execution.mutatedDocument =
+      actionModified
+      || PythonHandleRegistry::instance().documentGeneration(context.document)
+           != documentGeneration
+      || context.document->map().modificationCount() != modificationCountBefore;
+    return execution;
+  };
 
   auto transaction = request.transactional
                        ? std::make_optional(PythonDocumentTransaction{
@@ -940,7 +965,9 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   }};
   gil = PyGILState_Ensure();
   auto releaseGil = kdl::invoke_later{[&]() { PyGILState_Release(gil); }};
-  auto scopedContext = ScopedExecutionContext{context};
+  auto executionContext = context;
+  executionContext.completedActions = &execution.completedActions;
+  auto scopedContext = ScopedExecutionContext{executionContext};
   auto scopedPreferenceChanges =
     ScopedPythonPendingPreferenceChanges{pendingPreferenceChanges};
   auto logCapture = PythonMcpLogCapture{execution};
@@ -951,7 +978,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   {
     cancel();
     execution.error = "Could not create Python execution globals";
-    return execution;
+    return finish();
   }
   auto releaseGlobals = kdl::invoke_later{[&]() { Py_DECREF(globals); }};
 
@@ -962,7 +989,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     Py_XDECREF(arguments);
     cancel();
     execution.error = "Could not prepare MCP Python arguments";
-    return execution;
+    return finish();
   }
   Py_DECREF(arguments);
 
@@ -978,7 +1005,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     Py_XDECREF(filenameObject);
     cancel();
     execution.error = "Could not prepare MCP Python filename";
-    return execution;
+    return finish();
   }
   Py_DECREF(filenameObject);
 
@@ -994,7 +1021,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     PyErr_Clear();
     cancel();
     execution.error = "Could not install the MCP Python timeout guard";
-    return execution;
+    return finish();
   }
 
   const auto source = request.source.toUtf8();
@@ -1010,7 +1037,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     cancel();
     execution.timedOut = timedOut;
     execution.error = error;
-    return execution;
+    return finish();
   }
   Py_DECREF(result);
 
@@ -1019,7 +1046,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     cancel();
     execution.timedOut = true;
     execution.error = "MCP Python execution exceeded its cooperative timeout";
-    return execution;
+    return finish();
   }
 
   auto* resultObject = PyDict_GetItemString(globals, "result");
@@ -1031,7 +1058,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   {
     cancel();
     execution.error = conversionError;
-    return execution;
+    return finish();
   }
   const auto compactResult =
     QJsonDocument{
@@ -1042,21 +1069,19 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   {
     cancel();
     execution.error = "Python result exceeds the 1 MiB response limit";
-    return execution;
+    return finish();
   }
 
   if (transaction && !transaction->commit())
   {
     execution.rolledBack = true;
     execution.error = "Could not commit the MCP Python transaction";
-    return execution;
+    return finish();
   }
   execution.ok = true;
   execution.committed = transaction.has_value();
-  execution.mutatedDocument =
-    context.document->map().modificationCount() != modificationCountBefore;
   execution.value = *jsonResult;
-  return execution;
+  return finish();
 }
 
 PythonCompletionRoot PythonRuntime::consoleCompletionRoot(
@@ -1397,6 +1422,19 @@ const std::string& PythonRuntime::lastError() const
 bool PythonRuntime::installApiModule()
 {
   return installPythonApiModule();
+}
+
+void recordCompletedPythonAction(const char* const action)
+{
+  if (auto* context = currentPythonExecutionContext();
+      context != nullptr && context->completedActions != nullptr)
+  {
+    // Callers use a fixed set of native operation names, so this receipt stays
+    // bounded even when a script performs many actions.
+    auto& actions = *context->completedActions;
+    const auto name = QString::fromLatin1(action);
+    actions.insert(name, actions.value(name).toInteger() + 1);
+  }
 }
 
 PythonExecutionContext* currentPythonExecutionContext()

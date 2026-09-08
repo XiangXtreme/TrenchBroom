@@ -768,6 +768,7 @@ void saveDocument(DocumentHandle& document)
 {
   requirePythonActionMode("save");
   throwIfError(saveAutomationDocument(document.get().map()));
+  recordCompletedPythonAction("save");
 }
 
 void saveDocumentAs(DocumentHandle& document, const std::string& path)
@@ -775,6 +776,7 @@ void saveDocumentAs(DocumentHandle& document, const std::string& path)
   requirePythonActionMode("save_as");
   throwIfError(saveAutomationDocument(
     document.get().map(), std::make_optional(absolutePathFromPython(path))));
+  recordCompletedPythonAction("save_as");
 }
 
 void exportDocument(
@@ -788,6 +790,7 @@ void exportDocument(
   }
   throwIfError(
     exportAutomationDocument(document.get().map(), exportPath, stripTbProperties));
+  recordCompletedPythonAction("export");
 }
 
 MapWindow& mapWindowForDocument(DocumentHandle& document)
@@ -851,6 +854,7 @@ DocumentHandle openDocument(const std::string& path)
         throw std::runtime_error{"Document window is no longer available"};
       }
       auto& document = mapWindow->document();
+      recordCompletedPythonAction("activate");
       return DocumentHandle{
         &document, PythonHandleRegistry::instance().documentGeneration(&document)};
     }
@@ -858,6 +862,7 @@ DocumentHandle openDocument(const std::string& path)
 
   throwIfError(openAutomationDocument(
     *context.appController, openPath, &context.document->map().gameInfo()));
+  recordCompletedPythonAction("open");
 
   auto* openedWindow = mapWindowManager.topMapWindow();
   if (openedWindow == nullptr)
@@ -905,6 +910,7 @@ DocumentHandle activateDocument(DocumentHandle& document)
   {
     throw std::runtime_error{"Document window is no longer available"};
   }
+  recordCompletedPythonAction("activate");
   return document;
 }
 
@@ -921,6 +927,7 @@ void closeDocument(DocumentHandle& document, const bool discardChanges)
   auto& window = mapWindowForDocument(document);
   PythonHandleRegistry::instance().invalidateDocument(&targetDocument);
   closeAutomationDocument(window, discardChanges);
+  recordCompletedPythonAction("close");
 }
 
 py::dict historyStatus(DocumentHandle& document)
@@ -945,6 +952,7 @@ bool undoDocument(DocumentHandle& document)
     return false;
   }
   window.undo();
+  recordCompletedPythonAction("history.undo");
   return true;
 }
 
@@ -957,6 +965,7 @@ bool redoDocument(DocumentHandle& document)
     return false;
   }
   window.redo();
+  recordCompletedPythonAction("history.redo");
   return true;
 }
 
@@ -3126,6 +3135,7 @@ py::dict setMaterialLocks(
   }
   const auto locks =
     automation::setTextureLocks(currentDocument().get().map(), textureLock, uvLock);
+  recordCompletedPythonAction("materials.lock_set");
   if (auto* pendingPreferenceChanges = currentPythonPendingPreferenceChanges())
   {
     if (textureLock)
@@ -3688,6 +3698,7 @@ void executeAction(const std::string& actionPath)
   {
     throw std::runtime_error{"Action is disabled"};
   }
+  recordCompletedPythonAction("actions.execute");
 }
 
 std::vector<std::string> listActions()
@@ -3972,6 +3983,7 @@ void defineModule(py::module_& module)
         auto& document = self.get();
         throwIfError(document.reload());
         PythonHandleRegistry::instance().invalidateDocument(&document);
+        recordCompletedPythonAction("reload");
       })
     .def("save_as", saveDocumentAs, py::arg("path"))
     .def("export", exportDocument, py::arg("path"), py::arg("strip_tb_properties") = true)

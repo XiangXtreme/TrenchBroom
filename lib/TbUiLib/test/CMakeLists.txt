@@ -27,6 +27,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MiscPreferencePane.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ModelBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpToolRegistry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpPythonExecution.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_OutlinerEntityPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_OutlinerTreeWidget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PieMenu.cpp
