@@ -2,9 +2,9 @@
 
 ## MCP 设置 {#mcp_settings}
 
-MCP 组配置了 TrenchBroom 面向外部 Agent 的可选本地主机 HTTP 端点。访问权限默认处于 **Off** 状态。**Read-only** 允许检查与捕获；**Edit** 还允许进行受保护的地图修改。工具配置文件控制发现范围的大小：**Core** 仅包含最小工具集，**Modeling** 为推荐的默认配置，而 **Full** 包含专家与调试工具。
+MCP 组配置了 TrenchBroom 面向外部 Agent 的可选本地主机 HTTP 端点。访问权限默认处于 **Off** 状态。**Read-only** 提供 `tb_inspect`、`tb_api` 和 `tb_capture`；**Edit** 还提供受文档保护的 `tb_execute_python`。Python 脚本调用公开的 `trenchbroom` API，而不是一组专用 MCP 编辑工具。
 
-显示的端点形式为 `http://127.0.0.1:<port>/mcp`。使用 **Copy URL** 可用于通用 MCP 客户端，或使用 **Copy Setup Command** 用于 Claude Code。更改访问权限或配置文件会重写本地 MCP 配置并重启桥接器。
+显示的端点形式为 `http://127.0.0.1:<port>/mcp`。使用 **Copy URL** 可用于通用 MCP 客户端，或使用 **Copy Setup Command** 用于 Claude Code。更改访问权限会重写本地 MCP 配置并重启桥接器。
 
 ![MCP 首选项设置](images/McpPreferences.png)
 

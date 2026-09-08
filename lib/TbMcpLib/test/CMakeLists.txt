@@ -26,7 +26,6 @@ add_executable(TbMcpStdioClientTest)
 
 target_sources(TbMcpStdioClientTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpBridgeClient.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpProtocolParity.cpp
 )
 
 target_link_libraries(TbMcpStdioClientTest

@@ -9,7 +9,6 @@ target_sources(TbMcpLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/McpJsonRpc.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/McpMode.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/McpToolCatalog.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/McpToolCatalogInternal.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/McpToolCatalogSerialization.cpp
 
   PUBLIC FILE_SET headers TYPE HEADERS

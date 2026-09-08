@@ -22,7 +22,6 @@ private:
   QString m_configPath;
   QString m_error;
   QComboBox* m_modeCombo = nullptr;
-  QComboBox* m_toolProfileCombo = nullptr;
   QLineEdit* m_httpUrlEdit = nullptr;
   QLabel* m_statusLabel = nullptr;
   QLabel* m_errorLabel = nullptr;
@@ -41,7 +40,6 @@ private:
   bool saveConfig();
   void applyConfigChange();
   void modeChanged(int index);
-  void toolProfileChanged(int index);
   void copyHttpUrl();
   void copyClaudeCommand();
 };

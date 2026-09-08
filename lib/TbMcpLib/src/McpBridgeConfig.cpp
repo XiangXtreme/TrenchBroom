@@ -122,7 +122,6 @@ McpBridgeConfig defaultBridgeConfig()
     true,
     "127.0.0.1",
     37666,
-    McpToolProfile::Modeling,
     2,
   };
 }
@@ -135,7 +134,6 @@ QJsonObject toJson(const McpBridgeConfig& config)
     {"httpEnabled", config.httpEnabled},
     {"httpHost", config.httpHost},
     {"httpPort", int(config.httpPort)},
-    {"toolProfile", toolProfileName(config.toolProfile)},
     {"configVersion", config.configVersion},
   };
 }
@@ -227,30 +225,6 @@ std::optional<McpBridgeConfig> bridgeConfigFromJson(
     httpPort = quint16(port);
   }
 
-  auto toolProfile = McpToolProfile::Modeling;
-  const auto toolProfileValue = json.value("toolProfile");
-  if (!toolProfileValue.isUndefined())
-  {
-    if (!toolProfileValue.isString())
-    {
-      if (error)
-      {
-        *error = "MCP toolProfile must be a string";
-      }
-      return std::nullopt;
-    }
-    const auto parsedProfile = parseToolProfile(toolProfileValue.toString());
-    if (!parsedProfile)
-    {
-      if (error)
-      {
-        *error = "MCP toolProfile is unknown";
-      }
-      return std::nullopt;
-    }
-    toolProfile = *parsedProfile;
-  }
-
   auto configVersion = 1;
   const auto configVersionValue = json.value("configVersion");
   if (!configVersionValue.isUndefined())
@@ -272,7 +246,6 @@ std::optional<McpBridgeConfig> bridgeConfigFromJson(
     httpEnabled,
     httpHost,
     httpPort,
-    toolProfile,
     configVersion,
   };
 }
@@ -343,7 +316,9 @@ std::optional<McpBridgeConfig> readOrCreateBridgeConfig(
       return std::nullopt;
     }
 
-    if (json->contains("token") || config->configVersion < 2)
+    if (
+      json->contains("token") || json->contains("toolProfile")
+      || config->configVersion < 2)
     {
       auto migrated = *config;
       // A configuration from before trusted Python existed must be re-enabled explicitly.

@@ -418,14 +418,6 @@ mcp::McpBridgeResponse McpBridgeServer::dispatchToolCall(
       QString{"Unknown MCP tool: %1"}.arg(request.tool));
   }
 
-  if (!tool->implemented)
-  {
-    return makeFailure(
-      request,
-      mcp::McpErrorCode::ToolNotFound,
-      QString{"MCP tool is registered but not implemented yet: %1"}.arg(request.tool));
-  }
-
   const auto effectiveMode =
     request.requestedMode && mcp::allowsMode(m_config.mode, *request.requestedMode)
       ? *request.requestedMode
@@ -437,22 +429,6 @@ mcp::McpBridgeResponse McpBridgeServer::dispatchToolCall(
       mcp::McpErrorCode::Forbidden,
       QString{"MCP tool is not available in mode %1"}.arg(mcp::modeName(effectiveMode)));
   }
-  if (
-    request.tool == "tb_history"
-    && (request.params.value("action").toString("status").trimmed().compare(
-          "undo", Qt::CaseInsensitive)
-          == 0
-        || request.params.value("action").toString("status").trimmed().compare(
-             "redo", Qt::CaseInsensitive)
-             == 0)
-    && !mcp::allowsMode(effectiveMode, mcp::McpMode::Edit))
-  {
-    return makeFailure(
-      request,
-      mcp::McpErrorCode::Forbidden,
-      "tb_history undo and redo require Edit mode");
-  }
-
   struct DispatchGuard
   {
     bool& dispatchInProgress;

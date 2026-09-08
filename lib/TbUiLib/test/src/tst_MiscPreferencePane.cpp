@@ -57,7 +57,6 @@ TEST_CASE("MiscPreferencePane")
   const auto mcpConfigPath = QDir{tempDir.path()}.filePath("mcp-config.json");
   auto mcpConfig = mcp::defaultBridgeConfig();
   mcpConfig.mode = mcp::McpMode::Edit;
-  mcpConfig.toolProfile = mcp::McpToolProfile::Full;
   REQUIRE(mcp::writeBridgeConfig(mcpConfig, mcpConfigPath));
   auto pane = MiscPreferencePane{appControllerFixture.appController(), mcpConfigPath};
 
@@ -107,7 +106,6 @@ TEST_CASE("MiscPreferencePane")
     const auto resetMcpConfig = mcp::readBridgeConfig(mcpConfigPath);
     REQUIRE(resetMcpConfig);
     CHECK(resetMcpConfig->mode == mcp::McpMode::Off);
-    CHECK(resetMcpConfig->toolProfile == mcp::McpToolProfile::Modeling);
   }
 
   SECTION("loads prefab directory preference")
@@ -150,21 +148,18 @@ TEST_CASE("MiscPreferencePane")
 
     auto* scrollArea = pane.findChild<QScrollArea*>("PreferencePane_ScrollArea");
     auto* modeCombo = pane.findChild<QComboBox*>("McpSettings_Mode");
-    auto* toolProfileCombo = pane.findChild<QComboBox*>("McpSettings_ToolProfile");
     auto* statusLabel = pane.findChild<QLabel*>("McpSettings_Status");
     auto* httpUrl = pane.findChild<QLineEdit*>("McpSettings_HttpUrl");
     auto* copyClaudeCommand =
       pane.findChild<QPushButton*>("McpSettings_CopyClaudeCommand");
     REQUIRE(scrollArea != nullptr);
     REQUIRE(modeCombo != nullptr);
-    REQUIRE(toolProfileCombo != nullptr);
     REQUIRE(statusLabel != nullptr);
     REQUIRE(httpUrl != nullptr);
     REQUIRE(copyClaudeCommand != nullptr);
 
     CHECK(scrollArea->verticalScrollBar()->maximum() > 0);
-    CHECK(modeCombo->geometry().bottom() < toolProfileCombo->geometry().top());
-    CHECK(toolProfileCombo->geometry().bottom() < statusLabel->geometry().top());
+    CHECK(modeCombo->geometry().bottom() < statusLabel->geometry().top());
     CHECK(statusLabel->geometry().bottom() < httpUrl->geometry().top());
     CHECK(httpUrl->geometry().bottom() < copyClaudeCommand->geometry().top());
   }

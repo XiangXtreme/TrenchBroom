@@ -26,9 +26,6 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MaterialBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MiscPreferencePane.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ModelBrowserView.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpBridgeServer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpHttpServer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpSessionState.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpToolRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_OutlinerEntityPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_OutlinerTreeWidget.cpp

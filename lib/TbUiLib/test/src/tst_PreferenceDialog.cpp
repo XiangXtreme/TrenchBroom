@@ -171,8 +171,8 @@ TEST_CASE("PreferenceDialog.preferencePanes")
     CHECK(pythonConsoleFontList->uniformItemSizes());
     CHECK(pythonConsoleFontList->maximumHeight() == 320);
     CHECK(
-      (pythonConsoleFontList->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded ||
-       pythonConsoleFontList->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff));
+      (pythonConsoleFontList->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded
+       || pythonConsoleFontList->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff));
 
     pane->resize(800, 600);
     pane->show();
@@ -307,19 +307,16 @@ TEST_CASE("PreferenceDialog.preferencePanes")
 
     auto* mcpSettings = pane->findChild<McpSettingsWidget*>("McpSettings_Group");
     auto* modeCombo = pane->findChild<QComboBox*>("McpSettings_Mode");
-    auto* toolProfileCombo = pane->findChild<QComboBox*>("McpSettings_ToolProfile");
     auto* httpUrl = pane->findChild<QLineEdit*>("McpSettings_HttpUrl");
     auto* copyUrl = pane->findChild<QPushButton*>("McpSettings_CopyUrl");
     auto* copyClaudeCommand =
       pane->findChild<QPushButton*>("McpSettings_CopyClaudeCommand");
     REQUIRE(mcpSettings != nullptr);
     REQUIRE(modeCombo != nullptr);
-    REQUIRE(toolProfileCombo != nullptr);
     REQUIRE(httpUrl != nullptr);
     REQUIRE(copyUrl != nullptr);
     REQUIRE(copyClaudeCommand != nullptr);
     CHECK(modeCombo->count() == 3);
-    CHECK(toolProfileCombo->count() == 3);
     CHECK(httpUrl->isReadOnly());
     CHECK(httpUrl->text().startsWith("http://127.0.0.1:"));
     CHECK(copyUrl->text() == "Copy URL");

@@ -37,15 +37,18 @@ TEST_CASE(
   auto expectedNames = QStringList{};
   for (const auto& tool : mcp::defaultToolCatalog())
   {
-    if (tool.implemented)
-    {
-      expectedNames.push_back(tool.name);
-    }
+    expectedNames.push_back(tool.name);
   }
   expectedNames.sort();
 
   CHECK(server.registeredToolNames() == expectedNames);
   CHECK(server.duplicateToolRegistrationCount() == 0);
+
+  const auto retired = server.dispatchRequest(
+    mcp::McpBridgeRequest{"retired-tool", "tb_history", {}, mcp::McpMode::Edit});
+  CHECK_FALSE(retired.ok);
+  REQUIRE(retired.error);
+  CHECK(retired.error->code == mcp::McpErrorCode::ToolNotFound);
 }
 
 } // namespace tb::ui

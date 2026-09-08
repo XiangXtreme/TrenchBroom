@@ -2,9 +2,9 @@
 
 ## MCP Settings {#mcp_settings}
 
-The MCP group configures TrenchBroom's optional localhost HTTP endpoint for external agents. Access is **Off** by default. **Read-only** allows inspection and captures; **Edit** also permits guarded map changes. The tool profile controls discovery size: **Core** is minimal, **Modeling** is the recommended default, and **Full** includes expert and debugging tools.
+The MCP group configures TrenchBroom's optional localhost HTTP endpoint for external agents. Access is **Off** by default. **Read-only** exposes `tb_inspect`, `tb_api`, and `tb_capture`; **Edit** also exposes guarded `tb_execute_python`. Python scripts use the public `trenchbroom` API, rather than a collection of specialized MCP editing tools.
 
-The displayed endpoint has the form `http://127.0.0.1:<port>/mcp`. Use **Copy URL** for a generic MCP client or **Copy Setup Command** for Claude Code. Changing access or profile rewrites the local MCP configuration and restarts the bridge.
+The displayed endpoint has the form `http://127.0.0.1:<port>/mcp`. Use **Copy URL** for a generic MCP client or **Copy Setup Command** for Claude Code. Changing access rewrites the local MCP configuration and restarts the bridge.
 
 ![MCP Preferences](images/McpPreferences.png)
 

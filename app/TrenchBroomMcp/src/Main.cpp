@@ -60,8 +60,7 @@ std::optional<QJsonObject> handleRequest(const QJsonObject& request)
           {}, McpError{McpErrorCode::Forbidden, "TrenchBroom MCP bridge is disabled"});
       }
       return Client.request(*config, type, toolName, params);
-    },
-    config->toolProfile);
+    });
 }
 
 void writeJsonLine(QTextStream& out, const QJsonObject& json)

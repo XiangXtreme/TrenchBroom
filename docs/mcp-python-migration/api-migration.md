@@ -45,9 +45,8 @@ result = {"path": document.path, "argument": arguments.get("name")}
 精确 `symbol`（如 `Document.path`）才展开对应符号。现有 public Python API 的目录
 由 `PythonApiCatalog` 维护，并有测试确保它和模块绑定同步。
 
-旧 MCP 工具仍处于过渡目录，Python API 不得通过 JSON 反调旧 handler。
-`capability-map.json` 保留旧目录审计信息，现有 planned/replacementSymbols 不能
-当作逐项开发清单或已验证的能力；新交付可以归档或删除该文件。
+旧 MCP 工具已退役，Python API 不得通过 JSON 反调任何 MCP handler。历史 capability
+映射不属于交付物，也不能当作逐项开发清单或已验证的能力。
 
 ## 地图快照
 

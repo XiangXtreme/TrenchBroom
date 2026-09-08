@@ -174,18 +174,12 @@ QJsonObject mcpInitializeResult(const QJsonObject& params)
   };
 }
 
-QJsonObject mcpToolsListResult(const McpMode currentMode, const McpToolProfile profile)
-{
-  return QJsonObject{
-    {"tools", toolsListJson(discoveryMode(currentMode), true, profile)},
-    {"trenchBroomMode", modeName(currentMode)},
-    {"toolProfile", toolProfileName(profile)},
-  };
-}
-
 QJsonObject mcpToolsListResult(const McpMode currentMode)
 {
-  return mcpToolsListResult(currentMode, McpToolProfile::Modeling);
+  return QJsonObject{
+    {"tools", toolsListJson(discoveryMode(currentMode))},
+    {"trenchBroomMode", modeName(currentMode)},
+  };
 }
 
 QJsonObject mcpToolCallResult(
@@ -239,8 +233,7 @@ QJsonObject mcpToolCallResult(
 std::optional<QJsonObject> handleMcpJsonRpcRequest(
   const QJsonObject& request,
   const McpMode currentMode,
-  const McpRequestDispatcher& dispatcher,
-  const McpToolProfile profile)
+  const McpRequestDispatcher& dispatcher)
 {
   const auto id = request.value("id");
   if (request.value("jsonrpc").toString() != "2.0")
@@ -278,7 +271,7 @@ std::optional<QJsonObject> handleMcpJsonRpcRequest(
 
   if (method == "tools/list")
   {
-    return jsonRpcResult(id, mcpToolsListResult(currentMode, profile));
+    return jsonRpcResult(id, mcpToolsListResult(currentMode));
   }
 
   if (method == "tools/call")

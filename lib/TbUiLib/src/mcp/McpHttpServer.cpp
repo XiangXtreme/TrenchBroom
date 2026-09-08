@@ -533,8 +533,7 @@ void McpHttpServer::handleSocketReadyRead(QTcpSocket& socket)
         type,
       };
       return m_bridgeServer.dispatchRequest(request);
-    },
-    m_config.toolProfile);
+    });
 
   if (!response)
   {

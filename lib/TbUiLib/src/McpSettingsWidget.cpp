@@ -40,23 +40,6 @@ int findModeIndex(const QComboBox& combo, const mcp::McpMode mode)
   return combo.findData(mcp::modeName(mode), ModeRole);
 }
 
-void addToolProfile(
-  QComboBox& combo, const QString& label, const mcp::McpToolProfile profile)
-{
-  combo.addItem(label, mcp::toolProfileName(profile));
-}
-
-mcp::McpToolProfile toolProfileFromCombo(const QComboBox& combo)
-{
-  const auto value = combo.currentData(ModeRole).toString();
-  return mcp::parseToolProfile(value).value_or(mcp::McpToolProfile::Modeling);
-}
-
-int findToolProfileIndex(const QComboBox& combo, const mcp::McpToolProfile profile)
-{
-  return combo.findData(mcp::toolProfileName(profile), ModeRole);
-}
-
 QString httpUrl(const mcp::McpBridgeConfig& config)
 {
   return QString{"http://%1:%2/mcp"}.arg(config.httpHost).arg(config.httpPort);
@@ -108,19 +91,6 @@ void McpSettingsWidget::createGui()
     this,
     &McpSettingsWidget::modeChanged);
 
-  m_toolProfileCombo = new QComboBox{};
-  m_toolProfileCombo->setObjectName("McpSettings_ToolProfile");
-  addToolProfile(*m_toolProfileCombo, tr("Core"), mcp::McpToolProfile::Core);
-  addToolProfile(*m_toolProfileCombo, tr("Modeling"), mcp::McpToolProfile::Modeling);
-  addToolProfile(*m_toolProfileCombo, tr("Full"), mcp::McpToolProfile::Full);
-  m_toolProfileCombo->setToolTip(
-    tr("Modeling is recommended. Full also exposes expert and debug tools."));
-  connect(
-    m_toolProfileCombo,
-    QOverload<int>::of(&QComboBox::currentIndexChanged),
-    this,
-    &McpSettingsWidget::toolProfileChanged);
-
   m_statusLabel = new QLabel{};
   m_statusLabel->setObjectName("McpSettings_Status");
   setInfoStyle(m_statusLabel);
@@ -164,7 +134,6 @@ void McpSettingsWidget::createGui()
   layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
   layout->addRow(infoLabel);
   layout->addRow(tr("Access"), m_modeCombo);
-  layout->addRow(tr("Tools"), m_toolProfileCombo);
   layout->addRow(tr("Status"), m_statusLabel);
   layout->addRow(tr("Endpoint"), endpointLayout);
   layout->addRow(tr("Claude Code"), copyClaudeCommandButton);
@@ -181,13 +150,9 @@ void McpSettingsWidget::resetToDefaults()
 void McpSettingsWidget::updateControls()
 {
   const auto modeBlocker = QSignalBlocker{m_modeCombo};
-  const auto toolProfileBlocker = QSignalBlocker{m_toolProfileCombo};
 
   const auto modeIndex = findModeIndex(*m_modeCombo, m_config.mode);
   m_modeCombo->setCurrentIndex(modeIndex >= 0 ? modeIndex : 0);
-  const auto toolProfileIndex =
-    findToolProfileIndex(*m_toolProfileCombo, m_config.toolProfile);
-  m_toolProfileCombo->setCurrentIndex(toolProfileIndex >= 0 ? toolProfileIndex : 1);
   m_httpUrlEdit->setText(httpUrl(m_config));
   m_httpUrlEdit->setCursorPosition(0);
 
@@ -247,12 +212,6 @@ void McpSettingsWidget::applyConfigChange()
 void McpSettingsWidget::modeChanged(const int /* index */)
 {
   m_config.mode = modeFromCombo(*m_modeCombo);
-  applyConfigChange();
-}
-
-void McpSettingsWidget::toolProfileChanged(const int /* index */)
-{
-  m_config.toolProfile = toolProfileFromCombo(*m_toolProfileCombo);
   applyConfigChange();
 }
 

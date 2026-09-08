@@ -915,7 +915,6 @@ QJsonObject doctorJson(
     {"configPath", mcp::defaultConfigPath()},
     {"pipeName", config.pipeName},
     {"mode", mcp::modeName(config.mode)},
-    {"toolProfile", mcp::toolProfileName(config.toolProfile)},
     {"authentication", "none"},
     {"listening", config.mode != mcp::McpMode::Off},
     {"documentCount",
@@ -927,17 +926,12 @@ QJsonObject doctorJson(
   };
   addMcpSkillHints(result);
 
-  const auto stats = mcp::toolProfileStatsJson(config.mode, true, config.toolProfile);
-  for (auto it = stats.begin(); it != stats.end(); ++it)
-  {
-    result.insert(it.key(), it.value());
-  }
+  result.insert("implementedToolCount", mcp::toolsSummaryJson(config.mode).size());
 
   if (fullDetail)
   {
     result.insert("detail", "full");
-    result.insert(
-      "implementedTools", mcp::toolsSummaryJson(config.mode, true, config.toolProfile));
+    result.insert("implementedTools", mcp::toolsSummaryJson(config.mode));
     result.insert("toolDiagnostics", mcp::toolDiagnosticsJson(config.mode));
   }
   else
