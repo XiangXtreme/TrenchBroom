@@ -514,6 +514,78 @@ with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
     REQUIRE(afterInvalidResult.ok);
     CHECK(afterInvalidResult.value == beforeInvalidResult.value);
 
+    const auto beforeRollbackState = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "result = {'brushes': len(tb.brushes.list()), "
+        "'selectedBrushes': len(tb.objects.selection().brushes)}",
+        "<mcp-python:before-rollback-state>",
+        {},
+      });
+    REQUIRE(beforeRollbackState.ok);
+
+    const auto checkRollbackState = [&]() {
+      const auto state = runtime.runMcpScript(
+        context,
+        PythonMcpExecutionRequest{
+          "import trenchbroom as tb\n"
+          "result = {'brushes': len(tb.brushes.list()), "
+          "'selectedBrushes': len(tb.objects.selection().brushes)}",
+          "<mcp-python:rollback-state>",
+          {},
+        });
+      REQUIRE(state.ok);
+      CHECK(state.value == beforeRollbackState.value);
+      CHECK(window.document().map().selection().brushes.empty());
+      CHECK_FALSE(window.document().map().modified());
+    };
+
+    const auto systemExit = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "tb.brushes.create_box((-16, -16, -16), (16, 16, 16))\n"
+        "raise SystemExit('MCP exit')",
+        "<mcp-python:system-exit>",
+        {},
+      });
+    CHECK_FALSE(systemExit.ok);
+    CHECK(systemExit.executed);
+    CHECK(systemExit.rolledBack);
+    CHECK(systemExit.error.contains("SystemExit"));
+    checkRollbackState();
+
+    const auto keyboardInterrupt = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "tb.brushes.create_box((-16, -16, -16), (16, 16, 16))\n"
+        "raise KeyboardInterrupt('MCP interrupt')",
+        "<mcp-python:keyboard-interrupt>",
+        {},
+      });
+    CHECK_FALSE(keyboardInterrupt.ok);
+    CHECK(keyboardInterrupt.executed);
+    CHECK(keyboardInterrupt.rolledBack);
+    CHECK(keyboardInterrupt.error.contains("KeyboardInterrupt"));
+    checkRollbackState();
+
+    const auto oversizedResult = runtime.runMcpScript(
+      context,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "tb.brushes.create_box((-16, -16, -16), (16, 16, 16))\n"
+        "result = 'x' * (1024 * 1024)",
+        "<mcp-python:oversized-result>",
+        {},
+      });
+    CHECK_FALSE(oversizedResult.ok);
+    CHECK(oversizedResult.executed);
+    CHECK(oversizedResult.rolledBack);
+    CHECK(oversizedResult.error.contains("1 MiB"));
+    checkRollbackState();
+
     const auto timedOut = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{

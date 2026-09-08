@@ -1003,11 +1003,13 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   execution.executed = true;
   if (result == nullptr)
   {
+    const auto timedOut = deadline.hasExpired();
+    const auto error =
+      timedOut ? QString{"MCP Python execution exceeded its cooperative timeout"}
+               : QString::fromStdString(formatCurrentException());
     cancel();
-    execution.timedOut = deadline.hasExpired();
-    execution.error = execution.timedOut
-                        ? "MCP Python execution exceeded its cooperative timeout"
-                        : QString::fromStdString(formatCurrentException());
+    execution.timedOut = timedOut;
+    execution.error = error;
     return execution;
   }
   Py_DECREF(result);

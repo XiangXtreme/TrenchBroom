@@ -145,3 +145,32 @@ Skill/recipe、手册或 UI 的修改分别运行其适用 validator/同步、Ge
 纯文档修订做静态检查。源码批次通过必要验证后继续交付；仅新变化、失败或未解决
 风险触发重跑。日志/地图/截图写到 build-release-codex/codex-logs，记录最终 tested
 commit、输入、回执、地图事实与支持范围；它们不进 Git。只提交任务改动，不 push。
+
+## 最终交付状态
+
+批次 A 已完成：公开目录固定为四入口，旧 MCP 的 IR、模块状态、selector、操作历史、
+Review 编排和 profile 兼容面不再接入执行链。批次 B 的最终 Release 场景记录在
+`build-release-codex/codex-logs/mcp-thin-final-20260908-1507`；该目录不纳入 Git。
+
+场景使用一次性地图，Python 创建七段弧形高差支柱、凸六边形平台和 light 实体，随后
+按 `targetname` 跨次定位实体、调整属性、平台位置和 face UV。回执与最终 map snapshot
+确认 11 个 brush、2 个点实体、15 个节点、bounds `[-96,-179,0]..[188,179,192]`，保存后
+地图为未修改状态。公开 action `Menu/View/Camera/Focus on Selection` 用于视角控制，
+`tb_capture` 产生可读取 PNG。事务异常返回 traceback 且 `rolledBack:true`；action 在原生
+undo 后抛错返回 `partialMutation:true`，随后 redo 恢复。
+
+最终工具发现的 Edit HTTP 回应为 11,275 bytes（小于 16 KiB），四项工具相对旧 Modeling
+53 项基线的目录数量比例为 7.55%。ReadOnly 实测为三项且拒绝执行，Off 进程没有监听
+socket。旧 `tb_history` 被拒绝；错误 fingerprint 和 executionId 内容冲突也均返回失败
+回执，精确重放返回 `historicalReplay:true`。
+
+破坏性变化：旧 MCP 工具、profile、IR、`tb.ir`、`tb.modules`、operationId 和 Review
+资源均不受支持。可靠性边界保持不变：协作超时与客户端断连不能强制打断一个阻塞的原生
+调用，客户端必须根据执行回执和随后 `tb_inspect` 的地图事实决定恢复动作。原生提交失败
+仍由生产路径处理；当前没有可安全注入该内部命令失败的夹具。
+
+最终源码的 C5 回归增加了在已创建并选中对象后触发 `SystemExit`、
+`KeyboardInterrupt` 和 1 MiB 结果上限的断言；它们都确认事务回滚、地图 dirty 状态、
+选择与 brush 数量恢复，且异常回执保留原始异常类型。`20260908-154247-ci-preflight-full-d98.stdout.log`
+记录了相对 `d98f869503f331809cd6727712438534c16c8c9e` 的完整预检通过（严格编译 47
+个单元和受影响测试）。

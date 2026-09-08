@@ -163,6 +163,7 @@ std::optional<AutomationSelectionGeometryAnalysis> analyzeSelectionGeometry(
       .closed = brush.closed(),
       .convex = brush.closed() && brush.fullySpecified(),
       .gridAligned = brushGridAligned(brush, grid),
+      .materials = {},
     };
     if (!fact.convex)
     {
@@ -245,10 +246,15 @@ AutomationCsgSelectionResult applySelectionCsg(
 {
   const auto& selection = map.selection();
   auto result = AutomationCsgSelectionResult{
+    .selectedBrushes = {},
+    .deletedBrushCount = 0u,
     .selectedBrushCountBefore = selection.brushes.size(),
     .selectedBrushFaceCountBefore = selection.brushFaces.size(),
     .operation = automationCsgOperationName(operation),
     .transactionName = transactionName,
+    .error = {},
+    .requiredSelection = {},
+    .selectionFailure = false,
   };
   if (!validCsgSelection(selection, operation, result.error, result.requiredSelection))
   {

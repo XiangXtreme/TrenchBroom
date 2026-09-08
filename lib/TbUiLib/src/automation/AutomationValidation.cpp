@@ -156,6 +156,8 @@ AutomationValidationIssue makeIssue(
     .hidden = issue.hidden(),
     .boundsMin = {bounds.min.x(), bounds.min.y(), bounds.min.z()},
     .boundsMax = {bounds.max.x(), bounds.max.y(), bounds.max.z()},
+    .faceIndex = {},
+    .propertyKey = {},
     .safeQuickFixes = safeQuickFixDescriptions(worldNode, issue),
   };
   if (const auto* faceIssue = dynamic_cast<const mdl::BrushFaceIssue*>(&issue))
