@@ -32,7 +32,7 @@ TEST_CASE("McpBridgeMessages")
   {
     const auto request = McpBridgeRequest{
       "1",
-      "tb_status",
+      "tb_inspect",
       QJsonObject{{"verbose", true}},
       McpMode::ReadOnly,
     };
@@ -45,66 +45,22 @@ TEST_CASE("McpBridgeMessages")
     CHECK(parsed->params.value("verbose").toBool());
     REQUIRE(parsed->requestedMode);
     CHECK(*parsed->requestedMode == McpMode::ReadOnly);
-    CHECK(parsed->type == McpBridgeRequestType::ToolCall);
     CHECK_FALSE(toJson(request).contains("token"));
-    CHECK(toJson(request).value("type").toString() == "tool_call");
+    CHECK_FALSE(toJson(request).contains("type"));
   }
 
-  SECTION("typed resource requests roundtrip")
-  {
-    const auto listRequest = McpBridgeRequest{
-      "list-1",
-      {},
-      QJsonObject{{"cursor", "opaque-cursor"}},
-      std::nullopt,
-      McpBridgeRequestType::ResourcesList,
-    };
-    const auto readRequest = McpBridgeRequest{
-      "read-1",
-      {},
-      QJsonObject{{"uri", "tbmcp://operation/mcp-op-1"}},
-      std::nullopt,
-      McpBridgeRequestType::ResourceRead,
-    };
-
-    const auto parsedList = bridgeRequestFromJson(toJson(listRequest));
-    const auto parsedRead = bridgeRequestFromJson(toJson(readRequest));
-
-    REQUIRE(parsedList);
-    CHECK(parsedList->type == McpBridgeRequestType::ResourcesList);
-    CHECK(parsedList->tool.isEmpty());
-    CHECK(parsedList->params.value("cursor").toString() == "opaque-cursor");
-    REQUIRE(parsedRead);
-    CHECK(parsedRead->type == McpBridgeRequestType::ResourceRead);
-    CHECK(parsedRead->params.value("uri").toString() == "tbmcp://operation/mcp-op-1");
-  }
-
-  SECTION("tokenless legacy requests without a type remain tool calls")
-  {
-    const auto parsed = bridgeRequestFromJson(QJsonObject{
-      {"id", "legacy-1"},
-      {"tool", "tb_status"},
-      {"params", QJsonObject{}},
-    });
-
-    REQUIRE(parsed);
-    CHECK(parsed->type == McpBridgeRequestType::ToolCall);
-    CHECK(parsed->tool == "tb_status");
-  }
-
-  SECTION("rejects unknown request types")
+  SECTION("requires a tool name")
   {
     auto error = QString{};
     const auto parsed = bridgeRequestFromJson(
       QJsonObject{
-        {"id", "1"},
-        {"type", "unknown"},
+        {"id", "missing-tool"},
         {"params", QJsonObject{}},
       },
       &error);
 
     CHECK_FALSE(parsed);
-    CHECK(error.contains("type"));
+    CHECK(error.contains("tool"));
   }
 
   SECTION("rejects invalid request params")
@@ -112,7 +68,7 @@ TEST_CASE("McpBridgeMessages")
     auto error = QString{};
     auto json = QJsonObject{
       {"id", "1"},
-      {"tool", "tb_status"},
+      {"tool", "tb_inspect"},
       {"params", true},
     };
 

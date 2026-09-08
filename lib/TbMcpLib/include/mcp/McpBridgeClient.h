@@ -40,7 +40,7 @@ struct McpBridgeClientTimeouts
   int writeMs = 5'000;
   int fastResponseMs = 10'000;
   int normalResponseMs = 30'000;
-  int longResponseMs = 120'000;
+  int longResponseMs = 90'000;
 
   int responseTimeoutMs(McpToolCostClass costClass) const;
 };
@@ -81,7 +81,6 @@ public:
 
   McpBridgeResponse request(
     const McpBridgeConfig& config,
-    McpBridgeRequestType type,
     const QString& toolName,
     QJsonObject params,
     QString requestId = {}) const;

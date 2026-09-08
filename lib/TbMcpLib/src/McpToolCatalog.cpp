@@ -161,31 +161,4 @@ bool canCallTool(const McpToolDefinition& tool, const McpMode mode)
   return allowsMode(mode, tool.requiredMode);
 }
 
-QJsonArray toolsSearchJson(
-  const QString& query, const QString& detail, const McpMode mode)
-{
-  auto result = QJsonArray{};
-  const auto needle = query.trimmed().toLower();
-  for (const auto& tool : defaultToolCatalog())
-  {
-    if (!allowsMode(mode, tool.requiredMode))
-    {
-      continue;
-    }
-    if (
-      !needle.isEmpty() && !tool.name.contains(needle, Qt::CaseInsensitive)
-      && !tool.description.contains(needle, Qt::CaseInsensitive))
-    {
-      continue;
-    }
-    auto item = toMcpToolDiagnosticJson(tool, mode);
-    if (detail == "schema")
-    {
-      item.insert("inputSchema", tool.inputSchema);
-    }
-    result.push_back(std::move(item));
-  }
-  return result;
-}
-
 } // namespace tb::mcp

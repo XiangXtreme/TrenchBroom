@@ -48,18 +48,13 @@ std::optional<QJsonObject> handleRequest(const QJsonObject& request)
 
   static const auto Client = McpBridgeClient{};
   return handleMcpJsonRpcRequest(
-    request,
-    config->mode,
-    [&](
-      const McpBridgeRequestType type,
-      const QString& toolName,
-      const QJsonObject& params) {
+    request, config->mode, [&](const QString& toolName, const QJsonObject& params) {
       if (config->mode == McpMode::Off)
       {
         return McpBridgeResponse::failure(
           {}, McpError{McpErrorCode::Forbidden, "TrenchBroom MCP bridge is disabled"});
       }
-      return Client.request(*config, type, toolName, params);
+      return Client.request(*config, toolName, params);
     });
 }
 

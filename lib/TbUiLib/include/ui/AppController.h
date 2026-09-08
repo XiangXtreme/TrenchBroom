@@ -142,8 +142,6 @@ public:
   ActionManager& actionManager();
 
 
-  const QJsonObject& mcpOverlayState() const;
-  void refreshMcpOverlayViews();
   void restartMcpBridge();
   bool mcpBridgeIsListening() const;
   bool mcpHttpServerIsListening() const;

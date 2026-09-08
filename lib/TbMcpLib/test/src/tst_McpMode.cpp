@@ -29,19 +29,17 @@ TEST_CASE("McpMode")
   CHECK(modeName(McpMode::Off) == "Off");
   CHECK(modeName(McpMode::ReadOnly) == "ReadOnly");
   CHECK(modeName(McpMode::Edit) == "Edit");
-  CHECK(modeName(McpMode::Danger) == "Danger");
 
   CHECK(parseMode("off") == McpMode::Off);
   CHECK(parseMode("ReadOnly") == McpMode::ReadOnly);
   CHECK(parseMode("Edit") == McpMode::Edit);
-  CHECK(parseMode("Danger") == McpMode::Danger);
+  CHECK(!parseMode("Danger"));
   CHECK(!parseMode("Unknown"));
 
   CHECK(!allowsMode(McpMode::Off, McpMode::ReadOnly));
   CHECK(allowsMode(McpMode::ReadOnly, McpMode::ReadOnly));
   CHECK(!allowsMode(McpMode::ReadOnly, McpMode::Edit));
   CHECK(allowsMode(McpMode::Edit, McpMode::ReadOnly));
-  CHECK(allowsMode(McpMode::Danger, McpMode::Edit));
 }
 
 } // namespace tb::mcp

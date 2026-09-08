@@ -124,6 +124,7 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
     CHECK(toolResponseTimeoutMs(McpToolCostClass::Fast) == 5'000);
     CHECK(toolResponseTimeoutMs(McpToolCostClass::Normal) == 30'000);
     CHECK(toolResponseTimeoutMs(McpToolCostClass::Long) == 90'000);
+    CHECK(McpBridgeClientTimeouts{}.longResponseMs == 90'000);
   }
 
   SECTION("uses five second connection and write limits")
@@ -136,8 +137,7 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
                       + '\n';
     const auto client = makeClient(state);
 
-    const auto response = client.request(
-      testConfig(), McpBridgeRequestType::ToolCall, "documents_list", {}, "request-1");
+    const auto response = client.request(testConfig(), "tb_inspect", {}, "request-1");
 
     REQUIRE(response.ok);
     CHECK(response.id == "request-1");
@@ -149,62 +149,9 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
     const auto request = QJsonDocument::fromJson(state->written.trimmed()).object();
     CHECK(request.value("id").toString() == "request-1");
     CHECK_FALSE(request.contains("token"));
-    CHECK(request.value("type").toString() == "tool_call");
-    CHECK(request.value("tool").toString() == "documents_list");
+    CHECK_FALSE(request.contains("type"));
+    CHECK(request.value("tool").toString() == "tb_inspect");
     CHECK(request.value("mode").toString() == "Edit");
-  }
-
-  SECTION("serializes typed resource list requests")
-  {
-    const auto state = std::make_shared<ConnectionState>();
-    state->lineAvailable = true;
-    state->response =
-      QJsonDocument{toJson(McpBridgeResponse::success(
-                      "resource-list-1", QJsonObject{{"resources", QJsonArray{}}}))}
-        .toJson(QJsonDocument::Compact)
-      + '\n';
-    const auto client = makeClient(state);
-
-    const auto response = client.request(
-      testConfig(),
-      McpBridgeRequestType::ResourcesList,
-      {},
-      QJsonObject{{"cursor", "opaque-cursor"}},
-      "resource-list-1");
-
-    REQUIRE(response.ok);
-    const auto request = QJsonDocument::fromJson(state->written.trimmed()).object();
-    CHECK(request.value("type").toString() == "resources_list");
-    CHECK_FALSE(request.contains("tool"));
-    CHECK(
-      request.value("params").toObject().value("cursor").toString() == "opaque-cursor");
-  }
-
-  SECTION("serializes typed resource read requests")
-  {
-    const auto state = std::make_shared<ConnectionState>();
-    state->lineAvailable = true;
-    state->response =
-      QJsonDocument{toJson(McpBridgeResponse::success(
-                      "resource-read-1", QJsonObject{{"operationId", "mcp-op-1"}}))}
-        .toJson(QJsonDocument::Compact)
-      + '\n';
-    const auto client = makeClient(state);
-
-    const auto response = client.request(
-      testConfig(),
-      McpBridgeRequestType::ResourceRead,
-      {},
-      QJsonObject{{"uri", "tbmcp://operation/mcp-op-1"}},
-      "resource-read-1");
-
-    REQUIRE(response.ok);
-    const auto request = QJsonDocument::fromJson(state->written.trimmed()).object();
-    CHECK(request.value("type").toString() == "resource_read");
-    CHECK_FALSE(request.contains("tool"));
-    CHECK(
-      request.value("params").toObject().value("uri").toString()
-      == "tbmcp://operation/mcp-op-1");
   }
 
   SECTION("returns structured recovery details after a response timeout")
@@ -214,8 +161,8 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
     const auto timeouts = McpBridgeClientTimeouts{11, 13, 17, 19, 23};
     const auto client = makeClient(state, timeouts);
 
-    const auto response = client.request(
-      testConfig(), McpBridgeRequestType::ToolCall, "tb_execute_python", {}, "request-long");
+    const auto response =
+      client.request(testConfig(), "tb_execute_python", {}, "request-long");
 
     REQUIRE_FALSE(response.ok);
     REQUIRE(response.error);
@@ -232,7 +179,7 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
         {"name", "tb_execute_python"},
         {"arguments", QJsonObject{}},
       },
-      [&](McpBridgeRequestType, const QString&, const QJsonObject&) { return response; });
+      [&](const QString&, const QJsonObject&) { return response; });
     const auto structured = toolResult.value("structuredContent").toObject();
     CHECK(structured.value("tool").toString() == "tb_execute_python");
     CHECK(structured.value("requestId").toString() == "request-long");
@@ -252,8 +199,7 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
       + '\n';
     const auto client = makeClient(state);
 
-    const auto response = client.request(
-      testConfig(), McpBridgeRequestType::ToolCall, "tb_status", {}, "request-1");
+    const auto response = client.request(testConfig(), "tb_inspect", {}, "request-1");
 
     REQUIRE_FALSE(response.ok);
     REQUIRE(response.error);

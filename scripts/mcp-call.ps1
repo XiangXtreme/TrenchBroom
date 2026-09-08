@@ -6,7 +6,6 @@ param(
   [string] $Method = "",
   [string] $ParamsJson = "{}",
   [string] $ParamsPath = "",
-  [string] $ResourceUri = "",
   [int] $TimeoutSec = 10,
   [switch] $Initialize,
   [switch] $ListTools,
@@ -222,9 +221,6 @@ try {
   } elseif ($ListTools) {
     $requestMethod = "tools/list"
     $requestParams = @{}
-  } elseif (-not [string]::IsNullOrWhiteSpace($ResourceUri)) {
-    $requestMethod = "resources/read"
-    $requestParams = [ordered] @{ uri = $ResourceUri }
   } elseif (-not [string]::IsNullOrWhiteSpace($Method)) {
     $requestMethod = $Method
     $requestParams = Read-JsonValue -Json $ParamsJson -Path $ParamsPath -DefaultValue @{}

@@ -32,8 +32,6 @@ QString modeName(const McpMode mode)
     return "ReadOnly";
   case McpMode::Edit:
     return "Edit";
-  case McpMode::Danger:
-    return "Danger";
   }
 
   return "Off";
@@ -53,11 +51,6 @@ std::optional<McpMode> parseMode(const QString& value)
   {
     return McpMode::Edit;
   }
-  if (value.compare("Danger", Qt::CaseInsensitive) == 0)
-  {
-    return McpMode::Danger;
-  }
-
   return std::nullopt;
 }
 
@@ -72,8 +65,6 @@ bool allowsMode(const McpMode currentMode, const McpMode requiredMode)
       return 1;
     case McpMode::Edit:
       return 2;
-    case McpMode::Danger:
-      return 3;
     }
 
     return 0;

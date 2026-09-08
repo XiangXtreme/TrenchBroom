@@ -21,7 +21,6 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QStringList>
 
 #include "mcp/McpError.h"
 #include "mcp/McpToolCatalog.h"
@@ -44,18 +43,6 @@ QJsonObject textToolResult(
       {"text", text},
     },
   };
-  const auto resourceUri = structuredContent.value("resourceUri").toString();
-  if (!resourceUri.isEmpty())
-  {
-    content.push_back(QJsonObject{
-      {"type", "resource_link"},
-      {"uri", resourceUri},
-      {"name", structuredContent.value("operationId").toString("MCP operation")},
-      {"description", "MCP operation details"},
-      {"mimeType", "application/json"},
-    });
-  }
-
   auto result = QJsonObject{
     {"content", content},
     {"isError", isError},
@@ -80,34 +67,6 @@ QString toolResultText(const QJsonObject& json)
   if (!summary.isEmpty())
   {
     return summary;
-  }
-
-  const auto operationId = json.value("operationId").toString();
-  if (!operationId.isEmpty())
-  {
-    const auto transactionName = json.value("transactionName").toString();
-    const auto changedCount = json.value("changedObjectCount").toInt(-1);
-    const auto brushCount = json.value("brushCount").toInt(-1);
-
-    auto parts = QStringList{QString{"operationId=%1"}.arg(operationId)};
-    if (!transactionName.isEmpty())
-    {
-      parts.push_back(QString{"transaction=%1"}.arg(transactionName));
-    }
-    if (brushCount >= 0)
-    {
-      parts.push_back(QString{"brushCount=%1"}.arg(brushCount));
-    }
-    else if (changedCount >= 0)
-    {
-      parts.push_back(QString{"changedObjectCount=%1"}.arg(changedCount));
-    }
-    if (const auto resourceUri = json.value("resourceUri").toString();
-        !resourceUri.isEmpty())
-    {
-      parts.push_back(QString{"resource=%1"}.arg(resourceUri));
-    }
-    return parts.join("; ");
   }
 
   if (json.contains("count"))
@@ -155,7 +114,6 @@ QJsonObject mcpInitializeResult(const QJsonObject& params)
     {"protocolVersion", ProtocolVersion},
     {"capabilities",
      QJsonObject{
-       {"resources", QJsonObject{{"listChanged", false}}},
        {"tools", QJsonObject{{"listChanged", false}}},
      }},
     {"serverInfo",
@@ -202,8 +160,7 @@ QJsonObject mcpToolCallResult(
     arguments = argumentsValue.toObject();
   }
 
-  const auto bridgeResponse =
-    dispatcher(McpBridgeRequestType::ToolCall, nameValue.toString(), arguments);
+  const auto bridgeResponse = dispatcher(nameValue.toString(), arguments);
   if (bridgeResponse.ok)
   {
     return textToolResult(
@@ -277,54 +234,6 @@ std::optional<QJsonObject> handleMcpJsonRpcRequest(
   if (method == "tools/call")
   {
     return jsonRpcResult(id, mcpToolCallResult(params, dispatcher));
-  }
-
-  if (method == "resources/list")
-  {
-    const auto cursorValue = params.value("cursor");
-    if (!cursorValue.isUndefined() && !cursorValue.isString())
-    {
-      return jsonRpcError(id, -32602, "resources/list cursor must be a string");
-    }
-    const auto response = dispatcher(McpBridgeRequestType::ResourcesList, {}, params);
-    if (!response.ok)
-    {
-      const auto error = response.error.value_or(
-        McpError{McpErrorCode::InternalError, "Unknown MCP resource list error"});
-      const auto code = error.code == McpErrorCode::InvalidParams ? -32602 : -32603;
-      return jsonRpcError(id, code, error.message);
-    }
-    if (!response.result.value("resources").isArray())
-    {
-      return jsonRpcError(id, -32603, "Resource provider returned an invalid list");
-    }
-    return jsonRpcResult(id, response.result);
-  }
-
-  if (method == "resources/read")
-  {
-    const auto uri = params.value("uri").toString();
-    if (uri.isEmpty())
-    {
-      return jsonRpcError(id, -32602, "resources/read requires uri");
-    }
-    const auto response = dispatcher(McpBridgeRequestType::ResourceRead, {}, params);
-    if (!response.ok)
-    {
-      const auto error = response.error.value_or(
-        McpError{McpErrorCode::InternalError, "Unknown MCP resource read error"});
-      const auto code = error.code == McpErrorCode::InvalidParams ? -32002 : -32603;
-      return jsonRpcError(id, code, error.message);
-    }
-    return jsonRpcResult(
-      id,
-      QJsonObject{
-        {"contents",
-         QJsonArray{QJsonObject{
-           {"uri", uri},
-           {"mimeType", "application/json"},
-           {"text", compactJsonText(response.result)},
-         }}}});
   }
 
   return jsonRpcError(id, -32601, QString{"Method not found: %1"}.arg(method));

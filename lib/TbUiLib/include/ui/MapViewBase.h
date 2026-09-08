@@ -374,8 +374,6 @@ private: // implement RenderView interface
   void invalidatePortalFileRenderer();
   void validatePortalFileRenderer(render::RenderContext& renderContext);
 
-  void renderMcpOverlay(
-    render::RenderContext& renderContext, render::RenderBatch& renderBatch);
   void renderSmartFaceSelectionPreview(
     render::RenderContext& renderContext, render::RenderBatch& renderBatch);
   void renderCompass(render::RenderBatch& renderBatch);

@@ -147,11 +147,6 @@ mcp::McpMode McpBridgeServer::mode() const
   return m_config.mode;
 }
 
-const QJsonObject& McpBridgeServer::overlayState() const
-{
-  return m_emptyOverlayState;
-}
-
 mcp::McpBridgeResponse McpBridgeServer::dispatchToolCall(
   const mcp::McpBridgeRequest& request) const
 {
@@ -246,15 +241,7 @@ void McpBridgeServer::removeConnection(QLocalSocket& socket)
 mcp::McpBridgeResponse McpBridgeServer::dispatchRequest(
   const mcp::McpBridgeRequest& request) const
 {
-  if (request.type == mcp::McpBridgeRequestType::ToolCall)
-  {
-    return dispatchToolCall(request);
-  }
-
-  return makeFailure(
-    request,
-    mcp::McpErrorCode::InvalidRequest,
-    "MCP resources are not supported by the thin Python bridge");
+  return dispatchToolCall(request);
 }
 
 void McpBridgeServer::handleNewConnection()

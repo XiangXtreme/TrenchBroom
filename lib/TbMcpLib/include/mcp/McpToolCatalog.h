@@ -45,10 +45,6 @@ std::optional<McpToolDefinition> findToolDefinition(const QString& name);
 bool canCallTool(const McpToolDefinition& tool, McpMode mode);
 
 QJsonObject toMcpToolJson(const McpToolDefinition& tool);
-QJsonObject toMcpToolDiagnosticJson(const McpToolDefinition& tool, McpMode currentMode);
 QJsonArray toolsListJson(McpMode mode);
-QJsonArray toolsSummaryJson(McpMode mode);
-QJsonArray toolsSearchJson(const QString& query, const QString& detail, McpMode mode);
-QJsonArray toolDiagnosticsJson(McpMode currentMode);
 
 } // namespace tb::mcp

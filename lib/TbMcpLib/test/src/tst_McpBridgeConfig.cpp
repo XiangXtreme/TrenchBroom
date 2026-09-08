@@ -47,6 +47,31 @@ TEST_CASE("McpBridgeConfig")
     CHECK_FALSE(rewritten.contains("toolProfile"));
     CHECK(rewritten.value("mode").toString() == "Off");
   }
+
+  SECTION("retires elevated configurations to Off")
+  {
+    auto directory = QTemporaryDir{};
+    REQUIRE(directory.isValid());
+    const auto path = QDir{directory.path()}.filePath("config.json");
+    auto file = QFile{path};
+    REQUIRE(file.open(QIODevice::WriteOnly));
+    file.write(QJsonDocument{
+      QJsonObject{
+        {"pipeName", "test-pipe"},
+        {"mode", "Danger"},
+        {"configVersion", 2},
+      }}.toJson());
+    file.close();
+
+    auto error = QString{};
+    const auto config = readOrCreateBridgeConfig(path, &error);
+    REQUIRE(config);
+    CHECK(error.isEmpty());
+    CHECK(config->mode == McpMode::Off);
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    const auto rewritten = QJsonDocument::fromJson(file.readAll()).object();
+    CHECK(rewritten.value("mode").toString() == "Off");
+  }
 }
 
 } // namespace tb::mcp

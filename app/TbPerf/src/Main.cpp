@@ -109,7 +109,7 @@ std::vector<PerfCase> perfCases()
         for (const auto& tool : catalog)
         {
           checksum += static_cast<std::uint64_t>(tool.name.size());
-          checksum += tool.implemented ? 1u : 0u;
+          checksum += tool.mutatesDocument ? 1u : 0u;
         }
         return checksum;
       },
@@ -119,12 +119,6 @@ std::vector<PerfCase> perfCases()
       "mcp.tools_list_json_edit",
       "Serialize the implemented MCP tool list for Edit mode.",
       [] { return jsonArrayCost(tb::mcp::toolsListJson(tb::mcp::McpMode::Edit)); },
-    },
-    {
-      "mcp",
-      "mcp.tool_diagnostics_json_edit",
-      "Serialize MCP tool diagnostics for Edit mode.",
-      [] { return jsonArrayCost(tb::mcp::toolDiagnosticsJson(tb::mcp::McpMode::Edit)); },
     },
     {
       "mcp",

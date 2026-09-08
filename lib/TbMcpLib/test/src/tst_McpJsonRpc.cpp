@@ -27,7 +27,7 @@ TEST_CASE("McpJsonRpc")
         {"params", QJsonObject{{"name", "tb_history"}}},
       },
       McpMode::Edit,
-      [](const McpBridgeRequestType, const QString&, const QJsonObject&) {
+      [](const QString&, const QJsonObject&) {
         return McpBridgeResponse::failure(
           {}, McpError{McpErrorCode::ToolNotFound, "MCP tool is not registered"});
       });
@@ -37,6 +37,28 @@ TEST_CASE("McpJsonRpc")
     CHECK(
       result.value("structuredContent").toObject().value("code").toString()
       == "ToolNotFound");
+  }
+
+  SECTION("does not advertise or dispatch retired resources")
+  {
+    const auto initialized = mcpInitializeResult({});
+    CHECK_FALSE(initialized.value("capabilities").toObject().contains("resources"));
+
+    auto dispatched = false;
+    const auto response = handleMcpJsonRpcRequest(
+      QJsonObject{
+        {"jsonrpc", "2.0"},
+        {"id", 2},
+        {"method", "resources/list"},
+      },
+      McpMode::Edit,
+      [&](const QString&, const QJsonObject&) {
+        dispatched = true;
+        return McpBridgeResponse::success({});
+      });
+    REQUIRE(response);
+    CHECK_FALSE(dispatched);
+    CHECK(response->value("error").toObject().value("code").toInt() == -32601);
   }
 }
 

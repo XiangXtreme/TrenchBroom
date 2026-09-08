@@ -149,7 +149,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpHttpServer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolRegistry.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolSupport.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MultiCompletionLineEdit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MultiPaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ObjExportDialog.cpp
@@ -387,7 +386,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/automation/AutomationValidation.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpBridgeServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpHttpServer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpObjectRegistry.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MultiCompletionLineEdit.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MultiPaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ObjExportDialog.h

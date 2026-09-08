@@ -33,8 +33,8 @@
 namespace tb::mcp
 {
 
-using McpRequestDispatcher = std::function<McpBridgeResponse(
-  McpBridgeRequestType type, const QString& toolName, const QJsonObject& params)>;
+using McpRequestDispatcher =
+  std::function<McpBridgeResponse(const QString& toolName, const QJsonObject& params)>;
 
 QJsonObject jsonRpcResult(const QJsonValue& id, QJsonObject result);
 QJsonObject jsonRpcError(const QJsonValue& id, int code, const QString& message);

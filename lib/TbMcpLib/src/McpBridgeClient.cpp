@@ -87,8 +87,8 @@ QJsonObject timeoutDetails(
     {"retrySafe", false},
     {"recoveryActions",
      QJsonArray{
-       "Call history_status before retrying the tool.",
-       "Inspect recent MCP operations with operation_inspect or operation_validate.",
+       "Use tb_inspect to confirm the current document and map facts.",
+       "Do not replay the executionId until its original receipt is known.",
        "Retry only after confirming whether the original request mutated the document.",
      }},
   };
@@ -128,7 +128,6 @@ McpBridgeClient::McpBridgeClient(
 
 McpBridgeResponse McpBridgeClient::request(
   const McpBridgeConfig& config,
-  const McpBridgeRequestType type,
   const QString& toolName,
   QJsonObject params,
   QString requestId) const
@@ -138,13 +137,7 @@ McpBridgeResponse McpBridgeClient::request(
     requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
   }
 
-  const auto requestName = type == McpBridgeRequestType::ToolCall ? toolName
-                           : type == McpBridgeRequestType::ResourcesList
-                             ? QString{"resources/list"}
-                             : QString{"resources/read"};
-  const auto costClass = type == McpBridgeRequestType::ToolCall
-                           ? toolCostClassForName(toolName)
-                           : McpToolCostClass::Fast;
+  const auto costClass = toolCostClassForName(toolName);
   return sendRequest(
     config,
     McpBridgeRequest{
@@ -152,9 +145,8 @@ McpBridgeResponse McpBridgeClient::request(
       toolName,
       std::move(params),
       config.mode,
-      type,
     },
-    requestName,
+    toolName,
     costClass);
 }
 

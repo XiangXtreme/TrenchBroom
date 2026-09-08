@@ -23,42 +23,6 @@
 
 namespace tb::mcp
 {
-namespace
-{
-
-QString requestTypeName(const McpBridgeRequestType type)
-{
-  switch (type)
-  {
-  case McpBridgeRequestType::ToolCall:
-    return "tool_call";
-  case McpBridgeRequestType::ResourcesList:
-    return "resources_list";
-  case McpBridgeRequestType::ResourceRead:
-    return "resource_read";
-  }
-  return "tool_call";
-}
-
-std::optional<McpBridgeRequestType> parseRequestType(const QString& value)
-{
-  if (value == "tool_call")
-  {
-    return McpBridgeRequestType::ToolCall;
-  }
-  if (value == "resources_list")
-  {
-    return McpBridgeRequestType::ResourcesList;
-  }
-  if (value == "resource_read")
-  {
-    return McpBridgeRequestType::ResourceRead;
-  }
-  return std::nullopt;
-}
-
-} // namespace
-
 McpBridgeResponse McpBridgeResponse::success(QString id, QJsonObject result)
 {
   return McpBridgeResponse{std::move(id), true, std::move(result), std::nullopt};
@@ -73,14 +37,9 @@ QJsonObject toJson(const McpBridgeRequest& request)
 {
   auto json = QJsonObject{
     {"id", request.id},
+    {"tool", request.tool},
     {"params", request.params},
-    {"type", requestTypeName(request.type)},
   };
-
-  if (request.type == McpBridgeRequestType::ToolCall)
-  {
-    json.insert("tool", request.tool);
-  }
 
   if (request.requestedMode)
   {
@@ -103,43 +62,14 @@ std::optional<McpBridgeRequest> bridgeRequestFromJson(
     return std::nullopt;
   }
 
-  auto type = McpBridgeRequestType::ToolCall;
-  const auto typeValue = json.value("type");
-  if (!typeValue.isUndefined())
+  const auto tool = json.value("tool");
+  if (!tool.isString() || tool.toString().trimmed().isEmpty())
   {
-    if (!typeValue.isString())
+    if (error)
     {
-      if (error)
-      {
-        *error = "MCP request type must be a string";
-      }
-      return std::nullopt;
+      *error = "MCP request tool is missing or empty";
     }
-    const auto parsedType = parseRequestType(typeValue.toString());
-    if (!parsedType)
-    {
-      if (error)
-      {
-        *error = "MCP request type is unknown";
-      }
-      return std::nullopt;
-    }
-    type = *parsedType;
-  }
-
-  auto toolName = QString{};
-  if (type == McpBridgeRequestType::ToolCall)
-  {
-    const auto tool = json.value("tool");
-    if (!tool.isString() || tool.toString().trimmed().isEmpty())
-    {
-      if (error)
-      {
-        *error = "MCP request tool is missing or empty";
-      }
-      return std::nullopt;
-    }
-    toolName = tool.toString();
+    return std::nullopt;
   }
 
   auto params = QJsonObject{};
@@ -182,10 +112,9 @@ std::optional<McpBridgeRequest> bridgeRequestFromJson(
 
   return McpBridgeRequest{
     id.toString(),
-    toolName,
+    tool.toString(),
     params,
     requestedMode,
-    type,
   };
 }
 

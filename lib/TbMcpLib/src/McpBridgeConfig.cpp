@@ -161,7 +161,11 @@ std::optional<McpBridgeConfig> bridgeConfigFromJson(
     return std::nullopt;
   }
 
-  const auto mode = parseMode(modeValue.toString());
+  const auto modeText = modeValue.toString();
+  // Retired elevated configurations must never retain write access after migration.
+  const auto mode = modeText.compare("Danger", Qt::CaseInsensitive) == 0
+                      ? std::optional{McpMode::Off}
+                      : parseMode(modeText);
   if (!mode)
   {
     if (error)
@@ -318,6 +322,7 @@ std::optional<McpBridgeConfig> readOrCreateBridgeConfig(
 
     if (
       json->contains("token") || json->contains("toolProfile")
+      || json->value("mode").toString().compare("Danger", Qt::CaseInsensitive) == 0
       || config->configVersion < 2)
     {
       auto migrated = *config;

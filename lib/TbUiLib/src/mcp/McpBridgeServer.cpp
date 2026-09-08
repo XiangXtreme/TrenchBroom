@@ -547,15 +547,16 @@ McpBridgeServer::McpBridgeServer(
           mcp::McpErrorCode::ToolNotFound,
           QString{"MCP tool is registered but not wired yet: %1"}.arg(toolName));
       },
-      std::move(transportLimits), parent}
+      std::move(transportLimits),
+      parent}
 {
-  auto legacyDispatcher = std::make_shared<ToolHandler>(std::move(m_toolHandler));
+  auto registeredDispatcher = std::make_shared<ToolHandler>(std::move(m_toolHandler));
   m_toolRegistry = std::make_unique<McpToolRegistry>();
   for (const auto& tool : mcp::defaultToolCatalog())
   {
     m_toolRegistry->registerHandler(
-      tool.name, [legacyDispatcher](const auto& toolName, const auto& params) {
-        return (*legacyDispatcher)(toolName, params);
+      tool.name, [registeredDispatcher](const auto& toolName, const auto& params) {
+        return (*registeredDispatcher)(toolName, params);
       });
   }
   m_toolHandler = [this](const auto& toolName, const auto& params) {

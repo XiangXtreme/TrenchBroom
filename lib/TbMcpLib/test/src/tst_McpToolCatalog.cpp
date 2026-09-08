@@ -48,12 +48,13 @@ TEST_CASE("McpToolCatalog")
     CHECK(names(toolsListJson(McpMode::Edit)) == expected);
   }
 
-  SECTION("search and exact lookup share the same catalog")
+  SECTION("exact lookup shares the registered catalog")
   {
-    const auto found = toolsSearchJson("execute", "schema", McpMode::Edit);
-    REQUIRE(found.size() == 1);
-    CHECK(found.first().toObject().value("name").toString() == "tb_execute_python");
-    CHECK(found.first().toObject().contains("inputSchema"));
+    const auto found = findToolDefinition("tb_execute_python");
+    REQUIRE(found);
+    CHECK(found->inputSchema.value("properties").toObject().contains("executionId"));
+    CHECK(canCallTool(*found, McpMode::Edit));
+    CHECK_FALSE(canCallTool(*found, McpMode::ReadOnly));
   }
 }
 

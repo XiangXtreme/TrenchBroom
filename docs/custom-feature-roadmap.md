@@ -74,12 +74,10 @@
   - 状态：FPS、sky、2D 可读线条已经分别接入 View Options，但还没有统一 overlay 模型。
   - 重点：避免每个显示功能都散落在不同菜单或临时开关里。
 
-- [ ] MCP / Agent 白盒生成
-  - 目标：让外部 MCP client 通过结构化工具查询地图、执行动作、放置资产，并逐步生成 GoldSrc/CS 1.6 白盒。
-  - 状态：底层协议、`TbMcpLib`、内置 HTTP `/mcp`、stdio 兼容 shim、tool catalog、安全模式、只读工具、选择设置、action 执行、事务型 entity/brush 编辑、MCP history、GoldSrc 资产/材质工具、overlay/capture、compile/leak 辅助、Blockout IR、批量 `blockout_create_batch`、`operation_*` 详情工具、`resources/read` 和 tool profile 已接入；默认关闭，不直接开放任意 Python 脚本。
-  - 重点：TrenchBroom 是唯一真实状态；写操作必须走 `MapDocument` transaction；白盒生成优先使用高层 outcome tools 和 Batch Blockout IR，不让 AI 默认直接拼 brush 顶点。
-  - 下一步：把 MCP overlay 收束进统一视图叠加层管理器，补 prefab provider、高级 UV 对齐、更细的 Blockout validation/snap 规则、更多 GoldSrc 常用结构模板，以及真实 MCP client 端到端回归。
-  - 依赖：视图叠加层管理器用于 overlay/截图反馈，统一资产浏览器用于模型/Sprite/声音放置，`trenchbroom` 稳定 API 可作为后续插件扩展基础。
+- [x] MCP / Agent 白盒生成
+  - 状态：MCP 默认关闭，公开入口固定为 `tb_inspect`、`tb_api`、`tb_execute_python` 和 `tb_capture`；ReadOnly 省略执行入口。复杂编辑由受文档和事务保护的 `trenchbroom` Python API 完成，原生 undo/redo、保存、验证和句柄失效检查仍由编辑器 owner 执行。
+  - 范围：旧 MCP 工具目录、Blockout IR、profile、operation history、resource、overlay 和兼容包装已退役。截图仅作为当前视口的可读视觉证据，地图事实仍通过检查和 Python API 确认。
+  - 后续：新增编辑能力优先扩展通用 Python API；资产和视图功能按各自产品需求推进，不再扩大 MCP 工具目录。
 
 - [ ] Python 插件 API 生产级收尾
   - 目标：让 `trenchbroom` 优先稳定插件生命周期、卸载清理、错误展示和示例文档，再扩展大 API 面。
@@ -161,5 +159,5 @@
 1. 先做 GoldSrc 资产浏览器第二阶段：Sprite、声音、WAD 纹理和实体属性路径选择。
 2. 同步加固 Python API：拆分绑定、稳定插件 session、补齐插件管理 UI 的测试。
 3. 做 GoldSrc / VHLT 配置向导和编译日志分析器，因为这两项对 CS 1.6 mapper 的日常收益最高。
-4. 建立 MCP 底层适配框架，但先只开放只读和结构化工具，避免过早把任意脚本执行暴露给外部 Agent。
-5. 最后整理 View Options / Overlay 管理模型，把 FPS、sky、2D 线条、MCP overlay 和后续 debug overlay 收到一个清晰入口。
+4. 保持 MCP 的四入口契约，并在核心工作流需要编辑器内部能力时扩展通用 Python API。
+5. 最后整理 View Options / Overlay 管理模型，把 FPS、sky、2D 线条和后续 debug overlay 收到一个清晰入口。

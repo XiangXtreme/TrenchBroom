@@ -521,16 +521,12 @@ void McpHttpServer::handleSocketReadyRead(QTcpSocket& socket)
   const auto response = mcp::handleMcpJsonRpcRequest(
     document.object(),
     m_config.mode,
-    [this](
-      const mcp::McpBridgeRequestType type,
-      const QString& toolName,
-      const QJsonObject& params) {
+    [this](const QString& toolName, const QJsonObject& params) {
       const auto request = mcp::McpBridgeRequest{
         "http",
         toolName,
         params,
         m_config.mode,
-        type,
       };
       return m_bridgeServer.dispatchRequest(request);
     });

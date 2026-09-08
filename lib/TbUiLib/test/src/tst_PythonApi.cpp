@@ -235,10 +235,10 @@ polygons = tb.brushes.create_polygon_batch([
 assert len(polygons) == 2
 assert polygons[1].faces()[0].material == "python-api-polygon"
 assert doc.id.startswith("doc:")
-assert all_brushes[0].id.startswith("mcp:")
+assert all_brushes[0].id.startswith("object:")
 all_faces = tb.faces.list()
 assert len(all_faces) >= 1
-assert all_faces[0].id.startswith("face:mcp:")
+assert all_faces[0].id.startswith("face:object:")
 tb.faces.set_material([all_faces[0], all_faces[0]], "python-api-material")
 assert tb.faces.list()[0].material == "python-api-material"
 assert tb.documents.snapshot()["brush_count"] >= 1
@@ -249,7 +249,7 @@ assert tb.objects.bounds() is not None
 created_entity = tb.entities.create(
     "info_player_start", {"targetname": "python-api-entity"}, (16, 32, 48))
 assert created_entity.classname == "info_player_start"
-assert created_entity.id.startswith("mcp:")
+assert created_entity.id.startswith("object:")
 assert created_entity["targetname"] == "python-api-entity"
 assert len(tb.entities.find(property="targetname", value="python-api-entity")) == 1
 checked_entities = tb.entities.create_checked_batch([

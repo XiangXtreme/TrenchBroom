@@ -33,7 +33,7 @@
 #include "mcp/McpBridgeConfig.h"
 #include "mcp/McpBridgeMessages.h"
 #include "mcp/McpError.h"
-#include "ui/mcp/McpObjectRegistry.h"
+#include "ui/automation/AutomationObjectRegistry.h"
 
 #include <functional>
 #include <map>
@@ -93,8 +93,7 @@ private:
   McpBridgeTransportLimits m_transportLimits;
   ToolHandler m_toolHandler;
   ActiveMapProvider m_activeMapProvider;
-  McpObjectRegistry m_objectRegistry;
-  QJsonObject m_emptyOverlayState;
+  automation::AutomationObjectRegistry m_objectRegistry;
   mutable std::map<QString, McpPythonExecutionReplay> m_pythonExecutionReplays;
   mutable QStringList m_pythonExecutionReplayOrder;
   std::unique_ptr<McpToolRegistry> m_toolRegistry;
@@ -133,11 +132,11 @@ public:
   bool isListening() const;
   QString pipeName() const;
   mcp::McpMode mode() const;
-  const QJsonObject& overlayState() const;
   QStringList registeredToolNames() const;
   int duplicateToolRegistrationCount() const;
 
   mcp::McpBridgeResponse dispatchRequest(const mcp::McpBridgeRequest& request) const;
+
 private:
   mcp::McpBridgeResponse dispatchToolCall(const mcp::McpBridgeRequest& request) const;
   void startRequestDeadline(QLocalSocket& socket);

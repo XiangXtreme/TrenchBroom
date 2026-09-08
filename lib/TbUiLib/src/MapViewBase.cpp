@@ -23,9 +23,6 @@
 #include <QClipboard>
 #include <QCursor>
 #include <QDebug>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QJsonValue>
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMimeData>
@@ -110,8 +107,6 @@
 #include "vm/util.h"
 
 #include <algorithm>
-#include <array>
-#include <optional>
 #include <ranges>
 #include <vector>
 
@@ -122,94 +117,8 @@ const int MapViewBase::DefaultCameraAnimationDuration = 250;
 namespace
 {
 
-constexpr auto McpOverlayColor = RgbaF{0.15f, 0.75f, 1.0f, 1.0f};
-constexpr auto McpOverlayBackgroundColor = RgbaF{0.02f, 0.04f, 0.06f, 0.85f};
 constexpr auto SmartFaceSelectionAddColor = RgbaF{0.16f, 0.85f, 0.48f, 0.32f};
 constexpr auto SmartFaceSelectionRemoveColor = RgbaF{0.95f, 0.28f, 0.24f, 0.32f};
-
-std::optional<vm::vec3d> vec3FromJsonValue(const QJsonValue& value)
-{
-  if (!value.isArray())
-  {
-    return std::nullopt;
-  }
-
-  const auto array = value.toArray();
-  if (array.size() != 3)
-  {
-    return std::nullopt;
-  }
-
-  auto components = std::array<double, 3>{};
-  for (auto i = 0; i < 3; ++i)
-  {
-    if (!array[i].isDouble())
-    {
-      return std::nullopt;
-    }
-    components[static_cast<size_t>(i)] = array[i].toDouble();
-  }
-
-  return vm::vec3d{components[0], components[1], components[2]};
-}
-
-std::optional<vm::bbox3d> boundsFromJsonObject(const QJsonObject& object)
-{
-  const auto min = vec3FromJsonValue(object.value("min"));
-  const auto max = vec3FromJsonValue(object.value("max"));
-  if (!min || !max)
-  {
-    return std::nullopt;
-  }
-
-  return vm::bbox3d{vm::min(*min, *max), vm::max(*min, *max)};
-}
-
-std::optional<mdl::NodePath> parseMcpNodePathId(const QString& id)
-{
-  if (id == "node:world")
-  {
-    return mdl::NodePath{};
-  }
-
-  static const auto Prefix = QString{"node:"};
-  if (!id.startsWith(Prefix))
-  {
-    return std::nullopt;
-  }
-
-  auto path = mdl::NodePath{};
-  for (const auto& part : id.mid(Prefix.size()).split('/', Qt::SkipEmptyParts))
-  {
-    auto ok = false;
-    const auto index = part.toULongLong(&ok);
-    if (!ok)
-    {
-      return std::nullopt;
-    }
-    path.indices.push_back(static_cast<std::size_t>(index));
-  }
-  return path;
-}
-
-mdl::Node* resolveMcpNodeId(mdl::WorldNode& worldNode, const QString& id)
-{
-  const auto path = parseMcpNodePathId(id);
-  if (!path)
-  {
-    return nullptr;
-  }
-  return worldNode.resolvePath(*path);
-}
-
-void renderMcpOverlayLabel(
-  render::RenderService& renderService, const QString& text, const vm::vec3d& position)
-{
-  if (!text.isEmpty())
-  {
-    renderService.renderString(text.toStdString(), vm::vec3f{position});
-  }
-}
 
 } // namespace
 
@@ -1244,7 +1153,6 @@ void MapViewBase::renderContents(gl::Gl& gl)
     renderSoftWorldBounds(renderContext, renderBatch);
     renderPointFile(renderContext, renderBatch);
     renderPortalFile(renderContext, renderBatch);
-    renderMcpOverlay(renderContext, renderBatch);
     renderSmartFaceSelectionPreview(renderContext, renderBatch);
     renderCompass(renderBatch);
     renderFPS(renderContext, renderBatch);
@@ -1346,118 +1254,6 @@ void MapViewBase::validatePortalFileRenderer(render::RenderContext&)
         lineWidth,
         render::PrimitiveRendererOcclusionPolicy::Hide,
         portal.vertices());
-    }
-  }
-}
-
-void MapViewBase::renderMcpOverlay(
-  render::RenderContext& renderContext, render::RenderBatch& renderBatch)
-{
-  const auto& overlayState = m_appController.mcpOverlayState();
-  if (overlayState.isEmpty())
-  {
-    return;
-  }
-
-  const auto* topMapWindow = m_appController.mapWindowManager().topMapWindow();
-  if (topMapWindow == nullptr || &topMapWindow->document() != &m_document)
-  {
-    return;
-  }
-
-  auto renderService = render::RenderService{renderContext, renderBatch};
-  renderService.setForegroundColor(McpOverlayColor);
-  renderService.setBackgroundColor(McpOverlayBackgroundColor);
-  renderService.setLineWidth(3.0f);
-  renderService.setShowOccludedObjectsTransparent();
-
-  auto& map = m_document.map();
-  auto& worldNode = map.worldNode();
-
-  const auto renderObjectBounds =
-    [&](const QString& objectId) -> std::optional<vm::vec3d> {
-    auto* node = resolveMcpNodeId(worldNode, objectId);
-    if (!node)
-    {
-      return std::nullopt;
-    }
-
-    const auto bounds = node->logicalBounds();
-    if (bounds.is_empty())
-    {
-      return std::nullopt;
-    }
-
-    renderService.renderBounds(vm::bbox3f{bounds});
-    return bounds.center();
-  };
-
-  const auto highlightedObjectIds = overlayState.value("highlightObjectIds");
-  if (highlightedObjectIds.isArray())
-  {
-    for (const auto& value : highlightedObjectIds.toArray())
-    {
-      if (value.isString())
-      {
-        renderObjectBounds(value.toString());
-      }
-    }
-  }
-
-  const auto boundsMarkers = overlayState.value("boundsMarkers");
-  if (boundsMarkers.isArray())
-  {
-    for (const auto& value : boundsMarkers.toArray())
-    {
-      const auto object = value.toObject();
-      const auto bounds = boundsFromJsonObject(object);
-      if (!bounds || bounds->is_empty())
-      {
-        continue;
-      }
-
-      renderService.renderBounds(vm::bbox3f{*bounds});
-      renderMcpOverlayLabel(
-        renderService, object.value("label").toString(), bounds->center());
-    }
-  }
-
-  const auto pointMarkers = overlayState.value("pointMarkers");
-  if (pointMarkers.isArray())
-  {
-    for (const auto& value : pointMarkers.toArray())
-    {
-      const auto object = value.toObject();
-      const auto position = vec3FromJsonValue(object.value("position"));
-      if (!position)
-      {
-        continue;
-      }
-
-      renderService.renderHandleHighlight(vm::vec3f{*position});
-      renderMcpOverlayLabel(renderService, object.value("label").toString(), *position);
-    }
-  }
-
-  const auto labels = overlayState.value("labels");
-  if (labels.isArray())
-  {
-    for (const auto& value : labels.toArray())
-    {
-      const auto object = value.toObject();
-      auto position = vec3FromJsonValue(object.value("position"));
-      if (!position)
-      {
-        const auto objectId = object.value("objectId").toString();
-        if (!objectId.isEmpty())
-        {
-          position = renderObjectBounds(objectId);
-        }
-      }
-      if (position)
-      {
-        renderMcpOverlayLabel(renderService, object.value("text").toString(), *position);
-      }
     }
   }
 }
@@ -1776,7 +1572,9 @@ void MapViewBase::showPopupMenuLater()
       }
     }
 
-    if (entityNode != nullptr && !entityNode->entity().classname().empty() && entityNode->entity().classname() != "worldspawn")
+    if (
+      entityNode != nullptr && !entityNode->entity().classname().empty()
+      && entityNode->entity().classname() != "worldspawn")
     {
       const auto classname = entityNode->entity().classname();
       menu.addAction(
@@ -1786,11 +1584,14 @@ void MapViewBase::showPopupMenuLater()
     }
   }
 
-  if (hasTemplateEntity() && map.selection().hasOnlyGeometryNodes() && map.selection().hasNodes())
+  if (
+    hasTemplateEntity() && map.selection().hasOnlyGeometryNodes()
+    && map.selection().hasNodes())
   {
     menu.addSeparator();
     menu.addAction(
-      tr("Apply Entity Template (%1)").arg(QString::fromStdString(m_templateEntityClassName)),
+      tr("Apply Entity Template (%1)")
+        .arg(QString::fromStdString(m_templateEntityClassName)),
       this,
       &MapViewBase::applyEntityTemplate);
   }

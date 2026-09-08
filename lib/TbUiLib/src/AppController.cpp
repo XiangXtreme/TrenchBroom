@@ -282,22 +282,6 @@ ActionManager& AppController::actionManager()
   return *m_actionManager;
 }
 
-const QJsonObject& AppController::mcpOverlayState() const
-{
-  return m_mcpBridgeServer->overlayState();
-}
-
-void AppController::refreshMcpOverlayViews()
-{
-  for (auto* mapWindow : m_mapWindowManager->mapWindows())
-  {
-    if (mapWindow)
-    {
-      mapWindow->refreshMapViews();
-    }
-  }
-}
-
 void AppController::restartMcpBridge()
 {
   m_mcpBridgeServer->stop();

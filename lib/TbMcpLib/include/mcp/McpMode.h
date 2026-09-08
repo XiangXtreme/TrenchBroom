@@ -31,7 +31,6 @@ enum class McpMode
   Off,
   ReadOnly,
   Edit,
-  Danger,
 };
 
 QString modeName(McpMode mode);
