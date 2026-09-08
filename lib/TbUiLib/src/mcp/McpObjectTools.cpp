@@ -46,6 +46,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationGroups.h"
 #include "ui/mcp/McpObjectRegistry.h"
 
 #include "kd/vector_utils.h"
@@ -1416,7 +1417,7 @@ McpBridgeToolResult groupCreateFromSelectionForMapResult(
   }
 
   const auto selectedBefore = map.selection().nodes;
-  auto* groupNode = mdl::groupSelectedNodes(map, name.toStdString());
+  auto* groupNode = automation::groupSelectedNodes(map, name.toStdString());
   if (groupNode == nullptr)
   {
     return McpBridgeToolResult::failure(
@@ -1577,14 +1578,14 @@ McpBridgeToolResult groupRenameSelectedForMapResult(
       });
   }
 
-  const auto groups = map.selection().groups;
+  const auto groups = automation::selectedGroups(map);
   auto groupIds = QJsonArray{};
   for (const auto* groupNode : groups)
   {
     groupIds.push_back(nodePathId(*groupNode, map.worldNode()));
   }
 
-  mdl::renameSelectedGroups(map, name.toStdString());
+  automation::renameSelectedGroups(map, name.toStdString());
 
   auto result = QJsonObject{};
   const auto transactionName =
@@ -1670,7 +1671,7 @@ McpBridgeToolResult groupUngroupSelectedForMapResult(
         {"recoveryAction", "select_groups_then_retry"},
       });
   }
-  auto selectedGroups = map.selection().groups;
+  auto selectedGroups = automation::selectedGroups(map);
   if (selectedGroups.empty())
   {
     return McpBridgeToolResult::failure(
@@ -1689,7 +1690,7 @@ McpBridgeToolResult groupUngroupSelectedForMapResult(
     groupIds.push_back(nodePathId(*groupNode, map.worldNode()));
   }
 
-  mdl::ungroupSelectedNodes(map);
+  automation::ungroupSelectedNodes(map);
   refreshMetadataObjectPaths(map, objectRegistry, metadataStore, moduleStore);
 
   const auto selectedAfter = map.selection().nodes;

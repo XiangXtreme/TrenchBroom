@@ -18,6 +18,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationDocuments.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationEntities.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationGeometry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationGroups.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationIr.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationIrExecution.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationMaterials.cpp

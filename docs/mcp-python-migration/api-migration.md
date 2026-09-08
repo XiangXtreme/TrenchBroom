@@ -95,6 +95,13 @@ sprite 和音频的紧凑路径摘要。`tb.assets.place_model`、`tb.assets.pla
 校验、classname、属性和 origin 的未附加节点构造。适配层各自拥有原生事务和选择策略，因此
 Python 返回可继续使用的 `Entity` 句柄，旧 MCP 保持历史和 JSON 回执。
 
+## 原生分组
+
+`tb.groups.create_from_selection(name)`、`inspect_selected()`、`rename_selected(name)` 和
+`ungroup_selected()` 对当前选择执行原生 group 命令。它们与过渡 MCP 的创建、检查、重命名和
+解组工具通过同一 automation 服务选择和调度 native group 命令；Python 返回紧凑 group 摘要，
+旧 MCP 保留 selector、对象 ID、模块元数据刷新与操作历史适配。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

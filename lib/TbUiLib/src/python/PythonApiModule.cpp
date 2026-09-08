@@ -73,6 +73,7 @@
 #include "ui/automation/AutomationDocuments.h"
 #include "ui/automation/AutomationEntities.h"
 #include "ui/automation/AutomationGeometry.h"
+#include "ui/automation/AutomationGroups.h"
 #include "ui/automation/AutomationIr.h"
 #include "ui/automation/AutomationIrExecution.h"
 #include "ui/automation/AutomationMaterials.h"
@@ -2028,8 +2029,7 @@ py::dict groupSummary(const mdl::GroupNode& group)
 
 std::vector<mdl::GroupNode*> selectedGroups(SelectionHandle selection)
 {
-  const auto& groups = selection.getDocument().map().selection().groups;
-  return {groups.begin(), groups.end()};
+  return automation::selectedGroups(selection.getDocument().map());
 }
 
 py::dict createGroupFromSelection(SelectionHandle selection, const std::string& name)
@@ -2039,7 +2039,7 @@ py::dict createGroupFromSelection(SelectionHandle selection, const std::string& 
     throw py::value_error{"name must not be empty"};
   }
 
-  auto* group = mdl::groupSelectedNodes(selection.getDocument().map(), name);
+  auto* group = automation::groupSelectedNodes(selection.getDocument().map(), name);
   if (group == nullptr)
   {
     throw std::runtime_error{"Selected objects cannot be grouped"};
@@ -2069,7 +2069,7 @@ py::list renameSelectedGroups(SelectionHandle selection, const std::string& name
   {
     throw py::value_error{"Current selection must contain only groups"};
   }
-  mdl::renameSelectedGroups(map, name);
+  automation::renameSelectedGroups(map, name);
   return inspectSelectedGroups(selection);
 }
 
@@ -2079,7 +2079,7 @@ py::dict ungroupSelectedGroups(SelectionHandle selection)
   {
     throw py::value_error{"Current selection must contain groups"};
   }
-  mdl::ungroupSelectedNodes(selection.getDocument().map());
+  automation::ungroupSelectedNodes(selection.getDocument().map());
   return selectionSnapshot(selection);
 }
 

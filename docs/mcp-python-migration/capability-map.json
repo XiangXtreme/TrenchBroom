@@ -1714,14 +1714,14 @@
       "domain": "objects",
       "replacementType": "trenchbroom Python API",
       "replacementSymbols": [
-        "tb.objects.create_from_selection"
+        "tb.groups.create_from_selection"
       ],
       "verification": {
         "testId": "T3-objects",
         "scenarioId": "S-objects",
         "status": "planned"
       },
-      "status": "planned",
+      "status": "implemented",
       "placeholderReason": null
     },
     {
@@ -1730,14 +1730,14 @@
       "domain": "objects",
       "replacementType": "trenchbroom Python API",
       "replacementSymbols": [
-        "tb.objects.inspect"
+        "tb.groups.inspect_selected"
       ],
       "verification": {
         "testId": "T3-objects",
         "scenarioId": "S-objects",
         "status": "planned"
       },
-      "status": "planned",
+      "status": "implemented",
       "placeholderReason": null
     },
     {
@@ -1746,14 +1746,14 @@
       "domain": "objects",
       "replacementType": "trenchbroom Python API",
       "replacementSymbols": [
-        "tb.objects.rename_selected"
+        "tb.groups.rename_selected"
       ],
       "verification": {
         "testId": "T3-objects",
         "scenarioId": "S-objects",
         "status": "planned"
       },
-      "status": "planned",
+      "status": "implemented",
       "placeholderReason": null
     },
     {
@@ -1762,14 +1762,14 @@
       "domain": "objects",
       "replacementType": "trenchbroom Python API",
       "replacementSymbols": [
-        "tb.objects.ungroup_selected"
+        "tb.groups.ungroup_selected"
       ],
       "verification": {
         "testId": "T3-objects",
         "scenarioId": "S-objects",
         "status": "planned"
       },
-      "status": "planned",
+      "status": "implemented",
       "placeholderReason": null
     },
     {
