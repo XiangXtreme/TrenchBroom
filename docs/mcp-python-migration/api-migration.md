@@ -73,6 +73,12 @@ JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它�
 `tb.faces.set_material` 使用同一 automation 写入操作，前者作为材料领域的组合入口对应过渡
 `texture_apply`。
 
+`tb.materials.apply_by_filter(brushes, material, face_semantic="all", normal=None,
+normal_tolerance=0.75)` 以显式 `Brush` 集合为目标，再按 `top`、`bottom`、`side` 或法线筛选
+face 后应用材质。它不接受旧 MCP 的 JSON selector；对象选择必须先由 Python 对象 API 组合完成。
+旧 MCP `texture_apply_by_filter` 保留其 JSON selector 和历史适配，但与 Python 共用 face 语义筛选和
+原生材质写入。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

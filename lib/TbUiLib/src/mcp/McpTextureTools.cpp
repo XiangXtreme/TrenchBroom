@@ -369,37 +369,6 @@ std::optional<vm::vec3d> vec3FromJson(const QJsonValue& value, QString& error)
   return vm::normalize(normal);
 }
 
-bool matchesFaceSemantic(
-  const mdl::BrushFaceHandle& handle,
-  const QString& faceSemantic,
-  const std::optional<vm::vec3d>& requestedNormal,
-  const double normalTolerance)
-{
-  const auto normal = handle.face().normal();
-  if (requestedNormal)
-  {
-    return vm::dot(normal, *requestedNormal) >= normalTolerance;
-  }
-
-  if (faceSemantic.isEmpty() || faceSemantic == "all")
-  {
-    return true;
-  }
-  if (faceSemantic == "top")
-  {
-    return normal.z() >= normalTolerance;
-  }
-  if (faceSemantic == "bottom")
-  {
-    return normal.z() <= -normalTolerance;
-  }
-  if (faceSemantic == "side" || faceSemantic == "sides")
-  {
-    return std::abs(normal.z()) <= 1.0 - normalTolerance;
-  }
-  return false;
-}
-
 std::vector<mdl::BrushFaceHandle> filterFaceHandlesBySemantic(
   std::vector<mdl::BrushFaceHandle> handles, const QJsonObject& params, QString& error)
 {
@@ -428,36 +397,16 @@ std::vector<mdl::BrushFaceHandle> filterFaceHandlesBySemantic(
     normalTolerance = std::clamp(toleranceValue.toDouble(), 0.0, 1.0);
   }
 
-  if (
-    !requestedNormal && !faceSemantic.isEmpty() && faceSemantic != "all"
-    && faceSemantic != "top" && faceSemantic != "bottom" && faceSemantic != "side"
-    && faceSemantic != "sides")
-  {
-    error = "faceSemantic must be all, top, bottom, or side";
-    return {};
-  }
-
-  if (!requestedNormal && (faceSemantic.isEmpty() || faceSemantic == "all"))
-  {
-    return handles;
-  }
-
-  handles.erase(
-    std::remove_if(
-      handles.begin(),
-      handles.end(),
-      [&](const auto& handle) {
-        return !matchesFaceSemantic(
-          handle, faceSemantic, requestedNormal, normalTolerance);
-      }),
-    handles.end());
-  if (handles.empty())
-  {
-    error = requestedNormal
-              ? "normal matched no brush faces"
-              : QString{"faceSemantic '%1' matched no brush faces"}.arg(faceSemantic);
-  }
-  return handles;
+  auto filter = automation::AutomationFaceFilter{
+    .semantic = faceSemantic.toStdString(),
+    .normal = requestedNormal,
+    .normalTolerance = normalTolerance,
+  };
+  auto automationError = std::string{};
+  auto filtered =
+    automation::filterBrushFaceHandles(std::move(handles), filter, automationError);
+  error = QString::fromStdString(automationError);
+  return filtered;
 }
 
 QString makeOperationId(int& nextOperationIndex)
@@ -1124,10 +1073,7 @@ McpBridgeToolResult textureApplyByFilterForMapResult(
   auto changedNodes = changedBrushIds(handles, map.worldNode());
   const auto transactionName = QString{"MCP: Apply texture by filter"};
   auto ok = executeTransaction(map, transactionName, [&]() {
-    mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, handles);
-    return mdl::setBrushFaceAttributes(
-      map, mdl::UpdateBrushFaceAttributes{.materialName = material.toStdString()});
+    return automation::setBrushFaceMaterial(map, handles, material.toStdString());
   });
   if (!ok)
   {

@@ -3589,6 +3589,68 @@ size_t setFacesMaterial(const py::iterable& faces, const std::string& materialNa
   return brushFaces.size();
 }
 
+size_t applyMaterialByFilter(
+  const py::iterable& brushes,
+  const std::string& materialName,
+  const std::string& faceSemantic,
+  const py::object& normal,
+  const double normalTolerance)
+{
+  if (materialName.empty())
+  {
+    throw py::value_error{"material must not be empty"};
+  }
+
+  auto brushHandles = std::vector<BrushHandle>{};
+  for (const auto& brush : brushes)
+  {
+    brushHandles.push_back(py::cast<BrushHandle>(brush));
+  }
+  std::ranges::sort(brushHandles, {}, [](const auto& brush) { return brush.brush; });
+  brushHandles.erase(
+    std::unique(
+      brushHandles.begin(),
+      brushHandles.end(),
+      [](const auto& lhs, const auto& rhs) { return lhs.brush == rhs.brush; }),
+    brushHandles.end());
+  if (brushHandles.empty())
+  {
+    throw py::value_error{"brushes must not be empty"};
+  }
+
+  auto& document =
+    DocumentHandle{brushHandles.front().document, brushHandles.front().generation}.get();
+  auto faces = std::vector<mdl::BrushFaceHandle>{};
+  for (const auto& brush : brushHandles)
+  {
+    if (brush.document != &document)
+    {
+      throw py::value_error{"All brushes must belong to the same document"};
+    }
+    auto& brushNode = brush.get();
+    const auto brushFaces = mdl::toHandles(&brushNode);
+    faces.insert(faces.end(), brushFaces.begin(), brushFaces.end());
+  }
+
+  auto filter = automation::AutomationFaceFilter{
+    .semantic = faceSemantic,
+    .normal = normal.is_none() ? std::nullopt
+                               : std::make_optional(toVmVec3(vec3FromObject(normal))),
+    .normalTolerance = normalTolerance,
+  };
+  auto error = std::string{};
+  faces = automation::filterBrushFaceHandles(std::move(faces), filter, error);
+  if (!error.empty())
+  {
+    throw py::value_error{error};
+  }
+
+  withPreservedSelection(document, "Python API Apply Material by Filter", [&](auto& map) {
+    return automation::setBrushFaceMaterial(map, faces, materialName);
+  });
+  return faces.size();
+}
+
 size_t alignFaces(const py::iterable& faces, const std::string& mode)
 {
   const auto normalizedMode = QString::fromStdString(mode).trimmed().toLower();
@@ -4781,6 +4843,8 @@ void defineModule(py::module_& module)
 
   py::class_<FaceHandle>(module, "Face")
     .def_property_readonly("id", faceId)
+    .def_property_readonly(
+      "normal", [](FaceHandle& self) { return vec3ToTuple(self.get().normal()); })
     .def_property_readonly("vertices", faceVertices)
     .def_property_readonly("uv_loops", faceUVLoops)
     .def_property(
@@ -6141,6 +6205,14 @@ void defineModule(py::module_& module)
     "current", []() { return currentDocument().get().map().currentMaterialName(); });
   materials.def("align_face", alignFaces, py::arg("faces"), py::arg("mode"));
   materials.def("apply", setFacesMaterial, py::arg("faces"), py::arg("material"));
+  materials.def(
+    "apply_by_filter",
+    applyMaterialByFilter,
+    py::arg("brushes"),
+    py::arg("material"),
+    py::arg("face_semantic") = "all",
+    py::arg("normal") = py::none(),
+    py::arg("normal_tolerance") = 0.75);
   materials.def(
     "copy_from_face", copyFaceAttributes, py::arg("source"), py::arg("targets"));
   materials.def(

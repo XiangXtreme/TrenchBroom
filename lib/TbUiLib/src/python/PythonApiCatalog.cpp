@@ -342,6 +342,11 @@ constexpr auto MaterialsSymbols = std::array{
     PythonApiValueType{PythonApiType::Material, 1u}},
   PythonApiSymbol{"current", Function, "() -> str"},
   PythonApiSymbol{"apply", Function, "(faces, material) -> int"},
+  PythonApiSymbol{
+    "apply_by_filter",
+    Function,
+    "(brushes, material, face_semantic='all', normal=None, normal_tolerance=0.75) -> "
+    "int"},
   PythonApiSymbol{"align_face", Function, "(faces, mode) -> int"},
   PythonApiSymbol{"copy_from_face", Function, "(source, targets) -> int"},
   PythonApiSymbol{"replace", Function, "(find, replace, scope='selection') -> int"},
@@ -429,7 +434,7 @@ constexpr auto Vec3Symbols = std::array{
 };
 
 constexpr auto PlaneSymbols = std::array{
-  PythonApiSymbol{"normal", Property, "Vec3", PythonApiValueType{PythonApiType::Vec3}},
+  PythonApiSymbol{"normal", Property, "tuple[float, float, float]"},
   PythonApiSymbol{"dist", Property, "float"},
   PythonApiSymbol{
     "from_points",
@@ -541,6 +546,7 @@ constexpr auto BrushSymbols = std::array{
 
 constexpr auto FaceSymbols = std::array{
   PythonApiSymbol{"id", Property, "str"},
+  PythonApiSymbol{"normal", Property, "Vec3", PythonApiValueType{PythonApiType::Vec3}},
   PythonApiSymbol{
     "vertices", Property, "list[Vec3]", PythonApiValueType{PythonApiType::Vec3, 1u}},
   PythonApiSymbol{"uv_loops", Property, "list"},

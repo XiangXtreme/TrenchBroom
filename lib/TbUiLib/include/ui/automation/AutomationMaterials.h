@@ -8,6 +8,8 @@
 
 #include "mdl/BrushFaceHandle.h"
 
+#include "vm/vec.h"
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -25,6 +27,13 @@ enum class AutomationFaceAlignment
   Reset,
   Paraxial,
   Parallel,
+};
+
+struct AutomationFaceFilter
+{
+  std::string semantic = "all";
+  std::optional<vm::vec3d> normal;
+  double normalTolerance = 0.75;
 };
 
 std::optional<AutomationFaceAlignment> automationFaceAlignmentFromString(
@@ -49,5 +58,14 @@ bool setBrushFaceMaterial(
   mdl::Map& map,
   const std::vector<mdl::BrushFaceHandle>& faces,
   const std::string& material);
+
+/**
+ * Filters an explicit face collection using the shared top/bottom/side or
+ * normal semantics. This does not resolve editor objects or selectors.
+ */
+std::vector<mdl::BrushFaceHandle> filterBrushFaceHandles(
+  std::vector<mdl::BrushFaceHandle> faces,
+  const AutomationFaceFilter& filter,
+  std::string& error);
 
 } // namespace tb::ui::automation
