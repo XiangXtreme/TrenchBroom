@@ -1,5 +1,12 @@
 # MCP Python API 迁移说明
 
+## 文档打开
+
+`tb.documents.open(path)` 与 `open_verified(path)` 只接受绝对的现有地图路径。它们和过渡 MCP
+`documents_open`、`documents_open_verified` 共用 `openAutomationDocument`：该服务从地图 header
+检测 game 与格式，并且不显示交互式选择对话。若目标已打开，Python 返回既有 document handle；
+`open_verified` 额外核对最终打开路径。两者属于 `mode:"action"`。
+
 `tb_execute_python` 在 Edit 模式执行受信任 Python。执行请求必须携带稳定的
 `executionId` 和 `tb_inspect` 返回的目标文档 fingerprint；保存的地图还应带 path。
 脚本在新的 globals 中运行：
