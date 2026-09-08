@@ -343,6 +343,7 @@ constexpr auto MaterialsSymbols = std::array{
   PythonApiSymbol{"current", Function, "() -> str"},
   PythonApiSymbol{"align_face", Function, "(faces, mode) -> int"},
   PythonApiSymbol{"copy_from_face", Function, "(source, targets) -> int"},
+  PythonApiSymbol{"replace", Function, "(find, replace, scope='selection') -> int"},
 };
 
 constexpr auto HistorySymbols = std::array{

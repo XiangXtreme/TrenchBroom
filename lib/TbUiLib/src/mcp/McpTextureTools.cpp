@@ -1473,10 +1473,7 @@ McpBridgeToolResult textureReplaceResult(
   const auto changedNodes = changedBrushIds(handles, map.worldNode());
   const auto transactionName = QString{"MCP: Replace texture"};
   const auto ok = executeTransaction(map, transactionName, [&]() {
-    mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, handles);
-    return mdl::setBrushFaceAttributes(
-      map, mdl::UpdateBrushFaceAttributes{.materialName = replace.toStdString()});
+    return automation::setBrushFaceMaterial(map, handles, replace.toStdString());
   });
   if (!ok)
   {

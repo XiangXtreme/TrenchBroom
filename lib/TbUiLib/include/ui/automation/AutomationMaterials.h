@@ -45,4 +45,9 @@ bool copyBrushFaceAttributes(
   const mdl::BrushFaceHandle& source,
   const std::vector<mdl::BrushFaceHandle>& targets);
 
+bool setBrushFaceMaterial(
+  mdl::Map& map,
+  const std::vector<mdl::BrushFaceHandle>& faces,
+  const std::string& material);
+
 } // namespace tb::ui::automation

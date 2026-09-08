@@ -78,4 +78,19 @@ bool copyBrushFaceAttributes(
   return mdl::setBrushFaceAttributes(map, mdl::copyAll(sourceFace));
 }
 
+bool setBrushFaceMaterial(
+  mdl::Map& map,
+  const std::vector<mdl::BrushFaceHandle>& faces,
+  const std::string& material)
+{
+  if (faces.empty() || material.empty())
+  {
+    return false;
+  }
+
+  mdl::deselectAll(map);
+  mdl::selectBrushFaces(map, faces);
+  return mdl::setBrushFaceAttributes(map, {.materialName = material});
+}
+
 } // namespace tb::ui::automation

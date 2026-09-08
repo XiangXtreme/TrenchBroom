@@ -65,6 +65,10 @@ JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它�
 的目标 `Face` 集合，返回去重后的目标数。源和目标必须处于当前文档，空目标会在提交前失败。
 该接口与过渡 MCP `texture_copy_from_face` 复用同一个 automation 操作。
 
+`tb.materials.replace(find, replace, scope="selection")` 在当前 brush-face 选择或整个地图中按
+不区分大小写的材质名替换。`scope` 只能是 `selection` 或 `map`；未找到候选 face 时不会创建事务。
+过渡 MCP `texture_replace` 也使用相同的 automation 写入操作。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

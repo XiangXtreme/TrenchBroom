@@ -3685,6 +3685,57 @@ size_t copyFaceAttributes(FaceHandle& source, const py::iterable& targets)
   return brushFaces.size();
 }
 
+size_t replaceMaterial(
+  const std::string& find, const std::string& replace, const std::string& scope)
+{
+  if (find.empty() || replace.empty())
+  {
+    throw py::value_error{"find and replace must not be empty"};
+  }
+  auto& document = currentDocument().get();
+  auto& map = document.map();
+  const auto normalizedScope = QString::fromStdString(scope).trimmed().toLower();
+  auto candidates = std::vector<mdl::BrushFaceHandle>{};
+  if (normalizedScope == "selection")
+  {
+    candidates = map.selection().allBrushFaces();
+  }
+  else if (normalizedScope == "map")
+  {
+    for (auto face : allFaces(document))
+    {
+      auto& brush = face.getBrushNode();
+      candidates.emplace_back(&brush, face.faceIndex);
+    }
+  }
+  else
+  {
+    throw py::value_error{"scope must be selection or map"};
+  }
+
+  candidates.erase(
+    std::remove_if(
+      candidates.begin(),
+      candidates.end(),
+      [&](const auto& candidate) {
+        return QString::compare(
+                 QString::fromStdString(candidate.face().materialName()),
+                 QString::fromStdString(find),
+                 Qt::CaseInsensitive)
+               != 0;
+      }),
+    candidates.end());
+  if (candidates.empty())
+  {
+    throw py::value_error{"No faces use the requested material"};
+  }
+
+  withPreservedSelection(document, "Python API Replace Texture", [&](auto& targetMap) {
+    return automation::setBrushFaceMaterial(targetMap, candidates, replace);
+  });
+  return candidates.size();
+}
+
 void updateFace(FaceHandle& face, mdl::UpdateBrushFaceAttributes update)
 {
   auto& document = DocumentHandle{face.document, face.generation}.get();
@@ -6092,6 +6143,12 @@ void defineModule(py::module_& module)
   materials.def("align_face", alignFaces, py::arg("faces"), py::arg("mode"));
   materials.def(
     "copy_from_face", copyFaceAttributes, py::arg("source"), py::arg("targets"));
+  materials.def(
+    "replace",
+    replaceMaterial,
+    py::arg("find"),
+    py::arg("replace"),
+    py::arg("scope") = "selection");
 
   auto historyDocument = [](const py::object& document) {
     return document.is_none() ? currentDocument() : py::cast<DocumentHandle>(document);
