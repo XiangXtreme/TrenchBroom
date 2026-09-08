@@ -341,6 +341,7 @@ constexpr auto MaterialsSymbols = std::array{
     "(query, limit=50) -> list[Material]",
     PythonApiValueType{PythonApiType::Material, 1u}},
   PythonApiSymbol{"current", Function, "() -> str"},
+  PythonApiSymbol{"apply", Function, "(faces, material) -> int"},
   PythonApiSymbol{"align_face", Function, "(faces, mode) -> int"},
   PythonApiSymbol{"copy_from_face", Function, "(source, targets) -> int"},
   PythonApiSymbol{"replace", Function, "(find, replace, scope='selection') -> int"},

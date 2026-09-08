@@ -69,6 +69,10 @@ JSON-RPC 或 Python 运行时。它只报告编辑器中的 brush 几何；它�
 不区分大小写的材质名替换。`scope` 只能是 `selection` 或 `map`；未找到候选 face 时不会创建事务。
 过渡 MCP `texture_replace` 也使用相同的 automation 写入操作。
 
+`tb.materials.apply(faces, material)` 把材质应用到显式 `Face` 集合，返回去重后的 face 数；它与
+`tb.faces.set_material` 使用同一 automation 写入操作，前者作为材料领域的组合入口对应过渡
+`texture_apply`。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

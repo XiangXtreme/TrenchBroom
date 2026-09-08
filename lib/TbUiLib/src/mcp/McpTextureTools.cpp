@@ -980,10 +980,7 @@ McpBridgeToolResult textureApplyResult(
 
   const auto transactionName = QString{"MCP: Apply texture"};
   auto ok = executeTransaction(map, transactionName, [&]() {
-    mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, handles);
-    return mdl::setBrushFaceAttributes(
-      map, mdl::UpdateBrushFaceAttributes{.materialName = material.toStdString()});
+    return automation::setBrushFaceMaterial(map, handles, material.toStdString());
   });
   if (!ok)
   {

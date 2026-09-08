@@ -429,6 +429,8 @@ assert tb.materials.copy_from_face(faces[0], [faces[1]]) == 1
 assert faces[1].material == "python-copy-source"
 assert tb.materials.replace("python-copy-source", "python-replaced", scope="map") == 2
 assert faces[0].material == "python-replaced"
+assert tb.materials.apply([faces[2]], "python-applied") == 1
+assert faces[2].material == "python-applied"
 try:
     tb.materials.align_face(csg["brushes"][0].faces(), "diagonal")
     raise AssertionError("face alignment accepted an invalid mode")

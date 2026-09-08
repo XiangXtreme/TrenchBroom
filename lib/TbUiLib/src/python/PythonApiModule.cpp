@@ -3547,7 +3547,7 @@ void setFaceMaterial(FaceHandle& face, const std::string& materialName)
   });
 }
 
-void setFacesMaterial(const py::iterable& faces, const std::string& materialName)
+size_t setFacesMaterial(const py::iterable& faces, const std::string& materialName)
 {
   auto handles = std::vector<FaceHandle>{};
   for (const auto& face : faces)
@@ -3566,7 +3566,7 @@ void setFacesMaterial(const py::iterable& faces, const std::string& materialName
     handles.end());
   if (handles.empty())
   {
-    return;
+    return 0u;
   }
 
   auto& document =
@@ -3584,10 +3584,9 @@ void setFacesMaterial(const py::iterable& faces, const std::string& materialName
   }
 
   withPreservedSelection(document, "Python API Set Face Materials", [&](auto& map) {
-    mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, brushFaces);
-    return mdl::setBrushFaceAttributes(map, {.materialName = materialName});
+    return automation::setBrushFaceMaterial(map, brushFaces, materialName);
   });
+  return brushFaces.size();
 }
 
 size_t alignFaces(const py::iterable& faces, const std::string& mode)
@@ -6141,6 +6140,7 @@ void defineModule(py::module_& module)
   materials.def(
     "current", []() { return currentDocument().get().map().currentMaterialName(); });
   materials.def("align_face", alignFaces, py::arg("faces"), py::arg("mode"));
+  materials.def("apply", setFacesMaterial, py::arg("faces"), py::arg("material"));
   materials.def(
     "copy_from_face", copyFaceAttributes, py::arg("source"), py::arg("targets"));
   materials.def(
