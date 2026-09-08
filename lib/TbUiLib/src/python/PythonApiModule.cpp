@@ -68,6 +68,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationActions.h"
 #include "ui/automation/AutomationAssets.h"
 #include "ui/automation/AutomationBrushes.h"
 #include "ui/automation/AutomationDocuments.h"
@@ -4266,35 +4267,21 @@ void executeAction(const std::string& actionPath)
     throw std::runtime_error{"No active map window"};
   }
 
-  const auto path = std::filesystem::path{actionPath};
-  const auto& actionsMap = ActionManager::instance().actionsMap();
-  const auto actionIt = actionsMap.find(path);
-  if (actionIt == std::end(actionsMap))
+  const auto result = automation::executeAutomationAction(
+    *context.appController, context.mapWindow, context.currentMapView, actionPath);
+  if (result.status == automation::AutomationActionStatus::Unknown)
   {
     throw py::key_error{actionPath};
   }
-
-  auto actionContext = ActionExecutionContext{
-    *context.appController, context.mapWindow, context.currentMapView};
-  const auto& action = actionIt->second;
-  if (!action.enabled(actionContext))
+  if (result.status == automation::AutomationActionStatus::Disabled)
   {
     throw std::runtime_error{"Action is disabled"};
   }
-  action.execute(actionContext);
 }
 
 std::vector<std::string> listActions()
 {
-  auto result = std::vector<std::string>{};
-  const auto& actionsMap = ActionManager::instance().actionsMap();
-  result.reserve(actionsMap.size());
-  for (const auto& [path, action] : actionsMap)
-  {
-    unused(action);
-    result.push_back(path.generic_string());
-  }
-  return result;
+  return automation::automationActionIds();
 }
 
 PluginPanelHandle createPluginPanel(const std::string& title)

@@ -14,6 +14,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AnimationManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AppController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationAssets.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationActions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationBrushes.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationDocuments.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationEntities.cpp

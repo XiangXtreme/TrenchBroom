@@ -102,6 +102,12 @@ Python 返回可继续使用的 `Entity` 句柄，旧 MCP 保持历史和 JSON �
 解组工具通过同一 automation 服务选择和调度 native group 命令；Python 返回紧凑 group 摘要，
 旧 MCP 保留 selector、对象 ID、模块元数据刷新与操作历史适配。
 
+## 编辑器动作
+
+`tb.actions.list()` 与 `tb.actions.execute(action_id)` 通过与过渡 MCP 相同的 automation
+服务枚举和调度注册动作。执行仍需 `mode:"action"`，服务返回未知或 disabled 状态，Python 与 MCP
+各自转换为其公开的错误语义。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

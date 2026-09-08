@@ -36,6 +36,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationActions.h"
 
 namespace tb::ui
 {
@@ -66,8 +67,10 @@ QJsonObject actionsListJson(AppController& appController)
     hasActiveView ? activeContext.mapView : nullptr};
 
   auto actions = QJsonArray{};
-  for (const auto& [path, action] : appController.actionManager().actionsMap())
+  for (const auto& actionId : automation::automationActionIds())
   {
+    const auto path = pathFromQString(QString::fromStdString(actionId));
+    const auto& action = appController.actionManager().actionsMap().at(path);
     const auto enabled = action.enabled(context);
     auto actionJson = QJsonObject{
       {"id", pathAsGenericQString(path)},
@@ -102,15 +105,6 @@ McpBridgeToolResult actionExecuteResult(
       mcp::McpErrorCode::InvalidParams, "action_execute requires actionId");
   }
 
-  const auto actionPath = pathFromQString(actionId);
-  const auto& actionsMap = appController.actionManager().actionsMap();
-  const auto actionIt = actionsMap.find(actionPath);
-  if (actionIt == std::end(actionsMap))
-  {
-    return McpBridgeToolResult::failure(
-      mcp::McpErrorCode::InvalidParams, QString{"Unknown action id: %1"}.arg(actionId));
-  }
-
   const auto activeContext = activeActionContext(appController);
   if (activeContext.mapWindow && !activeContext.mapView)
   {
@@ -118,16 +112,21 @@ McpBridgeToolResult actionExecuteResult(
       mcp::McpErrorCode::Forbidden, "No active map view");
   }
 
-  auto context =
-    ActionExecutionContext{appController, activeContext.mapWindow, activeContext.mapView};
-  const auto& action = actionIt->second;
-  if (!action.enabled(context))
+  const auto execution = automation::executeAutomationAction(
+    appController,
+    activeContext.mapWindow,
+    activeContext.mapView,
+    actionId.toStdString());
+  if (execution.status == automation::AutomationActionStatus::Unknown)
+  {
+    return McpBridgeToolResult::failure(
+      mcp::McpErrorCode::InvalidParams, QString{"Unknown action id: %1"}.arg(actionId));
+  }
+  if (execution.status == automation::AutomationActionStatus::Disabled)
   {
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::Forbidden, QString{"Action is disabled: %1"}.arg(actionId));
   }
-
-  action.execute(context);
   return McpBridgeToolResult::success(QJsonObject{
     {"actionId", actionId},
     {"executed", true},
