@@ -1,8 +1,0 @@
-{
-  "moduleId": "recipe-stair-run-minimal",
-  "routeId": "recipe-stair-run-minimal",
-  "min": [0, 0, 0],
-  "max": [128, 64, 64],
-  "steps": 4,
-  "axis": "x"
-}

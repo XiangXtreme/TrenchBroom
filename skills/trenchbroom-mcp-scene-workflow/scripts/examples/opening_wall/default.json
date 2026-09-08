@@ -1,8 +1,0 @@
-{
-  "moduleId": "recipe-opening-wall-default",
-  "min": [0, 0, 0],
-  "max": [320, 16, 160],
-  "openingMin": [112, 0, 0],
-  "openingMax": [208, 16, 112],
-  "material": "__TB_empty"
-}

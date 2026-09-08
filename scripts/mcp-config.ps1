@@ -54,7 +54,7 @@ $genericConfig = [ordered] @{
   notes = @(
     "Start TrenchBroom first.",
     "Enable MCP in Preferences > MCP and use ReadOnly or Edit mode.",
-    "Run scripts\\mcp-smoke.ps1 to verify the local HTTP endpoint."
+    "Run scripts\\mcp-call.ps1 -Tool tb_inspect -ArgumentsJson '{\"view\":\"status\"}' to verify the local HTTP endpoint."
   )
 }
 
@@ -109,7 +109,7 @@ codex mcp add $ServerName --url $url
 4. Run:
 
 ```powershell
-scripts\mcp-smoke.ps1 -RawJson
+scripts\mcp-call.ps1 -Tool tb_inspect -ArgumentsJson '{"view":"status"}'
 ```
 
 If the smoke script reports `Forbidden`, TrenchBroom MCP mode is still `Off`.

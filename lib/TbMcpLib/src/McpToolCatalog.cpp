@@ -43,15 +43,6 @@ QJsonObject documentSchema()
     {"fingerprint"});
 }
 
-QJsonObject arrayOfStrings(const QString& description)
-{
-  return QJsonObject{
-    {"type", "array"},
-    {"description", description},
-    {"items", QJsonObject{{"type", "string"}}},
-  };
-}
-
 } // namespace
 
 const std::vector<McpToolDefinition>& defaultToolCatalog()
@@ -116,12 +107,7 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
       "path.",
       McpMode::ReadOnly,
       false,
-      objectSchema({
-        {"path", stringProperty("Optional absolute output path.")},
-        {"includeOverlay",
-         QJsonObject{{"type", "boolean"}, {"description", "Include viewport overlays."}}},
-        {"formats", arrayOfStrings("Optional preferred image formats.")},
-      }),
+      objectSchema({{"path", stringProperty("Optional absolute PNG output path.")}}),
       McpToolCostClass::Normal,
     },
   };

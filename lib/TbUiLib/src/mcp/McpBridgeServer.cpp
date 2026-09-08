@@ -149,7 +149,6 @@ QString pythonApiExample(const PythonApiTypeInfo& type, const PythonApiSymbol& s
   case PythonApiType::Brushes:
   case PythonApiType::Faces:
   case PythonApiType::Materials:
-  case PythonApiType::Ir:
   case PythonApiType::Actions:
     return QString{"import trenchbroom as tb\nvalue = tb.%1.%2"}.arg(
       QString::fromUtf8(type.name), name);
@@ -177,7 +176,6 @@ QString pythonApiQualifiedName(
   case PythonApiType::Brushes:
   case PythonApiType::Faces:
   case PythonApiType::Materials:
-  case PythonApiType::Ir:
   case PythonApiType::Actions:
     return QString{"trenchbroom.%1.%2"}.arg(typeName, symbolName);
   default:
@@ -543,17 +541,7 @@ McpBridgeServer::McpBridgeServer(
         }
         if (toolName == "tb_capture")
         {
-          const auto action =
-            params.value("action").toString("current").trimmed().toLower();
-          if (action != "current")
-          {
-            return invalidParamsFailure("tb_capture only captures the current viewport");
-          }
-          if (action == "current")
-          {
-            return viewportCaptureCurrentResult(appController, params);
-          }
-          return invalidParamsFailure("Unsupported tb_capture action");
+          return viewportCaptureCurrentResult(appController, params);
         }
         return McpBridgeToolResult::failure(
           mcp::McpErrorCode::ToolNotFound,

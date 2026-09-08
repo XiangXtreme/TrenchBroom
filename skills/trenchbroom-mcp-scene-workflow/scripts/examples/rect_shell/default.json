@@ -1,8 +1,0 @@
-{
-  "moduleId": "recipe-rect-shell-default",
-  "kind": "corridor",
-  "min": [0, 0, 0],
-  "max": [512, 128, 128],
-  "thickness": 16,
-  "material": "__TB_empty"
-}

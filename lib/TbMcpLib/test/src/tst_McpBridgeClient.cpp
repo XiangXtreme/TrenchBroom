@@ -115,20 +115,15 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
 {
   SECTION("uses catalog cost classes and response timeouts")
   {
-    CHECK(toolCostClassForName("tb_status") == McpToolCostClass::Fast);
-    CHECK(toolCostClassForName("documents_list") == McpToolCostClass::Fast);
-    CHECK(toolCostClassForName("entity_create") == McpToolCostClass::Normal);
-    CHECK(toolCostClassForName("map_validate") == McpToolCostClass::Normal);
-    CHECK(toolCostClassForName("ir_apply") == McpToolCostClass::Long);
-    CHECK(toolCostClassForName("heightmap_import_grayscale") == McpToolCostClass::Long);
-    CHECK(toolCostClassForName("render_review_current_scene") == McpToolCostClass::Long);
-    CHECK(toolCostClassForName("compile_run") == McpToolCostClass::Long);
-    CHECK(toolCostClassForName("python_generate_blockout") == McpToolCostClass::Long);
+    CHECK(toolCostClassForName("tb_inspect") == McpToolCostClass::Fast);
+    CHECK(toolCostClassForName("tb_api") == McpToolCostClass::Fast);
+    CHECK(toolCostClassForName("tb_capture") == McpToolCostClass::Normal);
+    CHECK(toolCostClassForName("tb_execute_python") == McpToolCostClass::Long);
     CHECK(toolCostClassForName("unknown_tool") == McpToolCostClass::Normal);
 
-    CHECK(toolResponseTimeoutMs(McpToolCostClass::Fast) == 10'000);
+    CHECK(toolResponseTimeoutMs(McpToolCostClass::Fast) == 5'000);
     CHECK(toolResponseTimeoutMs(McpToolCostClass::Normal) == 30'000);
-    CHECK(toolResponseTimeoutMs(McpToolCostClass::Long) == 120'000);
+    CHECK(toolResponseTimeoutMs(McpToolCostClass::Long) == 90'000);
   }
 
   SECTION("uses five second connection and write limits")
@@ -220,12 +215,12 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
     const auto client = makeClient(state, timeouts);
 
     const auto response = client.request(
-      testConfig(), McpBridgeRequestType::ToolCall, "ir_apply", {}, "request-long");
+      testConfig(), McpBridgeRequestType::ToolCall, "tb_execute_python", {}, "request-long");
 
     REQUIRE_FALSE(response.ok);
     REQUIRE(response.error);
     CHECK(state->readyReadTimeoutMs == 23);
-    CHECK(response.error->details.value("tool").toString() == "ir_apply");
+    CHECK(response.error->details.value("tool").toString() == "tb_execute_python");
     CHECK(response.error->details.value("requestId").toString() == "request-long");
     CHECK(response.error->details.value("timeoutMs").toInt() == 23);
     CHECK(response.error->details.value("mutatedDocument").toString() == "unknown");
@@ -234,12 +229,12 @@ TEST_CASE("McpBridgeClient", "[McpStdioClient]")
 
     const auto toolResult = mcpToolCallResult(
       QJsonObject{
-        {"name", "ir_apply"},
+        {"name", "tb_execute_python"},
         {"arguments", QJsonObject{}},
       },
       [&](McpBridgeRequestType, const QString&, const QJsonObject&) { return response; });
     const auto structured = toolResult.value("structuredContent").toObject();
-    CHECK(structured.value("tool").toString() == "ir_apply");
+    CHECK(structured.value("tool").toString() == "tb_execute_python");
     CHECK(structured.value("requestId").toString() == "request-long");
     CHECK(structured.value("timeoutMs").toInt() == 23);
     CHECK(structured.value("mutatedDocument").toString() == "unknown");

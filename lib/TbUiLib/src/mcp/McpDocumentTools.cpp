@@ -27,7 +27,6 @@
 #include "McpThinBridgeTools.h"
 #include "fs/DiskIO.h"
 #include "mcp/McpError.h"
-#include "mcp/McpToolCatalog.h"
 #include "mdl/Brush.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
@@ -69,11 +68,8 @@ QJsonObject mcpSkillHintsJson()
   return QJsonObject{
     {"associatedSkills", QJsonArray{"trenchbroom-mcp-scene-workflow"}},
     {"skillWorkflowHint",
-     "Use trenchbroom-mcp-scene-workflow when building or editing TrenchBroom "
-     "scenes with MCP."},
-    {"recipeWorkflowHint",
-     "For prefab-like scenes, routes, or architecture, use skill recipes to emit "
-     "IR, then apply via ir_compile_preview_from_file and ir_apply_from_file."},
+     "Use trenchbroom-mcp-scene-workflow to inspect the public Python API, compose "
+     "a guarded script, and capture editor evidence."},
   };
 }
 
@@ -903,40 +899,6 @@ QJsonObject makeStatus(
     result.insert("activeDocumentWindowTitle", mapWindow->windowTitle());
     result.insert("documentEpoch", documentEpoch(map, objectRegistry));
     result.insert("documentFingerprint", documentFingerprint(map, objectRegistry));
-  }
-
-  return result;
-}
-
-QJsonObject doctorJson(
-  AppController& appController, const mcp::McpBridgeConfig& config, const bool fullDetail)
-{
-  auto result = QJsonObject{
-    {"configPath", mcp::defaultConfigPath()},
-    {"pipeName", config.pipeName},
-    {"mode", mcp::modeName(config.mode)},
-    {"authentication", "none"},
-    {"listening", config.mode != mcp::McpMode::Off},
-    {"documentCount",
-     static_cast<int>(appController.mapWindowManager().mapWindows().size())},
-    {"activeDocument", appController.mapWindowManager().topMapWindow() != nullptr},
-    {"schemaLookupHint",
-     "Use tb_tools_search(detail:\"schema\", query:\"exact_tool_name\") to inspect one "
-     "tool schema."},
-  };
-  addMcpSkillHints(result);
-
-  result.insert("implementedToolCount", mcp::toolsSummaryJson(config.mode).size());
-
-  if (fullDetail)
-  {
-    result.insert("detail", "full");
-    result.insert("implementedTools", mcp::toolsSummaryJson(config.mode));
-    result.insert("toolDiagnostics", mcp::toolDiagnosticsJson(config.mode));
-  }
-  else
-  {
-    result.insert("detail", "summary");
   }
 
   return result;

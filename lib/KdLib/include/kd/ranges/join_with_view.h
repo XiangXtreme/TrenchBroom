@@ -481,7 +481,7 @@ public:
     }
 
     Parent* parent_{nullptr};
-    [[no_unique_address]] OuterMember outer_it_{};
+    OuterMember outer_it_{};
     std::variant<PatternIter, InnerIter> inner_it_{};
   };
 

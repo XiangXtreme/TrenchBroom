@@ -79,7 +79,21 @@ if ($sourceRoot.TrimEnd("\") -eq $destinationRoot.TrimEnd("\")) {
   throw "Source and destination are the same directory."
 }
 
-Get-SkillFiles -Root $Source | ForEach-Object {
+$sourceFiles = Get-SkillFiles -Root $Source
+$sourcePaths = [System.Collections.Generic.HashSet[string]]::new(
+  [System.StringComparer]::OrdinalIgnoreCase)
+foreach ($file in $sourceFiles) {
+  [void] $sourcePaths.Add($file.RelativePath)
+}
+
+# The runtime copy is managed exclusively by this script, so remove retired source files.
+Get-SkillFiles -Root $Destination | Where-Object {
+  -not $sourcePaths.Contains($_.RelativePath)
+} | ForEach-Object {
+  Remove-Item -LiteralPath $_.FullName -Force
+}
+
+$sourceFiles | ForEach-Object {
   $target = Join-Path $Destination $_.RelativePath
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
   Copy-Item -LiteralPath $_.FullName -Destination $target -Force

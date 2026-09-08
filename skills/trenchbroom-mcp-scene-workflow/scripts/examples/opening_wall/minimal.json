@@ -1,7 +1,0 @@
-{
-  "moduleId": "recipe-opening-wall-minimal",
-  "min": [0, 0, 0],
-  "max": [256, 16, 128],
-  "openingMin": [96, 0, 0],
-  "openingMax": [160, 16, 96]
-}

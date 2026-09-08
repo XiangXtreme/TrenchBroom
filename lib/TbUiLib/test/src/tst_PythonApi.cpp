@@ -44,7 +44,6 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
-#include "ui/automation/AutomationObjectRegistry.h"
 #include "ui/python/PythonHandleRegistry.h"
 #include "ui/python/PythonPluginManager.h"
 #include "ui/python/PythonPluginSession.h"
@@ -445,80 +444,6 @@ with open("python-api-csg-ok.txt", "w", encoding="utf-8") as f:
     REQUIRE(scriptSucceeded);
     CHECK(env.loadFile("python-api-csg-ok.txt") == "ok");
   }
-
-#if 0 // The retired IR interpreter is deliberately no longer a Python API feature.
-  SECTION("applies supported IR atomically through the native automation service")
-  {
-    auto env = fs::TestEnvironment{};
-    auto currentPathGuard = CurrentPathGuard{env.dir()};
-    env.createFile(
-      "ir_apply.py",
-      R"(
-import json
-import os
-import trenchbroom as tb
-
-before_brushes = len(tb.brushes.list())
-before_entities = len(tb.entities.find(classname="test_spawn"))
-applied = tb.ir.apply({
-    "name": "Python API atomic IR",
-    "select": False,
-    "selectEntities": False,
-    "operations": [
-        {"type": "box", "min": [-320, -64, -32], "max": [-256, 0, 32]},
-        {"type": "prism", "points2d": [[-240, -64], [-192, -64], [-192, 0], [-240, 0]],
-         "minZ": -32, "maxZ": 32},
-    ],
-    "entities": [{"classname": "test_spawn", "origin": [-224, 32, 16]}],
-})
-assert applied["atomic"]
-assert applied["brush_count"] == 2
-assert applied["entity_count"] == 1
-assert len(applied["brushes"]) == 2
-assert len(applied["entities"]) == 1
-assert len(applied["objects"]) == 3
-assert len(tb.brushes.list()) == before_brushes + 2
-assert len(tb.entities.find(classname="test_spawn")) == before_entities + 1
-
-path = os.path.abspath("ir-apply.json")
-with open(path, "w", encoding="utf-8") as file:
-    json.dump({"select": False, "operations": [{"type": "box", "size": [64, 64, 64]}]}, file)
-from_file = tb.ir.apply_from_file(path)
-assert os.path.samefile(from_file["source_path"], path)
-assert from_file["brush_count"] == 1
-assert "legacyUnversionedIr" in from_file["warnings"]
-
-before_invalid = len(tb.brushes.list())
-try:
-    tb.ir.apply({"operations": [
-        {"type": "box", "size": [64, 64, 64]},
-        {"type": "not-a-native-ir-operation"},
-    ]})
-    raise AssertionError("IR apply accepted an unsupported operation")
-except ValueError:
-    pass
-assert len(tb.brushes.list()) == before_invalid
-
-with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
-    file.write("ok")
-)");
-
-    auto context = PythonExecutionContext{};
-    context.mapWindow = &window;
-    context.document = &window.document();
-    context.appController = &window.appController();
-    context.currentMapView = window.currentMapViewBase();
-    context.logger = &window.pythonLogger();
-    context.scriptPath = env.dir() / "ir_apply.py";
-
-    const auto scriptSucceeded =
-      PythonRuntime::instance().runScript(context, context.scriptPath);
-    CAPTURE(PythonRuntime::instance().lastError());
-    CHECK(scriptSucceeded);
-    CHECK(env.loadFile("ir-apply-ok.txt") == "ok");
-  }
-
-#endif
   SECTION("runs isolated MCP Python globals and rolls back invalid results")
   {
     auto context = PythonExecutionContext{};
@@ -529,221 +454,6 @@ with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
     context.logger = &window.pythonLogger();
 
     auto& runtime = PythonRuntime::instance();
- #if 0 // Module metadata recovery was retired with tb.modules.
-    auto moduleRegistry = automation::AutomationObjectRegistry{};
-    auto moduleStore = std::map<QString, automation::AutomationModuleRecord>{};
-    auto metadataStore = std::map<QString, automation::AutomationObjectMetadataRecord>{};
-    const auto documentFingerprint =
-      moduleRegistry.documentFingerprint(window.document().map());
-    const auto worldObjectId = moduleRegistry.registerNode(
-      window.document().map(), window.document().map().worldNode());
-    moduleStore.emplace(
-      "test-module",
-      automation::AutomationModuleRecord{
-        "test-module",
-        documentFingerprint,
-        {worldObjectId},
-        {"mcp-op-1"},
-        QJsonObject{{"role", "route"}},
-        3,
-        "mcp-op-1",
-        "sha256:test",
-        QJsonObject{{"intent", "balanced"}},
-      });
-    moduleStore.emplace(
-      "other-document-module",
-      automation::AutomationModuleRecord{
-        "other-document-module", "doc:other", {}, {}, {}, 1, {}, {}, {}});
-    moduleStore.emplace(
-      "stale-module",
-      automation::AutomationModuleRecord{
-        "stale-module", documentFingerprint, {"mcp:missing"}, {}, {}, 1, {}, {}, {}});
-    metadataStore.emplace(
-      "stale-metadata",
-      automation::AutomationObjectMetadataRecord{
-        "mcp:missing",
-        documentFingerprint,
-        QJsonObject{{"moduleId", "stale-module"}},
-        true});
-    metadataStore.emplace(
-      "metadata-only-module",
-      automation::AutomationObjectMetadataRecord{
-        worldObjectId,
-        documentFingerprint,
-        QJsonObject{{"moduleId", "metadata-only-module"}, {"part", "floor"}},
-        false});
-    context.objectRegistry = &moduleRegistry;
-    context.metadataStore = &metadataStore;
-    context.moduleStore = &moduleStore;
-
-    auto transactionOnlyContext = context;
-    transactionOnlyContext.mcpExecution = true;
-    transactionOnlyContext.allowNonTransactionalActions = false;
-    transactionOnlyContext.allowPersistentUi = false;
-    const auto rejectedLockUpdate = runtime.runMcpScript(
-      transactionOnlyContext,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\ntb.materials.lock_set(texture_lock=False)",
-        "<mcp-python:transaction-lock-update>",
-        {},
-      });
-    CHECK_FALSE(rejectedLockUpdate.ok);
-    CHECK(rejectedLockUpdate.rolledBack);
-    CHECK(rejectedLockUpdate.error.contains("requires mode='action'"));
-
-    auto actionContext = context;
-    actionContext.mcpExecution = true;
-    actionContext.allowNonTransactionalActions = true;
-    actionContext.allowPersistentUi = false;
-    const auto changedLocks = runtime.runMcpScript(
-      actionContext,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\n"
-        "before = tb.materials.lock_get()\n"
-        "after = tb.materials.lock_set(texture_lock=not before['texture_lock'], "
-        "uv_lock=not before['uv_lock'])\n"
-        "result = {'before': before, 'after': after}",
-        "<mcp-python:action-lock-update>",
-        {},
-        "MCP Python action",
-        30'000,
-        false,
-      });
-    CAPTURE(changedLocks.error);
-    REQUIRE(changedLocks.ok);
-    CHECK_FALSE(changedLocks.committed);
-    const auto changedLocksResult = changedLocks.value.toObject();
-    const auto locksBefore = changedLocksResult.value("before").toObject();
-    const auto locksAfter = changedLocksResult.value("after").toObject();
-    CHECK(
-      locksAfter.value("texture_lock").toBool()
-      != locksBefore.value("texture_lock").toBool());
-    CHECK(locksAfter.value("uv_lock").toBool() != locksBefore.value("uv_lock").toBool());
-
-    const auto restoredLocks = runtime.runMcpScript(
-      actionContext,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\n"
-        "result = tb.materials.lock_set(texture_lock=arguments['texture_lock'], "
-        "uv_lock=arguments['uv_lock'])",
-        "<mcp-python:action-lock-restore>",
-        QJsonObject{
-          {"texture_lock", locksBefore.value("texture_lock")},
-          {"uv_lock", locksBefore.value("uv_lock")},
-        },
-        "MCP Python action",
-        30'000,
-        false,
-      });
-    CAPTURE(restoredLocks.error);
-    REQUIRE(restoredLocks.ok);
-    CHECK(restoredLocks.value.toObject() == locksBefore);
-
-    const auto modules = runtime.runMcpScript(
-      context,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\n"
-        "module = tb.modules.inspect('test-module')\n"
-        "selection = tb.modules.select('test-module')\n"
-        "metadata_module = tb.modules.inspect('metadata-only-module')\n"
-        "metadata_selection = tb.modules.select('metadata-only-module')\n"
-        "result = {'count': len(tb.modules.list()), 'id': module['id'], "
-        "'revision': module['revision'], 'role': module['metadata']['role'], "
-        "'selected': selection['node_count'], "
-        "'metadata_object_count': metadata_module['object_count'], "
-        "'metadata_selected': metadata_selection['node_count'], "
-        "'stale_count': len(tb.modules.list(include_stale=True)), "
-        "'stale_objects': tb.modules.inspect('stale-module')['stale_object_count']}",
-        "<mcp-python:modules>",
-        {},
-      });
-    CAPTURE(modules.error);
-    REQUIRE(modules.ok);
-    const auto moduleResult = modules.value.toObject();
-    CHECK(moduleResult.value("count").toInt() == 2);
-    CHECK(moduleResult.value("id").toString() == "test-module");
-    CHECK(moduleResult.value("revision").toInt() == 3);
-    CHECK(moduleResult.value("role").toString() == "route");
-    CHECK(moduleResult.value("selected").toInt() == 1);
-    CHECK(moduleResult.value("metadata_object_count").toInt() == 1);
-    CHECK(moduleResult.value("metadata_selected").toInt() >= 1);
-    CHECK(moduleResult.value("stale_count").toInt() == 3);
-    CHECK(moduleResult.value("stale_objects").toInt() == 1);
-
-    const auto forgotten = runtime.runMcpScript(
-      context,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\n"
-        "tb.modules.forget('test-module')\n"
-        "try:\n"
-        "    tb.modules.inspect('test-module')\n"
-        "    raise AssertionError('forgotten module was still available')\n"
-        "except KeyError:\n"
-        "    pass\n"
-        "result = {'remaining': len(tb.modules.list(include_stale=True))}",
-        "<mcp-python:forget-module>",
-        {},
-      });
-    CAPTURE(forgotten.error);
-    REQUIRE(forgotten.ok);
-    CHECK(forgotten.value.toObject() == QJsonObject{{"remaining", 2}});
-    CHECK_FALSE(moduleStore.contains("test-module"));
-    CHECK(moduleStore.contains("other-document-module"));
-    CHECK(moduleStore.contains("stale-module"));
-
-    const auto compacted = runtime.runMcpScript(
-      context,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\n"
-        "result = tb.modules.compact('stale-module')",
-        "<mcp-python:compact-module>",
-        {},
-      });
-    CAPTURE(compacted.error);
-    REQUIRE(compacted.ok);
-    CHECK(compacted.value.toObject().value("removed_stale_metadata_count").toInt() == 1);
-    CHECK(compacted.value.toObject().value("removed_stale_object_id_count").toInt() == 1);
-    CHECK(metadataStore.size() == 1);
-    CHECK(metadataStore.contains("metadata-only-module"));
-    CHECK(moduleStore.at("stale-module").objectIds.empty());
-
-    const auto forgottenMetadataOnly = runtime.runMcpScript(
-      context,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\n"
-        "tb.modules.forget('metadata-only-module')\n"
-        "try:\n"
-        "    tb.modules.inspect('metadata-only-module')\n"
-        "    raise AssertionError('metadata-only module was still available')\n"
-        "except KeyError:\n"
-        "    pass\n"
-        "result = {'remaining': len(tb.modules.list(include_stale=True))}",
-        "<mcp-python:forget-metadata-only-module>",
-        {},
-      });
-    CAPTURE(forgottenMetadataOnly.error);
-    REQUIRE(forgottenMetadataOnly.ok);
-    CHECK(forgottenMetadataOnly.value.toObject() == QJsonObject{{"remaining", 0}});
-    CHECK(metadataStore.empty());
-
-    moduleStore.emplace(
-      "rollback-module",
-      automation::AutomationModuleRecord{
-        "rollback-module", documentFingerprint, {}, {}, {}, 1, {}, {}, {}});
-    const auto failedForget = runtime.runMcpScript(
-      context,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\n"
-        "tb.modules.forget('rollback-module')\n"
-        "raise RuntimeError('force transaction rollback')",
-        "<mcp-python:rollback-module-state>",
-        {},
-      });
-    CHECK_FALSE(failedForget.ok);
-    CHECK(failedForget.rolledBack);
-    CHECK(moduleStore.contains("rollback-module"));
-
- #endif
     const auto first = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{
@@ -829,6 +539,11 @@ with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
       "python_api_catalog.py",
       R"(
 import trenchbroom as tb
+
+assert not hasattr(tb, "ir")
+assert not hasattr(tb, "modules")
+assert "ir" not in tb._api_catalog
+assert "modules" not in tb._api_catalog
 
 for type_name, expected_names in tb._api_catalog.items():
     target = tb if type_name == "trenchbroom" else getattr(tb, type_name)

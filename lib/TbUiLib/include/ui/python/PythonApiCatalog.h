@@ -19,8 +19,6 @@ enum class PythonApiType
   Faces,
   Materials,
   Groups,
-  Modules,
-  Ir,
   Geometry,
   History,
   Assets,

@@ -41,16 +41,6 @@ mcp::McpBridgeResponse makeFailure(
   return mcp::McpBridgeResponse::failure(request.id, mcp::McpError{code, message});
 }
 
-mcp::McpBridgeResponse makeFailure(
-  const mcp::McpBridgeRequest& request,
-  const mcp::McpErrorCode code,
-  const QString& message,
-  QJsonObject details)
-{
-  return mcp::McpBridgeResponse::failure(
-    request.id, mcp::McpError{code, message, std::move(details)});
-}
-
 } // namespace
 
 bool McpBridgeServer::start(const mcp::McpBridgeConfig& config, QString* error)

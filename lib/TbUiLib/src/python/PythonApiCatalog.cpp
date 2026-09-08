@@ -362,24 +362,6 @@ constexpr auto GroupsSymbols = std::array{
   PythonApiSymbol{"ungroup_selected", Function, "() -> dict"},
 };
 
-constexpr auto ModulesSymbols = std::array{
-  PythonApiSymbol{
-    "list", Function, "(include_stale=False, include_empty=False) -> list[dict]"},
-  PythonApiSymbol{"inspect", Function, "(module_id) -> dict"},
-  PythonApiSymbol{"select", Function, "(module_id) -> dict"},
-  PythonApiSymbol{"compact", Function, "(module_id) -> dict"},
-  PythonApiSymbol{"forget", Function, "(module_id)"},
-};
-
-constexpr auto IrSymbols = std::array{
-  PythonApiSymbol{"validate", Function, "(ir) -> dict"},
-  PythonApiSymbol{"preview", Function, "(ir) -> dict"},
-  PythonApiSymbol{"compile_preview_from_file", Function, "(path) -> dict"},
-  PythonApiSymbol{"apply", Function, "(ir, name='Python API Apply IR') -> dict"},
-  PythonApiSymbol{
-    "apply_from_file", Function, "(path, name='Python API Apply IR') -> dict"},
-};
-
 constexpr auto GeometrySymbols = std::array{
   PythonApiSymbol{
     "analyze_selection",

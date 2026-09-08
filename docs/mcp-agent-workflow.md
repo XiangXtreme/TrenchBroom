@@ -6,9 +6,8 @@
 
 ## 状态与目标
 
-源码核查点 f713d9f14 已注册先前六个新入口并保留旧目录；新执行层的目标是四入口。
-本文不宣称源码已经切换。使用前读取实际 tools/list 和 tb_api；实现 Agent 按交付
-规范完成切换，不为使用旧 workflow 添加代理或兼容层。
+当前执行层只公开四入口。使用前读取实际 tools/list 和 tb_api；不为使用旧 workflow
+添加代理或兼容层。
 
 | 入口 | 用途 |
 | --- | --- |
@@ -51,6 +50,5 @@ Python 是受信任代码。地图回滚不能撤销脚本的文件/进程副作
 ## 接口切换
 
 旧工具、profile、IR/模块协议、MCP 操作历史和别名整体退役，旧脚本可能需要修改。
-使用当前 Python API 的明确文档，不按 capability-map 的 planned 符号猜测调用。
-[API 审计说明](mcp-python-migration/api-migration.md) 记录的是切换前实现，不能作为
-接口永久保留承诺。仓库内 Skill、示例和调用脚本随切换更新。
+使用 tb_api 的实际结果，不按 capability-map 的 planned 符号猜测调用。仓库内 Skill、
+示例和调用脚本随切换更新。

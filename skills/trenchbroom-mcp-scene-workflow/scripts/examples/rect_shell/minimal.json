@@ -1,7 +1,0 @@
-{
-  "moduleId": "recipe-rect-shell-minimal",
-  "kind": "room",
-  "min": [0, 0, 0],
-  "max": [256, 256, 128],
-  "thickness": 16
-}

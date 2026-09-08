@@ -21,7 +21,11 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/mcp/McpBridgeServer.h"
 
+#include <QUuid>
+
 #include <catch2/catch_test_macros.hpp>
+
+#include <optional>
 
 namespace tb::ui
 {
@@ -49,6 +53,51 @@ TEST_CASE(
   CHECK_FALSE(retired.ok);
   REQUIRE(retired.error);
   CHECK(retired.error->code == mcp::McpErrorCode::ToolNotFound);
+}
+
+TEST_CASE("McpBridgeServer dispatches only the thin Python bridge", "[McpBridgeServer]")
+{
+  auto appControllerFixture = AppControllerFixture{};
+  auto& appController = appControllerFixture.appController();
+  auto server = McpBridgeServer{appController};
+  auto config = mcp::McpBridgeConfig{};
+  config.mode = mcp::McpMode::ReadOnly;
+  config.httpEnabled = false;
+  config.pipeName = QString{"trenchbroom-mcp-test-%1"}.arg(
+    QUuid::createUuid().toString(QUuid::WithoutBraces));
+  auto error = QString{};
+  REQUIRE(server.start(config, &error));
+
+  const auto inspect = server.dispatchRequest(
+    mcp::McpBridgeRequest{
+      "inspect", "tb_inspect", QJsonObject{{"view", "status"}}, std::nullopt});
+  REQUIRE(inspect.ok);
+  CHECK(inspect.result.value("mode").toString() == "ReadOnly");
+
+  const auto api = server.dispatchRequest(
+    mcp::McpBridgeRequest{
+      "api", "tb_api", QJsonObject{{"symbol", "trenchbroom.ir"}}, std::nullopt});
+  REQUIRE(api.ok);
+  CHECK(api.result.value("symbols").toArray().isEmpty());
+
+  const auto capture =
+    server.dispatchRequest(mcp::McpBridgeRequest{"capture", "tb_capture", {}, std::nullopt});
+  CHECK_FALSE(capture.ok);
+  REQUIRE(capture.error);
+  CHECK(capture.error->code == mcp::McpErrorCode::NoActiveDocument);
+
+  const auto execute = server.dispatchRequest(mcp::McpBridgeRequest{
+    "execute", "tb_execute_python", QJsonObject{{"executionId", "read-only"}}, std::nullopt});
+  CHECK_FALSE(execute.ok);
+  REQUIRE(execute.error);
+  CHECK(execute.error->code == mcp::McpErrorCode::Forbidden);
+
+  const auto retired =
+    server.dispatchRequest(mcp::McpBridgeRequest{"retired", "tb_history", {}, std::nullopt});
+  CHECK_FALSE(retired.ok);
+  REQUIRE(retired.error);
+  CHECK(retired.error->code == mcp::McpErrorCode::ToolNotFound);
+  server.stop();
 }
 
 } // namespace tb::ui
