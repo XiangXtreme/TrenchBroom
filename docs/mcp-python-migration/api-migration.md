@@ -11,6 +11,9 @@
 `saveAutomationDocument`、`exportAutomationDocument`。调用方必须在 action 模式下提供明确目标；
 导出不得覆盖当前地图。
 
+`tb.documents.activate` 与 `close` 同过渡 MCP 的对应操作共用 `AutomationDocuments` 窗口调度。
+关闭前 Python 使目标 document handle 失效；未保存地图仍需显式传入 `discard_changes=True`。
+
 `tb_execute_python` 在 Edit 模式执行受信任 Python。执行请求必须携带稳定的
 `executionId` 和 `tb_inspect` 返回的目标文档 fingerprint；保存的地图还应带 path。
 脚本在新的 globals 中运行：

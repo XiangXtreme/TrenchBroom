@@ -848,7 +848,7 @@ DocumentHandle openDocument(const std::string& path)
             mapWindow->document().map().path(), openPath, pathError));
     if (samePath && !pathError)
     {
-      if (!mapWindowManager.activateMapWindow(*mapWindow))
+      if (!activateAutomationDocument(*context.appController, *mapWindow))
       {
         throw std::runtime_error{"Document window is no longer available"};
       }
@@ -903,7 +903,7 @@ DocumentHandle activateDocument(DocumentHandle& document)
     return document;
   }
   auto& window = mapWindowForDocument(document);
-  if (!context.appController->mapWindowManager().activateMapWindow(window))
+  if (!activateAutomationDocument(*context.appController, window))
   {
     throw std::runtime_error{"Document window is no longer available"};
   }
@@ -922,7 +922,7 @@ void closeDocument(DocumentHandle& document, const bool discardChanges)
 
   auto& window = mapWindowForDocument(document);
   PythonHandleRegistry::instance().invalidateDocument(&targetDocument);
-  window.closeDocument(discardChanges);
+  closeAutomationDocument(window, discardChanges);
 }
 
 py::dict historyStatus(DocumentHandle& document)

@@ -792,9 +792,11 @@ McpBridgeToolResult documentActivateResult(
                                          : invalidParamsFailure(error);
   }
 
-  mapWindow->show();
-  mapWindow->raise();
-  mapWindow->activateWindow();
+  if (!activateAutomationDocument(appController, *mapWindow))
+  {
+    return McpBridgeToolResult::failure(
+      mcp::McpErrorCode::InternalError, "Document window is no longer available");
+  }
 
   return McpBridgeToolResult::success(QJsonObject{
     {"activated", true},
@@ -864,7 +866,7 @@ McpBridgeToolResult documentCloseResult(
   }
 
   const auto document = documentJson(*mapWindow, 0);
-  mapWindow->closeDocument(mcpOptionalBool(params, "discardChanges", false));
+  closeAutomationDocument(*mapWindow, mcpOptionalBool(params, "discardChanges", false));
 
   return McpBridgeToolResult::success(QJsonObject{
     {"closed", true},

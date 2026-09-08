@@ -20,6 +20,7 @@
 #include "mdl/MapHeader.h"
 #include "ui/AppController.h"
 #include "ui/MapDocument.h"
+#include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 
 #include <optional>
@@ -120,6 +121,16 @@ Result<void> exportAutomationDocument(
     std::nullopt,
     std::nullopt,
   });
+}
+
+bool activateAutomationDocument(AppController& appController, MapWindow& mapWindow)
+{
+  return appController.mapWindowManager().activateMapWindow(mapWindow);
+}
+
+void closeAutomationDocument(MapWindow& mapWindow, const bool discardChanges)
+{
+  mapWindow.closeDocument(discardChanges);
 }
 
 } // namespace tb::ui

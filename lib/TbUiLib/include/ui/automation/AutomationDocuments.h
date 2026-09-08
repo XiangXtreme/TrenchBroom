@@ -25,6 +25,7 @@ class Map;
 namespace tb::ui
 {
 class AppController;
+class MapWindow;
 
 /**
  * Opens a persistent map with its header-declared game and map format.
@@ -40,5 +41,7 @@ Result<void> saveAutomationDocument(
   mdl::Map& map, std::optional<std::filesystem::path> path = std::nullopt);
 Result<void> exportAutomationDocument(
   const mdl::Map& map, const std::filesystem::path& path, bool stripTbProperties);
+bool activateAutomationDocument(AppController& appController, MapWindow& mapWindow);
+void closeAutomationDocument(MapWindow& mapWindow, bool discardChanges);
 
 } // namespace tb::ui
