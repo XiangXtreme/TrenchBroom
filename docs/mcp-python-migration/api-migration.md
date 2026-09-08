@@ -79,6 +79,10 @@ face 后应用材质。它不接受旧 MCP 的 JSON selector；对象选择必�
 旧 MCP `texture_apply_by_filter` 保留其 JSON selector 和历史适配，但与 Python 共用 face 语义筛选和
 原生材质写入。
 
+`tb.materials.lock_get()` 返回当前对齐锁和 UV 锁；`tb.materials.lock_set(texture_lock=None,
+uv_lock=None)` 至少设置其一，并同步编辑上下文与持久偏好。过渡 MCP `texture_lock_get` 和
+`texture_lock_set` 复用同一 typed automation 状态。
+
 ## 批量盒体
 
 `tb.brushes.create_box(min, max, material=None, select=True)` 创建一个轴对齐盒体，

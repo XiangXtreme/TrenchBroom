@@ -347,6 +347,8 @@ constexpr auto MaterialsSymbols = std::array{
     Function,
     "(brushes, material, face_semantic='all', normal=None, normal_tolerance=0.75) -> "
     "int"},
+  PythonApiSymbol{"lock_get", Function, "() -> dict"},
+  PythonApiSymbol{"lock_set", Function, "(texture_lock=None, uv_lock=None) -> dict"},
   PythonApiSymbol{"align_face", Function, "(faces, mode) -> int"},
   PythonApiSymbol{"copy_from_face", Function, "(source, targets) -> int"},
   PythonApiSymbol{"replace", Function, "(find, replace, scope='selection') -> int"},

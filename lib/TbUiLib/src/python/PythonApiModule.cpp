@@ -84,6 +84,7 @@
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonExecutionContext.h"
 #include "ui/python/PythonHandleRegistry.h"
+#include "ui/python/PythonMcpExecutionState.h"
 #include "ui/python/PythonPluginSession.h"
 #include "ui/python/PythonRuntime.h"
 
@@ -3651,6 +3652,61 @@ size_t applyMaterialByFilter(
   return faces.size();
 }
 
+py::dict materialLocks()
+{
+  const auto locks = automation::textureLocks(currentDocument().get().map());
+  auto result = py::dict{};
+  result["texture_lock"] = locks.alignment;
+  result["uv_lock"] = locks.uv;
+  return result;
+}
+
+std::optional<bool> optionalBoolArgument(const py::object& value, const char* const name)
+{
+  if (value.is_none())
+  {
+    return std::nullopt;
+  }
+  if (!py::isinstance<py::bool_>(value))
+  {
+    throw py::type_error{std::string{name} + " must be a boolean or None"};
+  }
+  return value.cast<bool>();
+}
+
+py::dict setMaterialLocks(
+  const py::object& textureLockValue, const py::object& uvLockValue)
+{
+  requirePythonActionMode("materials.lock_set");
+  const auto textureLock = optionalBoolArgument(textureLockValue, "texture_lock");
+  const auto uvLock = optionalBoolArgument(uvLockValue, "uv_lock");
+  if (!textureLock && !uvLock)
+  {
+    throw py::value_error{"texture_lock or uv_lock is required"};
+  }
+  const auto locks =
+    automation::setTextureLocks(currentDocument().get().map(), textureLock, uvLock);
+  if (auto* pendingPreferenceChanges = currentPythonPendingPreferenceChanges())
+  {
+    if (textureLock)
+    {
+      pendingPreferenceChanges->textureLock = textureLock;
+    }
+    if (uvLock)
+    {
+      pendingPreferenceChanges->uvLock = uvLock;
+    }
+  }
+  else
+  {
+    automation::persistTextureLocks(textureLock, uvLock);
+  }
+  auto result = py::dict{};
+  result["texture_lock"] = locks.alignment;
+  result["uv_lock"] = locks.uv;
+  return result;
+}
+
 size_t alignFaces(const py::iterable& faces, const std::string& mode)
 {
   const auto normalizedMode = QString::fromStdString(mode).trimmed().toLower();
@@ -6213,6 +6269,12 @@ void defineModule(py::module_& module)
     py::arg("face_semantic") = "all",
     py::arg("normal") = py::none(),
     py::arg("normal_tolerance") = 0.75);
+  materials.def("lock_get", materialLocks);
+  materials.def(
+    "lock_set",
+    setMaterialLocks,
+    py::arg("texture_lock") = py::none(),
+    py::arg("uv_lock") = py::none());
   materials.def(
     "copy_from_face", copyFaceAttributes, py::arg("source"), py::arg("targets"));
   materials.def(

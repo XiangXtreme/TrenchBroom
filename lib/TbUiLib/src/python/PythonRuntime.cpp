@@ -4,8 +4,10 @@
 #include "mdl/Map.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
+#include "ui/automation/AutomationMaterials.h"
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonApiModule.h"
+#include "ui/python/PythonMcpExecutionState.h"
 #include "ui/python/PythonPluginSession.h"
 
 #include "kd/invoke.h"
@@ -41,6 +43,7 @@ namespace
 {
 thread_local PythonExecutionContext* g_currentExecutionContext = nullptr;
 thread_local PythonPluginSession* g_currentPluginSession = nullptr;
+thread_local PythonPendingPreferenceChanges* g_pendingPreferenceChanges = nullptr;
 
 struct PythonMcpLogCapture
 {
@@ -165,6 +168,10 @@ int mcpExecutionDeadlineTrace(PyObject* object, PyFrameObject*, int, PyObject*)
   if (deadline == nullptr)
   {
     return -1;
+  }
+  if (deadline->timedOut)
+  {
+    return 0;
   }
   if (!deadline->timer.hasExpired(deadline->timeoutMs))
   {
@@ -658,6 +665,23 @@ std::optional<PythonApiValueType> apiValueTypeForObject(
 }
 } // namespace
 
+ScopedPythonPendingPreferenceChanges::ScopedPythonPendingPreferenceChanges(
+  PythonPendingPreferenceChanges& changes)
+  : m_previous{g_pendingPreferenceChanges}
+{
+  g_pendingPreferenceChanges = &changes;
+}
+
+ScopedPythonPendingPreferenceChanges::~ScopedPythonPendingPreferenceChanges()
+{
+  g_pendingPreferenceChanges = m_previous;
+}
+
+PythonPendingPreferenceChanges* currentPythonPendingPreferenceChanges()
+{
+  return g_pendingPreferenceChanges;
+}
+
 PythonRuntime::PythonRuntime()
   : m_state{std::make_unique<PythonRuntimeState>()}
 {
@@ -917,9 +941,22 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     }
   };
 
-  auto gil = PyGILState_Ensure();
+  auto pendingPreferenceChanges = PythonPendingPreferenceChanges{};
+  auto gil = PyGILState_STATE{};
+  auto persistPreferenceChanges = kdl::invoke_later{[&]() {
+    if (
+      execution.ok
+      && (pendingPreferenceChanges.textureLock || pendingPreferenceChanges.uvLock))
+    {
+      automation::persistTextureLocks(
+        pendingPreferenceChanges.textureLock, pendingPreferenceChanges.uvLock);
+    }
+  }};
+  gil = PyGILState_Ensure();
   auto releaseGil = kdl::invoke_later{[&]() { PyGILState_Release(gil); }};
   auto scopedContext = ScopedExecutionContext{context};
+  auto scopedPreferenceChanges =
+    ScopedPythonPendingPreferenceChanges{pendingPreferenceChanges};
   auto logCapture = PythonMcpLogCapture{execution};
   auto scopedLogCapture = ScopedMcpLogCapture{logCapture};
   auto scopedStdStreamRedirect = ScopedStdStreamRedirect{};

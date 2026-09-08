@@ -36,6 +36,12 @@ struct AutomationFaceFilter
   double normalTolerance = 0.75;
 };
 
+struct AutomationTextureLocks
+{
+  bool alignment = false;
+  bool uv = false;
+};
+
 std::optional<AutomationFaceAlignment> automationFaceAlignmentFromString(
   const std::string& mode);
 
@@ -67,5 +73,10 @@ std::vector<mdl::BrushFaceHandle> filterBrushFaceHandles(
   std::vector<mdl::BrushFaceHandle> faces,
   const AutomationFaceFilter& filter,
   std::string& error);
+
+AutomationTextureLocks textureLocks(const mdl::Map& map);
+AutomationTextureLocks setTextureLocks(
+  mdl::Map& map, std::optional<bool> alignment, std::optional<bool> uv);
+void persistTextureLocks(std::optional<bool> alignment, std::optional<bool> uv);
 
 } // namespace tb::ui::automation

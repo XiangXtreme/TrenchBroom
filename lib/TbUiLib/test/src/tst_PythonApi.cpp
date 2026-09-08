@@ -127,11 +127,11 @@ TEST_CASE("PythonApi")
                     appController.taskManager(),
                     appController.glManager().resourceManager())
                   | kdl::value();
-  auto window = MapWindow{appController, std::move(document)};
-  window.document().map().entityDefinitionManager().setDefinitions({
+  document->map().entityDefinitionManager().setDefinitions({
     {"test_spawn", {}, "", {}, mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}}},
     {"test_func", {}, "", {}, std::nullopt},
   });
+  auto window = MapWindow{appController, std::move(document)};
 
   SECTION("runs Python API smoke script")
   {
@@ -597,6 +597,69 @@ with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
     context.metadataStore = &metadataStore;
     context.moduleStore = &moduleStore;
 
+    auto transactionOnlyContext = context;
+    transactionOnlyContext.mcpExecution = true;
+    transactionOnlyContext.allowNonTransactionalActions = false;
+    transactionOnlyContext.allowPersistentUi = false;
+    const auto rejectedLockUpdate = runtime.runMcpScript(
+      transactionOnlyContext,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\ntb.materials.lock_set(texture_lock=False)",
+        "<mcp-python:transaction-lock-update>",
+        {},
+      });
+    CHECK_FALSE(rejectedLockUpdate.ok);
+    CHECK(rejectedLockUpdate.rolledBack);
+    CHECK(rejectedLockUpdate.error.contains("requires mode='action'"));
+
+    auto actionContext = context;
+    actionContext.mcpExecution = true;
+    actionContext.allowNonTransactionalActions = true;
+    actionContext.allowPersistentUi = false;
+    const auto changedLocks = runtime.runMcpScript(
+      actionContext,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "before = tb.materials.lock_get()\n"
+        "after = tb.materials.lock_set(texture_lock=not before['texture_lock'], "
+        "uv_lock=not before['uv_lock'])\n"
+        "result = {'before': before, 'after': after}",
+        "<mcp-python:action-lock-update>",
+        {},
+        "MCP Python action",
+        30'000,
+        false,
+      });
+    CAPTURE(changedLocks.error);
+    REQUIRE(changedLocks.ok);
+    CHECK_FALSE(changedLocks.committed);
+    const auto changedLocksResult = changedLocks.value.toObject();
+    const auto locksBefore = changedLocksResult.value("before").toObject();
+    const auto locksAfter = changedLocksResult.value("after").toObject();
+    CHECK(
+      locksAfter.value("texture_lock").toBool()
+      != locksBefore.value("texture_lock").toBool());
+    CHECK(locksAfter.value("uv_lock").toBool() != locksBefore.value("uv_lock").toBool());
+
+    const auto restoredLocks = runtime.runMcpScript(
+      actionContext,
+      PythonMcpExecutionRequest{
+        "import trenchbroom as tb\n"
+        "result = tb.materials.lock_set(texture_lock=arguments['texture_lock'], "
+        "uv_lock=arguments['uv_lock'])",
+        "<mcp-python:action-lock-restore>",
+        QJsonObject{
+          {"texture_lock", locksBefore.value("texture_lock")},
+          {"uv_lock", locksBefore.value("uv_lock")},
+        },
+        "MCP Python action",
+        30'000,
+        false,
+      });
+    CAPTURE(restoredLocks.error);
+    REQUIRE(restoredLocks.ok);
+    CHECK(restoredLocks.value.toObject() == locksBefore);
+
     const auto modules = runtime.runMcpScript(
       context,
       PythonMcpExecutionRequest{
@@ -728,21 +791,6 @@ with open("ir-apply-ok.txt", "w", encoding="utf-8") as file:
       });
     REQUIRE(second.ok);
     CHECK(second.value.isNull());
-
-    auto transactionOnlyContext = context;
-    transactionOnlyContext.mcpExecution = true;
-    transactionOnlyContext.allowNonTransactionalActions = false;
-    transactionOnlyContext.allowPersistentUi = false;
-    const auto rejectedAction = runtime.runMcpScript(
-      transactionOnlyContext,
-      PythonMcpExecutionRequest{
-        "import trenchbroom as tb\ntb.current_document().save()",
-        "<mcp-python:transaction-action>",
-        {},
-      });
-    CHECK_FALSE(rejectedAction.ok);
-    CHECK(rejectedAction.rolledBack);
-    CHECK(rejectedAction.error.contains("requires mode='action'"));
 
     const auto beforeInvalidResult = runtime.runMcpScript(
       context,

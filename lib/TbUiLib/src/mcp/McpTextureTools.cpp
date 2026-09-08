@@ -619,10 +619,10 @@ McpBridgeToolResult textureSearchForMapResult(mdl::Map& map, const QJsonObject& 
 
 QJsonObject textureLockJson(mdl::Map& map)
 {
-  const auto& editorContext = map.editorContext();
+  const auto locks = automation::textureLocks(map);
   return QJsonObject{
-    {"textureLock", editorContext.alignmentLock()},
-    {"uvLock", editorContext.uvLock()},
+    {"textureLock", locks.alignment},
+    {"uvLock", locks.uv},
   };
 }
 
@@ -665,19 +665,15 @@ McpBridgeToolResult textureLockSetForMapResult(mdl::Map& map, const QJsonObject&
         QJsonObject{{"targetSource", "uvLock"}}, "fix_uv_lock_then_retry"));
   }
 
-  auto& editorContext = map.editorContext();
-  if (textureLockValue.isBool())
-  {
-    const auto textureLock = textureLockValue.toBool();
-    setPref(Preferences::AlignmentLock, textureLock);
-    editorContext.setAlignmentLock(textureLock);
-  }
-  if (uvLockValue.isBool())
-  {
-    const auto uvLock = uvLockValue.toBool();
-    setPref(Preferences::UvLock, uvLock);
-    editorContext.setUvLock(uvLock);
-  }
+  automation::setTextureLocks(
+    map,
+    textureLockValue.isBool() ? std::make_optional(textureLockValue.toBool())
+                              : std::nullopt,
+    uvLockValue.isBool() ? std::make_optional(uvLockValue.toBool()) : std::nullopt);
+  automation::persistTextureLocks(
+    textureLockValue.isBool() ? std::make_optional(textureLockValue.toBool())
+                              : std::nullopt,
+    uvLockValue.isBool() ? std::make_optional(uvLockValue.toBool()) : std::nullopt);
 
   auto result = textureLockJson(map);
   result.insert("changed", true);

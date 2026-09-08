@@ -6,11 +6,14 @@
 
 #include "ui/automation/AutomationMaterials.h"
 
+#include "base/PreferenceManager.h"
 #include "mdl/BrushFace.h"
+#include "mdl/EditorContext.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Brushes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/UpdateBrushFaceAttributes.h"
+#include "prefs/Preferences.h"
 
 #include <algorithm>
 #include <cctype>
@@ -176,6 +179,43 @@ std::vector<mdl::BrushFaceHandle> filterBrushFaceHandles(
                             : "face_semantic matched no brush faces";
   }
   return faces;
+}
+
+AutomationTextureLocks textureLocks(const mdl::Map& map)
+{
+  const auto& editorContext = map.editorContext();
+  return AutomationTextureLocks{
+    .alignment = editorContext.alignmentLock(),
+    .uv = editorContext.uvLock(),
+  };
+}
+
+AutomationTextureLocks setTextureLocks(
+  mdl::Map& map, const std::optional<bool> alignment, const std::optional<bool> uv)
+{
+  auto& editorContext = map.editorContext();
+  if (alignment)
+  {
+    editorContext.setAlignmentLock(*alignment);
+  }
+  if (uv)
+  {
+    editorContext.setUvLock(*uv);
+  }
+  return textureLocks(map);
+}
+
+void persistTextureLocks(
+  const std::optional<bool> alignment, const std::optional<bool> uv)
+{
+  if (alignment)
+  {
+    setPref(Preferences::AlignmentLock, *alignment);
+  }
+  if (uv)
+  {
+    setPref(Preferences::UvLock, *uv);
+  }
 }
 
 } // namespace tb::ui::automation
