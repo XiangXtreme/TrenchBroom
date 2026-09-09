@@ -26,7 +26,11 @@ enum class TransactionScope
 {
   /** A user my only observe the initial and final state of the transaction. */
   Oneshot,
-  /** A user may observe intermediate states of the transaction. */
+  /**
+   * A user may observe intermediate states of the transaction. Once committed, it
+   * forms an independent undo step that cannot collate with adjacent transactions.
+   * Nested one-shot transactions may still collate inside it.
+   */
   LongRunning,
 };
 

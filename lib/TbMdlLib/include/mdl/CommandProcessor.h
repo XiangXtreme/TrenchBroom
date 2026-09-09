@@ -359,11 +359,14 @@ private:
    * undoes all of these commands in reverse order.
    *
    * @param name the name of the command to create
+   * @param scope the transaction scope, retained to preserve undo boundaries
    * @param commands the commands to store in the newly created transaction command
    * @return the newly created command
    */
   std::unique_ptr<UndoableCommand> createTransaction(
-    std::string name, std::vector<std::unique_ptr<UndoableCommand>> commands);
+    std::string name,
+    TransactionScope scope,
+    std::vector<std::unique_ptr<UndoableCommand>> commands);
 
   /**
    * Pushes the given command onto the undo stack, unless it can be collated with the

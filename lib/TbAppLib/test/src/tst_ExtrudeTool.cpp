@@ -50,8 +50,10 @@
 #include "mdl/UvUtils.h"
 #include "mdl/WorldNode.h"
 #include "ui/ExtrudeTool.h"
+#include "ui/InputState.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/MoveObjectsTool.h"
 
 #include "kd/result.h"
 
@@ -951,6 +953,7 @@ TEST_CASE("ExtrudeTool")
       builder.createCuboid(vm::bbox3d{32.0}, "material") | kdl::value()};
     addNodes(map, {{map.editorContext().currentLayer(), {source}}});
     selectNodes(map, {source});
+    map.setIsCommandCollationEnabled(true);
 
     const auto inward = GENERATE(false, true);
     const auto cancel = GENERATE(false, true);
@@ -1030,6 +1033,60 @@ TEST_CASE("ExtrudeTool")
       CHECK(preview->brush() == finalPreview);
       CHECK(source->brush() == finalSource);
     }
+  }
+
+  SECTION("split extrusion and a subsequent move have separate undo steps")
+  {
+    auto& document = fixture.create();
+    auto& map = document.map();
+    auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+    auto* source = new mdl::BrushNode{
+      builder.createCuboid(vm::bbox3d{32.0}, "material") | kdl::value()};
+    addNodes(map, {{map.editorContext().currentLayer(), {source}}});
+    selectNodes(map, {source});
+    // Match the editor: fixture defaults disable collation between undo entries.
+    map.setIsCommandCollationEnabled(true);
+
+    const auto inward = GENERATE(false, true);
+    CAPTURE(inward);
+    auto tool = ExtrudeTool{document};
+    performPick(map, tool, vm::ray3d{{0, 0, 64}, {0, 0, -1}});
+    auto state = ExtrudeDragState{
+      tool.proposedDragHandles(),
+      ExtrudeTool::getDragFaces(tool.proposedDragHandles()),
+      true};
+    tool.beginExtrude();
+    REQUIRE(tool.extrude({0, 0, inward ? -8.0 : 8.0}, state));
+    REQUIRE(tool.extrude({0, 0, inward ? -16.0 : 16.0}, state));
+    tool.commit(state);
+    REQUIRE(source->parent()->childCount() == 2);
+    const auto selectedBrushes = [&] {
+      return map.selection().brushes
+             | std::views::transform([](const auto* node) { return node->brush(); })
+             | kdl::ranges::to<std::vector>();
+    };
+    const auto splitBrushes = selectedBrushes();
+    auto moveTool = MoveObjectsTool{document};
+    auto input = InputState{0.0f, 0.0f};
+    REQUIRE(moveTool.startMove(input));
+    REQUIRE(moveTool.move(input, {0, 0, 8}) == MoveObjectsTool::MoveResult::Continue);
+    moveTool.endMove(input);
+    const auto movedBrushes = selectedBrushes();
+
+    // No delay: both drags finish inside the normal command collation interval.
+    map.undoCommand();
+    CHECK(source->parent()->childCount() == 2);
+    CHECK(selectedBrushes() == splitBrushes);
+    map.undoCommand();
+    CHECK(source->parent()->childCount() == 1);
+    CHECK(source->logicalBounds() == vm::bbox3d{32.0});
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{source});
+    map.redoCommand();
+    CHECK(source->parent()->childCount() == 2);
+    CHECK(selectedBrushes() == splitBrushes);
+    map.redoCommand();
+    CHECK(source->parent()->childCount() == 2);
+    CHECK(selectedBrushes() == movedBrushes);
   }
 
   SECTION("split preview handles direction changes, clipping and invalid positions")

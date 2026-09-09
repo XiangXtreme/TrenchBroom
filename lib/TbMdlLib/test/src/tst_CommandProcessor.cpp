@@ -1048,6 +1048,78 @@ TEST_CASE("CommandProcessor")
     CHECK(*commandProcessor.redoCommandName() == commandName2);
   }
 
+  SECTION("long running transactions keep undo boundaries on both sides")
+  {
+    using S = TransactionScope;
+    const auto [firstScope, secondScope] = GENERATE(
+      std::pair{S::Oneshot, S::LongRunning},
+      std::pair{S::LongRunning, S::Oneshot},
+      std::pair{S::LongRunning, S::LongRunning});
+    // Use a long interval so the test cannot pass just because the timer expired.
+    auto processor = CommandProcessor{map, 1h};
+    const auto initialModificationCount = map.modificationCount();
+    auto first = std::make_unique<TestCommand>("change", K(updateModificationCount));
+    auto second = std::make_unique<TestCommand>("change", K(updateModificationCount));
+    first->expectDo(true);
+    first->expectUndo(true);
+    second->expectDo(true);
+    second->expectUndo(true);
+    second->expectDo(true);
+    second->expectUndo(true);
+    // Neither command expects a collation attempt across the outer boundary.
+    processor.startTransaction("edit", firstScope);
+    processor.startTransaction("preview", S::Oneshot);
+    REQUIRE(processor.executeAndStore(std::move(first)));
+    processor.commitTransaction();
+    processor.commitTransaction();
+    processor.startTransaction("edit", secondScope);
+    processor.startTransaction("preview", S::Oneshot);
+    REQUIRE(processor.executeAndStore(std::move(second)));
+    processor.commitTransaction();
+    processor.commitTransaction();
+
+    CHECK(map.modificationCount() == initialModificationCount + 2);
+    REQUIRE(processor.undo());
+    CHECK(map.modificationCount() == initialModificationCount + 1);
+    REQUIRE(processor.canUndo());
+    REQUIRE(processor.redo());
+    CHECK(map.modificationCount() == initialModificationCount + 2);
+    REQUIRE(processor.undo());
+    REQUIRE(processor.undo());
+    CHECK(map.modificationCount() == initialModificationCount);
+    CHECK_FALSE(processor.canUndo());
+  }
+
+  SECTION("preview transactions still collate inside a long running transaction")
+  {
+    const auto initialModificationCount = map.modificationCount();
+    auto first = std::make_unique<TestCommand>("change", K(updateModificationCount));
+    auto second = std::make_unique<TestCommand>("change", K(updateModificationCount));
+    first->expectDo(true);
+    first->expectCollate(second.get(), true);
+    first->expectUndo(true);
+    first->expectDo(true);
+    first->expectUndo(true);
+    second->expectDo(true);
+
+    commandProcessor.startTransaction("drag", TransactionScope::LongRunning);
+    commandProcessor.startTransaction("preview", TransactionScope::Oneshot);
+    REQUIRE(commandProcessor.executeAndStore(std::move(first)));
+    commandProcessor.commitTransaction();
+    commandProcessor.startTransaction("preview", TransactionScope::Oneshot);
+    REQUIRE(commandProcessor.executeAndStore(std::move(second)));
+    commandProcessor.commitTransaction();
+    commandProcessor.commitTransaction();
+
+    REQUIRE(commandProcessor.undo());
+    CHECK(map.modificationCount() == initialModificationCount);
+    CHECK_FALSE(commandProcessor.canUndo());
+    REQUIRE(commandProcessor.redo());
+    CHECK(map.modificationCount() == initialModificationCount + 2);
+    REQUIRE(commandProcessor.undo());
+    CHECK(map.modificationCount() == initialModificationCount);
+  }
+
   SECTION("collateTransactions")
   {
     auto transaction1_command1 =

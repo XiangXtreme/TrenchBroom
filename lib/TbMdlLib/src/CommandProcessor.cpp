@@ -47,6 +47,7 @@ void notifyCommandIfNotType(T& notifier, C& command)
 class TransactionCommand : public UndoableCommand
 {
 private:
+  TransactionScope m_scope;
   std::vector<std::unique_ptr<UndoableCommand>> m_commands;
 
   Notifier<Command&>& m_commandDoNotifier;
@@ -57,12 +58,14 @@ private:
 public:
   TransactionCommand(
     std::string name,
+    const TransactionScope scope,
     std::vector<std::unique_ptr<UndoableCommand>> commands,
     Notifier<Command&>& i_commandDoNotifier,
     Notifier<Command&>& i_commandDoneNotifier,
     Notifier<UndoableCommand&>& i_commandUndoNotifier,
     Notifier<UndoableCommand&>& i_commandUndoneNotifier)
     : UndoableCommand(std::move(name), false)
+    , m_scope{scope}
     , m_commands{std::move(commands)}
     , m_commandDoNotifier{i_commandDoNotifier}
     , m_commandDoneNotifier{i_commandDoneNotifier}
@@ -115,6 +118,15 @@ private:
   {
     if (auto* transactionCommand = dynamic_cast<TransactionCommand*>(&other))
     {
+      // A completed drag is an independent undo step. Its nested one-shot preview
+      // transactions can still collate while the drag is running.
+      if (
+        m_scope == TransactionScope::LongRunning
+        || transactionCommand->m_scope == TransactionScope::LongRunning)
+      {
+        return false;
+      }
+
       if (m_commands.empty())
       {
         m_commands = std::move(transactionCommand->m_commands);
@@ -408,7 +420,8 @@ void CommandProcessor::createAndStoreTransaction()
     {
       transaction.name = transaction.commands.front()->name();
     }
-    auto command = createTransaction(transaction.name, std::move(transaction.commands));
+    auto command = createTransaction(
+      transaction.name, transaction.scope, std::move(transaction.commands));
     const auto isModification = command->isModification();
 
     if (m_transactionStack.empty())
@@ -425,10 +438,13 @@ void CommandProcessor::createAndStoreTransaction()
 }
 
 std::unique_ptr<UndoableCommand> CommandProcessor::createTransaction(
-  std::string name, std::vector<std::unique_ptr<UndoableCommand>> commands)
+  std::string name,
+  const TransactionScope scope,
+  std::vector<std::unique_ptr<UndoableCommand>> commands)
 {
   return std::make_unique<TransactionCommand>(
     std::move(name),
+    scope,
     std::move(commands),
     commandDoNotifier,
     commandDoneNotifier,
