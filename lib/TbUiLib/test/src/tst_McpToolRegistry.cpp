@@ -64,8 +64,9 @@ TEST_CASE("McpBridgeServer dispatches only the thin Python bridge", "[McpBridgeS
   auto config = mcp::McpBridgeConfig{};
   config.mode = mcp::McpMode::ReadOnly;
   config.httpEnabled = false;
-  config.pipeName = QString{"trenchbroom-mcp-test-%1"}.arg(
-    QUuid::createUuid().toString(QUuid::WithoutBraces));
+  // Keep the Unix socket path below macOS's sockaddr_un limit.
+  config.pipeName = QString{"tb-mcp-%1"}.arg(
+    QUuid::createUuid().toString(QUuid::WithoutBraces).left(12));
   auto error = QString{};
   const auto started = server.start(config, &error);
   INFO(error.toStdString());
