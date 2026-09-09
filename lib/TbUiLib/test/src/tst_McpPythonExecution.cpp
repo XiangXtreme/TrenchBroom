@@ -759,22 +759,37 @@ tb.documents.current().selection.clear()
     const auto line =
       QJsonDocument{mcp::toJson(call)}.toJson(QJsonDocument::Compact) + '\n';
     auto client = std::async(std::launch::async, [&, line, pipe = config.pipeName]() {
+      constexpr auto clientTimeout = 15s;
+      const auto deadline = std::chrono::steady_clock::now() + clientTimeout;
+      const auto remainingTimeoutMs = [&]() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+                 deadline - std::chrono::steady_clock::now())
+          .count();
+      };
       auto socket = QLocalSocket{};
       socket.connectToServer(pipe);
-      if (!socket.waitForConnected(5000))
+      if (
+        const auto timeoutMs = remainingTimeoutMs();
+        timeoutMs <= 0 || !socket.waitForConnected(static_cast<int>(timeoutMs)))
       {
         return QByteArray{};
       }
       socket.write(line);
       socket.flush();
-      if (startedFuture.wait_for(5s) != std::future_status::ready)
+      if (
+        const auto timeoutMs = remainingTimeoutMs();
+        timeoutMs <= 0
+        || startedFuture.wait_for(std::chrono::milliseconds{timeoutMs})
+             != std::future_status::ready)
       {
         return QByteArray{};
       }
       socket.abort();
       disconnected.set_value();
       socket.connectToServer(pipe);
-      if (!socket.waitForConnected(5000))
+      if (
+        const auto timeoutMs = remainingTimeoutMs();
+        timeoutMs <= 0 || !socket.waitForConnected(static_cast<int>(timeoutMs)))
       {
         return QByteArray{};
       }
@@ -782,7 +797,8 @@ tb.documents.current().selection.clear()
       socket.flush();
       while (!socket.canReadLine())
       {
-        if (!socket.waitForReadyRead(5000))
+        const auto timeoutMs = remainingTimeoutMs();
+        if (timeoutMs <= 0 || !socket.waitForReadyRead(static_cast<int>(timeoutMs)))
         {
           return QByteArray{};
         }
