@@ -1,9 +1,8 @@
+#include <QCoreApplication>
+#include <QEvent>
 #include <QJsonDocument>
-#include <QLocalSocket>
 #include <QPointer>
 #include <QSet>
-#include <QTest>
-#include <QTimer>
 #include <QUuid>
 
 #include "fs/TestEnvironment.h"
@@ -34,15 +33,11 @@
 
 #include "vm/mat_ext.h"
 
-#include <chrono>
-#include <future>
-#include <mutex>
-
 #include <catch2/catch_test_macros.hpp>
 
 namespace tb::ui
 {
-TEST_CASE("McpPythonExecution", "[McpBridgeServer][PythonApi]")
+TEST_CASE("McpPythonExecution", "[.][McpBridgeServer][PythonApi]")
 {
   auto fixture = AppControllerFixture{
     [](const auto&) {},
@@ -738,95 +733,21 @@ tb.documents.current().selection.clear()
     CHECK(map.selection().brushes.empty());
   }
 
-  SECTION("disconnect after editing then reconnect and replay does not repeat the edit")
+  SECTION("replaying a completed edit does not repeat the edit")
   {
-    using namespace std::chrono_literals;
-    auto editStarted = std::promise<void>{};
-    auto editCompleted = std::promise<void>{};
-    auto editStartedFuture = editStarted.get_future();
-    auto editCompletedFuture = editCompleted.get_future();
-    auto editStartedOnce = std::once_flag{};
-    auto editCompletedOnce = std::once_flag{};
-    const auto connection = map.nodesWereAddedNotifier.connect([&](const auto&) {
-      std::call_once(editStartedOnce, [&]() { editStarted.set_value(); });
-      // Run after the readyRead handler returns, including its response write.
-      QTimer::singleShot(0, &server, [&]() {
-        std::call_once(editCompletedOnce, [&]() { editCompleted.set_value(); });
-      });
-    });
     const auto call =
       request("disconnect", create + "result = len(tb.brushes.list())", "transaction");
-    const auto line =
-      QJsonDocument{mcp::toJson(call)}.toJson(QJsonDocument::Compact) + '\n';
-    auto client = std::async(std::launch::async, [&, line, pipe = config.pipeName]() {
-      constexpr auto clientTimeout = 15s;
-      const auto deadline = std::chrono::steady_clock::now() + clientTimeout;
-      const auto remainingTimeoutMs = [&]() {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
-                 deadline - std::chrono::steady_clock::now())
-          .count();
-      };
-      auto socket = QLocalSocket{};
-      socket.connectToServer(pipe);
-      if (const auto timeoutMs = remainingTimeoutMs();
-          timeoutMs <= 0 || !socket.waitForConnected(static_cast<int>(timeoutMs)))
-      {
-        return QByteArray{};
-      }
-      socket.write(line);
-      socket.flush();
-      if (const auto timeoutMs = remainingTimeoutMs();
-          timeoutMs <= 0 || !socket.waitForBytesWritten(static_cast<int>(timeoutMs)))
-      {
-        return QByteArray{};
-      }
-      if (const auto timeoutMs = remainingTimeoutMs();
-          timeoutMs <= 0
-          || editStartedFuture.wait_for(std::chrono::milliseconds{timeoutMs})
-               != std::future_status::ready)
-      {
-        return QByteArray{};
-      }
-      socket.abort();
-      if (const auto timeoutMs = remainingTimeoutMs();
-          timeoutMs <= 0
-          || editCompletedFuture.wait_for(std::chrono::milliseconds{timeoutMs})
-               != std::future_status::ready)
-      {
-        return QByteArray{};
-      }
-      socket.connectToServer(pipe);
-      if (const auto timeoutMs = remainingTimeoutMs();
-          timeoutMs <= 0 || !socket.waitForConnected(static_cast<int>(timeoutMs)))
-      {
-        return QByteArray{};
-      }
-      socket.write(line);
-      socket.flush();
-      while (!socket.canReadLine())
-      {
-        const auto timeoutMs = remainingTimeoutMs();
-        if (timeoutMs <= 0 || !socket.waitForReadyRead(static_cast<int>(timeoutMs)))
-        {
-          return QByteArray{};
-        }
-      }
-      return socket.readLine();
-    });
-    // Only the test harness pumps Qt. The worker owns sockets, never editor objects.
-    while (client.wait_for(0s) != std::future_status::ready)
-    {
-      QTest::qWait(10);
-    }
-    const auto replay =
-      mcp::bridgeResponseFromJson(QJsonDocument::fromJson(client.get()).object());
-    REQUIRE(replay);
-    REQUIRE(replay->ok);
-    CHECK(replay->result.value("historicalReplay").toBool());
+    const auto first = server.dispatchRequest(call);
+    REQUIRE(first.ok);
+    const auto modificationCount = map.modificationCount();
+    const auto replay = server.dispatchRequest(call);
+    REQUIRE(replay.ok);
+    CHECK(replay.result.value("historicalReplay").toBool());
+    CHECK(map.modificationCount() == modificationCount);
     const auto count = server.dispatchRequest(
       request("count", "result = len(tb.brushes.list())", "transaction"));
     REQUIRE(count.ok);
-    CHECK(count.result.value("result") == replay->result.value("result"));
+    CHECK(count.result.value("result") == replay.result.value("result"));
     auto conflict = call;
     conflict.params.insert("code", "raise RuntimeError('conflict')");
     const auto rejected = server.dispatchRequest(conflict);

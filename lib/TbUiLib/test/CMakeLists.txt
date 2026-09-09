@@ -117,3 +117,39 @@ add_custom_command(TARGET TbUiLibTest POST_BUILD
 
 include(Catch)
 catch_discover_tests(TbUiLibTest)
+
+# McpPythonExecution creates a full editor fixture per section. Register each
+# section separately so a stalled integration path has a short, visible timeout.
+set(TB_MCP_PYTHON_EXECUTION_SECTIONS
+  "API discovery has complete bounded pages and actual binding metadata"
+  "problem summaries omit ignored issues and details page within the byte budget"
+  "viewport options are idempotent and invalid patches have no side effects"
+  "property edits preserve handles and selection through delete and history"
+  "cached editor handles reject worker thread access"
+  "foreign document handles cannot escape the guarded transaction"
+  "viewport changes are synchronous actions with truthful receipts"
+  "large replay payloads expire without repeating edits"
+  "worldspawn property edits preserve selection before subsequent brush edits"
+  "action failure before editing has no mutation or completed actions"
+  "action failures preserve edits for every failure exit"
+  "undo followed by failure records the completed native action"
+  "undo and a replacement edit cannot hide mutation behind the same count"
+  "save followed by failure retains persistence evidence without a map edit"
+  "closing the target followed by failure retains lifecycle evidence"
+  "transaction failure restores preexisting selection and dirty state"
+  "native linked group commit failure rolls back the script"
+  "replaying a completed edit does not repeat the edit"
+)
+
+foreach(section IN LISTS TB_MCP_PYTHON_EXECUTION_SECTIONS)
+  add_test(
+    NAME "McpPythonExecution: ${section}"
+    COMMAND TbUiLibTest McpPythonExecution --section "${section}"
+  )
+  set_tests_properties(
+    "McpPythonExecution: ${section}"
+    PROPERTIES
+      WORKING_DIRECTORY "$<TARGET_FILE_DIR:TbUiLibTest>"
+      TIMEOUT 60
+  )
+endforeach()
