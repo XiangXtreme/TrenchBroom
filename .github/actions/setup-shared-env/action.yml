@@ -8,8 +8,10 @@ runs:
       run: |
         {
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache"
-          echo "CCACHE_CACHE_KEY_PREFIX=ccache-v1"
-          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE"
-          echo "CCACHE_NOHASHDIR=1"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            echo "CCACHE_CACHE_KEY_PREFIX=ccache-v1"
+          else
+            echo "CCACHE_CACHE_KEY_PREFIX=ccache-v2"
+          fi
           echo "CCACHE_COMPILERCHECK=content"
         } >> "$GITHUB_ENV"

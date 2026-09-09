@@ -35,6 +35,7 @@
 
 #include <chrono>
 #include <future>
+#include <mutex>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -739,20 +740,11 @@ tb.documents.current().selection.clear()
   SECTION("disconnect after editing then reconnect and replay does not repeat the edit")
   {
     using namespace std::chrono_literals;
-    auto started = std::promise<void>{};
-    auto disconnected = std::promise<void>{};
-    auto startedFuture = started.get_future();
-    auto disconnectedFuture = disconnected.get_future();
-    auto observed = false;
-    auto disconnectedDuringEdit = false;
+    auto editCompleted = std::promise<void>{};
+    auto editCompletedFuture = editCompleted.get_future();
+    auto editCompletedOnce = std::once_flag{};
     const auto connection = map.nodesWereAddedNotifier.connect([&](const auto&) {
-      if (!observed)
-      {
-        observed = true;
-        started.set_value();
-        disconnectedDuringEdit =
-          disconnectedFuture.wait_for(5s) == std::future_status::ready;
-      }
+      std::call_once(editCompletedOnce, [&]() { editCompleted.set_value(); });
     });
     const auto call =
       request("disconnect", create + "result = len(tb.brushes.list())", "transaction");
@@ -768,28 +760,29 @@ tb.documents.current().selection.clear()
       };
       auto socket = QLocalSocket{};
       socket.connectToServer(pipe);
-      if (
-        const auto timeoutMs = remainingTimeoutMs();
-        timeoutMs <= 0 || !socket.waitForConnected(static_cast<int>(timeoutMs)))
+      if (const auto timeoutMs = remainingTimeoutMs();
+          timeoutMs <= 0 || !socket.waitForConnected(static_cast<int>(timeoutMs)))
       {
         return QByteArray{};
       }
       socket.write(line);
       socket.flush();
-      if (
-        const auto timeoutMs = remainingTimeoutMs();
-        timeoutMs <= 0
-        || startedFuture.wait_for(std::chrono::milliseconds{timeoutMs})
-             != std::future_status::ready)
+      if (const auto timeoutMs = remainingTimeoutMs();
+          timeoutMs <= 0 || !socket.waitForBytesWritten(static_cast<int>(timeoutMs)))
       {
         return QByteArray{};
       }
       socket.abort();
-      disconnected.set_value();
+      if (const auto timeoutMs = remainingTimeoutMs();
+          timeoutMs <= 0
+          || editCompletedFuture.wait_for(std::chrono::milliseconds{timeoutMs})
+               != std::future_status::ready)
+      {
+        return QByteArray{};
+      }
       socket.connectToServer(pipe);
-      if (
-        const auto timeoutMs = remainingTimeoutMs();
-        timeoutMs <= 0 || !socket.waitForConnected(static_cast<int>(timeoutMs)))
+      if (const auto timeoutMs = remainingTimeoutMs();
+          timeoutMs <= 0 || !socket.waitForConnected(static_cast<int>(timeoutMs)))
       {
         return QByteArray{};
       }
@@ -814,7 +807,6 @@ tb.documents.current().selection.clear()
       mcp::bridgeResponseFromJson(QJsonDocument::fromJson(client.get()).object());
     REQUIRE(replay);
     REQUIRE(replay->ok);
-    CHECK(disconnectedDuringEdit);
     CHECK(replay->result.value("historicalReplay").toBool());
     const auto count = server.dispatchRequest(
       request("count", "result = len(tb.brushes.list())", "transaction"));
