@@ -3,6 +3,7 @@
 #include <QPointer>
 #include <QSet>
 #include <QTest>
+#include <QTimer>
 #include <QUuid>
 
 #include "fs/TestEnvironment.h"
@@ -740,11 +741,18 @@ tb.documents.current().selection.clear()
   SECTION("disconnect after editing then reconnect and replay does not repeat the edit")
   {
     using namespace std::chrono_literals;
+    auto editStarted = std::promise<void>{};
     auto editCompleted = std::promise<void>{};
+    auto editStartedFuture = editStarted.get_future();
     auto editCompletedFuture = editCompleted.get_future();
+    auto editStartedOnce = std::once_flag{};
     auto editCompletedOnce = std::once_flag{};
     const auto connection = map.nodesWereAddedNotifier.connect([&](const auto&) {
-      std::call_once(editCompletedOnce, [&]() { editCompleted.set_value(); });
+      std::call_once(editStartedOnce, [&]() { editStarted.set_value(); });
+      // Run after the readyRead handler returns, including its response write.
+      QTimer::singleShot(0, &server, [&]() {
+        std::call_once(editCompletedOnce, [&]() { editCompleted.set_value(); });
+      });
     });
     const auto call =
       request("disconnect", create + "result = len(tb.brushes.list())", "transaction");
@@ -769,6 +777,13 @@ tb.documents.current().selection.clear()
       socket.flush();
       if (const auto timeoutMs = remainingTimeoutMs();
           timeoutMs <= 0 || !socket.waitForBytesWritten(static_cast<int>(timeoutMs)))
+      {
+        return QByteArray{};
+      }
+      if (const auto timeoutMs = remainingTimeoutMs();
+          timeoutMs <= 0
+          || editStartedFuture.wait_for(std::chrono::milliseconds{timeoutMs})
+               != std::future_status::ready)
       {
         return QByteArray{};
       }
