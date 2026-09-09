@@ -150,6 +150,7 @@ foreach(section IN LISTS TB_MCP_PYTHON_EXECUTION_SECTIONS)
     "McpPythonExecution: ${section}"
     PROPERTIES
       WORKING_DIRECTORY "$<TARGET_FILE_DIR:TbUiLibTest>"
+      RESOURCE_LOCK McpPythonExecution
       TIMEOUT 60
   )
 endforeach()

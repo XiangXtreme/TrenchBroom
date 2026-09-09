@@ -591,6 +591,7 @@ tb.documents.current().selection.clear()
   SECTION("action failures preserve edits for every failure exit")
   {
     auto code = QString{};
+    auto timeoutMs = 30'000;
     SECTION("exception")
     {
       code = "raise RuntimeError('after')";
@@ -605,11 +606,12 @@ tb.documents.current().selection.clear()
     }
     SECTION("timeout")
     {
-      code = "while True: pass";
+      code = "import time\ntime.sleep(0.2)";
+      timeoutMs = 100;
     }
     const auto before = map.modificationCount();
     auto call = request("after", create + code, "action");
-    call.params.insert("timeoutMs", code.startsWith("while") ? 100 : 30000);
+    call.params.insert("timeoutMs", timeoutMs);
     const auto response = server.dispatchRequest(call);
     REQUIRE(response.error);
     CHECK(map.modificationCount() != before);
