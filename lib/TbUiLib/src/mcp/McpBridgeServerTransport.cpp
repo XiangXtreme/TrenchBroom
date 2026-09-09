@@ -78,22 +78,22 @@ bool McpBridgeServer::start(const mcp::McpBridgeConfig& config, QString* error)
     return false;
   }
 
+  if (m_server->listen(m_config.pipeName))
+  {
+    return true;
+  }
+
   if (
     probe.error() != QLocalSocket::ServerNotFoundError
     && probe.error() != QLocalSocket::ConnectionRefusedError)
   {
     if (error)
     {
-      *error = QString{"Could not verify whether MCP pipe '%1' is active: %2"}.arg(
+      *error = QString{"Could not claim MCP pipe '%1' after probe failure: %2"}.arg(
         m_config.pipeName, probe.errorString());
     }
     m_server.reset();
     return false;
-  }
-
-  if (m_server->listen(m_config.pipeName))
-  {
-    return true;
   }
 
   if (

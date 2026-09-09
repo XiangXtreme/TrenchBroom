@@ -1470,7 +1470,7 @@ py::object jsonValueToPython(const QJsonValue& value)
     {
       result.append(jsonValueToPython(item));
     }
-    return std::move(result);
+    return result;
   }
   auto result = py::dict{};
   const auto object = value.toObject();
@@ -1478,7 +1478,7 @@ py::object jsonValueToPython(const QJsonValue& value)
   {
     result[py::str{it.key().toStdString()}] = jsonValueToPython(it.value());
   }
-  return std::move(result);
+  return result;
 }
 
 py::dict groupSummary(const mdl::GroupNode& group)

@@ -23,6 +23,7 @@
 
 #include <QUuid>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <optional>
@@ -66,7 +67,9 @@ TEST_CASE("McpBridgeServer dispatches only the thin Python bridge", "[McpBridgeS
   config.pipeName = QString{"trenchbroom-mcp-test-%1"}.arg(
     QUuid::createUuid().toString(QUuid::WithoutBraces));
   auto error = QString{};
-  REQUIRE(server.start(config, &error));
+  const auto started = server.start(config, &error);
+  INFO(error.toStdString());
+  REQUIRE(started);
 
   const auto inspect = server.dispatchRequest(
     mcp::McpBridgeRequest{
