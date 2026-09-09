@@ -64,7 +64,7 @@ jobs:
         run: ccache --show-stats
 
       - name: Save ccache
-        if: ${{ success() && github.ref == 'refs/heads/main' }}
+        if: ${{ always() && github.ref == 'refs/heads/main' }}
         uses: ./.github/actions/ccache-save
         with:
           os: windows-2022
