@@ -37,7 +37,8 @@ set_target_properties(TbCsLibPmShared PROPERTIES
 )
 target_compile_options(TbCsLibPmShared PRIVATE ${TB_CS_FP_FLAGS})
 if(MSVC)
-  target_compile_options(TbCsLibPmShared PRIVATE /w)
+  # The game code passes string literals to char* parameters.
+  target_compile_options(TbCsLibPmShared PRIVATE /w /Zc:strictStrings-)
 else()
   target_compile_options(TbCsLibPmShared PRIVATE -w)
 endif()

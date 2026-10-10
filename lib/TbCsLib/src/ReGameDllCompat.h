@@ -41,6 +41,12 @@ typedef int BOOL;
 typedef unsigned char byte;
 typedef int int32;
 typedef unsigned int uint32;
+#ifdef _MSC_VER
+#include <string.h>
+#define strcasecmp _stricmp
+#define strncasecmp _strnicmp
+#endif
+
 #ifndef TRUE
 #define TRUE 1
 #define FALSE 0

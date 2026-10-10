@@ -43,7 +43,7 @@ namespace tb::ui
 namespace
 {
 
-constexpr auto ChanAuto = 0;
+[[maybe_unused]] constexpr auto ChanAuto = 0;
 
 } // namespace
 
