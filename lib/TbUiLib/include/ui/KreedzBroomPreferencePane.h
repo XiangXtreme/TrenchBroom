@@ -34,8 +34,6 @@ class QKeyEvent;
 
 namespace tb::ui
 {
-class FormWithSectionsLayout;
-
 /**
  * Records a single key, including bare modifiers such as Ctrl or Shift which
  * QKeySequenceEdit cannot record. Click it, then press the key; Escape cancels.
@@ -88,31 +86,19 @@ public:
 private:
   void createGui();
 
-  void addFloat(
-    FormWithSectionsLayout& layout,
-    const QString& label,
+  QWidget* floatField(
     Preference<float>& preference,
     double minimum,
     double maximum,
     int decimals,
     double step,
     const QString& suffix = {});
-  void addInt(
-    FormWithSectionsLayout& layout,
-    const QString& label,
-    Preference<int>& preference,
-    int minimum,
-    int maximum,
-    const QString& suffix = {});
-  void addBool(
-    FormWithSectionsLayout& layout, const QString& label, Preference<bool>& preference);
-  void addKey(
-    FormWithSectionsLayout& layout, const QString& label, Preference<int>& preference);
-  void addChoice(
-    FormWithSectionsLayout& layout,
-    const QString& label,
-    Preference<int>& preference,
-    const std::vector<std::pair<QString, int>>& choices);
+  QWidget* intField(
+    Preference<int>& preference, int minimum, int maximum, const QString& suffix = {});
+  QWidget* boolField(const QString& label, Preference<bool>& preference);
+  QWidget* keyField(Preference<int>& preference);
+  QWidget* choiceField(
+    Preference<int>& preference, const std::vector<std::pair<QString, int>>& choices);
 
   bool canResetToDefaults() override;
   void doResetToDefaults() override;

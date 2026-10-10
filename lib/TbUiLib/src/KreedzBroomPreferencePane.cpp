@@ -23,9 +23,9 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFocusEvent>
+#include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QKeySequence>
-#include <QLabel>
 #include <QMessageBox>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -33,7 +33,6 @@
 #include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
 #include "ui/FormWithSectionsLayout.h"
-#include "ui/QStyleUtils.h"
 #include "ui/ViewConstants.h"
 
 #include <algorithm>
@@ -46,11 +45,23 @@ namespace
 
 constexpr auto FieldWidth = 120;
 
-QWidget* infoLabel(const QString& text)
+QWidget* withToolTip(QWidget* widget, const QString& toolTip)
 {
-  auto* label = new QLabel{text};
-  label->setWordWrap(true);
-  return setInfoStyle(label);
+  widget->setToolTip(toolTip);
+  return widget;
+}
+
+// Two related fields in one form row, e.g. the keys for forward and back.
+QWidget* pair(QWidget* first, QWidget* second)
+{
+  auto* widget = new QWidget{};
+  auto* layout = new QHBoxLayout{widget};
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->setSpacing(LayoutConstants::MediumHMargin);
+  layout->addWidget(first);
+  layout->addWidget(second);
+  layout->addStretch();
+  return widget;
 }
 
 } // namespace
@@ -149,170 +160,150 @@ KreedzBroomPreferencePane::KreedzBroomPreferencePane(QWidget* parent)
 
 void KreedzBroomPreferencePane::createGui()
 {
-  auto* layout = new FormWithSectionsLayout{};
-  layout->setContentsMargins(
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin);
-  layout->setVerticalSpacing(LayoutConstants::NarrowVMargin);
+  // Two columns of sections use the width of the dialog instead of one long column.
+  const auto createColumn = []() {
+    auto* column = new FormWithSectionsLayout{};
+    column->setVerticalSpacing(LayoutConstants::NarrowVMargin);
+    return column;
+  };
+  auto* left = createColumn();
+  auto* right = createColumn();
 
-  layout->addSection("Play Mode");
-  layout->addRow(infoLabel(
-    "Run > Play (F7) walks the map with Counter-Strike 1.6 movement. Changes apply the "
-    "next time play mode starts. The defaults are the game's defaults."));
-
-  layout->addSection("Mouse");
-  addFloat(
-    *layout, "Sensitivity", Preferences::PlayModeMouseSensitivity, 0.01, 50.0, 2, 0.1);
-  layout->addRow(
+  left->addSection("Mouse");
+  left->addRow(
+    "Sensitivity",
+    withToolTip(
+      floatField(Preferences::PlayModeMouseSensitivity, 0.01, 50.0, 2, 0.1),
+      "Same scale as the game's sensitivity."));
+  left->addRow("", boolField("Invert mouse", Preferences::PlayModeInvertMouse));
+  left->addRow(
     "",
-    infoLabel(
-      QString{
-        "Same scale as the game's sensitivity: 0.022 degrees per mouse count (m_yaw)."}));
-  addBool(*layout, "Invert mouse", Preferences::PlayModeInvertMouse);
-  addBool(*layout, "Raw mouse input", Preferences::PlayModeRawInput);
-  layout->addRow(
-    "",
-    infoLabel(
-      QString{
-        "Like m_rawinput 1: unaccelerated mouse counts. Turn off to use the desktop's "
-        "pointer acceleration. The cursor stays locked in the view either way."}));
+    withToolTip(
+      boolField("Raw input", Preferences::PlayModeRawInput),
+      "Unaccelerated mouse counts, like m_rawinput 1."));
 
-  layout->addSection("Keys");
-  addKey(*layout, "Forward", Preferences::PlayModeKeyForward);
-  addKey(*layout, "Back", Preferences::PlayModeKeyBack);
-  addKey(*layout, "Move left", Preferences::PlayModeKeyMoveLeft);
-  addKey(*layout, "Move right", Preferences::PlayModeKeyMoveRight);
-  addKey(*layout, "Jump", Preferences::PlayModeKeyJump);
-  addKey(*layout, "Duck", Preferences::PlayModeKeyDuck);
-  addKey(*layout, "Walk", Preferences::PlayModeKeyWalk);
-  addKey(*layout, "Use", Preferences::PlayModeKeyUse);
-  addKey(*layout, "Turn left", Preferences::PlayModeKeyTurnLeft);
-  addKey(*layout, "Turn right", Preferences::PlayModeKeyTurnRight);
-  addFloat(*layout, "cl_yawspeed", Preferences::PlayModeYawSpeed, 0.0, 1000.0, 0, 5.0);
+  left->addSection("Server");
+  left->addRow(
+    "sv_airaccelerate",
+    floatField(Preferences::PlayModeAirAccelerate, 0.0, 1000.0, 1, 1.0));
+  left->addRow(
+    "sv_accelerate", floatField(Preferences::PlayModeAccelerate, 0.0, 100.0, 1, 0.5));
+  left->addRow(
+    "sv_friction", floatField(Preferences::PlayModeFriction, 0.0, 100.0, 1, 0.5));
+  left->addRow(
+    "sv_stopspeed", floatField(Preferences::PlayModeStopSpeed, 0.0, 1000.0, 0, 5.0));
+  left->addRow(
+    "sv_gravity", floatField(Preferences::PlayModeGravity, 0.0, 5000.0, 0, 10.0));
+  left->addRow(
+    "sv_maxspeed", floatField(Preferences::PlayModeMaxSpeed, 0.0, 2000.0, 0, 10.0));
+  left->addRow(
+    "edgefriction", floatField(Preferences::PlayModeEdgeFriction, 0.0, 10.0, 1, 0.5));
+  left->addRow(
+    "sv_stepsize", floatField(Preferences::PlayModeStepSize, 0.0, 64.0, 0, 1.0));
+
+  left->addSection("View");
+  left->addRow(
+    "Field of view", floatField(Preferences::PlayModeFov, 10.0, 170.0, 0, 5.0, "°"));
+  left->addRow("", boolField("Show HUD", Preferences::PlayModeShowHud));
+  left->addRow("", boolField("Show crosshair", Preferences::PlayModeShowCrosshair));
+  left->addRow("", boolField("Show fall damage", Preferences::PlayModeShowFallDamage));
+
+  right->addSection("Keys");
+  right->addRow(
+    "Forward / Back",
+    pair(
+      keyField(Preferences::PlayModeKeyForward), keyField(Preferences::PlayModeKeyBack)));
+  right->addRow(
+    "Move left / right",
+    pair(
+      keyField(Preferences::PlayModeKeyMoveLeft),
+      keyField(Preferences::PlayModeKeyMoveRight)));
+  right->addRow(
+    "Jump / Duck",
+    pair(keyField(Preferences::PlayModeKeyJump), keyField(Preferences::PlayModeKeyDuck)));
+  right->addRow(
+    "Walk / Use",
+    pair(keyField(Preferences::PlayModeKeyWalk), keyField(Preferences::PlayModeKeyUse)));
+  right->addRow(
+    "Turn left / right",
+    pair(
+      keyField(Preferences::PlayModeKeyTurnLeft),
+      keyField(Preferences::PlayModeKeyTurnRight)));
   const auto wheelChoices = std::vector<std::pair<QString, int>>{
     {"Nothing", Preferences::PlayModeWheelNothing},
     {"Jump", Preferences::PlayModeWheelJump},
     {"Duck", Preferences::PlayModeWheelDuck},
   };
-  addChoice(*layout, "Mouse wheel up", Preferences::PlayModeWheelUp, wheelChoices);
-  addChoice(*layout, "Mouse wheel down", Preferences::PlayModeWheelDown, wheelChoices);
-  layout->addRow(
-    "",
-    infoLabel(
-      QString{"Click a key button, then press the key. Each mouse wheel notch presses "
-              "its action "
-              "for one frame, like \"bind mwheelup +duck\" in the game (duck tap, scroll "
-              "jump). "
-              "Escape or F7 leaves play mode."}));
+  right->addRow(
+    "Wheel up / down",
+    withToolTip(
+      pair(
+        choiceField(Preferences::PlayModeWheelUp, wheelChoices),
+        choiceField(Preferences::PlayModeWheelDown, wheelChoices)),
+      "Each notch presses the action for one frame, like \"bind mwheeldown +jump\"."));
+  right->addRow(
+    "cl_yawspeed", floatField(Preferences::PlayModeYawSpeed, 0.0, 1000.0, 0, 5.0));
 
-  layout->addSection("Server");
-  addFloat(
-    *layout, "sv_airaccelerate", Preferences::PlayModeAirAccelerate, 0.0, 1000.0, 1, 1.0);
-  layout->addRow(
-    "",
-    infoLabel(QString{"10 is the CS 1.6 default; some KZ and surf servers use 100."}));
-  addFloat(*layout, "sv_accelerate", Preferences::PlayModeAccelerate, 0.0, 100.0, 1, 0.5);
-  addFloat(*layout, "sv_friction", Preferences::PlayModeFriction, 0.0, 100.0, 1, 0.5);
-  addFloat(*layout, "sv_stopspeed", Preferences::PlayModeStopSpeed, 0.0, 1000.0, 0, 5.0);
-  addFloat(*layout, "sv_gravity", Preferences::PlayModeGravity, 0.0, 5000.0, 0, 10.0);
-  addFloat(*layout, "sv_maxspeed", Preferences::PlayModeMaxSpeed, 0.0, 2000.0, 0, 10.0);
-  addFloat(*layout, "edgefriction", Preferences::PlayModeEdgeFriction, 0.0, 10.0, 1, 0.5);
-  addFloat(*layout, "sv_stepsize", Preferences::PlayModeStepSize, 0.0, 64.0, 0, 1.0);
-
-  layout->addSection("Compiler");
-  addChoice(
-    *layout,
-    "Compiler",
-    Preferences::PlayModeCompiler,
-    {
-      {"VHLT", Preferences::PlayModeCompilerVhlt},
-      {"ZHLT", Preferences::PlayModeCompilerZhlt},
-    });
-  layout->addRow(
-    "",
-    infoLabel(
-      QString{"The map compiler to imitate. VHLT and ZHLT differ in the Simple, Precise "
-              "and Normalized cliptypes, and only VHLT knows the CLIPHULLn, NOCLIP and "
-              "BEVELBRUSH tool textures."}));
-  addChoice(
-    *layout,
-    "Cliptype",
-    Preferences::PlayModeClipType,
-    {
-      {"Legacy", Preferences::PlayModeClipTypeLegacy},
-      {"Simple", Preferences::PlayModeClipTypeSimple},
-      {"Precise", Preferences::PlayModeClipTypePrecise},
-      {"Normalized", Preferences::PlayModeClipTypeNormalized},
-      {"Smallest", Preferences::PlayModeClipTypeSmallest},
-    });
-  layout->addRow(
-    "",
-    infoLabel(
-      QString{"How hlcsg grows brushes into the player's collision hulls (-cliptype). "
-              "Legacy was ZHLT's default and is what most CS 1.6 maps use; Simple is "
-              "VHLT's default. Legacy slopes are lower and depend on how the brushes "
-              "are split."}));
-  addBool(
-    *layout,
-    "Use the map's info_compile_parameters",
-    Preferences::PlayModeUseMapClipType);
-  layout->addRow(
-    "",
-    infoLabel(
-      QString{"Like the compiler, an info_compile_parameters entity's cliptype wins "
-              "(a missing key means Smallest)."}));
-
-  layout->addSection("Player");
-  addFloat(
-    *layout,
+  right->addSection("Player");
+  right->addRow(
     "Weapon speed",
-    Preferences::PlayModeWeaponSpeed,
-    1.0,
-    2000.0,
-    0,
-    5.0,
-    " u/s");
-  layout->addRow(
-    "",
-    infoLabel(
-      QString{
-        "Maximum speed of the held weapon: 250 knife and pistols, 260 Scout, 221 AK-47, "
-        "230 M4A1, 210 AWP."}));
-  addInt(*layout, "fps_max", Preferences::PlayModeFrameRate, 4, 1000, " fps");
-  layout->addRow(
-    "",
-    infoLabel(
-      QString{"The frame rate changes the physics like in the game (it sets the usercmd "
-              "length). 100 is the KZ standard."}));
+    withToolTip(
+      floatField(Preferences::PlayModeWeaponSpeed, 1.0, 2000.0, 0, 5.0, " u/s"),
+      "250 knife and pistols, 260 Scout, 230 M4A1, 221 AK-47, 210 AWP."));
+  right->addRow(
+    "fps_max",
+    withToolTip(
+      intField(Preferences::PlayModeFrameRate, 4, 1000, " fps"),
+      "The frame rate changes the physics like in the game. 100 is the KZ standard."));
 
-  layout->addSection("View");
-  addFloat(*layout, "Field of view", Preferences::PlayModeFov, 10.0, 170.0, 0, 5.0, "°");
-  addBool(*layout, "Show HUD", Preferences::PlayModeShowHud);
-  addBool(*layout, "Show fall damage", Preferences::PlayModeShowFallDamage);
-  layout->addRow(
+  right->addSection("Clip Hulls");
+  right->addRow(
+    "Compiler",
+    choiceField(
+      Preferences::PlayModeCompiler,
+      {
+        {"VHLT", Preferences::PlayModeCompilerVhlt},
+        {"ZHLT", Preferences::PlayModeCompilerZhlt},
+      }));
+  right->addRow(
+    "Cliptype",
+    withToolTip(
+      choiceField(
+        Preferences::PlayModeClipType,
+        {
+          {"Legacy", Preferences::PlayModeClipTypeLegacy},
+          {"Simple", Preferences::PlayModeClipTypeSimple},
+          {"Precise", Preferences::PlayModeClipTypePrecise},
+          {"Normalized", Preferences::PlayModeClipTypeNormalized},
+          {"Smallest", Preferences::PlayModeClipTypeSmallest},
+        }),
+      "hlcsg -cliptype. Legacy is what most CS 1.6 maps use."));
+  right->addRow(
     "",
-    infoLabel(
-      QString{"There are no deaths: hard landings only show the damage they would "
-              "deal."}));
-  addBool(*layout, "Show crosshair", Preferences::PlayModeShowCrosshair);
+    withToolTip(
+      boolField("Use map cliptype", Preferences::PlayModeUseMapClipType),
+      "Use the cliptype of the map's info_compile_parameters entity."));
 
-  layout->addSection("Sound");
-  addFloat(*layout, "Volume", Preferences::PlayModeSoundVolume, 0.0, 1.0, 2, 0.05);
-  layout->addRow(
-    "",
-    infoLabel(
-      QString{
-        "Footsteps, ladders and water from the game's sound folder, played like the "
-        "game does (a new sound cuts the previous one on the same channel). 0 mutes."}));
+  right->addSection("Sound");
+  right->addRow(
+    "Volume", floatField(Preferences::PlayModeSoundVolume, 0.0, 1.0, 2, 0.05));
+
+  auto* layout = new QHBoxLayout{};
+  layout->setContentsMargins(
+    LayoutConstants::DialogOuterMargin,
+    LayoutConstants::DialogOuterMargin,
+    LayoutConstants::DialogOuterMargin,
+    LayoutConstants::DialogOuterMargin);
+  layout->setSpacing(3 * LayoutConstants::WideHMargin);
+  layout->addLayout(left);
+  layout->addLayout(right);
+  layout->setAlignment(left, Qt::AlignTop);
+  layout->setAlignment(right, Qt::AlignTop);
 
   createScrollableContent(layout);
 }
 
-void KreedzBroomPreferencePane::addFloat(
-  FormWithSectionsLayout& layout,
-  const QString& label,
+QWidget* KreedzBroomPreferencePane::floatField(
   Preference<float>& preference,
   const double minimum,
   const double maximum,
@@ -327,7 +318,6 @@ void KreedzBroomPreferencePane::addFloat(
   spinBox->setSuffix(suffix);
   spinBox->setKeyboardTracking(false);
   spinBox->setMaximumWidth(FieldWidth);
-  layout.addRow(label, spinBox);
 
   connect(
     spinBox, &QDoubleSpinBox::valueChanged, this, [&preference](const double value) {
@@ -341,11 +331,10 @@ void KreedzBroomPreferencePane::addFloat(
     },
     [&preference]() { PreferenceManager::instance().resetToDefault(preference); },
   });
+  return spinBox;
 }
 
-void KreedzBroomPreferencePane::addInt(
-  FormWithSectionsLayout& layout,
-  const QString& label,
+QWidget* KreedzBroomPreferencePane::intField(
   Preference<int>& preference,
   const int minimum,
   const int maximum,
@@ -356,7 +345,6 @@ void KreedzBroomPreferencePane::addInt(
   spinBox->setSuffix(suffix);
   spinBox->setKeyboardTracking(false);
   spinBox->setMaximumWidth(FieldWidth);
-  layout.addRow(label, spinBox);
 
   connect(spinBox, &QSpinBox::valueChanged, this, [&preference](const int value) {
     PreferenceManager::instance().set(preference, value);
@@ -368,13 +356,13 @@ void KreedzBroomPreferencePane::addInt(
     },
     [&preference]() { PreferenceManager::instance().resetToDefault(preference); },
   });
+  return spinBox;
 }
 
-void KreedzBroomPreferencePane::addBool(
-  FormWithSectionsLayout& layout, const QString& label, Preference<bool>& preference)
+QWidget* KreedzBroomPreferencePane::boolField(
+  const QString& label, Preference<bool>& preference)
 {
   auto* checkBox = new QCheckBox{label};
-  layout.addRow("", checkBox);
 
   connect(
     checkBox,
@@ -390,15 +378,15 @@ void KreedzBroomPreferencePane::addBool(
     },
     [&preference]() { PreferenceManager::instance().resetToDefault(preference); },
   });
+  return checkBox;
 }
 
-void KreedzBroomPreferencePane::addKey(
-  FormWithSectionsLayout& layout, const QString& label, Preference<int>& preference)
+QWidget* KreedzBroomPreferencePane::keyField(Preference<int>& preference)
 {
   auto* button = new PlayModeKeyButton{
     [&preference](const int key) { PreferenceManager::instance().set(preference, key); }};
   button->setMaximumWidth(FieldWidth);
-  layout.addRow(label, button);
+  button->setToolTip(tr("Click, then press a key"));
 
   m_keyButtons.push_back(button);
   m_bindings.push_back({
@@ -407,13 +395,11 @@ void KreedzBroomPreferencePane::addKey(
     },
     [&preference]() { PreferenceManager::instance().resetToDefault(preference); },
   });
+  return button;
 }
 
-void KreedzBroomPreferencePane::addChoice(
-  FormWithSectionsLayout& layout,
-  const QString& label,
-  Preference<int>& preference,
-  const std::vector<std::pair<QString, int>>& choices)
+QWidget* KreedzBroomPreferencePane::choiceField(
+  Preference<int>& preference, const std::vector<std::pair<QString, int>>& choices)
 {
   auto* comboBox = new QComboBox{};
   for (const auto& [text, value] : choices)
@@ -421,7 +407,6 @@ void KreedzBroomPreferencePane::addChoice(
     comboBox->addItem(text, value);
   }
   comboBox->setMaximumWidth(FieldWidth);
-  layout.addRow(label, comboBox);
 
   connect(
     comboBox, &QComboBox::currentIndexChanged, this, [comboBox, &preference](const int) {
@@ -435,6 +420,7 @@ void KreedzBroomPreferencePane::addChoice(
     },
     [&preference]() { PreferenceManager::instance().resetToDefault(preference); },
   });
+  return comboBox;
 }
 
 bool KreedzBroomPreferencePane::canResetToDefaults()
