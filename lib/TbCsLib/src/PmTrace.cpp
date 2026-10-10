@@ -20,11 +20,11 @@
  Copyright (c) 2014-2025 ReHLDS Contributors.
  */
 
-// Port of ReHLDS engine/pmovetst.cpp, see PmTrace.h. Expressions keep the original
+// Port of ReHLDS engine/pmovetst.cpp, see PmTraceEngine.h. Expressions keep the original
 // form and evaluation order (compile with -ffp-contract=off) so results round the
 // same way; real_t is double in ReHLDS's original-compatible build, which matters
 // where it is noted.
-#include "PmTrace.h"
+#include "PmTraceEngine.h"
 
 #include <cstring>
 

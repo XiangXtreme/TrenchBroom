@@ -24,7 +24,7 @@
 
 #include "PlayerHost.h"
 
-#include "PmTrace.h"
+#include "PmTraceEngine.h"
 
 #include <algorithm>
 #include <cmath>

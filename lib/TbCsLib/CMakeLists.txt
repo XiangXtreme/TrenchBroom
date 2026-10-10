@@ -54,7 +54,7 @@ target_sources(TbCsLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayerHost.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayerHost.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PmTrace.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/PmTrace.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PmTraceEngine.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ReGameDllCompat.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ScsApi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/World.h
