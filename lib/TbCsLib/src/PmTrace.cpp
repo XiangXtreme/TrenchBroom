@@ -395,11 +395,11 @@ bool recursiveHullCheck(
   return false; // trace backed up past 0.0
 }
 
-Hull* hullForBsp(physent_t* pe, const playermove_t* pmove, float* offset)
+Hull* hullForBsp(physent_t* pe, const playermove_t* pm, float* offset)
 {
   auto* model = const_cast<BrushModel*>(modelOf(pe));
   Hull* hull = nullptr;
-  switch (pmove->usehull)
+  switch (pm->usehull)
   {
   case 1:
     hull = &model->hulls[3];
@@ -415,9 +415,9 @@ Hull* hullForBsp(physent_t* pe, const playermove_t* pmove, float* offset)
     break;
   }
 
-  offset[0] = hull->clip_mins[0] - pmove->player_mins[pmove->usehull][0];
-  offset[1] = hull->clip_mins[1] - pmove->player_mins[pmove->usehull][1];
-  offset[2] = hull->clip_mins[2] - pmove->player_mins[pmove->usehull][2];
+  offset[0] = hull->clip_mins[0] - pm->player_mins[pm->usehull][0];
+  offset[1] = hull->clip_mins[1] - pm->player_mins[pm->usehull][1];
+  offset[2] = hull->clip_mins[2] - pm->player_mins[pm->usehull][2];
   offset[0] += pe->origin[0];
   offset[1] += pe->origin[1];
   offset[2] += pe->origin[2];
@@ -425,7 +425,7 @@ Hull* hullForBsp(physent_t* pe, const playermove_t* pmove, float* offset)
 }
 
 pmtrace_t playerTrace(
-  playermove_t* pmove,
+  playermove_t* pm,
   const float* start,
   const float* end,
   const int traceFlags,
@@ -472,7 +472,7 @@ pmtrace_t playerTrace(
     }
 
     float offset[3];
-    const Hull* hull = hullForBsp(pe, pmove, offset);
+    const Hull* hull = hullForBsp(pe, pm, offset);
 
     float startL[3];
     float endL[3];
@@ -514,18 +514,19 @@ pmtrace_t playerTrace(
   return trace;
 }
 
-int testPlayerPosition(playermove_t* pmove, const float* pos, pmtrace_t* ptrace, IgnoreFn filter)
+int testPlayerPosition(
+  playermove_t* pm, const float* pos, pmtrace_t* ptrace, IgnoreFn filter)
 {
   const pmtrace_t tr = playerTrace(
-    pmove, pmove->origin, pmove->origin, PM_NORMAL, pmove->numphysent, pmove->physents, -1, nullptr);
+    pm, pm->origin, pm->origin, PM_NORMAL, pm->numphysent, pm->physents, -1, nullptr);
   if (ptrace)
   {
     *ptrace = tr;
   }
 
-  for (int i = 0; i < pmove->numphysent; ++i)
+  for (int i = 0; i < pm->numphysent; ++i)
   {
-    physent_t* pe = &pmove->physents[i];
+    physent_t* pe = &pm->physents[i];
     if (filter && filter(pe))
     {
       continue;
@@ -540,7 +541,7 @@ int testPlayerPosition(playermove_t* pmove, const float* pos, pmtrace_t* ptrace,
     }
 
     float offset[3];
-    const Hull* hull = hullForBsp(pe, pmove, offset);
+    const Hull* hull = hullForBsp(pe, pm, offset);
     const float test[3] = {pos[0] - offset[0], pos[1] - offset[1], pos[2] - offset[2]};
     if (hullPointContents(hull, hull->firstclipnode, test) == ContentsSolid)
     {
@@ -550,9 +551,9 @@ int testPlayerPosition(playermove_t* pmove, const float* pos, pmtrace_t* ptrace,
   return -1;
 }
 
-int pointContents(playermove_t* pmove, const float* p, int* truecontents)
+int pointContents(playermove_t* pm, const float* p, int* truecontents)
 {
-  if (!pmove->physents[0].model)
+  if (!pm->physents[0].model)
   {
     if (truecontents)
     {
@@ -561,7 +562,7 @@ int pointContents(playermove_t* pmove, const float* p, int* truecontents)
     return ContentsSolid;
   }
 
-  const BrushModel* world = modelOf(&pmove->physents[0]);
+  const BrushModel* world = modelOf(&pm->physents[0]);
   int entityContents = hullPointContents(&world->hulls[0], world->hulls[0].firstclipnode, p);
   if (truecontents)
   {
@@ -580,9 +581,9 @@ int pointContents(playermove_t* pmove, const float* p, int* truecontents)
   }
 
   // PM_LinkContents: the first non-solid brush entity containing the point wins
-  for (int i = 1; i < pmove->numphysent; ++i)
+  for (int i = 1; i < pm->numphysent; ++i)
   {
-    const physent_t* pe = &pmove->physents[i];
+    const physent_t* pe = &pm->physents[i];
     if (pe->solid || !pe->model)
     {
       continue;
@@ -597,24 +598,24 @@ int pointContents(playermove_t* pmove, const float* p, int* truecontents)
   return entityContents;
 }
 
-int truePointContents(playermove_t* pmove, const float* p)
+int truePointContents(playermove_t* pm, const float* p)
 {
-  if (!pmove->physents[0].model)
+  if (!pm->physents[0].model)
   {
     return ContentsEmpty;
   }
-  const BrushModel* world = modelOf(&pmove->physents[0]);
+  const BrushModel* world = modelOf(&pm->physents[0]);
   return hullPointContents(&world->hulls[0], world->hulls[0].firstclipnode, p);
 }
 
 float traceModel(
-  playermove_t* pmove, physent_t* pe, const float* start, const float* end, trace_t* trace)
+  playermove_t* pm, physent_t* pe, const float* start, const float* end, trace_t* trace)
 {
-  const int saveHull = pmove->usehull;
-  pmove->usehull = 2;
+  const int saveHull = pm->usehull;
+  pm->usehull = 2;
   float offset[3];
-  const Hull* hull = hullForBsp(pe, pmove, offset);
-  pmove->usehull = saveHull;
+  const Hull* hull = hullForBsp(pe, pm, offset);
+  pm->usehull = saveHull;
 
   const float startL[3] = {start[0] - offset[0], start[1] - offset[1], start[2] - offset[2]};
   const float endL[3] = {end[0] - offset[0], end[1] - offset[1], end[2] - offset[2]};
@@ -642,7 +643,7 @@ float traceModel(
 }
 
 pmtrace_t* traceLine(
-  playermove_t* pmove,
+  playermove_t* pm,
   const float* start,
   const float* end,
   const int flags,
@@ -651,51 +652,51 @@ pmtrace_t* traceLine(
   IgnoreFn filter)
 {
   static thread_local pmtrace_t tr;
-  const int oldhull = pmove->usehull;
-  pmove->usehull = usehull;
+  const int oldhull = pm->usehull;
+  pm->usehull = usehull;
   if (filter)
   {
     // PM_TraceLineEx
     tr = flags ? playerTrace(
-                   pmove, start, end, PM_NORMAL, pmove->numvisent, pmove->visents, -1, filter)
+                   pm, start, end, PM_NORMAL, pm->numvisent, pm->visents, -1, filter)
                : playerTrace(
-                   pmove, start, end, PM_NORMAL, pmove->numphysent, pmove->physents, -1, filter);
+                   pm, start, end, PM_NORMAL, pm->numphysent, pm->physents, -1, filter);
   }
   else if (flags == 0)
   {
     tr = playerTrace(
-      pmove, start, end, PM_NORMAL, pmove->numphysent, pmove->physents, ignore_pe, nullptr);
+      pm, start, end, PM_NORMAL, pm->numphysent, pm->physents, ignore_pe, nullptr);
   }
   else if (flags == 1)
   {
     tr = playerTrace(
-      pmove, start, end, PM_NORMAL, pmove->numvisent, pmove->visents, ignore_pe, nullptr);
+      pm, start, end, PM_NORMAL, pm->numvisent, pm->visents, ignore_pe, nullptr);
   }
-  pmove->usehull = oldhull;
+  pm->usehull = oldhull;
   return &tr;
 }
 
-void stuckTouch(playermove_t* pmove, int /* hitent */, const pmtrace_t* traceresult)
+void stuckTouch(playermove_t* pm, int /* hitent */, const pmtrace_t* traceresult)
 {
   // PM_StuckTouch -> PM_AddToTouched (server side), which keys on the trace's entity
-  if (!pmove->server)
+  if (!pm->server)
   {
     return;
   }
-  for (int i = 0; i < pmove->numtouch; ++i)
+  for (int i = 0; i < pm->numtouch; ++i)
   {
-    if (pmove->touchindex[i].ent == traceresult->ent)
+    if (pm->touchindex[i].ent == traceresult->ent)
     {
       return;
     }
   }
-  if (pmove->numtouch >= MAX_PHYSENTS)
+  if (pm->numtouch >= MAX_PHYSENTS)
   {
     return;
   }
   pmtrace_t tr = *traceresult;
-  copyVec(pmove->velocity, tr.deltavelocity);
-  pmove->touchindex[pmove->numtouch++] = tr;
+  copyVec(pm->velocity, tr.deltavelocity);
+  pm->touchindex[pm->numtouch++] = tr;
 }
 
 } // namespace tb::cs::pm

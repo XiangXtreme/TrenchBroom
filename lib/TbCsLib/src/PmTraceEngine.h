@@ -49,11 +49,11 @@ bool recursiveHullCheck(
   pmtrace_t* trace);
 
 // PM_HullForBsp
-Hull* hullForBsp(physent_t* pe, const playermove_t* pmove, float* offset);
+Hull* hullForBsp(physent_t* pe, const playermove_t* pm, float* offset);
 
 // _PM_PlayerTrace
 pmtrace_t playerTrace(
-  playermove_t* pmove,
+  playermove_t* pm,
   const float* start,
   const float* end,
   int traceFlags,
@@ -64,23 +64,19 @@ pmtrace_t playerTrace(
 
 // _PM_TestPlayerPosition
 int testPlayerPosition(
-  playermove_t* pmove, const float* pos, pmtrace_t* ptrace, IgnoreFn filter);
+  playermove_t* pm, const float* pos, pmtrace_t* ptrace, IgnoreFn filter);
 
 // PM_PointContents (currents are reported as water), PM_TruePointContents
-int pointContents(playermove_t* pmove, const float* p, int* truecontents);
-int truePointContents(playermove_t* pmove, const float* p);
+int pointContents(playermove_t* pm, const float* p, int* truecontents);
+int truePointContents(playermove_t* pm, const float* p);
 
 // PM_TraceModel
 float traceModel(
-  playermove_t* pmove,
-  physent_t* pe,
-  const float* start,
-  const float* end,
-  trace_t* trace);
+  playermove_t* pm, physent_t* pe, const float* start, const float* end, trace_t* trace);
 
 // PM_TraceLine (filter == nullptr) and PM_TraceLineEx
 pmtrace_t* traceLine(
-  playermove_t* pmove,
+  playermove_t* pm,
   const float* start,
   const float* end,
   int flags,
@@ -89,6 +85,6 @@ pmtrace_t* traceLine(
   IgnoreFn filter);
 
 // PM_StuckTouch
-void stuckTouch(playermove_t* pmove, int hitent, const pmtrace_t* traceresult);
+void stuckTouch(playermove_t* pm, int hitent, const pmtrace_t* traceresult);
 
 } // namespace tb::cs::pm
