@@ -200,8 +200,13 @@ void MapView3D::startPlayMode(const bool fromCamera)
   case PlayModeRawMouse::Backend::XInput2:
     m_playMode->setInputDescription(motion + ", XInput2" + confined);
     break;
+  case PlayModeRawMouse::Backend::RawInput:
+    m_playMode->setInputDescription(motion + ", Raw Input" + confined);
+    break;
   case PlayModeRawMouse::Backend::None:
-    m_playMode->setInputDescription("cursor warping (accelerated)");
+    m_playMode->setInputDescription(
+      std::string{"cursor warping (accelerated)"}
+      + (m_rawMouse->confinesPointer() ? ", confined" : ""));
     break;
   }
 

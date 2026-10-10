@@ -42,6 +42,16 @@
 #include <wayland-client.h>
 #endif
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 #include <cstdlib>
 #include <cstring>
 #include <utility>
@@ -268,6 +278,13 @@ PlayModeRawMouse::Backend PlayModeRawMouse::start(QWidget& view, const bool raw)
       m_backend = Backend::XInput2;
     }
   }
+  else if (QGuiApplication::platformName() == "windows")
+  {
+    if (startWindows(view))
+    {
+      m_backend = Backend::RawInput;
+    }
+  }
   return m_backend;
 }
 
@@ -281,8 +298,14 @@ void PlayModeRawMouse::stop()
   case Backend::XInput2:
     stopXInput2();
     break;
+  case Backend::RawInput:
   case Backend::None:
     break;
+  }
+  // The cursor is clipped on Windows with or without Raw Input.
+  if (m_clipView)
+  {
+    stopWindows();
   }
   m_backend = Backend::None;
   m_confined = false;
@@ -321,6 +344,40 @@ bool PlayModeRawMouse::nativeEventFilter(
       m_motion(motion->dx, motion->dy, static_cast<double>(motion->timestamp));
     }
   }
+#ifdef Q_OS_WIN
+  if (m_clipView && eventType == "windows_generic_MSG")
+  {
+    const auto* msg = static_cast<const MSG*>(message);
+    if (msg->message == WM_INPUT && m_backend == Backend::RawInput)
+    {
+      auto input = RAWINPUT{};
+      auto size = static_cast<UINT>(sizeof(input));
+      if (
+        GetRawInputData(
+          reinterpret_cast<HRAWINPUT>(msg->lParam),
+          RID_INPUT,
+          &input,
+          &size,
+          static_cast<UINT>(sizeof(RAWINPUTHEADER)))
+          != static_cast<UINT>(-1)
+        && input.header.dwType == RIM_TYPEMOUSE
+        && (input.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) == 0
+        && (input.data.mouse.lLastX != 0 || input.data.mouse.lLastY != 0))
+      {
+        m_motion(
+          static_cast<double>(input.data.mouse.lLastX),
+          static_cast<double>(input.data.mouse.lLastY),
+          static_cast<double>(msg->time));
+      }
+    }
+    else if (msg->message == WM_MOUSEMOVE)
+    {
+      // Windows drops the clip rectangle when the window loses focus, moves or is
+      // resized; restore it as soon as the mouse is back over the view.
+      clipCursorToView();
+    }
+  }
+#endif
   // Never consume the event; Qt does not use raw motion itself.
   return false;
 }
@@ -479,6 +536,86 @@ void PlayModeRawMouse::stopXInput2()
     }
     selectRawMotion(connection, false);
     xcb_flush(connection);
+  }
+#endif
+}
+
+bool PlayModeRawMouse::startWindows(QWidget& view)
+{
+  m_clipView = &view;
+  QCoreApplication::instance()->installNativeEventFilter(this);
+  clipCursorToView();
+  m_confined = true;
+
+#ifdef Q_OS_WIN
+  if (m_raw)
+  {
+    // Generic desktop mouse. Legacy mouse messages are kept, Qt still needs them for
+    // clicks and to keep the cursor in the view.
+    auto device = RAWINPUTDEVICE{};
+    device.usUsagePage = 0x01;
+    device.usUsage = 0x02;
+    device.dwFlags = 0;
+    device.hwndTarget = reinterpret_cast<HWND>(view.window()->winId());
+    return RegisterRawInputDevices(&device, 1, static_cast<UINT>(sizeof(device))) == TRUE;
+  }
+#endif
+  return false;
+}
+
+void PlayModeRawMouse::stopWindows()
+{
+#ifdef Q_OS_WIN
+  if (m_backend == Backend::RawInput)
+  {
+    auto device = RAWINPUTDEVICE{};
+    device.usUsagePage = 0x01;
+    device.usUsage = 0x02;
+    device.dwFlags = RIDEV_REMOVE;
+    device.hwndTarget = nullptr;
+    RegisterRawInputDevices(&device, 1, static_cast<UINT>(sizeof(device)));
+  }
+  ClipCursor(nullptr);
+#endif
+  QCoreApplication::instance()->removeNativeEventFilter(this);
+  m_clipView = nullptr;
+}
+
+void PlayModeRawMouse::clipCursorToView()
+{
+#ifdef Q_OS_WIN
+  if (!m_clipView)
+  {
+    return;
+  }
+
+  auto* hwnd = reinterpret_cast<HWND>(m_clipView->window()->winId());
+  if (GetForegroundWindow() != hwnd)
+  {
+    return;
+  }
+
+  // ClipCursor takes physical screen coordinates: the view's offset in the window's
+  // client area, scaled by the window's device pixel ratio.
+  auto origin = POINT{0, 0};
+  ClientToScreen(hwnd, &origin);
+  const auto scale = m_clipView->devicePixelRatioF();
+  const auto offset = m_clipView->mapTo(m_clipView->window(), QPoint{0, 0});
+  const auto left = origin.x + static_cast<LONG>(offset.x() * scale);
+  const auto top = origin.y + static_cast<LONG>(offset.y() * scale);
+  const auto clip = RECT{
+    left,
+    top,
+    left + static_cast<LONG>(m_clipView->width() * scale),
+    top + static_cast<LONG>(m_clipView->height() * scale),
+  };
+
+  auto current = RECT{};
+  if (
+    !GetClipCursor(&current) || current.left != clip.left || current.top != clip.top
+    || current.right != clip.right || current.bottom != clip.bottom)
+  {
+    ClipCursor(&clip);
   }
 #endif
 }

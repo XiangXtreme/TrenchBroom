@@ -20,6 +20,7 @@
 #pragma once
 
 #include <QAbstractNativeEventFilter>
+#include <QPointer>
 
 #include <cstdint>
 #include <functional>
@@ -58,6 +59,9 @@ std::optional<RawMouseMotion> parseXInputRawMotion(
  * - X11 / XWayland: the pointer is grabbed and confined to the window with the cursor
  *   hidden through XFixes, which makes XWayland lock it, and motion comes from XInput2
  *   raw events.
+ * - Windows: the cursor is clipped to the view (ClipCursor), and raw motion comes from
+ *   Raw Input (WM_INPUT). For accelerated motion the cursor is only clipped, start()
+ *   returns Backend::None and the caller reads cursor deltas.
  * - Elsewhere, or if the required protocols are missing, start() returns Backend::None
  *   and the caller keeps the cursor in the view itself.
  */
@@ -72,6 +76,7 @@ public:
     None,
     Wayland,
     XInput2,
+    RawInput,
   };
 
 private:
@@ -84,6 +89,8 @@ private:
 
   uint8_t m_xinputOpcode = 0;
   uint32_t m_x11Window = 0;
+
+  QPointer<QWidget> m_clipView;
 
   std::unique_ptr<WaylandState> m_wayland;
   QTimer* m_pollTimer = nullptr;
@@ -118,6 +125,9 @@ private:
   void stopWayland();
   bool startXInput2(QWidget& view);
   void stopXInput2();
+  bool startWindows(QWidget& view);
+  void stopWindows();
+  void clipCursorToView();
 };
 
 } // namespace tb::ui
