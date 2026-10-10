@@ -2508,6 +2508,33 @@ QWidget* MapWindow::addPluginPanel(const QString& title, const QString& content)
   return container;
 }
 
+MapView3D* MapWindow::playModeView()
+{
+  // Prefer the view the user is working in, otherwise the first visible 3D view.
+  if (
+    auto* view3D = dynamic_cast<MapView3D*>(currentMapViewBase());
+    view3D && view3D->isVisible())
+  {
+    return view3D;
+  }
+  for (auto* view3D : findChildren<MapView3D*>())
+  {
+    if (view3D->isVisible())
+    {
+      return view3D;
+    }
+  }
+  return nullptr;
+}
+
+void MapWindow::startPlayMode(const bool fromCamera)
+{
+  if (auto* view3D = playModeView())
+  {
+    view3D->startPlayMode(fromCamera);
+  }
+}
+
 namespace
 {
 

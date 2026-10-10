@@ -20,6 +20,7 @@
 #pragma once
 
 #include <QImage>
+#include <QPointF>
 
 #include "base/NotifierConnection.h"
 #include "ui/MapViewBase.h"
@@ -44,6 +45,8 @@ class Node;
 namespace ui
 {
 class FlyModeHelper;
+class PlayModeController;
+class PlayModeRawMouse;
 
 class MapView3D : public MapViewBase
 {
@@ -51,7 +54,17 @@ class MapView3D : public MapViewBase
 private:
   std::unique_ptr<gl::PerspectiveCamera> m_camera;
   std::unique_ptr<FlyModeHelper> m_flyModeHelper;
+  std::unique_ptr<PlayModeController> m_playMode;
+  std::unique_ptr<PlayModeRawMouse> m_rawMouse;
   bool m_ignoreCameraChangeEvents = false;
+
+  // Play mode mouse capture
+  bool m_warpCursor = true;
+  bool m_mouseTrackingBeforePlay = false;
+  bool m_awaitingCursorWarp = false;
+  bool m_grabbedMouse = false;
+  int m_wheelAccumulator = 0;
+  QPointF m_lastPlayMousePos;
 
   NotifierConnection m_notifierConnection;
 
@@ -61,6 +74,14 @@ public:
 
   QImage grabPrefabThumbnailFramebuffer(const std::vector<mdl::Node*>& nodes);
   const gl::PerspectiveCamera& perspectiveCamera() const;
+
+  bool playModeActive() const;
+  /**
+   * Starts simulating Counter-Strike 1.6 movement in this view. Resumes the previous
+   * play session unless fromCamera is set.
+   */
+  void startPlayMode(bool fromCamera);
+  void stopPlayMode();
 
 private:
   void initializeCamera();
@@ -72,10 +93,19 @@ private: // notification
   void preferenceDidChange(const std::filesystem::path& path);
 
 protected: // QWidget overrides
+  bool event(QEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
   void keyReleaseEvent(QKeyEvent* event) override;
+  void mouseMoveEvent(QMouseEvent* event) override;
+  void mousePressEvent(QMouseEvent* event) override;
+  void mouseReleaseEvent(QMouseEvent* event) override;
+  void mouseDoubleClickEvent(QMouseEvent* event) override;
+  void wheelEvent(QWheelEvent* event) override;
   void focusInEvent(QFocusEvent* event) override;
   void focusOutEvent(QFocusEvent* event) override;
+
+private:
+  void recenterPlayCursor();
 
 protected: // QOpenGLWidget overrides
   void initializeGL() override;

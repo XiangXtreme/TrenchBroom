@@ -304,6 +304,102 @@ inline auto CameraFlyUp = Preference<std::vector<KeySequence>>{
 inline auto CameraFlyDown = Preference<std::vector<KeySequence>>{
   "Controls/Camera/Move down", std::vector<KeySequence>{KeySequence{"X"}}};
 
+// Play mode (KreedzBroom: embedded Counter-Strike 1.6 movement). The defaults are the
+// CS 1.6 client and server defaults.
+inline auto PlayModeMouseSensitivity =
+  Preference<float>{"Controls/Play mode/Mouse sensitivity", 2.5f};
+inline auto PlayModeInvertMouse =
+  Preference<bool>{"Controls/Play mode/Invert mouse", false};
+inline auto PlayModeRawInput =
+  Preference<bool>{"Controls/Play mode/Raw mouse input", true};
+
+// Keys are single Qt key codes so that modifiers (Ctrl to duck) can be bound.
+// Qt key codes of the default play mode keys. This library does not use Qt, so they
+// are spelled out here; the play mode code checks them against Qt.
+inline constexpr auto PlayModeQtKeyW = 0x57;
+inline constexpr auto PlayModeQtKeyS = 0x53;
+inline constexpr auto PlayModeQtKeyA = 0x41;
+inline constexpr auto PlayModeQtKeyD = 0x44;
+inline constexpr auto PlayModeQtKeySpace = 0x20;
+inline constexpr auto PlayModeQtKeyControl = 0x01000021;
+inline constexpr auto PlayModeQtKeyShift = 0x01000020;
+inline constexpr auto PlayModeQtKeyE = 0x45;
+inline constexpr auto PlayModeQtKeyLeft = 0x01000012;
+inline constexpr auto PlayModeQtKeyRight = 0x01000014;
+inline auto PlayModeKeyForward =
+  Preference<int>{"Controls/Play mode/Key forward", PlayModeQtKeyW};
+inline auto PlayModeKeyBack =
+  Preference<int>{"Controls/Play mode/Key back", PlayModeQtKeyS};
+inline auto PlayModeKeyMoveLeft =
+  Preference<int>{"Controls/Play mode/Key move left", PlayModeQtKeyA};
+inline auto PlayModeKeyMoveRight =
+  Preference<int>{"Controls/Play mode/Key move right", PlayModeQtKeyD};
+inline auto PlayModeKeyJump =
+  Preference<int>{"Controls/Play mode/Key jump", PlayModeQtKeySpace};
+inline auto PlayModeKeyDuck =
+  Preference<int>{"Controls/Play mode/Key duck", PlayModeQtKeyControl};
+inline auto PlayModeKeyWalk =
+  Preference<int>{"Controls/Play mode/Key walk", PlayModeQtKeyShift};
+inline auto PlayModeKeyUse =
+  Preference<int>{"Controls/Play mode/Key use", PlayModeQtKeyE};
+inline auto PlayModeKeyTurnLeft =
+  Preference<int>{"Controls/Play mode/Key turn left", PlayModeQtKeyLeft};
+inline auto PlayModeKeyTurnRight =
+  Preference<int>{"Controls/Play mode/Key turn right", PlayModeQtKeyRight};
+inline auto PlayModeYawSpeed =
+  Preference<float>{"Controls/Play mode/cl_yawspeed", 210.0f};
+// What a mouse wheel notch does: one +action/-action pair, like "bind mwheelup +jump".
+inline constexpr auto PlayModeWheelNothing = 0;
+inline constexpr auto PlayModeWheelJump = 1;
+inline constexpr auto PlayModeWheelDuck = 2;
+inline auto PlayModeWheelUp =
+  Preference<int>{"Controls/Play mode/Mouse wheel up", PlayModeWheelJump};
+inline auto PlayModeWheelDown =
+  Preference<int>{"Controls/Play mode/Mouse wheel down", PlayModeWheelJump};
+
+inline auto PlayModeAirAccelerate =
+  Preference<float>{"Controls/Play mode/sv_airaccelerate", 10.0f};
+inline auto PlayModeAccelerate =
+  Preference<float>{"Controls/Play mode/sv_accelerate", 5.0f};
+inline auto PlayModeFriction = Preference<float>{"Controls/Play mode/sv_friction", 4.0f};
+inline auto PlayModeStopSpeed =
+  Preference<float>{"Controls/Play mode/sv_stopspeed", 75.0f};
+inline auto PlayModeGravity = Preference<float>{"Controls/Play mode/sv_gravity", 800.0f};
+inline auto PlayModeMaxSpeed = Preference<float>{"Controls/Play mode/sv_maxspeed", 320.0f};
+inline auto PlayModeEdgeFriction =
+  Preference<float>{"Controls/Play mode/edgefriction", 2.0f};
+inline auto PlayModeStepSize = Preference<float>{"Controls/Play mode/sv_stepsize", 18.0f};
+
+// Whose hlcsg builds the clip hulls (SCS_COMPILER_*).
+inline constexpr auto PlayModeCompilerVhlt = 0;
+inline constexpr auto PlayModeCompilerZhlt = 1;
+inline auto PlayModeCompiler =
+  Preference<int>{"Controls/Play mode/Compiler", PlayModeCompilerVhlt};
+
+// hlcsg -cliptype used to build the clip hulls, with VHLT's values (SCS_CLIPTYPE_*).
+inline constexpr auto PlayModeClipTypeSmallest = 0;
+inline constexpr auto PlayModeClipTypeNormalized = 1;
+inline constexpr auto PlayModeClipTypeSimple = 2;
+inline constexpr auto PlayModeClipTypePrecise = 3;
+inline constexpr auto PlayModeClipTypeLegacy = 4;
+inline auto PlayModeClipType =
+  Preference<int>{"Controls/Play mode/Cliptype", PlayModeClipTypeLegacy};
+inline auto PlayModeUseMapClipType =
+  Preference<bool>{"Controls/Play mode/Use map cliptype", true};
+
+inline auto PlayModeWeaponSpeed =
+  Preference<float>{"Controls/Play mode/Weapon speed", 250.0f};
+inline auto PlayModeFrameRate = Preference<int>{"Controls/Play mode/fps_max", 100};
+
+inline auto PlayModeFov = Preference<float>{"Controls/Play mode/Field of view", 90.0f};
+inline auto PlayModeShowHud = Preference<bool>{"Controls/Play mode/Show HUD", true};
+inline auto PlayModeShowFallDamage =
+  Preference<bool>{"Controls/Play mode/Show fall damage", true};
+// Like the game's "volume" cvar; 0 mutes the footsteps and other movement sounds.
+inline auto PlayModeSoundVolume = Preference<float>{"Controls/Play mode/Volume", 0.8f};
+inline auto PlayModeShowCrosshair =
+  Preference<bool>{"Controls/Play mode/Show crosshair", true};
+
 // Map view config
 inline auto ShowEntityClassnames =
   Preference<bool>{"Map view/Show entity classnames", true};

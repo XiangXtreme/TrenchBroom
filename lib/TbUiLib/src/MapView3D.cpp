@@ -19,7 +19,14 @@
 
 #include "ui/MapView3D.h"
 
+#include <QCursor>
+#include <QGuiApplication>
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
+
 #include "base/PreferenceManager.h"
+#include "prefs/Preferences.h"
 #include "gl/PerspectiveCamera.h"
 #include "mdl/BezierPatch.h"
 #include "mdl/BrushFace.h"
@@ -64,6 +71,8 @@
 #include "ui/MoveObjectsToolController.h"
 #include "ui/PathToolController.h"
 #include "ui/PrefabToolController.h"
+#include "ui/PlayModeController.h"
+#include "ui/PlayModeRawMouse.h"
 #include "ui/RotateToolController.h"
 #include "ui/ScaleToolController.h"
 #include "ui/SelectionTool.h"
@@ -78,6 +87,9 @@
 
 #include "vm/util.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace tb::ui
 {
 
@@ -86,6 +98,14 @@ MapView3D::MapView3D(
   : MapViewBase{appController, document, toolBox}
   , m_camera{std::make_unique<gl::PerspectiveCamera>()}
   , m_flyModeHelper{std::make_unique<FlyModeHelper>(*m_camera)}
+  , m_playMode{std::make_unique<PlayModeController>(document, *m_camera)}
+  , m_rawMouse{std::make_unique<PlayModeRawMouse>(
+      [&](const double dx, const double dy, const double timestampMs) {
+        if (m_playMode->active())
+        {
+          m_playMode->rawLook(dx, dy, timestampMs);
+        }
+      })}
 {
   bindEvents();
   connectObservers();
@@ -97,7 +117,10 @@ MapView3D::MapView3D(
   mapViewBaseVirtualInit();
 }
 
-MapView3D::~MapView3D() = default;
+MapView3D::~MapView3D()
+{
+  stopPlayMode();
+}
 
 QImage MapView3D::grabPrefabThumbnailFramebuffer(const std::vector<mdl::Node*>& nodes)
 {
@@ -125,6 +148,97 @@ QImage MapView3D::grabPrefabThumbnailFramebuffer(const std::vector<mdl::Node*>& 
 const gl::PerspectiveCamera& MapView3D::perspectiveCamera() const
 {
   return *m_camera;
+}
+
+bool MapView3D::playModeActive() const
+{
+  return m_playMode->active();
+}
+
+void MapView3D::startPlayMode(const bool fromCamera)
+{
+  if (m_playMode->active())
+  {
+    return;
+  }
+
+  m_flyModeHelper->resetKeys();
+  cancelMouseDrag();
+
+  m_playMode->start(fromCamera);
+  if (!m_playMode->active())
+  {
+    return;
+  }
+
+  m_mouseTrackingBeforePlay = hasMouseTracking();
+  setMouseTracking(true);
+  setCursor(Qt::BlankCursor);
+  setFocus(Qt::OtherFocusReason);
+
+  // Capture the mouse like the game: the windowing system keeps the pointer in place and
+  // motion is read as relative movement, raw (m_rawinput 1) or accelerated. The cursor is
+  // captured either way so the real cursor never leaves the view. Without the required
+  // protocols, fall back to cursor deltas and warp the cursor back to the center (on
+  // Wayland, Qt warps through the pointer-warp protocol where the compositor offers it).
+  const auto raw = pref(Preferences::PlayModeRawInput);
+  const auto backend = m_rawMouse->start(*this, raw);
+  m_warpCursor = true;
+  m_grabbedMouse = !m_rawMouse->confinesPointer();
+  if (m_grabbedMouse)
+  {
+    grabMouse();
+  }
+
+  const auto motion = std::string{raw ? "raw" : "accelerated"};
+  const auto confined = m_rawMouse->confinesPointer() ? "" : ", not confined";
+  switch (backend)
+  {
+  case PlayModeRawMouse::Backend::Wayland:
+    m_playMode->setInputDescription(motion + ", Wayland locked pointer");
+    break;
+  case PlayModeRawMouse::Backend::XInput2:
+    m_playMode->setInputDescription(motion + ", XInput2" + confined);
+    break;
+  case PlayModeRawMouse::Backend::None:
+    m_playMode->setInputDescription("cursor warping (accelerated)");
+    break;
+  }
+
+  m_wheelAccumulator = 0;
+  m_lastPlayMousePos = QCursor::pos() - mapToGlobal(QPoint{0, 0});
+  m_awaitingCursorWarp = false;
+  recenterPlayCursor();
+  update();
+}
+
+void MapView3D::recenterPlayCursor()
+{
+  if (m_warpCursor)
+  {
+    QCursor::setPos(mapToGlobal(rect().center()));
+    m_lastPlayMousePos = QPointF{rect().center()};
+    m_awaitingCursorWarp = true;
+  }
+}
+
+void MapView3D::stopPlayMode()
+{
+  if (!m_playMode->active())
+  {
+    return;
+  }
+
+  m_playMode->stop();
+  m_rawMouse->stop();
+  if (m_grabbedMouse)
+  {
+    releaseMouse();
+    m_grabbedMouse = false;
+  }
+  unsetCursor();
+  setMouseTracking(m_mouseTrackingBeforePlay);
+  update();
 }
 
 void MapView3D::initializeCamera()
@@ -194,8 +308,36 @@ void MapView3D::preferenceDidChange(const std::filesystem::path& path)
   }
 }
 
+bool MapView3D::event(QEvent* event)
+{
+  if (m_playMode->active() && event->type() == QEvent::ShortcutOverride)
+  {
+    // While playing, every key belongs to the game: accepting the override delivers it
+    // as a key press instead of triggering editor shortcuts (E, R, Space, ...).
+    event->accept();
+    return true;
+  }
+
+  return MapViewBase::event(event);
+}
+
 void MapView3D::keyPressEvent(QKeyEvent* event)
 {
+  if (m_playMode->active())
+  {
+    if (
+      !event->isAutoRepeat()
+      && (event->key() == Qt::Key_Escape || event->key() == Qt::Key_F7))
+    {
+      stopPlayMode();
+    }
+    else
+    {
+      m_playMode->keyDown(*event);
+    }
+    return;
+  }
+
   m_flyModeHelper->keyDown(event);
 
   MapViewBase::keyPressEvent(event);
@@ -203,9 +345,104 @@ void MapView3D::keyPressEvent(QKeyEvent* event)
 
 void MapView3D::keyReleaseEvent(QKeyEvent* event)
 {
+  if (m_playMode->active())
+  {
+    m_playMode->keyUp(*event);
+    return;
+  }
+
   m_flyModeHelper->keyUp(event);
 
   MapViewBase::keyReleaseEvent(event);
+}
+
+void MapView3D::mouseMoveEvent(QMouseEvent* event)
+{
+  if (!m_playMode->active())
+  {
+    MapViewBase::mouseMoveEvent(event);
+    return;
+  }
+
+  const auto position = event->position();
+  const auto center = QPointF{rect().center()};
+  const auto recenterDistance = 0.25 * static_cast<double>(std::min(width(), height()));
+  const auto distanceToCenter = [&]() {
+    const auto d = position - center;
+    return std::sqrt(d.x() * d.x() + d.y() * d.y());
+  };
+
+  if (m_awaitingCursorWarp)
+  {
+    // Motion events queued before the cursor was warped are relative to the old cursor
+    // position; using them would count that movement twice.
+    if (distanceToCenter() > 0.5 * recenterDistance)
+    {
+      return;
+    }
+    m_awaitingCursorWarp = false;
+  }
+
+  const auto delta = position - m_lastPlayMousePos;
+  m_lastPlayMousePos = position;
+  if (!delta.isNull() && m_rawMouse->backend() == PlayModeRawMouse::Backend::None)
+  {
+    // Mouse counts correspond to device pixels.
+    const auto scale = devicePixelRatioF();
+    m_playMode->look(
+      *event, static_cast<float>(delta.x() * scale), static_cast<float>(delta.y() * scale));
+  }
+
+  // Warp rarely: only when the cursor gets close to the edge of the view.
+  if (distanceToCenter() > recenterDistance)
+  {
+    recenterPlayCursor();
+  }
+}
+
+void MapView3D::mousePressEvent(QMouseEvent* event)
+{
+  if (!m_playMode->active())
+  {
+    MapViewBase::mousePressEvent(event);
+  }
+}
+
+void MapView3D::mouseReleaseEvent(QMouseEvent* event)
+{
+  if (!m_playMode->active())
+  {
+    MapViewBase::mouseReleaseEvent(event);
+  }
+}
+
+void MapView3D::mouseDoubleClickEvent(QMouseEvent* event)
+{
+  if (!m_playMode->active())
+  {
+    MapViewBase::mouseDoubleClickEvent(event);
+  }
+}
+
+void MapView3D::wheelEvent(QWheelEvent* event)
+{
+  if (!m_playMode->active())
+  {
+    MapViewBase::wheelEvent(event);
+    return;
+  }
+
+  // Every wheel notch (120 units) is one +action/-action pair, like a wheel bind in the
+  // game. High resolution wheels report fractions of a notch, which are accumulated.
+  constexpr auto Notch = 120;
+  m_wheelAccumulator += event->angleDelta().y();
+  while (std::abs(m_wheelAccumulator) >= Notch)
+  {
+    const auto up = m_wheelAccumulator > 0;
+    m_playMode->wheel(*event, up);
+    m_wheelAccumulator -= up ? Notch : -Notch;
+  }
+  event->accept();
 }
 
 void MapView3D::focusInEvent(QFocusEvent* event)
@@ -218,6 +455,7 @@ void MapView3D::focusInEvent(QFocusEvent* event)
 void MapView3D::focusOutEvent(QFocusEvent* event)
 {
   m_flyModeHelper->resetKeys();
+  stopPlayMode();
 
   MapViewBase::focusOutEvent(event);
 }
@@ -236,7 +474,7 @@ void MapView3D::bindEvents()
 
 void MapView3D::updateFlyMode()
 {
-  if (m_flyModeHelper->anyKeyDown())
+  if (m_flyModeHelper->anyKeyDown() || m_playMode->active())
   {
     update();
   }
@@ -582,7 +820,15 @@ ActionContext::Type MapView3D::viewActionContext() const
 void MapView3D::preRender()
 {
   const auto ignoreCameraUpdates = kdl::set_temp{m_ignoreCameraChangeEvents};
-  m_flyModeHelper->pollAndUpdate();
+  if (m_playMode->active())
+  {
+    m_rawMouse->poll();
+    m_playMode->update();
+  }
+  else
+  {
+    m_flyModeHelper->pollAndUpdate();
+  }
 }
 
 render::RenderMode MapView3D::renderMode()
@@ -616,6 +862,12 @@ void MapView3D::renderTools(
   render::RenderContext& renderContext,
   render::RenderBatch& renderBatch)
 {
+  if (m_playMode->active())
+  {
+    m_playMode->render(renderContext, renderBatch);
+    return;
+  }
+
   ToolBoxConnector::renderTools(renderContext, renderBatch);
 }
 

@@ -80,6 +80,7 @@ enum class InfoPanelPage;
 class Inspector;
 enum class InspectorPage;
 class MapDocument;
+class MapView3D;
 class MapViewBase;
 class MapView3D;
 enum class MapViewLayout;
@@ -443,6 +444,7 @@ public:
   void runPythonScript();
 
   QWidget* addPluginPanel(const QString& title, const QString& content = QString());
+  void startPlayMode(bool fromCamera);
 
   bool canRevealMaterial() const;
   void revealMaterial();
@@ -465,6 +467,8 @@ public:
   MapViewBase* currentMapViewBase();
 
 private:
+  MapView3D* playModeView();
+
   const mdl::CompilationProfile* lastCompilationProfile() const;
   void setLastCompilationProfileName(std::string name);
   void loadLastCompilationProfileName();
