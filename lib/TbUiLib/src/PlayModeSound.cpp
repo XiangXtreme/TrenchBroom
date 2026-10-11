@@ -29,7 +29,9 @@
 #include "kd/result.h"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
+#include <string_view>
 
 #ifndef TB_PLAY_MODE_SOUND
 // Without Qt Multimedia there is nothing to play with.
@@ -44,6 +46,26 @@ namespace
 {
 
 [[maybe_unused]] constexpr auto ChanAuto = 0;
+constexpr auto ChanBody = 4;
+
+// These are the samples emitted by the GoldSrc movement code. They all use CHAN_BODY,
+// so preloading them here lets the first landing reuse the same QSoundEffect objects.
+constexpr std::array<std::string_view, 41> MovementSamples{
+  "player/pl_step1.wav",   "player/pl_step2.wav",   "player/pl_step3.wav",
+  "player/pl_step4.wav",   "player/pl_metal1.wav",  "player/pl_metal2.wav",
+  "player/pl_metal3.wav",  "player/pl_metal4.wav",  "player/pl_dirt1.wav",
+  "player/pl_dirt2.wav",   "player/pl_dirt3.wav",   "player/pl_dirt4.wav",
+  "player/pl_duct1.wav",   "player/pl_duct2.wav",   "player/pl_duct3.wav",
+  "player/pl_duct4.wav",   "player/pl_grate1.wav",  "player/pl_grate2.wav",
+  "player/pl_grate3.wav",  "player/pl_grate4.wav",  "player/pl_tile1.wav",
+  "player/pl_tile2.wav",   "player/pl_tile3.wav",   "player/pl_tile4.wav",
+  "player/pl_tile5.wav",   "player/pl_slosh1.wav",  "player/pl_slosh2.wav",
+  "player/pl_slosh3.wav",  "player/pl_slosh4.wav",  "player/pl_wade1.wav",
+  "player/pl_wade2.wav",   "player/pl_wade3.wav",   "player/pl_wade4.wav",
+  "player/pl_ladder1.wav", "player/pl_ladder2.wav", "player/pl_ladder3.wav",
+  "player/pl_ladder4.wav", "player/pl_snow1.wav",   "player/pl_snow2.wav",
+  "player/pl_snow3.wav",   "player/pl_snow4.wav",
+};
 
 } // namespace
 
@@ -95,6 +117,25 @@ void PlayModeSound::play(const int channel, const std::string& sample, const flo
   (void)channel;
   (void)sample;
   (void)volume;
+#endif
+}
+
+void PlayModeSound::preload()
+{
+#ifdef TB_PLAY_MODE_SOUND
+  for (const auto sample : MovementSamples)
+  {
+    const auto sampleName = std::string{sample};
+    if (const auto url = resolve(sampleName))
+    {
+      auto& effect = m_effects[{ChanBody, sampleName}];
+      if (!effect)
+      {
+        effect = std::make_unique<QSoundEffect>();
+        effect->setSource(QUrl{QString::fromStdString(*url)});
+      }
+    }
+  }
 #endif
 }
 

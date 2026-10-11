@@ -65,6 +65,9 @@ public:
   /** pmove->PM_PlaySound: `sample` relative to sound/, `volume` in [0, 1]. */
   void play(int channel, const std::string& sample, float volume);
 
+  /** Starts loading the movement sounds before the first physics tick can play them. */
+  void preload();
+
   void stopAll();
 
 private:

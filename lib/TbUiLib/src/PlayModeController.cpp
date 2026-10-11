@@ -282,6 +282,7 @@ void PlayModeController::start(const bool fromCamera)
   m_context.reset();
   m_sound = std::make_unique<PlayModeSound>(m_document.map().gameFileSystem());
   m_sound->setVolume(pref(Preferences::PlayModeSoundVolume));
+  m_sound->preload();
   config.sound_user = m_sound.get();
   config.sound_fn = [](
                       void* user,
