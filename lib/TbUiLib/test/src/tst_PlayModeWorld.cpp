@@ -177,6 +177,28 @@ TEST_CASE("buildPlayModeWorld")
     CHECK(world.clipType == SCS_CLIPTYPE_SIMPLE);
   }
 
+  SECTION("large hull is omitted by default and can be enabled explicitly")
+  {
+    auto* wall = createCuboid(map, vm::bbox3d{{100, -64, 0}, {116, 64, 128}}, "wall");
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {wall}}});
+
+    const auto defaultWorld = buildPlayModeWorld(map);
+    REQUIRE(defaultWorld.world);
+    auto defaultContext = createContext(defaultWorld);
+    auto trace = scs_trace{};
+    const float start[3] = {0, 0, 0};
+    const float end[3] = {300, 0, 0};
+    scs_trace_hull(defaultContext.get(), start, end, SCS_HULL_LARGE, &trace);
+    CHECK(trace.fraction == 1.0f);
+
+    const auto allHullsWorld = buildPlayModeWorld(map, {.hullMask = 0b1111u});
+    REQUIRE(allHullsWorld.world);
+    auto allHullsContext = createContext(allHullsWorld);
+    trace = scs_trace{};
+    scs_trace_hull(allHullsContext.get(), start, end, SCS_HULL_LARGE, &trace);
+    CHECK(trace.fraction < 1.0f);
+  }
+
   SECTION("liquid materials become water contents")
   {
     mdl::addNodes(

@@ -308,12 +308,24 @@ vm::vec3f spawnAngles(const mdl::Entity& entity)
 class BrushCollector
 {
 private:
+  uint32_t m_hullMask;
   std::vector<std::vector<scs_plane>> m_planes;
   std::vector<scs_brush> m_brushes;
 
 public:
+  explicit BrushCollector(const uint32_t hullMask)
+    : m_hullMask{hullMask}
+  {
+  }
+
   void add(const mdl::Brush& brush, const BrushInfo& info, const int32_t contents)
   {
+    const auto hullMask = (info.hullMask != 0 ? info.hullMask : m_hullMask) & m_hullMask;
+    if (hullMask == 0)
+    {
+      return;
+    }
+
     auto& planes = m_planes.emplace_back();
     planes.reserve(brush.faceCount());
     for (size_t i = 0; i < brush.faceCount(); ++i)
@@ -326,7 +338,7 @@ public:
          info.bevelFaces[i] ? SCS_PLANE_BEVEL : 0u});
     }
     m_brushes.push_back(
-      {nullptr, static_cast<uint32_t>(planes.size()), contents, info.hullMask});
+      {nullptr, static_cast<uint32_t>(planes.size()), contents, hullMask});
   }
 
   bool empty() const { return m_brushes.empty(); }
@@ -345,6 +357,11 @@ public:
 
 struct CollectedEntity
 {
+  explicit CollectedEntity(const uint32_t hullMask)
+    : brushes{hullMask}
+  {
+  }
+
   BrushCollector brushes;
   int32_t entityContents = 0;
 };
@@ -361,7 +378,7 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   auto result = PlayModeWorld{};
   result.clipType = options.clipType;
   const auto zhlt = options.compiler == SCS_COMPILER_ZHLT;
-  auto worldBrushes = BrushCollector{};
+  auto worldBrushes = BrushCollector{options.hullMask};
   auto entities = std::vector<CollectedEntity>{};
 
   const auto addWorldBrush = [&](const mdl::BrushNode& brushNode, const bool noclip) {
@@ -413,7 +430,8 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
         // Brush entities are collected in the order NodeWriter writes them to the .map
         // file, so their indices match the compiled map's models and physents. The
         // order matters: traces keep the first model's plane on ties (pixelwalk).
-        auto* collected = role == EntityRole::World ? nullptr : &entities.emplace_back();
+        auto* collected =
+          role == EntityRole::World ? nullptr : &entities.emplace_back(options.hullMask);
         if (collected)
         {
           collected->entityContents = role == EntityRole::Ladder ? SCS_CONTENTS_LADDER

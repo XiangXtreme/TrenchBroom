@@ -21,6 +21,7 @@
 
 #include "vm/vec.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -67,6 +68,10 @@ struct PlayModeWorldOptions
 {
   int compiler = 0; // SCS_COMPILER_VHLT; also decides which tool textures exist
   int clipType = 4; // SCS_CLIPTYPE_LEGACY, what most CS 1.6 maps were compiled with
+  // Play Mode only needs the point, standing, and ducked player hulls by default.
+  // The large hull remains available to the generic SCS API, but is omitted from
+  // this editor-only collision world unless explicitly requested.
+  uint32_t hullMask = 0b1011u;
 };
 
 /**

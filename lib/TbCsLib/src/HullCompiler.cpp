@@ -921,6 +921,35 @@ std::unique_ptr<BrushModel> compileBrushModel(
 
   for (int hull = 0; hull < kNumHulls; ++hull)
   {
+    const auto hullBit = 1u << hull;
+    if (std::none_of(prepared.begin(), prepared.end(), [hullBit](const PreparedBrush& brush) {
+          return (brush.hulls & hullBit) != 0;
+        }))
+    {
+      // Keep the runtime representation valid while avoiding all geometry work for
+      // hulls that the caller deliberately omitted (for example Play Mode's large hull).
+      PlaneTable planeTable;
+      const int plane = planeTable.findOrAdd({{0, 0, 1}, 0.0}) & ~1;
+      auto nodes = std::vector<ClipNode>{{plane, {kContentsEmpty, kContentsEmpty}}};
+      nodes.push_back(nodes.front());
+
+      stats.clipnodes[static_cast<std::size_t>(hull)] = nodes.size();
+      model->clipnodes[static_cast<std::size_t>(hull)] = std::move(nodes);
+      model->planes[static_cast<std::size_t>(hull)] = planeTable.toClipPlanes();
+
+      Hull& h = model->hulls[static_cast<std::size_t>(hull)];
+      h.clipnodes = model->clipnodes[static_cast<std::size_t>(hull)].data();
+      h.planes = model->planes[static_cast<std::size_t>(hull)].data();
+      h.firstclipnode = 0;
+      h.lastclipnode = static_cast<int>(model->clipnodes[static_cast<std::size_t>(hull)].size()) - 1;
+      for (int a = 0; a < 3; ++a)
+      {
+        h.clip_mins[a] = static_cast<float>(options.hullMins[static_cast<std::size_t>(hull)][a]);
+        h.clip_maxs[a] = static_cast<float>(options.hullMaxs[static_cast<std::size_t>(hull)][a]);
+      }
+      continue;
+    }
+
     PlaneTable planeTable;
     std::vector<Volume> volumes;
     volumes.reserve(prepared.size());
