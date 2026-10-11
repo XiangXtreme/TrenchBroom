@@ -174,6 +174,16 @@ vm::vec3f PlayModeTimeline::latestViewAngles() const
   return angles;
 }
 
+void PlayModeTimeline::setViewAngles(const vm::vec3f& viewAngles)
+{
+  m_viewAngles = viewAngles;
+  m_events.erase(
+    std::remove_if(
+      m_events.begin(), m_events.end(),
+      [](const auto& event) { return event.type == Event::Type::Look; }),
+    m_events.end());
+}
+
 const scs_usercmd& PlayModeTimeline::lastCommand() const
 {
   return m_lastCommand;

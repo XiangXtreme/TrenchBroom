@@ -394,6 +394,8 @@ inline auto PlayModeWeaponSpeed =
 inline auto PlayModeFrameRate = Preference<int>{"Controls/Play mode/fps_max", 100};
 
 inline auto PlayModeFov = Preference<float>{"Controls/Play mode/Field of view", 90.0f};
+inline auto PlayModeRestoreCheckpointView =
+  Preference<bool>{"Controls/Play mode/Restore checkpoint view", true};
 inline auto PlayModeShowHud = Preference<bool>{"Controls/Play mode/Show HUD", true};
 inline auto PlayModeShowFallDamage =
   Preference<bool>{"Controls/Play mode/Show fall damage", true};

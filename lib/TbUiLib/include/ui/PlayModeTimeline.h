@@ -115,6 +115,9 @@ public:
   /** The view angles including input that has not been simulated yet. */
   vm::vec3f latestViewAngles() const;
 
+  /** Sets the current view and discards queued mouse movement from the old view. */
+  void setViewAngles(const vm::vec3f& viewAngles);
+
   /** The usercmd of the most recent tick. */
   const scs_usercmd& lastCommand() const;
 

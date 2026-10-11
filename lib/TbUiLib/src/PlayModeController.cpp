@@ -436,13 +436,15 @@ void PlayModeController::saveCheckpoint()
     return;
   }
 
-  m_checkpointOrigin = vm::vec3f{state.origin[0], state.origin[1], state.origin[2]};
+  m_checkpoint = Checkpoint{
+    vm::vec3f{state.origin[0], state.origin[1], state.origin[2]},
+    m_timeline.latestViewAngles()};
   m_document.logger().info() << "Play mode: checkpoint saved";
 }
 
 void PlayModeController::loadCheckpoint()
 {
-  if (!m_checkpointOrigin)
+  if (!m_checkpoint)
   {
     m_document.logger().info() << "Play mode: no checkpoint saved";
     return;
@@ -453,7 +455,7 @@ void PlayModeController::loadCheckpoint()
   auto state = current;
   for (int i = 0; i < 3; ++i)
   {
-    state.origin[i] = (*m_checkpointOrigin)[i];
+    state.origin[i] = m_checkpoint->origin[i];
     state.velocity[i] = 0.0f;
     state.basevelocity[i] = 0.0f;
   }
@@ -472,9 +474,22 @@ void PlayModeController::loadCheckpoint()
     return;
   }
 
+  if (pref(Preferences::PlayModeRestoreCheckpointView))
+  {
+    for (int i = 0; i < 3; ++i)
+    {
+      state.v_angle[i] = m_checkpoint->viewAngles[i];
+    }
+  }
   scs_set_state(m_context.get(), &state);
+  if (pref(Preferences::PlayModeRestoreCheckpointView))
+  {
+    m_viewAngles = m_checkpoint->viewAngles;
+    m_timeline.setViewAngles(m_checkpoint->viewAngles);
+  }
   m_previousEye = m_currentEye = eyePosition();
   m_fallShownMs = -1.0e9;
+  syncCamera(1.0f);
   m_document.logger().info() << "Play mode: checkpoint loaded";
 }
 

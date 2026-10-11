@@ -113,7 +113,12 @@ private:
   vm::vec3f m_currentEye{};
 
   std::optional<scs_player_state> m_savedState;
-  std::optional<vm::vec3f> m_checkpointOrigin;
+  struct Checkpoint
+  {
+    vm::vec3f origin;
+    vm::vec3f viewAngles;
+  };
+  std::optional<Checkpoint> m_checkpoint;
   std::string m_statusMessage;
 
 public:

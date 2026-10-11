@@ -203,6 +203,9 @@ void KreedzBroomPreferencePane::createGui()
   left->addSection("View");
   left->addRow(
     "Field of view", floatField(Preferences::PlayModeFov, 10.0, 170.0, 0, 5.0, "°"));
+  left->addRow(
+    "",
+    boolField("Restore checkpoint view", Preferences::PlayModeRestoreCheckpointView));
   left->addRow("", boolField("Show HUD", Preferences::PlayModeShowHud));
   left->addRow("", boolField("Show crosshair", Preferences::PlayModeShowCrosshair));
   left->addRow("", boolField("Show fall damage", Preferences::PlayModeShowFallDamage));

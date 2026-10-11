@@ -300,6 +300,19 @@ TEST_CASE("PlayModeTimeline")
     timeline.look(5.0, 100.0f, 10.0f);
     CHECK(timeline.latestViewAngles() == vm::vec3f{89, 100, 0}); // pitch is clamped
   }
+
+  SECTION("setViewAngles discards queued mouse movement")
+  {
+    auto timeline = PlayModeTimeline{};
+    timeline.reset(0.0, vm::vec3f{0, 90, 0});
+    timeline.look(5.0, 10.0f, 20.0f);
+    timeline.setViewAngles(vm::vec3f{10, 180, 0});
+
+    CHECK(timeline.latestViewAngles() == vm::vec3f{10, 180, 0});
+
+    timeline.look(15.0, -5.0f, 7.0f);
+    CHECK(timeline.latestViewAngles() == vm::vec3f{5, 187, 0});
+  }
 }
 
 } // namespace tb::ui
