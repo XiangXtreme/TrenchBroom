@@ -175,7 +175,6 @@ void KreedzBroomPreferencePane::createGui()
     withToolTip(
       floatField(Preferences::PlayModeMouseSensitivity, 0.01, 50.0, 2, 0.1),
       "Same scale as the game's sensitivity."));
-  left->addRow("", boolField("Invert mouse", Preferences::PlayModeInvertMouse));
   left->addRow(
     "",
     withToolTip(

@@ -429,10 +429,8 @@ void PlayModeController::turn(const double timeMs, const double dx, const double
   // IN_MouseMove: viewangles[YAW] -= m_yaw * sensitivity * mx, pitch += m_pitch * my
   const auto scale =
     static_cast<double>(pref(Preferences::PlayModeMouseSensitivity) * MouseYawDegrees);
-  // m_pitch is negative when the mouse is inverted
-  const auto pitchScale = pref(Preferences::PlayModeInvertMouse) ? -scale : scale;
   m_timeline.look(
-    timeMs, static_cast<float>(dy * pitchScale), static_cast<float>(-dx * scale));
+    timeMs, static_cast<float>(dy * scale), static_cast<float>(-dx * scale));
 }
 
 void PlayModeController::wheel(const QInputEvent& event, const bool up)

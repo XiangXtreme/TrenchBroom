@@ -308,8 +308,6 @@ inline auto CameraFlyDown = Preference<std::vector<KeySequence>>{
 // CS 1.6 client and server defaults.
 inline auto PlayModeMouseSensitivity =
   Preference<float>{"Controls/Play mode/Mouse sensitivity", 2.5f};
-inline auto PlayModeInvertMouse =
-  Preference<bool>{"Controls/Play mode/Invert mouse", false};
 inline auto PlayModeRawInput =
   Preference<bool>{"Controls/Play mode/Raw mouse input", true};
 
