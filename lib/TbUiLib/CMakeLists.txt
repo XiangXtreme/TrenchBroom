@@ -597,8 +597,6 @@ if(UNIX AND NOT APPLE)
   endif()
 endif()
 
-set_target_properties(TbUiLib PROPERTIES AUTOMOC TRUE)
-
 target_compile_definitions(TbUiLib
   PRIVATE
     TB_PYTHON3_EXECUTABLE="${Python3_EXECUTABLE}"

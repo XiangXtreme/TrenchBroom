@@ -117,7 +117,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("preferences-colors"),
     QStringLiteral("preferences-mouse"),
     QStringLiteral("preferences-keyboard"),
-    QStringLiteral("preferences-misc")};
+    QStringLiteral("preferences-misc"),
+    QStringLiteral("preferences-kreedzbroom")};
   return pages.contains(page);
 }
 
@@ -833,11 +834,12 @@ void configurePreferencesSnapshot(
     auto* navigation = targetWidget.findChild<QListWidget*>(
       QStringLiteral("PreferenceDialog_NavigationList")))
   {
-    const auto row = targetName == QStringLiteral("preferences-colors")     ? 2
-                     : targetName == QStringLiteral("preferences-mouse")    ? 3
-                     : targetName == QStringLiteral("preferences-keyboard") ? 4
-                     : targetName == QStringLiteral("preferences-misc")     ? 5
-                                                                            : 1;
+    const auto row = targetName == QStringLiteral("preferences-colors")        ? 2
+                     : targetName == QStringLiteral("preferences-mouse")       ? 3
+                     : targetName == QStringLiteral("preferences-keyboard")    ? 4
+                     : targetName == QStringLiteral("preferences-misc")        ? 5
+                     : targetName == QStringLiteral("preferences-kreedzbroom") ? 6
+                                                                               : 1;
     navigation->setCurrentRow(row);
     navigation->setFocus(Qt::OtherFocusReason);
   }

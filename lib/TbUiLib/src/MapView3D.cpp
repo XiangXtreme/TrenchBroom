@@ -26,7 +26,6 @@
 #include <QWheelEvent>
 
 #include "base/PreferenceManager.h"
-#include "prefs/Preferences.h"
 #include "gl/PerspectiveCamera.h"
 #include "mdl/BezierPatch.h"
 #include "mdl/BrushFace.h"
@@ -70,9 +69,9 @@
 #include "ui/MapViewToolBox.h"
 #include "ui/MoveObjectsToolController.h"
 #include "ui/PathToolController.h"
-#include "ui/PrefabToolController.h"
 #include "ui/PlayModeController.h"
 #include "ui/PlayModeRawMouse.h"
+#include "ui/PrefabToolController.h"
 #include "ui/RotateToolController.h"
 #include "ui/ScaleToolController.h"
 #include "ui/SelectionTool.h"
@@ -395,7 +394,9 @@ void MapView3D::mouseMoveEvent(QMouseEvent* event)
     // Mouse counts correspond to device pixels.
     const auto scale = devicePixelRatioF();
     m_playMode->look(
-      *event, static_cast<float>(delta.x() * scale), static_cast<float>(delta.y() * scale));
+      *event,
+      static_cast<float>(delta.x() * scale),
+      static_cast<float>(delta.y() * scale));
   }
 
   // Warp rarely: only when the cursor gets close to the edge of the view.

@@ -18,7 +18,8 @@ param(
     "preferences-colors",
     "preferences-mouse",
     "preferences-keyboard",
-    "preferences-misc"
+    "preferences-misc",
+    "preferences-kreedzbroom"
   ),
   [string[]] $Themes = @("light", "dark", "blender"),
   [string[]] $ScaleFactors = @("1", "1.5", "2"),
@@ -253,9 +254,10 @@ foreach ($target in $normalizedTargets) {
       "preferences-colors",
       "preferences-mouse",
       "preferences-keyboard",
-      "preferences-misc"
+      "preferences-misc",
+      "preferences-kreedzbroom"
     )) {
-    throw "Unsupported target '$target'. Expected welcome, workbench, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, face-inspector, material-browser-empty, plugin-inspector, supporting, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, or preferences-misc."
+    throw "Unsupported target '$target'. Expected welcome, workbench, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, face-inspector, material-browser-empty, plugin-inspector, supporting, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
   }
 }
 foreach ($theme in $Themes) {
