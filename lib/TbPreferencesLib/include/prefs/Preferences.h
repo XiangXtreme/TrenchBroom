@@ -355,7 +355,7 @@ inline constexpr auto PlayModeWheelDuck = 2;
 inline auto PlayModeWheelUp =
   Preference<int>{"Controls/Play mode/Mouse wheel up", PlayModeWheelJump};
 inline auto PlayModeWheelDown =
-  Preference<int>{"Controls/Play mode/Mouse wheel down", PlayModeWheelJump};
+  Preference<int>{"Controls/Play mode/Mouse wheel down", PlayModeWheelDuck};
 
 inline auto PlayModeAirAccelerate =
   Preference<float>{"Controls/Play mode/sv_airaccelerate", 10.0f};
