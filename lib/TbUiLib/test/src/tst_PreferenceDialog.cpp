@@ -94,7 +94,8 @@ TEST_CASE("PreferenceDialog")
 
     CHECK(
       paneNames
-      == QStringList{"Games", "View", "Colors", "Mouse", "Keyboard", "Misc", "Update"});
+      == QStringList{
+        "Games", "View", "Colors", "Mouse", "Keyboard", "Misc", "KreedzBroom", "Update"});
 
     navigation->setCurrentRow(0);
     QTest::keyClick(navigation, Qt::Key_Down);
