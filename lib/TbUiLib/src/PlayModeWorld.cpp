@@ -19,6 +19,7 @@
 
 #include "ui/PlayModeWorld.h"
 
+#include "cs/scs.h"
 #include "mdl/Brush.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
@@ -30,7 +31,6 @@
 #include "mdl/Map.h"
 #include "mdl/PatchNode.h"
 #include "mdl/WorldNode.h"
-#include "cs/scs.h"
 
 #include "kd/overload.h"
 
@@ -259,15 +259,6 @@ int intForKey(const mdl::Entity& entity, const std::string& key)
   return 0;
 }
 
-// hlcsg's info_compile_parameters "cliptype": 0-3 as named, anything else legacy.
-int32_t compileParametersClipType(const mdl::Entity& entity)
-{
-  const auto value = intForKey(entity, "cliptype");
-  return value >= SCS_CLIPTYPE_SMALLEST && value <= SCS_CLIPTYPE_PRECISE
-           ? value
-           : SCS_CLIPTYPE_LEGACY;
-}
-
 int32_t liquidContents(const mdl::Entity& entity)
 {
   // func_water stores its contents in "skin" (-3 water, -4 slime, -5 lava)
@@ -408,11 +399,6 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
           {
             result.spawnPoints.push_back(
               {classname, vm::vec3f{entity.origin()}, spawnAngles(entity)});
-          }
-          else if (classname == "info_compile_parameters" && options.useMapClipType)
-          {
-            result.clipType = compileParametersClipType(entity);
-            result.clipTypeFromMap = true;
           }
           return;
         }

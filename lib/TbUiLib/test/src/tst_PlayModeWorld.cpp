@@ -171,24 +171,9 @@ TEST_CASE("buildPlayModeWorld")
       == vm::approx{100.0f - 16.0f - 0.03125f, 0.01f});
   }
 
-  SECTION("cliptype comes from the options or info_compile_parameters")
+  SECTION("cliptype comes from the options")
   {
-    auto world = buildPlayModeWorld(map, {.clipType = SCS_CLIPTYPE_SIMPLE});
-    CHECK(world.clipType == SCS_CLIPTYPE_SIMPLE);
-    CHECK_FALSE(world.clipTypeFromMap);
-
-    auto* parameters = new mdl::EntityNode{mdl::Entity{{
-      {mdl::EntityPropertyKeys::Classname, "info_compile_parameters"},
-      {"cliptype", "3"},
-    }}};
-    mdl::addNodes(map, {{&mdl::parentForNodes(map), {parameters}}});
-
-    world = buildPlayModeWorld(map, {.clipType = SCS_CLIPTYPE_SIMPLE});
-    CHECK(world.clipType == SCS_CLIPTYPE_PRECISE);
-    CHECK(world.clipTypeFromMap);
-
-    world =
-      buildPlayModeWorld(map, {.clipType = SCS_CLIPTYPE_SIMPLE, .useMapClipType = false});
+    const auto world = buildPlayModeWorld(map, {.clipType = SCS_CLIPTYPE_SIMPLE});
     CHECK(world.clipType == SCS_CLIPTYPE_SIMPLE);
   }
 

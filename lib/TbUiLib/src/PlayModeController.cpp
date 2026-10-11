@@ -663,7 +663,6 @@ bool PlayModeController::rebuildWorld()
         pref(Preferences::PlayModeClipType),
         Preferences::PlayModeClipTypeSmallest,
         Preferences::PlayModeClipTypeLegacy),
-      .useMapClipType = pref(Preferences::PlayModeUseMapClipType),
     });
   if (!m_world.world)
   {
@@ -679,8 +678,7 @@ bool PlayModeController::rebuildWorld()
     << m_world.skippedBrushCount << " skipped), "
     << (pref(Preferences::PlayModeCompiler) == Preferences::PlayModeCompilerZhlt ? "ZHLT"
                                                                                  : "VHLT")
-    << " cliptype " << clipTypeName(m_world.clipType)
-    << (m_world.clipTypeFromMap ? " (info_compile_parameters)" : "");
+    << " cliptype " << clipTypeName(m_world.clipType);
   return true;
 }
 

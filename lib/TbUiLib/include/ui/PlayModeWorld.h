@@ -60,7 +60,6 @@ struct PlayModeWorld
   size_t skippedBrushCount = 0;
   double buildMilliseconds = 0.0;
   int clipType = 0;             // SCS_CLIPTYPE_* the hulls were built with
-  bool clipTypeFromMap = false; // set by an info_compile_parameters entity
   std::string error;            // non-empty if the world could not be built
 };
 
@@ -68,8 +67,6 @@ struct PlayModeWorldOptions
 {
   int compiler = 0; // SCS_COMPILER_VHLT; also decides which tool textures exist
   int clipType = 4; // SCS_CLIPTYPE_LEGACY, what most CS 1.6 maps were compiled with
-  // Like hlcsg, let an info_compile_parameters entity's "cliptype" key win.
-  bool useMapClipType = true;
 };
 
 /**

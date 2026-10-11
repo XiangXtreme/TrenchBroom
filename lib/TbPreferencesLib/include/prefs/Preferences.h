@@ -382,8 +382,6 @@ inline constexpr auto PlayModeClipTypePrecise = 3;
 inline constexpr auto PlayModeClipTypeLegacy = 4;
 inline auto PlayModeClipType =
   Preference<int>{"Controls/Play mode/Cliptype", PlayModeClipTypeLegacy};
-inline auto PlayModeUseMapClipType =
-  Preference<bool>{"Controls/Play mode/Use map cliptype", true};
 
 inline auto PlayModeWeaponSpeed =
   Preference<float>{"Controls/Play mode/Weapon speed", 250.0f};

@@ -277,11 +277,6 @@ void KreedzBroomPreferencePane::createGui()
           {"Smallest", Preferences::PlayModeClipTypeSmallest},
         }),
       "hlcsg -cliptype. Legacy is what most CS 1.6 maps use."));
-  right->addRow(
-    "",
-    withToolTip(
-      boolField("Use map cliptype", Preferences::PlayModeUseMapClipType),
-      "Use the cliptype of the map's info_compile_parameters entity."));
 
   right->addSection("Sound");
   right->addRow(
