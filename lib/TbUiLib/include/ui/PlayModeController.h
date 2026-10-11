@@ -39,6 +39,11 @@ class QKeyEvent;
 
 namespace tb
 {
+namespace mdl
+{
+class Map;
+}
+
 namespace gl
 {
 class PerspectiveCamera;
@@ -78,6 +83,10 @@ private:
   std::unique_ptr<PlayModeSound> m_sound; // must outlive m_context, which calls it
   std::unique_ptr<scs_context, ContextDeleter> m_context;
   PlayModeWorld m_world;
+  const mdl::Map* m_worldMap = nullptr;
+  std::optional<size_t> m_worldModificationCount;
+  int m_worldCompiler = -1;
+  int m_worldClipType = -1;
   bool m_active = false;
 
   PlayModeTimeline m_timeline;

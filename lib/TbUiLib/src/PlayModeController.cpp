@@ -653,24 +653,37 @@ void PlayModeController::render(
 
 bool PlayModeController::rebuildWorld()
 {
-  m_world = buildPlayModeWorld(
-    m_document.map(),
-    {
-      .compiler = std::clamp(
-        pref(Preferences::PlayModeCompiler),
-        Preferences::PlayModeCompilerVhlt,
-        Preferences::PlayModeCompilerZhlt),
-      .clipType = std::clamp(
-        pref(Preferences::PlayModeClipType),
-        Preferences::PlayModeClipTypeSmallest,
-        Preferences::PlayModeClipTypeLegacy),
-    });
+  auto& map = m_document.map();
+  const auto compiler = std::clamp(
+    pref(Preferences::PlayModeCompiler),
+    Preferences::PlayModeCompilerVhlt,
+    Preferences::PlayModeCompilerZhlt);
+  const auto clipType = std::clamp(
+    pref(Preferences::PlayModeClipType),
+    Preferences::PlayModeClipTypeSmallest,
+    Preferences::PlayModeClipTypeLegacy);
+  const auto modificationCount = map.modificationCount();
+
+  if (
+    m_world.world && m_worldMap == &map && m_worldModificationCount == modificationCount
+    && m_worldCompiler == compiler && m_worldClipType == clipType)
+  {
+    scs_set_world(m_context.get(), m_world.world.get());
+    m_document.logger().info() << "Play mode: reused cached collision world";
+    return true;
+  }
+
+  m_world = buildPlayModeWorld(map, {.compiler = compiler, .clipType = clipType});
   if (!m_world.world)
   {
     m_document.logger().error() << "Play mode: " << m_world.error;
     return false;
   }
 
+  m_worldMap = &map;
+  m_worldModificationCount = modificationCount;
+  m_worldCompiler = compiler;
+  m_worldClipType = clipType;
   scs_set_world(m_context.get(), m_world.world.get());
   m_document.logger().info()
     << "Play mode: compiled " << m_world.worldBrushCount << " world brushes and "
