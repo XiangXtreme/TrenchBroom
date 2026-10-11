@@ -324,6 +324,8 @@ inline constexpr auto PlayModeQtKeyShift = 0x01000020;
 inline constexpr auto PlayModeQtKeyE = 0x45;
 inline constexpr auto PlayModeQtKeyLeft = 0x01000012;
 inline constexpr auto PlayModeQtKeyRight = 0x01000014;
+inline constexpr auto PlayModeQtKeyP = 0x50;
+inline constexpr auto PlayModeQtKeyL = 0x4c;
 inline auto PlayModeKeyForward =
   Preference<int>{"Controls/Play mode/Key forward", PlayModeQtKeyW};
 inline auto PlayModeKeyBack =
@@ -344,6 +346,10 @@ inline auto PlayModeKeyTurnLeft =
   Preference<int>{"Controls/Play mode/Key turn left", PlayModeQtKeyLeft};
 inline auto PlayModeKeyTurnRight =
   Preference<int>{"Controls/Play mode/Key turn right", PlayModeQtKeyRight};
+inline auto PlayModeKeySavePoint =
+  Preference<int>{"Controls/Play mode/Key save point", PlayModeQtKeyP};
+inline auto PlayModeKeyLoadPoint =
+  Preference<int>{"Controls/Play mode/Key load point", PlayModeQtKeyL};
 inline auto PlayModeYawSpeed =
   Preference<float>{"Controls/Play mode/cl_yawspeed", 210.0f};
 // What a mouse wheel notch does: one +action/-action pair, like "bind mwheelup +jump".

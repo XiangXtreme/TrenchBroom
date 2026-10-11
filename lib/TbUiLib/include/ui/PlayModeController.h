@@ -113,6 +113,7 @@ private:
   vm::vec3f m_currentEye{};
 
   std::optional<scs_player_state> m_savedState;
+  std::optional<vm::vec3f> m_checkpointOrigin;
   std::string m_statusMessage;
 
 public:
@@ -166,6 +167,8 @@ private:
   double nowMs() const;
   double eventTime(double timestampMs, EventSource source);
   void turn(double timeMs, double dx, double dy);
+  void saveCheckpoint();
+  void loadCheckpoint();
 };
 
 } // namespace ui

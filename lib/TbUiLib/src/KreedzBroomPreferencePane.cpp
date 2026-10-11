@@ -228,6 +228,11 @@ void KreedzBroomPreferencePane::createGui()
     pair(
       keyField(Preferences::PlayModeKeyTurnLeft),
       keyField(Preferences::PlayModeKeyTurnRight)));
+  right->addRow(
+    "Save / load point",
+    pair(
+      keyField(Preferences::PlayModeKeySavePoint),
+      keyField(Preferences::PlayModeKeyLoadPoint)));
   const auto wheelChoices = std::vector<std::pair<QString, int>>{
     {"Nothing", Preferences::PlayModeWheelNothing},
     {"Jump", Preferences::PlayModeWheelJump},

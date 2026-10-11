@@ -61,6 +61,8 @@ static_assert(Preferences::PlayModeQtKeyShift == Qt::Key_Shift);
 static_assert(Preferences::PlayModeQtKeyE == Qt::Key_E);
 static_assert(Preferences::PlayModeQtKeyLeft == Qt::Key_Left);
 static_assert(Preferences::PlayModeQtKeyRight == Qt::Key_Right);
+static_assert(Preferences::PlayModeQtKeyP == Qt::Key_P);
+static_assert(Preferences::PlayModeQtKeyL == Qt::Key_L);
 
 constexpr auto PlayerViewHeight = 17.0f; // CS VEC_VIEW
 constexpr auto MouseYawDegrees = 0.022f; // m_yaw / m_pitch
@@ -263,6 +265,11 @@ void PlayModeController::start(const bool fromCamera)
     return;
   }
 
+  if (fromCamera)
+  {
+    m_checkpointOrigin.reset();
+  }
+
   // Recreate the context so preference changes (sv_airaccelerate) take effect; the
   // player state survives in m_savedState.
   auto config = scs_config{};
@@ -378,6 +385,23 @@ bool PlayModeController::handleKey(const QKeyEvent& event, const bool down)
   // Keys are matched by key code alone, so a key still works while another modifier is
   // held (e.g. jumping while ducking with Ctrl).
   const auto key = event.key();
+  if (key == pref(Preferences::PlayModeKeySavePoint))
+  {
+    if (down)
+    {
+      saveCheckpoint();
+    }
+    return true;
+  }
+  if (key == pref(Preferences::PlayModeKeyLoadPoint))
+  {
+    if (down)
+    {
+      loadCheckpoint();
+    }
+    return true;
+  }
+
   const auto bindings = {
     std::pair{pref(Preferences::PlayModeKeyForward), PlayModeButton::Forward},
     std::pair{pref(Preferences::PlayModeKeyBack), PlayModeButton::Back},
@@ -404,6 +428,59 @@ bool PlayModeController::handleKey(const QKeyEvent& event, const bool down)
     event.key(),
     down);
   return true;
+}
+
+void PlayModeController::saveCheckpoint()
+{
+  auto state = scs_player_state{};
+  scs_get_state(m_context.get(), &state);
+  if (std::abs(state.velocity[2]) > 0.01f)
+  {
+    m_document.logger().info()
+      << "Play mode: checkpoint requires zero vertical speed";
+    return;
+  }
+
+  m_checkpointOrigin = vm::vec3f{state.origin[0], state.origin[1], state.origin[2]};
+  m_document.logger().info() << "Play mode: checkpoint saved";
+}
+
+void PlayModeController::loadCheckpoint()
+{
+  if (!m_checkpointOrigin)
+  {
+    m_document.logger().info() << "Play mode: no checkpoint saved";
+    return;
+  }
+
+  auto current = scs_player_state{};
+  scs_get_state(m_context.get(), &current);
+  auto state = current;
+  for (int i = 0; i < 3; ++i)
+  {
+    state.origin[i] = (*m_checkpointOrigin)[i];
+    state.velocity[i] = 0.0f;
+    state.basevelocity[i] = 0.0f;
+  }
+  state.flags |= SCS_FL_ONGROUND;
+  state.ground_entity = 0;
+  state.gravity = 1.0f;
+  state.fall_velocity = 0.0f;
+  state.server_fall_velocity = 0.0f;
+  state.last_fall_damage = 0.0f;
+  state.last_fall_speed = 0.0f;
+  state.teleport_time = 0.0f;
+
+  if (!scs_position_is_free(m_context.get(), state.origin, usehullFor(state)))
+  {
+    m_document.logger().info() << "Play mode: checkpoint position is blocked";
+    return;
+  }
+
+  scs_set_state(m_context.get(), &state);
+  m_previousEye = m_currentEye = eyePosition();
+  m_fallShownMs = -1.0e9;
+  m_document.logger().info() << "Play mode: checkpoint loaded";
 }
 
 void PlayModeController::look(const QInputEvent& event, const float dx, const float dy)
@@ -680,6 +757,7 @@ bool PlayModeController::rebuildWorld()
     return false;
   }
 
+  m_checkpointOrigin.reset();
   m_worldMap = &map;
   m_worldModificationCount = modificationCount;
   m_worldCompiler = compiler;
