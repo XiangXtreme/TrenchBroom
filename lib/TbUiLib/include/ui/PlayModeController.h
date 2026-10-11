@@ -30,9 +30,13 @@
 #include "vm/vec.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+
+template <typename T>
+class QFutureWatcher;
 
 class QInputEvent;
 class QKeyEvent;
@@ -120,6 +124,12 @@ private:
   };
   std::optional<Checkpoint> m_checkpoint;
   std::string m_statusMessage;
+  using WorldBuildResult = std::shared_ptr<PlayModeWorld>;
+  std::unique_ptr<QFutureWatcher<WorldBuildResult>> m_worldBuildWatcher;
+  std::function<void(bool)> m_startCompletion;
+  bool m_starting = false;
+  bool m_startUsingCachedWorld = false;
+  bool m_startFromCamera = false;
 
 public:
   PlayModeController(MapDocument& document, gl::PerspectiveCamera& camera);
@@ -128,12 +138,16 @@ public:
   bool active() const;
 
   /**
-   * Compiles the current map and starts simulating. Resumes the last saved player state
-   * unless fromCamera is set or that state is no longer valid, in which case the player
-   * spawns at the camera (or at a spawn point if the camera position is blocked).
+   * Compiles the current map asynchronously and starts simulating when it is ready.
+   * Resumes the last saved player state unless fromCamera is set or that state is no
+   * longer valid, in which case the player spawns at the camera (or at a spawn point if
+   * the camera position is blocked). The completion callback receives whether startup
+   * succeeded and is invoked on the UI thread.
    */
-  void start(bool fromCamera);
+  void start(bool fromCamera, std::function<void(bool)> completion);
   void stop();
+
+  bool starting() const;
 
   void keyDown(const QKeyEvent& event);
   void keyUp(const QKeyEvent& event);
@@ -163,7 +177,6 @@ public:
   void render(render::RenderContext& renderContext, render::RenderBatch& renderBatch);
 
 private:
-  bool rebuildWorld();
   bool placePlayer(bool fromCamera);
   bool tryPlaceAt(const vm::vec3f& origin, const vm::vec3f& angles);
   vm::vec3f eyePosition() const;
@@ -174,6 +187,7 @@ private:
   void turn(double timeMs, double dx, double dy);
   void saveCheckpoint();
   void loadCheckpoint();
+  void finishStarting();
 };
 
 } // namespace ui

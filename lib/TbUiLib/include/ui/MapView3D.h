@@ -29,6 +29,7 @@
 #include <vector>
 
 class QKeyEvent;
+class QProgressDialog;
 
 namespace tb
 {
@@ -56,6 +57,7 @@ private:
   std::unique_ptr<FlyModeHelper> m_flyModeHelper;
   std::unique_ptr<PlayModeController> m_playMode;
   std::unique_ptr<PlayModeRawMouse> m_rawMouse;
+  QProgressDialog* m_playModeBuildProgress = nullptr;
   bool m_ignoreCameraChangeEvents = false;
 
   // Play mode mouse capture

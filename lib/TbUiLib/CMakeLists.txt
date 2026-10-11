@@ -510,6 +510,7 @@ target_link_libraries(TbUiLib
     pybind11::embed
     Python3::Python
     Qt6::Multimedia
+    Qt6::Concurrent
     ctre::ctre
     Qt6::Svg
     TbVersionLib

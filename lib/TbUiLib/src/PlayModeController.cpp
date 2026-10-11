@@ -19,16 +19,18 @@
 
 #include "ui/PlayModeController.h"
 
+#include <QFutureWatcher>
 #include <QKeyEvent>
+#include <QtConcurrent/QtConcurrent>
 
 #include "base/Logger.h"
 #include "base/PreferenceManager.h"
-#include "prefs/Preferences.h"
 #include "gl/AttrString.h"
 #include "gl/FontDescriptor.h"
 #include "gl/PerspectiveCamera.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
+#include "prefs/Preferences.h"
 #include "render/RenderBatch.h"
 #include "render/RenderService.h"
 #include "render/TextAnchor.h"
@@ -247,23 +249,38 @@ PlayModeController::PlayModeController(
   MapDocument& document, gl::PerspectiveCamera& camera)
   : m_document{document}
   , m_camera{camera}
+  , m_worldBuildWatcher{std::make_unique<QFutureWatcher<WorldBuildResult>>()}
 {
   m_clock.start();
+  QObject::connect(
+    m_worldBuildWatcher.get(), &QFutureWatcher<WorldBuildResult>::finished, [this]() {
+      finishStarting();
+    });
 }
 
-PlayModeController::~PlayModeController() = default;
+PlayModeController::~PlayModeController()
+{
+  if (m_worldBuildWatcher->isRunning())
+  {
+    m_worldBuildWatcher->waitForFinished();
+  }
+}
 
 bool PlayModeController::active() const
 {
   return m_active;
 }
 
-void PlayModeController::start(const bool fromCamera)
+void PlayModeController::start(
+  const bool fromCamera, std::function<void(bool)> completion)
 {
-  if (m_active)
+  if (m_active || m_starting)
   {
     return;
   }
+
+  m_startCompletion = std::move(completion);
+  m_startFromCamera = fromCamera;
 
   // Recreate the context so preference changes (sv_airaccelerate) take effect; the
   // player state survives in m_savedState.
@@ -300,20 +317,109 @@ void PlayModeController::start(const bool fromCamera)
   if (!m_context)
   {
     m_document.logger().error() << "Play mode: could not create the physics context";
+    if (m_startCompletion)
+    {
+      m_startCompletion(false);
+    }
     return;
   }
 
-  if (!rebuildWorld())
+  const auto compiler = std::clamp(
+    pref(Preferences::PlayModeCompiler),
+    Preferences::PlayModeCompilerVhlt,
+    Preferences::PlayModeCompilerZhlt);
+  const auto clipType = std::clamp(
+    pref(Preferences::PlayModeClipType),
+    Preferences::PlayModeClipTypeSmallest,
+    Preferences::PlayModeClipTypeLegacy);
+  const auto* map = &m_document.map();
+  const auto cacheValid = m_world.world && m_worldMap == map
+                          && m_worldModificationCount == map->modificationCount()
+                          && m_worldCompiler == compiler && m_worldClipType == clipType;
+  m_starting = true;
+  m_startUsingCachedWorld = cacheValid;
+  if (cacheValid)
+  {
+    finishStarting();
+    return;
+  }
+
+  m_worldCompiler = compiler;
+  m_worldClipType = clipType;
+  m_worldBuildWatcher->setFuture(
+    QtConcurrent::run([map, compiler, clipType]() -> WorldBuildResult {
+      return std::make_shared<PlayModeWorld>(
+        buildPlayModeWorld(*map, {.compiler = compiler, .clipType = clipType}));
+    }));
+}
+
+bool PlayModeController::starting() const
+{
+  return m_starting;
+}
+
+void PlayModeController::finishStarting()
+{
+  if (!m_starting)
+  {
+    return;
+  }
+
+  m_starting = false;
+  const auto usingCachedWorld = m_startUsingCachedWorld;
+  if (!usingCachedWorld)
+  {
+    const auto world = m_worldBuildWatcher->result();
+    if (!world || !world->world)
+    {
+      if (world && !world->error.empty())
+      {
+        m_document.logger().error() << "Play mode: " << world->error;
+      }
+      m_context.reset();
+      if (m_startCompletion)
+      {
+        m_startCompletion(false);
+      }
+      m_startUsingCachedWorld = false;
+      return;
+    }
+
+    m_world = std::move(*world);
+    m_worldMap = &m_document.map();
+    m_worldModificationCount = m_document.map().modificationCount();
+  }
+  m_startUsingCachedWorld = false;
+
+  if (!m_world.world)
   {
     m_context.reset();
+    if (m_startCompletion)
+    {
+      m_startCompletion(false);
+    }
     return;
   }
 
-  placePlayer(fromCamera);
+  scs_set_world(m_context.get(), m_world.world.get());
+  if (!usingCachedWorld)
+  {
+    m_document.logger().info() << "Play mode: compiled " << m_world.worldBrushCount
+                               << " world brushes and " << m_world.entityCount
+                               << " brush entities in "
+                               << formatFloat(
+                                    static_cast<float>(m_world.buildMilliseconds), 1)
+                               << " ms (" << m_world.skippedBrushCount << " skipped), "
+                               << (pref(Preferences::PlayModeCompiler)
+                                       == Preferences::PlayModeCompilerZhlt
+                                     ? "ZHLT"
+                                     : "VHLT")
+                               << " cliptype " << clipTypeName(m_world.clipType);
+  }
+
+  placePlayer(m_startFromCamera);
 
   const auto now = nowMs();
-  // The client sends usercmds of 1000 / fps_max milliseconds (truncated), which changes
-  // the physics exactly like in the game.
   const auto frameRate = std::clamp(pref(Preferences::PlayModeFrameRate), 4, 1000);
   m_timeline.reset(now, m_viewAngles, static_cast<uint8_t>(1000 / frameRate));
   m_timeline.setYawSpeed(pref(Preferences::PlayModeYawSpeed));
@@ -329,13 +435,17 @@ void PlayModeController::start(const bool fromCamera)
   std::ranges::fill(m_keyLastDownMs, 0.0);
   m_document.logger().info() << "Play mode: " << m_statusMessage;
 
-  // See the world through the game's eyes: CS's field of view and no editor zoom.
   m_editorFov = m_camera.fov();
   m_editorZoom = m_camera.zoom();
   m_camera.setFov(pref(Preferences::PlayModeFov));
   m_camera.setZoom(1.0f);
-
   syncCamera(1.0f);
+
+  if (m_startCompletion)
+  {
+    auto completion = std::move(m_startCompletion);
+    completion(true);
+  }
 }
 
 void PlayModeController::stop()
@@ -736,51 +846,6 @@ void PlayModeController::render(
     renderService.renderLine(
       m_camera.unproject(cx, cy - Size, Depth), m_camera.unproject(cx, cy + Size, Depth));
   }
-}
-
-bool PlayModeController::rebuildWorld()
-{
-  auto& map = m_document.map();
-  const auto compiler = std::clamp(
-    pref(Preferences::PlayModeCompiler),
-    Preferences::PlayModeCompilerVhlt,
-    Preferences::PlayModeCompilerZhlt);
-  const auto clipType = std::clamp(
-    pref(Preferences::PlayModeClipType),
-    Preferences::PlayModeClipTypeSmallest,
-    Preferences::PlayModeClipTypeLegacy);
-  const auto modificationCount = map.modificationCount();
-
-  if (
-    m_world.world && m_worldMap == &map && m_worldModificationCount == modificationCount
-    && m_worldCompiler == compiler && m_worldClipType == clipType)
-  {
-    scs_set_world(m_context.get(), m_world.world.get());
-    m_document.logger().info() << "Play mode: reused cached collision world";
-    return true;
-  }
-
-  m_world = buildPlayModeWorld(map, {.compiler = compiler, .clipType = clipType});
-  if (!m_world.world)
-  {
-    m_document.logger().error() << "Play mode: " << m_world.error;
-    return false;
-  }
-
-  m_worldMap = &map;
-  m_worldModificationCount = modificationCount;
-  m_worldCompiler = compiler;
-  m_worldClipType = clipType;
-  scs_set_world(m_context.get(), m_world.world.get());
-  m_document.logger().info()
-    << "Play mode: compiled " << m_world.worldBrushCount << " world brushes and "
-    << m_world.entityCount << " brush entities in "
-    << formatFloat(static_cast<float>(m_world.buildMilliseconds), 1) << " ms ("
-    << m_world.skippedBrushCount << " skipped), "
-    << (pref(Preferences::PlayModeCompiler) == Preferences::PlayModeCompilerZhlt ? "ZHLT"
-                                                                                 : "VHLT")
-    << " cliptype " << clipTypeName(m_world.clipType);
-  return true;
 }
 
 bool PlayModeController::placePlayer(const bool fromCamera)

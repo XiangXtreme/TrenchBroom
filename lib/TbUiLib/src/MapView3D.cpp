@@ -19,10 +19,13 @@
 
 #include "ui/MapView3D.h"
 
+#include <QApplication>
 #include <QCursor>
+#include <QEventLoop>
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QProgressDialog>
 #include <QWheelEvent>
 
 #include "base/PreferenceManager.h"
@@ -156,7 +159,7 @@ bool MapView3D::playModeActive() const
 
 void MapView3D::startPlayMode(const bool fromCamera)
 {
-  if (m_playMode->active())
+  if (m_playMode->active() || m_playMode->starting())
   {
     return;
   }
@@ -164,56 +167,69 @@ void MapView3D::startPlayMode(const bool fromCamera)
   m_flyModeHelper->resetKeys();
   cancelMouseDrag();
 
-  m_playMode->start(fromCamera);
-  if (!m_playMode->active())
-  {
-    return;
-  }
+  m_playModeBuildProgress = new QProgressDialog{this};
+  m_playModeBuildProgress->setWindowTitle(tr("Play Mode"));
+  m_playModeBuildProgress->setLabelText(tr("Compiling collision hulls..."));
+  m_playModeBuildProgress->setRange(0, 0);
+  m_playModeBuildProgress->setCancelButton(nullptr);
+  m_playModeBuildProgress->setWindowModality(Qt::WindowModal);
+  m_playModeBuildProgress->setMinimumDuration(0);
+  m_playModeBuildProgress->show();
+  m_playModeBuildProgress->raise();
+  QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
-  m_mouseTrackingBeforePlay = hasMouseTracking();
-  setMouseTracking(true);
-  setCursor(Qt::BlankCursor);
-  setFocus(Qt::OtherFocusReason);
+  m_playMode->start(fromCamera, [this](const bool started) {
+    if (m_playModeBuildProgress)
+    {
+      m_playModeBuildProgress->close();
+      m_playModeBuildProgress->deleteLater();
+      m_playModeBuildProgress = nullptr;
+    }
+    if (!started)
+    {
+      return;
+    }
 
-  // Capture the mouse like the game: the windowing system keeps the pointer in place and
-  // motion is read as relative movement, raw (m_rawinput 1) or accelerated. The cursor is
-  // captured either way so the real cursor never leaves the view. Without the required
-  // protocols, fall back to cursor deltas and warp the cursor back to the center (on
-  // Wayland, Qt warps through the pointer-warp protocol where the compositor offers it).
-  const auto raw = pref(Preferences::PlayModeRawInput);
-  const auto backend = m_rawMouse->start(*this, raw);
-  m_warpCursor = true;
-  m_grabbedMouse = !m_rawMouse->confinesPointer();
-  if (m_grabbedMouse)
-  {
-    grabMouse();
-  }
+    m_mouseTrackingBeforePlay = hasMouseTracking();
+    setMouseTracking(true);
+    setCursor(Qt::BlankCursor);
+    setFocus(Qt::OtherFocusReason);
 
-  const auto motion = std::string{raw ? "raw" : "accelerated"};
-  const auto confined = m_rawMouse->confinesPointer() ? "" : ", not confined";
-  switch (backend)
-  {
-  case PlayModeRawMouse::Backend::Wayland:
-    m_playMode->setInputDescription(motion + ", Wayland locked pointer");
-    break;
-  case PlayModeRawMouse::Backend::XInput2:
-    m_playMode->setInputDescription(motion + ", XInput2" + confined);
-    break;
-  case PlayModeRawMouse::Backend::RawInput:
-    m_playMode->setInputDescription(motion + ", Raw Input" + confined);
-    break;
-  case PlayModeRawMouse::Backend::None:
-    m_playMode->setInputDescription(
-      std::string{"cursor warping (accelerated)"}
-      + (m_rawMouse->confinesPointer() ? ", confined" : ""));
-    break;
-  }
+    const auto raw = pref(Preferences::PlayModeRawInput);
+    const auto backend = m_rawMouse->start(*this, raw);
+    m_warpCursor = true;
+    m_grabbedMouse = !m_rawMouse->confinesPointer();
+    if (m_grabbedMouse)
+    {
+      grabMouse();
+    }
 
-  m_wheelAccumulator = 0;
-  m_lastPlayMousePos = QCursor::pos() - mapToGlobal(QPoint{0, 0});
-  m_awaitingCursorWarp = false;
-  recenterPlayCursor();
-  update();
+    const auto motion = std::string{raw ? "raw" : "accelerated"};
+    const auto confined = m_rawMouse->confinesPointer() ? "" : ", not confined";
+    switch (backend)
+    {
+    case PlayModeRawMouse::Backend::Wayland:
+      m_playMode->setInputDescription(motion + ", Wayland locked pointer");
+      break;
+    case PlayModeRawMouse::Backend::XInput2:
+      m_playMode->setInputDescription(motion + ", XInput2" + confined);
+      break;
+    case PlayModeRawMouse::Backend::RawInput:
+      m_playMode->setInputDescription(motion + ", Raw Input" + confined);
+      break;
+    case PlayModeRawMouse::Backend::None:
+      m_playMode->setInputDescription(
+        std::string{"cursor warping (accelerated)"}
+        + (m_rawMouse->confinesPointer() ? ", confined" : ""));
+      break;
+    }
+
+    m_wheelAccumulator = 0;
+    m_lastPlayMousePos = QCursor::pos() - mapToGlobal(QPoint{0, 0});
+    m_awaitingCursorWarp = false;
+    recenterPlayCursor();
+    update();
+  });
 }
 
 void MapView3D::recenterPlayCursor()
