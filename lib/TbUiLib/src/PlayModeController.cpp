@@ -265,11 +265,6 @@ void PlayModeController::start(const bool fromCamera)
     return;
   }
 
-  if (fromCamera)
-  {
-    m_checkpointOrigin.reset();
-  }
-
   // Recreate the context so preference changes (sv_airaccelerate) take effect; the
   // player state survives in m_savedState.
   auto config = scs_config{};
@@ -757,7 +752,6 @@ bool PlayModeController::rebuildWorld()
     return false;
   }
 
-  m_checkpointOrigin.reset();
   m_worldMap = &map;
   m_worldModificationCount = modificationCount;
   m_worldCompiler = compiler;
