@@ -40,9 +40,11 @@
 #include "ui/HandleDragTracker.h"
 #include "ui/MapDocument.h"
 
+#include "kd/contracts.h"
+#include "kd/flat_map.h"
 #include "kd/ranges/concat_view.h"
+#include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
-#include "kd/vector_utils.h"
 
 #include "vm/bbox.h"
 #include "vm/line.h"
@@ -211,11 +213,12 @@ auto initializeFaces(const auto& faces)
 
 auto initializeCenter(const auto& faces)
 {
-  return vm::bbox3d::merge_all(
-           std::begin(faces),
-           std::end(faces),
-           [](const auto& faceHandle) { return faceHandle.face().bounds(); })
-    .center();
+  contract_pre(!faces.empty());
+
+  return vm::bbox3d::build(faces | std::views::transform([](const auto& faceHandle) {
+                             return faceHandle.face().bounds();
+                           }))
+    ->center();
 }
 
 auto initializeNormal(const auto& faces)
@@ -580,16 +583,15 @@ void SweepTool::commitSweep()
 {
   if (canCommitSweep())
   {
-    auto nodesToAdd = m_previewBrushes | std::views::transform([](auto& entry) {
-                        auto& [parent, childrenPtrs] = entry;
-                        auto childrenRaw =
-                          childrenPtrs | std::views::transform([](auto& childPtr) {
-                            return static_cast<mdl::Node*>(childPtr.release());
-                          })
-                          | kdl::ranges::to<std::vector>();
-                        return std::pair{parent, std::move(childrenRaw)};
-                      })
-                      | kdl::ranges::to<std::map>();
+    auto nodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
+    for (auto&& [parent, childrenPtrs] : m_previewBrushes)
+    {
+      auto childrenRaw = childrenPtrs | std::views::transform([](auto& childPtr) {
+                           return static_cast<mdl::Node*>(childPtr.release());
+                         })
+                         | kdl::ranges::to<std::vector>();
+      nodesToAdd.insert({parent, std::move(childrenRaw)});
+    }
 
     m_previewBrushes.clear();
     m_brushRenderer->clear();
@@ -865,7 +867,7 @@ void SweepTool::nodesWereRemoved(const std::vector<mdl::Node*>& nodes)
     {
       if (
         sourceFace.parent
-        && (kdl::vec_contains(nodes, sourceFace.parent) || sourceFace.parent->isDescendantOf(nodes)))
+        && (kdl::ranges::contains(nodes, sourceFace.parent) || sourceFace.parent->isDescendantOf(nodes)))
       {
         sourceFace.parent = nullptr;
         changed = true;

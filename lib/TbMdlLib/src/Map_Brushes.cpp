@@ -36,6 +36,8 @@
 #include "mdl/UvUtils.h"
 #include "mdl/WorldNode.h"
 
+#include "kd/flat_map.h"
+
 #include "vm/scalar.h"
 
 #include <array>
@@ -563,7 +565,7 @@ bool setFaceUVsWithSplit(Map& map, const std::vector<FaceUVUpdate>& updates)
     return false;
   }
 
-  auto nodesToAdd = std::map<Node*, std::vector<Node*>>{};
+  auto nodesToAdd = kdl::flat_map<Node*, std::vector<Node*>>{};
   auto replacementCount = size_t{0};
   for (auto& [parent, brushes] : replacementBrushes)
   {

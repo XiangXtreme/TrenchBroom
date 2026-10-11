@@ -24,6 +24,7 @@
 #include "mdl/UvAttributes.h"
 #include "mdl/UvCoordSystem.h"
 
+#include "kd/flat_map.h"
 #include "kd/reflection_decl.h"
 
 #include "vm/plane.h"
@@ -34,7 +35,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -159,7 +159,8 @@ static_assert(
   sizeof(SweepParameters)
   == ((2u * sizeof(size_t) + 2u * sizeof(int) + alignof(size_t) - 1u) / alignof(size_t) * alignof(size_t)));
 
-using SweepBrushMap = std::map<mdl::Node*, std::vector<std::unique_ptr<mdl::BrushNode>>>;
+using SweepBrushMap =
+  kdl::flat_map<mdl::Node*, std::vector<std::unique_ptr<mdl::BrushNode>>>;
 
 struct SweepIssue
 {

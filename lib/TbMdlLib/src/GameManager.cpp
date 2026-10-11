@@ -33,6 +33,7 @@
 #include "kd/const_overload.h"
 #include "kd/path_utils.h"
 #include "kd/result_fold.h"
+#include "kd/string_compare_natural.h"
 
 #include <algorithm>
 #include <iostream>
@@ -242,8 +243,8 @@ template <typename Config>
 Result<bool> writeConfig(
   fs::WritableFileSystem& fs,
   GameInfo& gameInfo,
-  Config GameInfo::*configField,
-  bool GameInfo::*parseFailedField,
+  Config GameInfo::* configField,
+  bool GameInfo::* parseFailedField,
   Config newConfig,
   const std::filesystem::path& filename,
   const std::string_view configLabel,
@@ -321,9 +322,10 @@ GameManager::GameManager(
   : m_configFs{std::move(configFs)}
   , m_gameInfos{std::move(gameInfos)}
 {
-  std::ranges::sort(m_gameInfos, [](const auto& lhs, const auto& rhs) {
-    return lhs.gameConfig.name < rhs.gameConfig.name;
-  });
+  std::ranges::sort(
+    m_gameInfos, kdl::ci::string_less_natural{}, [](const auto& gameInfo) {
+      return gameInfo.gameConfig.name;
+    });
 }
 
 GameManager::GameManager(GameManager&&) noexcept = default;

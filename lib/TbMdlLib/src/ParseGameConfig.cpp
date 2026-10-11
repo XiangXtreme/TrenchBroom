@@ -31,11 +31,12 @@
 #include "mdl/TagMatcher.h"
 #include "mdl/UvAttributes.h"
 
+#include "kd/flat_set.h"
+#include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
 
 #include <fmt/format.h>
 
-#include <algorithm>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -63,7 +64,7 @@ void checkVersion(const el::EvaluationContext& context, const el::Value& version
   const auto validVsns = std::vector<el::IntegerType>{9};
   const auto isValidVersion =
     version.convertibleTo(el::ValueType::Number)
-    && std::ranges::find(validVsns, version.integerValue(context)) != validVsns.end();
+    && kdl::ranges::contains(validVsns, version.integerValue(context));
 
   if (!isValidVersion)
   {
@@ -158,7 +159,7 @@ void checkTagName(
   const std::vector<SmartTag>& tags)
 {
   const auto& name = nameValue.stringValue(context);
-  if (std::ranges::any_of(tags, [&](const auto& tag) { return tag.name() == name; }))
+  if (kdl::ranges::contains(tags, name, &SmartTag::name))
   {
     throw ParserException{
       *context.location(nameValue), fmt::format("Duplicate tag '{}'", name)};
@@ -182,7 +183,7 @@ std::unique_ptr<TagMatcher> parseFaceTagMatcher(
     return patternValue.type() == el::ValueType::String
              ? std::make_unique<SurfaceParmTagMatcher>(patternValue.stringValue(context))
              : std::make_unique<SurfaceParmTagMatcher>(
-                 kdl::vector_set{patternValue.asStringSet(context)});
+                 kdl::flat_set(patternValue.asStringSet(context)));
   }
   if (match == "contentflag")
   {

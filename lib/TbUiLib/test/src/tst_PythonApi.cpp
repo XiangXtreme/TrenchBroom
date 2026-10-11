@@ -50,6 +50,8 @@
 #include "ui/python/PythonRuntime.h"
 #include "ui/python/PythonScripting.h"
 
+#include "kd/flat_map.h"
+
 #include "vm/approx.h"
 #include "vm/bbox.h"
 
@@ -766,14 +768,16 @@ print("hello stderr", file=sys.stderr)
     REQUIRE(runtime.runConsoleCommand(
       context,
       "b = "
-      "trenchbroom.brushes.create([(-32,-32,-32),(32,-32,-32),(32,32,-32),(-32,32,-32),(-32,-32,32),("
+      "trenchbroom.brushes.create([(-32,-32,-32),(32,-32,-32),(32,32,-32),(-32,32,-32),(-"
+      "32,-32,32),("
       "32,-32,32),(32,32,32),(-32,32,32)])"));
     REQUIRE(runtime.runConsoleCommand(context, "sel.set([b])"));
     REQUIRE(runtime.runConsoleCommand(context, "len(doc.selection.brushes)"));
     CHECK(logger.messages.back() == "=> 1");
 
     REQUIRE(runtime.runConsoleCommand(context, "import trenchbroom as api"));
-    REQUIRE(runtime.runConsoleCommand(context, "brush_list = trenchbroom.brushes.selected()"));
+    REQUIRE(
+      runtime.runConsoleCommand(context, "brush_list = trenchbroom.brushes.selected()"));
     REQUIRE(runtime.runConsoleCommand(context, "e = 1"));
     const auto apiRoot = runtime.consoleCompletionRoot(window, "api");
     CHECK(apiRoot.exists);
@@ -796,14 +800,16 @@ print("hello stderr", file=sys.stderr)
     REQUIRE(runtime.runConsoleCommand(context, "len(doc.selection.brushes)"));
     CHECK(logger.messages.back() == "=> 1");
 
-    REQUIRE(runtime.runConsoleCommand(context, "trenchbroom.objects.delete(doc.selection.brushes)"));
+    REQUIRE(runtime.runConsoleCommand(
+      context, "trenchbroom.objects.delete(doc.selection.brushes)"));
     REQUIRE(runtime.runConsoleCommand(context, "len(doc.selection.brushes)"));
     CHECK(logger.messages.back() == "=> 0");
 
     REQUIRE(runtime.runConsoleCommand(
       context,
       "b2 = "
-      "trenchbroom.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(-16,16,-16),(-16,-16,16),("
+      "trenchbroom.brushes.create([(-16,-16,-16),(16,-16,-16),(16,16,-16),(-16,16,-16),(-"
+      "16,-16,16),("
       "16,-16,16),(16,16,16),(-16,16,16)])"));
     REQUIRE(runtime.runConsoleCommand(context, "sel.set([b2])"));
     REQUIRE(runtime.runConsoleCommand(
@@ -2545,7 +2551,7 @@ panel.set_html_view("history", '<a href="tb://history/456">Updated</a>')
     auto& map = window.document().map();
     auto* entityNode = new mdl::EntityNode{
       mdl::Entity{{{mdl::EntityPropertyKeys::Classname, "info_player_start"}}}};
-    auto nodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+    auto nodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
     nodesToAdd.emplace(
       static_cast<mdl::Node*>(map.worldNode().defaultLayer()),
       std::vector<mdl::Node*>{static_cast<mdl::Node*>(entityNode)});
@@ -2685,13 +2691,13 @@ panel.set_html_view("history", '<a href="tb://history/456">Updated</a>')
        {"_axis", "0 0 1"}}}};
     auto* brushNode = new mdl::BrushNode{builder.createCube(64.0, "spin") | kdl::value()};
 
-    auto entityNodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+    auto entityNodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
     entityNodesToAdd.emplace(
       static_cast<mdl::Node*>(map.worldNode().defaultLayer()),
       std::vector<mdl::Node*>{static_cast<mdl::Node*>(entityNode)});
     mdl::addNodes(map, entityNodesToAdd);
 
-    auto brushNodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+    auto brushNodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
     brushNodesToAdd.emplace(
       static_cast<mdl::Node*>(entityNode),
       std::vector<mdl::Node*>{static_cast<mdl::Node*>(brushNode)});

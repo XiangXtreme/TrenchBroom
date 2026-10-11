@@ -239,7 +239,7 @@ function ConvertTo-StrictClangCommand {
     [string] $ClangCompiler
   )
 
-  $compilerPattern = '^("[^"]*\\cl\.exe"|[^\s]*\\cl\.exe)'
+  $compilerPattern = '^(?:(?:"(?:[^"]*[\\/])?(?:ccache|sccache)\.exe"|(?:[^\s"]*[\\/])?(?:ccache|sccache)\.exe)\s+)?("[^"]*[\\/]cl\.exe"|[^\s"]*[\\/]cl\.exe)'
   $strictCommand = [regex]::Replace(
     $Command,
     $compilerPattern,
@@ -325,10 +325,14 @@ function Invoke-FilteredBuild {
   )
 
   $buildScript = Join-Path $RepositoryRoot "scripts\build-filtered.ps1"
+  $environmentArgs = @()
+  if (-not [string]::IsNullOrWhiteSpace($env:VSCMD_VER)) {
+    $environmentArgs += "-NoVsDevCmd"
+  }
   & powershell.exe -ExecutionPolicy Bypass -File $buildScript `
     -BuildDir $BuildDirectory `
     -Target $Target `
-    -QtBin $QtBinaryDirectory
+    -QtBin $QtBinaryDirectory @environmentArgs
   if ($LASTEXITCODE -ne 0) {
     throw "Build failed for target $Target"
   }

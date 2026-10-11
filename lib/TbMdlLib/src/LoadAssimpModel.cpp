@@ -36,8 +36,10 @@
 
 #include "kd/path_utils.h"
 #include "kd/ranges/as_rvalue_view.h"
+#include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
 #include "kd/result_fold.h"
+#include "kd/unpack.h"
 
 #include <assimp/IOStream.hpp>
 #include <assimp/IOSystem.hpp>
@@ -855,18 +857,15 @@ Result<void> loadSceneFrame(
     scene.mRootNode->mTransformation,
     getAxisTransform(scene));
 
-  auto bounds = vm::bbox3f::builder{};
+  auto points = std::vector<vm::vec3f>{};
 
   return meshes | std::views::transform([&](const auto& mesh) {
            return std::tuple{mesh, getMeshIndex(scene, *mesh.m_mesh)};
          })
-         | std::views::filter([](const auto& meshAndIndex) {
-             return std::get<1>(meshAndIndex) != std::nullopt;
-           })
-         | std::views::transform([&](const auto& meshAndIndex) {
-             const auto& mesh = std::get<0>(meshAndIndex);
-             const auto& meshIndex = *std::get<1>(meshAndIndex);
-
+         | std::views::filter(kdl::unpack(
+           [](const auto&, const auto& meshIndex) { return meshIndex != std::nullopt; }))
+         | std::views::transform(
+           kdl::unpack([&](const auto& mesh, const auto& meshIndex) {
              return computeMeshVertices(
                       *mesh.m_mesh,
                       mesh.m_transform,
@@ -875,21 +874,21 @@ Result<void> loadSceneFrame(
                     | kdl::transform([&](const auto& vertices) {
                         for (const auto& v : vertices)
                         {
-                          bounds.add(v.attr);
+                          points.push_back(v.attr);
                         }
 
-                        return computeMeshData(mesh, meshIndex, vertices);
+                        return computeMeshData(mesh, *meshIndex, vertices);
                       });
-           })
+           }))
          | kdl::fold | kdl::and_then([&](const auto& meshData) -> Result<void> {
-             if (!bounds.initialized())
+             const auto frameBounds = vm::bbox3f::build(points);
+             if (!frameBounds)
              {
                // passing empty bounds as bbox crashes the program, don't let it happen
                return Error{"Model has no vertices. (So no valid bounding box.)"};
              }
 
-             const auto frameBounds = bounds.bounds();
-             auto& frame = model.addFrame(name, frameBounds);
+             auto& frame = model.addFrame(name, *frameBounds);
 
              for (const auto& data : meshData)
              {
@@ -921,7 +920,7 @@ bool canLoadAssimpModel(const std::filesystem::path& path)
     ".csm",  ".ply",      ".cob",          ".scn",      ".xgl"};
   // clang-format on
 
-  return kdl::vec_contains(supportedExtensions, kdl::path_to_lower(path.extension()));
+  return kdl::ranges::contains(supportedExtensions, kdl::path_to_lower(path.extension()));
 }
 
 Result<EntityModelData> loadAssimpModel(

@@ -44,6 +44,7 @@
 #include "ui/Tool.h"
 
 #include "kd/contracts.h"
+#include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
 #include "kd/set_temp.h"
 #include "kd/string_utils.h"
@@ -123,7 +124,7 @@ public:
   {
     const auto hasHandle = [&](const auto* node) {
       const auto nodeHandles = SomeHandleType::getHandles(*node);
-      return std::ranges::find(nodeHandles, handle) != nodeHandles.end();
+      return kdl::ranges::contains(nodeHandles, handle);
     };
 
     auto result =
@@ -138,7 +139,7 @@ public:
 
     const auto hasHandle = [&](const auto* node, const auto& handle) {
       const auto nodeHandles = SomeHandleType::getHandles(*node);
-      return std::ranges::find(nodeHandles, handle) != nodeHandles.end();
+      return kdl::ranges::contains(nodeHandles, handle);
     };
 
     const auto hasAnyHandle = [&](const auto* node) {
@@ -185,42 +186,24 @@ public:
   }
 
 public: // Handle selection
-  bool select(const std::vector<mdl::Hit>& hits, const bool addToSelection)
+  bool select(const mdl::Hit& hit, const bool addToSelection)
   {
-    contract_pre(!hits.empty());
-
-    if (const auto& firstHit = hits.front(); firstHit.hasType(HandleType::HandleHitType))
+    if (hit.hasType(HandleType::HandleHitType))
     {
       if (!addToSelection)
       {
         handleManager().template deselectAllHandles<HandleType>();
       }
 
-      // Count the number of hit handles which are selected already.
-      size_t selected = 0u;
-      for (const auto& hit : hits)
+      const auto& handle = hit.target<const HandleType&>();
+      if (!handleManager().template isHandleSelected<HandleType>(handle))
       {
-        if (handleManager().template isHandleSelected<HandleType>(
-              hit.target<HandleType>()))
-        {
-          ++selected;
-        }
-      }
-
-      if (selected < hits.size())
-      {
-        for (const auto& hit : hits)
-        {
-          handleManager().template selectHandle<HandleType>(hit.target<HandleType>());
-        }
+        handleManager().template selectHandle<HandleType>(handle);
       }
       else if (addToSelection)
       {
         // The user meant to deselect a selected handle.
-        for (const auto& hit : hits)
-        {
-          handleManager().template deselectHandle<HandleType>(hit.target<HandleType>());
-        }
+        handleManager().template deselectHandle<HandleType>(handle);
       }
     }
     refreshViews();

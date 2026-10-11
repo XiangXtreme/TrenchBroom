@@ -39,15 +39,14 @@ kdl_reflect_impl(BezierPatch);
 
 namespace
 {
+
 vm::bbox3d computeBounds(const std::vector<BezierPatch::Point>& points)
 {
-  auto builder = vm::bbox3d::builder{};
-  for (const auto& point : points)
-  {
-    builder.add(point.xyz());
-  }
-  return builder.bounds();
+  contract_pre(!points.empty());
+
+  return *vm::bbox3d::build(points | std::views::transform(&BezierPatch::Point::xyz));
 }
+
 } // namespace
 
 BezierPatch::BezierPatch(
@@ -191,7 +190,7 @@ void BezierPatch::transform(const vm::mat4x4d& transformation)
 }
 
 void BezierPatch::transformControlPoints(
-  const std::set<vm::vec3d>& positions, const vm::mat4x4d& transformation)
+  const kdl::flat_set<vm::vec3d>& positions, const vm::mat4x4d& transformation)
 {
   contract_pre(vm::is_orientation_preserving_transform(transformation));
 

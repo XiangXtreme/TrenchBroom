@@ -25,6 +25,7 @@
 #include "mdl/EntityModel.h"
 #include "mdl/LoadAssimpModel.h"
 
+#include "kd/ranges/contains.h"
 #include "kd/ranges/stride_view.h"
 
 #include "vm/approx.h"
@@ -68,6 +69,29 @@ TEST_CASE("loadAssimpModel")
       CHECK(modelData.value().surface(3).skinCount() == 1);
       CHECK(modelData.value().frameCount() == 3);
     }
+  }
+
+  SECTION("pitch type")
+  {
+    const auto [modelPath, expectedPitchType] =
+      GENERATE(table<std::filesystem::path, PitchType>({
+        {"cube/cube.mdl", PitchType::MdlInverted},
+        {"alignment/ase/cuboid.ase", PitchType::Normal},
+        {"alignment/obj/cuboid.obj", PitchType::Normal},
+        {"alignment/fbx/cuboid.fbx", PitchType::Normal},
+        {"alignment/gltf/cuboid.gltf", PitchType::Normal},
+        {"alignment/glb/cuboid.glb", PitchType::Normal},
+      }));
+
+    CAPTURE(modelPath);
+
+    const auto basePath = getFixtureRoot() / "test/mdl/LoadAssimpModel";
+    auto fs = fs::DiskFileSystem{basePath};
+
+    auto modelData = loadAssimpModel(modelPath, fs, logger);
+    REQUIRE(modelData);
+
+    CHECK(modelData.value().pitchType() == expectedPitchType);
   }
 
   SECTION("alignment")
@@ -117,8 +141,8 @@ TEST_CASE("loadAssimpModel")
     const auto pixels = std::ranges::subrange{image.data(), image.data() + image.size()};
     const auto alphas = pixels | std::views::drop(3) | kdl::views::stride(4);
 
-    const auto hasTransparentPixel = std::ranges::find(alphas, 0) != alphas.end();
-    const auto hasOpaquePixel = std::ranges::find(alphas, 255) != alphas.end();
+    const auto hasTransparentPixel = kdl::ranges::contains(alphas, 0);
+    const auto hasOpaquePixel = kdl::ranges::contains(alphas, 255);
 
     CHECK(hasTransparentPixel);
     CHECK(hasOpaquePixel);

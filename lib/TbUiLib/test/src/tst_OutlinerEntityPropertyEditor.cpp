@@ -44,6 +44,8 @@
 #include "ui/SmartSkyboxEditor.h"
 #include "ui/outliner/OutlinerEntityPropertyEditor.h"
 
+#include "kd/flat_map.h"
+
 #include <map>
 
 #include <catch2/catch_test_macros.hpp>
@@ -389,7 +391,7 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     auto* brushNode = mdl::createBrushNode(map);
     mdl::addNodes(
       map,
-      std::map<mdl::Node*, std::vector<mdl::Node*>>{
+      kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{
         {&mdl::parentForNodes(map), {static_cast<mdl::Node*>(brushNode)}}});
     processOutlinerUpdates();
 

@@ -155,47 +155,49 @@ Result<std::string> readPrefabAssetText(
          });
 }
 
-void addPrefabNodeBounds(vm::bbox3d::builder& builder, const mdl::Node& node)
+void collectPrefabNodeBounds(std::vector<vm::bbox3d>& bounds, const mdl::Node& node)
 {
   node.accept(kdl::overload(
     [&](const mdl::WorldNode& worldNode) {
       for (const auto* child : worldNode.children())
       {
-        addPrefabNodeBounds(builder, *child);
+        collectPrefabNodeBounds(bounds, *child);
       }
     },
     [&](const mdl::LayerNode& layerNode) {
       for (const auto* child : layerNode.children())
       {
-        addPrefabNodeBounds(builder, *child);
+        collectPrefabNodeBounds(bounds, *child);
       }
     },
-    [&](const mdl::GroupNode& groupNode) { builder.add(groupNode.logicalBounds()); },
+    [&](const mdl::GroupNode& groupNode) { bounds.push_back(groupNode.logicalBounds()); },
     [&](const mdl::EntityNode& entityNode) {
       if (mdl::isWorldspawn(entityNode.entity().classname()))
       {
         for (const auto* child : entityNode.children())
         {
-          addPrefabNodeBounds(builder, *child);
+          collectPrefabNodeBounds(bounds, *child);
         }
       }
       else
       {
-        builder.add(entityNode.logicalBounds());
+        bounds.push_back(entityNode.logicalBounds());
       }
     },
-    [&](const mdl::BrushNode& brushNode) { builder.add(brushNode.logicalBounds()); },
-    [&](const mdl::PatchNode& patchNode) { builder.add(patchNode.logicalBounds()); }));
+    [&](const mdl::BrushNode& brushNode) { bounds.push_back(brushNode.logicalBounds()); },
+    [&](const mdl::PatchNode& patchNode) {
+      bounds.push_back(patchNode.logicalBounds());
+    }));
 }
 
 vm::bbox3d computePrefabAssetBounds(const std::vector<mdl::Node*>& nodes)
 {
-  auto builder = vm::bbox3d::builder{};
+  auto bounds = std::vector<vm::bbox3d>{};
   for (const auto* node : nodes)
   {
-    addPrefabNodeBounds(builder, *node);
+    collectPrefabNodeBounds(bounds, *node);
   }
-  return builder.initialized() ? builder.bounds() : vm::bbox3d{};
+  return vm::bbox3d::build(bounds).value_or(vm::bbox3d{});
 }
 
 Result<std::vector<mdl::Node*>> readPrefabAssetNodes(

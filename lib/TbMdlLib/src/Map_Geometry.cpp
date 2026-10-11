@@ -49,6 +49,7 @@
 #include "mdl/Transaction.h"
 #include "mdl/WorldNode.h"
 
+#include "kd/flat_map.h"
 #include "kd/overload.h"
 #include "kd/ranges/as_rvalue_view.h"
 #include "kd/ranges/to.h"
@@ -180,15 +181,13 @@ bool transformNodes(
       }};
     });
 
-  const auto success = map.taskManager().run_tasks_and_wait(tasks) | kdl::fold
-                       | kdl::transform([&](auto nodesToUpdate) {
-                           return updateNodeContents(
-                             map,
-                             commandName,
-                             std::move(nodesToUpdate),
-                             collectContainingGroups(nodes));
-                         })
-                       | kdl::value_or(false);
+  const auto success =
+    map.taskManager().run_tasks_and_wait(tasks) | kdl::fold
+    | kdl::transform([&](auto nodesToUpdate) {
+        return updateNodeContents(
+          map, commandName, std::move(nodesToUpdate), collectContainingGroups(nodes));
+      })
+    | kdl::value_or(false);
 
   return success;
 }
@@ -953,7 +952,7 @@ bool csgSubtract(Map& map, const std::string& commandName)
                              })
                            | kdl::ranges::to<std::vector>();
 
-  auto toAdd = std::map<Node*, std::vector<Node*>>{};
+  auto toAdd = kdl::flat_map<Node*, std::vector<Node*>>{};
   auto toRemove =
     std::vector<Node*>{std::begin(subtrahendNodes), std::end(subtrahendNodes)};
 
@@ -1065,7 +1064,7 @@ bool csgHollow(Map& map, const std::string& commandName)
   }
 
   bool didHollowAnything = false;
-  auto toAdd = std::map<Node*, std::vector<Node*>>{};
+  auto toAdd = kdl::flat_map<Node*, std::vector<Node*>>{};
   auto toRemove = std::vector<Node*>{};
 
   for (auto* brushNode : brushNodes)

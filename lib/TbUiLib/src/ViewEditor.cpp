@@ -36,6 +36,7 @@
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/Tag.h"
+#include "mdl/TagManager.h"
 #include "mdl/TagType.h"
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
@@ -458,7 +459,7 @@ void ViewEditor::createTagFilter(QWidget* parent)
   m_tagCheckBoxes.clear();
 
   const auto& map = m_document.map();
-  if (const auto& tags = map.smartTags(); !tags.empty())
+  if (const auto& tags = map.tagManager().smartTags(); !tags.empty())
   {
     createTagFilter(parent, tags);
   }

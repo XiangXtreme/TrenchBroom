@@ -16,6 +16,8 @@
 #include "mdl/Node.h"
 #include "mdl/WorldNode.h"
 
+#include "kd/flat_map.h"
+
 #include <algorithm>
 #include <map>
 
@@ -38,7 +40,7 @@ bool addNodes(
   {
     mdl::deselectAll(map);
   }
-  auto nodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+  auto nodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
   nodesToAdd.emplace(&parent, nodes);
   if (!map.executeAndStore(mdl::AddRemoveNodesCommand::add(nodesToAdd)))
   {
@@ -71,7 +73,7 @@ bool removeNodes(mdl::Map& map, std::vector<mdl::Node*> nodes)
   {
     return false;
   }
-  auto nodesByParent = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+  auto nodesByParent = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
   for (auto* node : nodes)
   {
     auto* parent = node->parent();

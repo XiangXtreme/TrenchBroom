@@ -20,7 +20,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <ranges>
 
 // This file can only be used with C++20 or later.
@@ -58,14 +57,7 @@ constexpr bool container_appendable = requires(C& c, Reference&& ref) {
     || requires { c.insert(c.end(), std::forward<Reference>(ref)); });
 };
 
-// Append a single element to the given container c. The if constexpr guards live in this
-// plain function template rather than inline in the generic lambda returned by
-// container_appender below: as a lambda they are checked eagerly when the enclosing
-// container_appender<C> is instantiated (before Reference is known), which trips up clang
-// and MSVC in opposite ways -- clang hard-errors on the ill-formed member access (e.g.
-// std::string::emplace_back) and MSVC mis-evaluates the requires guards. Here the guards
-// are only checked when the function is actually called, with C and Reference both fully
-// substituted.
+// Append a single element to the given container c.
 template <typename C, typename Reference>
 constexpr void container_append(C& c, Reference&& ref)
 {
@@ -87,15 +79,6 @@ constexpr void container_append(C& c, Reference&& ref)
   }
 }
 
-// Create a function that appends an element to the given container c.
-template <typename C>
-constexpr auto container_appender(C& c)
-{
-  return [&c]<typename Reference>(Reference&& ref) {
-    container_append(c, std::forward<Reference>(ref));
-  };
-}
-
 // Used for type constexpr if conditions, see below
 template <typename R>
 struct dummy_iterator
@@ -113,15 +96,44 @@ struct dummy_iterator
 };
 
 // True if std::iterator_traits<std::ranges::iterator_t<R>>::iterator_category
-// is valid and denotes a type derived from std::input_iterator_tag
-template <typename R>
-concept input_iterator_range =
+// is valid and denotes a type derived from Tag
+template <typename R, typename Tag>
+concept iterator_category_range =
   requires {
     typename std::iterator_traits<std::ranges::iterator_t<R>>::iterator_category;
   }
   && std::derived_from<
     typename std::iterator_traits<std::ranges::iterator_t<R>>::iterator_category,
-    std::input_iterator_tag>;
+    Tag>;
+
+// Is it better to reserve the memory for the elements of R and to append them to C one by
+// one than to pass the iterators of R to C's constructor?
+//
+// The iterator constructors of containers select their strategy by the legacy iterator
+// category and not by the C++20 iterator concepts. They can only allocate the memory for
+// all elements up front if that category is derived from std::forward_iterator_tag,
+// otherwise they append the elements one by one and grow as needed. But the iterators of
+// some ranges report std::input_iterator_tag even though they model a stronger C++20
+// iterator concept because dereferencing them yields a prvalue, e.g. std::views::iota or
+// std::views::transform. If we know the size of such a range, we can do better than the
+// container's constructor by reserving the memory ourselves.
+//
+// And even if the category is derived from std::forward_iterator_tag, the constructors
+// must iterate over the range twice unless it is also derived from
+// std::random_access_iterator_tag: once to count the elements and once to copy them. If
+// we know the size of such a range, we can avoid the first pass.
+//
+// Reserving memory and appending elements can reallocate, so both require that the
+// elements of C can be moved, whereas the iterator constructors can construct them in
+// place. This requirement isn't part of the signatures of the corresponding member
+// functions, so reservable_container and container_appendable cannot detect it.
+template <typename C, typename R, typename... Args>
+constexpr bool prefer_reserve_and_append =
+  std::ranges::sized_range<R>
+  && !iterator_category_range<R, std::random_access_iterator_tag>
+  && reservable_container<C> && std::constructible_from<C, Args...>
+  && container_appendable<C, std::ranges::range_reference_t<R>>
+  && requires { requires std::move_constructible<std::ranges::range_value_t<C>>; };
 
 } // namespace detail
 
@@ -146,12 +158,14 @@ constexpr C to(R&& r, Args&&... args)
     }
     // Note: std::from_range is only available in C++23, so we can't support it
     else if constexpr (
-      std::ranges::common_range<R> && detail::input_iterator_range<R>
+      std::ranges::common_range<R>
+      && detail::iterator_category_range<R, std::input_iterator_tag>
       && std::constructible_from<
         C,
         std::ranges::iterator_t<R>,
         std::ranges::sentinel_t<R>,
-        Args...>)
+        Args...>
+      && !detail::prefer_reserve_and_append<C, R, Args...>)
     {
       return C(std::ranges::begin(r), std::ranges::end(r), std::forward<Args>(args)...);
     }
@@ -165,7 +179,10 @@ constexpr C to(R&& r, Args&&... args)
       {
         c.reserve(static_cast<std::ranges::range_size_t<C>>(std::ranges::size(r)));
       }
-      std::ranges::for_each(r, detail::container_appender(c));
+      for (auto&& elem : r)
+      {
+        detail::container_append(c, std::forward<decltype(elem)>(elem));
+      }
       return c;
     }
   }

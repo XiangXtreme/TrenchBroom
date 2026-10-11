@@ -23,6 +23,7 @@
 
 #include "kd/contracts.h"
 #include "kd/range_utils.h"
+#include "kd/ranges/contains.h"
 
 #include "vm/bbox.h"
 #include "vm/plane.h"
@@ -32,7 +33,6 @@
 #include "vm/vec.h"
 #include "vm/vec_io.h" // IWYU pragma: keep
 
-#include <algorithm>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -876,16 +876,15 @@ typename Polyhedron<T, FP, VP>::Face* Polyhedron<T, FP, VP>::findClosestFace(
 template <typename T, typename FP, typename VP>
 void Polyhedron<T, FP, VP>::updateBounds()
 {
-  auto builder = typename vm::bbox<T, 3>::builder();
-  builder.add(m_vertices.begin(), m_vertices.end(), GetVertexPosition{});
-
-  if (!builder.initialized())
+  if (
+    const auto bounds =
+      vm::bbox<T, 3>::build(m_vertices | std::views::transform(GetVertexPosition{})))
   {
-    m_bounds.min = m_bounds.max = vm::vec<T, 3>::nan();
+    m_bounds = *bounds;
   }
   else
   {
-    m_bounds = builder.bounds();
+    m_bounds.min = m_bounds.max = vm::vec<T, 3>::nan();
   }
 }
 
@@ -964,13 +963,9 @@ typename Polyhedron<T, FP, VP>::Edge* Polyhedron<T, FP, VP>::removeEdge(Edge* ed
     return nullptr;
   }
 
-  const auto v2WasRemoved = [&]() {
-    return std::ranges::find(m_vertices, v2) == m_vertices.end();
-  };
+  const auto v2WasRemoved = [&]() { return !kdl::ranges::contains(m_vertices, v2); };
 
-  const auto edgeWasRemoved = [&]() {
-    return std::ranges::find(m_edges, edge) == m_edges.end();
-  };
+  const auto edgeWasRemoved = [&]() { return !kdl::ranges::contains(m_edges, edge); };
 
   // merge f1 into n1:
   if (

@@ -32,7 +32,6 @@
 #include "vm/ray.h"
 #include "vm/vec.h"
 
-#include <map>
 #include <memory>
 #include <vector>
 

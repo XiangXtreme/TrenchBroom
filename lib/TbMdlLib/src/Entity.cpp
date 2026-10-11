@@ -27,10 +27,10 @@
 #include "mdl/ModelDefinition.h"
 #include "mdl/PropertyDefinition.h"
 
+#include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
 #include "kd/reflection_impl.h"
 #include "kd/string_utils.h"
-#include "kd/vector_utils.h"
 
 #include "vm/mat.h"
 #include "vm/mat_ext.h"
@@ -42,6 +42,31 @@
 
 namespace tb::mdl
 {
+namespace
+{
+
+vm::mat4x4d entityModelTransformation(
+  const Entity& entity,
+  const std::optional<el::ExpressionNode>& defaultModelScaleExpression)
+{
+  if (const auto* pointDefinition = getPointEntityDefinition(entity.definition()))
+  {
+    const auto variableStore = EntityPropertiesVariableStore{entity};
+    const auto scale = safeGetModelScale(
+      pointDefinition->modelDefinition, variableStore, defaultModelScaleExpression);
+    return vm::translation_matrix(entity.origin()) * entity.rotation()
+           * vm::scaling_matrix(scale);
+  }
+
+  return vm::mat4x4d::identity();
+}
+
+bool isModelLoaded(const EntityModel* model)
+{
+  return model && model->dataResource().isLoaded();
+}
+
+} // namespace
 
 void setDefaultProperties(
   const EntityDefinition& entityDefinition,
@@ -182,18 +207,6 @@ const EntityModelFrame* Entity::modelFrame() const
          | kdl::value_or(nullptr);
 }
 
-void Entity::invalidateModelDependentCachesIfNeeded() const
-{
-  const auto* modelData = m_model ? m_model->data() : nullptr;
-  const auto pitchType = modelData ? modelData->pitchType() : PitchType::Normal;
-  if (m_cachedModelPitchType != pitchType)
-  {
-    m_cachedModelPitchType = pitchType;
-    m_cachedRotation = std::nullopt;
-    m_cachedModelTransformation = std::nullopt;
-  }
-}
-
 Result<ModelSpecification> Entity::modelSpecification() const
 {
   if (const auto* pointEntityDefinition = getPointEntityDefinition(definition()))
@@ -207,23 +220,17 @@ Result<ModelSpecification> Entity::modelSpecification() const
 const vm::mat4x4d& Entity::modelTransformation(
   const std::optional<el::ExpressionNode>& defaultModelScaleExpression) const
 {
-  invalidateModelDependentCachesIfNeeded();
-  if (!m_cachedModelTransformation)
+  const auto modelIsLoaded = isModelLoaded(m_model);
+  if (
+    !m_cachedModelTransformation
+    || m_cachedModelTransformation->modelIsLoaded != modelIsLoaded)
   {
-    if (const auto* pointDefinition = getPointEntityDefinition(definition()))
-    {
-      const auto variableStore = EntityPropertiesVariableStore{*this};
-      const auto scale = safeGetModelScale(
-        pointDefinition->modelDefinition, variableStore, defaultModelScaleExpression);
-      m_cachedModelTransformation =
-        vm::translation_matrix(origin()) * rotation() * vm::scaling_matrix(scale);
-    }
-    else
-    {
-      m_cachedModelTransformation = vm::mat4x4d::identity();
-    }
+    m_cachedModelTransformation = {
+      entityModelTransformation(*this, defaultModelScaleExpression),
+      modelIsLoaded,
+    };
   }
-  return *m_cachedModelTransformation;
+  return m_cachedModelTransformation->transform;
 }
 
 Result<DecalSpecification> Entity::decalSpecification() const
@@ -261,7 +268,7 @@ void Entity::addOrUpdateProperty(
   {
     m_properties.emplace_back(key, std::move(value));
 
-    if (defaultToProtected && !kdl::vec_contains(m_protectedProperties, key))
+    if (defaultToProtected && !kdl::ranges::contains(m_protectedProperties, key))
     {
       m_protectedProperties.push_back(std::move(key));
     }
@@ -428,12 +435,15 @@ void Entity::setOrigin(const vm::vec3d& origin)
 
 const vm::mat4x4d& Entity::rotation() const
 {
-  invalidateModelDependentCachesIfNeeded();
-  if (!m_cachedRotation)
+  const auto modelIsLoaded = isModelLoaded(m_model);
+  if (!m_cachedRotation || m_cachedRotation->modelIsLoaded != modelIsLoaded)
   {
-    m_cachedRotation = entityRotation(*this);
+    m_cachedRotation = {
+      entityRotation(*this),
+      modelIsLoaded,
+    };
   }
-  return *m_cachedRotation;
+  return m_cachedRotation->transform;
 }
 
 std::vector<EntityProperty> Entity::propertiesWithKey(const std::string& key) const

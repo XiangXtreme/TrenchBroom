@@ -45,9 +45,11 @@
 #include "kd/collection_utils.h"
 #include "kd/contracts.h"
 #include "kd/ranges/as_rvalue_view.h"
+#include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
 #include "kd/result.h"
 #include "kd/string_compare.h"
+#include "kd/string_compare_natural.h"
 #include "kd/vector_utils.h"
 
 #include <ranges>
@@ -226,7 +228,8 @@ void ModEditor::updateAvailableMods()
 {
   auto& map = m_document.map();
   findAvailableMods(map.gameInfo()) | kdl::transform([&](auto availableMods) {
-    m_availableMods = kdl::col_sort(std::move(availableMods), kdl::ci::string_less{});
+    m_availableMods =
+      kdl::col_sort(std::move(availableMods), kdl::ci::string_less_natural{});
   }) | kdl::transform_error([&](auto e) {
     m_availableMods.clear();
     map.logger().error() << "Could not update available mods: " << e.msg;
@@ -242,7 +245,8 @@ void ModEditor::updateMods()
   m_availableModList->clear();
   m_availableModList->addItems(
     m_availableMods | std::views::filter([&](const auto& mod) {
-      return kdl::ci::str_contains(mod, pattern) && !kdl::vec_contains(enabledMods, mod);
+      return kdl::ci::str_contains(mod, pattern)
+             && !kdl::ranges::contains(enabledMods, mod);
     })
     | std::views::transform(QString::fromStdString) | kdl::ranges::to<QStringList>());
 

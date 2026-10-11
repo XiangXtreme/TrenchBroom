@@ -1165,9 +1165,8 @@ TEST_CASE("Map_Geometry")
       const auto face1Verts = brushNode1->brush().face(*oFace1Index).vertexPositions();
       const auto face2Verts = brushNode2->brush().face(*oFace2Index).vertexPositions();
 
-      const auto bounds = vm::merge(
-        vm::bbox3d::merge_all(std::begin(face1Verts), std::end(face1Verts)),
-        vm::bbox3d::merge_all(std::begin(face2Verts), std::end(face2Verts)));
+      const auto bounds =
+        vm::merge(*vm::bbox3d::build(face1Verts), *vm::bbox3d::build(face2Verts));
 
       CHECK(brushNode3->logicalBounds() == bounds);
     }
@@ -1210,6 +1209,26 @@ TEST_CASE("Map_Geometry")
       const auto& top = brush3.face(*brush3.findFace(vm::vec3d{0, 0, 1}));
       CHECK(top.uAxis() == vm::vec3d{1, 0, 0});
       CHECK(top.vAxis() == vm::vec3d{0, 1, 0});
+    }
+
+    SECTION("Regression tests")
+    {
+      // A merge of these brushes previously crashed due to floating point imprecision
+      // when computing the convex hull of their combined vertices.
+      auto& map = fixture.load(
+        "test/mdl/Map/csgConvexMergeCrash.map",
+        {.mapFormat = MapFormat::Valve, .worldBounds = vm::bbox3d{32768.0}});
+
+      REQUIRE(map.editorContext().currentLayer()->childCount() == 119);
+
+      selectAllNodes(map);
+      CHECK(csgConvexMerge(map));
+
+      REQUIRE(map.editorContext().currentLayer()->childCount() == 1);
+      auto* result =
+        dynamic_cast<BrushNode*>(map.editorContext().currentLayer()->children().at(0));
+      REQUIRE(result);
+      CHECK(result->brush().fullySpecified());
     }
   }
 

@@ -26,7 +26,9 @@
 #include "mdl/NodeQueries.h"
 
 #include "kd/contracts.h"
+#include "kd/flat_set.h"
 #include "kd/ranges/cartesian_product_view.h"
+#include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
 #include "kd/stable_remove_duplicates.h"
 #include "kd/string_compare.h"
@@ -240,9 +242,10 @@ std::vector<GroupNode*> collectContainingGroups(const std::vector<Node*>& nodes)
   return kdl::vec_sort_and_remove_duplicates(std::move(result));
 }
 
-std::map<Node*, std::vector<Node*>> parentChildrenMap(const std::vector<Node*>& nodes)
+kdl::flat_map<Node*, std::vector<Node*>> parentChildrenMap(
+  const std::vector<Node*>& nodes)
 {
-  auto result = std::map<Node*, std::vector<Node*>>{};
+  auto result = kdl::flat_map<Node*, std::vector<Node*>>{};
 
   for (auto* node : nodes)
   {
@@ -312,7 +315,7 @@ static std::vector<Node*> collectMatchingNodes(
       },
       [&](BrushNode& brushNode) {
         // if `brush` is one of the search query nodes, don't count it as touching
-        if (!kdl::vec_contains(brushes, &brushNode))
+        if (!kdl::ranges::contains(brushes, &brushNode))
         {
           collectIfMatching(brushNode);
         }
@@ -431,17 +434,16 @@ std::vector<BrushFaceHandle> collectConnectedCoplanarFaces(
 
   const auto makeCandidate = [&](const BrushFaceHandle& handle) {
     const auto vertices = handle.face().vertexPositions();
+    contract_pre(!vertices.empty());
+
     const auto edges =
       handle.face().edges()
       | std::views::transform([](const auto* edge) { return edge->segment(); });
 
-    auto builder = vm::bbox3d::builder{};
-    builder.add(std::begin(vertices), std::end(vertices));
-
     return Candidate{
       handle,
       edges | kdl::ranges::to<std::vector>(),
-      builder.bounds().expand(epsilon),
+      vm::bbox3d::build(vertices)->expand(epsilon),
     };
   };
 
@@ -484,7 +486,7 @@ std::vector<BrushFaceHandle> collectConnectedCoplanarFaces(
   // Flood out from the start face, re-querying the tree around each face we reach so a
   // long row of brushes is followed without ever visiting the rest of the map.
   auto region = std::vector<BrushFaceHandle>{};
-  auto visited = kdl::vector_set<BrushFaceHandle>{startFace};
+  auto visited = kdl::flat_set<BrushFaceHandle>{startFace};
   auto pending = std::vector<Candidate>{};
   pending.push_back(makeCandidate(startFace));
 
@@ -543,15 +545,14 @@ std::vector<BrushFaceHandle> collectSmartFaceSelection(
       handle.face().edges()
       | std::views::transform([](const auto* edge) { return edge->segment(); });
 
-    auto builder = vm::bbox3d::builder{};
-    builder.add(std::begin(vertices), std::end(vertices));
+    const auto bounds = vm::bbox3d::build(vertices);
 
     return Candidate{
       handle,
       handle.face().normal(),
       handle.face().center(),
       edges | kdl::ranges::to<std::vector>(),
-      builder.bounds().expand(gapTolerance + epsilon),
+      bounds.value_or(vm::bbox3d{}).expand(gapTolerance + epsilon),
     };
   };
 
@@ -637,7 +638,7 @@ std::vector<BrushFaceHandle> collectSmartFaceSelection(
   };
 
   auto result = std::vector<BrushFaceHandle>{};
-  auto visited = kdl::vector_set<BrushFaceHandle>{};
+  auto visited = kdl::flat_set<BrushFaceHandle>{};
   auto seeds = std::vector<Candidate>{};
   for (const auto& seedFace : seedFaces)
   {
@@ -779,33 +780,35 @@ std::vector<BrushFaceHandle> collectSmartFaceSelection(
 vm::bbox3d computeLogicalBounds(
   const std::vector<Node*>& nodes, const vm::bbox3d& defaultBounds)
 {
-  vm::bbox3d::builder builder;
+  auto bounds = std::vector<vm::bbox3d>{};
   Node::visitAll(
     nodes,
     kdl::overload(
       [](const WorldNode&) {},
       [](const LayerNode&) {},
-      [&](const GroupNode& groupNode) { builder.add(groupNode.logicalBounds()); },
-      [&](const EntityNode& entityNode) { builder.add(entityNode.logicalBounds()); },
-      [&](const BrushNode& brushNode) { builder.add(brushNode.logicalBounds()); },
-      [&](const PatchNode& patchNode) { builder.add(patchNode.logicalBounds()); }));
-  return builder.initialized() ? builder.bounds() : defaultBounds;
+      [&](const GroupNode& groupNode) { bounds.push_back(groupNode.logicalBounds()); },
+      [&](const EntityNode& entityNode) { bounds.push_back(entityNode.logicalBounds()); },
+      [&](const BrushNode& brushNode) { bounds.push_back(brushNode.logicalBounds()); },
+      [&](const PatchNode& patchNode) { bounds.push_back(patchNode.logicalBounds()); }));
+  return vm::bbox3d::build(bounds).value_or(defaultBounds);
 }
 
 vm::bbox3d computePhysicalBounds(
   const std::vector<Node*>& nodes, const vm::bbox3d& defaultBounds)
 {
-  vm::bbox3d::builder builder;
+  auto bounds = std::vector<vm::bbox3d>{};
   Node::visitAll(
     nodes,
     kdl::overload(
       [](const WorldNode&) {},
       [](const LayerNode&) {},
-      [&](const GroupNode& groupNode) { builder.add(groupNode.physicalBounds()); },
-      [&](const EntityNode& entityNode) { builder.add(entityNode.physicalBounds()); },
-      [&](const BrushNode& brushNode) { builder.add(brushNode.physicalBounds()); },
-      [&](const PatchNode& patchNode) { builder.add(patchNode.physicalBounds()); }));
-  return builder.initialized() ? builder.bounds() : defaultBounds;
+      [&](const GroupNode& groupNode) { bounds.push_back(groupNode.physicalBounds()); },
+      [&](const EntityNode& entityNode) {
+        bounds.push_back(entityNode.physicalBounds());
+      },
+      [&](const BrushNode& brushNode) { bounds.push_back(brushNode.physicalBounds()); },
+      [&](const PatchNode& patchNode) { bounds.push_back(patchNode.physicalBounds()); }));
+  return vm::bbox3d::build(bounds).value_or(defaultBounds);
 }
 
 std::vector<BrushNode*> filterBrushNodes(const std::vector<Node*>& nodes)

@@ -176,7 +176,7 @@ private:
    * If a brush is in the VBO, it's always valid.
    * If a brush is valid, it might not be in the VBO if it was hidden by the Filter.
    *
-   * Do not attempt to use vector_set here, it turns out to be slower.
+   * Do not attempt to use a sorted vector here, it turns out to be slower.
    */
   std::unordered_set<const mdl::BrushNode*> m_allBrushes;
   std::unordered_set<const mdl::BrushNode*> m_invalidBrushes;
@@ -262,7 +262,7 @@ public:
 
   /**
    * Specifies whether 2D brush edges should use stable per brush/entity colors.
- */
+   */
   void setUseReadable2DBrushOutlines(bool useReadable2DBrushOutlines);
   void setSkipSkyFaces(bool skipSkyFaces);
 

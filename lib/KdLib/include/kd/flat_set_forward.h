@@ -1,5 +1,5 @@
 /*
- Copyright 2024 Kristian Duske
+ Copyright (C) 2026 Kristian Duske
 
  Permission is hereby granted, free of charge, to any person obtaining a copy of this
  software and associated documentation files (the "Software"), to deal in the Software
@@ -20,35 +20,14 @@
 
 #pragma once
 
-#include <iterator>
-#include <numeric>
-#include <utility>
+#include <functional>
+#include <vector>
 
 namespace kdl
 {
-
-inline constexpr auto fold_left = [](auto&& range, auto&& init, auto&& op) {
-  return std::accumulate(
-    std::begin(range),
-    std::end(range),
-    std::forward<decltype(init)>(init),
-    std::forward<decltype(op)>(op));
-};
-
-inline constexpr auto fold_right = [](auto&& range, auto&& init, auto&& op) {
-  return std::accumulate(
-    std::make_reverse_iterator(std::end(range)),
-    std::make_reverse_iterator(std::begin(range)),
-    std::forward<decltype(init)>(init),
-    std::forward<decltype(op)>(op));
-};
-
-inline constexpr auto fold_left_first = [](auto&& range, auto&& op) {
-  return fold_left(range, *std::begin(range), std::forward<decltype(op)>(op));
-};
-
-inline constexpr auto fold_right_first = [](auto&& range, auto&& op) {
-  return fold_right(range, *std::prev(std::end(range)), std::forward<decltype(op)>(op));
-};
-
-} // namespace kdl
+template <
+  typename Key,
+  typename Compare = std::less<Key>,
+  typename KeyContainer = std::vector<Key>>
+class flat_set;
+}

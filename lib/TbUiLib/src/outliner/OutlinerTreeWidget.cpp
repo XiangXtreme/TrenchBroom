@@ -44,7 +44,9 @@
 #include "ui/QWidgetUtils.h"
 #include "ui/ViewUtils.h"
 
+#include "kd/flat_map.h"
 #include "kd/memory_utils.h"
+#include "kd/ranges/contains.h"
 #include "kd/vector_utils.h"
 
 #include <algorithm>
@@ -2321,7 +2323,7 @@ void OutlinerTreeWidget::contextMenuEvent(QContextMenuEvent* event)
     setSingleSelectionIfNeeded();
 
     const auto& selection = m_document.map().selection();
-    const auto isGroupInSelection = kdl::vec_contains(selection.groups, groupNode);
+    const auto isGroupInSelection = kdl::ranges::contains(selection.groups, groupNode);
     const auto keepSelection = selection.hasOnlyGroups() && isGroupInSelection;
 
     if (!keepSelection)
@@ -2685,7 +2687,7 @@ bool OutlinerTreeWidget::dropSelectedItemsOnItem(QTreeWidgetItem* targetItem)
     auto transaction = mdl::Transaction{map, "Move Brushes to worldspawn"};
     mdl::deselectAll(map);
 
-    auto nodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+    auto nodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
     nodesToAdd[layerNode] = nodesToMove;
     if (!mdl::reparentNodes(map, nodesToAdd))
     {
@@ -2724,7 +2726,7 @@ bool OutlinerTreeWidget::dropSelectedItemsOnItem(QTreeWidgetItem* targetItem)
       mdl::Transaction{map, "Move Objects to Layer " + targetLayer->name()};
     mdl::deselectAll(map);
 
-    auto nodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+    auto nodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
     nodesToAdd[targetLayer] = nodesToMove;
     if (!mdl::reparentNodes(map, nodesToAdd))
     {
@@ -2756,7 +2758,7 @@ bool OutlinerTreeWidget::dropSelectedItemsOnItem(QTreeWidgetItem* targetItem)
     auto transaction = mdl::Transaction{map, "Move Objects to " + targetGroup->name()};
     mdl::deselectAll(map);
 
-    auto nodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+    auto nodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
     nodesToAdd[targetGroup] = nodesToMove;
     if (!mdl::reparentNodes(map, nodesToAdd))
     {
@@ -2790,7 +2792,7 @@ bool OutlinerTreeWidget::dropSelectedItemsOnItem(QTreeWidgetItem* targetItem)
         mdl::Transaction{map, "Move Brushes to Entity " + targetEntity->name()};
       mdl::deselectAll(map);
 
-      auto nodesToAdd = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+      auto nodesToAdd = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
       nodesToAdd[targetEntity] = nodesToMove;
       if (!mdl::reparentNodes(map, nodesToAdd))
       {

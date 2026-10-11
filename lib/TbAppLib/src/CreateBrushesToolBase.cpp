@@ -22,6 +22,7 @@
 #include "base/PreferenceManager.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Map.h"
+#include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/Transaction.h"
@@ -53,7 +54,7 @@ const mdl::Grid& CreateBrushesToolBase::grid() const
   return m_document.map().grid();
 }
 
-void CreateBrushesToolBase::createBrushes()
+void CreateBrushesToolBase::createBrushes(std::optional<std::string> groupName)
 {
   if (!m_brushNodes.empty())
   {
@@ -68,6 +69,10 @@ void CreateBrushesToolBase::createBrushes()
     auto addedNodes =
       addNodes(m_document.map(), {{&parentForNodes(m_document.map()), nodesToAdd}});
     selectNodes(m_document.map(), addedNodes);
+    if (groupName && addedNodes.size() > 1)
+    {
+      groupSelectedNodes(m_document.map(), *groupName);
+    }
     transaction.commit();
 
     doBrushesWereCreated();
@@ -103,15 +108,15 @@ void CreateBrushesToolBase::render(
     m_brushRenderer->setForceTransparent(true);
     m_brushRenderer->setTransparencyAlpha(0.7f);
 
-    auto boundsBuilder = vm::bbox3d::builder{};
     for (const auto& brushNode : m_brushNodes)
     {
       m_brushRenderer->addBrush(*brushNode);
-      boundsBuilder.add(brushNode->logicalBounds());
     }
     m_brushRenderer->render(renderContext, renderBatch);
 
-    auto boundsRenderer = render::SelectionBoundsRenderer{boundsBuilder.bounds()};
+    const auto bounds = vm::bbox3d::build(
+      m_brushNodes | std::views::transform(&mdl::BrushNode::logicalBounds));
+    auto boundsRenderer = render::SelectionBoundsRenderer{*bounds};
     boundsRenderer.render(renderContext, renderBatch);
   }
 }

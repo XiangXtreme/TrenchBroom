@@ -25,7 +25,7 @@
 #include "ui/DrawShapeToolParameters.h"
 #include "ui/MapDocumentFixture.h"
 
-#include "kd/range_fold.h"
+#include "kd/ranges/fold.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -466,7 +466,7 @@ TEST_CASE("DrawShapeToolArchExtension")
           CHECK(brushes.size() == 5u);
 
           CHECK(
-            kdl::fold_left_first(
+            kdl::ranges::fold_left_first(
               brushes
                 | std::views::transform([](const auto& brush) { return brush.bounds(); }),
               [](const auto& lhs, const auto& rhs) { return vm::merge(lhs, rhs); })

@@ -18,16 +18,48 @@
  DEALINGS IN THE SOFTWARE.
 */
 
-#pragma once
+#include "kd/string_compare_natural.h"
 
-#include <functional>
-#include <memory>
+#include "kd/string_compare.h"
+#include "kd/string_compare_detail.h"
+
+#include <string_view>
 
 namespace kdl
 {
-template <
-  typename T,
-  typename Compare = std::less<T>,
-  typename Allocator = std::allocator<T>>
-class vector_set;
+namespace cs
+{
+
+int str_compare_natural(const std::string_view s1, const std::string_view s2)
+{
+  return kdl::str_compare_natural(s1, s2, char_less());
 }
+
+bool string_less_natural::operator()(
+  const std::string_view lhs, const std::string_view rhs) const
+{
+  // break ties by exact string to get a total order
+  const auto compareResult = str_compare_natural(lhs, rhs);
+  return compareResult != 0 ? compareResult < 0 : lhs < rhs;
+}
+
+} // namespace cs
+
+namespace ci
+{
+
+int str_compare_natural(const std::string_view s1, const std::string_view s2)
+{
+  return kdl::str_compare_natural(s1, s2, char_less());
+}
+
+bool string_less_natural::operator()(
+  const std::string_view lhs, const std::string_view rhs) const
+{
+  // break ties by exact string to get a total order
+  const auto compareResult = str_compare_natural(lhs, rhs);
+  return compareResult != 0 ? compareResult < 0 : lhs < rhs;
+}
+
+} // namespace ci
+} // namespace kdl

@@ -43,6 +43,7 @@
 #include "ui/MapDocument.h"
 
 #include "kd/contracts.h"
+#include "kd/flat_map.h"
 #include "kd/k.h"
 #include "kd/map_utils.h"
 #include "kd/overload.h"
@@ -61,7 +62,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <map>
 #include <ranges>
 #include <vector>
 
@@ -407,7 +407,7 @@ bool applySplitBrushes(
 
   if (!reuseNodes)
   {
-    auto newNodes = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+    auto newNodes = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
     auto splitNodes = std::vector<mdl::BrushNode*>(brushes.size(), nullptr);
     for (size_t i = 0; i < brushes.size(); ++i)
     {
@@ -695,7 +695,7 @@ bool stampBrushes(mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragS
     mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
 
   auto newDragFaces = std::vector<mdl::BrushFaceHandle>{};
-  auto newNodes = std::map<mdl::Node*, std::vector<mdl::Node*>>{};
+  auto newNodes = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
 
   return dragState.initialDragHandles
          | std::views::transform([&](const auto& dragHandle) {

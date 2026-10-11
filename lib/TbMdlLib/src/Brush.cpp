@@ -26,8 +26,11 @@
 #include "mdl/UvCoordSystem.h"
 
 #include "kd/contracts.h"
+#include "kd/flat_map.h"
+#include "kd/flat_set.h"
 #include "kd/range_utils.h"
 #include "kd/ranges/concat_view.h"
+#include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
 #include "kd/reflection_impl.h"
 #include "kd/result.h"
@@ -44,7 +47,6 @@
 #include <cmath>
 #include <iterator>
 #include <ranges>
-#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -108,7 +110,7 @@ BrushGeometry removeVerticesFromGeometry(
   for (const auto* vertex : geometry.vertices())
   {
     const auto& position = vertex->position();
-    if (!kdl::vec_contains(vertexPositions, position))
+    if (!kdl::ranges::contains(vertexPositions, position))
     {
       points.push_back(position);
     }
@@ -671,7 +673,7 @@ static std::optional<std::vector<vm::vec3d>> chamferVerticesInGeometry(
     std::remove_if(
       points.begin(),
       points.end(),
-      [&](const auto& p) { return kdl::vec_contains(vertexPositions, p); }),
+      [&](const auto& p) { return kdl::ranges::contains(vertexPositions, p); }),
     points.end());
 
   vertexPositions = kdl::vec_sort_and_remove_duplicates(std::move(vertexPositions));
@@ -959,7 +961,7 @@ Result<void> Brush::snapVertices(
 
   const auto newGeometry = snappedGeometry(*m_geometry, snapToF);
 
-  auto vertexMapping = std::map<vm::vec3d, vm::vec3d>{};
+  auto vertexMapping = kdl::flat_map<vm::vec3d, vm::vec3d>{};
   for (const auto* vertex : m_geometry->vertices())
   {
     const auto& origin = vertex->position();
@@ -1128,7 +1130,7 @@ Brush::CanTransformVerticesResult Brush::doCanTransformVertices(
   }
 
   const auto vertexSet =
-    std::set<vm::vec3d>{std::begin(vertexPositions), std::end(vertexPositions)};
+    kdl::flat_set<vm::vec3d>{std::begin(vertexPositions), std::end(vertexPositions)};
 
   auto remainingPoints = std::vector<vm::vec3d>{};
   remainingPoints.reserve(vertexCount());
@@ -1259,7 +1261,7 @@ Result<void> Brush::doTransformVertices(
   for (const auto* vertex : m_geometry->vertices())
   {
     const auto& position = vertex->position();
-    if (kdl::vec_contains(vertexPositions, position))
+    if (kdl::ranges::contains(vertexPositions, position))
     {
       newVertices.push_back(transform * position);
     }
@@ -1271,11 +1273,11 @@ Result<void> Brush::doTransformVertices(
 
   auto newGeometry = BrushGeometry{newVertices};
 
-  auto vertexMapping = std::map<vm::vec3d, vm::vec3d>{};
+  auto vertexMapping = kdl::flat_map<vm::vec3d, vm::vec3d>{};
   for (auto* oldVertex : m_geometry->vertices())
   {
     const auto& oldPosition = oldVertex->position();
-    const auto transformed = kdl::vec_contains(vertexPositions, oldPosition);
+    const auto transformed = kdl::ranges::contains(vertexPositions, oldPosition);
     const auto newPosition = transformed ? transform * oldPosition : oldPosition;
     const auto* newVertex =
       newGeometry.findClosestVertex(newPosition, CloseVertexEpsilon);
@@ -1588,8 +1590,7 @@ bool Brush::checkFaceLinks() const
   }
 
   const auto findFaceGeometry = [&](const BrushFaceGeometry* g) {
-    return std::ranges::any_of(
-      m_geometry->faces(), [&](const auto* fg) { return fg == g; });
+    return kdl::ranges::contains(m_geometry->faces(), g);
   };
 
   for (const auto* faceGeometry : m_geometry->faces())
@@ -1607,7 +1608,7 @@ bool Brush::checkFaceLinks() const
     }
   }
 
-  auto faceGeometries = std::set<const BrushFaceGeometry*>{};
+  auto faceGeometries = kdl::flat_set<const BrushFaceGeometry*>{};
   for (const auto& face : m_faces)
   {
     const auto* faceGeometry = face.geometry();

@@ -31,7 +31,7 @@
 #include "mdl/Transaction.h"
 #include "ui/MapDocument.h"
 
-#include "kd/range_fold.h"
+#include "kd/ranges/fold.h"
 
 namespace tb::ui
 {
@@ -116,12 +116,12 @@ void ControlPointToolPage::updateControls()
         return patchNode->patch().pointColumnCount();
       });
 
-    const auto rows = kdl::fold_left(
+    const auto rows = kdl::ranges::fold_left(
       rowCounts | std::views::drop(1),
       std::optional<size_t>{rowCounts.front()},
       returnIfEqual);
 
-    const auto cols = kdl::fold_left(
+    const auto cols = kdl::ranges::fold_left(
       colCounts | std::views::drop(1),
       std::optional<size_t>{colCounts.front()},
       returnIfEqual);

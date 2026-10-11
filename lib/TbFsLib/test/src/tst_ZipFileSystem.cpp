@@ -26,6 +26,8 @@
 
 #include "kd/result.h"
 
+#include <filesystem>
+
 #include <catch2/catch_test_macros.hpp>
 
 namespace tb::fs
@@ -53,6 +55,19 @@ TEST_CASE("ZipFileSystem")
     {
       auto fs = openFS<ZipFileSystem>(fsTestPath / "empty_filename.zip");
       CHECK_THAT(fs->find("", TraversalMode::Recursive), MatchesPathsResult({}));
+    }
+
+    SECTION("reads an entry whose name is not valid UTF-8")
+    {
+      // https://github.com/TrenchBroom/TrenchBroom/issues/5494
+      const auto fs = openFS<ZipFileSystem>(fsTestPath / "non_utf8_filename.zip");
+
+#ifdef _WIN32
+      const auto expectedPath = std::filesystem::path{L"fen\u00EAtre.txt"};
+#else
+      const auto expectedPath = std::filesystem::path{"fen\xEAtre.txt"};
+#endif
+      CHECK_THAT(fs->find("", TraversalMode::Flat), MatchesPathsResult({expectedPath}));
     }
   }
 

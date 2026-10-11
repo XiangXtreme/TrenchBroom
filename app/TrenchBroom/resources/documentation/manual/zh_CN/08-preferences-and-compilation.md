@@ -183,7 +183,7 @@ TrenchBroom 会在以下位置通知你有新更新：
 
 TrenchBroom 支持直接在编辑器中编译地图。你可以创建编译配置，并配置这些配置来运行外部编译工具。不过，TrenchBroom 不附带预打包的编译工具，你需要自行下载和安装。选择 #menu(Menu/Run/Compile...) 后会打开如下编译对话框。
 
-![编译对话框（Windows）](images/CompilationDialog.png)
+![编译对话框（macOS）](images/CompilationDialog.png)
 
 你可以在此对话框中创建编译配置，配置列表位于左侧。每个编译配置都有名称、工作目录和任务列表。点击配置列表下方的“+”按钮创建新配置，点击“-”按钮删除选中的配置。要复制配置，请右键点击它并从菜单中选择“Duplicate”。选中配置后，可以在对话框右侧编辑其名称、工作目录和任务。
 
@@ -323,7 +323,7 @@ TrenchBroom 支持直接在编辑器中编译地图。你可以创建编译配�
 
 可以点击编译对话框中的 'Launch' 按钮，或选择 #menu(Menu/Run/Launch...) 手动启动游戏引擎。这会打开下图所示的启动对话框。
 
-![启动对话框（macOS）](images/LaunchGameEngineDialog.png)
+![启动对话框（Linux）](images/LaunchGameEngineDialog.png)
 
 在此对话框中，你可以选择所需的游戏引擎，编辑其参数并启动引擎。要选择引擎，请在对话框右侧列表中点击该引擎。如果想编辑引擎列表，可以点击“Configure engines...”按钮打开游戏引擎配置对话框。然后可以在对话框左侧底部的文本框中编辑其参数。请注意，你可以在该文本框中使用以下变量：
 

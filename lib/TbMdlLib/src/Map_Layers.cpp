@@ -36,6 +36,7 @@
 
 #include "kd/contracts.h"
 #include "kd/range_utils.h"
+#include "kd/ranges/contains.h"
 #include "kd/vector_utils.h"
 
 #include <algorithm>
@@ -224,7 +225,7 @@ void moveSelectedNodesToLayer(Map& map, LayerNode* layerNode)
       }
       else
       {
-        if (!kdl::vec_contains(nodesToMove, entityNode))
+        if (!kdl::ranges::contains(nodesToMove, entityNode))
         {
           nodesToMove.push_back(entityNode);
           kdl::vec_append(nodesToSelect, entityNode->children());
@@ -317,7 +318,7 @@ bool canIsolateLayers(const Map& map, const std::vector<LayerNode*>& layers)
 {
   const auto allLayers = map.worldNode().allLayers();
   return std::ranges::any_of(allLayers, [&](const auto* layer) {
-    return kdl::vec_contains(layers, layer) != layer->visible();
+    return kdl::ranges::contains(layers, layer) != layer->visible();
   });
 }
 
