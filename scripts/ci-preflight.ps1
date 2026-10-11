@@ -5,6 +5,7 @@ param(
   [string] $QtBin = "D:\Qtx\6.11.1\msvc2022_64\bin",
   [string] $ClangCl = "",
   [switch] $Full,
+  [switch] $ShowTestWindows,
   [switch] $SkipStrictCompile,
   [switch] $SkipBuild,
   [switch] $SkipTests,
@@ -340,6 +341,7 @@ function Invoke-FilteredBuild {
 
 $originalLocation = Get-Location
 $originalPath = $env:PATH
+$originalShowTestWindows = $env:TB_TEST_SHOW_WINDOWS
 try {
   $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
   Set-Location $repositoryRoot
@@ -410,6 +412,12 @@ try {
     Write-Host "Tests skipped"
   } else {
     $env:PATH = "$QtBin;$originalPath"
+    $env:TB_TEST_SHOW_WINDOWS = if ($ShowTestWindows) { "1" } else { "0" }
+    Write-Host $(if ($ShowTestWindows) {
+      "UI tests: native windows enabled (-ShowTestWindows)"
+    } else {
+      "UI tests: background window policy; use -ShowTestWindows for desktop validation"
+    })
     foreach ($testDirectory in $plan.TestDirectories) {
       $relativeTestDirectory = [System.IO.Path]::GetRelativePath(
         $repositoryRoot, $testDirectory)
@@ -425,5 +433,6 @@ try {
   Write-Host "==> Local CI preflight passed"
 } finally {
   $env:PATH = $originalPath
+  $env:TB_TEST_SHOW_WINDOWS = $originalShowTestWindows
   Set-Location $originalLocation
 }

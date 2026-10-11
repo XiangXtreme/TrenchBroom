@@ -69,6 +69,7 @@
   & scripts\ci-preflight.ps1 -Full
   ```
   Use `-BaseRef <ref>` or `-Paths @('path1', 'path2')` only to narrow an intentional investigation; do not skip checks in the final push preflight without recording why.
+- `TbUiLibTest` runs with background windows by default, including direct runs and CTest. The test-only window policy preserves Qt visibility, layout, events and rendering while preventing QWidget windows and popups from appearing on the desktop. It also uses Qt dialogs instead of native system dialogs. Preflight enforces this default even when the calling shell has `TB_TEST_SHOW_WINDOWS=1`. Use `-ShowTestWindows` only for intentional desktop validation. For a focused native-window check, set `$env:TB_TEST_SHOW_WINDOWS = '1'`, run the relevant CTest filter, and restore the variable afterward. Background tests do not establish native focus, activation, mouse capture or system-dialog behavior; new tests for those paths must be explicitly validated on the desktop.
 - For deterministic UI theme acceptance, run the checked-in snapshot matrix:
   ```powershell
   powershell -ExecutionPolicy Bypass -File scripts\ui-theme-acceptance.ps1

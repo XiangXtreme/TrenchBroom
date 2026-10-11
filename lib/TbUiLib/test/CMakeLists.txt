@@ -4,6 +4,7 @@ EMBED_UTF8_MANIFEST(TbUiLibTest)
 target_sources(TbUiLibTest
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/RunAllTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TestWindowPolicy.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ActionContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ActionInfo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Actions.cpp
@@ -62,6 +63,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_KreedzBroomPreferencePane.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SystemPaths.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TabBook.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TestWindowPolicy.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TextOutputAdapter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Theme.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_UiSnapshot.cpp

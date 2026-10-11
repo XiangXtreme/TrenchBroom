@@ -22,6 +22,7 @@
 #include <QApplication>
 
 #include "TestPreferenceStore.h"
+#include "TestWindowPolicy.h"
 #include "base/PreferenceManager.h"
 
 #include "kd/contracts.h"
@@ -58,7 +59,15 @@ int main(int argc, char** argv)
   tb::PreferenceManager::createInstance(
     std::make_unique<tb::TestPreferenceStore>(), K(saveInstantly));
 
+  const auto showWindows = qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1;
+  if (!showWindows)
+  {
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+  }
+
   auto app = QApplication{argc, argv};
+  auto windowPolicy =
+    showWindows ? nullptr : std::make_unique<tb::ui::TestWindowPolicy>(app);
 
   return Catch::Session().run(argc, argv);
 }

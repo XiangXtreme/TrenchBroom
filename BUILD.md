@@ -4,6 +4,32 @@ Follow these instructions if you want to get started developing on TrenchBroom.
 
 To see how releases of TrenchBroom are packaged, consult our CI scripts instead.
 
+## Running UI tests
+
+Build `TbUiLibTest` before running its tests. UI tests keep QWidget windows, dialogs
+and popups off the desktop by default, both through CTest and when running the test
+executable directly. Qt visibility, layouts, events and rendering still run; the
+native Qt platform remains in use. System dialogs use their Qt implementation.
+These checks do not validate native focus, activation, mouse capture or system dialogs.
+
+For an intentional desktop check of a specific test, opt in with
+`TB_TEST_SHOW_WINDOWS=1`. For example, in PowerShell:
+
+```powershell
+$previousShowWindows = $env:TB_TEST_SHOW_WINDOWS
+try {
+  $env:TB_TEST_SHOW_WINDOWS = '1'
+  ctest --test-dir build-release-codex/lib/TbUiLib/test -R '^TabBook$' --output-on-failure
+} finally {
+  $env:TB_TEST_SHOW_WINDOWS = $previousShowWindows
+}
+```
+
+The Windows local preflight also defaults to background UI tests. Pass
+`-ShowTestWindows` to `scripts/ci-preflight.ps1` when intentionally validating the
+affected suite with visible native windows. The script restores the calling
+shell's display setting afterward.
+
 ## All Platforms
 
 First, clone the TrenchBroom repository:
