@@ -696,7 +696,7 @@
 #define BOUNCE_FLESH                BREAK_FLESH         // "debris/flesh%i.wav", Com_RandomLong( 1, 7 )
 #define BOUNCE_WOOD                 BREAK_WOOD          // "debris/wood%i.wav", Com_RandomLong( 1, 4 )
 #define BOUNCE_SHRAP                0x10                // "weapons/ric%i.wav", Com_RandomLong( 1, 5 ) NOTE: unreachable
-#define BOUNCE_SHELL                0x20                // "player/pl_shell%i.wav", Com_RandomLong( 1, 3 ) 
+#define BOUNCE_SHELL                0x20                // "player/pl_shell%i.wav", Com_RandomLong( 1, 3 )
 #define BOUNCE_CONCRETE             BREAK_CONCRETE      // "debris/concrete%i.wav", Com_RandomLong( 1, 3 )
 #define BOUNCE_SHOTSHELL            0x80                // "weapons/sshell%i.wav", Com_RandomLong( 1, 3 )
 

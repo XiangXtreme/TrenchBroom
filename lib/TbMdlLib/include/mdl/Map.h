@@ -235,8 +235,6 @@ public: // misc
   gl::ResourceManager& resourceManager();
   const gl::ResourceManager& resourceManager() const;
 
-  const GameFileSystem& gameFileSystem() const;
-
   EntityDefinitionManager& entityDefinitionManager();
   const EntityDefinitionManager& entityDefinitionManager() const;
 

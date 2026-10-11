@@ -678,11 +678,6 @@ const gl::ResourceManager& Map::resourceManager() const
   return m_resourceManager;
 }
 
-const GameFileSystem& Map::gameFileSystem() const
-{
-  return *m_gameFileSystem;
-}
-
 EntityDefinitionManager& Map::entityDefinitionManager()
 {
   return *m_entityDefinitionManager;

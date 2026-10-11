@@ -2700,7 +2700,7 @@ void EXT_FUNC __API_HOOK(PM_Jump)()
 
 	// No more effect
 	// in air, so no effect
- 	if (pmove->onground == -1)
+	if (pmove->onground == -1)
 	{
 		// Flag that we jumped.
 		// don't jump again until released
