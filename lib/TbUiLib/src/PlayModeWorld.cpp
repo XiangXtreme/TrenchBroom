@@ -366,6 +366,19 @@ struct CollectedEntity
   int32_t entityContents = 0;
 };
 
+struct CollectedTeleport
+{
+  BrushCollector brushes;
+  std::string target;
+};
+
+struct NamedDestination
+{
+  std::string name;
+  vm::vec3f origin;
+  vm::vec3f angles;
+};
+
 } // namespace
 
 void ScsWorldDeleter::operator()(scs_world* world) const
@@ -380,6 +393,8 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   const auto zhlt = options.compiler == SCS_COMPILER_ZHLT;
   auto worldBrushes = BrushCollector{options.hullMask};
   auto entities = std::vector<CollectedEntity>{};
+  auto teleports = std::vector<CollectedTeleport>{};
+  auto destinations = std::vector<NamedDestination>{};
 
   const auto addWorldBrush = [&](const mdl::BrushNode& brushNode, const bool noclip) {
     if (const auto info = brushInfo(brushNode.brush(), noclip, zhlt))
@@ -409,6 +424,11 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
       },
       [&](const mdl::EntityNode& entityNode) {
         const auto& entity = entityNode.entity();
+        if (const auto* name = entity.property("targetname"); name && !name->empty())
+        {
+          destinations.push_back(
+            {*name, vm::vec3f{entity.origin()}, spawnAngles(entity)});
+        }
         if (entity.pointEntity())
         {
           const auto classname = toLower(entity.classname());
@@ -416,6 +436,42 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
           {
             result.spawnPoints.push_back(
               {classname, vm::vec3f{entity.origin()}, spawnAngles(entity)});
+          }
+          return;
+        }
+
+        if (toLower(entity.classname()) == "trigger_teleport")
+        {
+          // SF_TRIGGER_NOCLIENTS excludes the single simulated player.
+          if ((intForKey(entity, "spawnflags") & 2) != 0)
+          {
+            return;
+          }
+          if (const auto* master = entity.property("master"); master && !master->empty())
+          {
+            result.warnings.push_back(
+              "trigger_teleport master logic is not simulated: " + *master);
+            return;
+          }
+          const auto* target = entity.property("target");
+          if (!target || target->empty())
+          {
+            result.warnings.push_back("trigger_teleport has no target");
+            return;
+          }
+          auto& teleport = teleports.emplace_back(
+            CollectedTeleport{BrushCollector{options.hullMask}, *target});
+          const auto noclip = intForKey(entity, "zhlt_noclip") != 0;
+          for (const auto* child : entityNode.children())
+          {
+            if (const auto* brush = dynamic_cast<const mdl::BrushNode*>(child);
+                brush && brush->visible())
+            {
+              if (const auto info = brushInfo(brush->brush(), noclip, zhlt))
+              {
+                teleport.brushes.add(brush->brush(), *info, SCS_CONTENTS_SOLID);
+              }
+            }
           }
           return;
         }
@@ -484,12 +540,36 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   }
 
   auto desc = scs_world_desc{};
+  auto teleportDescs = std::vector<scs_teleport_trigger>{};
+  for (auto& teleport : teleports)
+  {
+    if (teleport.brushes.empty())
+    {
+      continue;
+    }
+    const auto destination = std::ranges::find_if(
+      destinations,
+      [&](const auto& candidate) { return candidate.name == teleport.target; });
+    if (destination == destinations.end())
+    {
+      result.warnings.push_back("trigger_teleport target not found: " + teleport.target);
+      continue;
+    }
+    teleportDescs.push_back({
+      teleport.brushes.data(),
+      static_cast<uint32_t>(teleport.brushes.size()),
+      {destination->origin[0], destination->origin[1], destination->origin[2]},
+      {destination->angles[0], destination->angles[1], destination->angles[2]},
+    });
+  }
   desc.world_brushes = worldBrushes.data();
   desc.world_brush_count = static_cast<uint32_t>(worldBrushes.size());
   desc.entities = entityDescs.data();
   desc.entity_count = static_cast<uint32_t>(entityDescs.size());
   desc.cliptype = result.clipType;
   desc.compiler = options.compiler;
+  desc.teleports = teleportDescs.data();
+  desc.teleport_count = static_cast<uint32_t>(teleportDescs.size());
 
   auto info = scs_world_info{};
   scs_world* world = nullptr;
@@ -511,6 +591,7 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   result.world = ScsWorldPtr{world};
   result.worldBrushCount = worldBrushes.size();
   result.entityCount = entities.size();
+  result.teleportCount = teleportDescs.size();
   result.skippedBrushCount += info.skipped_brushes;
   result.buildMilliseconds = info.build_milliseconds;
   return result;

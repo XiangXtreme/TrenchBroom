@@ -17,6 +17,7 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "cs/scs.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
@@ -27,8 +28,8 @@
 #include "mdl/Map_NodeVisibility.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/WorldNode.h"
-#include "cs/scs.h"
 #include "ui/CatchConfig.h"
+#include "ui/PlayModeTimeline.h"
 #include "ui/PlayModeWorld.h"
 
 #include "kd/result.h"
@@ -39,6 +40,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -76,6 +78,13 @@ mdl::EntityNode* createBrushEntity(
   mdl::addNodes(map, {{&mdl::parentForNodes(map), {entityNode}}});
   mdl::addNodes(map, {{entityNode, {createCuboid(map, bounds, "wall")}}});
   return entityNode;
+}
+
+void setProperty(mdl::EntityNode& node, std::string key, std::string value)
+{
+  auto entity = node.entity();
+  entity.addOrUpdateProperty(std::move(key), std::move(value));
+  node.setEntity(std::move(entity));
 }
 
 // Sweeps the standing hull along +x at walking height and returns where it stops.
@@ -259,6 +268,176 @@ TEST_CASE("buildPlayModeWorld")
     scs_get_state(context.get(), &state);
     CHECK(state.movetype == SCS_MOVETYPE_FLY);
     CHECK(state.origin[2] > 200.0f);
+  }
+
+  SECTION("trigger_teleport")
+  {
+    auto* trigger = createBrushEntity(
+      map, "trigger_teleport", vm::bbox3d{{100, -64, 0}, {116, 64, 128}});
+    setProperty(*trigger, "target", "exit");
+    auto* destination = new mdl::EntityNode{mdl::Entity{{
+      {"classname", "info_teleport_destination"},
+      {"targetname", "exit"},
+      {"origin", "300 100 64"},
+      {"angles", "10 90 0"},
+    }}};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {destination}}});
+
+    SECTION("touching with the player hull teleports without blocking")
+    {
+      const auto world = buildPlayModeWorld(map);
+      REQUIRE(world.world);
+      CHECK(world.teleportCount == 1u);
+      CHECK(world.entityCount == 0u);
+      CHECK(world.warnings.empty());
+      auto context = createContext(world);
+      CHECK(blockedAtX(context.get(), 300.0f) == vm::approx{300.0f});
+
+      // The center is outside the brush, but the standing player overlaps it.
+      const float spawn[3] = {90, 0, 40};
+      scs_spawn(context.get(), spawn, nullptr);
+      auto state = scs_player_state{};
+      scs_get_state(context.get(), &state);
+      state.velocity[0] = 100;
+      state.basevelocity[1] = 20;
+      scs_set_state(context.get(), &state);
+      auto cmd = scs_usercmd{};
+      cmd.msec = 10;
+      scs_step(context.get(), &cmd);
+      scs_get_state(context.get(), &state);
+
+      CHECK(state.teleport_count == 1u);
+      CHECK(
+        vm::vec3f{state.origin[0], state.origin[1], state.origin[2]}
+        == vm::vec3f{300, 100, 101});
+      CHECK(
+        vm::vec3f{state.v_angle[0], state.v_angle[1], state.v_angle[2]}
+        == vm::vec3f{10, 90, 0});
+      for (int i = 0; i < 3; ++i)
+      {
+        CHECK(state.velocity[i] == 0.0f);
+        CHECK(state.basevelocity[i] == 0.0f);
+      }
+      CHECK((state.flags & SCS_FL_ONGROUND) == 0);
+      CHECK(state.ground_entity == -1);
+    }
+
+    SECTION("ducking uses the ducked destination height")
+    {
+      const auto world = buildPlayModeWorld(map);
+      REQUIRE(world.world);
+      auto context = createContext(world);
+      const float spawn[3] = {90, 0, 40};
+      scs_spawn(context.get(), spawn, nullptr);
+      auto cmd = scs_usercmd{};
+      cmd.msec = 10;
+      cmd.buttons = SCS_IN_DUCK; // completes immediately in the air
+      scs_step(context.get(), &cmd);
+      auto state = scs_player_state{};
+      scs_get_state(context.get(), &state);
+      CHECK((state.flags & SCS_FL_DUCKING) != 0);
+      CHECK(state.teleport_count == 1u);
+      CHECK(state.origin[2] == 83.0f);
+    }
+
+    SECTION("gaps between trigger brushes do not teleport")
+    {
+      mdl::addNodes(
+        map,
+        {{trigger,
+          {createCuboid(map, vm::bbox3d{{200, -64, 0}, {216, 64, 128}}, "wall")}}});
+      const auto world = buildPlayModeWorld(map);
+      REQUIRE(world.world);
+      auto context = createContext(world);
+      const float spawn[3] = {150, 0, 40};
+      scs_spawn(context.get(), spawn, nullptr);
+      auto cmd = scs_usercmd{};
+      cmd.msec = 10;
+      scs_step(context.get(), &cmd);
+      auto state = scs_player_state{};
+      scs_get_state(context.get(), &state);
+      CHECK(state.teleport_count == 0u);
+      CHECK(state.origin[0] == 150.0f);
+    }
+
+    SECTION("the first matching targetname wins")
+    {
+      auto* other = new mdl::EntityNode{mdl::Entity{{
+        {"classname", "info_teleport_destination"},
+        {"targetname", "exit"},
+        {"origin", "400 200 64"},
+      }}};
+      mdl::addNodes(map, {{&mdl::parentForNodes(map), {other}}});
+      const auto world = buildPlayModeWorld(map);
+      auto context = createContext(world);
+      const float spawn[3] = {90, 0, 40};
+      scs_spawn(context.get(), spawn, nullptr);
+      auto cmd = scs_usercmd{};
+      cmd.msec = 100; // second half must preserve the server's new view angles
+      scs_step(context.get(), &cmd);
+      auto state = scs_player_state{};
+      scs_get_state(context.get(), &state);
+      CHECK(state.teleport_count == 1u);
+      CHECK(state.origin[0] == 300.0f);
+      CHECK(state.origin[1] == 100.0f);
+      CHECK(state.v_angle[0] == 10.0f);
+      CHECK(state.v_angle[1] == 90.0f);
+    }
+
+    SECTION("the timeline adopts destination angles and keeps future mouse input")
+    {
+      const auto world = buildPlayModeWorld(map);
+      auto context = createContext(world);
+      const float spawn[3] = {90, 0, 40};
+      scs_spawn(context.get(), spawn, nullptr);
+      auto timeline = PlayModeTimeline{};
+      timeline.reset(0, {});
+      timeline.look(15, -5, 20);
+      timeline.advance(context.get(), 10);
+      CHECK(timeline.latestViewAngles() == vm::vec3f{5, 110, 0});
+      timeline.advance(context.get(), 30);
+      auto state = scs_player_state{};
+      scs_get_state(context.get(), &state);
+      CHECK(state.teleport_count == 1u);
+      CHECK(state.v_angle[0] == vm::approx{5.0f, 0.01f});
+      CHECK(state.v_angle[1] == vm::approx{110.0f, 0.01f});
+    }
+
+    SECTION("hidden trigger brushes are ignored")
+    {
+      mdl::hideNodes(map, {trigger->children().front()});
+      const auto world = buildPlayModeWorld(map);
+      REQUIRE(world.world);
+      CHECK(world.teleportCount == 0u);
+    }
+
+    SECTION("NOCLIENTS excludes the player")
+    {
+      setProperty(*trigger, "spawnflags", "2");
+      const auto world = buildPlayModeWorld(map);
+      REQUIRE(world.world);
+      CHECK(world.teleportCount == 0u);
+    }
+
+    SECTION("unresolved targets and unsupported masters are reported")
+    {
+      SECTION("missing target")
+      {
+        setProperty(*trigger, "target", "");
+      }
+      SECTION("unknown target")
+      {
+        setProperty(*trigger, "target", "unknown");
+      }
+      SECTION("master gate")
+      {
+        setProperty(*trigger, "master", "gate");
+      }
+      const auto world = buildPlayModeWorld(map);
+      REQUIRE(world.world);
+      CHECK(world.teleportCount == 0u);
+      CHECK(world.warnings.size() == 1u);
+    }
   }
 
   SECTION("hidden brushes are ignored")

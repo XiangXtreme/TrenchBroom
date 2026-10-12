@@ -146,6 +146,13 @@ uint32_t PlayModeTimeline::advance(
     scs_build_usercmd(&m_input, state.maxspeed, m_msec, &cmd);
     m_viewAngles[1] = m_input.viewangles[1]; // +left / +right turned the view
     scs_step(context, &cmd);
+    auto after = scs_player_state{};
+    scs_get_state(context, &after);
+    if (after.teleport_count != state.teleport_count)
+    {
+      // A server fixangle replaces the command view; future input stays queued.
+      m_viewAngles = vm::vec3f{after.v_angle[0], after.v_angle[1], after.v_angle[2]};
+    }
     m_lastCommand = cmd;
 
     m_nextTickMs += tickMs;

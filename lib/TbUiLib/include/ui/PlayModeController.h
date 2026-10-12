@@ -107,6 +107,7 @@ private:
   // when the last hard landing was reported on the HUD
   double m_fallShownMs = -1.0e9;
   uint32_t m_fallShownCount = 0;
+  uint32_t m_teleportCount = 0;
   // showkeys: when each movement button was last down in a usercmd (forward, back,
   // move left, move right, duck, jump)
   double m_keyLastDownMs[6] = {};

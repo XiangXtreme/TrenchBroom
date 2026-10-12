@@ -386,6 +386,10 @@ void PlayModeController::finishStarting()
     }
 
     m_world = std::move(*world);
+    for (const auto& warning : m_world.warnings)
+    {
+      m_document.logger().warn() << "Play mode: " << warning;
+    }
     m_worldMap = &m_document.map();
     m_worldModificationCount = m_document.map().modificationCount();
   }
@@ -406,7 +410,8 @@ void PlayModeController::finishStarting()
   {
     m_document.logger().info() << "Play mode: compiled " << m_world.worldBrushCount
                                << " world brushes and " << m_world.entityCount
-                               << " brush entities in "
+                               << " brush entities, " << m_world.teleportCount
+                               << " teleport triggers in "
                                << formatFloat(
                                     static_cast<float>(m_world.buildMilliseconds), 1)
                                << " ms (" << m_world.skippedBrushCount << " skipped), "
@@ -432,6 +437,7 @@ void PlayModeController::finishStarting()
   m_showPre.reset(state);
   m_fallShownMs = -1.0e9;
   m_fallShownCount = state.fall_count;
+  m_teleportCount = state.teleport_count;
   std::ranges::fill(m_keyLastDownMs, 0.0);
   m_document.logger().info() << "Play mode: " << m_statusMessage;
 
@@ -563,7 +569,7 @@ void PlayModeController::loadCheckpoint()
   auto current = scs_player_state{};
   scs_get_state(m_context.get(), &current);
   auto state = current;
-  for (int i = 0; i < 3; ++i)
+  for (size_t i = 0; i < 3; ++i)
   {
     state.origin[i] = m_checkpoint->origin[i];
     state.velocity[i] = 0.0f;
@@ -586,7 +592,7 @@ void PlayModeController::loadCheckpoint()
 
   if (pref(Preferences::PlayModeRestoreCheckpointView))
   {
-    for (int i = 0; i < 3; ++i)
+    for (size_t i = 0; i < 3; ++i)
     {
       state.v_angle[i] = m_checkpoint->viewAngles[i];
     }
@@ -662,6 +668,12 @@ void PlayModeController::update()
 
     auto state = scs_player_state{};
     scs_get_state(m_context.get(), &state);
+    if (state.teleport_count != m_teleportCount)
+    {
+      m_teleportCount = state.teleport_count;
+      m_previousEye = m_currentEye;
+      m_showPre.reset(state);
+    }
     m_showPre.tick(m_timeline.lastCommand(), state, now);
 
     if (state.fall_count != m_fallShownCount)

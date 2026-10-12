@@ -81,6 +81,7 @@ private:
   void runCommandChopped(usercmd_t cmd);
   void runCommandOnce(const usercmd_t& cmd);
   void postThinkFallDamage();
+  void touchTeleports();
   void checkMovingGround(float frametime);
   void setupPMove(const usercmd_t& cmd);
   void finishPMove();

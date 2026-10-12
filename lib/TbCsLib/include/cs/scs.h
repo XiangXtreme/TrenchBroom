@@ -144,6 +144,16 @@ typedef struct scs_brush_entity {
   int32_t entity_contents;
 } scs_brush_entity;
 
+/* Non-solid trigger_teleport, with target resolved by the editor. Destination
+ * origin is at the feet; TeleportTouch adjusts it for the current player hull. */
+typedef struct scs_teleport_trigger
+{
+  const scs_brush* brushes;
+  uint32_t brush_count;
+  float destination_origin[3];
+  float destination_angles[3];
+} scs_teleport_trigger;
+
 /* hlcsg -cliptype: how brushes grow into the player clip hulls. The values
  * are VHLT's, also used by the info_compile_parameters "cliptype" key. */
 #define SCS_CLIPTYPE_SMALLEST 0
@@ -163,6 +173,8 @@ typedef struct scs_world_desc {
   uint32_t entity_count;
   int32_t cliptype; /* SCS_CLIPTYPE_* */
   int32_t compiler; /* SCS_COMPILER_* */
+  const scs_teleport_trigger* teleports;
+  uint32_t teleport_count;
 } scs_world_desc;
 
 typedef struct scs_world_info {
@@ -262,6 +274,7 @@ typedef struct scs_player_state {
   float last_fall_damage;     /* damage of the most recent damaging landing */
   float last_fall_speed;      /* its fall speed */
   uint32_t fall_count;        /* incremented by every damaging landing */
+  uint32_t teleport_count;    /* incremented by trigger teleports (server fixangle) */
 } scs_player_state;
 
 /* FlPlayerFallDamage (multiplayer rules): damage of landing at `fall_speed`, 0 if

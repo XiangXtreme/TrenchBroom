@@ -111,10 +111,12 @@ extern "C" {
 
 scs_result scs_world_build(const scs_world_desc* desc, scs_world** out_world, scs_world_info* info)
 {
-  if (!desc || !out_world || (desc->world_brush_count && !desc->world_brushes)
-      || (desc->entity_count && !desc->entities)
-      || desc->cliptype < SCS_CLIPTYPE_SMALLEST || desc->cliptype > SCS_CLIPTYPE_LEGACY
-      || desc->compiler < SCS_COMPILER_VHLT || desc->compiler > SCS_COMPILER_ZHLT)
+  if (
+    !desc || !out_world || (desc->world_brush_count && !desc->world_brushes)
+    || (desc->entity_count && !desc->entities)
+    || (desc->teleport_count && !desc->teleports)
+    || desc->cliptype < SCS_CLIPTYPE_SMALLEST || desc->cliptype > SCS_CLIPTYPE_LEGACY
+    || desc->compiler < SCS_COMPILER_VHLT || desc->compiler > SCS_COMPILER_ZHLT)
   {
     return SCS_ERR_INVALID_ARGUMENT;
   }
@@ -152,6 +154,29 @@ scs_result scs_world_build(const scs_world_desc* desc, scs_world** out_world, sc
       }
       model->name = "*" + std::to_string(i + 1);
       world->models.push_back(std::move(model));
+    }
+
+    for (uint32_t i = 0; i < desc->teleport_count; ++i)
+    {
+      const auto& source = desc->teleports[i];
+      if (source.brush_count && !source.brushes)
+      {
+        return SCS_ERR_INVALID_ARGUMENT;
+      }
+      tb::cs::HullCompileStats stats;
+      tb::cs::TeleportTrigger trigger;
+      trigger.model =
+        compileBrushes(source.brushes, source.brush_count, true, options, stats);
+      skipped += stats.skippedBrushes;
+      std::memcpy(
+        trigger.destinationOrigin,
+        source.destination_origin,
+        sizeof(trigger.destinationOrigin));
+      std::memcpy(
+        trigger.destinationAngles,
+        source.destination_angles,
+        sizeof(trigger.destinationAngles));
+      world->teleports.push_back(std::move(trigger));
     }
 
     if (info)

@@ -58,6 +58,8 @@ struct PlayModeWorld
   std::vector<PlayModeSpawnPoint> spawnPoints;
   size_t worldBrushCount = 0;
   size_t entityCount = 0;
+  size_t teleportCount = 0;
+  std::vector<std::string> warnings;
   size_t skippedBrushCount = 0;
   double buildMilliseconds = 0.0;
   int clipType = 0;             // SCS_CLIPTYPE_* the hulls were built with
@@ -77,9 +79,10 @@ struct PlayModeWorldOptions
 /**
  * Compiles the visible brushes of the given map into a TbCsLib collision world, using
  * the same rules a GoldSrc compile would: worldspawn, func_group and func_detail become
- * world geometry, func_ladder and func_water become special brush entities, triggers and
- * other non-solid brush entities are ignored, and CLIP / ORIGIN / HINT / SKIP / !liquid
- * materials determine brush contents. Clip hulls are expanded with VHLT's or ZHLT's
+ * world geometry, func_ladder and func_water become special brush entities, and
+ * trigger_teleport becomes a non-blocking touch volume. Other non-solid brush entities
+ * are ignored, and CLIP / ORIGIN / HINT / SKIP / !liquid materials determine brush
+ * contents. Clip hulls are expanded with VHLT's or ZHLT's
  * hlcsg rules for the chosen cliptype, including their tool textures (BEVEL, and for
  * VHLT CLIPHULLn / NOCLIP / ...).
  */

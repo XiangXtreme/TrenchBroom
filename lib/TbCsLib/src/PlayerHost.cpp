@@ -463,9 +463,14 @@ void PlayerHost::runCommandChopped(usercmd_t cmd)
   {
     const int oldmsec = cmd.msec;
     cmd.msec = static_cast<byte>(oldmsec / 2);
+    const auto teleportCount = ent_.teleport_count;
     runCommandOnce(cmd);
     cmd.msec = static_cast<byte>(oldmsec / 2);
     cmd.impulse = 0;
+    if (ent_.teleport_count != teleportCount)
+    {
+      copyVec(ent_.v_angle, cmd.viewangles);
+    }
     runCommandOnce(cmd);
     return;
   }
@@ -486,7 +491,7 @@ void PlayerHost::runCommandOnce(const usercmd_t& cmd)
   checkMovingGround(frametime);
 
   copyVec(ent_.v_angle, pm_->oldangles);
-  copyVec(cmd.viewangles, ent_.v_angle); // fixangle is never set in the editor
+  copyVec(cmd.viewangles, ent_.v_angle);
 
   // CBasePlayer::PreThink. Besides the fall speed nothing in it feeds pm_shared
   // (maxspeed is set through the state).
@@ -499,10 +504,44 @@ void PlayerHost::runCommandOnce(const usercmd_t& cmd)
   PM_Move(pm_.get(), 1);
   finishPMove();
 
-  // Touch processing (triggers) would run here.
+  touchTeleports();
   pm_->numtouch = 0;
 
   postThinkFallDamage();
+}
+
+void PlayerHost::touchTeleports()
+{
+  // ReHLDS SV_TouchLinks tests the player origin against the trigger's expanded
+  // BSP hull. Trigger models never enter the blocking physent list.
+  for (const auto& trigger : world_->teleports)
+  {
+    physent_t pe{};
+    pe.model = reinterpret_cast<model_s*>(trigger.model.get());
+    pm_->usehull = (ent_.flags & SCS_FL_DUCKING) ? SCS_HULL_DUCKED : SCS_HULL_STANDING;
+    float offset[3];
+    const auto* hull = pm::hullForBsp(&pe, pm_.get(), offset);
+    float point[3];
+    for (int i = 0; i < 3; ++i)
+    {
+      point[i] = ent_.origin[i] - offset[i];
+    }
+    if (pm::hullPointContents(hull, hull->firstclipnode, point) != CONTENTS_SOLID)
+    {
+      continue;
+    }
+
+    // ReGameDLL CBaseTrigger::TeleportTouch: feet to center, then one unit up.
+    copyVec(trigger.destinationOrigin, ent_.origin);
+    ent_.origin[2] += 1.0f - pm_->player_mins[pm_->usehull][2];
+    copyVec(trigger.destinationAngles, ent_.v_angle);
+    std::fill_n(ent_.velocity, 3, 0.0f);
+    std::fill_n(ent_.basevelocity, 3, 0.0f);
+    ent_.flags &= ~SCS_FL_ONGROUND;
+    ent_.ground_entity = -1;
+    ++ent_.teleport_count;
+    resetPersistentMoveState();
+  }
 }
 
 void PlayerHost::postThinkFallDamage()

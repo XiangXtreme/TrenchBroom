@@ -26,12 +26,20 @@
 
 namespace tb::cs {
 
+struct TeleportTrigger
+{
+  std::unique_ptr<BrushModel> model;
+  float destinationOrigin[3]{};
+  float destinationAngles[3]{};
+};
+
 // An immutable compiled collision world. models[0] is worldspawn, models[n]
 // is brush entity n-1. Shared between contexts via shared_ptr so the editor
 // can rebuild and hot-swap it while a context is still using the old one.
 struct World
 {
   std::vector<std::unique_ptr<BrushModel>> models;
+  std::vector<TeleportTrigger> teleports;
 };
 
 } // namespace tb::cs
