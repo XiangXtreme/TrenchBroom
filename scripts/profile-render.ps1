@@ -15,6 +15,7 @@ param(
   [switch] $HideModels,
   [switch] $HideLabels,
   [switch] $HideEdges,
+  [switch] $GlCallTiming,
   [switch] $NoBuild
 )
 
@@ -35,6 +36,7 @@ New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
   position = $Position; direction = $Direction
   hideLabels = [bool]$HideLabels; hideEdges = [bool]$HideEdges; hideModels = [bool]$HideModels
   warmupSeconds = $WarmupSeconds; play = [bool]$Play; moveForward = [bool]$MoveForward
+  glCallTiming = [bool]$GlCallTiming
 } | ConvertTo-Json | Set-Content (Join-Path $outputDir 'capture.json')
 $jsonl = Join-Path $outputDir 'render.jsonl'
 $exe = Join-Path $build 'lib/TbUiLib/test/TbUiLibTest.exe'
@@ -54,6 +56,7 @@ $start.Environment['TB_RENDER_PROFILE_SECONDS'] = [string]$Seconds
 $start.Environment['TB_RENDER_PROFILE_WARMUP'] = [string]$WarmupSeconds
 $start.Environment['TB_RENDER_PROFILE_POSITION'] = $Position
 $start.Environment['TB_RENDER_PROFILE_DIRECTION'] = $Direction
+$start.Environment['TB_RENDER_PROFILE_GL_TIMING'] = if ($GlCallTiming) { '1' } else { '0' }
 foreach ($flag in @('TB_RENDER_PROFILE_HIDE_LABELS', 'TB_RENDER_PROFILE_HIDE_EDGES', 'TB_RENDER_PROFILE_HIDE_MODELS', 'TB_RENDER_PROFILE_PLAY', 'TB_RENDER_PROFILE_MOVE_FORWARD')) {
   $start.Environment.Remove($flag) | Out-Null
 }

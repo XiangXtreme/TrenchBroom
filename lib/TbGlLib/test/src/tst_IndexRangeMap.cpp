@@ -203,13 +203,13 @@ TEST_CASE("IndexRangeMap")
     map.add(PrimType::Points, 0, 1);
 
     auto drawnPrimTypes = std::vector<GLenum>{};
-    gl.onMultiDrawArrays = [&](const GLenum mode, const GLint*, const GLsizei*, GLsizei) {
+    gl.onDrawArrays = [&](const GLenum mode, GLint, GLsizei) {
       drawnPrimTypes.push_back(mode);
     };
 
     map.render(gl, vertexArray);
 
-    // only the two primitive types that were added are drawn, one multiDrawArrays
+    // only the two primitive types that were added are drawn, one drawArrays
     // call each; every other (empty) primitive type is skipped
     CHECK(
       drawnPrimTypes

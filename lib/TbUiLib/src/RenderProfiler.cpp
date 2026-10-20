@@ -84,6 +84,7 @@ struct RenderProfiler::Impl
   explicit Impl(const QString& path)
     : file{path}
   {
+    timing.timeGlCalls = qEnvironmentVariableIntValue("TB_RENDER_PROFILE_GL_TIMING") != 0;
     QDir{}.mkpath(QFileInfo{path}.absolutePath());
     if (!file.open(QIODevice::WriteOnly | QIODevice::Append))
     {
@@ -235,6 +236,7 @@ render::RenderTiming& RenderProfiler::beginFrame(
   p.timing.milliseconds.clear();
   p.timing.counters.clear();
   p.timing.glCounters.fill(0);
+  p.timing.glMilliseconds.fill(0.0);
   p.startGpu(context);
   if (!p.metadataWritten)
   {
@@ -250,6 +252,7 @@ render::RenderTiming& RenderProfiler::beginFrame(
        {"gl_version", glString(GL_VERSION)},
        {"swap_interval_requested", context.format().swapInterval()},
        {"gpu_supported", p.gpuSupported},
+       {"gl_call_timing", p.timing.timeGlCalls},
        {"cpu_stages", "inclusive wall time; includes any driver stalls"},
        {"presentation",
         "Qt composition and swap return, not display scanout or input latency"}});

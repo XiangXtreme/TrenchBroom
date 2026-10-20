@@ -145,6 +145,16 @@ The raw log separates:
   resource uploads outside the view's render scope are not included. Fixed arrays
   collect this traffic without per-call clocks, map lookups, or driver queries, and
   remain inactive when profiling is disabled.
+- Add `-GlCallTiming` (or set `TB_RENDER_PROFILE_GL_TIMING=1` alongside
+  `TB_RENDER_PROFILE`) to time forwarded GL calls by category. Metadata records
+  `gl_call_timing`; `cpu.gl.frame.*` and the corresponding pass scopes report CPU
+  wall time inside draw, uniform, texture, buffer, attribute, state-stack, and
+  selected pipeline-state calls. These include driver processing/waits and clock
+  overhead, not GPU stage time. Pipeline-state coverage includes program, texture
+  unit, blend/depth/raster state, and legacy matrix updates; it is not an exhaustive
+  trace of every GL function. Scopes are inclusive. The extra clocks can substantially
+  perturb performance: use this mode for attribution, then disable it for before/after
+  FPS comparisons. Ordinary workload counting does not take these per-call clocks.
 - `cpu.models.visibility`, `cpu.models.entity_setup`, and `cpu.models.submit`
   separate conservative view-frustum checks, per-entity uniform setup, and material
   renderer submission. `models.render_calls` counts submitted entities;
@@ -256,6 +266,58 @@ waits before choosing instancing, state reuse, or an API migration.
 Local capture directories: baseline `20261020-231840-278`, filters only
 `20261020-232403-358`, final `20261020-232653-055` and `20261020-232823-497`.
 Generated logs and image comparisons remain outside version control.
+
+### Single-range draw dispatch follow-up
+
+Opt-in GL call timing narrowed the remaining model submission cost to the draw
+API itself. In an instrumented capture, model draw calls accounted for 8.14 ms
+of a 9.84 ms submission stage; model attribute changes took 0.29 ms, uniforms
+0.18 ms, and each binding category under 0.1 ms. That instrumented run averaged
+61.6 FPS, so its timings must not be compared directly with ordinary captures.
+
+`VertexArray` previously used `glMultiDrawArrays` for its range-list overload even
+when the list contained exactly one range. It now uses `glDrawArrays` for that
+case and retains multi-draw for multiple ranges, preserving their topology and
+boundaries. This follows the [OpenGL 2.1 specification](https://registry.khronos.org/OpenGL/specs/gl/glspec21.pdf):
+multi-draw behaves as separate draw-array calls over the supplied ranges.
+
+The same stationary Play scene was captured with extra GL call timing disabled:
+
+| Per-frame metric | Original dispatch, repeated | Single-range dispatch | Single-range dispatch, repeated |
+| --- | ---: | ---: | ---: |
+| FPS | 107.0 | 140.9 | 137.1 |
+| CPU frame, mean | 8.01 ms | 3.98 ms | 4.68 ms |
+| Model submission | 4.69 ms | 0.34 ms | 0.40 ms |
+| Model stage | 5.14 ms | 0.70 ms | 0.84 ms |
+| Edge stage | 0.53 ms | 0.01 ms | 0.01 ms |
+| Transparent face stage | 1.18 ms | 1.17 ms | 1.34 ms |
+| GPU elapsed query | 1.96 ms | 1.64 ms | 1.85 ms |
+
+The first optimized capture was followed by a source-level reversion of only the
+dispatch change, an incremental rebuild, and the original-dispatch capture. The
+change was then restored, rebuilt, and captured again. Each capture warmed up for
+15 seconds; the first two measured 12 seconds and the last measured 15 seconds.
+The last capture had a 40.42 ms maximum CPU frame, including a 28.91 ms text
+preparation spike, so the mean improvement does not imply all hitches are resolved.
+
+All three submitted 138 model entities, 833 model draws, and 116763 model vertex
+references per frame. Model state traffic also stayed fixed. The benefit is a
+less costly driver dispatch path on this machine, rather than fewer models or
+draws; it is not a universal multi-draw performance claim. Opaque brush range
+counts vary slightly with allocation, as in the previous comparison. Camera
+metadata matched. The inspected before/after framebuffer comparison changed
+4241 pixels (0.42%), mainly the focus border; excluding a two-pixel border left
+35 differing pixels, with no missing geometry apparent.
+
+Remaining ordinary captures spend about 1.2-1.3 ms in transparent faces. The frame
+interval also exceeds render-to-swap-return time by roughly 2-3 ms in the optimized
+captures. Event processing, update scheduling and driver behavior outside the
+measured render scope need separate attribution before inferring an FPS ceiling
+or choosing an API migration.
+
+Capture directories: instrumented `20261020-234046-550`, original dispatch
+`20261020-234501-794`, optimized `20261020-234259-644` and
+`20261020-234634-776`.
 
 Some WAD references in this local map were unavailable; the captures establish a
 comparison for that asset set, not a promise of the same FPS on a fully resolved map

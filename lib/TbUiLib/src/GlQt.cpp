@@ -50,16 +50,22 @@ void GlQt::viewport(
 
 void GlQt::matrixMode(const GLenum mode)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glMatrixMode(mode);
 }
 
 void GlQt::loadMatrixd(const GLdouble* matrix)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glLoadMatrixd(matrix);
 }
 
 void GlQt::loadMatrixf(const GLfloat* matrix)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glLoadMatrixf(matrix);
 }
 
@@ -86,32 +92,42 @@ void GlQt::getIntegerv(const GLenum pname, GLint* params)
 void GlQt::enableClientState(const GLenum cap)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glEnableClientState(cap);
 }
 
 void GlQt::disableClientState(const GLenum cap)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glDisableClientState(cap);
 }
 
 void GlQt::pushAttrib(const GLbitfield mask)
 {
+  render::RenderTiming::countGl(render::GlCounter::StateStack);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::StateStack};
   m_gl.glPushAttrib(mask);
 }
 
 void GlQt::popAttrib()
 {
+  render::RenderTiming::countGl(render::GlCounter::StateStack);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::StateStack};
   m_gl.glPopAttrib();
 }
 
 void GlQt::enable(const GLenum cap)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glEnable(cap);
 }
 
 void GlQt::disable(const GLenum cap)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glDisable(cap);
 }
 
@@ -122,47 +138,65 @@ void GlQt::lineWidth(const GLfloat width)
 
 void GlQt::polygonMode(const GLenum face, const GLenum mode)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glPolygonMode(face, mode);
 }
 
 void GlQt::frontFace(const GLenum mode)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glFrontFace(mode);
 }
 
 void GlQt::cullFace(const GLenum mode)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glCullFace(mode);
 }
 
 void GlQt::blendFunc(const GLenum sfactor, const GLenum dfactor)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glBlendFunc(sfactor, dfactor);
 }
 
 void GlQt::shadeModel(const GLenum mode)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glShadeModel(mode);
 }
 
 void GlQt::depthMask(const GLboolean flag)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glDepthMask(flag);
 }
 
 void GlQt::depthRange(const GLclampd nearVal, const GLclampd farVal)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glDepthRange(nearVal, farVal);
 }
 
 void GlQt::colorMask(
   const GLboolean red, const GLboolean green, const GLboolean blue, const GLboolean alpha)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glColorMask(red, green, blue, alpha);
 }
 
 void GlQt::depthFunc(const GLenum func)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glDepthFunc(func);
 }
 
@@ -194,6 +228,8 @@ void GlQt::getProgramiv(const GLuint program, const GLenum pname, GLint* params)
 
 void GlQt::useProgram(const GLuint program)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glUseProgram(program);
 }
 
@@ -240,12 +276,14 @@ void GlQt::getShaderiv(const GLuint shader, const GLenum pname, GLint* params)
 void GlQt::uniform1f(const GLint location, const GLfloat v0)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform1f(location, v0);
 }
 
 void GlQt::uniform2f(const GLint location, const GLfloat v0, const GLfloat v1)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform2f(location, v0, v1);
 }
 
@@ -253,6 +291,7 @@ void GlQt::uniform3f(
   const GLint location, const GLfloat v0, const GLfloat v1, const GLfloat v2)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform3f(location, v0, v1, v2);
 }
 
@@ -264,24 +303,28 @@ void GlQt::uniform4f(
   const GLfloat v3)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform4f(location, v0, v1, v2, v3);
 }
 
 void GlQt::uniform1i(const GLint location, const GLint v0)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform1i(location, v0);
 }
 
 void GlQt::uniform2i(const GLint location, const GLint v0, const GLint v1)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform2i(location, v0, v1);
 }
 
 void GlQt::uniform3i(const GLint location, const GLint v0, const GLint v1, const GLint v2)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform3i(location, v0, v1, v2);
 }
 
@@ -289,54 +332,63 @@ void GlQt::uniform4i(
   const GLint location, const GLint v0, const GLint v1, const GLint v2, const GLint v3)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform4i(location, v0, v1, v2, v3);
 }
 
 void GlQt::uniform1fv(const GLint location, const GLsizei count, const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform1fv(location, count, value);
 }
 
 void GlQt::uniform2fv(const GLint location, const GLsizei count, const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform2fv(location, count, value);
 }
 
 void GlQt::uniform3fv(const GLint location, const GLsizei count, const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform3fv(location, count, value);
 }
 
 void GlQt::uniform4fv(const GLint location, const GLsizei count, const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform4fv(location, count, value);
 }
 
 void GlQt::uniform1iv(const GLint location, const GLsizei count, const GLint* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform1iv(location, count, value);
 }
 
 void GlQt::uniform2iv(const GLint location, const GLsizei count, const GLint* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform2iv(location, count, value);
 }
 
 void GlQt::uniform3iv(const GLint location, const GLsizei count, const GLint* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform3iv(location, count, value);
 }
 
 void GlQt::uniform4iv(const GLint location, const GLsizei count, const GLint* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniform4iv(location, count, value);
 }
 
@@ -347,6 +399,7 @@ void GlQt::uniformMatrix2fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix2fv(location, count, transpose, value);
 }
 
@@ -357,6 +410,7 @@ void GlQt::uniformMatrix3fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix3fv(location, count, transpose, value);
 }
 
@@ -367,6 +421,7 @@ void GlQt::uniformMatrix4fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix4fv(location, count, transpose, value);
 }
 
@@ -377,6 +432,7 @@ void GlQt::uniformMatrix2x3fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix2x3fv(location, count, transpose, value);
 }
 
@@ -387,6 +443,7 @@ void GlQt::uniformMatrix3x2fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix3x2fv(location, count, transpose, value);
 }
 
@@ -397,6 +454,7 @@ void GlQt::uniformMatrix2x4fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix2x4fv(location, count, transpose, value);
 }
 
@@ -407,6 +465,7 @@ void GlQt::uniformMatrix4x2fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix4x2fv(location, count, transpose, value);
 }
 
@@ -417,6 +476,7 @@ void GlQt::uniformMatrix3x4fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix3x4fv(location, count, transpose, value);
 }
 
@@ -427,6 +487,7 @@ void GlQt::uniformMatrix4x3fv(
   const GLfloat* value)
 {
   render::RenderTiming::countGl(render::GlCounter::Uniforms);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::Uniforms};
   m_gl.glUniformMatrix4x3fv(location, count, transpose, value);
 }
 
@@ -453,6 +514,7 @@ void GlQt::deleteBuffers(const GLsizei n, const GLuint* buffers)
 void GlQt::bindBuffer(const GLenum target, const GLuint buffer)
 {
   render::RenderTiming::countGl(render::GlCounter::BufferBinds);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::BufferBinds};
   m_gl.glBindBuffer(target, buffer);
 }
 
@@ -472,6 +534,7 @@ void GlQt::vertexPointer(
   const GLint size, const GLenum type, const GLsizei stride, const GLvoid* ptr)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glVertexPointer(size, type, stride, ptr);
 }
 
@@ -479,12 +542,14 @@ void GlQt::colorPointer(
   const GLint size, const GLenum type, const GLsizei stride, const GLvoid* pointer)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glColorPointer(size, type, stride, pointer);
 }
 
 void GlQt::normalPointer(const GLenum type, const GLsizei stride, const GLvoid* ptr)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glNormalPointer(type, stride, ptr);
 }
 
@@ -492,18 +557,21 @@ void GlQt::texCoordPointer(
   const GLint size, const GLenum type, const GLsizei stride, const GLvoid* pointer)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glTexCoordPointer(size, type, stride, pointer);
 }
 
 void GlQt::enableVertexAttribArray(const GLuint index)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glEnableVertexAttribArray(index);
 }
 
 void GlQt::disableVertexAttribArray(const GLuint index)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glDisableVertexAttribArray(index);
 }
 
@@ -516,6 +584,7 @@ void GlQt::vertexAttribPointer(
   const void* pointer)
 {
   render::RenderTiming::countGl(render::GlCounter::AttributeChanges);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::AttributeChanges};
   m_gl.glVertexAttribPointer(index, size, type, normalized, stride, pointer);
 }
 
@@ -532,11 +601,14 @@ void GlQt::deleteTextures(const GLsizei n, const GLuint* textures)
 void GlQt::bindTexture(const GLenum target, const GLuint texture)
 {
   render::RenderTiming::countGl(render::GlCounter::TextureBinds);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::TextureBinds};
   m_gl.glBindTexture(target, texture);
 }
 
 void GlQt::activeTexture(const GLenum texture)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glActiveTexture(texture);
 }
 
@@ -572,12 +644,14 @@ void GlQt::compressedTexImage2D(
 void GlQt::texParameterf(const GLenum target, const GLenum pname, const GLfloat param)
 {
   render::RenderTiming::countGl(render::GlCounter::TextureParameters);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::TextureParameters};
   m_gl.glTexParameterf(target, pname, param);
 }
 
 void GlQt::texParameteri(const GLenum target, const GLenum pname, const GLint param)
 {
   render::RenderTiming::countGl(render::GlCounter::TextureParameters);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::TextureParameters};
   m_gl.glTexParameteri(target, pname, param);
 }
 
@@ -593,6 +667,8 @@ void GlQt::pixelStorei(const GLenum pname, const GLint param)
 
 void GlQt::clientActiveTexture(const GLenum texture)
 {
+  render::RenderTiming::countGl(render::GlCounter::PipelineState);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::PipelineState};
   m_gl.glClientActiveTexture(texture);
 }
 
@@ -602,6 +678,7 @@ void GlQt::drawArrays(const GLenum mode, const GLint first, const GLsizei count)
   render::RenderTiming::countGl(render::GlCounter::DrawRanges);
   render::RenderTiming::countGl(
     render::GlCounter::SubmittedVertices, count > 0 ? static_cast<size_t>(count) : 0u);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::DrawCalls};
   m_gl.glDrawArrays(mode, first, count);
 }
 
@@ -612,6 +689,7 @@ void GlQt::drawElements(
   render::RenderTiming::countGl(render::GlCounter::DrawRanges);
   render::RenderTiming::countGl(
     render::GlCounter::SubmittedVertices, count > 0 ? static_cast<size_t>(count) : 0u);
+  const auto timing = render::RenderGlCallScope{render::GlCounter::DrawCalls};
   m_gl.glDrawElements(mode, count, type, indices);
 }
 
@@ -634,6 +712,7 @@ void GlQt::multiDrawArrays(
     render::RenderTiming::countGl(
       render::GlCounter::SubmittedVertices, submittedVertices);
   }
+  const auto timing = render::RenderGlCallScope{render::GlCounter::DrawCalls};
   m_gl.glMultiDrawArrays(mode, first, count, primcount);
 }
 

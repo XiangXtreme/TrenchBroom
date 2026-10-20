@@ -313,6 +313,45 @@ TEST_CASE("RenderTiming")
     CHECK(outer.counters.at("gl.frame.uniforms") == 0);
     CHECK(inner.counters.at("gl.other.draw_calls") == 100);
   }
+
+  SECTION("GL call wall timing is opt-in and follows the captured frame")
+  {
+    const auto index = static_cast<size_t>(GlCounter::DrawCalls);
+    {
+      const auto disabled = RenderGlCallScope{GlCounter::DrawCalls};
+    }
+    {
+      const auto capture = RenderTiming::Capture{outer};
+      const auto pass = RenderGlScope{"gl.models"};
+      const auto disabled = RenderGlCallScope{GlCounter::DrawCalls};
+    }
+    CHECK(outer.glMilliseconds[index] == 0.0);
+    CHECK_FALSE(outer.milliseconds.contains("cpu.gl.models.draw_calls"));
+    outer.timeGlCalls = true;
+    inner.timeGlCalls = true;
+    {
+      const auto capture = RenderTiming::Capture{outer};
+      const auto frame = RenderGlScope{"gl.frame"};
+      // Deterministic deltas verify aggregation without clock-resolution assumptions.
+      outer.glMilliseconds[index] += 1.0;
+      {
+        const auto pass = RenderGlScope{"gl.models"};
+        outer.glMilliseconds[index] += 2.0;
+      }
+      {
+        const auto nestedCapture = RenderTiming::Capture{inner};
+        const auto pass = RenderGlScope{"gl.other"};
+        inner.glMilliseconds[index] += 4.0;
+        const auto call = RenderGlCallScope{GlCounter::Uniforms};
+      }
+    }
+    CHECK(outer.milliseconds.at("cpu.gl.frame.draw_calls") == 3.0);
+    CHECK(outer.milliseconds.at("cpu.gl.models.draw_calls") == 2.0);
+    CHECK(inner.milliseconds.at("cpu.gl.other.draw_calls") == 4.0);
+    CHECK(inner.glMilliseconds[static_cast<size_t>(GlCounter::Uniforms)] >= 0.0);
+    CHECK(outer.glMilliseconds[static_cast<size_t>(GlCounter::Uniforms)] == 0.0);
+    CHECK(RenderTiming::current == nullptr);
+  }
 }
 
 } // namespace tb::render

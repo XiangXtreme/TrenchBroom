@@ -110,7 +110,16 @@ void VertexArray::render(
 
   const auto* indexArray = indices.data();
   const auto* countArray = counts.data();
-  gl.multiDrawArrays(toGL(primType), indexArray, countArray, primCount);
+  // A single range needs no multi-draw dispatch. Some compatibility drivers incur
+  // substantial overhead on that path even with primCount == 1.
+  if (primCount == 1)
+  {
+    gl.drawArrays(toGL(primType), indexArray[0], countArray[0]);
+  }
+  else
+  {
+    gl.multiDrawArrays(toGL(primType), indexArray, countArray, primCount);
+  }
 }
 
 void VertexArray::render(

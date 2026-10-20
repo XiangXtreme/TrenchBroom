@@ -201,17 +201,41 @@ TEST_CASE("VertexArray")
       CHECK(capturedCount == 2);
     }
 
-    SECTION("render(gl, primType, indices, counts, primCount) issues a multi-draw call")
+    SECTION("a single range uses drawArrays with the range's offset and count")
+    {
+      auto drawCalls = 0;
+      gl.onDrawArrays = [&](const GLenum mode, const GLint first, const GLsizei count) {
+        ++drawCalls;
+        CHECK(mode == toGL(PrimType::TriangleStrip));
+        CHECK(first == 1);
+        CHECK(count == 2);
+      };
+      gl.onMultiDrawArrays = [](GLenum, const GLint*, const GLsizei*, GLsizei) {
+        FAIL("a single range must not use multiDrawArrays");
+      };
+      array.render(gl, PrimType::TriangleStrip, Indices{1}, Counts{2}, 1);
+      CHECK(drawCalls == 1);
+    }
+
+    SECTION("multiple ranges preserve the multi-draw topology and boundaries")
     {
       auto capturedPrimCount = GLsizei{-1};
-      gl.onMultiDrawArrays =
-        [&](GLenum, const GLint*, const GLsizei*, const GLsizei primCount) {
-          capturedPrimCount = primCount;
-        };
-
       const auto indices = Indices{0, 1};
       const auto counts = Counts{1, 2};
-      array.render(gl, PrimType::Triangles, indices, counts, 2);
+      gl.onMultiDrawArrays = [&](
+                               const GLenum mode,
+                               const GLint* first,
+                               const GLsizei* count,
+                               const GLsizei primCount) {
+        CHECK(mode == toGL(PrimType::TriangleFan));
+        CHECK(first == indices.data());
+        CHECK(count == counts.data());
+        capturedPrimCount = primCount;
+      };
+      gl.onDrawArrays = [](GLenum, GLint, GLsizei) {
+        FAIL("separate fans must not be joined into one drawArrays range");
+      };
+      array.render(gl, PrimType::TriangleFan, indices, counts, 2);
       CHECK(capturedPrimCount == 2);
     }
 

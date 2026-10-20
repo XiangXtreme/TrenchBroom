@@ -184,6 +184,7 @@ TEST_CASE("RenderView profiling")
   auto directory = QTemporaryDir{};
   const auto path = directory.filePath("render.jsonl");
   const auto previous = qgetenv("TB_RENDER_PROFILE");
+  const auto previousGlTiming = qgetenv("TB_RENDER_PROFILE_GL_TIMING");
   const auto restore = qScopeGuard([&]() {
     if (previous.isNull())
     {
@@ -193,8 +194,23 @@ TEST_CASE("RenderView profiling")
     {
       qputenv("TB_RENDER_PROFILE", previous);
     }
+    if (previousGlTiming.isNull())
+    {
+      qunsetenv("TB_RENDER_PROFILE_GL_TIMING");
+    }
+    else
+    {
+      qputenv("TB_RENDER_PROFILE_GL_TIMING", previousGlTiming);
+    }
   });
   qputenv("TB_RENDER_PROFILE", path.toUtf8());
+  auto glTiming = false;
+  SECTION("default GL workload counters") {}
+  SECTION("opt-in GL call wall timing")
+  {
+    glTiming = true;
+  }
+  qputenv("TB_RENDER_PROFILE_GL_TIMING", glTiming ? "1" : "0");
   auto fixture = AppControllerFixture{};
   {
     auto view = TestRenderView{fixture.appController()};
@@ -210,7 +226,7 @@ TEST_CASE("RenderView profiling")
   auto file = QFile{path};
   REQUIRE(file.open(QIODevice::ReadOnly));
   auto sawMetadata = false;
-  auto sawCpu = false;
+  auto cpuSamples = qint64{0};
   auto gpuSupported = false;
   auto sawGpu = false;
   while (!file.atEnd())
@@ -221,11 +237,13 @@ TEST_CASE("RenderView profiling")
     {
       sawMetadata = true;
       gpuSupported = object["gpu_supported"].toBool();
+      CHECK(object["gl_call_timing"].toBool() == glTiming);
     }
     if (object["kind"] == "window")
     {
       const auto timings = object["timings_ms"].toObject();
-      sawCpu |= timings["cpu.frame"].toObject()["samples"].toInt() >= 5;
+      // Parallel test load can spread the requested repaints across reporting windows.
+      cpuSamples += timings["cpu.frame"].toObject()["samples"].toInteger();
       sawGpu |= timings["gpu.frame"].toObject()["samples"].toInt() > 0;
       CHECK(timings["cpu.frame"].toObject()["max"].toDouble() >= 0.0);
       const auto counters = object["counters"].toObject();
@@ -233,10 +251,18 @@ TEST_CASE("RenderView profiling")
       CHECK(
         counters["gl.frame.buffer_binds"].toInteger() == object["frames"].toInteger());
       CHECK(counters["gl.frame.draw_calls"].toInteger() == 0);
+      if (!glTiming)
+      {
+        CHECK_FALSE(timings.contains("cpu.gl.frame.buffer_binds"));
+      }
+      else
+      {
+        CHECK(timings.contains("cpu.gl.frame.buffer_binds"));
+      }
     }
   }
   CHECK(sawMetadata);
-  CHECK(sawCpu);
+  CHECK(cpuSamples >= 5);
   CHECK((!gpuSupported || sawGpu));
 }
 
