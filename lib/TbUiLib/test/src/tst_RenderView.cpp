@@ -18,6 +18,7 @@
  */
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
 #include <QImage>
@@ -334,6 +335,8 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   {
     setPref(game->gamePathPreference, pathFromQString(gamePath));
   }
+  auto loadTimer = QElapsedTimer{};
+  loadTimer.start();
   auto document = MapDocument::loadDocument(
                     app->environmentConfig(),
                     *game,
@@ -343,15 +346,29 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
                     app->taskManager(),
                     app->glManager().resourceManager())
                   | kdl::value();
+  const auto documentLoadedMs = loadTimer.elapsed();
   auto inputFilter = ProfileInputFilter{};
   QApplication::instance()->installEventFilter(&inputFilter);
   const auto removeInputFilter =
     qScopeGuard([&]() { QApplication::instance()->removeEventFilter(&inputFilter); });
   auto window = MapWindow{*app, std::move(document)};
+  const auto windowConstructedMs = loadTimer.elapsed();
   window.resize(1400, 900);
-  window.show();
   auto* view = window.findChild<MapView3D*>();
   REQUIRE(view != nullptr);
+  qint64 firstFrameMs = -1;
+  auto presentedFrames = 0;
+  const auto frameConnection =
+    QObject::connect(view, &QOpenGLWidget::frameSwapped, view, [&]() {
+      ++presentedFrames;
+      if (firstFrameMs < 0)
+      {
+        firstFrameMs = loadTimer.elapsed();
+      }
+    });
+  const auto disconnectFrames =
+    qScopeGuard([&]() { QObject::disconnect(frameConnection); });
+  window.show();
   REQUIRE(QTest::qWaitFor([&]() { return view->isValid(); }, 5000));
   auto& camera = static_cast<MapViewBase&>(*view).camera();
   if (
@@ -366,8 +383,37 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   {
     camera.lookAt(camera.position() + *direction, vm::vec3f{0, 0, 1});
   }
+  const auto loadTiming = qEnvironmentVariableIsSet("TB_RENDER_PROFILE_LOAD_TIMING");
+  // Loading can request more resources on a subsequent frame. Require two
+  // presented frames and a quiet interval; failed resources also settle, so the
+  // accompanying asset warnings remain part of interpreting this measurement.
+  const auto waitForResources = [&]() {
+    const auto initialFrames = presentedFrames;
+    auto quietTimer = QElapsedTimer{};
+    quietTimer.start();
+    auto& resources = app->glManager().resourceManager();
+    auto resourceCount = resources.resources().size();
+    REQUIRE(QTest::qWaitFor(
+      [&]() {
+        view->update();
+        const auto count = resources.resources().size();
+        if (resources.needsProcessing() || count != resourceCount)
+        {
+          quietTimer.restart();
+          resourceCount = count;
+        }
+        return presentedFrames >= initialFrames + 2 && quietTimer.elapsed() >= 250;
+      },
+      120000));
+  };
+  if (loadTiming)
+  {
+    waitForResources();
+  }
+  const auto editorReadyMs = loadTimer.elapsed();
   const auto stopPlay = qScopeGuard([&]() { view->stopPlayMode(); });
   const auto play = qEnvironmentVariableIsSet("TB_RENDER_PROFILE_PLAY");
+  const auto playStartMs = loadTimer.elapsed();
   if (play)
   {
     window.raise();
@@ -375,6 +421,28 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
     view->setFocus();
     view->startPlayMode(true);
     REQUIRE(QTest::qWaitFor([&]() { return view->playModeActive(); }, 120000));
+  }
+  const auto playActiveMs = loadTimer.elapsed();
+  if (loadTiming)
+  {
+    if (play)
+    {
+      waitForResources();
+    }
+    const auto readyMs = loadTimer.elapsed();
+    auto loading = QFile{qEnvironmentVariable("TB_RENDER_PROFILE") + ".loading.json"};
+    REQUIRE(loading.open(QIODevice::WriteOnly));
+    loading.write(QJsonDocument{
+      QJsonObject{
+        {"document_loaded_ms", documentLoadedMs},
+        {"window_constructed_ms", windowConstructedMs},
+        {"first_frame_ms", firstFrameMs},
+        {"editor_resources_settled_ms", editorReadyMs},
+        {"play_activation_ms", play ? playActiveMs - playStartMs : 0},
+        {"total_ready_ms", readyMs},
+        {"resource_quiet_interval_ms", 250},
+        {"play",
+         play}}}.toJson());
   }
   QObject::connect(
     view, &QOpenGLWidget::frameSwapped, view, [view]() { view->update(); });

@@ -115,6 +115,43 @@ if they continue into measurement. `WorstWindowP95Ms` is the largest per-window 
 P95 across the entire run. Check test output and the PNG for missing assets before
 comparing results. WAD/model availability affects workload.
 
+Add `-LoadTiming` to write `render.jsonl.loading.json`. Its cumulative milestones
+start immediately before `MapDocument::loadDocument`, excluding process startup,
+test setup, and application-service construction: document load returned, window
+construction returned, first 3D `frameSwapped`, and editor resources settled. Resource
+settling requires no pending resource processing or resource-count changes for
+250 ms and at least two presented frames. Failed resources also settle; this is
+completion of the available workload, not proof that every referenced asset exists.
+With `-Play`, the file additionally records the separate Play activation duration
+and cumulative readiness after a second resource-settling check. These checks add
+quiet intervals and alter startup ordering; use this mode for loading measurements,
+not comparisons with earlier steady-state FPS captures. Warmup and measurement
+durations are outside the recorded loading time. Fresh processes still benefit
+from OS file caches; this mode does not establish cold-disk startup performance.
+
+On 2026-10-21, three fresh-process loading captures of `kz_skyline.map` with the
+Half-Life asset directory and camera `3100 1000 320`, direction `-1 0 0`, reported:
+
+| Milestone (seconds from document-load start) | Play run 1 | Play run 2 | Editor only |
+| --- | ---: | ---: | ---: |
+| Document load returned | 0.533 | 0.550 | 0.729 |
+| Window construction returned | 1.035 | 1.055 | 1.347 |
+| First 3D frame swapped | 2.612 | 2.613 | 3.277 |
+| Editor resources settled | 5.918 | 6.239 | 7.175 |
+| Editor plus Play resources settled | 13.234 | 13.096 | n/a |
+
+Play activation alone took 7.054 / 6.601 seconds, while the collision-builder log
+reported only 1.515 / 1.508 seconds; collision build time is not the entire Play
+startup time. The remaining activation time has not been separately attributed.
+Captures are `20261021-010511-893`, `20261021-010554-751`, and
+`20261021-010622-322` under the render-profile log directory. Each used
+`-LoadTiming -NoBuild -WarmupSeconds 1 -Seconds 5`, with `-Play` for the first two.
+These are diagnostic, file-cache-dependent measurements with the same six missing
+WAD references recorded in earlier captures, not a complete-asset or cold-start
+guarantee. Readiness includes one 250 ms quiet check for the editor and another for
+Play; actual display scanout and assets requested by later camera movement are not
+measured.
+
 The raw log separates:
 
 - `frame.interval`: time between starts of rendered frames; includes event-loop,

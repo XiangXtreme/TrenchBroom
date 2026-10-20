@@ -16,6 +16,7 @@ param(
   [switch] $HideLabels,
   [switch] $HideEdges,
   [switch] $GlCallTiming,
+  [switch] $LoadTiming,
   [switch] $NoBuild
 )
 
@@ -37,6 +38,7 @@ New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
   hideLabels = [bool]$HideLabels; hideEdges = [bool]$HideEdges; hideModels = [bool]$HideModels
   warmupSeconds = $WarmupSeconds; play = [bool]$Play; moveForward = [bool]$MoveForward
   glCallTiming = [bool]$GlCallTiming
+  loadTiming = [bool]$LoadTiming
 } | ConvertTo-Json | Set-Content (Join-Path $outputDir 'capture.json')
 $jsonl = Join-Path $outputDir 'render.jsonl'
 $exe = Join-Path $build 'lib/TbUiLib/test/TbUiLibTest.exe'
@@ -57,6 +59,8 @@ $start.Environment['TB_RENDER_PROFILE_WARMUP'] = [string]$WarmupSeconds
 $start.Environment['TB_RENDER_PROFILE_POSITION'] = $Position
 $start.Environment['TB_RENDER_PROFILE_DIRECTION'] = $Direction
 $start.Environment['TB_RENDER_PROFILE_GL_TIMING'] = if ($GlCallTiming) { '1' } else { '0' }
+$start.Environment.Remove('TB_RENDER_PROFILE_LOAD_TIMING') | Out-Null
+if ($LoadTiming) { $start.Environment['TB_RENDER_PROFILE_LOAD_TIMING'] = '1' }
 foreach ($flag in @('TB_RENDER_PROFILE_HIDE_LABELS', 'TB_RENDER_PROFILE_HIDE_EDGES', 'TB_RENDER_PROFILE_HIDE_MODELS', 'TB_RENDER_PROFILE_PLAY', 'TB_RENDER_PROFILE_MOVE_FORWARD')) {
   $start.Environment.Remove($flag) | Out-Null
 }
@@ -75,6 +79,9 @@ $process.WaitForExit()
 $stdout.GetAwaiter().GetResult() | Set-Content (Join-Path $outputDir 'test-output.txt')
 $stderr.GetAwaiter().GetResult() | Set-Content (Join-Path $outputDir 'test-errors.txt')
 if ($process.ExitCode -ne 0) { throw "Capture failed; inspect $outputDir" }
+if ($LoadTiming) {
+  Get-Content -Raw -LiteralPath "$jsonl.loading.json" | Write-Host
+}
 
 $records = @(Get-Content -LiteralPath $jsonl | ForEach-Object { $_ | ConvertFrom-Json })
 $metadata = @($records | Where-Object { $_.kind -eq 'metadata' -and $_.view -eq 'tb::ui::MapView3D' })
