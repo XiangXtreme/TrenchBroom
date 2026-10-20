@@ -17,11 +17,14 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <QDateTime>
 #include <QEventLoop>
 #include <QFile>
 #include <QImage>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QKeyEvent>
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -76,6 +79,18 @@ public:
 private:
   bool shouldRenderFocusIndicator() const override { return false; }
   void renderContents(gl::Gl&) override { ++frames; }
+};
+
+// Keep external keyboard/mouse activity out of scripted captures. Synthetic
+// key events still traverse the normal view/controller input path.
+class ProfileInputFilter : public QObject
+{
+  bool eventFilter(QObject* receiver, QEvent* event) override
+  {
+    // Automated runs must keep simulating even if another desktop window activates.
+    return (event->type() == QEvent::FocusOut && qobject_cast<MapView3D*>(receiver))
+           || (event->spontaneous() && dynamic_cast<QInputEvent*>(event) != nullptr);
+  }
 };
 } // namespace
 
@@ -224,6 +239,12 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   setPref(Preferences::DefaultPluginPaths, "");
   setPref(Preferences::PythonPluginDirectories, "");
   setPref(Preferences::RenderFpsLimit, 0);
+  // Native raw motion bypasses QObject event filters. Zero sensitivity keeps
+  // that backend active without letting physical mouse motion turn the camera.
+  setPref(Preferences::PlayModeMouseSensitivity, 0.0f);
+  setPref(
+    Preferences::ShowPointEntityModels,
+    !qEnvironmentVariableIsSet("TB_RENDER_PROFILE_HIDE_MODELS"));
   setPref(
     Preferences::ShowEntityClassnames,
     !qEnvironmentVariableIsSet("TB_RENDER_PROFILE_HIDE_LABELS"));
@@ -262,6 +283,10 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
                     app->taskManager(),
                     app->glManager().resourceManager())
                   | kdl::value();
+  auto inputFilter = ProfileInputFilter{};
+  QApplication::instance()->installEventFilter(&inputFilter);
+  const auto removeInputFilter =
+    qScopeGuard([&]() { QApplication::instance()->removeEventFilter(&inputFilter); });
   auto window = MapWindow{*app, std::move(document)};
   window.resize(1400, 900);
   window.show();
@@ -281,14 +306,66 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   {
     camera.lookAt(camera.position() + *direction, vm::vec3f{0, 0, 1});
   }
+  const auto stopPlay = qScopeGuard([&]() { view->stopPlayMode(); });
+  const auto play = qEnvironmentVariableIsSet("TB_RENDER_PROFILE_PLAY");
+  if (play)
+  {
+    window.raise();
+    window.activateWindow();
+    view->setFocus();
+    view->startPlayMode(true);
+    REQUIRE(QTest::qWaitFor([&]() { return view->playModeActive(); }, 120000));
+  }
   QObject::connect(
     view, &QOpenGLWidget::frameSwapped, view, [view]() { view->update(); });
-  auto loop = QEventLoop{};
-  const auto seconds =
-    std::clamp(qEnvironmentVariableIntValue("TB_RENDER_PROFILE_SECONDS"), 2, 300);
-  QTimer::singleShot(seconds * 1000, &loop, &QEventLoop::quit);
-  view->update();
-  loop.exec();
+  const auto runFor = [&](const int seconds) {
+    auto loop = QEventLoop{};
+    QTimer::singleShot(seconds * 1000, &loop, &QEventLoop::quit);
+    view->update();
+    loop.exec();
+  };
+  runFor(std::clamp(qEnvironmentVariableIntValue("TB_RENDER_PROFILE_WARMUP"), 1, 60));
+  if (play)
+  {
+    REQUIRE(view->playModeActive());
+  }
+  const auto moving = play && qEnvironmentVariableIsSet("TB_RENDER_PROFILE_MOVE_FORWARD");
+  if (moving)
+  {
+    auto key = QKeyEvent{QEvent::KeyPress, Qt::Key_W, Qt::NoModifier};
+    QApplication::sendEvent(view, &key);
+  }
+  const auto positionStart = camera.position();
+  const auto directionStart = camera.direction();
+  const auto measurementStart = QDateTime::currentDateTimeUtc();
+  runFor(std::clamp(qEnvironmentVariableIntValue("TB_RENDER_PROFILE_SECONDS"), 2, 300));
+  const auto measurementEnd = QDateTime::currentDateTimeUtc();
+  CHECK(vm::squared_distance(directionStart, camera.direction()) < 0.000001f);
+  if (moving)
+  {
+    auto key = QKeyEvent{QEvent::KeyRelease, Qt::Key_W, Qt::NoModifier};
+    QApplication::sendEvent(view, &key);
+  }
+  if (play)
+  {
+    CHECK(view->playModeActive());
+  }
+  auto measurement =
+    QFile{qEnvironmentVariable("TB_RENDER_PROFILE") + ".measurement.json"};
+  REQUIRE(measurement.open(QIODevice::WriteOnly));
+  const auto vectorJson = [](const vm::vec3f& v) {
+    return QJsonArray{v.x(), v.y(), v.z()};
+  };
+  const auto measurementInfo = QJsonObject{
+    {"start_utc", measurementStart.toString(Qt::ISODateWithMs)},
+    {"end_utc", measurementEnd.toString(Qt::ISODateWithMs)},
+    {"position_start", vectorJson(positionStart)},
+    {"position_end", vectorJson(camera.position())},
+    {"direction_start", vectorJson(directionStart)},
+    {"direction_end", vectorJson(camera.direction())},
+    {"play", play},
+    {"move_forward", moving}};
+  measurement.write(QJsonDocument{measurementInfo}.toJson());
   CHECK(view->isValid());
   CHECK_FALSE(window.document().map().modified());
   CHECK(view->grabFramebuffer().save(qEnvironmentVariable("TB_RENDER_PROFILE") + ".png"));

@@ -38,6 +38,7 @@ namespace mdl
 {
 class EditorContext;
 class EntityModelManager;
+class EntityModelFrame;
 class EntityNode;
 } // namespace mdl
 
@@ -74,7 +75,14 @@ private:
   mdl::EntityModelManager& m_entityModelManager;
   const mdl::EditorContext& m_editorContext;
 
-  std::unordered_map<const mdl::EntityNode*, gl::MaterialRenderer*> m_entities;
+  struct ModelRenderData
+  {
+    gl::MaterialRenderer* renderer;
+    // Matches the renderer's model specification and lifetime. Resolve this on
+    // entity updates, avoiding model-definition expression evaluation per frame.
+    const mdl::EntityModelFrame* frame;
+  };
+  std::unordered_map<const mdl::EntityNode*, ModelRenderData> m_entities;
   std::vector<const mdl::EntityNode*> m_transparentDrawOrder;
 
   Pass m_opaquePass;

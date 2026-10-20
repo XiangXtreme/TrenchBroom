@@ -33,6 +33,7 @@
 #include "prefs/Preferences.h"
 #include "render/RenderBatch.h"
 #include "render/RenderService.h"
+#include "render/RenderTiming.h"
 #include "render/TextAnchor.h"
 #include "render/TextRenderer.h"
 #include "ui/MapDocument.h"
@@ -653,6 +654,7 @@ void PlayModeController::wheel(const QInputEvent& event, const bool up)
 
 void PlayModeController::update()
 {
+  const auto timing = render::RenderTimingScope{"cpu.play.update"};
   if (!m_active)
   {
     return;
@@ -663,6 +665,7 @@ void PlayModeController::update()
   const auto now = nowMs();
   while (m_timeline.advance(m_context.get(), now, 1) == 1)
   {
+    render::RenderTiming::count("play.physics_ticks", 1);
     m_previousEye = m_currentEye;
     m_currentEye = eyePosition();
 
@@ -738,6 +741,7 @@ double PlayModeController::eventTime(const double timestampMs, const EventSource
 void PlayModeController::render(
   render::RenderContext& renderContext, render::RenderBatch& renderBatch)
 {
+  const auto timing = render::RenderTimingScope{"cpu.play.hud_build"};
   if (!m_active)
   {
     return;

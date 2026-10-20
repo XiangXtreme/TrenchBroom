@@ -35,11 +35,11 @@
 #include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
 #include "prefs/Preferences.h"
+#include "render/Frustum.h"
 #include "render/GoldSrcEntityRenderer.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/RenderTiming.h"
-#include "render/Transformation.h"
 
 #include "vm/mat.h"
 #include "vm/vec.h"
@@ -132,7 +132,8 @@ void EntityModelRenderer::addEntity(const mdl::EntityNode& entityNode)
   auto* renderer = m_entityModelManager.renderer(modelSpec);
   if (renderer != nullptr)
   {
-    m_entities.emplace(&entityNode, renderer);
+    m_entities.emplace(
+      &entityNode, ModelRenderData{renderer, m_entityModelManager.frame(modelSpec)});
   }
 }
 
@@ -149,27 +150,14 @@ void EntityModelRenderer::updateEntity(const mdl::EntityNode& entityNode)
     });
 
   auto* renderer = m_entityModelManager.renderer(modelSpec);
-  auto it = m_entities.find(&entityNode);
-
-  if (renderer == nullptr && it == std::end(m_entities))
+  if (renderer)
   {
-    return;
-  }
-
-  if (it == std::end(m_entities))
-  {
-    m_entities.emplace(&entityNode, renderer);
+    m_entities.insert_or_assign(
+      &entityNode, ModelRenderData{renderer, m_entityModelManager.frame(modelSpec)});
   }
   else
   {
-    if (renderer == nullptr)
-    {
-      m_entities.erase(it);
-    }
-    else if (it->second != renderer)
-    {
-      it->second = renderer;
-    }
+    m_entities.erase(&entityNode);
   }
 }
 
@@ -261,13 +249,33 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
   const auto& propertyConfig = m_entities.begin()->first->entityPropertyConfig();
   const auto& defaultModelScaleExpression = propertyConfig.defaultModelScaleExpression;
 
+  const auto frustum = Frustum{renderContext.camera()};
+  const auto visible = [&](
+                         const mdl::EntityNode& entityNode, const ModelRenderData& data) {
+    if (!m_showHiddenEntities && !m_editorContext.visible(entityNode))
+    {
+      return false;
+    }
+    if (renderContext.render3D())
+    {
+      const auto visibilityTiming = RenderTimingScope{"cpu.models.visibility"};
+      if (const auto* frame = data.frame)
+      {
+        const auto sphere = modelSphere(
+          frame->bounds(),
+          vm::mat4x4f{
+            entityNode.entity().modelTransformation(defaultModelScaleExpression)});
+        if (!frustum.intersects(sphere))
+        {
+          RenderTiming::count("models.culled_pass_entities", 1);
+          return false;
+        }
+      }
+    }
+    return true;
+  };
   const auto renderEntity =
     [&](const mdl::EntityNode& entityNode, gl::MaterialRenderer& renderer) {
-      if (!m_showHiddenEntities && !m_editorContext.visible(entityNode))
-      {
-        return;
-      }
-
       const auto* model = entityNode.entity().model();
       const auto* modelData = model ? model->data() : nullptr;
       if (!modelData)
@@ -275,14 +283,17 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
         return;
       }
 
-      shader.set("Orientation", static_cast<int>(modelData->orientation()));
+      {
+        const auto setupTiming = RenderTimingScope{"cpu.models.entity_setup"};
+        shader.set("Orientation", static_cast<int>(modelData->orientation()));
 
-      const auto transformation =
-        vm::mat4x4f{entityNode.entity().modelTransformation(defaultModelScaleExpression)};
-      const auto multMatrix =
-        MultiplyModelMatrix{renderContext.transformation(), transformation};
-
-      shader.set("ModelMatrix", transformation);
+        // EntityModel.vertsh consumes these uniforms directly; the legacy
+        // model-view stack does not participate in entity model positioning.
+        shader.set(
+          "ModelMatrix",
+          vm::mat4x4f{
+            entityNode.entity().modelTransformation(defaultModelScaleExpression)});
+      }
 
       auto settings = renderContext.goldSrcRendering()
                         ? goldSrcEntityRenderSettings(&entityNode.entity())
@@ -295,6 +306,7 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
       auto renderFunc = GoldSrcEntityMaterialRenderFunc{
         shader, renderContext.minFilterMode(), renderContext.magFilterMode(), settings};
       RenderTiming::count("models.render_calls", 1);
+      const auto submitTiming = RenderTimingScope{"cpu.models.submit"};
       renderer.render(gl, shader.program(), renderFunc);
     };
 
@@ -304,9 +316,11 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
     // camera, which can change every frame, so the entities are re-sorted each time
     // rather than once when m_entities changes.
     m_transparentDrawOrder.clear();
-    for (const auto& [entityNode, renderer] : m_entities)
+    for (const auto& [entityNode, data] : m_entities)
     {
-      if (isTransparentEntity(*entityNode, renderContext.goldSrcRendering()))
+      if (
+        visible(*entityNode, data)
+        && isTransparentEntity(*entityNode, renderContext.goldSrcRendering()))
       {
         m_transparentDrawOrder.push_back(entityNode);
       }
@@ -320,16 +334,18 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
 
     for (const auto* entityNode : m_transparentDrawOrder)
     {
-      renderEntity(*entityNode, *m_entities.at(entityNode));
+      renderEntity(*entityNode, *m_entities.at(entityNode).renderer);
     }
   }
   else
   {
-    for (const auto& [entityNode, renderer] : m_entities)
+    for (const auto& [entityNode, data] : m_entities)
     {
-      if (!isTransparentEntity(*entityNode, renderContext.goldSrcRendering()))
+      if (
+        visible(*entityNode, data)
+        && !isTransparentEntity(*entityNode, renderContext.goldSrcRendering()))
       {
-        renderEntity(*entityNode, *renderer);
+        renderEntity(*entityNode, *data.renderer);
       }
     }
   }
