@@ -18,16 +18,27 @@
  */
 
 #include "TestEnvironment.h"
+#include "TestParserStatus.h"
 #include "base/Logger.h"
 #include "fs/DiskFileSystem.h"
+#include "fs/TestUtils.h"
 #include "gl/CreateResource.h"
+#include "gl/Material.h"
+#include "gl/Texture.h"
+#include "mdl/Entity.h"
+#include "mdl/EntityDefinition.h"
 #include "mdl/EntityModel.h"
 #include "mdl/EntityModelManager.h"
+#include "mdl/EnvironmentConfig.h"
+#include "mdl/FgdParser.h"
 #include "mdl/GameConfig.h"
+#include "mdl/GameFileSystem.h"
 #include "mdl/GameInfo.h"
 #include "mdl/ModelSpecification.h"
+#include "mdl/ParseGameConfig.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
 namespace tb::mdl
@@ -95,6 +106,76 @@ TEST_CASE("EntityModelManager")
       REQUIRE(model != nullptr);
       CHECK(model->data() == nullptr);
     }
+  }
+
+  SECTION("GoldSrc sprites do not require an external palette")
+  {
+    auto spriteFs = fs::DiskFileSystem{getFixtureRoot() / "test/mdl/LoadSpriteModel"};
+    auto info = makeTestGameInfo();
+    info.gameConfig.materialConfig.palette = "does_not_exist.lmp";
+    auto spriteManager = EntityModelManager{
+      info,
+      spriteFs,
+      [](auto loader) { return gl::createResourceSync(std::move(loader)); },
+      logger};
+
+    const auto spriteName = GENERATE(
+      "RenderModeNormal.spr",
+      "RenderModeAlphaTest.spr",
+      "RenderModeAdditive.spr",
+      "RenderModeIndexAlpha.spr");
+    const auto* sprite = spriteManager.model(spriteName);
+    REQUIRE(sprite);
+    REQUIRE(sprite->data());
+    CHECK(sprite->data()->frameCount() == 1u);
+    CHECK(spriteManager.renderer({spriteName, 0, 0}));
+    CHECK(spriteManager.model("ViewPlaneParallel.spr")->data() == nullptr);
+  }
+
+  SECTION("Bundled GoldSrc entity icons load without game assets")
+  {
+    const auto definitionFile = GENERATE("CounterStrike16.fgd", "HalfLife.fgd");
+    const auto className = GENERATE("multi_manager", "env_shake", "trigger_changetarget");
+    CAPTURE(definitionFile, className);
+    auto resources = fs::DiskFileSystem{getFixtureRoot() / "games/Halflife"};
+    const auto configPath = getFixtureRoot() / "games/Halflife/GameConfig.cfg";
+    const auto config =
+      parseGameConfig(
+        fs::readTextFile(resources, "GameConfig.cfg") | kdl::value(), configPath)
+      | kdl::value();
+    auto gameFs = GameFileSystem{};
+    gameFs.initialize({}, config, getFixtureRoot(), {}, logger);
+
+    const auto fgd = fs::readTextFile(resources, definitionFile) | kdl::value();
+    auto parser = FgdParser{fgd, RgbaF{1, 1, 1, 1}};
+    auto status = TestParserStatus{};
+    const auto definitions = parser.parseDefinitions(status) | kdl::value();
+    const auto definition =
+      std::ranges::find(definitions, className, &EntityDefinition::name);
+    REQUIRE(definition != definitions.end());
+    auto entity = Entity{};
+    entity.setDefinition(&*definition);
+    const auto spec = entity.modelSpecification() | kdl::value();
+    CHECK(
+      spec.path == std::filesystem::path{"editor"} / (std::string{className} + ".png"));
+
+    const auto info = makeGameInfo(config);
+    auto iconManager = EntityModelManager{
+      info,
+      gameFs,
+      [](auto loader) { return gl::createResourceSync(std::move(loader)); },
+      logger};
+    const auto* icon = iconManager.model(spec.path);
+    REQUIRE(icon);
+    REQUIRE(icon->data());
+    CHECK(icon->data()->orientation() == Orientation::ViewPlaneParallel);
+    CHECK(icon->data()->frameCount() == 1u);
+    const auto* texture = icon->data()->surfaces().front().skin(0)->texture();
+    REQUIRE(texture);
+    CHECK(texture->width() == 32u);
+    CHECK(texture->height() == 32u);
+    CHECK(texture->alphaDomain() == img::ImageAlphaDomain::Graduated);
+    CHECK(iconManager.renderer(spec));
   }
 
   SECTION("frame")

@@ -27,6 +27,8 @@
 #include "kd/ranges/contains.h"
 #include "kd/ranges/to.h"
 #include "kd/reflection_impl.h"
+#include "kd/string_compare.h"
+#include "kd/vector_utils.h"
 
 #include <ranges>
 
@@ -108,12 +110,99 @@ auto getLinkTargetPropertyKeys(const EntityNodeBase& targetNode)
 template <std::ranges::range R>
 auto getPropertiesForKeys(const EntityNodeBase& entityNode, R keys)
 {
-  return std::move(keys) | std::views::transform([&](const auto& key) {
-           return entityNode.entity().numberedProperties(key)
-                  | std::views::transform(
-                    [&](auto property) { return std::pair{key, std::move(property)}; });
-         })
-         | std::views::join;
+  auto result = std::vector<std::pair<std::string, EntityProperty>>{};
+  for (const auto& key : keys)
+  {
+    for (auto property : entityNode.entity().numberedProperties(key))
+    {
+      result.emplace_back(key, std::move(property));
+    }
+  }
+  return result;
+}
+
+auto getLinkSources(const EntityNodeBase& sourceNode)
+{
+  auto result = std::vector<std::pair<std::string, std::string>>{};
+  for (const auto& [key, property] :
+       getPropertiesForKeys(sourceNode, getLinkSourcePropertyKeys(sourceNode)))
+  {
+    result.emplace_back(key, property.value());
+  }
+
+  const auto& entity = sourceNode.entity();
+  if (entity.classname() == "multi_manager")
+  {
+    // These are consumed by GoldSrc before CMultiManager::KeyValue is called.
+    // See gEntvarsDescription in Valve's Half-Life SDK (dlls/util.cpp).
+    static constexpr std::string_view entityVariableKeys[] = {
+      "classname",     "globalname",
+      "origin",        "oldorigin",
+      "velocity",      "basevelocity",
+      "movedir",       "angles",
+      "avelocity",     "punchangle",
+      "v_angle",       "fixangle",
+      "idealpitch",    "pitch_speed",
+      "ideal_yaw",     "yaw_speed",
+      "modelindex",    "model",
+      "viewmodel",     "weaponmodel",
+      "absmin",        "absmax",
+      "mins",          "maxs",
+      "size",          "ltime",
+      "nextthink",     "solid",
+      "movetype",      "skin",
+      "body",          "effects",
+      "gravity",       "friction",
+      "light_level",   "frame",
+      "scale",         "sequence",
+      "animtime",      "framerate",
+      "controller",    "blending",
+      "rendermode",    "renderamt",
+      "rendercolor",   "renderfx",
+      "health",        "frags",
+      "weapons",       "takedamage",
+      "deadflag",      "view_ofs",
+      "button",        "impulse",
+      "chain",         "dmg_inflictor",
+      "enemy",         "aiment",
+      "owner",         "groundentity",
+      "spawnflags",    "flags",
+      "colormap",      "team",
+      "max_health",    "teleport_time",
+      "armortype",     "armorvalue",
+      "waterlevel",    "watertype",
+      "target",        "targetname",
+      "netname",       "message",
+      "dmg_take",      "dmg_save",
+      "dmg",           "dmgtime",
+      "noise",         "noise1",
+      "noise2",        "noise3",
+      "speed",         "air_finished",
+      "pain_finished", "radsuit_finished",
+      "angle",         "wait"};
+    // GoldSrc CMultiManager::KeyValue uses additional keys as target names and
+    // values as delays. UTIL_StripToken removes the '#' duplicate-target suffix.
+    for (const auto& property : entity.properties())
+    {
+      const auto& key = property.key();
+      if (
+        std::ranges::any_of(
+          entityVariableKeys,
+          [&](const auto name) { return kdl::ci::str_is_equal(key, name); })
+        || key.starts_with(EntityPropertyKeys::TbPrefix)
+        || getPropertyDefinition(entity.definition(), key))
+      {
+        continue;
+      }
+
+      auto targetName = key.substr(0, key.find('#'));
+      if (!targetName.empty())
+      {
+        result.emplace_back(key, std::move(targetName));
+      }
+    }
+  }
+  return result;
 }
 
 void removeLinkEnd(
@@ -260,11 +349,8 @@ void EntityLinkManager::clear()
 
 void EntityLinkManager::addLinksFrom(EntityNodeBase& sourceNode)
 {
-  for (const auto& [sourcePropertyKey, sourceProperty] :
-       getPropertiesForKeys(sourceNode, getLinkSourcePropertyKeys(sourceNode)))
+  for (const auto& [sourcePropertyKey, sourcePropertyValue] : getLinkSources(sourceNode))
   {
-    const auto& sourcePropertyValue = sourceProperty.value();
-
     // The node has some source property. We create an entry for the node and the property
     // even if we don't know if there are any target nodes. This way, we can detect link
     // sources with missing targets during validation.
@@ -303,13 +389,19 @@ void EntityLinkManager::addLinksTo(EntityNodeBase& targetNode)
     // targets with missing sources during validation.
     auto& linkSourcesForKey = m_linkTargets[&targetNode][targetPropertyKey];
 
-    for (auto* sourceNode : m_nodeIndex.findNodes<EntityNodeBase>(
-           NodeIndex::escapePattern(targetPropertyValue)))
+    const auto pattern = NodeIndex::escapePattern(targetPropertyValue);
+    auto sourceNodes = m_nodeIndex.findNodes<EntityNodeBase>(pattern);
+    const auto duplicateSources = m_nodeIndex.findNodes<EntityNodeBase>(pattern + "#*");
+    sourceNodes.insert(
+      sourceNodes.end(), duplicateSources.begin(), duplicateSources.end());
+    sourceNodes = kdl::vec_sort_and_remove_duplicates(std::move(sourceNodes));
+
+    for (auto* sourceNode : sourceNodes)
     {
-      for (const auto& sourcePropertyKey : getLinkSourcePropertyKeys(*sourceNode))
+      for (const auto& [sourcePropertyKey, sourcePropertyValue] :
+           getLinkSources(*sourceNode))
       {
-        const auto& sourceEntity = sourceNode->entity();
-        if (sourceEntity.hasNumberedProperty(sourcePropertyKey, targetPropertyValue))
+        if (sourcePropertyValue == targetPropertyValue)
         {
           linkSourcesForKey.emplace(LinkEnd{sourceNode, sourcePropertyKey});
           m_linkSources[sourceNode][sourcePropertyKey].emplace(

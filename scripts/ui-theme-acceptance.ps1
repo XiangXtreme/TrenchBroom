@@ -7,6 +7,7 @@ param(
     "outliner",
     "entity-browser",
     "entity-browser-empty",
+    "goldsrc-entity-links",
     "face-inspector",
     "material-browser-empty",
     "plugin-inspector",
@@ -29,6 +30,7 @@ param(
   [string] $MaterialMapPath =
     "lib\TbMdlLib\test\fixture\mdl\Map\reloadMaterialCollectionsQ2.map",
   [string] $MaterialGamePath = "lib\TbUiLib\test\fixture\mdl\Game\Quake2",
+  [string] $GoldSrcMapPath = "lib\TbUiLib\test\fixture\ui\UiSnapshot\goldsrcEntityLinks.map",
   [string] $OutputDir = "",
   [string] $BaselineDir = "",
   [int] $PixelDifferenceThreshold = 24,
@@ -242,6 +244,7 @@ foreach ($target in $normalizedTargets) {
       "outliner-brush-entity-after",
       "entity-browser",
       "entity-browser-empty",
+      "goldsrc-entity-links",
       "face-inspector",
       "material-browser-empty",
       "plugin-inspector",
@@ -257,7 +260,7 @@ foreach ($target in $normalizedTargets) {
       "preferences-misc",
       "preferences-kreedzbroom"
     )) {
-    throw "Unsupported target '$target'. Expected welcome, workbench, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, face-inspector, material-browser-empty, plugin-inspector, supporting, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
+    throw "Unsupported target '$target'. Expected welcome, workbench, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, goldsrc-entity-links, face-inspector, material-browser-empty, plugin-inspector, supporting, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
   }
 }
 foreach ($theme in $Themes) {
@@ -301,6 +304,10 @@ $resolvedMaterialMapPath =
   if ($usesMaterialFixture) { Resolve-Path -Path $MaterialMapPath } else { $null }
 $resolvedMaterialGamePath =
   if ($usesMaterialFixture) { Resolve-Path -Path $MaterialGamePath } else { $null }
+$resolvedGoldSrcMapPath =
+  if ($normalizedTargets -contains "goldsrc-entity-links") {
+    Resolve-Path -Path $GoldSrcMapPath
+  } else { $null }
 $usesOutlinerFixture =
   @($normalizedTargets | Where-Object { $_.StartsWith("outliner") }).Count -gt 0
 $resolvedOutlinerMapPath =
@@ -362,11 +369,14 @@ foreach ($target in $normalizedTargets) {
       $useMaterialFixture =
         $target -eq "face-inspector" -or $target -eq "material-browser-empty"
       $useOutlinerFixture = $target.StartsWith("outliner")
+      $useGoldSrcFixture = $target -eq "goldsrc-entity-links"
       $targetMapPath =
         if ($useMaterialFixture) {
           $resolvedMaterialMapPath
         } elseif ($useOutlinerFixture) {
           $resolvedOutlinerMapPath
+        } elseif ($useGoldSrcFixture) {
+          $resolvedGoldSrcMapPath
         } else {
           $resolvedMapPath
         }
@@ -374,8 +384,13 @@ foreach ($target in $normalizedTargets) {
         $processInfo.Arguments +=
           " --ui-snapshot-game-path `"$($resolvedMaterialGamePath.Path)`""
       }
+      if ($useGoldSrcFixture) {
+        $processInfo.Arguments +=
+          " --ui-snapshot-game-path `"$(Split-Path -Parent $resolvedGoldSrcMapPath.Path)`""
+      }
       if (
         $target -eq "workbench" -or
+        $target -eq "goldsrc-entity-links" -or
         $target.StartsWith("outliner") -or
         $target -eq "entity-browser" -or
         $target -eq "entity-browser-empty" -or

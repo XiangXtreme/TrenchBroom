@@ -117,6 +117,89 @@ TEST_CASE("EntityLinkManager")
       {TargetProp, PropertyValueTypes::LinkTarget{}, {}, {}},
     }};
 
+  SECTION("Multi-manager target keys")
+  {
+    const auto sourceFirst = GENERATE(false, true);
+    const auto targetName = GENERATE("test1"s, "test[*]?"s);
+    const auto duplicateKey = targetName + "#1";
+    const auto managerDefinition = EntityDefinition{
+      "multi_manager",
+      {},
+      {},
+      {{TargetProp, PropertyValueTypes::LinkTarget{}, {}, {}},
+       {"custom_setting", PropertyValueTypes::String{}, {}, {}}}};
+    auto source = EntityNode{Entity{{
+      {Classname, "multi_manager"},
+      {Origin, "0 0 0"},
+      {Angles, "0 0 0"},
+      {Angle, "0"},
+      {Spawnflags, "1"},
+      {TargetProp, "manager"},
+      {"wait", "1"},
+      {"globalname", "1"},
+      {"rendercolor", "255 255 255"},
+      {"RenderAmt", "255"},
+      {"_tb_custom", "1"},
+      {"custom_setting", "1"},
+      {targetName, "1"},
+      {duplicateKey, "2"},
+      {"missing_target", "0"},
+      {"#1", "0"},
+    }}};
+    source.setDefinition(&managerDefinition);
+    auto target = EntityNode{Entity{{{TargetProp, targetName}}}};
+    target.setDefinition(&targetDefinition);
+
+    auto& first = sourceFirst ? source : target;
+    auto& second = sourceFirst ? target : source;
+    i.addNode(first);
+    m.addEntityNode(first);
+    i.addNode(second);
+    m.addEntityNode(second);
+
+    CHECK(m.hasLink(source, target, targetName, TargetProp));
+    CHECK(m.hasLink(source, target, duplicateKey, TargetProp));
+    CHECK(m.linksTo(target, TargetProp).size() == 2u);
+    CHECK(m.linksFrom(source).size() == 3u);
+    CHECK_THAT(
+      m.getSourcePropertyKeysWithMissingTarget(source),
+      UnorderedEquals(std::vector<std::string>{"missing_target"}));
+
+    SECTION("Removing and re-adding the target updates both ends")
+    {
+      m.removeEntityNode(target);
+      i.removeNode(target);
+      CHECK(m.hasMissingTarget(source, targetName));
+      CHECK(m.hasMissingTarget(source, duplicateKey));
+      CHECK(m.linksTo(target).empty());
+
+      i.addNode(target);
+      m.addEntityNode(target);
+      CHECK(m.hasLink(source, target, duplicateKey, TargetProp));
+      CHECK(!m.hasMissingTarget(source, targetName));
+    }
+
+    SECTION("Removing the manager removes both incoming references")
+    {
+      m.removeEntityNode(source);
+      i.removeNode(source);
+      CHECK(m.linksFrom(source).empty());
+      CHECK(m.linksTo(target, TargetProp).empty());
+    }
+
+    SECTION("Other entity classes do not treat custom keys as targets")
+    {
+      m.removeEntityNode(source);
+      i.removeNode(source);
+      auto entity = source.entity();
+      entity.setClassname("other_class");
+      source.setEntity(std::move(entity));
+      i.addNode(source);
+      m.addEntityNode(source);
+      CHECK(m.linksFrom(source).empty());
+    }
+  }
+
   SECTION("Adding and removing entities")
   {
     auto sourceNode = EntityNode{Entity{{

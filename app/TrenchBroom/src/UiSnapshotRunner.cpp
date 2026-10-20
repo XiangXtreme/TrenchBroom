@@ -49,12 +49,16 @@
 #include "UiComponentSnapshot.h"
 #include "base/PreferenceManager.h"
 #include "fs/DiskIO.h"
+#include "gl/Camera.h"
 #include "gl/Material.h"
 #include "gl/MaterialManager.h"
 #include "gl/Resource.h"
 #include "gl/Texture.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
+#include "mdl/EntityLinkManager.h"
+#include "mdl/EntityModel.h"
+#include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
 #include "mdl/GameManager.h"
 #include "mdl/GroupNode.h"
@@ -72,6 +76,7 @@
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
+#include "ui/MapView3D.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
@@ -105,6 +110,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("outliner-brush-entity-after"),
     QStringLiteral("entity-browser"),
     QStringLiteral("entity-browser-empty"),
+    QStringLiteral("goldsrc-entity-links"),
     QStringLiteral("face-inspector"),
     QStringLiteral("material-browser-empty"),
     QStringLiteral("plugin-inspector"),
@@ -434,6 +440,38 @@ void configureSupportingSnapshot(QWidget& targetWidget)
   }
 }
 
+void configureGoldSrcEntitySnapshot(QWidget& targetWidget)
+{
+  auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget);
+  if (!mapWindow)
+  {
+    return;
+  }
+  auto& map = mapWindow->document().map();
+  if (auto* manager = findSnapshotEntity(map.worldNode(), "multi_manager"))
+  {
+    if (!manager->selected())
+    {
+      mdl::deselectAll(map);
+      mdl::selectNodes(map, {manager});
+    }
+  }
+  setPref(Preferences::EntityLinkMode, Preferences::EntityLinkModeAll);
+  setPref(Preferences::ShowAxes, false);
+  mapWindow->switchToInspectorPage(InspectorPage::Entity);
+  if (mapWindow->infoPanelVisible())
+  {
+    mapWindow->toggleInfoPanel();
+  }
+  for (auto* view : mapWindow->findChildren<MapView3D*>())
+  {
+    view->stopCameraAnimation();
+    auto& camera = static_cast<MapViewBase&>(*view).camera();
+    camera.moveTo(vm::vec3f{96, -110, 170});
+    camera.lookAt(vm::vec3f{96, 112, 48}, vm::vec3f{0, 0, 1});
+  }
+}
+
 void configurePathToolSnapshot(QWidget& targetWidget)
 {
   auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget);
@@ -533,6 +571,67 @@ struct UiSnapshotReadiness
   UiSnapshotReadinessState state;
   QString detail;
 };
+
+UiSnapshotReadiness goldSrcEntitySnapshotReadiness(QWidget& targetWidget)
+{
+  auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget);
+  if (!mapWindow)
+  {
+    return {UiSnapshotReadinessState::Failed, "Entity snapshot is not a map window"};
+  }
+  auto& map = mapWindow->document().map();
+  auto* manager = findSnapshotEntity(map.worldNode(), "multi_manager");
+  for (const auto* targetName : {"test1", "test2", "test3", "shake"})
+  {
+    auto* target =
+      findSnapshotNode<mdl::EntityNode>(map.worldNode(), [&](const auto& node) {
+        return node.entity().hasProperty(mdl::EntityPropertyKeys::Targetname, targetName);
+      });
+    if (!manager || !target)
+    {
+      return {UiSnapshotReadinessState::Failed, "GoldSrc entity fixture is incomplete"};
+    }
+    if (
+      std::string_view{targetName} != "shake"
+      && !map.entityLinkManager().hasLink(*manager, *target, targetName))
+    {
+      return {UiSnapshotReadinessState::Failed, "Multi-manager target link is missing"};
+    }
+    if (std::string_view{targetName} == "shake")
+    {
+      const auto& links =
+        map.entityLinkManager().linksTo(*target, mdl::EntityPropertyKeys::Targetname);
+      if (links.size() != 1u || links.begin()->propertyKey != "target")
+      {
+        return {UiSnapshotReadinessState::Failed, "Standard target link is missing"};
+      }
+    }
+  }
+  for (const auto* classname : {"multi_manager", "trigger_changetarget", "env_shake"})
+  {
+    const auto* node = findSnapshotEntity(map.worldNode(), classname);
+    if (!node)
+    {
+      return {UiSnapshotReadinessState::Failed, "GoldSrc entity fixture is incomplete"};
+    }
+    const auto spec = node->entity().modelSpecification();
+    if (!spec)
+    {
+      return {UiSnapshotReadinessState::Failed, "Entity icon definition is invalid"};
+    }
+    const auto* model = map.entityModelManager().model(spec.value().path);
+    if (!model || !model->data())
+    {
+      return {UiSnapshotReadinessState::Pending, "Waiting for entity icon models"};
+    }
+    const auto* texture = model->data()->surfaces().front().skin(0)->texture();
+    if (!texture || !texture->isReady())
+    {
+      return {UiSnapshotReadinessState::Pending, "Waiting for entity icon textures"};
+    }
+  }
+  return {UiSnapshotReadinessState::Ready, "GoldSrc target links and entity icons ready"};
+}
 
 UiSnapshotReadiness outlinerSnapshotReadiness(
   QWidget& targetWidget, const QString& targetName)
@@ -650,6 +749,10 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
 
 UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& targetName)
 {
+  if (targetName == QStringLiteral("goldsrc-entity-links"))
+  {
+    return goldSrcEntitySnapshotReadiness(targetWidget);
+  }
   if (isOutlinerSnapshotTarget(targetName))
   {
     return outlinerSnapshotReadiness(targetWidget, targetName);
@@ -875,7 +978,11 @@ void configurePreferencesSnapshot(
 
 void configureSnapshot(QWidget& targetWidget, const QString& targetName)
 {
-  if (isOutlinerSnapshotTarget(targetName))
+  if (targetName == QStringLiteral("goldsrc-entity-links"))
+  {
+    configureGoldSrcEntitySnapshot(targetWidget);
+  }
+  else if (isOutlinerSnapshotTarget(targetName))
   {
     configureOutlinerSnapshot(targetWidget, targetName);
   }

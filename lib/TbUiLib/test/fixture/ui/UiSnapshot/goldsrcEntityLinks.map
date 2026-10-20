@@ -1,0 +1,42 @@
+// Game: Half-Life
+// Format: Valve
+{
+"classname" "worldspawn"
+"mapversion" "220"
+{
+( -64 -64 -16 ) ( -64 -63 -16 ) ( -64 -64 -15 ) __TB_empty [ 0 -1 0 0 ] [ 0 0 -1 0 ] 0 1 1
+( -64 -64 -16 ) ( -64 -64 -15 ) ( -63 -64 -16 ) __TB_empty [ 1 0 0 0 ] [ 0 0 -1 0 ] 0 1 1
+( -64 -64 -16 ) ( -63 -64 -16 ) ( -64 -63 -16 ) __TB_empty [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 256 320 0 ) ( 256 321 0 ) ( 257 320 0 ) __TB_empty [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 256 320 0 ) ( 257 320 0 ) ( 256 320 1 ) __TB_empty [ 1 0 0 0 ] [ 0 0 -1 0 ] 0 1 1
+( 256 320 0 ) ( 256 320 1 ) ( 256 321 0 ) __TB_empty [ 0 1 0 0 ] [ 0 0 -1 0 ] 0 1 1
+}
+}
+{
+"classname" "multi_manager"
+"origin" "0 0 48"
+"test1" "1"
+"test2" "1"
+"test3" "1"
+}
+{
+"classname" "trigger_changetarget"
+"origin" "0 128 48"
+"targetname" "test1"
+}
+{
+"classname" "trigger_changetarget"
+"origin" "96 128 48"
+"targetname" "test2"
+}
+{
+"classname" "trigger_changetarget"
+"origin" "192 128 48"
+"targetname" "test3"
+"target" "shake"
+}
+{
+"classname" "env_shake"
+"origin" "192 256 48"
+"targetname" "shake"
+}

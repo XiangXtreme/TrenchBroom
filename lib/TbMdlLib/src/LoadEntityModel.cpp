@@ -86,6 +86,13 @@ Result<EntityModelData> loadEntityModelData(
            }
            if (canLoadSpriteModel(path, reader))
            {
+             auto header = reader;
+             header.readString(4);
+             if (header.template readInt<int32_t>() == 2)
+             {
+               // GoldSrc sprites embed their palette; a Quake palette is not required.
+               return loadSpriteModel(modelName, reader, Palette{nullptr}, logger);
+             }
              return loadPalette(fs, materialConfig) | kdl::and_then([&](auto palette) {
                       return loadSpriteModel(modelName, reader, palette, logger);
                     });

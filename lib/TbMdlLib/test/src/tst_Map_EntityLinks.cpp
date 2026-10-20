@@ -70,6 +70,67 @@ TEST_CASE("Map_EntityLinks")
         {Targetname, PropertyValueTypes::LinkTarget{}, {}, {}},
       }}});
 
+  SECTION("Multi-manager keys follow editing and undo")
+  {
+    auto* manager = new EntityNode{Entity{{
+      {Classname, "multi_manager"},
+      {"test1#2", "1"},
+    }}};
+    auto* target = new EntityNode{Entity{{
+      {Classname, targetClassname},
+      {Targetname, "test1"},
+    }}};
+    addNodes(map, {{&parentForNodes(map), {manager, target}}});
+    REQUIRE(map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+
+    SECTION("Renaming the target updates links")
+    {
+      selectNodes(map, {target});
+      REQUIRE(setEntityProperty(map, Targetname, "test2"));
+      CHECK(!map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+      CHECK(map.entityLinkManager().hasMissingTarget(*manager, "test1#2"));
+      map.undoCommand();
+      CHECK(map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+      map.redoCommand();
+      CHECK(!map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+    }
+
+    SECTION("Renaming a schedule key updates links")
+    {
+      selectNodes(map, {manager});
+      REQUIRE(renameEntityProperty(map, "test1#2", "test2"));
+      CHECK(!map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+      CHECK(map.entityLinkManager().hasMissingTarget(*manager, "test2"));
+      map.undoCommand();
+      CHECK(map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+    }
+
+    SECTION("Changing a delay retains the link")
+    {
+      selectNodes(map, {manager});
+      REQUIRE(setEntityProperty(map, "test1#2", "5"));
+      CHECK(map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+    }
+
+    SECTION("Removing a schedule key removes the link")
+    {
+      selectNodes(map, {manager});
+      REQUIRE(removeEntityProperty(map, "test1#2"));
+      CHECK(map.entityLinkManager().linksTo(*target, Targetname).empty());
+      map.undoCommand();
+      CHECK(map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+    }
+
+    SECTION("Changing the manager class removes the key references")
+    {
+      selectNodes(map, {manager});
+      REQUIRE(setEntityProperty(map, Classname, sourceClassname));
+      CHECK(map.entityLinkManager().linksFrom(*manager).empty());
+      map.undoCommand();
+      CHECK(map.entityLinkManager().hasLink(*manager, *target, "test1#2"));
+    }
+  }
+
   SECTION("Adding nodes adds their links")
   {
     auto* sourceNode = new EntityNode{Entity{{

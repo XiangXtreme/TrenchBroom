@@ -948,7 +948,7 @@
 	]
 ]
 
-@PointClass base(Targetname) = env_shake : "Screen Shake" 
+@PointClass base(Targetname) size(-16 -16 -16, 16 16 16) iconsprite("editor/env_shake.png") = env_shake : "Screen Shake"
 [
 	spawnflags(flags) =
 	[
@@ -2284,7 +2284,7 @@
 	m_imaxlivechildren(integer) : "Max live children" : 5
 ]
 
-@PointClass base(Targetname) color(255 128 0) = multi_manager : "MultiTarget Manager" 
+@PointClass base(Targetname) color(255 128 0) size(-16 -16 -16, 16 16 16) iconsprite("editor/multi_manager.png") = multi_manager : "MultiTarget Manager"
 [
 	spawnflags(Flags) = 
 	[
@@ -2551,7 +2551,7 @@
 	]
 ]
 
-@PointClass base(Targetx, Targetname) = trigger_changetarget : "Trigger Change Target"
+@PointClass base(Targetx, Targetname) size(-16 -16 -16, 16 16 16) iconsprite("editor/trigger_changetarget.png") = trigger_changetarget : "Trigger Change Target"
 [
 	m_iszNewtarget(target_destination) : "New Target"
 ]
