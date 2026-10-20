@@ -332,6 +332,7 @@ void RenderView::resizeGL(int w, int h)
 void RenderView::render()
 {
   auto gl = GlQt{glFunctions()};
+  const auto workload = render::RenderGlScope{"gl.frame"};
 
   {
     const auto scope = render::RenderTimingScope{"cpu.input"};

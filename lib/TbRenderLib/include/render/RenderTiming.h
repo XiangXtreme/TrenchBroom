@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <map>
 #include <string>
@@ -15,11 +16,27 @@
 namespace tb::render
 {
 
+enum class GlCounter : size_t
+{
+  DrawCalls,
+  DrawRanges,
+  SubmittedVertices,
+  TextureBinds,
+  TextureParameters,
+  Uniforms,
+  BufferBinds,
+  AttributeChanges,
+  Count
+};
+
+using GlCounters = std::array<size_t, static_cast<size_t>(GlCounter::Count)>;
+
 /** Optional CPU timings for one frame. Nested stages are inclusive; do not add them. */
 struct RenderTiming
 {
   std::map<std::string, double, std::less<>> milliseconds;
   std::map<std::string, size_t, std::less<>> counters;
+  GlCounters glCounters{};
   static inline thread_local RenderTiming* current = nullptr;
 
   class Capture
@@ -50,6 +67,57 @@ struct RenderTiming
       it->second += value;
     }
   }
+
+  // GL calls are frequent: accumulate fixed counters without per-call map lookups.
+  static void countGl(const GlCounter counter, const size_t value = 1)
+  {
+    if (current)
+    {
+      current->glCounters[static_cast<size_t>(counter)] += value;
+    }
+  }
+};
+
+/** Inclusive GL workload for a pass. Counts API submissions, not visible geometry. */
+class RenderGlScope
+{
+  RenderTiming* m_timing = RenderTiming::current;
+  std::string_view m_prefix;
+  GlCounters m_start{};
+
+public:
+  explicit RenderGlScope(const std::string_view prefix)
+    : m_prefix{prefix}
+  {
+    if (m_timing)
+    {
+      m_start = m_timing->glCounters;
+    }
+  }
+
+  ~RenderGlScope()
+  {
+    if (m_timing)
+    {
+      constexpr auto names = std::array{
+        "draw_calls",
+        "draw_ranges",
+        "submitted_vertices",
+        "texture_binds",
+        "texture_parameters",
+        "uniforms",
+        "buffer_binds",
+        "attribute_changes"};
+      static_assert(names.size() == std::tuple_size_v<GlCounters>);
+      for (size_t i = 0; i < names.size(); ++i)
+      {
+        m_timing->counters[std::string{m_prefix} + "." + names[i]] +=
+          m_timing->glCounters[i] - m_start[i];
+      }
+    }
+  }
+  RenderGlScope(const RenderGlScope&) = delete;
+  RenderGlScope& operator=(const RenderGlScope&) = delete;
 };
 
 /** When profiling is disabled this only checks a thread-local pointer. */

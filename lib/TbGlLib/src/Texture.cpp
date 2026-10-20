@@ -264,9 +264,9 @@ bool Texture::activate(Gl& gl, const int minFilter, const int magFilter) const
   return std::visit(
     kdl::overload(
       [](const TextureLoadedState&) { return false; },
-      [&](const TextureReadyState& readyState) {
+      [&](TextureReadyState& readyState) {
         gl.bindTexture(GL_TEXTURE_2D, readyState.textureId);
-        setFilterMode(gl, minFilter, magFilter, readyState.useMipmap);
+        setFilterMode(gl, minFilter, magFilter, readyState);
         return true;
       },
       [](const TextureDroppedState&) { return false; }),
@@ -334,21 +334,25 @@ const std::vector<TextureBuffer>& Texture::buffersIfLoaded() const
 }
 
 void Texture::setFilterMode(
-  Gl& gl, const int minFilter, const int magFilter, const bool useMipmap) const
+  Gl& gl, const int minFilter, const int magFilter, TextureReadyState& readyState) const
 {
-  if (m_alphaDomain == img::ImageAlphaDomain::Binary)
+  const auto masked = m_alphaDomain == img::ImageAlphaDomain::Binary;
+  const auto effectiveMin =
+    masked ? GL_NEAREST : textureFilterMode(minFilter, readyState.useMipmap);
+  const auto effectiveMag =
+    masked ? GL_NEAREST : textureFilterMode(magFilter, readyState.useMipmap);
+
+  // Rebinding or sharing a texture does not change its sampling parameters. Only
+  // submit changes, including alpha-domain changes and non-mipmap fallbacks.
+  if (readyState.minFilter != effectiveMin)
   {
-    // Force GL_NEAREST filtering for a hard alpha cutout, to avoid it blurring into a
-    // semi-transparent fringe.
-    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, effectiveMin);
+    readyState.minFilter = effectiveMin;
   }
-  else
+  if (readyState.magFilter != effectiveMag)
   {
-    gl.texParameteri(
-      GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFilterMode(minFilter, useMipmap));
-    gl.texParameteri(
-      GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFilterMode(magFilter, useMipmap));
+    gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, effectiveMag);
+    readyState.magFilter = effectiveMag;
   }
 }
 

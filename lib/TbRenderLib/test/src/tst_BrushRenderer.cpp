@@ -182,6 +182,7 @@ TEST_CASE("BrushRenderer rendering")
   gl.onDepthMask = [&](const GLboolean flag) { depthMaskCalls.push_back(flag); };
 
   auto drawCallCount = 0;
+  auto drawnIndices = std::vector<GLsizei>{};
   auto drawnThresholds = std::vector<GLfloat>{};
   auto drawnEntityAlphas = std::vector<GLfloat>{};
   auto drawnEntityModes = std::vector<int>{};
@@ -191,8 +192,9 @@ TEST_CASE("BrushRenderer rendering")
   gl.onPushAttrib = [&](GLbitfield) { ++pushedStates; };
   gl.onPopAttrib = [&]() { --pushedStates; };
   gl.onBlendFunc = [&](GLenum src, GLenum dst) { blendFactors.emplace_back(src, dst); };
-  gl.onDrawElements = [&](GLenum, GLsizei, GLenum, const void*) {
+  gl.onDrawElements = [&](GLenum, GLsizei count, GLenum, const void*) {
     ++drawCallCount;
+    drawnIndices.push_back(count);
     drawnEntityAlphas.push_back(entityAlpha);
     drawnEntityModes.push_back(entityMode);
     drawnOffsets.push_back(textureOffset);
@@ -301,6 +303,56 @@ TEST_CASE("BrushRenderer rendering")
     renderer.render(renderContext, nextFrame);
     nextFrame.render(renderContext);
     CHECK(uploads == 0);
+  }
+
+  SECTION("opaque conveyor ranges coalesce and split again after settings change")
+  {
+    renderContext.setGoldSrcRendering(true);
+    renderContext.setAnimationTime(0.5);
+    auto scrollMaterial =
+      gl::Material{"SCROLLarrows", createTextureResource(gl::Texture{128, 128})};
+    auto conveyor =
+      mdl::EntityNode{mdl::Entity{{{"classname", "func_conveyor"}, {"speed", "64"}}}};
+    auto renderer = BrushRenderer{};
+    for (size_t i = 0; i < 3; ++i)
+    {
+      auto* brush = new mdl::BrushNode{makeCubeBrushNode(scrollMaterial).brush()};
+      conveyor.addChild(brush);
+      renderer.addBrush(*brush);
+    }
+    auto batch = RenderBatch{vboManager};
+    renderer.render(renderContext, batch);
+    batch.render(renderContext);
+    CHECK(drawnIndices == std::vector<GLsizei>{108});
+    CHECK(drawnOffsets == std::vector<float>{0.75f});
+
+    // A moved brush with different settings must not inherit its former neighbors'
+    // conveyor offset, even though it still uses the same material/index buffer.
+    auto* changed = static_cast<mdl::BrushNode*>(conveyor.children().front());
+    conveyor.removeChild(changed);
+    renderer.invalidateBrush(*changed);
+    drawnIndices.clear();
+    drawnOffsets.clear();
+    auto next = RenderBatch{vboManager};
+    renderer.render(renderContext, next);
+    next.render(renderContext);
+    auto movingIndices = 0;
+    auto stillIndices = 0;
+    for (size_t i = 0; i < drawnIndices.size(); ++i)
+    {
+      if (drawnOffsets[i] == 0.75f)
+      {
+        movingIndices += drawnIndices[i];
+      }
+      else if (drawnOffsets[i] == 0.0f)
+      {
+        stillIndices += drawnIndices[i];
+      }
+    }
+    CHECK(movingIndices == 72);
+    CHECK(stillIndices == 36);
+    renderer.removeBrush(*changed);
+    delete changed;
   }
 
   SECTION(

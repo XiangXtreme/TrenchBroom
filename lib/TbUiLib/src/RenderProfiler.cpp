@@ -234,6 +234,7 @@ render::RenderTiming& RenderProfiler::beginFrame(
   p.fpsLimit = fpsLimit;
   p.timing.milliseconds.clear();
   p.timing.counters.clear();
+  p.timing.glCounters.fill(0);
   p.startGpu(context);
   if (!p.metadataWritten)
   {

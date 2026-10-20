@@ -209,6 +209,7 @@ void EntityModelRenderer::renderTransparent(RenderBatch& renderBatch)
 void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool transparent)
 {
   const auto timing = RenderTimingScope{"cpu.models.draw"};
+  const auto workload = RenderGlScope{"gl.models"};
   const auto passTiming =
     RenderTimingScope{transparent ? "cpu.models.transparent" : "cpu.models.opaque"};
   RenderTiming::count("models.pass_entities", m_entities.size());

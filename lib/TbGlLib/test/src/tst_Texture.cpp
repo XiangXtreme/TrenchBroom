@@ -172,6 +172,13 @@ TEST_CASE("Texture")
         == std::vector<TexParam>{
           {GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR},
           {GL_TEXTURE_MAG_FILTER, GL_NEAREST_MIPMAP_NEAREST}});
+      filterParams.clear();
+      CHECK(texture.activate(gl, GL_LINEAR_MIPMAP_LINEAR, GL_NEAREST_MIPMAP_NEAREST));
+      CHECK(filterParams.empty());
+      CHECK(texture.activate(gl, GL_LINEAR_MIPMAP_NEAREST, GL_NEAREST_MIPMAP_NEAREST));
+      CHECK(
+        filterParams
+        == std::vector<TexParam>{{GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST}});
     }
 
     SECTION("falls back to the non-mipmap filter for a single-level texture")
@@ -206,6 +213,86 @@ TEST_CASE("Texture")
         filterParams
         == std::vector<TexParam>{
           {GL_TEXTURE_MIN_FILTER, GL_NEAREST}, {GL_TEXTURE_MAG_FILTER, GL_NEAREST}});
+    }
+  }
+
+  SECTION("activate caches effective filtering per texture")
+  {
+    auto gl = MockGl{};
+    installTextureUploadSupport(gl);
+    auto texture =
+      Texture{4, 4, RgbaF{}, GL_RGBA, NoEmbeddedDefaults{}, std::move(buffers)};
+    texture.upload(gl);
+    REQUIRE(texture.activate(gl, GL_LINEAR, GL_LINEAR));
+
+    auto filterParams = std::vector<TexParam>{};
+    gl.onTexParameteri = [&](GLenum, const GLenum pname, const GLint param) {
+      filterParams.emplace_back(pname, param);
+    };
+
+    SECTION("repeated activation and equivalent single-level filters")
+    {
+      CHECK(texture.deactivate(gl));
+      CHECK(texture.activate(gl, GL_LINEAR, GL_LINEAR));
+      CHECK(texture.activate(gl, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR));
+      CHECK(filterParams.empty());
+
+      CHECK(texture.activate(gl, GL_NEAREST_MIPMAP_LINEAR, GL_LINEAR));
+      CHECK(filterParams == std::vector<TexParam>{{GL_TEXTURE_MIN_FILTER, GL_NEAREST}});
+      filterParams.clear();
+      CHECK(texture.activate(gl, GL_NEAREST, GL_NEAREST));
+      CHECK(filterParams == std::vector<TexParam>{{GL_TEXTURE_MAG_FILTER, GL_NEAREST}});
+    }
+
+    SECTION("alpha-domain changes override and restore requested filtering")
+    {
+      texture.setAlphaDomain(img::ImageAlphaDomain::Binary);
+      CHECK(texture.activate(gl, GL_LINEAR, GL_LINEAR));
+      CHECK(
+        filterParams
+        == std::vector<TexParam>{
+          {GL_TEXTURE_MIN_FILTER, GL_NEAREST}, {GL_TEXTURE_MAG_FILTER, GL_NEAREST}});
+      filterParams.clear();
+      CHECK(texture.activate(gl, GL_NEAREST_MIPMAP_LINEAR, GL_LINEAR));
+      CHECK(filterParams.empty());
+      texture.setAlphaDomain(img::ImageAlphaDomain::Opaque);
+      CHECK(texture.activate(gl, GL_LINEAR, GL_LINEAR));
+      CHECK(
+        filterParams
+        == std::vector<TexParam>{
+          {GL_TEXTURE_MIN_FILTER, GL_LINEAR}, {GL_TEXTURE_MAG_FILTER, GL_LINEAR}});
+    }
+
+    SECTION("binding another texture preserves the first texture's filter state")
+    {
+      auto otherBuffers = TextureBufferList{};
+      setMipBufferSize(otherBuffers, 1, 4, 4, GL_RGBA);
+      auto other =
+        Texture{4, 4, RgbaF{}, GL_RGBA, NoEmbeddedDefaults{}, std::move(otherBuffers)};
+      other.upload(gl);
+      CHECK(other.activate(gl, GL_NEAREST, GL_NEAREST));
+      filterParams.clear();
+      CHECK(texture.activate(gl, GL_LINEAR, GL_LINEAR));
+      CHECK(other.activate(gl, GL_NEAREST, GL_NEAREST));
+      CHECK(filterParams.empty());
+    }
+
+    SECTION("different view filters update the shared texture and survive a move")
+    {
+      CHECK(texture.activate(gl, GL_NEAREST, GL_NEAREST));
+      filterParams.clear();
+      auto moved = std::move(texture);
+      CHECK(moved.activate(gl, GL_NEAREST, GL_NEAREST));
+      CHECK(filterParams.empty());
+      CHECK(moved.activate(gl, GL_LINEAR, GL_LINEAR));
+      CHECK(
+        filterParams
+        == std::vector<TexParam>{
+          {GL_TEXTURE_MIN_FILTER, GL_LINEAR}, {GL_TEXTURE_MAG_FILTER, GL_LINEAR}});
+      filterParams.clear();
+      moved.drop(gl);
+      CHECK_FALSE(moved.activate(gl, GL_NEAREST, GL_NEAREST));
+      CHECK(filterParams.empty());
     }
   }
 

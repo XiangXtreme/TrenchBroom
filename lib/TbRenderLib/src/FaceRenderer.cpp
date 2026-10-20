@@ -182,6 +182,7 @@ void FaceRenderer::prepare(gl::Gl& gl, gl::VboManager& vboManager)
 void FaceRenderer::render(RenderContext& context)
 {
   const auto timing = RenderTimingScope{"cpu.faces.draw"};
+  const auto workload = RenderGlScope{"gl.faces"};
   auto& gl = context.gl();
 
   auto& shaderManager = context.shaderManager();

@@ -62,8 +62,12 @@ struct TextureReadyState
 {
   GLuint textureId;
   bool useMipmap;
+  // Filtering belongs to the shared texture object, not the current GL context.
+  // Zero is not a filter enum and forces initialization on first activation.
+  int minFilter = 0;
+  int magFilter = 0;
 
-  kdl_reflect_decl(TextureReadyState, textureId, useMipmap);
+  kdl_reflect_decl(TextureReadyState, textureId, useMipmap, minFilter, magFilter);
 };
 
 struct TextureDroppedState
@@ -148,7 +152,8 @@ public:
   const std::vector<TextureBuffer>& buffersIfLoaded() const;
 
 private:
-  void setFilterMode(Gl& gl, int minFilter, int magFilter, bool useMipmap) const;
+  void setFilterMode(
+    Gl& gl, int minFilter, int magFilter, TextureReadyState& readyState) const;
 };
 
 } // namespace tb::gl

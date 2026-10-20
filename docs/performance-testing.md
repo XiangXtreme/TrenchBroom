@@ -134,6 +134,17 @@ The raw log separates:
 - Counters such as `faces.draw_calls`, material groups, opaque/transparent items,
   and batch size help explain the CPU submission cost. These are logical renderer
   calls/items, not a driver-level capture of every OpenGL draw in the application.
+- `gl.frame.*`, `gl.models.*`, `gl.faces.*`, and `gl.edges.*` count API submissions
+  through `GlQt` in those scopes. A multi-draw is one `draw_calls` entry but contributes
+  each subrange to `draw_ranges`. `submitted_vertices` sums array counts and index
+  counts, including repeated indices and degenerate padding; it is neither a unique
+  vertex count nor a visible triangle count. Buffer allocation can change padding
+  and adjacent batch sizes between runs. Texture binds/parameters, uniform calls,
+  buffer binds, and vertex attribute changes expose state traffic. Pass scopes are
+  inclusive; do not add them to the frame counters. Qt's own compositor GL calls and
+  resource uploads outside the view's render scope are not included. Fixed arrays
+  collect this traffic without per-call clocks, map lookups, or driver queries, and
+  remain inactive when profiling is disabled.
 - `cpu.models.visibility`, `cpu.models.entity_setup`, and `cpu.models.submit`
   separate conservative view-frustum checks, per-entity uniform setup, and material
   renderer submission. `models.render_calls` counts submitted entities;
@@ -193,6 +204,59 @@ and conveyor behavior. Physics was a small fraction of steady-state frame time.
 CPU submission can include driver stalls, so these measurements do not establish
 that CPU work alone limits the frame rate.
 
+### Submission and opaque batching follow-up
+
+The same stationary Play scene was measured again with GL API counters. A
+12-second baseline after 15 seconds of warmup averaged 84.0 FPS, with a 10.46 ms
+CPU frame and 8.35 ms elapsed GPU query. The model pass submitted 138 entities as
+833 actual GL draws, 116763 vertex references, 4998 attribute changes, and 3652
+uniform calls per frame. Faces contributed 3406 draws and 33607 uniform calls.
+
+Two changes retain the same rendering content:
+
+- Texture objects cache their effective minification/magnification filters. Masked
+  filtering, single-level fallbacks, and runtime filter/alpha-domain changes still
+  apply. The cache follows the shared texture object across binds and moves.
+- During brush-cache validation, opaque ranges are sorted by material and index
+  position. Adjacent ranges merge only when their material and entity settings
+  match, including conveyor speed. Index gaps remain separate. Transparent ranges
+  retain their per-item distance sort.
+
+| Per-frame metric | Baseline | Filters cached | Filters cached + opaque batching |
+| --- | ---: | ---: | ---: |
+| FPS | 84.0 | 83.7 | 107.2 / 107.6 |
+| CPU frame, mean | 10.46 ms | 10.35 ms | 8.10 / 8.01 ms |
+| GPU query, mean | 8.35 ms | 8.24 ms | 2.08 / 2.00 ms |
+| Opaque face stage | 1.02 ms | 1.07 ms | 0.26 / 0.25 ms |
+| Model submission stage | 5.26 ms | 5.00 ms | 4.78 / 4.80 ms |
+| GL draws | 4266 | 4266 | 3001 / 2996 |
+| GL uniform calls | 37458 | 37458 | 24023 / 23971 |
+| GL texture parameter calls | 8478 | 0 | 0 |
+| GL buffer binds | 8556 | 8556 | 6026 / 6016 |
+
+The two final captures used 15 seconds each after the same warmup. Their opaque
+range counts were 321 and 316, compared with 1586 before merging; the transparent
+item count stayed at 1706. Filter caching alone produced no measurable FPS gain
+in this sample. Batching reduced actual GL traffic and improved FPS by about 28%.
+The camera and model workload stayed fixed. A framebuffer comparison against the
+baseline changed 0.24% of pixels, mostly small edge/depth-order differences, with
+no missing geometry apparent in the inspected images. Real-GL preview tests cover
+glass, render color, additive sprites, and conveyor animation; mock rendering tests
+also verify merging and splitting after entity ownership/settings changes.
+
+GPU telemetry during the first final run showed roughly 35-41% utilization and
+480-510 MHz graphics clocks around measurement start; clocks were not locked.
+These are whole-device, coarse samples, not process-specific GPU busy times.
+An elapsed GPU query can include scheduling and pipeline idle intervals, so the
+drop in that query is not proof of a fourfold reduction in shader work or a fixed
+500 FPS hardware ceiling. The remaining model submission wall time is the largest
+measured stage. A driver timeline is needed to separate host state processing from
+waits before choosing instancing, state reuse, or an API migration.
+
+Local capture directories: baseline `20261020-231840-278`, filters only
+`20261020-232403-358`, final `20261020-232653-055` and `20261020-232823-497`.
+Generated logs and image comparisons remain outside version control.
+
 Some WAD references in this local map were unavailable; the captures establish a
 comparison for that asset set, not a promise of the same FPS on a fully resolved map
 or another computer. Compare final framebuffer images and asset warnings with each
@@ -201,3 +265,5 @@ early windows must be separated from steady-state Play costs.
 
 Qt references: [timer query availability](https://doc.qt.io/qt-6/qopengltimerquery.html#isResultAvailable),
 [composition and swap signals](https://doc.qt.io/qt-6/qopenglwidget.html#signals).
+GL references: [timer query semantics](https://registry.khronos.org/OpenGL/extensions/ARB/ARB_timer_query.txt),
+[texture parameters](https://wikis.khronos.org/opengl/GLAPI/glTexParameter).

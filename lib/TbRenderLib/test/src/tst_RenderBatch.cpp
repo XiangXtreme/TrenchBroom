@@ -281,6 +281,38 @@ TEST_CASE("RenderTiming")
   CHECK_FALSE(outer.milliseconds.contains("nested"));
   CHECK(inner.milliseconds.contains("nested"));
   CHECK(outer.milliseconds.at("total") >= inner.milliseconds.at("nested"));
+
+  SECTION("GL workload scopes measure deltas and accumulate repeated passes")
+  {
+    {
+      const auto disabled = RenderGlScope{"disabled"};
+      RenderTiming::countGl(GlCounter::DrawCalls);
+    }
+    CHECK_FALSE(outer.counters.contains("disabled.draw_calls"));
+    const auto capture = RenderTiming::Capture{outer};
+    {
+      const auto frame = RenderGlScope{"gl.frame"};
+      RenderTiming::countGl(GlCounter::DrawCalls, 2);
+      for (size_t i = 0; i < 2; ++i)
+      {
+        const auto models = RenderGlScope{"gl.models"};
+        RenderTiming::countGl(GlCounter::DrawCalls, 3);
+        RenderTiming::countGl(GlCounter::DrawRanges, 7);
+        RenderTiming::countGl(GlCounter::SubmittedVertices, 42);
+      }
+      {
+        const auto nestedCapture = RenderTiming::Capture{inner};
+        const auto nested = RenderGlScope{"gl.other"};
+        RenderTiming::countGl(GlCounter::DrawCalls, 100);
+      }
+    }
+    CHECK(outer.counters.at("gl.frame.draw_calls") == 8);
+    CHECK(outer.counters.at("gl.models.draw_calls") == 6);
+    CHECK(outer.counters.at("gl.models.draw_ranges") == 14);
+    CHECK(outer.counters.at("gl.models.submitted_vertices") == 84);
+    CHECK(outer.counters.at("gl.frame.uniforms") == 0);
+    CHECK(inner.counters.at("gl.other.draw_calls") == 100);
+  }
 }
 
 } // namespace tb::render

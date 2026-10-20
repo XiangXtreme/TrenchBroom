@@ -35,7 +35,9 @@
 #include "kd/contracts.h"
 #include "kd/string_compare.h"
 
+#include <algorithm>
 #include <cstring>
+#include <functional>
 #include <vector>
 
 namespace tb::render
@@ -868,6 +870,35 @@ std::shared_ptr<std::vector<TransparentDrawItem>> BrushRenderer::collectOpaqueDr
       }
     }
   }
+
+  // These ranges never need back-to-front sorting. Adjacent indices with identical
+  // material and entity settings can share one submission without crossing holes
+  // in the index buffer or applying conveyor offsets to other brushes.
+  std::ranges::sort(*items, [](const auto& lhs, const auto& rhs) {
+    return lhs.material == rhs.material
+             ? lhs.indexPos < rhs.indexPos
+             : std::less<const gl::Material*>{}(lhs.material, rhs.material);
+  });
+  size_t mergedCount = 0;
+  for (const auto& item : *items)
+  {
+    if (mergedCount > 0)
+    {
+      auto& previous = (*items)[mergedCount - 1];
+      const auto& a = previous.entitySettings;
+      const auto& b = item.entitySettings;
+      if (
+        previous.material == item.material
+        && previous.indexPos + previous.indexCount == item.indexPos && a.mode == b.mode
+        && a.alpha == b.alpha && a.color == b.color && a.conveyorSpeed == b.conveyorSpeed)
+      {
+        previous.indexCount += item.indexCount;
+        continue;
+      }
+    }
+    (*items)[mergedCount++] = item;
+  }
+  items->resize(mergedCount);
   return items;
 }
 

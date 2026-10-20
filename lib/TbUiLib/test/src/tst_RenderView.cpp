@@ -32,6 +32,7 @@
 
 #include "base/PreferenceManager.h"
 #include "gl/Camera.h"
+#include "gl/GlInterface.h"
 #include "gl/GlManager.h"
 #include "gl/ResourceManager.h"
 #include "mdl/EnvironmentConfig.h"
@@ -78,7 +79,11 @@ public:
 
 private:
   bool shouldRenderFocusIndicator() const override { return false; }
-  void renderContents(gl::Gl&) override { ++frames; }
+  void renderContents(gl::Gl& gl) override
+  {
+    gl.bindBuffer(GL_ARRAY_BUFFER, 0);
+    ++frames;
+  }
 };
 
 // Keep external keyboard/mouse activity out of scripted captures. Synthetic
@@ -223,6 +228,11 @@ TEST_CASE("RenderView profiling")
       sawCpu |= timings["cpu.frame"].toObject()["samples"].toInt() >= 5;
       sawGpu |= timings["gpu.frame"].toObject()["samples"].toInt() > 0;
       CHECK(timings["cpu.frame"].toObject()["max"].toDouble() >= 0.0);
+      const auto counters = object["counters"].toObject();
+      REQUIRE(counters.contains("gl.frame.buffer_binds"));
+      CHECK(
+        counters["gl.frame.buffer_binds"].toInteger() == object["frames"].toInteger());
+      CHECK(counters["gl.frame.draw_calls"].toInteger() == 0);
     }
   }
   CHECK(sawMetadata);

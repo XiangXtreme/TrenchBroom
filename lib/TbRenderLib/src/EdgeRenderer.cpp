@@ -77,6 +77,7 @@ EdgeRenderer::RenderBase::~RenderBase() = default;
 void EdgeRenderer::RenderBase::renderEdges(RenderContext& renderContext)
 {
   const auto timing = RenderTimingScope{"cpu.edges.draw"};
+  const auto workload = RenderGlScope{"gl.edges"};
   auto& gl = renderContext.gl();
 
   if (m_params.offset != 0.0)
