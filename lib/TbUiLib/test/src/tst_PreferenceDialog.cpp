@@ -138,6 +138,26 @@ TEST_CASE("PreferenceDialog.preferencePanes")
   {
     auto pane = std::make_unique<ViewPreferencePane>();
 
+    auto* fpsLimitSpin =
+      pane->findChild<QSpinBox*>(QStringLiteral("ViewPreference_FpsLimitSpin"));
+    REQUIRE(fpsLimitSpin != nullptr);
+    CHECK(fpsLimitSpin->minimum() == 0);
+    CHECK(fpsLimitSpin->maximum() == Preferences::MaxRenderFpsLimit);
+    CHECK(fpsLimitSpin->specialValueText() == QStringLiteral("Unlimited"));
+    auto& fpsPrefs = PreferenceManager::instance();
+    const auto previousFpsLimit = fpsPrefs.getPendingValue(Preferences::RenderFpsLimit);
+    static_cast<PreferencePane&>(*pane).updateControls();
+    CHECK(fpsLimitSpin->value() == previousFpsLimit);
+    fpsLimitSpin->setValue(60);
+    CHECK(fpsPrefs.getPendingValue(Preferences::RenderFpsLimit) == 60);
+    fpsLimitSpin->setValue(0);
+    CHECK(fpsPrefs.getPendingValue(Preferences::RenderFpsLimit) == 0);
+    fpsLimitSpin->setValue(144);
+    pane->resetToDefaults();
+    CHECK(fpsLimitSpin->value() == 0);
+    CHECK(fpsPrefs.getPendingValue(Preferences::RenderFpsLimit) == 0);
+    fpsPrefs.set(Preferences::RenderFpsLimit, previousFpsLimit);
+
     auto* themeCombo =
       pane->findChild<QComboBox*>(QStringLiteral("ViewPreference_ThemeCombo"));
     REQUIRE(themeCombo != nullptr);

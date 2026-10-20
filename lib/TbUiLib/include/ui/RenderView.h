@@ -29,6 +29,7 @@
 #include <string>
 
 class QOpenGLFunctions_2_1;
+class QTimer;
 
 namespace tb
 {
@@ -51,6 +52,8 @@ private:
   Color m_focusColor;
   AppController& m_appController;
   InputEventRecorder m_eventRecorder;
+  QTimer* m_frameTimer = nullptr;
+  QElapsedTimer m_frameStart;
 
   NotifierConnection m_notifierConnection;
 
@@ -72,6 +75,7 @@ public:
   ~RenderView() override;
 
 protected: // QWindow overrides
+  void paintEvent(QPaintEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
   void keyReleaseEvent(QKeyEvent* event) override;
   void mouseDoubleClickEvent(QMouseEvent* event) override;

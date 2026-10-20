@@ -49,6 +49,8 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+
 namespace tb::ui
 {
 
@@ -59,6 +61,21 @@ RenderView::RenderView(AppController& appController, QWidget* parent)
   auto pal = QPalette{};
   const auto color = pal.color(QPalette::Highlight);
   m_focusColor = fromQColor(color);
+
+  m_frameTimer = new QTimer{this};
+  m_frameTimer->setSingleShot(true);
+  m_frameTimer->setTimerType(Qt::PreciseTimer);
+  connect(m_frameTimer, &QTimer::timeout, this, [this]() { update(); });
+  m_notifierConnection +=
+    PreferenceManager::instance().preferenceDidChangeNotifier.connect(
+      [this](const auto& path) {
+        if (path == Preferences::RenderFpsLimit.path)
+        {
+          m_frameTimer->stop();
+          m_frameStart.invalidate();
+          update();
+        }
+      });
 
   // FPS counter
   auto* fpsCounter = new QTimer{this};
@@ -90,6 +107,29 @@ RenderView::RenderView(AppController& appController, QWidget* parent)
 }
 
 RenderView::~RenderView() = default;
+
+void RenderView::paintEvent(QPaintEvent* event)
+{
+  const auto fpsLimit =
+    std::clamp(pref(Preferences::RenderFpsLimit), 0, Preferences::MaxRenderFpsLimit);
+  if (fpsLimit > 0 && m_frameStart.isValid())
+  {
+    const auto interval = (1000000000LL + fpsLimit - 1) / fpsLimit;
+    const auto remaining = interval - m_frameStart.nsecsElapsed();
+    if (remaining > 0)
+    {
+      if (!m_frameTimer->isActive())
+      {
+        m_frameTimer->start(static_cast<int>((remaining + 999999LL) / 1000000LL));
+      }
+      return;
+    }
+  }
+
+  // Defer before Qt invalidates the OpenGL framebuffer, retaining the previous image.
+  m_frameTimer->stop();
+  QOpenGLWidget::paintEvent(event);
+}
 
 void RenderView::keyPressEvent(QKeyEvent* event)
 {
@@ -154,6 +194,11 @@ void RenderView::wheelEvent(QWheelEvent* event)
 
 bool RenderView::event(QEvent* event)
 {
+  if (event->type() == QEvent::Hide || event->type() == QEvent::Resize)
+  {
+    m_frameTimer->stop();
+    m_frameStart.invalidate();
+  }
   // Unfortunately, QWidget doesn't define a specialized handler for QNativeGestureEvent,
   // so we must override the main event handler to handle it.
   if (event->type() == QEvent::NativeGesture)
@@ -170,6 +215,7 @@ bool RenderView::event(QEvent* event)
 
 void RenderView::paintGL()
 {
+  m_frameStart.start();
   render();
 
   // Update stats

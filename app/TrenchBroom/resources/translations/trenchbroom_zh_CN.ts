@@ -4101,6 +4101,14 @@ They may contain new features or bug fixes that are not yet part of a stable rel
 <context>
     <name>tb::ui::ViewPreferencePane</name>
     <message>
+        <source>FPS limit</source>
+        <translation>限制 FPS</translation>
+    </message>
+    <message>
+        <source>Unlimited</source>
+        <translation>不限制</translation>
+    </message>
+    <message>
         <location filename="../../../../lib/TbUiLib/src/ViewPreferencePane.cpp" line="120"/>
         <source>Requires restart after changing</source>
         <translation>更改后需要重启</translation>

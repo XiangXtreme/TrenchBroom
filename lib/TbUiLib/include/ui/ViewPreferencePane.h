@@ -43,6 +43,7 @@ private:
   QCheckBox* m_showAxes = nullptr;
   QComboBox* m_filterModeCombo = nullptr;
   QCheckBox* m_enableMsaa = nullptr;
+  QSpinBox* m_fpsLimitSpin = nullptr;
   QComboBox* m_themeCombo = nullptr;
   QComboBox* m_materialBrowserIconSizeCombo = nullptr;
   QComboBox* m_rendererFontSizeCombo = nullptr;
@@ -72,6 +73,7 @@ private slots:
   void fovChanged(int value);
   void showAxesChanged(int state);
   void enableMsaaChanged(int state);
+  void fpsLimitChanged(int value);
   void filterModeChanged(int index);
   void themeChanged(int index);
   void materialBrowserIconSizeChanged(int index);

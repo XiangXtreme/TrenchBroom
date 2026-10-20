@@ -180,6 +180,13 @@ QWidget* ViewPreferencePane::createViewPreferences()
   m_enableMsaa = new QCheckBox{};
   m_enableMsaa->setToolTip("Enable multisampling");
 
+  m_fpsLimitSpin = new QSpinBox{};
+  m_fpsLimitSpin->setObjectName(QStringLiteral("ViewPreference_FpsLimitSpin"));
+  m_fpsLimitSpin->setRange(0, Preferences::MaxRenderFpsLimit);
+  m_fpsLimitSpin->setSpecialValueText(tr("Unlimited"));
+  m_fpsLimitSpin->setSuffix(QStringLiteral(" FPS"));
+  m_fpsLimitSpin->setMaximumWidth(160);
+
   m_materialBrowserIconSizeCombo = new QComboBox{};
   m_materialBrowserIconSizeCombo->setObjectName(
     QStringLiteral("ViewPreference_MaterialBrowserIconSizeCombo"));
@@ -268,6 +275,7 @@ QWidget* ViewPreferencePane::createViewPreferences()
   layout->addRow("Show axes", m_showAxes);
   layout->addRow("Filter mode", m_filterModeCombo);
   layout->addRow("Enable multisampling", m_enableMsaa);
+  layout->addRow(tr("FPS limit"), m_fpsLimitSpin);
 
   layout->addSection("Material Browser");
   layout->addRow("Icon size", m_materialBrowserIconSizeCombo);
@@ -283,6 +291,8 @@ QWidget* ViewPreferencePane::createViewPreferences()
 
 void ViewPreferencePane::bindEvents()
 {
+  connect(
+    m_fpsLimitSpin, &QSpinBox::valueChanged, this, &ViewPreferencePane::fpsLimitChanged);
   connect(
     m_layoutCombo,
     QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -362,6 +372,7 @@ void ViewPreferencePane::doResetToDefaults()
   prefs.resetToDefault(Preferences::CameraFov);
   prefs.resetToDefault(Preferences::ShowAxes);
   prefs.resetToDefault(Preferences::EnableMSAA);
+  prefs.resetToDefault(Preferences::RenderFpsLimit);
   prefs.resetToDefault(Preferences::TextureMinFilter);
   prefs.resetToDefault(Preferences::TextureMagFilter);
   prefs.resetToDefault(Preferences::Theme);
@@ -383,6 +394,7 @@ void ViewPreferencePane::updateControls()
 
   const auto showAxesBlocker = QSignalBlocker{m_showAxes};
   const auto enableMsaaBlocker = QSignalBlocker{m_enableMsaa};
+  const auto fpsLimitBlocker = QSignalBlocker{m_fpsLimitSpin};
   const auto themeBlocker = QSignalBlocker{m_themeCombo};
 
   const auto materialBrowserIconSizeBlocker =
@@ -412,6 +424,7 @@ void ViewPreferencePane::updateControls()
 
   m_showAxes->setChecked(prefs.getPendingValue(Preferences::ShowAxes));
   m_enableMsaa->setChecked(prefs.getPendingValue(Preferences::EnableMSAA));
+  m_fpsLimitSpin->setValue(prefs.getPendingValue(Preferences::RenderFpsLimit));
   m_themeCombo->setCurrentIndex(
     findThemeIndex(QString::fromStdString(prefs.getPendingValue(Preferences::Theme))));
 
@@ -494,6 +507,11 @@ void ViewPreferencePane::enableMsaaChanged(const int state)
   const auto value = state == Qt::Checked;
   auto& prefs = PreferenceManager::instance();
   prefs.set(Preferences::EnableMSAA, value);
+}
+
+void ViewPreferencePane::fpsLimitChanged(const int value)
+{
+  PreferenceManager::instance().set(Preferences::RenderFpsLimit, value);
 }
 
 void ViewPreferencePane::filterModeChanged(const int value)
