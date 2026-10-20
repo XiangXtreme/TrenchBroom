@@ -202,10 +202,15 @@ void KreedzBroomPreferencePane::createGui()
 
   left->addSection("View");
   left->addRow(
+    "",
+    withToolTip(
+      boolField(tr("Full screen during play"), Preferences::PlayModeFullScreen),
+      tr("Fill the screen with the 3D view while playing. Restore the editor layout "
+         "when play ends.")));
+  left->addRow(
     "Field of view", floatField(Preferences::PlayModeFov, 10.0, 170.0, 0, 5.0, "°"));
   left->addRow(
-    "",
-    boolField("Restore checkpoint view", Preferences::PlayModeRestoreCheckpointView));
+    "", boolField("Restore checkpoint view", Preferences::PlayModeRestoreCheckpointView));
   left->addRow("", boolField("Show HUD", Preferences::PlayModeShowHud));
   left->addRow("", boolField("Show crosshair", Preferences::PlayModeShowCrosshair));
   left->addRow("", boolField("Show fall damage", Preferences::PlayModeShowFallDamage));

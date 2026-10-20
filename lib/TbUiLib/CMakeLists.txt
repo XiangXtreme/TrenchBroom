@@ -166,6 +166,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PieMenuSettingsDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeController.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeFullScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeRawMouse.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeShowPre.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeSound.cpp

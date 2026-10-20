@@ -176,6 +176,12 @@ protected:
   {
     QWidget::resizeEvent(event);
 
+    if (window()->isFullScreen())
+    {
+      clearMask();
+      return;
+    }
+
     auto path = QPainterPath{};
     path.addRoundedRect(QRectF{rect()}, 8.0, 8.0);
     setMask(QRegion{path.toFillPolygon().toPolygon()});
@@ -272,6 +278,11 @@ MapWindow::MapWindow(AppController& appController, std::unique_ptr<MapDocument> 
 
 MapWindow::~MapWindow()
 {
+  for (auto* view : findChildren<MapView3D*>())
+  {
+    view->stopPlayMode();
+  }
+
   m_pythonPluginManager.unloadPlugins(*this);
   PythonRuntime::instance().cleanupDocument(*this);
   disconnect(qApp, &QApplication::focusChanged, this, &MapWindow::focusChange);
@@ -2511,9 +2522,8 @@ QWidget* MapWindow::addPluginPanel(const QString& title, const QString& content)
 MapView3D* MapWindow::playModeView()
 {
   // Prefer the view the user is working in, otherwise the first visible 3D view.
-  if (
-    auto* view3D = dynamic_cast<MapView3D*>(currentMapViewBase());
-    view3D && view3D->isVisible())
+  if (auto* view3D = dynamic_cast<MapView3D*>(currentMapViewBase());
+      view3D && view3D->isVisible())
   {
     return view3D;
   }
@@ -2844,6 +2854,11 @@ void MapWindow::changeEvent(QEvent*)
 
 void MapWindow::closeEvent(QCloseEvent* event)
 {
+  for (auto* view : findChildren<MapView3D*>())
+  {
+    view->stopPlayMode();
+  }
+
   if (!closeCompileDialog() || (!m_discardChangesOnClose && !confirmOrDiscardChanges()))
   {
     m_discardChangesOnClose = false;

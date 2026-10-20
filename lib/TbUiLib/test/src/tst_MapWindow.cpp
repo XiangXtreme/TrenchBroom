@@ -22,15 +22,18 @@
 #include <QClipboard>
 #include <QComboBox>
 #include <QCursor>
+#include <QFocusEvent>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenuBar>
 #include <QMouseEvent>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QStyleOptionViewItem>
 #include <QTextEdit>
@@ -72,11 +75,16 @@
 #include "ui/MapDocumentFixture.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
+#include "ui/MapViewLayout.h"
 #include "ui/MapWindow.h"
 #include "ui/PieMenu.h"
+#include "ui/PlayModeFullScreen.h"
 #include "ui/PythonConsole.h"
 #include "ui/QPathUtils.h"
+#include "ui/SwitchableMapViewContainer.h"
 #include "ui/python/PythonScripting.h"
+
+#include <utility>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -270,7 +278,8 @@ TEST_CASE("MapWindow")
     runButton->click();
     input->setPlainText(QStringLiteral("console_value + 1"));
     runButton->click();
-    input->setPlainText(QStringLiteral("trenchbroom.documents.current().entities[0].classname"));
+    input->setPlainText(
+      QStringLiteral("trenchbroom.documents.current().entities[0].classname"));
     runButton->click();
 
     QTRY_VERIFY_WITH_TIMEOUT(output->toPlainText().contains(QStringLiteral("42")), 500);
@@ -857,6 +866,105 @@ panel.add_label("Loaded from preferences")
   }
 }
 
+TEST_CASE("PlayModeFullScreen")
+{
+  setPref(Preferences::DefaultPluginPaths, "");
+  setPref(Preferences::PythonPluginDirectories, "");
+  auto fixture = AppControllerFixture{};
+  auto& appController = fixture.appController();
+  auto document = MapDocument::createDocument(
+                    appController.environmentConfig(),
+                    mdl::QuakeGameInfo,
+                    mdl::MapFormat::Valve,
+                    vm::bbox3d{8192.0},
+                    appController.taskManager(),
+                    appController.glManager().resourceManager())
+                  | kdl::value();
+  auto window = MapWindow{appController, std::move(document)};
+  window.resize(1100, 800);
+  window.show();
+  auto* container = window.findChild<SwitchableMapViewContainer*>();
+  REQUIRE(container);
+
+  for (const auto layout :
+       {MapViewLayout::OnePane,
+        MapViewLayout::TwoPanes,
+        MapViewLayout::ThreePanes,
+        MapViewLayout::FourPanes})
+  {
+    DYNAMIC_SECTION("restores layout " << static_cast<int>(layout))
+    {
+      container->switchToMapView(layout);
+      auto& view = window.activate3DMapView();
+      QApplication::processEvents();
+      auto* parentBefore = view.parentWidget();
+      const auto geometryBefore = window.geometry();
+      const auto viewSizeBefore = view.size();
+      const auto menuHiddenBefore = window.menuBar()->isHidden();
+      const auto statusHiddenBefore = window.statusBar()->isHidden();
+      auto* inspector = window.findChild<QWidget*>("MapWindow_InspectorSurface");
+      REQUIRE(inspector);
+      inspector->hide();
+      QApplication::processEvents();
+
+      const auto splitters = window.findChildren<QSplitter*>();
+      auto sizes = std::vector<QList<int>>{};
+      for (auto* splitter : splitters)
+      {
+        sizes.push_back(splitter->sizes());
+      }
+
+      auto presentation = PlayModeFullScreen{};
+      presentation.enter(view);
+      presentation.enter(view); // repeated entry must not overwrite the snapshot
+      QApplication::processEvents();
+      CHECK(window.isFullScreen());
+      CHECK(view.isVisible());
+      CHECK(view.parentWidget() == parentBefore);
+      CHECK(window.menuBar()->isHidden());
+      CHECK(window.statusBar()->isHidden());
+      CHECK(view.size() == window.size());
+
+      presentation.leave();
+      presentation.leave();
+      QApplication::processEvents();
+      CHECK_FALSE(window.isFullScreen());
+      CHECK(window.geometry() == geometryBefore);
+      CHECK(window.menuBar()->isHidden() == menuHiddenBefore);
+      CHECK(window.statusBar()->isHidden() == statusHiddenBefore);
+      CHECK(inspector->isHidden());
+      for (auto i = qsizetype{0}; i < splitters.size(); ++i)
+      {
+        CHECK(splitters[i]->sizes() == sizes[static_cast<size_t>(i)]);
+      }
+      // All existing GL views survive both transitions.
+      CHECK(view.parentWidget() == parentBefore);
+      CHECK(view.width() >= viewSizeBefore.width());
+    }
+  }
+
+  SECTION("preserves an already maximized pane on destruction")
+  {
+    auto& view = window.activate3DMapView();
+    auto focus = QFocusEvent{QEvent::FocusIn};
+    QApplication::sendEvent(&view, &focus);
+    if (!window.currentViewMaximized())
+    {
+      window.toggleMaximizeCurrentView();
+    }
+    REQUIRE(window.currentViewMaximized());
+    QApplication::processEvents();
+    {
+      auto presentation = PlayModeFullScreen{};
+      presentation.enter(view);
+      CHECK(window.isFullScreen());
+    }
+    QApplication::processEvents();
+    CHECK_FALSE(window.isFullScreen());
+    CHECK(window.currentViewMaximized());
+  }
+}
+
 #ifdef Q_OS_WIN
 TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
 {
@@ -880,15 +988,17 @@ TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
   auto window = MapWindow{appController, std::move(document)};
 
   const auto previousRawInput = pref(Preferences::PlayModeRawInput);
+  const auto previousFullScreen = pref(Preferences::PlayModeFullScreen);
   const auto previousPosition = QCursor::pos();
   auto originalClip = RECT{};
   REQUIRE(GetClipCursor(&originalClip));
   const auto restore = qScopeGuard([&]() {
     setPref(Preferences::PlayModeRawInput, previousRawInput);
+    setPref(Preferences::PlayModeFullScreen, previousFullScreen);
     QCursor::setPos(previousPosition);
   });
   window.resize(1000, 700);
-  window.show();
+  window.showNormal();
   window.raise();
   window.activateWindow();
   REQUIRE(QTest::qWaitForWindowActive(&window));
@@ -899,15 +1009,33 @@ TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
   QCursor::setPos(view->mapToGlobal(view->rect().center()));
   QTest::mouseClick(view, Qt::LeftButton);
 
-  for (const auto raw : {true, false})
+  for (const auto [raw, fullScreen] :
+       {std::pair{true, false},
+        std::pair{true, true},
+        std::pair{false, false},
+        std::pair{false, true}})
   {
-    DYNAMIC_SECTION("raw input " << raw)
+    DYNAMIC_SECTION("raw input " << raw << ", full screen " << fullScreen)
     {
       setPref(Preferences::PlayModeRawInput, raw);
+      setPref(Preferences::PlayModeFullScreen, fullScreen);
+      if (fullScreen)
+      {
+        window.showMaximized();
+        QApplication::processEvents();
+        REQUIRE(window.isMaximized());
+      }
+      const auto maximizedBefore = window.isMaximized();
       view->startPlayMode(true);
       const auto stop = qScopeGuard([&]() { view->stopPlayMode(); });
       REQUIRE(QTest::qWaitFor([&]() { return view->playModeActive(); }, 10000));
       QApplication::processEvents();
+
+      CHECK(window.isFullScreen() == fullScreen);
+      if (fullScreen)
+      {
+        CHECK(view->size() == window.size());
+      }
 
       const auto hwnd = reinterpret_cast<HWND>(window.winId());
       const auto hiddenCursor = GetCursor();
@@ -943,6 +1071,11 @@ TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
           CHECK(view->playModeActive());
           CHECK(QWidget::mouseGrabber() == view);
           CHECK(GetCursor() == hiddenCursor);
+          const auto cursorInView = view->mapFromGlobal(QCursor::pos());
+          INFO(
+            "view " << view->width() << "x" << view->height() << ", cursor "
+                    << cursorInView.x() << "," << cursorInView.y() << ", scale "
+                    << view->devicePixelRatioF());
           CHECK(view->rect().contains(view->mapFromGlobal(QCursor::pos())));
         }
       }
@@ -958,8 +1091,12 @@ TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
         otherWindow.show();
         otherWindow.activateWindow();
         REQUIRE(QTest::qWaitForWindowActive(&otherWindow));
+        QApplication::processEvents();
+        CHECK(otherWindow.isActiveWindow());
       }
       CHECK_FALSE(view->playModeActive());
+      CHECK_FALSE(window.isFullScreen());
+      CHECK(window.isMaximized() == maximizedBefore);
       CHECK(QWidget::mouseGrabber() != view);
       CHECK(GetCapture() == nullptr);
       auto releasedClip = RECT{};

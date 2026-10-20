@@ -371,7 +371,8 @@ inline auto PlayModeFriction = Preference<float>{"Controls/Play mode/sv_friction
 inline auto PlayModeStopSpeed =
   Preference<float>{"Controls/Play mode/sv_stopspeed", 75.0f};
 inline auto PlayModeGravity = Preference<float>{"Controls/Play mode/sv_gravity", 800.0f};
-inline auto PlayModeMaxSpeed = Preference<float>{"Controls/Play mode/sv_maxspeed", 320.0f};
+inline auto PlayModeMaxSpeed =
+  Preference<float>{"Controls/Play mode/sv_maxspeed", 320.0f};
 inline auto PlayModeEdgeFriction =
   Preference<float>{"Controls/Play mode/edgefriction", 2.0f};
 inline auto PlayModeStepSize = Preference<float>{"Controls/Play mode/sv_stepsize", 18.0f};
@@ -396,6 +397,8 @@ inline auto PlayModeWeaponSpeed =
 inline auto PlayModeFrameRate = Preference<int>{"Controls/Play mode/fps_max", 100};
 
 inline auto PlayModeFov = Preference<float>{"Controls/Play mode/Field of view", 90.0f};
+inline auto PlayModeFullScreen =
+  Preference<bool>{"Controls/Play mode/Full screen", false};
 inline auto PlayModeRestoreCheckpointView =
   Preference<bool>{"Controls/Play mode/Restore checkpoint view", true};
 inline auto PlayModeShowHud = Preference<bool>{"Controls/Play mode/Show HUD", true};

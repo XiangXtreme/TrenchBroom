@@ -159,10 +159,12 @@ TEST_CASE("RenderView")
       auto elapsed = QElapsedTimer{};
       elapsed.start();
       updateTimer.start(1);
-      QTest::qWait(650);
+      // Parallel GL tests can delay frame delivery beyond a fixed wall-clock wait.
+      // Wait for progress, then check the cap against the actual elapsed time.
+      const auto progressed = QTest::qWaitFor(
+        [&]() { return requests > 5 && view.frames >= initialFrames + 2; }, 5000);
       updateTimer.stop();
-      CHECK(requests > 5);
-      CHECK(view.frames >= initialFrames + 2);
+      CHECK(progressed);
       CHECK(view.frames - initialFrames <= (elapsed.elapsed() + 199) / 200);
     }
 

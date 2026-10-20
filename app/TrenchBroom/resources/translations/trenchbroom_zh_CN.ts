@@ -4263,4 +4263,15 @@ They may contain new features or bug fixes that are not yet part of a stable rel
         <translation>打开地图</translation>
     </message>
 </context>
+<context>
+    <name>tb::ui::KreedzBroomPreferencePane</name>
+    <message>
+        <source>Full screen during play</source>
+        <translation>Play 时全屏显示</translation>
+    </message>
+    <message>
+        <source>Fill the screen with the 3D view while playing. Restore the editor layout when play ends.</source>
+        <translation>Play 时让 3D 视图占满整个显示器，结束后恢复编辑器布局。</translation>
+    </message>
+</context>
 </TS>

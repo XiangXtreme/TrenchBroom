@@ -26,6 +26,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QProgressDialog>
+#include <QTimer>
 #include <QWheelEvent>
 
 #include "base/PreferenceManager.h"
@@ -73,6 +74,7 @@
 #include "ui/MoveObjectsToolController.h"
 #include "ui/PathToolController.h"
 #include "ui/PlayModeController.h"
+#include "ui/PlayModeFullScreen.h"
 #include "ui/PlayModeRawMouse.h"
 #include "ui/PrefabToolController.h"
 #include "ui/RotateToolController.h"
@@ -108,6 +110,7 @@ MapView3D::MapView3D(
           m_playMode->rawLook(dx, dy, timestampMs);
         }
       })}
+  , m_playModeFullScreen{std::make_unique<PlayModeFullScreen>()}
 {
   bindEvents();
   connectObservers();
@@ -190,6 +193,15 @@ void MapView3D::startPlayMode(const bool fromCamera)
       return;
     }
 
+    const auto changingPresentation = kdl::set_temp{m_changingPlayPresentation, true};
+    if (pref(Preferences::PlayModeFullScreen))
+    {
+      m_playModeFullScreen->enter(*this);
+    }
+    // Let the modal build dialog return native focus and settle any full-screen
+    // resizing before Raw Input confines the pointer to this widget's rectangle.
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
     m_mouseTrackingBeforePlay = hasMouseTracking();
     setMouseTracking(true);
     setCursor(Qt::BlankCursor);
@@ -247,8 +259,15 @@ void MapView3D::recenterPlayCursor()
 
 void MapView3D::stopPlayMode()
 {
+  stopPlayMode(false);
+}
+
+void MapView3D::stopPlayMode(const bool deferPresentationRestore)
+{
   if (!m_playMode->active())
   {
+    const auto changingPresentation = kdl::set_temp{m_changingPlayPresentation, true};
+    m_playModeFullScreen->leave();
     return;
   }
 
@@ -261,6 +280,23 @@ void MapView3D::stopPlayMode()
   }
   unsetCursor();
   setMouseTracking(m_mouseTrackingBeforePlay);
+  const auto restorePresentation = [this]() {
+    if (!m_playMode->active())
+    {
+      const auto changingPresentation = kdl::set_temp{m_changingPlayPresentation, true};
+      m_playModeFullScreen->leave();
+    }
+  };
+  if (deferPresentationRestore)
+  {
+    // Finish the native focus transfer before changing the top-level window state.
+    // Restoring inside FocusOut can interfere with activation of the next window.
+    QTimer::singleShot(0, this, restorePresentation);
+  }
+  else
+  {
+    restorePresentation();
+  }
   update();
 }
 
@@ -480,7 +516,10 @@ void MapView3D::focusInEvent(QFocusEvent* event)
 void MapView3D::focusOutEvent(QFocusEvent* event)
 {
   m_flyModeHelper->resetKeys();
-  stopPlayMode();
+  if (!m_changingPlayPresentation)
+  {
+    stopPlayMode(true);
+  }
 
   MapViewBase::focusOutEvent(event);
 }
