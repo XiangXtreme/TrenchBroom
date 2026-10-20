@@ -21,6 +21,7 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QComboBox>
+#include <QCursor>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayout>
@@ -29,6 +30,7 @@
 #include <QMouseEvent>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScopeGuard>
 #include <QStatusBar>
 #include <QStyleOptionViewItem>
 #include <QTextEdit>
@@ -68,6 +70,7 @@
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapWindow.h"
 #include "ui/PieMenu.h"
@@ -76,6 +79,16 @@
 #include "ui/python/PythonScripting.h"
 
 #include <catch2/catch_test_macros.hpp>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 namespace tb::ui
 {
@@ -176,6 +189,7 @@ TEST_CASE("MapWindow")
   UNSCOPED_INFO("creating MapWindow");
   auto window = MapWindow{appController, std::move(document)};
   UNSCOPED_INFO("MapWindow created");
+
 
   SECTION("uses modern workbench surfaces and status controls")
   {
@@ -842,5 +856,127 @@ panel.add_label("Loaded from preferences")
     QApplication::sendPostedEvents(menu, QEvent::DeferredDelete);
   }
 }
+
+#ifdef Q_OS_WIN
+TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
+{
+  if (qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") != 1)
+  {
+    SKIP("Native mouse capture requires TB_TEST_SHOW_WINDOWS=1");
+  }
+
+  setPref(Preferences::DefaultPluginPaths, "");
+  setPref(Preferences::PythonPluginDirectories, "");
+  auto fixture = AppControllerFixture{};
+  auto& appController = fixture.appController();
+  auto document = MapDocument::createDocument(
+                    appController.environmentConfig(),
+                    mdl::QuakeGameInfo,
+                    mdl::MapFormat::Valve,
+                    vm::bbox3d{8192.0},
+                    appController.taskManager(),
+                    appController.glManager().resourceManager())
+                  | kdl::value();
+  auto window = MapWindow{appController, std::move(document)};
+
+  const auto previousRawInput = pref(Preferences::PlayModeRawInput);
+  const auto previousPosition = QCursor::pos();
+  auto originalClip = RECT{};
+  REQUIRE(GetClipCursor(&originalClip));
+  const auto restore = qScopeGuard([&]() {
+    setPref(Preferences::PlayModeRawInput, previousRawInput);
+    QCursor::setPos(previousPosition);
+  });
+  window.resize(1000, 700);
+  window.show();
+  window.raise();
+  window.activateWindow();
+  REQUIRE(QTest::qWaitForWindowActive(&window));
+
+  auto* view = window.findChild<MapView3D*>();
+  REQUIRE(view != nullptr);
+  REQUIRE(view->isVisible());
+  QCursor::setPos(view->mapToGlobal(view->rect().center()));
+  QTest::mouseClick(view, Qt::LeftButton);
+
+  for (const auto raw : {true, false})
+  {
+    DYNAMIC_SECTION("raw input " << raw)
+    {
+      setPref(Preferences::PlayModeRawInput, raw);
+      view->startPlayMode(true);
+      const auto stop = qScopeGuard([&]() { view->stopPlayMode(); });
+      REQUIRE(QTest::qWaitFor([&]() { return view->playModeActive(); }, 10000));
+      QApplication::processEvents();
+
+      const auto hwnd = reinterpret_cast<HWND>(window.winId());
+      const auto hiddenCursor = GetCursor();
+      CHECK(QWidget::mouseGrabber() == view);
+      CHECK(GetCapture() == hwnd);
+
+      // Activation tracking can update the widget cursor while playing. The capture
+      // cursor must take precedence even after a native cursor-update message.
+      view->setCursor(Qt::ArrowCursor);
+      SendMessageW(
+        hwnd,
+        WM_SETCURSOR,
+        reinterpret_cast<WPARAM>(hwnd),
+        MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+      CHECK(GetCursor() == hiddenCursor);
+
+      // Large relative moves can hit an edge before Qt handles WM_MOUSEMOVE. Exercise
+      // every corner, including the lower left, without yielding between each burst.
+      for (const auto dx : {-10000L, 10000L})
+      {
+        for (const auto dy : {-10000L, 10000L})
+        {
+          auto input = INPUT{};
+          input.type = INPUT_MOUSE;
+          input.mi.dx = dx;
+          input.mi.dy = dy;
+          input.mi.dwFlags = MOUSEEVENTF_MOVE;
+          for (auto i = 0; i < 12; ++i)
+          {
+            REQUIRE(SendInput(1, &input, sizeof(INPUT)) == 1u);
+          }
+          QTest::qWait(30);
+          CHECK(view->playModeActive());
+          CHECK(QWidget::mouseGrabber() == view);
+          CHECK(GetCursor() == hiddenCursor);
+          CHECK(view->rect().contains(view->mapFromGlobal(QCursor::pos())));
+        }
+      }
+
+      if (raw)
+      {
+        QTest::keyClick(view, Qt::Key_Escape);
+      }
+      else
+      {
+        // Real focus transfer exercises the same cleanup path as leaving the app.
+        auto otherWindow = QWidget{};
+        otherWindow.show();
+        otherWindow.activateWindow();
+        REQUIRE(QTest::qWaitForWindowActive(&otherWindow));
+      }
+      CHECK_FALSE(view->playModeActive());
+      CHECK(QWidget::mouseGrabber() != view);
+      CHECK(GetCapture() == nullptr);
+      auto releasedClip = RECT{};
+      REQUIRE(GetClipCursor(&releasedClip));
+      CHECK(releasedClip.left == originalClip.left);
+      CHECK(releasedClip.top == originalClip.top);
+      CHECK(releasedClip.right == originalClip.right);
+      CHECK(releasedClip.bottom == originalClip.bottom);
+      SendMessageW(
+        hwnd,
+        WM_SETCURSOR,
+        reinterpret_cast<WPARAM>(hwnd),
+        MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+      CHECK(GetCursor() != hiddenCursor);
+    }
+  }
+}
+#endif
 
 } // namespace tb::ui

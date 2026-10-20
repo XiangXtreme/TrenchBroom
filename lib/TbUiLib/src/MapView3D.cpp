@@ -198,10 +198,13 @@ void MapView3D::startPlayMode(const bool fromCamera)
     const auto raw = pref(Preferences::PlayModeRawInput);
     const auto backend = m_rawMouse->start(*this, raw);
     m_warpCursor = true;
-    m_grabbedMouse = !m_rawMouse->confinesPointer();
+    // Windows ClipCursor only confines coordinates. Capture the events and cursor
+    // shape too, so fast motion and widget cursor updates cannot reveal the pointer.
+    m_grabbedMouse =
+      !m_rawMouse->confinesPointer() || QGuiApplication::platformName() == "windows";
     if (m_grabbedMouse)
     {
-      grabMouse();
+      grabMouse(Qt::BlankCursor);
     }
 
     const auto motion = std::string{raw ? "raw" : "accelerated"};
