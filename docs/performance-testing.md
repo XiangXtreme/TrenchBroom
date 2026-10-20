@@ -88,7 +88,10 @@ For a repeatable **Valve-format GoldSrc map** capture, use PowerShell 7:
 
 The script builds `TbUiLibTest`, opens a native editor window with background services
 and plugins disabled, disables the frame cap in its in-memory test preferences, and
-continuously redraws the 3D view. It loads the original map read-only. It does not
+continuously redraws the 3D view. It uses the application's OpenGL defaults, including
+4x MSAA and a zero swap-interval request. The application uses its FPS preference
+for frame limiting; the platform or driver can override the swap-interval request.
+It loads the original map read-only. It does not
 save changes to the map or user preferences. `-NoBuild` reuses current binaries;
 `-Play` starts the real Play controller from the requested camera position and waits
 for collision-world construction before warming up. `-MoveForward` holds W during
@@ -121,6 +124,14 @@ The raw log separates:
   draw, face/transparent-sort/edge/model/link/text work. Scene stages measure queuing;
   the batch stages measure preparation and actual submission. CPU wall time can
   include driver waits. Nested values **must not be added together**.
+- `cpu.paint_event`: the surrounding `QOpenGLWidget::paintEvent()` wall time,
+  including Qt's context/framebuffer preparation and the render call. It overlaps
+  `cpu.frame`; do not add them. `cpu.profile.begin_frame` measures the profiler's
+  initial bookkeeping and query setup, excluding first-frame metadata output.
+- `present.paint_to_render` and `present.render_to_paint_end`: the parts of that
+  paint event before and after rendering. `present.swap_to_paint` measures from a
+  tracked Qt swap return to the next accepted paint event. It can include input,
+  event handling, frame limiting and driver scheduling, rather than just idle time.
 - `gpu.frame`: asynchronous `GL_TIME_ELAPSED` covering the view's render commands.
   A ring of four queries is polled without waiting; results are retrieved only when
   available. Unsupported drivers omit this metric; a full ring increments
@@ -155,6 +166,13 @@ The raw log separates:
   trace of every GL function. Scopes are inclusive. The extra clocks can substantially
   perturb performance: use this mode for attribution, then disable it for before/after
   FPS comparisons. Ordinary workload counting does not take these per-call clocks.
+- Metadata includes the global `default_samples_requested` and
+  `default_swap_interval_requested`, plus the view context's `context_samples`,
+  `surface_depth_bits` and `swap_interval_requested`. An offscreen widget context
+  need not report the top-level compositing surface's swap setting. Neither value
+  proves what the driver presents. `framebuffer_samples` queries `GL_SAMPLES` in
+  the view's currently bound FBO: context samples can be zero while the widget
+  framebuffer still uses MSAA.
 - `cpu.models.visibility`, `cpu.models.entity_setup`, and `cpu.models.submit`
   separate conservative view-frustum checks, per-entity uniform setup, and material
   renderer submission. `models.render_calls` counts submitted entities;
@@ -325,7 +343,62 @@ or another computer. Compare final framebuffer images and asset warnings with ea
 new run. Timing probes also add overhead. Resource-loading brush-cache rebuilds in
 early windows must be separated from steady-state Play costs.
 
+### Paint boundaries and refresh synchronization follow-up
+
+The external-map runner now shares the application's GL default-format setup.
+Earlier captures above did not explicitly request the application's 4x MSAA in
+the test executable. They support their within-configuration comparisons, but
+must not be used as strict before/after baselines against this new configuration.
+
+New paint-event boundaries exposed time outside `RenderView::render()`. The
+machine's active display was 144 Hz, and the previous default swap interval of
+one coincided with a 6.95 ms frame interval even with the FPS preference set to
+Unlimited. Startup now requests interval zero so RenderView's FPS preference
+controls the application cap. All other default format settings are preserved.
+
+Stationary Play captures at the same camera and 1368x737 viewport, with 15 seconds
+of warmup and 12 seconds of measurement, compared these startup requests:
+
+| Metric | Interval 1 | Interval 0 | Interval 0, repeated | Interval 1, restored |
+| --- | ---: | ---: | ---: | ---: |
+| FPS | 143.8 | 193.4 | 193.8 | 141.3 |
+| Frame interval, mean | 6.95 ms | 5.08 ms | 5.07 ms | 6.95 ms |
+| CPU frame, mean | 3.94 ms | 4.02 ms | 3.96 ms | 4.11 ms |
+| Paint event, mean | 5.55 ms | 4.46 ms | 4.42 ms | 5.59 ms |
+| Paint entry to render | 1.57 ms | 0.40 ms | 0.43 ms | 1.45 ms |
+| Swap return to next paint | 1.11 ms | 0.34 ms | 0.36 ms | 1.06 ms |
+| GPU elapsed query | 1.62 ms | 1.42 ms | 1.57 ms | 1.68 ms |
+
+Capture directories, in table order: `20261021-000358-155`,
+`20261021-000720-216`, `20261021-001104-531`, and `20261021-001331-818`.
+The source-level restoration changed only the swap-interval request. All runs
+requested 4x MSAA; the new FBO query confirmed four samples in both zero-interval
+captures and the restored one-interval capture. The widget context still reported
+interval one, so that context value alone did not describe top-level presentation.
+
+All four captures submitted 138 models, 833 model draws and 116763 model vertex
+references per frame, with 1706 transparent brush items. Opaque range counts vary
+with allocation. The first and third framebuffer images differed in 173 pixels
+(0.017%); inspection showed the same scene. The repeated zero-interval result is
+about 35% faster than the first one-interval baseline without reducing requested
+quality. These are rendered-frame throughput measurements, not a measured change
+in display scanout or input latency. Platforms and driver settings can override
+the synchronization request.
+
+A final zero-interval capture with W held (`20261021-001527-584`) averaged
+191.6 FPS, a 5.16 ms frame interval, 4.09 ms CPU frame and 1.43 ms GPU query.
+The eye moved from `3100 1000 442.03125` to approximately `2799 934 437` and
+submitted about 127 models per frame. This validates the moving Play path but
+is a different workload from the stationary comparison. Its metadata recorded
+default interval zero and four actual FBO samples.
+
+Remaining steady-state work includes about 1.2 ms of transparent face processing
+(including 0.24 ms of sorting), with CPU frame wall time near 4 ms. This
+identifies a next target for reducing state changes while preserving draw order;
+it does not establish a hardware FPS ceiling or require an API migration.
+
 Qt references: [timer query availability](https://doc.qt.io/qt-6/qopengltimerquery.html#isResultAvailable),
-[composition and swap signals](https://doc.qt.io/qt-6/qopenglwidget.html#signals).
+[composition and swap signals](https://doc.qt.io/qt-6/qopenglwidget.html#signals),
+[swap interval requests](https://doc.qt.io/qt-6/qsurfaceformat.html#setSwapInterval).
 GL references: [timer query semantics](https://registry.khronos.org/OpenGL/extensions/ARB/ARB_timer_query.txt),
 [texture parameters](https://wikis.khronos.org/opengl/GLAPI/glTexParameter).

@@ -26,7 +26,6 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QString>
-#include <QSurfaceFormat>
 #include <QTemporaryDir>
 #include <QTranslator>
 #include <QtGlobal>
@@ -42,6 +41,7 @@
 #include "ui/Contracts.h"
 #include "ui/CrashReporter.h"
 #include "ui/FileEventFilter.h"
+#include "ui/GlFunctions.h"
 #include "ui/QPathUtils.h"
 #include "ui/QPreferenceStore.h"
 #include "ui/RecentDocuments.h"
@@ -266,19 +266,7 @@ void enableDraftReleaseUpdates()
 
 int main(int argc, char* argv[])
 {
-  // Set OpenGL defaults
-  // Needs to be done here before QApplication is created
-  // (see: https://doc.qt.io/qt-5/qsurfaceformat.html#setDefaultFormat)
-  QSurfaceFormat format;
-  format.setRenderableType(QSurfaceFormat::OpenGL);
-  format.setVersion(2, 1);
-  format.setProfile(QSurfaceFormat::CompatibilityProfile);
-  format.setDepthBufferSize(24);
-  // Best-effort hint; not reliably honored by Qt's Wayland QPA plugin (see
-  // RenderView::render() for the fix that doesn't depend on this).
-  format.setAlphaBufferSize(0);
-  format.setSamples(4);
-  QSurfaceFormat::setDefaultFormat(format);
+  configureDefaultGlFormat();
 
   // Makes all QOpenGLWidget in the application share a single context
   // (default behaviour would be for QOpenGLWidget's in a single top-level window to share

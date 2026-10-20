@@ -152,7 +152,15 @@ void RenderView::paintEvent(QPaintEvent* event)
 
   // Defer before Qt invalidates the OpenGL framebuffer, retaining the previous image.
   m_frameTimer->stop();
+  if (m_renderProfiler)
+  {
+    m_renderProfiler->beginPaint();
+  }
   QOpenGLWidget::paintEvent(event);
+  if (m_renderProfiler)
+  {
+    m_renderProfiler->endPaint();
+  }
 }
 
 void RenderView::keyPressEvent(QKeyEvent* event)

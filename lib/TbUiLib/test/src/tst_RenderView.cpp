@@ -227,6 +227,9 @@ TEST_CASE("RenderView profiling")
   REQUIRE(file.open(QIODevice::ReadOnly));
   auto sawMetadata = false;
   auto cpuSamples = qint64{0};
+  auto paintSamples = qint64{0};
+  auto paintToRenderSamples = qint64{0};
+  auto renderToPaintEndSamples = qint64{0};
   auto gpuSupported = false;
   auto sawGpu = false;
   while (!file.atEnd())
@@ -238,12 +241,28 @@ TEST_CASE("RenderView profiling")
       sawMetadata = true;
       gpuSupported = object["gpu_supported"].toBool();
       CHECK(object["gl_call_timing"].toBool() == glTiming);
+      for (const auto* field :
+           {"swap_interval_requested",
+            "default_swap_interval_requested",
+            "context_samples",
+            "framebuffer_samples",
+            "surface_depth_bits",
+            "default_samples_requested"})
+      {
+        REQUIRE(object[field].isDouble());
+      }
+      CHECK(object["framebuffer_samples"].toInt() >= 0);
     }
     if (object["kind"] == "window")
     {
       const auto timings = object["timings_ms"].toObject();
       // Parallel test load can spread the requested repaints across reporting windows.
       cpuSamples += timings["cpu.frame"].toObject()["samples"].toInteger();
+      paintSamples += timings["cpu.paint_event"].toObject()["samples"].toInteger();
+      paintToRenderSamples +=
+        timings["present.paint_to_render"].toObject()["samples"].toInteger();
+      renderToPaintEndSamples +=
+        timings["present.render_to_paint_end"].toObject()["samples"].toInteger();
       sawGpu |= timings["gpu.frame"].toObject()["samples"].toInt() > 0;
       CHECK(timings["cpu.frame"].toObject()["max"].toDouble() >= 0.0);
       const auto counters = object["counters"].toObject();
@@ -263,6 +282,11 @@ TEST_CASE("RenderView profiling")
   }
   CHECK(sawMetadata);
   CHECK(cpuSamples >= 5);
+  // Initialization may render outside paintEvent, and a final reporting window
+  // may close before endPaint. Verify real boundaries without equating counts.
+  CHECK(paintSamples > 0);
+  CHECK(paintToRenderSamples > 0);
+  CHECK(renderToPaintEndSamples > 0);
   CHECK((!gpuSupported || sawGpu));
 }
 

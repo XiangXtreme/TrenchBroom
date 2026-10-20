@@ -19,6 +19,7 @@
 #include <QOpenGLFunctions>
 #include <QOpenGLTimerQuery>
 #include <QSize>
+#include <QSurfaceFormat>
 
 #include "render/RenderTiming.h"
 #include "ui/FileLogger.h"
@@ -60,6 +61,8 @@ struct RenderProfiler::Impl
   QElapsedTimer clock;
   qint64 reportStart = 0;
   qint64 frameStart = -1;
+  qint64 paintStart = -1;
+  qint64 swapEnd = -1;
   qint64 renderEnd = -1;
   qint64 composeStart = -1;
   bool pendingComposition = false;
@@ -214,11 +217,44 @@ RenderProfiler::~RenderProfiler()
   m_impl->report(true);
 }
 
+void RenderProfiler::beginPaint()
+{
+  auto& p = *m_impl;
+  p.paintStart = p.clock.nsecsElapsed();
+  if (p.swapEnd >= 0)
+  {
+    p.samples["present.swap_to_paint"].push_back(
+      static_cast<double>(p.paintStart - p.swapEnd) / 1e6);
+    p.swapEnd = -1;
+  }
+}
+
+void RenderProfiler::endPaint()
+{
+  auto& p = *m_impl;
+  const auto now = p.clock.nsecsElapsed();
+  if (p.paintStart >= 0)
+  {
+    p.samples["cpu.paint_event"].push_back(static_cast<double>(now - p.paintStart) / 1e6);
+    if (p.renderEnd >= p.paintStart)
+    {
+      p.samples["present.render_to_paint_end"].push_back(
+        static_cast<double>(now - p.renderEnd) / 1e6);
+    }
+    p.paintStart = -1;
+  }
+}
+
 render::RenderTiming& RenderProfiler::beginFrame(
   QOpenGLContext& context, const QString& view, const QSize& pixels, const int fpsLimit)
 {
   auto& p = *m_impl;
   const auto now = p.clock.nsecsElapsed();
+  if (p.paintStart >= 0)
+  {
+    p.samples["present.paint_to_render"].push_back(
+      static_cast<double>(now - p.paintStart) / 1e6);
+  }
   if (p.frameStart >= 0)
   {
     p.samples["frame.interval"].push_back(static_cast<double>(now - p.frameStart) / 1e6);
@@ -238,8 +274,12 @@ render::RenderTiming& RenderProfiler::beginFrame(
   p.timing.glCounters.fill(0);
   p.timing.glMilliseconds.fill(0.0);
   p.startGpu(context);
+  p.samples["cpu.profile.begin_frame"].push_back(
+    static_cast<double>(p.clock.nsecsElapsed() - now) / 1e6);
   if (!p.metadataWritten)
   {
+    auto framebufferSamples = GLint{};
+    context.functions()->glGetIntegerv(GL_SAMPLES, &framebufferSamples);
     const auto glString = [&](const GLenum name) {
       const auto* value = context.functions()->glGetString(name);
       return value ? QString::fromLatin1(reinterpret_cast<const char*>(value))
@@ -251,6 +291,12 @@ render::RenderTiming& RenderProfiler::beginFrame(
        {"renderer", glString(GL_RENDERER)},
        {"gl_version", glString(GL_VERSION)},
        {"swap_interval_requested", context.format().swapInterval()},
+       {"default_swap_interval_requested",
+        QSurfaceFormat::defaultFormat().swapInterval()},
+       {"context_samples", context.format().samples()},
+       {"framebuffer_samples", framebufferSamples},
+       {"surface_depth_bits", context.format().depthBufferSize()},
+       {"default_samples_requested", QSurfaceFormat::defaultFormat().samples()},
        {"gpu_supported", p.gpuSupported},
        {"gl_call_timing", p.timing.timeGlCalls},
        {"cpu_stages", "inclusive wall time; includes any driver stalls"},
@@ -301,6 +347,7 @@ void RenderProfiler::frameSwapped()
   if (p.pendingComposition && p.composeStart >= 0)
   {
     const auto now = p.clock.nsecsElapsed();
+    p.swapEnd = now;
     p.samples["present.render_to_compose"].push_back(
       static_cast<double>(p.composeStart - p.renderEnd) / 1e6);
     p.samples["present.compose_swap"].push_back(

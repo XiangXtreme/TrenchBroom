@@ -27,6 +27,9 @@ class QOpenGLFunctions_2_1;
 namespace tb::ui
 {
 
+// Call before QApplication construction, also in native render benchmarks.
+void configureDefaultGlFormat();
+
 QOpenGLFunctions_2_1& getGlFunctions(std::string_view callSite, QOpenGLContext* context);
 
 } // namespace tb::ui

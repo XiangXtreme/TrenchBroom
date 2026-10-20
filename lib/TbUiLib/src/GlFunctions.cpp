@@ -30,6 +30,24 @@
 
 namespace tb::ui
 {
+
+void configureDefaultGlFormat()
+{
+  auto format = QSurfaceFormat{};
+  format.setRenderableType(QSurfaceFormat::OpenGL);
+  format.setVersion(2, 1);
+  format.setProfile(QSurfaceFormat::CompatibilityProfile);
+  format.setDepthBufferSize(24);
+  // Best-effort hint; not reliably honored by Qt's Wayland QPA plugin (see
+  // RenderView::render() for the fix that doesn't depend on this).
+  format.setAlphaBufferSize(0);
+  format.setSamples(4);
+  // RenderView applies the user's FPS limit. Avoid an additional refresh-rate
+  // limit when it is set to Unlimited; the platform may override this request.
+  format.setSwapInterval(0);
+  QSurfaceFormat::setDefaultFormat(format);
+}
+
 namespace
 {
 

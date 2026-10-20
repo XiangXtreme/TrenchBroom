@@ -34,6 +34,8 @@ public:
   explicit RenderProfiler(const QString& path);
   ~RenderProfiler();
 
+  void beginPaint();
+  void endPaint();
   render::RenderTiming& beginFrame(
     QOpenGLContext& context, const QString& view, const QSize& pixels, int fpsLimit);
   void endFrame();

@@ -24,6 +24,7 @@
 #include "TestPreferenceStore.h"
 #include "TestWindowPolicy.h"
 #include "base/PreferenceManager.h"
+#include "ui/GlFunctions.h"
 
 #include "kd/contracts.h"
 #include "kd/k.h"
@@ -63,6 +64,7 @@ int main(int argc, char** argv)
   if (qEnvironmentVariableIsSet("TB_RENDER_PROFILE_MAP"))
   {
     // The opt-in map benchmark uses the application's real shared resource uploader.
+    tb::ui::configureDefaultGlFormat();
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
   }
   if (!showWindows)
