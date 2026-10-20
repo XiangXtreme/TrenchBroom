@@ -237,7 +237,7 @@ void FaceRenderer::render(RenderContext& context)
                                && material->effectiveBlendFunc().enable
                                     == gl::MaterialBlendFunc::Enable::UseFactors;
 
-      gl::setAlphaFuncUniforms(shader, material);
+      // RenderFunc::before applies the material's alpha-test uniforms.
       // A material with real per-pixel blending renders with its own true alpha,
       // independent of the whole-batch X-ray/hidden-brush fade.
       shader.set("Alpha", isRealBlend ? 1.0f : m_alpha);
@@ -278,10 +278,8 @@ void FaceRenderer::renderTransparentItems(
   RenderTiming::count("faces.transparent_items", m_sortedDrawItems->size());
   auto& gl = context.gl();
 
-  // Correct back-to-front blending requires draw order to follow distance to the
-  // camera, which is fundamentally incompatible with batching by material -- so unlike
-  // renderOpaqueItems, this draws one item at a time in sorted order instead of one
-  // whole material buffer at a time.
+  // Preserve back-to-front draw order. Only consecutive items with identical
+  // material and entity settings may reuse the active state; ranges stay separate.
   //
   // Sort a reused array of pointers into m_sortedDrawItems rather than a copy of the
   // items themselves -- the camera (and therefore the sort order) can change every
@@ -299,6 +297,19 @@ void FaceRenderer::renderTransparentItems(
     });
   }
 
+  auto& entityRenderFunc = static_cast<RenderFunc&>(renderFunc);
+  const auto* activeItem = static_cast<const TransparentDrawItem*>(nullptr);
+  auto* activeIndices = static_cast<BrushIndexArray*>(nullptr);
+  const auto finishRun = [&]() {
+    if (activeItem)
+    {
+      activeIndices->cleanup(gl);
+      // after() must still see the settings used by before(), before setDrawItem
+      // changes them for the next run, to balance the entity/material state stack.
+      renderFunc.after(gl, activeItem->material);
+    }
+  };
+
   for (const auto* item : m_transparentDrawOrder)
   {
     if (const auto it = m_indexArrayMap->find(item->material);
@@ -307,19 +318,24 @@ void FaceRenderer::renderTransparentItems(
       RenderTiming::count("faces.draw_calls", 1);
       const auto& brushIndexHolderPtr = it->second;
 
-      setMaterialUniforms(item->material);
-
-      auto& entityRenderFunc = static_cast<RenderFunc&>(renderFunc);
-      entityRenderFunc.setDrawItem(context, *item);
-
-      renderFunc.before(gl, item->material);
-      brushIndexHolderPtr->setup(gl);
+      if (
+        !activeItem || activeItem->material != item->material
+        || activeItem->entitySettings != item->entitySettings)
+      {
+        finishRun();
+        setMaterialUniforms(item->material);
+        entityRenderFunc.setDrawItem(context, *item);
+        renderFunc.before(gl, item->material);
+        brushIndexHolderPtr->setup(gl);
+        activeItem = item;
+        activeIndices = brushIndexHolderPtr.get();
+        RenderTiming::count("faces.transparent_state_runs", 1);
+      }
       brushIndexHolderPtr->render(
         gl, gl::PrimType::Triangles, item->indexPos, item->indexCount);
-      brushIndexHolderPtr->cleanup(gl);
-      renderFunc.after(gl, item->material);
     }
   }
+  finishRun();
 }
 
 void FaceRenderer::renderOpaqueItems(

@@ -145,6 +145,9 @@ The raw log separates:
 - Counters such as `faces.draw_calls`, material groups, opaque/transparent items,
   and batch size help explain the CPU submission cost. These are logical renderer
   calls/items, not a driver-level capture of every OpenGL draw in the application.
+  `faces.transparent_state_runs` counts consecutive transparent items that share
+  material and all entity settings. Each run activates state once, while retaining
+  the individual sorted draw calls and their index ranges.
 - `gl.frame.*`, `gl.models.*`, `gl.faces.*`, and `gl.edges.*` count API submissions
   through `GlQt` in those scopes. A multi-draw is one `draw_calls` entry but contributes
   each subrange to `draw_ranges`. `submitted_vertices` sums array counts and index
@@ -396,6 +399,65 @@ Remaining steady-state work includes about 1.2 ms of transparent face processing
 (including 0.24 ms of sorting), with CPU frame wall time near 4 ms. This
 identifies a next target for reducing state changes while preserving draw order;
 it does not establish a hardware FPS ceiling or require an API migration.
+
+### Sorted transparent state reuse follow-up
+
+The transparent pass now retains material, entity uniforms and index-buffer state
+across consecutive items with identical material and entity settings. It still
+sorts every frame and submits each item's original range as a separate draw.
+Material, render mode, amount, color or conveyor-speed changes end the run before
+new settings are installed, preserving the material/entity state-stack pairing.
+The opaque range merger uses the same settings equality. Alpha-test uniforms are
+also applied only by the material callback instead of twice per activation.
+
+The stationary Play scene was captured with the same camera, 1368x737 viewport,
+four actual FBO samples and interval-zero request as the previous section.
+Extra per-GL-call timing remained disabled. Each run warmed up for 15 seconds.
+
+| Per-frame metric | Baseline | State reuse | State reuse + duplicate uniforms removed |
+| --- | ---: | ---: | ---: |
+| FPS | 193.7 | 210.4 | 219.0 |
+| CPU frame, mean | 4.02 ms | 3.61 ms | 3.46 ms |
+| Transparent faces, including sort | 1.18 ms | 0.97 ms | 0.91 ms |
+| Transparent sort | 0.25 ms | 0.25 ms | 0.25 ms |
+| Transparent items | 1706 | 1706 | 1706 |
+| Transparent state activations | 1706 | 900 | 901 |
+| Face uniform calls | 20215 | 12903 | 11371 |
+| Face buffer binds | 4290 | 2686 | 2680 |
+| Face texture binds | 4286 | 2682 | 2676 |
+| Model draws | 833 | 833 | 833 |
+
+These 12-second captures are `20261021-002744-696`, `20261021-003250-703`
+and `20261021-003521-575`. The baseline activated state once per transparent item;
+the new counter records runs directly. Opaque range/padding counts and the order
+of equal-distance transparent items can vary with allocation, so total face traffic
+is not identical between runs. All submitted 138 model entities and 116763 model
+vertex references per frame. The baseline and final framebuffer differed in 165
+pixels (0.016%); inspection showed the same scene.
+
+A 12-second final-version repeat (`20261021-003621-881`) averaged 182.0 FPS,
+including a one-second reporting window at 24.4 FPS. Its CPU frame maximum was
+32.38 ms and frame-interval maximum 61.16 ms, with stalls across preparation,
+rendering and presentation. Other windows were mostly 205-221 FPS. The cause of
+this transient remains unresolved; it is retained in the evidence and the faster
+sample does not establish that frame pacing or all hitches are fixed.
+
+A longer 15-second final-version repeat (`20261021-003753-749`) averaged
+220.8 FPS, a 4.47 ms frame interval, 3.47 ms CPU frame and 0.91 ms transparent
+face processing (including 0.25 ms sorting). Its maximum frame interval was
+7.61 ms; the earlier long stall did not recur in this capture. It retained 1706
+transparent items with 900 state activations, 833 model draws and four FBO samples.
+
+The final W-held Play capture (`20261021-003901-598`, 12 seconds) averaged
+214.4 FPS, a 4.62 ms frame interval and 3.60 ms CPU frame. It followed the same
+approximately `3100 1000 442` to `2799 934 437` traversal as the earlier moving
+capture, submitting about 127 models per frame. Transparent processing averaged
+0.94 ms. This moving workload is separate from the stationary comparisons.
+
+Regression tests cover camera-dependent draw order, an intervening material,
+same-material entity amount/color/mode/conveyor changes, the return to the batch
+fade, and state cleanup across frames. Real-GL preview tests exercise glass,
+render color, additive sprites and conveyor animation.
 
 Qt references: [timer query availability](https://doc.qt.io/qt-6/qopengltimerquery.html#isResultAvailable),
 [composition and swap signals](https://doc.qt.io/qt-6/qopenglwidget.html#signals),

@@ -37,6 +37,7 @@
 #include "render/BrushRenderer.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 
 #include "kd/filesystem_utils.h"
 #include "kd/result.h"
@@ -44,7 +45,9 @@
 #include "vm/bbox.h"
 
 #include <fstream>
+#include <memory>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -118,17 +121,20 @@ TEST_CASE("BrushRenderer rendering")
   };
 
   auto capturedAlphas = std::vector<GLfloat>{};
+  auto currentAlpha = 1.0f;
   // tracks the most recently set AlphaFuncThreshold, so onDrawElements below can record
   // which material's item was active for each draw call, to verify sorted draw order
   auto currentAlphaFuncThreshold = std::optional<GLfloat>{};
   auto entityAlpha = 1.0f;
   auto entityMode = 0;
   auto textureOffset = 0.0f;
+  auto entityColor = vm::vec3f{1.0f, 1.0f, 1.0f};
   gl.onUniform1f = [&](const GLint location, const GLfloat value) {
     const auto& name = locationToName.at(location);
     if (name == "Alpha")
     {
       capturedAlphas.push_back(value);
+      currentAlpha = value;
     }
     else if (name == "AlphaFuncThreshold")
     {
@@ -151,7 +157,12 @@ TEST_CASE("BrushRenderer rendering")
       textureOffset = x;
     }
   };
-  gl.onUniform3f = [](GLint, GLfloat, GLfloat, GLfloat) {};
+  gl.onUniform3f = [&](GLint location, GLfloat x, GLfloat y, GLfloat z) {
+    if (locationToName.at(location) == "EntityColor")
+    {
+      entityColor = vm::vec3f{x, y, z};
+    }
+  };
   gl.onUniform4f = [](GLint, GLfloat, GLfloat, GLfloat, GLfloat) {};
 
   gl.onUseProgram = [](GLuint) {};
@@ -187,6 +198,8 @@ TEST_CASE("BrushRenderer rendering")
   auto drawnEntityAlphas = std::vector<GLfloat>{};
   auto drawnEntityModes = std::vector<int>{};
   auto drawnOffsets = std::vector<float>{};
+  auto drawnColors = std::vector<vm::vec3f>{};
+  auto drawnAlphas = std::vector<float>{};
   auto blendFactors = std::vector<std::pair<GLenum, GLenum>>{};
   auto pushedStates = 0;
   gl.onPushAttrib = [&](GLbitfield) { ++pushedStates; };
@@ -198,6 +211,8 @@ TEST_CASE("BrushRenderer rendering")
     drawnEntityAlphas.push_back(entityAlpha);
     drawnEntityModes.push_back(entityMode);
     drawnOffsets.push_back(textureOffset);
+    drawnColors.push_back(entityColor);
+    drawnAlphas.push_back(currentAlpha);
     if (currentAlphaFuncThreshold)
     {
       drawnThresholds.push_back(*currentAlphaFuncThreshold);
@@ -433,10 +448,16 @@ TEST_CASE("BrushRenderer rendering")
     batch.render(renderContext);
 
     CHECK(drawnThresholds == std::vector<GLfloat>{0.3f, 0.2f, 0.1f});
+
+    camera.moveTo(vm::vec3f{400, 0, 0});
+    drawnThresholds.clear();
+    auto nextFrame = RenderBatch{vboManager};
+    renderer.render(renderContext, nextFrame);
+    nextFrame.render(renderContext);
+    CHECK(drawnThresholds == std::vector<GLfloat>{0.1f, 0.2f, 0.3f});
   }
 
-  SECTION(
-    "transparent brushes sharing a material are no longer batched into one draw call")
+  SECTION("transparent brushes sharing state retain separate ordered draws")
   {
     auto renderer = BrushRenderer{};
     auto brush1 = makeCubeBrushNode(blendMaterial, vm::vec3d{100.0, 0.0, 0.0});
@@ -449,6 +470,91 @@ TEST_CASE("BrushRenderer rendering")
     batch.render(renderContext);
 
     CHECK(drawCallCount == 2);
+  }
+
+  SECTION("an intervening material breaks a transparent state run")
+  {
+    blendMaterial.setAlphaFunc(gl::MaterialAlphaFunc::Compare::GreaterEqual, 0.1f);
+    auto otherMaterial = gl::Material{"other", createTextureResource(gl::Texture{4, 4})};
+    otherMaterial.setBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    otherMaterial.setAlphaFunc(gl::MaterialAlphaFunc::Compare::GreaterEqual, 0.2f);
+    auto farBrush = makeCubeBrushNode(blendMaterial, vm::vec3d{300, 0, 0});
+    auto midBrush = makeCubeBrushNode(otherMaterial, vm::vec3d{200, 0, 0});
+    auto nearBrush = makeCubeBrushNode(blendMaterial, vm::vec3d{100, 0, 0});
+    auto renderer = BrushRenderer{};
+    renderer.addBrush(nearBrush);
+    renderer.addBrush(farBrush);
+    renderer.addBrush(midBrush);
+    auto batch = RenderBatch{vboManager};
+    renderer.render(renderContext, batch);
+    batch.render(renderContext);
+    CHECK(drawCallCount == 3);
+    CHECK(drawnThresholds == std::vector<GLfloat>{0.1f, 0.2f, 0.1f});
+    CHECK(pushedStates == 0);
+  }
+
+  SECTION("transparent state reuse preserves entity settings and frame cleanup")
+  {
+    renderContext.setGoldSrcRendering(true);
+    renderContext.setAnimationTime(0.5);
+    auto scrollMaterial =
+      gl::Material{"SCROLLarrows", createTextureResource(gl::Texture{128, 128})};
+    auto entities = std::vector<std::unique_ptr<mdl::EntityNode>>{};
+    auto renderer = BrushRenderer{};
+    renderer.setTransparencyAlpha(0.4f);
+    renderer.setForceTransparent(true);
+    const auto settings = std::vector<GoldSrcEntityRenderSettings>{
+      {2, 100.0f / 255.0f, {1, 0, 0}, 64},
+      {2, 100.0f / 255.0f, {1, 0, 0}, 64},
+      {2, 100.0f / 255.0f, {0, 0, 1}, 64},
+      {2, 160.0f / 255.0f, {0, 0, 1}, 64},
+      {2, 160.0f / 255.0f, {0, 0, 1}, -64},
+      {5, 160.0f / 255.0f, {0, 0, 1}, -64},
+      {0, 1.0f, {0, 0, 1}, 0}};
+    for (size_t i = 0; i < settings.size(); ++i)
+    {
+      const auto& s = settings[i];
+      auto entity = std::make_unique<mdl::EntityNode>(mdl::Entity{
+        {{"classname", s.conveyorSpeed == 0 ? "func_wall" : "func_conveyor"},
+         {"speed", std::to_string(s.conveyorSpeed)},
+         {"rendermode", std::to_string(s.mode)},
+         {"renderamt", i < 3 ? "100" : "160"},
+         {"rendercolor", i < 2 ? "255 0 0" : "0 0 255"}}});
+      const auto x = 100.0 * static_cast<double>(settings.size() - i);
+      auto* brush =
+        new mdl::BrushNode{makeCubeBrushNode(scrollMaterial, vm::vec3d{x, 0, 0}).brush()};
+      entity->addChild(brush);
+      renderer.addBrush(*brush);
+      entities.push_back(std::move(entity));
+    }
+
+    for (auto frame = 0; frame < 2; ++frame)
+    {
+      drawnEntityModes.clear();
+      drawnEntityAlphas.clear();
+      drawnColors.clear();
+      drawnOffsets.clear();
+      drawnAlphas.clear();
+      auto timing = RenderTiming{};
+      const auto capture = RenderTiming::Capture{timing};
+      auto batch = RenderBatch{vboManager};
+      renderer.renderTransparent(renderContext, batch);
+      batch.render(renderContext);
+      REQUIRE(drawnEntityModes.size() == settings.size());
+      CHECK(timing.counters.at("faces.transparent_state_runs") == 6);
+      for (size_t i = 0; i < settings.size(); ++i)
+      {
+        CHECK(drawnEntityModes[i] == settings[i].mode);
+        CHECK(drawnEntityAlphas[i] == settings[i].alpha);
+        CHECK(drawnColors[i] == settings[i].color);
+        CHECK(
+          drawnOffsets[i]
+          == goldSrcConveyorOffset(settings[i], "SCROLLarrows", 128, 0.5));
+        CHECK(drawnAlphas[i] == (settings[i].mode == 0 ? 0.4f : 1.0f));
+      }
+      CHECK(pushedStates == 0);
+      CHECK(renderContext.animationRequested());
+    }
   }
 
   vboManager.destroyPendingVbos(gl);

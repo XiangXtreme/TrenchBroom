@@ -40,6 +40,7 @@ struct GoldSrcEntityRenderSettings
   vm::vec3f color{1.0f, 1.0f, 1.0f};
   float conveyorSpeed = 0.0f;
 
+  bool operator==(const GoldSrcEntityRenderSettings&) const = default;
   bool transparent() const;
 };
 

@@ -889,8 +889,7 @@ std::shared_ptr<std::vector<TransparentDrawItem>> BrushRenderer::collectOpaqueDr
       const auto& b = item.entitySettings;
       if (
         previous.material == item.material
-        && previous.indexPos + previous.indexCount == item.indexPos && a.mode == b.mode
-        && a.alpha == b.alpha && a.color == b.color && a.conveyorSpeed == b.conveyorSpeed)
+        && previous.indexPos + previous.indexCount == item.indexPos && a == b)
       {
         previous.indexCount += item.indexCount;
         continue;
