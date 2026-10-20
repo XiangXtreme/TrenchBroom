@@ -43,14 +43,12 @@ namespace tb::render
 namespace
 {
 
-class RenderFunc : public gl::MaterialRenderFunc
+class RenderFunc : public GoldSrcEntityMaterialRenderFunc
 {
 private:
   gl::ActiveShader& m_shader;
   bool m_applyMaterial;
   Color m_defaultColor;
-  int m_minFilter;
-  int m_magFilter;
 
 public:
   RenderFunc(
@@ -59,19 +57,45 @@ public:
     Color defaultColor,
     const int minFilter,
     const int magFilter)
-    : m_shader{shader}
+    : GoldSrcEntityMaterialRenderFunc{shader, minFilter, magFilter, {}}
+    , m_shader{shader}
     , m_applyMaterial{applyMaterial}
     , m_defaultColor{std::move(defaultColor)}
-    , m_minFilter{minFilter}
-    , m_magFilter{magFilter}
   {
+  }
+
+  void setDrawItem(RenderContext& context, const TransparentDrawItem& item)
+  {
+    setSettings(item.entitySettings);
+    if (item.entitySettings.mode != 0)
+    {
+      m_shader.set("Alpha", 1.0f);
+    }
+    const auto* texture = gl::getTexture(item.material);
+    const auto name =
+      item.material ? std::string_view{item.material->name()} : std::string_view{};
+    m_shader.set(
+      "TexCoordOffset",
+      vm::vec2f{
+        goldSrcConveyorOffset(
+          item.entitySettings,
+          name,
+          texture ? texture->width() : 0,
+          context.animationTime()),
+        0.0f});
+    if (
+      texture && item.entitySettings.conveyorSpeed != 0.0f
+      && isGoldSrcConveyorMaterial(name))
+    {
+      context.requestAnimation();
+    }
   }
 
   void before(gl::Gl& gl, const gl::Material* material) override
   {
+    GoldSrcEntityMaterialRenderFunc::before(gl, material);
     if (const auto* texture = gl::getTexture(material))
     {
-      material->activate(gl, m_minFilter, m_magFilter);
       m_shader.set("ApplyMaterial", m_applyMaterial);
       m_shader.set("Color", texture->averageColor());
     }
@@ -84,10 +108,7 @@ public:
 
   void after(gl::Gl& gl, const gl::Material* material) override
   {
-    if (material)
-    {
-      material->deactivate(gl);
-    }
+    GoldSrcEntityMaterialRenderFunc::after(gl, material);
   }
 };
 
@@ -99,12 +120,21 @@ FaceRenderer::FaceRenderer(
   std::shared_ptr<BrushVertexArray> vertexArray,
   std::shared_ptr<MaterialToBrushIndicesMap> indexArrayMap,
   Color faceColor,
-  std::shared_ptr<const std::vector<TransparentDrawItem>> sortedDrawItems)
+  std::shared_ptr<const std::vector<TransparentDrawItem>> sortedDrawItems,
+  std::shared_ptr<const std::vector<TransparentDrawItem>> opaqueDrawItems)
   : m_vertexArray{std::move(vertexArray)}
   , m_indexArrayMap{std::move(indexArrayMap)}
   , m_sortedDrawItems{std::move(sortedDrawItems)}
+  , m_opaqueDrawItems{std::move(opaqueDrawItems)}
   , m_faceColor{std::move(faceColor)}
 {
+  if (m_opaqueDrawItems)
+  {
+    for (const auto& item : *m_opaqueDrawItems)
+    {
+      m_perItemMaterials.insert(item.material);
+    }
+  }
 }
 
 void FaceRenderer::setGrayscale(const bool grayscale)
@@ -180,6 +210,7 @@ void FaceRenderer::render(RenderContext& context)
     shader.set("ShadeFaces", shadeFaces);
     shader.set("ShowFog", showFog);
     shader.set("Alpha", m_alpha);
+    shader.set("TexCoordOffset", vm::vec2f{});
     shader.set("EnableMasked", false);
     shader.set("AlphaFuncCompare", size_t{0});
     shader.set("AlphaFuncThreshold", 0.5f);
@@ -227,6 +258,9 @@ void FaceRenderer::render(RenderContext& context)
       gl.depthMask(GL_TRUE);
     }
 
+    shader.set("EntityRenderMode", 0);
+    shader.set("TexCoordOffset", vm::vec2f{});
+
     m_vertexArray->cleanup(gl, shader.program());
   }
 }
@@ -265,6 +299,9 @@ void FaceRenderer::renderTransparentItems(
 
       setMaterialUniforms(item->material);
 
+      auto& entityRenderFunc = static_cast<RenderFunc&>(renderFunc);
+      entityRenderFunc.setDrawItem(context, *item);
+
       renderFunc.before(gl, item->material);
       brushIndexHolderPtr->setup(gl);
       brushIndexHolderPtr->render(
@@ -284,7 +321,7 @@ void FaceRenderer::renderOpaqueItems(
 
   for (const auto& [material, brushIndexHolderPtr] : *m_indexArrayMap)
   {
-    if (brushIndexHolderPtr->hasValidIndices())
+    if (brushIndexHolderPtr->hasValidIndices() && !m_perItemMaterials.contains(material))
     {
       setMaterialUniforms(material);
 
@@ -293,6 +330,22 @@ void FaceRenderer::renderOpaqueItems(
       brushIndexHolderPtr->render(gl, gl::PrimType::Triangles);
       brushIndexHolderPtr->cleanup(gl);
       renderFunc.after(gl, material);
+    }
+  }
+
+  if (m_opaqueDrawItems)
+  {
+    auto& entityRenderFunc = static_cast<RenderFunc&>(renderFunc);
+    for (const auto& item : *m_opaqueDrawItems)
+    {
+      const auto& holder = m_indexArrayMap->at(item.material);
+      setMaterialUniforms(item.material);
+      entityRenderFunc.setDrawItem(context, item);
+      renderFunc.before(gl, item.material);
+      holder->setup(gl);
+      holder->render(gl, gl::PrimType::Triangles, item.indexPos, item.indexCount);
+      holder->cleanup(gl);
+      renderFunc.after(gl, item.material);
     }
   }
 }

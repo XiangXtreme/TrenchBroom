@@ -24,6 +24,9 @@ uniform sampler2D Material;
 uniform bool ApplyTinting;
 uniform vec4 TintColor;
 uniform bool GrayScale;
+uniform int EntityRenderMode;
+uniform float EntityAlpha;
+uniform vec3 EntityColor;
 
 varying vec4 worldCoordinates;
 
@@ -34,13 +37,18 @@ void main()
 {
   vec4 texel = texture2D(Material, gl_TexCoord[0].st);
 
-  if (!passesAlphaFunc(texel.a))
+  if (!passesAlphaFunc(texel.a) || (EntityRenderMode == 4 && texel.a <= 0.25))
   {
     discard;
   }
 
   gl_FragColor = vec4(vec3(Brightness / 2.0 * texel), texel.a);
   gl_FragColor = vec4(clamp(2.0 * gl_FragColor.rgb, 0.0, 1.0), gl_FragColor.a);
+  if (EntityRenderMode != 0)
+  {
+    gl_FragColor.rgb *= EntityColor;
+    gl_FragColor.a *= EntityAlpha;
+  }
 
   if (GrayScale)
   {

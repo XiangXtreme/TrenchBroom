@@ -26,6 +26,7 @@
 #include "mdl/BrushNode.h"
 #include "mdl/BrushRendererBrushCache.h"
 #include "mdl/EditorContext.h"
+#include "mdl/EntityNode.h"
 #include "mdl/TagAttribute.h"
 #include "render/BrushRendererArrays.h"
 #include "render/RenderContext.h"
@@ -44,6 +45,14 @@ namespace
 bool isSkyFace(const mdl::BrushFace& face)
 {
   return kdl::ci::str_is_equal(face.materialName(), "sky");
+}
+
+GoldSrcEntityRenderSettings brushEntityRenderSettings(
+  const mdl::BrushNode& brush, const bool enabled)
+{
+  const auto* owner =
+    enabled ? dynamic_cast<const mdl::EntityNode*>(brush.parent()) : nullptr;
+  return goldSrcEntityRenderSettings(owner ? &owner->entity() : nullptr);
 }
 
 class FilterWrapper : public BrushRenderer::Filter
@@ -340,7 +349,8 @@ void BrushRenderer::clear()
   m_transparentFaces = std::make_shared<MaterialToBrushIndicesMap>();
   m_opaqueFaces = std::make_shared<MaterialToBrushIndicesMap>();
 
-  m_opaqueFaceRenderer = FaceRenderer{m_vertexArray, m_opaqueFaces, m_faceColor};
+  m_opaqueFaceRenderer = FaceRenderer{
+    m_vertexArray, m_opaqueFaces, m_faceColor, nullptr, collectOpaqueDrawItems()};
   m_transparentFaceRenderer = FaceRenderer{
     m_vertexArray, m_transparentFaces, m_faceColor, collectTransparentDrawItems()};
   m_edgeRenderer = IndexedEdgeRenderer{m_vertexArray, m_edgeIndices};
@@ -440,6 +450,12 @@ void BrushRenderer::render(RenderContext& renderContext, RenderBatch& renderBatc
 
 void BrushRenderer::renderOpaque(RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  // 2D views share this cache with the 3D view but only draw edges.
+  if (renderContext.render3D() && m_goldSrcRendering != renderContext.goldSrcRendering())
+  {
+    m_goldSrcRendering = renderContext.goldSrcRendering();
+    invalidate();
+  }
   if (!m_allBrushes.empty())
   {
     if (!valid())
@@ -460,6 +476,11 @@ void BrushRenderer::renderOpaque(RenderContext& renderContext, RenderBatch& rend
 void BrushRenderer::renderTransparent(
   RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  if (renderContext.render3D() && m_goldSrcRendering != renderContext.goldSrcRendering())
+  {
+    m_goldSrcRendering = renderContext.goldSrcRendering();
+    invalidate();
+  }
   if (!m_allBrushes.empty())
   {
     if (!valid())
@@ -522,7 +543,8 @@ void BrushRenderer::validate()
 
   contract_assert(valid());
 
-  m_opaqueFaceRenderer = FaceRenderer{m_vertexArray, m_opaqueFaces, m_faceColor};
+  m_opaqueFaceRenderer = FaceRenderer{
+    m_vertexArray, m_opaqueFaces, m_faceColor, nullptr, collectOpaqueDrawItems()};
   m_transparentFaceRenderer = FaceRenderer{
     m_vertexArray, m_transparentFaces, m_faceColor, collectTransparentDrawItems()};
   m_edgeRenderer = IndexedEdgeRenderer{m_vertexArray, m_edgeIndices};
@@ -565,6 +587,14 @@ bool BrushRenderer::shouldDrawFaceInTransparentPass(
   const mdl::BrushFace& face,
   const gl::Material* material) const
 {
+  if (m_goldSrcRendering)
+  {
+    const auto settings = brushEntityRenderSettings(brushNode, true);
+    if (settings.mode != 0)
+    {
+      return settings.transparent();
+    }
+  }
   // A material with real per-pixel blending must always be drawn in the transparent pass
   // (with depth-writes off) regardless of the X-ray/hidden-brush preference below --
   // that preference only concerns the whole-brush fade, an unrelated feature.
@@ -795,7 +825,45 @@ std::shared_ptr<std::vector<TransparentDrawItem>> BrushRenderer::
     for (const auto& key : info.transparentFaceIndicesKeys)
     {
       items->push_back(TransparentDrawItem{
-        key.material, key.block->pos, key.block->size, key.sortPosition});
+        key.material,
+        key.block->pos,
+        key.block->size,
+        key.sortPosition,
+        brushEntityRenderSettings(*brushNode, m_goldSrcRendering)});
+    }
+  }
+  return items;
+}
+
+std::shared_ptr<std::vector<TransparentDrawItem>> BrushRenderer::collectOpaqueDrawItems()
+  const
+{
+  auto items = std::make_shared<std::vector<TransparentDrawItem>>();
+  if (!m_goldSrcRendering)
+  {
+    return items;
+  }
+  auto affectedMaterials = std::unordered_set<const gl::Material*>{};
+  for (const auto& [brushNode, info] : m_brushInfo)
+  {
+    const auto settings = brushEntityRenderSettings(*brushNode, true);
+    if (settings.mode != 0 || settings.conveyorSpeed != 0.0f)
+    {
+      for (const auto& [material, key] : info.opaqueFaceIndicesKeys)
+      {
+        affectedMaterials.insert(material);
+      }
+    }
+  }
+  for (const auto& [brushNode, info] : m_brushInfo)
+  {
+    const auto settings = brushEntityRenderSettings(*brushNode, true);
+    for (const auto& [material, key] : info.opaqueFaceIndicesKeys)
+    {
+      if (affectedMaterials.contains(material))
+      {
+        items->push_back({material, key->pos, key->size, {}, settings});
+      }
     }
   }
   return items;

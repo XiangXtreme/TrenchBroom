@@ -32,6 +32,7 @@
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
+#include "mdl/EntityNode.h"
 #include "mdl/MapFormat.h"
 #include "render/BrushRenderer.h"
 #include "render/RenderBatch.h"
@@ -120,6 +121,9 @@ TEST_CASE("BrushRenderer rendering")
   // tracks the most recently set AlphaFuncThreshold, so onDrawElements below can record
   // which material's item was active for each draw call, to verify sorted draw order
   auto currentAlphaFuncThreshold = std::optional<GLfloat>{};
+  auto entityAlpha = 1.0f;
+  auto entityMode = 0;
+  auto textureOffset = 0.0f;
   gl.onUniform1f = [&](const GLint location, const GLfloat value) {
     const auto& name = locationToName.at(location);
     if (name == "Alpha")
@@ -130,8 +134,23 @@ TEST_CASE("BrushRenderer rendering")
     {
       currentAlphaFuncThreshold = value;
     }
+    else if (name == "EntityAlpha")
+    {
+      entityAlpha = value;
+    }
   };
-  gl.onUniform1i = [](GLint, GLint) {};
+  gl.onUniform1i = [&](GLint location, GLint value) {
+    if (locationToName.at(location) == "EntityRenderMode")
+    {
+      entityMode = value;
+    }
+  };
+  gl.onUniform2f = [&](GLint location, GLfloat x, GLfloat) {
+    if (locationToName.at(location) == "TexCoordOffset")
+    {
+      textureOffset = x;
+    }
+  };
   gl.onUniform3f = [](GLint, GLfloat, GLfloat, GLfloat) {};
   gl.onUniform4f = [](GLint, GLfloat, GLfloat, GLfloat, GLfloat) {};
 
@@ -157,14 +176,26 @@ TEST_CASE("BrushRenderer rendering")
   gl.onEnableClientState = [](GLenum) {};
   gl.onDisableClientState = [](GLenum) {};
   gl.onClientActiveTexture = [](GLenum) {};
+  gl.onLineWidth = [](GLfloat) {};
 
   auto depthMaskCalls = std::vector<GLboolean>{};
   gl.onDepthMask = [&](const GLboolean flag) { depthMaskCalls.push_back(flag); };
 
   auto drawCallCount = 0;
   auto drawnThresholds = std::vector<GLfloat>{};
+  auto drawnEntityAlphas = std::vector<GLfloat>{};
+  auto drawnEntityModes = std::vector<int>{};
+  auto drawnOffsets = std::vector<float>{};
+  auto blendFactors = std::vector<std::pair<GLenum, GLenum>>{};
+  auto pushedStates = 0;
+  gl.onPushAttrib = [&](GLbitfield) { ++pushedStates; };
+  gl.onPopAttrib = [&]() { --pushedStates; };
+  gl.onBlendFunc = [&](GLenum src, GLenum dst) { blendFactors.emplace_back(src, dst); };
   gl.onDrawElements = [&](GLenum, GLsizei, GLenum, const void*) {
     ++drawCallCount;
+    drawnEntityAlphas.push_back(entityAlpha);
+    drawnEntityModes.push_back(entityMode);
+    drawnOffsets.push_back(textureOffset);
     if (currentAlphaFuncThreshold)
     {
       drawnThresholds.push_back(*currentAlphaFuncThreshold);
@@ -175,17 +206,102 @@ TEST_CASE("BrushRenderer rendering")
   auto shaderManager =
     gl::ShaderManager{[&](const std::filesystem::path&) { return tmpFile.path(); }};
   REQUIRE(shaderManager.loadProgram(gl, gl::Shaders::FaceShader).is_success());
+  REQUIRE(shaderManager.loadProgram(gl, gl::Shaders::EdgeShader).is_success());
 
   auto camera = gl::OrthographicCamera{};
   auto fontManager = gl::FontManager{[](const auto& path) { return path; }};
   auto renderContext =
     RenderContext{gl, RenderMode::Render3D, camera, fontManager, shaderManager};
   renderContext.setShowEdges(false);
+  auto uploads = 0;
 
   auto opaqueMaterial = gl::Material{"opaque", createTextureResource(gl::Texture{4, 4})};
 
   auto blendMaterial = gl::Material{"blend", createTextureResource(gl::Texture{4, 4})};
   blendMaterial.setBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  SECTION("GoldSrc entities sharing a material retain their individual render amounts")
+  {
+    renderContext.setGoldSrcRendering(true);
+    auto entity1 =
+      mdl::EntityNode{mdl::Entity{{{"rendermode", "2"}, {"renderamt", "100"}}}};
+    auto entity2 =
+      mdl::EntityNode{mdl::Entity{{{"rendermode", "5"}, {"renderamt", "160"}}}};
+    auto* brush1 = new mdl::BrushNode{makeCubeBrushNode(opaqueMaterial).brush()};
+    auto* brush2 = new mdl::BrushNode{makeCubeBrushNode(opaqueMaterial).brush()};
+    entity1.addChild(brush1);
+    entity2.addChild(brush2);
+    auto renderer = BrushRenderer{};
+    renderer.addBrush(*brush1);
+    renderer.addBrush(*brush2);
+    auto batch = RenderBatch{vboManager};
+    renderer.renderOpaque(renderContext, batch);
+    batch.render(renderContext);
+    CHECK(drawCallCount == 0);
+    auto transparentBatch = RenderBatch{vboManager};
+    renderer.renderTransparent(renderContext, transparentBatch);
+    transparentBatch.render(renderContext);
+    CHECK(drawCallCount == 2);
+    CHECK(
+      std::ranges::find(drawnEntityAlphas, 100.0f / 255.0f) != drawnEntityAlphas.end());
+    CHECK(
+      std::ranges::find(drawnEntityAlphas, 160.0f / 255.0f) != drawnEntityAlphas.end());
+    CHECK(
+      std::ranges::find(blendFactors, std::pair<GLenum, GLenum>{GL_SRC_ALPHA, GL_ONE})
+      != blendFactors.end());
+    CHECK(pushedStates == 0);
+
+    auto changed = entity1.entity();
+    changed.addOrUpdateProperty("rendermode", "0");
+    entity1.setEntity(std::move(changed));
+    renderer.invalidateBrush(*brush1);
+    drawnEntityModes.clear();
+    auto changedBatch = RenderBatch{vboManager};
+    renderer.renderOpaque(renderContext, changedBatch);
+    changedBatch.render(renderContext);
+    CHECK(drawnEntityModes == std::vector<int>{0});
+  }
+
+  SECTION("opaque conveyors animate while other brushes sharing the texture stay still")
+  {
+    renderContext.setGoldSrcRendering(true);
+    renderContext.setAnimationTime(0.5);
+    auto scrollMaterial =
+      gl::Material{"SCROLLarrows", createTextureResource(gl::Texture{128, 128})};
+    auto conveyor =
+      mdl::EntityNode{mdl::Entity{{{"classname", "func_conveyor"}, {"speed", "64"}}}};
+    auto* moving = new mdl::BrushNode{makeCubeBrushNode(scrollMaterial).brush()};
+    conveyor.addChild(moving);
+    auto still = makeCubeBrushNode(scrollMaterial);
+    auto renderer = BrushRenderer{};
+    renderer.addBrush(*moving);
+    renderer.addBrush(still);
+    auto batch = RenderBatch{vboManager};
+    renderer.render(renderContext, batch);
+    batch.render(renderContext);
+    CHECK(drawCallCount == 2);
+    CHECK(std::ranges::find(drawnOffsets, 0.75f) != drawnOffsets.end());
+    CHECK(std::ranges::find(drawnOffsets, 0.0f) != drawnOffsets.end());
+    CHECK(renderContext.animationRequested());
+
+    // A split layout must reuse the same buffers as it alternates 2D and 3D views.
+    {
+      auto context2D =
+        RenderContext{gl, RenderMode::Render2D, camera, fontManager, shaderManager};
+      context2D.setGoldSrcRendering(true);
+      context2D.setShowEdges(false);
+      auto batch2D = RenderBatch{vboManager};
+      renderer.render(context2D, batch2D);
+      batch2D.render(context2D);
+    }
+    // The first 2D draw uploads its edge buffers; returning to 3D must reuse faces.
+    gl.onBufferData = [&](GLenum, GLsizeiptr, const void*, GLenum) { ++uploads; };
+    gl.onBufferSubData = [&](GLenum, GLintptr, GLsizeiptr, const void*) { ++uploads; };
+    auto nextFrame = RenderBatch{vboManager};
+    renderer.render(renderContext, nextFrame);
+    nextFrame.render(renderContext);
+    CHECK(uploads == 0);
+  }
 
   SECTION(
     "a material with real blend factors is drawn in the transparent pass, with depth "

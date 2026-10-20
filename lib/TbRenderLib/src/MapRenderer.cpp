@@ -48,6 +48,7 @@
 #include "render/EdgeRenderer.h"
 #include "render/EntityDecalRenderer.h"
 #include "render/EntityLinkRenderer.h"
+#include "render/GoldSrcEntityRenderer.h"
 #include "render/GroupLinkRenderer.h"
 #include "render/ObjectRenderer.h"
 #include "render/RenderBatch.h"
@@ -245,6 +246,7 @@ void MapRenderer::restoreSelectionColors()
 
 void MapRenderer::render(RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  renderContext.setGoldSrcRendering(usesGoldSrcRendering(m_map.gameInfo().gameConfig));
   setupGL(renderBatch);
   updateSkyFaceRendering(renderContext);
   renderSky(renderContext, renderBatch);

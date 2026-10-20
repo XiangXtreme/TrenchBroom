@@ -57,6 +57,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PathTool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_RecentDocuments.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_RenderView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcEntityPreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartFaceSelectionPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartModelEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartSkyboxEditor.cpp
@@ -120,10 +121,16 @@ file(GENERATE
   CONTENT "#define CMD_TOOL_PATH \"$<TARGET_FILE:CmdTool>\"")
 
 # Copy fixtures
+file(GLOB TB_UI_TEST_SHADERS CONFIGURE_DEPENDS
+  "${TB_RESOURCE_DIR}/shader/*.vertsh"
+  "${TB_RESOURCE_DIR}/shader/*.fragsh")
+set_property(TARGET TbUiLibTest APPEND PROPERTY LINK_DEPENDS ${TB_UI_TEST_SHADERS})
+
 set(TEST_FIXTURE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/fixture)
 set(TEST_FIXTURE_DEST_DIR $<TARGET_FILE_DIR:TbUiLibTest>/fixture)
 
 add_custom_command(TARGET TbUiLibTest POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${TB_RESOURCE_DIR}/shader" "$<TARGET_FILE_DIR:TbUiLibTest>/shader"
   COMMAND ${CMAKE_COMMAND} -E rm -rf "${TEST_FIXTURE_DEST_DIR}"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${TEST_FIXTURE_SOURCE_DIR}" "${TEST_FIXTURE_DEST_DIR}/test"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${TB_RESOURCE_DIR}/games" "${TEST_FIXTURE_DEST_DIR}/games"

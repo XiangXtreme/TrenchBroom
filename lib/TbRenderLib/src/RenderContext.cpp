@@ -21,6 +21,8 @@
 
 #include "gl/Camera.h"
 
+#include <chrono>
+
 namespace tb::render
 {
 
@@ -37,6 +39,9 @@ RenderContext::RenderContext(
   , m_fontManager{fontManager}
   , m_shaderManager{shaderManager}
 {
+  static const auto start = std::chrono::steady_clock::now();
+  m_animationTime =
+    std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
 
 gl::Gl& RenderContext::gl()
@@ -52,6 +57,32 @@ bool RenderContext::render2D() const
 bool RenderContext::render3D() const
 {
   return m_renderMode == RenderMode::Render3D;
+}
+
+bool RenderContext::goldSrcRendering() const
+{
+  return m_goldSrcRendering && render3D() && showMaterials();
+}
+
+void RenderContext::setGoldSrcRendering(const bool enabled)
+{
+  m_goldSrcRendering = enabled;
+}
+double RenderContext::animationTime() const
+{
+  return m_animationTime;
+}
+void RenderContext::setAnimationTime(const double time)
+{
+  m_animationTime = time;
+}
+void RenderContext::requestAnimation()
+{
+  m_animationRequested = true;
+}
+bool RenderContext::animationRequested() const
+{
+  return m_animationRequested;
 }
 
 const gl::Camera& RenderContext::camera() const

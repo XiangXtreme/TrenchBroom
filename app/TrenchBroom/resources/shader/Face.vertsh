@@ -21,6 +21,7 @@
 
 uniform vec4 Color;
 uniform vec3 CameraPosition;
+uniform vec2 TexCoordOffset;
 
 varying vec4 modelCoordinates;
 varying vec3 modelNormal;
@@ -31,6 +32,7 @@ void main(void)
 {
   gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * gl_Vertex;
   gl_TexCoord[0] = gl_MultiTexCoord0;
+  gl_TexCoord[0].st += TexCoordOffset;
   modelCoordinates = gl_Vertex;
   modelNormal = gl_Normal;
   faceColor = Color;

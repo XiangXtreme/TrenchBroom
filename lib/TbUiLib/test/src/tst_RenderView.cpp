@@ -77,6 +77,9 @@ TEST_CASE("RenderView")
         view.repaint();
       }
       CHECK(view.frames - initialFrames <= elapsed.elapsed() / 200);
+      // Under parallel GPU load, the synchronous burst can span several frame
+      // intervals. Leave an explicit asynchronous request to test trailing delivery.
+      view.update();
       const auto framesAfterBurst = view.frames;
       REQUIRE(QTest::qWaitFor([&]() { return view.frames > framesAfterBurst; }, 1000));
       const auto finalFrames = view.frames;

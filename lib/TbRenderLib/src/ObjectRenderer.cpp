@@ -19,6 +19,7 @@
 
 #include "render/ObjectRenderer.h"
 
+#include "mdl/EntityNode.h"
 #include "mdl/GroupNode.h"
 
 #include "kd/overload.h"
@@ -67,7 +68,13 @@ void ObjectRenderer::invalidateNode(mdl::Node& node)
     [](mdl::WorldNode&) {},
     [](mdl::LayerNode&) {},
     [&](mdl::GroupNode& groupNode) { m_groupRenderer.invalidateGroup(groupNode); },
-    [&](mdl::EntityNode& entityNode) { m_entityRenderer.invalidateEntity(entityNode); },
+    [&](mdl::EntityNode& entityNode) {
+      m_entityRenderer.invalidateEntity(entityNode);
+      for (auto* child : entityNode.children())
+      {
+        invalidateNode(*child);
+      }
+    },
     [&](mdl::BrushNode& brushNode) { m_brushRenderer.invalidateBrush(brushNode); },
     [&](mdl::PatchNode& patchNode) { m_patchRenderer.invalidatePatch(patchNode); }));
 }

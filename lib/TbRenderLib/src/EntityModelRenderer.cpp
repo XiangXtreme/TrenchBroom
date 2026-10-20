@@ -35,6 +35,7 @@
 #include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
 #include "prefs/Preferences.h"
+#include "render/GoldSrcEntityRenderer.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/Transformation.h"
@@ -70,8 +71,16 @@ bool hasTranslucentSkin(const mdl::EntityModelData& modelData)
   });
 }
 
-bool isTransparentEntity(const mdl::EntityNode& entityNode)
+bool isTransparentEntity(const mdl::EntityNode& entityNode, const bool goldSrcRendering)
 {
+  if (goldSrcRendering)
+  {
+    const auto settings = goldSrcEntityRenderSettings(&entityNode.entity());
+    if (settings.mode != 0)
+    {
+      return settings.transparent();
+    }
+  }
   const auto* model = entityNode.entity().model();
   const auto* modelData = model ? model->data() : nullptr;
   return modelData && hasTranslucentSkin(*modelData);
@@ -270,8 +279,16 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
 
       shader.set("ModelMatrix", transformation);
 
-      auto renderFunc = gl::AlphaTestedMaterialRenderFunc{
-        shader, renderContext.minFilterMode(), renderContext.magFilterMode()};
+      auto settings = renderContext.goldSrcRendering()
+                        ? goldSrcEntityRenderSettings(&entityNode.entity())
+                        : GoldSrcEntityRenderSettings{};
+      // GoldSrc treats an all-zero sprite/model render color as untinted.
+      if (settings.color == vm::vec3f{})
+      {
+        settings.color = vm::vec3f{1.0f, 1.0f, 1.0f};
+      }
+      auto renderFunc = GoldSrcEntityMaterialRenderFunc{
+        shader, renderContext.minFilterMode(), renderContext.magFilterMode(), settings};
       renderer.render(gl, shader.program(), renderFunc);
     };
 
@@ -283,7 +300,7 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
     m_transparentDrawOrder.clear();
     for (const auto& [entityNode, renderer] : m_entities)
     {
-      if (isTransparentEntity(*entityNode))
+      if (isTransparentEntity(*entityNode, renderContext.goldSrcRendering()))
       {
         m_transparentDrawOrder.push_back(entityNode);
       }
@@ -304,12 +321,13 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
   {
     for (const auto& [entityNode, renderer] : m_entities)
     {
-      if (!isTransparentEntity(*entityNode))
+      if (!isTransparentEntity(*entityNode, renderContext.goldSrcRendering()))
       {
         renderEntity(*entityNode, *renderer);
       }
     }
   }
+  shader.set("EntityRenderMode", 0);
 }
 
 } // namespace tb::render

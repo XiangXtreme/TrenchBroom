@@ -31,6 +31,9 @@ uniform float GridSize;
 uniform float GridAlpha;
 uniform bool ShadeFaces;
 uniform bool ShowFog;
+uniform int EntityRenderMode;
+uniform float EntityAlpha;
+uniform vec3 EntityColor;
 
 varying vec4 modelCoordinates;
 varying vec3 modelNormal;
@@ -46,7 +49,11 @@ bool passesAlphaFunc(float alpha);
 
 void main()
 {
-  if (ApplyMaterial)
+  if (EntityRenderMode == 1)
+  {
+    gl_FragColor = vec4(EntityColor, 1.0);
+  }
+  else if (ApplyMaterial)
   {
     gl_FragColor = texture2D(Material, gl_TexCoord[0].st);
   }
@@ -56,7 +63,8 @@ void main()
   }
 
   // Discard fully-cutout pixels for alpha-tested (masked) materials.
-  if (!passesAlphaFunc(gl_FragColor.a))
+  if ((EntityRenderMode != 1 && !passesAlphaFunc(gl_FragColor.a))
+      || (EntityRenderMode == 4 && gl_FragColor.a <= 0.25))
   {
     discard;
   }
@@ -69,6 +77,10 @@ void main()
   // so this is a no-op for them. Alpha is still the whole-object fade used for X-ray/
   // hidden-brush preview.
   gl_FragColor.a = gl_FragColor.a * Alpha;
+  if (EntityRenderMode != 0)
+  {
+    gl_FragColor.a *= EntityAlpha;
+  }
 
   if (GrayScale)
   {
@@ -84,7 +96,7 @@ void main()
     gl_FragColor = clamp(brightnessCorrection * gl_FragColor, 0.0, 1.0);
   }
 
-  if (ShadeFaces)
+  if (ShadeFaces && EntityRenderMode != 1 && EntityRenderMode != 3 && EntityRenderMode != 5)
   {
     // angular dimming ( can be controlled with dimStrength )
     // TODO: make view option
@@ -95,7 +107,7 @@ void main()
     gl_FragColor.rgb *= angleDim;
   }
 
-  if (ShowFog)
+  if (ShowFog && EntityRenderMode != 3 && EntityRenderMode != 5)
   {
     float distance = length(viewVector);
 
@@ -114,7 +126,7 @@ void main()
       mix(gl_FragColor.rgb, fogColor, clamp(fogFactor + fogBias, 0.0, maxFogAmount));
   }
 
-  if (RenderGrid && GridAlpha > 0.0)
+  if (RenderGrid && GridAlpha > 0.0 && EntityRenderMode != 3 && EntityRenderMode != 5)
   {
     vec3 coords = modelCoordinates.xyz;
 

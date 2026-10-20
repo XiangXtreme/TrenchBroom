@@ -14,6 +14,7 @@ target_sources(TbRenderLibTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Compass.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityLinkRenderer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GridRenderer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcEntityRenderer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GroupLinkRenderer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LinkRenderer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PointGuideRenderer.cpp

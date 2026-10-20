@@ -36,6 +36,7 @@ class QResizeEvent;
 class QShortcut;
 class QString;
 class QAction;
+class QTimer;
 
 namespace tb
 {
@@ -102,6 +103,7 @@ private:
   std::unique_ptr<render::Compass> m_compass;
   std::unique_ptr<render::PrimitiveRenderer> m_portalFileRenderer;
   bool m_renderingThumbnail = false;
+  QTimer* m_materialAnimationTimer = nullptr;
 
   /**
    * Tracks whether this map view has most recently gotten the focus. This is tracked and

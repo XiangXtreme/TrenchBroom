@@ -17,6 +17,7 @@ target_sources(TbRenderLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityModelRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/FaceRenderer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/GoldSrcEntityRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GridRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GroupLinkRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GroupRenderer.cpp

@@ -20,6 +20,7 @@
 #pragma once
 
 #include "base/Color.h"
+#include "render/GoldSrcEntityRenderer.h"
 #include "render/Renderable.h"
 
 #include "vm/vec.h"
@@ -27,6 +28,7 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace tb
@@ -45,9 +47,8 @@ class BrushVertexArray;
 class RenderBatch;
 
 /**
- * One drawable sub-range within a transparent-pass material's index buffer, carrying
- * enough information to sort it against every other material's groups by distance to
- * the camera and draw it on its own. See FaceRenderer's sorted-draw mode.
+ * One drawable sub-range within a material's index buffer, with entity render settings
+ * and a position for back-to-front sorting in the transparent pass.
  */
 struct TransparentDrawItem
 {
@@ -55,6 +56,7 @@ struct TransparentDrawItem
   size_t indexPos;
   size_t indexCount;
   vm::vec3f sortPosition;
+  GoldSrcEntityRenderSettings entitySettings;
 };
 
 class FaceRenderer : public IndexedRenderable
@@ -67,6 +69,8 @@ private:
   std::shared_ptr<MaterialToBrushIndicesMap> m_indexArrayMap;
   std::shared_ptr<const std::vector<TransparentDrawItem>> m_sortedDrawItems;
   std::vector<const TransparentDrawItem*> m_transparentDrawOrder;
+  std::shared_ptr<const std::vector<TransparentDrawItem>> m_opaqueDrawItems;
+  std::unordered_set<const gl::Material*> m_perItemMaterials;
   Color m_faceColor;
   bool m_grayscale = false;
   bool m_tint = false;
@@ -80,12 +84,15 @@ public:
    * If `sortedDrawItems` is non-null, faces are drawn back-to-front by distance to the
    * camera each frame, one draw call per item, instead of one draw call per material.
    * See TransparentDrawItem.
+   * Opaque materials present in `opaqueDrawItems` use individual ranges too, so entity
+   * render settings and conveyor offsets do not leak to brushes sharing the material.
    */
   FaceRenderer(
     std::shared_ptr<BrushVertexArray> vertexArray,
     std::shared_ptr<MaterialToBrushIndicesMap> indexArrayMap,
     Color faceColor,
-    std::shared_ptr<const std::vector<TransparentDrawItem>> sortedDrawItems = nullptr);
+    std::shared_ptr<const std::vector<TransparentDrawItem>> sortedDrawItems = nullptr,
+    std::shared_ptr<const std::vector<TransparentDrawItem>> opaqueDrawItems = nullptr);
 
   void setGrayscale(bool grayscale);
   void setTint(bool tint);

@@ -81,6 +81,9 @@ private:
   bool m_showPointEntityBounds = true;
 
   bool m_showFog = false;
+  bool m_goldSrcRendering = false;
+  bool m_animationRequested = false;
+  double m_animationTime = 0.0;
 
   bool m_showGrid = true;
   double m_gridSize = 4;
@@ -106,6 +109,13 @@ public:
 
   bool render2D() const;
   bool render3D() const;
+
+  bool goldSrcRendering() const;
+  void setGoldSrcRendering(bool enabled);
+  double animationTime() const;
+  void setAnimationTime(double time);
+  void requestAnimation();
+  bool animationRequested() const;
 
   const gl::Camera& camera() const;
   Transformation& transformation();

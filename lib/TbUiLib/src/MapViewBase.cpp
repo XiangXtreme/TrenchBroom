@@ -30,6 +30,7 @@
 #include <QShortcut>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QtGlobal>
 
 #include "base/Logger.h"
@@ -135,9 +136,17 @@ MapViewBase::MapViewBase(
   , m_document{document}
   , m_toolBox{toolBox}
   , m_animationManager{std::make_unique<AnimationManager>(this)}
+  , m_materialAnimationTimer{new QTimer{this}}
   , m_updateActionStatesSignalDelayer{new SignalDelayer{this}}
   , m_actionCache{document}
 {
+  m_materialAnimationTimer->setSingleShot(true);
+  connect(m_materialAnimationTimer, &QTimer::timeout, this, [this]() {
+    if (isVisible())
+    {
+      update();
+    }
+  });
   setToolBox(toolBox);
   bindEvents();
   connectObservers();
@@ -1165,6 +1174,14 @@ void MapViewBase::renderContents(gl::Gl& gl)
   }
 
   renderBatch.render(renderContext);
+  if (renderContext.animationRequested() && !m_renderingThumbnail)
+  {
+    m_materialAnimationTimer->start(16);
+  }
+  else
+  {
+    m_materialAnimationTimer->stop();
+  }
 }
 
 void MapViewBase::preRender() {}

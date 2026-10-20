@@ -208,6 +208,7 @@ private:
   bool m_showHiddenBrushes = false;
   bool m_useReadable2DBrushOutlines = false;
   bool m_skipSkyFaces = false;
+  bool m_goldSrcRendering = false;
   std::vector<gl::VertexTypes::P3C4::Vertex> m_coloredEdgeVertices;
 
 public:
@@ -347,6 +348,7 @@ private:
    * geometry changes (i.e. here, after validate()), not every frame.
    */
   std::shared_ptr<std::vector<TransparentDrawItem>> collectTransparentDrawItems() const;
+  std::shared_ptr<std::vector<TransparentDrawItem>> collectOpaqueDrawItems() const;
 
 public:
   /**
