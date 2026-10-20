@@ -237,6 +237,51 @@ TEST_CASE("BrushRenderer rendering")
   auto blendMaterial = gl::Material{"blend", createTextureResource(gl::Texture{4, 4})};
   blendMaterial.setBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+  SECTION("material batches invalidate shared readable outlines only once")
+  {
+    auto first = makeCubeBrushNode(opaqueMaterial);
+    auto second = makeCubeBrushNode(blendMaterial);
+    auto unrelatedMaterial =
+      gl::Material{"unrelated", createTextureResource(gl::Texture{4, 4})};
+    auto unrelated = makeCubeBrushNode(unrelatedMaterial);
+    auto renderer = BrushRenderer{};
+    renderer.setUseReadable2DBrushOutlines(true);
+    renderer.addBrush(first);
+    renderer.addBrush(second);
+    renderer.addBrush(unrelated);
+    const auto draw = [&]() {
+      auto batch = RenderBatch{vboManager};
+      renderer.render(renderContext, batch);
+      batch.render(renderContext);
+      REQUIRE(renderer.valid());
+    };
+    draw();
+    const auto indices = drawnIndices;
+    REQUIRE_FALSE(indices.empty());
+
+    auto timing = RenderTiming{};
+    const auto capture = RenderTiming::Capture{timing};
+    renderer.invalidateMaterials({});
+    CHECK(renderer.valid());
+    auto unusedMaterial =
+      gl::Material{"unused", createTextureResource(gl::Texture{4, 4})};
+    renderer.invalidateMaterials({&unusedMaterial});
+    CHECK(renderer.valid());
+    CHECK(timing.counters["brushes.invalidate_all"] == 0);
+    renderer.invalidateMaterials({&unrelatedMaterial});
+    CHECK_FALSE(renderer.valid());
+    CHECK(timing.counters["brushes.invalidate_all"] == 1);
+    draw();
+
+    timing.counters.clear();
+    renderer.invalidateMaterials({&opaqueMaterial, &blendMaterial});
+    CHECK_FALSE(renderer.valid());
+    CHECK(timing.counters["brushes.invalidate_all"] == 1);
+    drawnIndices.clear();
+    draw();
+    CHECK(drawnIndices == indices);
+  }
+
   SECTION("GoldSrc entities sharing a material retain their individual render amounts")
   {
     renderContext.setGoldSrcRendering(true);

@@ -501,3 +501,60 @@ Qt references: [timer query availability](https://doc.qt.io/qt-6/qopengltimerque
 [swap interval requests](https://doc.qt.io/qt-6/qsurfaceformat.html#setSwapInterval).
 GL references: [timer query semantics](https://registry.khronos.org/OpenGL/extensions/ARB/ARB_timer_query.txt),
 [texture parameters](https://wikis.khronos.org/opengl/GLAPI/glTexParameter).
+
+### Material-batch invalidation during loading
+
+Loading diagnostics also bracket the resource-notification observers installed
+during document/window construction. `resource_notification_ms` is their cumulative
+wall time, `resource_notification_max_ms` is the slowest batch, and
+`resource_notification_batches` counts batches up to the readiness milestone.
+These timings overlap the cumulative loading milestones. With `-LoadTiming`, the
+application log additionally reports slow GL resource polls split into context
+setup, resource processing including notifications, and cleanup.
+
+The readable 2D brush-outline path previously invalidated the entire brush
+renderer for every face matching a changed material. This repeatedly walked all
+brushes and copied the invalid-brush set, even when those brushes were already
+invalid. A material batch now clears each affected brush's vertex cache once and
+invalidates the shared edge stream once after visiting all affected brushes.
+The ordinary outline path invalidates only affected brushes, once per brush;
+empty material batches return immediately. `brushes.invalidate_all` counts global
+invalidations when a render timing capture is active.
+
+Two editor-only captures before and after this change used the same loading mode,
+camera, viewport, and available assets:
+
+| Metric | Before 1 | Before 2 | After 1 | After 2 |
+| --- | ---: | ---: | ---: | ---: |
+| Document load returned (s) | 0.558 | 0.545 | 0.541 | 0.552 |
+| First 3D frame swapped (s) | 2.676 | 2.658 | 1.904 | 1.927 |
+| Editor resources settled (s) | 6.150 | 5.887 | 3.432 | 3.533 |
+| Resource notification total (s) | 2.601 | 2.523 | 0.156 | 0.180 |
+| Slowest notification batch (ms) | 907.3 | 914.9 | 58.0 | 76.1 |
+
+Mean editor readiness fell from 6.019 to 3.483 seconds (42% less time). The interval
+from document-load return to editor readiness fell from 5.467 to 2.936 seconds
+(46% less time). Before captures are `20261021-011520-400` and
+`20261021-011716-368`; after captures are `20261021-011917-188` and
+`20261021-012002-108`. All used `-LoadTiming -NoBuild -WarmupSeconds 1 -Seconds 5`.
+The repeated after captures retained 140 rendered models, 370 model-pass entities,
+and 1706 transparent items per frame. Their PNGs differ from the second baseline
+in 0.057% / 0.069% of pixels; visual inspection found the same scene. Opaque range
+padding and allocation can change submitted vertex counts between processes.
+The same six WAD files remain unavailable; these are warm-cache measurements of
+the available asset set, not cold-disk or complete-asset results.
+
+An additional Play capture, `20261021-012040-359`, reached editor readiness in
+3.616 seconds and Play/resource readiness in 10.670 seconds. Play activation took
+6.803 seconds, including a logged 1.578-second collision build; this change does
+not optimize that separate activation stage. It used `-LoadTiming -Play`, eight
+seconds of warmup, and twelve seconds of measurement. A subsequent control with
+the original invalidation loop restored, `20261021-012347-151`, took 6.092 seconds
+to editor readiness and 13.157 seconds to Play/resource readiness with the same
+parameters; its notification total returned to 2.599 seconds.
+Restoring the optimized loop and rebuilding produced `20261021-012700-711`:
+3.573 seconds to editor readiness, 10.617 seconds to Play/resource readiness,
+and 0.160 seconds in notification observers. The matched control pair reported
+211.3 / 210.1 steady-state FPS and 3.640 / 3.661 ms CPU frame time, respectively:
+steady-state performance was comparable. Both rendered 138 models and 1706
+transparent items per frame; their PNGs differ in 77 pixels (0.0076%).

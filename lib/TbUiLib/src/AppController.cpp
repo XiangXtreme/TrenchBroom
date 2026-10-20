@@ -20,6 +20,7 @@
 #include "ui/AppController.h"
 
 #include <QDesktopServices>
+#include <QElapsedTimer>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
@@ -530,6 +531,12 @@ void AppController::processGlResources()
 
   if (m_glManager->initialized())
   {
+    const auto profile = qEnvironmentVariableIsSet("TB_RENDER_PROFILE_LOAD_TIMING");
+    auto timer = QElapsedTimer{};
+    if (profile)
+    {
+      timer.start();
+    }
     auto taskRunner = [&](auto task) { return taskManager().run_task(std::move(task)); };
 
     auto errorHandler = [&](const auto&, const auto& error) {
@@ -566,11 +573,22 @@ void AppController::processGlResources()
     auto gl = GlQt{glFunctions};
     auto processContext = tb::gl::ProcessContext{gl, errorHandler};
 
+    const auto contextNs = profile ? timer.nsecsElapsed() : 0;
     m_glManager->resourceManager().process(taskRunner, processContext, 20ms);
+    const auto processedNs = profile ? timer.nsecsElapsed() : 0;
     m_glManager->vboManager().destroyPendingVbos(gl);
     m_glManager->fontManager().destroyPendingFonts(gl);
 
     m_glContext->doneCurrent();
+    if (profile && timer.elapsed() > 1)
+    {
+      FileLogger::instance().info() << fmt::format(
+        "Load profile: context {:.3f} ms, resources and notifications {:.3f} ms, cleanup "
+        "{:.3f} ms",
+        static_cast<double>(contextNs) / 1e6,
+        static_cast<double>(processedNs - contextNs) / 1e6,
+        static_cast<double>(timer.nsecsElapsed() - processedNs) / 1e6);
+    }
   }
 }
 

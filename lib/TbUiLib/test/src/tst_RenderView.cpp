@@ -54,6 +54,7 @@
 
 #include "vm/vec_io.h"
 
+#include <algorithm>
 #include <thread>
 
 #include <catch2/catch_test_macros.hpp>
@@ -337,6 +338,19 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   }
   auto loadTimer = QElapsedTimer{};
   loadTimer.start();
+  const auto loadTiming = qEnvironmentVariableIsSet("TB_RENDER_PROFILE_LOAD_TIMING");
+  auto notificationTimer = QElapsedTimer{};
+  auto notificationNs = qint64{0};
+  auto notificationMaxNs = qint64{0};
+  auto notificationBatches = 0;
+  auto& resourceManager = app->glManager().resourceManager();
+  const auto beginNotifications =
+    resourceManager.resourcesWereProcessedNotifier.connect([&](const auto&) {
+      if (loadTiming)
+      {
+        notificationTimer.start();
+      }
+    });
   auto document = MapDocument::loadDocument(
                     app->environmentConfig(),
                     *game,
@@ -353,6 +367,16 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
     qScopeGuard([&]() { QApplication::instance()->removeEventFilter(&inputFilter); });
   auto window = MapWindow{*app, std::move(document)};
   const auto windowConstructedMs = loadTimer.elapsed();
+  const auto endNotifications =
+    resourceManager.resourcesWereProcessedNotifier.connect([&](const auto&) {
+      if (loadTiming && notificationTimer.isValid())
+      {
+        const auto ns = notificationTimer.nsecsElapsed();
+        notificationNs += ns;
+        notificationMaxNs = std::max(notificationMaxNs, ns);
+        ++notificationBatches;
+      }
+    });
   window.resize(1400, 900);
   auto* view = window.findChild<MapView3D*>();
   REQUIRE(view != nullptr);
@@ -383,7 +407,6 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   {
     camera.lookAt(camera.position() + *direction, vm::vec3f{0, 0, 1});
   }
-  const auto loadTiming = qEnvironmentVariableIsSet("TB_RENDER_PROFILE_LOAD_TIMING");
   // Loading can request more resources on a subsequent frame. Require two
   // presented frames and a quiet interval; failed resources also settle, so the
   // accompanying asset warnings remain part of interpreting this measurement.
@@ -441,6 +464,9 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
         {"play_activation_ms", play ? playActiveMs - playStartMs : 0},
         {"total_ready_ms", readyMs},
         {"resource_quiet_interval_ms", 250},
+        {"resource_notification_ms", static_cast<double>(notificationNs) / 1e6},
+        {"resource_notification_max_ms", static_cast<double>(notificationMaxNs) / 1e6},
+        {"resource_notification_batches", notificationBatches},
         {"play",
          play}}}.toJson());
   }

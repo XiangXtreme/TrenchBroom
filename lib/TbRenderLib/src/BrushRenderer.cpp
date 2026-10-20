@@ -282,6 +282,7 @@ BrushRenderer::BrushRenderer()
 
 void BrushRenderer::invalidate()
 {
+  RenderTiming::count("brushes.invalidate_all", 1);
   for (auto* brushNode : m_allBrushes)
   {
     // this will also invalidate already invalid brushes, which
@@ -297,18 +298,36 @@ void BrushRenderer::invalidate()
 
 void BrushRenderer::invalidateMaterials(const std::vector<const gl::Material*>& materials)
 {
+  if (materials.empty())
+  {
+    return;
+  }
   const auto materialSet =
     std::unordered_set<const gl::Material*>{materials.begin(), materials.end()};
+  auto invalidateAll = false;
   for (auto* brushNode : m_allBrushes)
   {
-    for (const auto& face : brushNode->brush().faces())
+    if (std::ranges::any_of(brushNode->brush().faces(), [&](const auto& face) {
+          return materialSet.contains(face.material());
+        }))
     {
-      if (materialSet.count(face.material()) > 0)
+      brushNode->brushRendererBrushCache().invalidateVertexCache();
+      if (m_useReadable2DBrushOutlines)
       {
-        brushNode->brushRendererBrushCache().invalidateVertexCache();
+        invalidateAll = true;
+      }
+      else
+      {
         invalidateBrush(*brushNode);
       }
     }
+  }
+  // Readable outlines share one edge stream. Invalidate it once for the whole
+  // batch, after clearing every affected brush's vertex cache, rather than once
+  // for each matching face (which repeatedly visits all brushes).
+  if (invalidateAll)
+  {
+    invalidate();
   }
 }
 
