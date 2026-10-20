@@ -112,6 +112,7 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 
 include(cmake/Dependencies.cmake)
+include(cmake/PythonRuntime.cmake)
 include(cmake/Lto.cmake)
 
 # Populate version variables using git

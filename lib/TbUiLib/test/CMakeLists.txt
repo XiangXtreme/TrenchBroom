@@ -43,6 +43,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PluginInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PythonPluginManifest.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PythonApi.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PythonRuntime.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PlayModeRawMouse.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PlayModeShowPre.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PlayModeTimeline.cpp
@@ -110,6 +111,7 @@ if(TB_XCB_XINPUT_FOUND)
 endif()
 
 set_target_properties(TbUiLibTest PROPERTIES AUTOMOC TRUE)
+tb_deploy_python_runtime(TbUiLibTest)
 
 add_dependencies(TbUiLibTest CmdTool)
 file(GENERATE

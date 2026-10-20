@@ -4,6 +4,13 @@ Follow these instructions if you want to get started developing on TrenchBroom.
 
 To see how releases of TrenchBroom are packaged, consult our CI scripts instead.
 
+Windows builds deploy the matching embedded Python standard library and extension
+modules to `python/Lib` and `python/DLLs` beside the executable. Keep this directory
+with the executable when copying a build. Windows release archives include it;
+the console does not require a separately installed Python or depend on its
+registry entries, `PYTHONHOME`, or `PYTHONPATH`. Missing or damaged runtime files
+are reported as initialization errors instead of terminating the editor.
+
 ## Running UI tests
 
 Build `TbUiLibTest` before running its tests. UI tests keep QWidget windows, dialogs

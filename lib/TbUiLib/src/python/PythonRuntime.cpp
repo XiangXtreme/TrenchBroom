@@ -17,6 +17,8 @@
 #undef slots
 #endif
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -38,6 +40,7 @@ namespace tb::ui
 struct PythonRuntimeState
 {
   std::unordered_map<MapWindow*, PyObject*> consoleGlobals;
+  std::string initializationError;
 };
 
 namespace
@@ -698,6 +701,11 @@ PythonRuntime& PythonRuntime::instance()
 
 bool PythonRuntime::ensureInitialized()
 {
+  if (!m_state->initializationError.empty())
+  {
+    m_lastError = m_state->initializationError;
+    return false;
+  }
   if (!installApiModule())
   {
     return false;
@@ -705,7 +713,70 @@ bool PythonRuntime::ensureInitialized()
 
   if (!Py_IsInitialized())
   {
-    Py_Initialize();
+    auto config = PyConfig{};
+    PyConfig_InitPythonConfig(&config);
+    config.parse_argv = 0;
+    config.install_signal_handlers = 0;
+    auto clearConfig = kdl::invoke_later{[&]() { PyConfig_Clear(&config); }};
+    const auto checkStatus = [&](const PyStatus status) {
+      if (!PyStatus_Exception(status))
+      {
+        return true;
+      }
+      m_lastError = "Python initialization failed";
+      if (status.func != nullptr)
+      {
+        m_lastError += std::string{" in "} + status.func;
+      }
+      if (status.err_msg != nullptr)
+      {
+        m_lastError += std::string{": "} + status.err_msg;
+      }
+      // A failed CPython initialization can leave partial interpreter state.
+      // Keep subsequent console submissions away from that state.
+      m_state->initializationError = m_lastError;
+      return false;
+    };
+
+#ifdef _WIN32
+    const auto runtimeRoot =
+      QDir{QCoreApplication::applicationDirPath()}.filePath("python");
+    const auto stdlib = QDir{runtimeRoot}.filePath("Lib");
+    if (QFileInfo{runtimeRoot}.isDir())
+    {
+      // Explicit paths isolate the bundle from stale Python registry entries
+      // after a Windows profile rename, and from PYTHONHOME/PYTHONPATH.
+      if (!QFileInfo::exists(QDir{stdlib}.filePath("encodings/__init__.py")))
+      {
+        m_lastError =
+          "Bundled Python standard library is missing: " + stdlib.toStdString();
+        return false;
+      }
+      config.isolated = 1;
+      config.use_environment = 0;
+      config.user_site_directory = 0;
+      config.safe_path = 1;
+      config.module_search_paths_set = 1;
+      const auto home = runtimeRoot.toStdWString();
+      if (!checkStatus(PyConfig_SetString(&config, &config.home, home.c_str())))
+      {
+        return false;
+      }
+      for (const auto& path : {stdlib, QDir{runtimeRoot}.filePath("DLLs"), runtimeRoot})
+      {
+        const auto nativePath = path.toStdWString();
+        if (!checkStatus(
+              PyWideStringList_Append(&config.module_search_paths, nativePath.c_str())))
+        {
+          return false;
+        }
+      }
+    }
+#endif
+    if (!checkStatus(Py_InitializeFromConfig(&config)))
+    {
+      return false;
+    }
   }
   if (!Py_IsInitialized())
   {
@@ -757,7 +828,10 @@ bool PythonRuntime::runConsoleCommand(
   }
   if (!ensureInitialized())
   {
-    m_lastError = "Python API initialization failed";
+    if (m_lastError.empty())
+    {
+      m_lastError = "Python API initialization failed";
+    }
     if (context.logger != nullptr)
     {
       context.logger->error() << m_lastError;
@@ -807,7 +881,8 @@ bool PythonRuntime::runConsoleCommand(
   if (trenchbroomModule != nullptr)
   {
     auto* documents = PyObject_GetAttrString(trenchbroomModule, "documents");
-    auto* docFunc = documents == nullptr ? nullptr : PyObject_GetAttrString(documents, "current");
+    auto* docFunc =
+      documents == nullptr ? nullptr : PyObject_GetAttrString(documents, "current");
     if (docFunc != nullptr)
     {
       auto* docObj = PyObject_CallNoArgs(docFunc);
@@ -912,7 +987,8 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   }
   if (!ensureInitialized())
   {
-    execution.error = "Python API initialization failed";
+    execution.error = m_lastError.empty() ? QString{"Python API initialization failed"}
+                                          : QString::fromStdString(m_lastError);
     return execution;
   }
 
@@ -1142,7 +1218,10 @@ bool PythonRuntime::runScript(
   {
     if (context.logger)
     {
-      m_lastError = "Python API initialization failed";
+      if (m_lastError.empty())
+      {
+        m_lastError = "Python API initialization failed";
+      }
       context.logger->error() << m_lastError;
     }
     return false;

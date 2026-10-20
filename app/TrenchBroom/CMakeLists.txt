@@ -239,10 +239,7 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy "${TB_RESOURCE_DIR}/win32/icons/DocIcon.ico"    "${CMAKE_CURRENT_BINARY_DIR}"
             COMMAND ${CMAKE_COMMAND} -E copy "${TB_RESOURCE_DIR}/win32/icons/WindowIcon.ico" "${CMAKE_CURRENT_BINARY_DIR}")
 
-    if(Python3_RUNTIME_LIBRARY)
-        add_custom_command(TARGET TrenchBroom POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${Python3_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:TrenchBroom>")
-    endif()
+    tb_deploy_python_runtime(TrenchBroom)
     # Run windeployqt which copies the Qt dlls into the deployable folder, along with necessary runtime dlls by the compiler
     # Only copy translations on release builds, as deploying them takes significantly longer
     if(NOT TB_SKIP_WINDEPLOYQT)
@@ -384,6 +381,14 @@ if(WIN32)
     endif()
 
     install(TARGETS TrenchBroom RUNTIME DESTINATION . COMPONENT TrenchBroom)
+    install(DIRECTORY "$<TARGET_FILE_DIR:TrenchBroom>/python"
+            DESTINATION . COMPONENT TrenchBroom
+            PATTERN "__pycache__" EXCLUDE
+            PATTERN "*.pyc" EXCLUDE)
+    install(FILES "${Python3_RUNTIME_LIBRARY}" DESTINATION . COMPONENT TrenchBroom)
+    get_filename_component(TB_PYTHON_INSTALL_DIR "${Python3_EXECUTABLE}" DIRECTORY)
+    install(FILES "${TB_PYTHON_INSTALL_DIR}/python3.dll"
+            DESTINATION . COMPONENT TrenchBroom OPTIONAL)
     install(CODE [[
         # The regexes are a workaround for https://gitlab.kitware.com/cmake/cmake/-/issues/22431
         file(GET_RUNTIME_DEPENDENCIES
