@@ -79,6 +79,7 @@
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/RenderService.h"
+#include "render/RenderTiming.h"
 #include "ui/ActionExecutionContext.h"
 #include "ui/ActionManager.h"
 #include "ui/AnimationManager.h"
@@ -1119,7 +1120,11 @@ bool MapViewBase::shouldRenderFocusIndicator() const
 
 void MapViewBase::renderContents(gl::Gl& gl)
 {
-  preRender();
+  const auto timing = render::RenderTimingScope{"cpu.map"};
+  {
+    const auto scope = render::RenderTimingScope{"cpu.camera_simulation"};
+    preRender();
+  }
 
   const auto& fontPath = pref(Preferences::RendererFontPath);
   const auto fontSize = static_cast<size_t>(pref(Preferences::RendererFontSize));
@@ -1162,6 +1167,7 @@ void MapViewBase::renderContents(gl::Gl& gl)
   renderMap(m_document.mapRenderer(), renderContext, renderBatch);
   if (!m_renderingThumbnail)
   {
+    const auto scope = render::RenderTimingScope{"cpu.overlays.build"};
     renderTools(m_toolBox, renderContext, renderBatch);
 
     renderCoordinateSystem(renderContext, renderBatch);

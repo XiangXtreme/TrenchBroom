@@ -38,6 +38,7 @@
 #include "render/GoldSrcEntityRenderer.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 #include "render/Transformation.h"
 
 #include "vm/mat.h"
@@ -219,6 +220,10 @@ void EntityModelRenderer::renderTransparent(RenderBatch& renderBatch)
 
 void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool transparent)
 {
+  const auto timing = RenderTimingScope{"cpu.models.draw"};
+  const auto passTiming =
+    RenderTimingScope{transparent ? "cpu.models.transparent" : "cpu.models.opaque"};
+  RenderTiming::count("models.pass_entities", m_entities.size());
   if (m_entities.empty())
   {
     return;
@@ -289,6 +294,7 @@ void EntityModelRenderer::renderPass(RenderContext& renderContext, const bool tr
       }
       auto renderFunc = GoldSrcEntityMaterialRenderFunc{
         shader, renderContext.minFilterMode(), renderContext.magFilterMode(), settings};
+      RenderTiming::count("models.render_calls", 1);
       renderer.render(gl, shader.program(), renderFunc);
     };
 

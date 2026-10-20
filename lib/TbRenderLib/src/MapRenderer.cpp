@@ -53,6 +53,7 @@
 #include "render/ObjectRenderer.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 #include "render/SkyRenderer.h"
 
 #include "kd/overload.h"
@@ -246,6 +247,7 @@ void MapRenderer::restoreSelectionColors()
 
 void MapRenderer::render(RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  const auto timing = RenderTimingScope{"cpu.scene.build"};
   renderContext.setGoldSrcRendering(usesGoldSrcRendering(m_map.gameInfo().gameConfig));
   setupGL(renderBatch);
   updateSkyFaceRendering(renderContext);
@@ -284,6 +286,7 @@ void MapRenderer::setupGL(RenderBatch& renderBatch)
 
 void MapRenderer::renderSky(RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  const auto timing = RenderTimingScope{"cpu.scene.sky"};
   m_skyRenderer->render(renderContext, renderBatch);
 }
 
@@ -336,6 +339,7 @@ void MapRenderer::renderLockedTransparent(
 void MapRenderer::renderEntityDecals(
   RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  const auto timing = RenderTimingScope{"cpu.scene.decals"};
   // only render decals in the 3D view
   if (renderContext.render3D())
   {
@@ -346,11 +350,13 @@ void MapRenderer::renderEntityDecals(
 void MapRenderer::renderEntityLinks(
   RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  const auto timing = RenderTimingScope{"cpu.scene.entity_links"};
   m_entityLinkRenderer->render(renderContext, renderBatch);
 }
 
 void MapRenderer::renderGroupLinks(RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  const auto timing = RenderTimingScope{"cpu.scene.group_links"};
   m_groupLinkRenderer->render(renderContext, renderBatch);
 }
 

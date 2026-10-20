@@ -30,6 +30,7 @@
 #include "mdl/TagAttribute.h"
 #include "render/BrushRendererArrays.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 
 #include "kd/contracts.h"
 #include "kd/string_compare.h"
@@ -531,6 +532,7 @@ void BrushRenderer::renderEdges(RenderContext& renderContext, RenderBatch& rende
 
 void BrushRenderer::validate()
 {
+  const auto timing = RenderTimingScope{"cpu.brush.validate"};
   contract_pre(!valid());
 
   m_coloredEdgeVertices.clear();

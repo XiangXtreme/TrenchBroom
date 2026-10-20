@@ -26,6 +26,7 @@
 #include "gl/Shaders.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 
 #include "kd/contracts.h"
 
@@ -74,6 +75,7 @@ void LinkRenderer::prepare(gl::Gl& gl, gl::VboManager& vboManager)
 
 void LinkRenderer::render(RenderContext& renderContext)
 {
+  const auto timing = RenderTimingScope{"cpu.links.draw"};
   contract_pre(m_valid);
 
   renderLines(renderContext);

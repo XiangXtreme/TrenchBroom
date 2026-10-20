@@ -37,12 +37,14 @@
 #include "gl/VertexArray.h"
 #include "gl/VertexType.h"
 #include "prefs/Preferences.h"
+#include "render/RenderTiming.h"
 #include "render/Transformation.h"
 #include "ui/AppController.h"
 #include "ui/GlFunctions.h"
 #include "ui/GlQt.h"
 #include "ui/InputEvent.h"
 #include "ui/QColorUtils.h"
+#include "ui/RenderProfiler.h"
 
 #include "vm/mat.h"
 #include "vm/mat_ext.h"
@@ -57,7 +59,20 @@ namespace tb::ui
 RenderView::RenderView(AppController& appController, QWidget* parent)
   : QOpenGLWidget{parent}
   , m_appController{appController}
+  , m_renderProfiler{RenderProfiler::fromEnvironment()}
 {
+  connect(this, &QOpenGLWidget::aboutToCompose, this, [this]() {
+    if (m_renderProfiler)
+    {
+      m_renderProfiler->aboutToCompose();
+    }
+  });
+  connect(this, &QOpenGLWidget::frameSwapped, this, [this]() {
+    if (m_renderProfiler)
+    {
+      m_renderProfiler->frameSwapped();
+    }
+  });
   auto pal = QPalette{};
   const auto color = pal.color(QPalette::Highlight);
   m_focusColor = fromQColor(color);
@@ -106,7 +121,16 @@ RenderView::RenderView(AppController& appController, QWidget* parent)
       [this](const auto&) { update(); });
 }
 
-RenderView::~RenderView() = default;
+RenderView::~RenderView()
+{
+  if (m_renderProfiler)
+  {
+    makeCurrent();
+    m_renderProfiler->releaseGpuQueries();
+    m_renderProfiler.reset();
+    doneCurrent();
+  }
+}
 
 void RenderView::paintEvent(QPaintEvent* event)
 {
@@ -216,7 +240,24 @@ bool RenderView::event(QEvent* event)
 void RenderView::paintGL()
 {
   m_frameStart.start();
-  render();
+  if (m_renderProfiler)
+  {
+    auto& timing = m_renderProfiler->beginFrame(
+      *context(),
+      QString::fromLatin1(metaObject()->className()),
+      size() * devicePixelRatioF(),
+      pref(Preferences::RenderFpsLimit));
+    {
+      const auto capture = render::RenderTiming::Capture{timing};
+      const auto scope = render::RenderTimingScope{"cpu.frame"};
+      render();
+    }
+    m_renderProfiler->endFrame();
+  }
+  else
+  {
+    render();
+  }
 
   // Update stats
   m_framesRendered++;
@@ -263,6 +304,22 @@ bool RenderView::multisample() const
 
 void RenderView::initializeGL()
 {
+  if (m_renderProfiler)
+  {
+    connect(
+      context(),
+      &QOpenGLContext::aboutToBeDestroyed,
+      this,
+      [this]() {
+        if (m_renderProfiler)
+        {
+          makeCurrent();
+          m_renderProfiler->releaseGpuQueries();
+          doneCurrent();
+        }
+      },
+      Qt::DirectConnection);
+  }
   doInitializeGL();
 }
 
@@ -276,9 +333,19 @@ void RenderView::render()
 {
   auto gl = GlQt{glFunctions()};
 
-  processInput();
-  clearBackground(gl);
-  renderContents(gl);
+  {
+    const auto scope = render::RenderTimingScope{"cpu.input"};
+    processInput();
+  }
+  {
+    const auto scope = render::RenderTimingScope{"cpu.clear"};
+    clearBackground(gl);
+  }
+  {
+    const auto scope = render::RenderTimingScope{"cpu.contents"};
+    renderContents(gl);
+  }
+  const auto overlays = render::RenderTimingScope{"cpu.focus_and_alpha"};
   renderFocusIndicator(gl);
 
   // Work around a Qt/Wayland bug (QTBUG-110014, QTBUG-132197, QTBUG-119214) where

@@ -29,6 +29,7 @@
 #include "render/BrushRendererArrays.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 
 namespace tb::render
 {
@@ -75,6 +76,7 @@ EdgeRenderer::RenderBase::~RenderBase() = default;
 
 void EdgeRenderer::RenderBase::renderEdges(RenderContext& renderContext)
 {
+  const auto timing = RenderTimingScope{"cpu.edges.draw"};
   auto& gl = renderContext.gl();
 
   if (m_params.offset != 0.0)

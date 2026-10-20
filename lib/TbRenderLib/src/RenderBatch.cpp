@@ -21,6 +21,7 @@
 
 #include "gl/VboManager.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 #include "render/Renderable.h"
 
 #include "kd/contracts.h"
@@ -105,6 +106,7 @@ void RenderBatch::addOneShot(IndexedRenderable* renderable)
 
 void RenderBatch::render(RenderContext& renderContext)
 {
+  const auto timing = RenderTimingScope{"cpu.batch"};
   prepareRenderables(renderContext.gl());
   renderRenderables(renderContext);
 }
@@ -118,6 +120,10 @@ void RenderBatch::doAdd(Renderable* renderable)
 
 void RenderBatch::prepareRenderables(gl::Gl& gl)
 {
+  const auto timing = RenderTimingScope{"cpu.batch.prepare"};
+  RenderTiming::count("batch.renderables", m_batch.size());
+  RenderTiming::count("batch.direct", m_directRenderables.size());
+  RenderTiming::count("batch.indexed", m_indexedRenderables.size());
   for (auto* renderable : m_directRenderables)
   {
     renderable->prepare(gl, m_vboManager);
@@ -130,6 +136,7 @@ void RenderBatch::prepareRenderables(gl::Gl& gl)
 
 void RenderBatch::renderRenderables(RenderContext& renderContext)
 {
+  const auto timing = RenderTimingScope{"cpu.batch.draw"};
   for (auto* renderable : m_batch)
   {
     renderable->render(renderContext);

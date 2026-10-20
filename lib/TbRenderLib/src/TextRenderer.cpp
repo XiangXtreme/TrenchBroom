@@ -29,6 +29,7 @@
 #include "gl/TextureFont.h"
 #include "mdl/BasicShapes.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 #include "render/TextAnchor.h"
 
 #include "vm/mat_ext.h"
@@ -190,12 +191,14 @@ vm::vec2f TextRenderer::stringSize(
 
 void TextRenderer::prepare(gl::Gl& gl, gl::VboManager& vboManager)
 {
+  const auto timing = RenderTimingScope{"cpu.text.prepare"};
   prepare(gl, m_entries, false, vboManager);
   prepare(gl, m_entriesOnTop, true, vboManager);
 }
 
 void TextRenderer::render(RenderContext& renderContext)
 {
+  const auto timing = RenderTimingScope{"cpu.text.draw"};
   auto& gl = renderContext.gl();
 
   const auto& viewport = renderContext.camera().viewport();

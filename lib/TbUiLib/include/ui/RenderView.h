@@ -26,6 +26,7 @@
 #include "base/NotifierConnection.h"
 #include "ui/InputEvent.h"
 
+#include <memory>
 #include <string>
 
 class QOpenGLFunctions_2_1;
@@ -44,6 +45,7 @@ class VboManager;
 namespace ui
 {
 class AppController;
+class RenderProfiler;
 
 class RenderView : public QOpenGLWidget, public InputEventProcessor
 {
@@ -54,6 +56,7 @@ private:
   InputEventRecorder m_eventRecorder;
   QTimer* m_frameTimer = nullptr;
   QElapsedTimer m_frameStart;
+  std::unique_ptr<RenderProfiler> m_renderProfiler;
 
   NotifierConnection m_notifierConnection;
 

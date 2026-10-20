@@ -203,6 +203,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/RecentDocumentListBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/RecentDocuments.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/RenderView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/RenderProfiler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ReplaceMaterialDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/RotateToolPage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SweepToolPage.cpp

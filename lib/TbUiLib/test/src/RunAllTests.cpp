@@ -60,6 +60,11 @@ int main(int argc, char** argv)
     std::make_unique<tb::TestPreferenceStore>(), K(saveInstantly));
 
   const auto showWindows = qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1;
+  if (qEnvironmentVariableIsSet("TB_RENDER_PROFILE_MAP"))
+  {
+    // The opt-in map benchmark uses the application's real shared resource uploader.
+    QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+  }
   if (!showWindows)
   {
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);

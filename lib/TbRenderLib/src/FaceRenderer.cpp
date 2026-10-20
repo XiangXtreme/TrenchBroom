@@ -32,6 +32,7 @@
 #include "render/BrushRendererArrays.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 
 #include "vm/vec.h"
 
@@ -169,6 +170,7 @@ void FaceRenderer::render(RenderBatch& renderBatch)
 
 void FaceRenderer::prepare(gl::Gl& gl, gl::VboManager& vboManager)
 {
+  const auto timing = RenderTimingScope{"cpu.faces.prepare"};
   m_vertexArray->prepare(gl, vboManager);
 
   for (const auto& [material, brushIndexHolderPtr] : *m_indexArrayMap)
@@ -179,6 +181,7 @@ void FaceRenderer::prepare(gl::Gl& gl, gl::VboManager& vboManager)
 
 void FaceRenderer::render(RenderContext& context)
 {
+  const auto timing = RenderTimingScope{"cpu.faces.draw"};
   auto& gl = context.gl();
 
   auto& shaderManager = context.shaderManager();
@@ -270,6 +273,8 @@ void FaceRenderer::renderTransparentItems(
   gl::MaterialRenderFunc& renderFunc,
   const std::function<void(const gl::Material*)>& setMaterialUniforms)
 {
+  const auto timing = RenderTimingScope{"cpu.faces.transparent"};
+  RenderTiming::count("faces.transparent_items", m_sortedDrawItems->size());
   auto& gl = context.gl();
 
   // Correct back-to-front blending requires draw order to follow distance to the
@@ -280,21 +285,25 @@ void FaceRenderer::renderTransparentItems(
   // Sort a reused array of pointers into m_sortedDrawItems rather than a copy of the
   // items themselves -- the camera (and therefore the sort order) can change every
   // frame, but the items themselves only change when BrushRenderer::validate() reruns.
-  m_transparentDrawOrder.resize(m_sortedDrawItems->size());
-  std::ranges::transform(
-    *m_sortedDrawItems, m_transparentDrawOrder.begin(), [](const auto& item) {
-      return &item;
+  {
+    const auto sortTiming = RenderTimingScope{"cpu.faces.transparent_sort"};
+    m_transparentDrawOrder.resize(m_sortedDrawItems->size());
+    std::ranges::transform(
+      *m_sortedDrawItems, m_transparentDrawOrder.begin(), [](const auto& item) {
+        return &item;
+      });
+    std::ranges::sort(m_transparentDrawOrder, [&](const auto* lhs, const auto* rhs) {
+      return vm::squared_distance(lhs->sortPosition, context.camera().position())
+             > vm::squared_distance(rhs->sortPosition, context.camera().position());
     });
-  std::ranges::sort(m_transparentDrawOrder, [&](const auto* lhs, const auto* rhs) {
-    return vm::squared_distance(lhs->sortPosition, context.camera().position())
-           > vm::squared_distance(rhs->sortPosition, context.camera().position());
-  });
+  }
 
   for (const auto* item : m_transparentDrawOrder)
   {
     if (const auto it = m_indexArrayMap->find(item->material);
         it != m_indexArrayMap->end())
     {
+      RenderTiming::count("faces.draw_calls", 1);
       const auto& brushIndexHolderPtr = it->second;
 
       setMaterialUniforms(item->material);
@@ -317,12 +326,17 @@ void FaceRenderer::renderOpaqueItems(
   gl::MaterialRenderFunc& renderFunc,
   const std::function<void(const gl::Material*)>& setMaterialUniforms) const
 {
+  const auto timing = RenderTimingScope{"cpu.faces.opaque"};
+  RenderTiming::count("faces.material_groups", m_indexArrayMap->size());
+  RenderTiming::count(
+    "faces.opaque_items", m_opaqueDrawItems ? m_opaqueDrawItems->size() : 0);
   auto& gl = context.gl();
 
   for (const auto& [material, brushIndexHolderPtr] : *m_indexArrayMap)
   {
     if (brushIndexHolderPtr->hasValidIndices() && !m_perItemMaterials.contains(material))
     {
+      RenderTiming::count("faces.draw_calls", 1);
       setMaterialUniforms(material);
 
       renderFunc.before(gl, material);
@@ -338,6 +352,7 @@ void FaceRenderer::renderOpaqueItems(
     auto& entityRenderFunc = static_cast<RenderFunc&>(renderFunc);
     for (const auto& item : *m_opaqueDrawItems)
     {
+      RenderTiming::count("faces.draw_calls", 1);
       const auto& holder = m_indexArrayMap->at(item.material);
       setMaterialUniforms(item.material);
       entityRenderFunc.setDrawItem(context, item);

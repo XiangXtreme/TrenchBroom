@@ -24,6 +24,7 @@
 #include "gl/VboManager.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
+#include "render/RenderTiming.h"
 #include "render/Renderable.h"
 
 #include <string>
@@ -248,6 +249,38 @@ TEST_CASE("RenderBatch")
 
     CHECK(order == std::vector<int>{1, 2});
   }
+}
+
+TEST_CASE("RenderTiming")
+{
+  auto outer = RenderTiming{};
+  auto inner = RenderTiming{};
+  REQUIRE(RenderTiming::current == nullptr);
+  {
+    const auto disabled = RenderTimingScope{"disabled"};
+    RenderTiming::count("disabled", 1);
+  }
+  CHECK(outer.milliseconds.empty());
+  CHECK(outer.counters.empty());
+  {
+    const auto capture = RenderTiming::Capture{outer};
+    const auto total = RenderTimingScope{"total"};
+    RenderTiming::count("items", 2);
+    {
+      const auto nestedCapture = RenderTiming::Capture{inner};
+      const auto nested = RenderTimingScope{"nested"};
+      RenderTiming::count("items", 5);
+    }
+    CHECK(RenderTiming::current == &outer);
+    RenderTiming::count("items", 3);
+  }
+  CHECK(RenderTiming::current == nullptr);
+  CHECK(outer.counters.at("items") == 5);
+  CHECK(inner.counters.at("items") == 5);
+  CHECK(outer.milliseconds.contains("total"));
+  CHECK_FALSE(outer.milliseconds.contains("nested"));
+  CHECK(inner.milliseconds.contains("nested"));
+  CHECK(outer.milliseconds.at("total") >= inner.milliseconds.at("nested"));
 }
 
 } // namespace tb::render

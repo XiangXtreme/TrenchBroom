@@ -30,6 +30,7 @@
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/RenderService.h"
+#include "render/RenderTiming.h"
 #include "render/TextAnchor.h"
 
 #include "kd/flat_set.h"
@@ -227,6 +228,7 @@ void EntityRenderer::renderTransparent(
 
 void EntityRenderer::renderBounds(RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  const auto timing = RenderTimingScope{"cpu.entity_bounds.build"};
   if (!m_boundsValid)
   {
     validateBounds();
@@ -309,6 +311,7 @@ void EntityRenderer::renderTransparentModels(
 void EntityRenderer::renderClassnames(
   RenderContext& renderContext, RenderBatch& renderBatch)
 {
+  const auto timing = RenderTimingScope{"cpu.labels.build"};
   if (m_showOverlays && renderContext.showEntityClassnames())
   {
     auto renderService = render::RenderService{renderContext, renderBatch};
