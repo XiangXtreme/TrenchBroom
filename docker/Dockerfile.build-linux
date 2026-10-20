@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y software-properties-common && \
       freeglut3-dev \
       mesa-common-dev \
       libgl1-mesa-dev \
+      libgl1-mesa-dri \
       libglu1-mesa-dev \
       libglm-dev \
       pandoc \
@@ -44,6 +45,8 @@ RUN apt-get update && apt-get install -y software-properties-common && \
       libwayland-egl1 \
       libxkbcommon-dev \
       libxkbcommon-x11-0 \
+      xvfb \
+      xauth \
       ccache \
       file \
       wget \

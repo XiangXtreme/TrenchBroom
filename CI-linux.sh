@@ -19,9 +19,8 @@ cd cmakebuild
 # containers where FUSE mounts are unavailable.
 export APPIMAGE_EXTRACT_AND_RUN=1
 
-# Catch2 test discovery runs test binaries during the build. Ensure a UTF-8
-# locale and headless Qt platform are set for both build-time discovery and
-# ctest execution.
+# Catch2 discovery only lists tests and does not need an OpenGL context.
+# Test execution below uses Xvfb because QOpenGLWidget requires an X11 display.
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 export QT_QPA_PLATFORM=offscreen
@@ -59,7 +58,9 @@ cmake --build . --config Release --parallel 2 || exit 1
 # Run tests
 
 BUILD_DIR=$(pwd)
-ctest --test-dir "$BUILD_DIR" --output-on-failure -j || exit 1
+xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" \
+  env QT_QPA_PLATFORM=xcb LIBGL_ALWAYS_SOFTWARE=1 \
+  ctest --test-dir "$BUILD_DIR" --output-on-failure -j || exit 1
 
 cd "$BUILD_DIR"
 ldd --verbose ./app/TrenchBroom/trenchbroom
