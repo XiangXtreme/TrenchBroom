@@ -390,25 +390,34 @@ if(WIN32)
     install(FILES "${TB_PYTHON_INSTALL_DIR}/python3.dll"
             DESTINATION . COMPONENT TrenchBroom OPTIONAL)
     install(CODE [[
+        # QMediaPlayer loads these plugins at runtime, so scanning only the executable
+        # misses both the backend and its FFmpeg dependencies.
+        file(GLOB TB_MULTIMEDIA_PLUGINS "$<TARGET_FILE_DIR:TrenchBroom>/multimedia/*.dll")
+        if(NOT TB_MULTIMEDIA_PLUGINS)
+            message(FATAL_ERROR "Qt multimedia plugins are missing; run windeployqt before packaging")
+        endif()
         # The regexes are a workaround for https://gitlab.kitware.com/cmake/cmake/-/issues/22431
         file(GET_RUNTIME_DEPENDENCIES
             RESOLVED_DEPENDENCIES_VAR RESOLVED_DLLS
             PRE_EXCLUDE_REGEXES "api-ms-.*" "ext-ms-.*" "hvsifiletrust.dll"
             POST_EXCLUDE_REGEXES ".*[Ss][Yy][Ss][Tt][Ee][Mm]32.*"
-            EXECUTABLES "$<TARGET_FILE:TrenchBroom>")
+            EXECUTABLES "$<TARGET_FILE:TrenchBroom>"
+            LIBRARIES ${TB_MULTIMEDIA_PLUGINS}
+            DIRECTORIES "$<TARGET_FILE_DIR:TrenchBroom>")
 
         message("Packaging .DLL's:")
         foreach(DLL ${RESOLVED_DLLS})
             message("${DLL}")
             file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}" FILES "${DLL}")
         endforeach()
-    ]])
+    ]] COMPONENT TrenchBroom)
 
     # Qt plugins etc.
     install(DIRECTORY
             "$<TARGET_FILE_DIR:TrenchBroom>/platforms"
             "$<TARGET_FILE_DIR:TrenchBroom>/styles"
             "$<TARGET_FILE_DIR:TrenchBroom>/tls"
+            "$<TARGET_FILE_DIR:TrenchBroom>/multimedia"
             DESTINATION . COMPONENT TrenchBroom)
 
 

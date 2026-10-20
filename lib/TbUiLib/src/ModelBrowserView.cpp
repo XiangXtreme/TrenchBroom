@@ -28,6 +28,7 @@
 #include <QScrollBar>
 #include <QUrl>
 
+#include "base/Logger.h"
 #include "base/Macros.h"
 #include "base/PreferenceManager.h"
 #include "fs/DiskIO.h"
@@ -701,7 +702,14 @@ void ModelBrowserView::ensureSoundPlayer()
     });
 
   connect(
-    m_soundPlayer, &QMediaPlayer::errorOccurred, this, [this](auto, const QString&) {
+    m_soundPlayer,
+    &QMediaPlayer::errorOccurred,
+    this,
+    [this](auto, const QString& error) {
+      m_document.logger().error()
+        << "Could not preview sound "
+        << m_soundPlayer->source().toDisplayString().toStdString() << ": "
+        << error.toStdString();
       m_playingSoundPath.clear();
       update();
     });
@@ -737,6 +745,14 @@ void ModelBrowserView::toggleSoundPreview(const std::filesystem::path& path)
 
   stopSoundPreview();
   ensureSoundPlayer();
+  if (!m_soundPlayer->isAvailable())
+  {
+    m_document.logger().error()
+      << "Could not preview sound: no Qt multimedia backend is available. "
+         "Check that the multimedia plugins and their dependencies are installed.";
+    update();
+    return;
+  }
   m_playingSoundPath = path;
   m_soundPlayer->setSource(
     QUrl::fromLocalFile(pathAsQString(preview->soundPath.lexically_normal())));
