@@ -852,6 +852,7 @@ void MapRenderer::modsDidChange()
   reloadEntityModels();
   invalidateRenderers(Renderer::All);
   invalidateEntityLinkRenderer();
+  m_skyRenderer->invalidate();
 }
 
 void MapRenderer::editorContextDidChange()
@@ -876,6 +877,7 @@ void MapRenderer::preferenceDidChange(const std::filesystem::path& path)
     invalidateRenderers(Renderer::All);
     invalidateEntityLinkRenderer();
     invalidateGroupLinkRenderer();
+    m_skyRenderer->invalidate();
   }
 
   if (kdl::path_has_prefix(path, "Map view"))
