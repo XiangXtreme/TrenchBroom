@@ -73,6 +73,7 @@
 #include "ui/CatchConfig.h"
 #include "ui/CommandPaletteDialog.h"
 #include "ui/InfoPanel.h"
+#include "ui/InputEvent.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
@@ -311,6 +312,27 @@ TEST_CASE("MapWindow")
     const auto endY = center.y() + 60.0f;
     const auto drag = [&](const QPoint& start, const QPoint& end) {
       CAPTURE(start.x(), start.y(), end.x(), end.y());
+      if (!showWindows)
+      {
+        // Background tests drive the view's input processor synchronously; native
+        // event delivery and paint scheduling are exercised with visible windows.
+        const auto send = [&](
+                            const MouseEvent::Type type,
+                            const MouseEvent::Button button,
+                            const QPoint& pos) {
+          view->processEvent(MouseEvent{type, button, float(pos.x()), float(pos.y())});
+        };
+        send(MouseEvent::Type::Motion, MouseEvent::Button::None, start);
+        send(MouseEvent::Type::Down, MouseEvent::Button::Left, start);
+        send(MouseEvent::Type::DragStart, MouseEvent::Button::None, start);
+        send(MouseEvent::Type::Drag, MouseEvent::Button::None, end);
+        REQUIRE(toolBox.dragging());
+        send(MouseEvent::Type::DragEnd, MouseEvent::Button::None, end);
+        send(MouseEvent::Type::Up, MouseEvent::Button::Left, end);
+        view->grabFramebuffer();
+        CHECK_FALSE(toolBox.dragging());
+        return;
+      }
       sendMouseMove(*view, start);
       view->grabFramebuffer();
       sendMousePress(*view, start);
@@ -321,12 +343,17 @@ TEST_CASE("MapWindow")
       // InputEventRecorder discards drags shorter than 100 ms as accidental motion.
       QTest::qWait(110);
       sendMouseRelease(*view, end);
-      view->grabFramebuffer();
-      CHECK_FALSE(toolBox.dragging());
+      // A pending widget composition can defer the input-processing paint beyond
+      // one grabFramebuffer call. Drain frames until release is handled.
+      QTRY_VERIFY_WITH_TIMEOUT(
+        ([&]() {
+          view->grabFramebuffer();
+          return !toolBox.dragging();
+        })(),
+        2000);
     };
     const auto start = QPoint{qRound(startX), qRound(startY)};
     const auto end = QPoint{qRound(endX), qRound(endY)};
-    const auto brushCenter = QPoint{qRound(center.x()), qRound(center.y())};
     const auto count = map.worldNode().defaultLayer()->childCount();
     drag(start, end);
     CHECK(map.selection().nodes == std::vector<mdl::Node*>{brush});
@@ -334,15 +361,35 @@ TEST_CASE("MapWindow")
 
     const auto brushBounds = brush->logicalBounds();
     mdl::deselectAll(map);
-    sendMouseMove(*view, brushCenter);
+    QApplication::processEvents();
     view->grabFramebuffer();
+    const auto deselectedCenter = view->camera().project(vm::vec3f{0, 0, 0});
+    const auto brushCenter =
+      QPoint{qRound(deselectedCenter.x()), qRound(deselectedCenter.y())};
+    if (showWindows)
+    {
+      sendMouseMove(*view, brushCenter);
+      view->grabFramebuffer();
+    }
+    else
+    {
+      view->processEvent(MouseEvent{
+        MouseEvent::Type::Motion,
+        MouseEvent::Button::None,
+        float(brushCenter.x()),
+        float(brushCenter.y())});
+    }
     REQUIRE_FALSE(view->pickResult().empty());
-    drag(brushCenter, end);
+    drag(brushCenter, brushCenter + QPoint{60, 60});
     CHECK(map.selection().nodes == std::vector<mdl::Node*>{brush});
     CHECK(brush->logicalBounds() == brushBounds);
     CHECK(map.worldNode().defaultLayer()->childCount() == count);
     REQUIRE(toolBox.moveObjectsTool().active());
-    drag(brushCenter, end);
+    QApplication::processEvents();
+    view->grabFramebuffer();
+    const auto selectedCenter = view->camera().project(vm::vec3f{0, 0, 0});
+    const auto moveStart = QPoint{qRound(selectedCenter.x()), qRound(selectedCenter.y())};
+    drag(moveStart, moveStart + QPoint{60, 60});
     CHECK(brush->logicalBounds() != brushBounds);
     map.undoCommand();
     CHECK(brush->logicalBounds() == brushBounds);

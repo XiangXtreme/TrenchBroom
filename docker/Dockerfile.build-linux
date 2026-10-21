@@ -7,6 +7,10 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 
 RUN apt-get update && apt-get install -y software-properties-common && \
     add-apt-repository ppa:ubuntu-toolchain-r/test && \
+    # Launchpad's HTTPS package cache can persistently return 503 for this PPA.
+    # HTTP serves the same signed archive; APT still verifies signatures and hashes.
+    sed -i 's|https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu|http://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu|g' \
+      /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test-jammy.list && \
     apt-get update && apt-get install -y \
       gcc-13 \
       g++-13 \
