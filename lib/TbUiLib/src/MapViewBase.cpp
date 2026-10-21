@@ -780,9 +780,10 @@ void MapViewBase::cancel()
   }
   if (!ToolBoxConnector::cancel())
   {
-    if (camera().orthographicProjection() && !m_toolBox.selectMode())
+    const auto defaultSelectMode = pref(Preferences::Default2DSelectMode);
+    if (m_toolBox.selectMode() != defaultSelectMode)
     {
-      m_toolBox.setSelectMode(true);
+      m_toolBox.setSelectMode(defaultSelectMode);
       return;
     }
     auto& map = m_document.map();

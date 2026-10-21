@@ -220,6 +220,7 @@ TEST_CASE("MapWindow")
 
   SECTION("2D base modes route drags and restore selection with Escape")
   {
+    setPref(Preferences::Default2DSelectMode, true);
     auto* container = window.findChild<SwitchableMapViewContainer*>();
     REQUIRE(container);
     container->switchToMapView(MapViewLayout::FourPanes);
@@ -319,6 +320,48 @@ TEST_CASE("MapWindow")
     CHECK(map.selection().hasNodes());
     view->cancel();
     CHECK_FALSE(map.selection().hasAny());
+  }
+
+  SECTION("Escape restores the configured default mode before clearing selection")
+  {
+    auto* container = window.findChild<SwitchableMapViewContainer*>();
+    REQUIRE(container);
+    container->switchToMapView(MapViewLayout::FourPanes);
+    auto& map = window.document().map();
+    auto& toolBox = window.toolBox();
+    auto* brush = new mdl::BrushNode{
+      mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()}.createCube(
+        32.0, "test")
+      | kdl::value()};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {brush}}});
+
+    for (auto* view : std::vector<MapViewBase*>{
+           window.findChild<MapView2D*>(), window.findChild<MapView3D*>()})
+    {
+      REQUIRE(view);
+      for (const auto defaultSelectMode : {false, true})
+      {
+        CAPTURE(view->objectName(), defaultSelectMode);
+        setPref(Preferences::Default2DSelectMode, defaultSelectMode);
+        mdl::selectNodes(map, {brush});
+        toolBox.setSelectMode(!defaultSelectMode);
+        view->cancel();
+        CHECK(toolBox.selectMode() == defaultSelectMode);
+        CHECK(map.selection().nodes == std::vector<mdl::Node*>{brush});
+        view->cancel();
+        CHECK_FALSE(map.selection().hasAny());
+        CHECK(toolBox.selectMode() == defaultSelectMode);
+
+        toolBox.setSelectMode(!defaultSelectMode);
+        toolBox.togglePathTool();
+        REQUIRE(toolBox.pathToolActive());
+        view->cancel();
+        CHECK_FALSE(toolBox.pathToolActive());
+        CHECK(toolBox.selectMode() != defaultSelectMode);
+        view->cancel();
+        CHECK(toolBox.selectMode() == defaultSelectMode);
+      }
+    }
   }
 
   SECTION("3D selection mode blocks brush creation after Shift S")
