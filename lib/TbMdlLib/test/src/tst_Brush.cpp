@@ -389,6 +389,10 @@ TEST_CASE("Brush")
     SECTION("collapsed geometry")
     {
       transformation = vm::scaling_matrix(vm::vec3d{0, 1, 1});
+      auto collapsed = source;
+      CHECK(collapsed.transform(worldBounds, transformation, lockMaterials).is_error());
+      CHECK(collapsed == original);
+      CHECK(source.transformed(worldBounds, transformation, lockMaterials).is_error());
     }
     SECTION("outside world bounds")
     {

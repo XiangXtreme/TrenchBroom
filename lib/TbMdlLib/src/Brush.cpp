@@ -1483,6 +1483,11 @@ Result<void> Brush::transform(
   const vm::mat4x4d& transformation,
   const bool lockMaterials)
 {
+  // A collapsed transform has no valid face normals for UV alignment.
+  if (vm::compute_determinant(vm::extract_minor(transformation, 3, 3)) == 0.0)
+  {
+    return Error{"Brush transformation collapses geometry"};
+  }
   for (auto& face : m_faces)
   {
     if (!face.transform(transformation, lockMaterials))
@@ -1499,6 +1504,10 @@ Result<Brush> Brush::transformed(
   const vm::mat4x4d& transformation,
   const bool lockMaterials) const
 {
+  if (vm::compute_determinant(vm::extract_minor(transformation, 3, 3)) == 0.0)
+  {
+    return Error{"Brush transformation collapses geometry"};
+  }
   auto faces = m_faces;
   for (size_t i = 0; i < faces.size(); ++i)
   {

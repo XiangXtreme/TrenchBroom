@@ -33,6 +33,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QScreen>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStyleOptionViewItem>
@@ -186,6 +187,27 @@ PieMenu* findVisiblePieMenu()
   return nullptr;
 }
 
+void activateModeAction(MapWindow& window, MapViewBase& view, const bool selectMode)
+{
+  auto* action = window.findAction(
+    selectMode ? "Menu/Edit/Tools/Select Mode" : "Menu/Edit/Tools/Create Brush Mode");
+  REQUIRE(action);
+  const auto key = selectMode ? Qt::Key_S : Qt::Key_B;
+  CHECK(action->shortcuts().contains(QKeySequence{Qt::SHIFT | key}));
+  if (qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1)
+  {
+    QTest::keyClick(&view, key, Qt::ShiftModifier);
+  }
+  else
+  {
+    // Native menu shortcut dispatch needs an active window on macOS. Background
+    // tests exercise the same QAction callback without native focus ownership.
+    action->trigger();
+  }
+  QApplication::processEvents();
+  view.grabFramebuffer();
+}
+
 } // namespace
 
 // Simple resource type for testing resource processing
@@ -256,22 +278,22 @@ TEST_CASE("MapWindow")
     REQUIRE(selectAction);
     REQUIRE(brushAction);
     toolBox.setSelectMode(false);
-    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    activateModeAction(window, *view, true);
     CHECK(toolBox.selectModeActive());
     CHECK(selectAction->isChecked());
     CHECK_FALSE(brushAction->isChecked());
-    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    activateModeAction(window, *view, true);
     CHECK(toolBox.brushCreationModeActive());
     CHECK_FALSE(selectAction->isChecked());
     CHECK(brushAction->isChecked());
-    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    activateModeAction(window, *view, true);
     CHECK(toolBox.selectModeActive());
     CHECK(selectAction->isChecked());
     CHECK_FALSE(brushAction->isChecked());
 
     toolBox.togglePathTool();
     REQUIRE(toolBox.pathToolActive());
-    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    activateModeAction(window, *view, true);
     CHECK_FALSE(toolBox.pathToolActive());
     CHECK(toolBox.selectModeActive());
     QApplication::processEvents();
@@ -325,10 +347,14 @@ TEST_CASE("MapWindow")
     map.undoCommand();
     CHECK(brush->logicalBounds() == brushBounds);
 
-    QTest::keyClick(view, Qt::Key_B, Qt::ShiftModifier);
+    activateModeAction(window, *view, false);
     CHECK(brushAction->isChecked());
     CHECK_FALSE(selectAction->isChecked());
-    drag(start, end);
+    // The tool page can resize the viewport; project again after switching modes.
+    const auto creationCenter = view->camera().project(vm::vec3f{0, 0, 0});
+    drag(
+      QPoint{qRound(creationCenter.x() - 60.0f), qRound(creationCenter.y() - 60.0f)},
+      QPoint{qRound(creationCenter.x() + 60.0f), qRound(creationCenter.y() + 60.0f)});
     CHECK(map.worldNode().defaultLayer()->childCount() == count + 1);
     CHECK(toolBox.brushCreationModeActive());
     view->cancel();
@@ -411,11 +437,11 @@ TEST_CASE("MapWindow")
     auto& map = window.document().map();
     auto& toolBox = window.toolBox();
     toolBox.setSelectMode(false);
-    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    activateModeAction(window, *view, true);
     REQUIRE(toolBox.selectModeActive());
-    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    activateModeAction(window, *view, true);
     REQUIRE(toolBox.brushCreationModeActive());
-    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    activateModeAction(window, *view, true);
     REQUIRE(toolBox.selectModeActive());
     const auto count = map.worldNode().defaultLayer()->childCount();
     const auto start = view->rect().center();
@@ -431,7 +457,7 @@ TEST_CASE("MapWindow")
     view->grabFramebuffer();
     CHECK(map.worldNode().defaultLayer()->childCount() == count);
 
-    QTest::keyClick(view, Qt::Key_B, Qt::ShiftModifier);
+    activateModeAction(window, *view, false);
     REQUIRE(toolBox.brushCreationModeActive());
     sendMousePress(*view, start);
     sendMouseMove(*view, end);
@@ -642,7 +668,7 @@ TEST_CASE("MapWindow")
          {mapButton, entityButton, faceButton, outlinerButton, pluginButton})
     {
       const auto iconImage = button->icon().pixmap(QSize{20, 20}).toImage();
-      CHECK(iconImage.size() == QSize{20, 20});
+      CHECK(iconImage.deviceIndependentSize() == QSizeF{20, 20});
       CHECK(iconImage.isGrayscale());
     }
     CHECK(mapButton->accessibleName() == "Map Inspector");
@@ -1126,7 +1152,11 @@ TEST_CASE("PlayModeFullScreen")
                     appController.glManager().resourceManager())
                   | kdl::value();
   auto window = MapWindow{appController, std::move(document)};
-  window.resize(1100, 800);
+  // restoreGeometry clamps off-screen windows. Keep the initial frame inside the
+  // available screen, including on small CI desktops, before comparing restoration.
+  const auto available = window.screen()->availableGeometry().adjusted(40, 40, -40, -40);
+  window.resize(QSize{1100, 800}.boundedTo(available.size()));
+  window.move(available.center() - window.rect().center());
   window.show();
   auto* container = window.findChild<SwitchableMapViewContainer*>();
   REQUIRE(container);
@@ -1143,14 +1173,22 @@ TEST_CASE("PlayModeFullScreen")
       auto& view = window.activate3DMapView();
       QApplication::processEvents();
       auto* parentBefore = view.parentWidget();
-      const auto geometryBefore = window.geometry();
-      const auto viewSizeBefore = view.size();
       const auto menuHiddenBefore = window.menuBar()->isHidden();
       const auto statusHiddenBefore = window.statusBar()->isHidden();
       auto* inspector = window.findChild<QWidget*>("MapWindow_InspectorSurface");
       REQUIRE(inspector);
       inspector->hide();
       QApplication::processEvents();
+      // Settle Qt's frame/screen correction before taking the baseline.
+      REQUIRE(window.restoreGeometry(window.saveGeometry()));
+      QApplication::processEvents();
+      const auto geometryBefore = window.geometry();
+      const auto viewSizeBefore = view.size();
+      CAPTURE(
+        geometryBefore.x(),
+        geometryBefore.y(),
+        geometryBefore.width(),
+        geometryBefore.height());
 
       const auto splitters = window.findChildren<QSplitter*>();
       auto sizes = std::vector<QList<int>>{};
@@ -1174,7 +1212,7 @@ TEST_CASE("PlayModeFullScreen")
       presentation.leave();
       QApplication::processEvents();
       CHECK_FALSE(window.isFullScreen());
-      CHECK(window.geometry() == geometryBefore);
+      QTRY_COMPARE(window.geometry(), geometryBefore);
       CHECK(window.menuBar()->isHidden() == menuHiddenBefore);
       CHECK(window.statusBar()->isHidden() == statusHiddenBefore);
       CHECK(inspector->isHidden());
