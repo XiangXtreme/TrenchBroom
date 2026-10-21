@@ -1,0 +1,168 @@
+name: Publish release
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful tag CI run to publish
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Validate tag build and release assets
+        id: release
+        uses: actions/github-script@v7
+        env:
+          CI_RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const repo = context.repo;
+            if (!/^\d+$/.test(process.env.CI_RUN_ID)) {
+              throw new Error('A numeric CI run ID is required');
+            }
+            const {data: run} = await github.rest.actions.getWorkflowRun({
+              ...repo, run_id: Number(process.env.CI_RUN_ID)
+            });
+            if (run.path !== '.github/workflows/ci.yml' ||
+                run.event !== 'push' || run.status !== 'completed' ||
+                run.conclusion !== 'success' ||
+                run.head_repository.full_name !== `${repo.owner}/${repo.repo}`) {
+              throw new Error('Only a successful repository tag CI run can publish');
+            }
+            const tag = run.head_branch;
+            if (!/^v\d{4}\.\d{1,2}(?:\.\d+)?$/.test(tag)) {
+              throw new Error(`Not a stable calendar release tag: ${tag}`);
+            }
+            let {data: ref} = await github.rest.git.getRef({...repo, ref: `tags/${tag}`});
+            let object = ref.object;
+            for (let depth = 0; object.type === 'tag' && depth < 10; ++depth) {
+              const {data} = await github.rest.git.getTag({...repo, tag_sha: object.sha});
+              object = data.object;
+            }
+            if (object.type !== 'commit' || object.sha !== run.head_sha) {
+              throw new Error('Release tag no longer matches the successful CI commit');
+            }
+            const {data: release} = await github.rest.repos.getReleaseByTag({...repo, tag});
+            if (release.prerelease) {
+              throw new Error('Prereleases require a separate publishing policy');
+            }
+            const platforms = ['Win64-AMD64', 'Linux-x86_64', 'macOS-arm64', 'macOS-x86_64'];
+            const names = platforms.flatMap(platform => {
+              const zip = `TrenchBroom-${platform}-${tag}-Release.zip`;
+              return [zip, `${zip}.md5`];
+            });
+            for (const name of names) {
+              const matches = release.assets.filter(asset => asset.name === name);
+              if (matches.length !== 1 || matches[0].state !== 'uploaded' ||
+                  matches[0].size <= 0 || !/^sha256:[0-9a-f]{64}$/.test(matches[0].digest)) {
+                throw new Error(`Missing or incomplete release asset: ${name}`);
+              }
+            }
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'release-metadata.json'),
+              JSON.stringify({release, names}));
+            core.setOutput('tag', tag);
+            core.setOutput('id', release.id);
+
+      - name: Download and verify packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-assets"
+          gh release download "$RELEASE_TAG" --dir "$RUNNER_TEMP/release-assets" --pattern '*.zip*'
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import zipfile
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          metadata = json.loads((root / 'release-metadata.json').read_text())
+          assets = {asset['name']: asset for asset in metadata['release']['assets']}
+          for name in metadata['names']:
+              file = root / 'release-assets' / name
+              sha256 = hashlib.sha256()
+              md5 = hashlib.md5()
+              with file.open('rb') as stream:
+                  while chunk := stream.read(1024 * 1024):
+                      sha256.update(chunk)
+                      md5.update(chunk)
+              if file.stat().st_size != assets[name]['size']:
+                  raise RuntimeError(f'Incorrect file size: {name}')
+              if 'sha256:' + sha256.hexdigest() != assets[name]['digest']:
+                  raise RuntimeError(f'SHA-256 mismatch: {name}')
+              if name.endswith('.zip'):
+                  checksum, filename = file.with_suffix('.zip.md5').read_text().strip().split(maxsplit=1)
+                  if filename.lstrip('*') != name or checksum.lower() != md5.hexdigest():
+                      raise RuntimeError(f'MD5 mismatch: {name}')
+                  with zipfile.ZipFile(file) as archive:
+                      if not archive.namelist() or archive.testzip() is not None:
+                          raise RuntimeError(f'Invalid ZIP: {name}')
+              print(f'Verified {name}', flush=True)
+          PY
+
+      - name: Publish verified release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        with:
+          script: |
+            const repo = context.repo;
+            const release_id = Number(process.env.RELEASE_ID);
+            const {data: release} = await github.rest.repos.getRelease({...repo, release_id});
+            const version = tag => {
+              const match = /^v(\d{4})\.(\d{1,2})(?:\.(\d+))?$/.exec(tag);
+              return match ? match.slice(1).map(value => Number(value || 0)) : null;
+            };
+            let make_latest = 'true';
+            try {
+              const {data: latest} = await github.rest.repos.getLatestRelease(repo);
+              const current = version(release.tag_name);
+              const previous = version(latest.tag_name);
+              const difference = previous && current.map((value, i) => value - previous[i])
+                .find(value => value !== 0);
+              if (!previous || difference < 0) make_latest = 'false';
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            let body = release.body;
+            if (!body?.trim()) {
+              const {data: notes} = await github.rest.repos.generateReleaseNotes({
+                ...repo, tag_name: release.tag_name
+              });
+              body = notes.body;
+            }
+            const {data: published} = await github.rest.repos.updateRelease({
+              ...repo, release_id, draft: false, make_latest, body,
+              name: release.name || `TrenchBroom ${release.tag_name}`
+            });
+            await core.summary.addHeading(`Published ${published.tag_name}`)
+              .addLink('Download release', published.html_url)
+              .addRaw('\n\nAll platform packages passed size, SHA-256, MD5 and ZIP CRC checks.\n')
+              .write();
