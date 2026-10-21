@@ -218,7 +218,7 @@ TEST_CASE("MapWindow")
   auto window = MapWindow{appController, std::move(document)};
   UNSCOPED_INFO("MapWindow created");
 
-  SECTION("2D base modes route drags and restore selection with Escape")
+  SECTION("2D base modes route drags and toggle with Shift S")
   {
     setPref(Preferences::Default2DSelectMode, true);
     auto* container = window.findChild<SwitchableMapViewContainer*>();
@@ -260,6 +260,22 @@ TEST_CASE("MapWindow")
     CHECK(toolBox.selectModeActive());
     CHECK(selectAction->isChecked());
     CHECK_FALSE(brushAction->isChecked());
+    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    CHECK(toolBox.brushCreationModeActive());
+    CHECK_FALSE(selectAction->isChecked());
+    CHECK(brushAction->isChecked());
+    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    CHECK(toolBox.selectModeActive());
+    CHECK(selectAction->isChecked());
+    CHECK_FALSE(brushAction->isChecked());
+
+    toolBox.togglePathTool();
+    REQUIRE(toolBox.pathToolActive());
+    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    CHECK_FALSE(toolBox.pathToolActive());
+    CHECK(toolBox.selectModeActive());
+    QApplication::processEvents();
+    CHECK(selectAction->isChecked());
 
     auto* brush = new mdl::BrushNode{
       mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()}.createCube(
@@ -316,13 +332,11 @@ TEST_CASE("MapWindow")
     CHECK(map.worldNode().defaultLayer()->childCount() == count + 1);
     CHECK(toolBox.brushCreationModeActive());
     view->cancel();
-    CHECK(toolBox.selectModeActive());
-    CHECK(map.selection().hasNodes());
-    view->cancel();
+    CHECK(toolBox.brushCreationModeActive());
     CHECK_FALSE(map.selection().hasAny());
   }
 
-  SECTION("Escape restores the configured default mode before clearing selection")
+  SECTION("Escape cancels tools and selection while preserving the base mode")
   {
     auto* container = window.findChild<SwitchableMapViewContainer*>();
     REQUIRE(container);
@@ -346,20 +360,22 @@ TEST_CASE("MapWindow")
         mdl::selectNodes(map, {brush});
         toolBox.setSelectMode(!defaultSelectMode);
         view->cancel();
-        CHECK(toolBox.selectMode() == defaultSelectMode);
-        CHECK(map.selection().nodes == std::vector<mdl::Node*>{brush});
+        CHECK(toolBox.selectMode() != defaultSelectMode);
+        CHECK_FALSE(map.selection().hasAny());
         view->cancel();
         CHECK_FALSE(map.selection().hasAny());
-        CHECK(toolBox.selectMode() == defaultSelectMode);
+        CHECK(toolBox.selectMode() != defaultSelectMode);
 
-        toolBox.setSelectMode(!defaultSelectMode);
+        mdl::selectNodes(map, {brush});
         toolBox.togglePathTool();
         REQUIRE(toolBox.pathToolActive());
         view->cancel();
         CHECK_FALSE(toolBox.pathToolActive());
         CHECK(toolBox.selectMode() != defaultSelectMode);
+        CHECK(map.selection().nodes == std::vector<mdl::Node*>{brush});
         view->cancel();
-        CHECK(toolBox.selectMode() == defaultSelectMode);
+        CHECK(toolBox.selectMode() != defaultSelectMode);
+        CHECK_FALSE(map.selection().hasAny());
       }
     }
   }
@@ -395,6 +411,10 @@ TEST_CASE("MapWindow")
     auto& map = window.document().map();
     auto& toolBox = window.toolBox();
     toolBox.setSelectMode(false);
+    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    REQUIRE(toolBox.selectModeActive());
+    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    REQUIRE(toolBox.brushCreationModeActive());
     QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
     REQUIRE(toolBox.selectModeActive());
     const auto count = map.worldNode().defaultLayer()->childCount();

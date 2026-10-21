@@ -1496,7 +1496,10 @@ void ActionManager::createToolsMenu()
     "Select Mode",
     ActionContext::Any,
     KeySequence{"Shift+S"},
-    [](auto& context) { context.mapWindow().toolBox().setSelectMode(true); },
+    [](auto& context) {
+      auto& toolBox = context.mapWindow().toolBox();
+      toolBox.setSelectMode(!toolBox.selectModeActive());
+    },
     [](const auto& context) {
       return context.hasDocument() && context.mapWindow().toolBox().enabled();
     },

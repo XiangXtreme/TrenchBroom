@@ -780,12 +780,6 @@ void MapViewBase::cancel()
   }
   if (!ToolBoxConnector::cancel())
   {
-    const auto defaultSelectMode = pref(Preferences::Default2DSelectMode);
-    if (m_toolBox.selectMode() != defaultSelectMode)
-    {
-      m_toolBox.setSelectMode(defaultSelectMode);
-      return;
-    }
     auto& map = m_document.map();
     if (map.selection().hasAny())
     {
