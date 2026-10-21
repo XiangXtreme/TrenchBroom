@@ -27,6 +27,7 @@
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QScopeGuard>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QtTest/QTest>
@@ -36,15 +37,24 @@
 #include "gl/GlInterface.h"
 #include "gl/GlManager.h"
 #include "gl/ResourceManager.h"
+#include "mdl/EditorContext.h"
 #include "mdl/EnvironmentConfig.h"
 #include "mdl/GameInfo.h"
 #include "mdl/GameManager.h"
+#include "mdl/Grid.h"
+#include "mdl/Hit.h"
+#include "mdl/HitFilter.h"
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
+#include "mdl/Map_Selection.h"
+#include "mdl/ModelUtils.h"
 #include "prefs/Preferences.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/MapDocument.h"
+#include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
+#include "ui/MapViewLayout.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/QPathUtils.h"
 #include "ui/RenderView.h"
@@ -95,7 +105,7 @@ class ProfileInputFilter : public QObject
   bool eventFilter(QObject* receiver, QEvent* event) override
   {
     // Automated runs must keep simulating even if another desktop window activates.
-    return (event->type() == QEvent::FocusOut && qobject_cast<MapView3D*>(receiver))
+    return (event->type() == QEvent::FocusOut && qobject_cast<MapViewBase*>(receiver))
            || (event->spontaneous() && dynamic_cast<QInputEvent*>(event) != nullptr);
   }
 };
@@ -209,21 +219,38 @@ TEST_CASE("RenderView profiling")
   });
   qputenv("TB_RENDER_PROFILE", path.toUtf8());
   auto glTiming = false;
+  auto multipleViews = false;
   SECTION("default GL workload counters") {}
   SECTION("opt-in GL call wall timing")
   {
     glTiming = true;
   }
+  SECTION("multiple views append complete records")
+  {
+    multipleViews = true;
+  }
   qputenv("TB_RENDER_PROFILE_GL_TIMING", glTiming ? "1" : "0");
   auto fixture = AppControllerFixture{};
   {
     auto view = TestRenderView{fixture.appController()};
+    auto other =
+      multipleViews ? std::make_unique<TestRenderView>(fixture.appController()) : nullptr;
+    if (other)
+    {
+      other->resize(200, 200);
+      other->show();
+      REQUIRE(QTest::qWaitFor([&]() { return other->frames > 0; }, 2000));
+    }
     view.resize(200, 200);
     view.show();
     REQUIRE(QTest::qWaitFor([&]() { return view.frames > 0; }, 2000));
     for (auto i = 0; i < 5; ++i)
     {
       view.repaint();
+      if (other)
+      {
+        other->repaint();
+      }
       QTest::qWait(15);
     }
   }
@@ -236,6 +263,8 @@ TEST_CASE("RenderView profiling")
   auto renderToPaintEndSamples = qint64{0};
   auto gpuSupported = false;
   auto sawGpu = false;
+  auto metadataViews = QSet<QString>{};
+  auto reportedViews = QSet<QString>{};
   while (!file.atEnd())
   {
     const auto object = QJsonDocument::fromJson(file.readLine()).object();
@@ -243,6 +272,7 @@ TEST_CASE("RenderView profiling")
     if (object["kind"] == "metadata")
     {
       sawMetadata = true;
+      metadataViews.insert(object["view_id"].toString());
       gpuSupported = object["gpu_supported"].toBool();
       CHECK(object["gl_call_timing"].toBool() == glTiming);
       for (const auto* field :
@@ -259,6 +289,7 @@ TEST_CASE("RenderView profiling")
     }
     if (object["kind"] == "window")
     {
+      reportedViews.insert(object["view_id"].toString());
       const auto timings = object["timings_ms"].toObject();
       // Parallel test load can spread the requested repaints across reporting windows.
       cpuSamples += timings["cpu.frame"].toObject()["samples"].toInteger();
@@ -285,6 +316,8 @@ TEST_CASE("RenderView profiling")
     }
   }
   CHECK(sawMetadata);
+  CHECK(metadataViews.size() == (multipleViews ? 2 : 1));
+  CHECK(reportedViews == metadataViews);
   CHECK(cpuSamples >= 5);
   // Initialization may render outside paintEvent, and a final reporting window
   // may close before endPaint. Verify real boundaries without equating counts.
@@ -303,6 +336,10 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   setPref(Preferences::DefaultPluginPaths, "");
   setPref(Preferences::PythonPluginDirectories, "");
   setPref(Preferences::RenderFpsLimit, 0);
+  const auto fourPanes = qEnvironmentVariableIsSet("TB_RENDER_PROFILE_FOUR_PANES");
+  setPref(
+    Preferences::MapViewLayout,
+    int(fourPanes ? MapViewLayout::FourPanes : MapViewLayout::OnePane));
   // Native raw motion bypasses QObject event filters. Zero sensitivity keeps
   // that backend active without letting physical mouse motion turn the camera.
   setPref(Preferences::PlayModeMouseSensitivity, 0.0f);
@@ -382,6 +419,9 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   window.resize(1400, 900);
   auto* view = window.findChild<MapView3D*>();
   REQUIRE(view != nullptr);
+  auto* dragView = fourPanes ? static_cast<MapViewBase*>(window.findChild<MapView2D*>())
+                             : static_cast<MapViewBase*>(view);
+  REQUIRE(dragView);
   qint64 firstFrameMs = -1;
   auto presentedFrames = 0;
   const auto frameConnection =
@@ -438,6 +478,11 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   const auto editorReadyMs = loadTimer.elapsed();
   const auto stopPlay = qScopeGuard([&]() { view->stopPlayMode(); });
   const auto play = qEnvironmentVariableIsSet("TB_RENDER_PROFILE_PLAY");
+  const auto moveSelection =
+    qEnvironmentVariableIsSet("TB_RENDER_PROFILE_MOVE_SELECTION");
+  const auto selectAll =
+    moveSelection || qEnvironmentVariableIsSet("TB_RENDER_PROFILE_SELECT_ALL");
+  REQUIRE_FALSE((play && selectAll));
   const auto playStartMs = loadTimer.elapsed();
   if (play)
   {
@@ -481,6 +526,88 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
     loop.exec();
   };
   runFor(std::clamp(qEnvironmentVariableIntValue("TB_RENDER_PROFILE_WARMUP"), 1, 60));
+  const auto presentFrame = [&]() {
+    auto loop = QEventLoop{};
+    auto presented = false;
+    const auto connection =
+      QObject::connect(view, &QOpenGLWidget::frameSwapped, &loop, [&]() {
+        presented = true;
+        loop.quit();
+      });
+    QTimer::singleShot(30000, &loop, &QEventLoop::quit);
+    view->update();
+    loop.exec();
+    QObject::disconnect(connection);
+    REQUIRE(presented);
+  };
+  const auto vectorJson = [](const auto& v) { return QJsonArray{v.x(), v.y(), v.z()}; };
+  auto& map = window.document().map();
+  auto selectionInfo = QJsonObject{};
+  if (selectAll)
+  {
+    auto timer = QElapsedTimer{};
+    timer.start();
+    mdl::selectAllNodes(map);
+    const auto selectMs = double(timer.nsecsElapsed()) / 1e6;
+    presentFrame();
+    selectionInfo = {
+      {"nodes", qint64(map.selection().nodes.size())},
+      {"brushes", qint64(map.selection().allBrushes().size())},
+      {"entities", qint64(map.selection().entities.size())},
+      {"select_sync_ms", selectMs},
+      {"select_to_present_ms", double(timer.nsecsElapsed()) / 1e6},
+      {"grid_size", map.grid().actualSize()},
+      {"alignment_lock", map.editorContext().alignmentLock()}};
+    REQUIRE(map.selectionBounds());
+    selectionInfo.insert("bounds_min", vectorJson(map.selectionBounds()->min));
+    selectionInfo.insert("bounds_max", vectorJson(map.selectionBounds()->max));
+    runFor(std::clamp(qEnvironmentVariableIntValue("TB_RENDER_PROFILE_WARMUP"), 1, 60));
+  }
+  const auto originalBounds = map.selectionBounds();
+  auto dragOrigin = QPoint{};
+  auto mouseEvent = [&](const MouseEvent::Type type, const QPoint& pos) {
+    dragView->processEvent(
+      MouseEvent{type, MouseEvent::Button::Left, float(pos.x()), float(pos.y())});
+  };
+  const auto cancelDrag = qScopeGuard([&]() {
+    if (moveSelection && window.toolBox().dragging())
+    {
+      window.toolBox().cancelMouseDrag();
+    }
+  });
+  if (moveSelection)
+  {
+    using namespace mdl::HitFilters;
+    window.raise();
+    window.activateWindow();
+    dragView->setFocus();
+    window.toolBox().setSelectMode(true);
+    auto found = false;
+    for (const auto y : {0.5, 0.65, 0.35, 0.8, 0.2})
+    {
+      for (const auto x : {0.5, 0.65, 0.35, 0.8, 0.2})
+      {
+        dragOrigin =
+          QPoint{qRound(x * dragView->width()), qRound(y * dragView->height())};
+        mouseEvent(MouseEvent::Type::Motion, dragOrigin);
+        if (dragView->pickResult()
+              .first(type(mdl::nodeHitType()) && transitivelySelected())
+              .isMatch())
+        {
+          found = true;
+          break;
+        }
+      }
+      if (found)
+      {
+        break;
+      }
+    }
+    REQUIRE(found);
+    mouseEvent(MouseEvent::Type::Down, dragOrigin);
+    mouseEvent(MouseEvent::Type::DragStart, dragOrigin);
+    REQUIRE(window.toolBox().dragging());
+  }
   if (play)
   {
     REQUIRE(view->playModeActive());
@@ -494,8 +621,55 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   const auto positionStart = camera.position();
   const auto directionStart = camera.direction();
   const auto measurementStart = QDateTime::currentDateTimeUtc();
-  runFor(std::clamp(qEnvironmentVariableIntValue("TB_RENDER_PROFILE_SECONDS"), 2, 300));
+  const auto seconds =
+    std::clamp(qEnvironmentVariableIntValue("TB_RENDER_PROFILE_SECONDS"), 2, 300);
+  auto updates = QJsonArray{};
+  auto dragEnd = dragOrigin;
+  if (moveSelection)
+  {
+    auto duration = QElapsedTimer{};
+    duration.start();
+    do
+    {
+      const auto before = map.selectionBounds();
+      dragEnd = dragOrigin + QPoint{updates.size() % 2 == 0 ? 64 : -64, 0};
+      auto timer = QElapsedTimer{};
+      timer.start();
+      mouseEvent(MouseEvent::Type::Drag, dragEnd);
+      const auto syncMs = double(timer.nsecsElapsed()) / 1e6;
+      const auto after = map.selectionBounds();
+      REQUIRE(after);
+      REQUIRE(after != before);
+      REQUIRE(window.toolBox().dragging());
+      presentFrame();
+      updates.append(QJsonObject{
+        {"sync_ms", syncMs},
+        {"to_present_ms", double(timer.nsecsElapsed()) / 1e6},
+        {"delta", vectorJson(after->min - before->min)}});
+    } while (duration.elapsed() < seconds * 1000);
+  }
+  else
+  {
+    runFor(seconds);
+  }
   const auto measurementEnd = QDateTime::currentDateTimeUtc();
+  if (moveSelection)
+  {
+    auto timer = QElapsedTimer{};
+    timer.start();
+    mouseEvent(MouseEvent::Type::DragEnd, dragEnd);
+    mouseEvent(MouseEvent::Type::Up, dragEnd);
+    selectionInfo.insert("release_sync_ms", double(timer.nsecsElapsed()) / 1e6);
+    presentFrame();
+    selectionInfo.insert("release_to_present_ms", double(timer.nsecsElapsed()) / 1e6);
+    REQUIRE_FALSE(window.toolBox().dragging());
+    CHECK(map.modified());
+    timer.restart();
+    map.undoCommand();
+    selectionInfo.insert("undo_sync_ms", double(timer.nsecsElapsed()) / 1e6);
+    CHECK(map.selectionBounds() == originalBounds);
+    selectionInfo.insert("updates", updates);
+  }
   CHECK(vm::squared_distance(directionStart, camera.direction()) < 0.000001f);
   if (moving)
   {
@@ -509,9 +683,6 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   auto measurement =
     QFile{qEnvironmentVariable("TB_RENDER_PROFILE") + ".measurement.json"};
   REQUIRE(measurement.open(QIODevice::WriteOnly));
-  const auto vectorJson = [](const vm::vec3f& v) {
-    return QJsonArray{v.x(), v.y(), v.z()};
-  };
   const auto measurementInfo = QJsonObject{
     {"start_utc", measurementStart.toString(Qt::ISODateWithMs)},
     {"end_utc", measurementEnd.toString(Qt::ISODateWithMs)},
@@ -520,7 +691,11 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
     {"direction_start", vectorJson(directionStart)},
     {"direction_end", vectorJson(camera.direction())},
     {"play", play},
-    {"move_forward", moving}};
+    {"move_forward", moving},
+    {"select_all", selectAll},
+    {"move_selection", moveSelection},
+    {"four_panes", fourPanes},
+    {"selection", selectionInfo}};
   measurement.write(QJsonDocument{measurementInfo}.toJson());
   CHECK(view->isValid());
   CHECK_FALSE(window.document().map().modified());

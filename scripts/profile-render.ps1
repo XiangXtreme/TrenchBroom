@@ -12,6 +12,9 @@ param(
   [ValidateRange(1, 60)][int] $WarmupSeconds = 8,
   [switch] $Play,
   [switch] $MoveForward,
+  [switch] $SelectAll,
+  [switch] $MoveSelection,
+  [switch] $FourPanes,
   [switch] $HideModels,
   [switch] $HideLabels,
   [switch] $HideEdges,
@@ -22,6 +25,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if ($MoveForward -and -not $Play) { throw '-MoveForward requires -Play' }
+if ($Play -and ($SelectAll -or $MoveSelection)) { throw 'Selection captures require editor mode' }
 $build = (Resolve-Path -LiteralPath $BuildDir).Path
 $map = (Resolve-Path -LiteralPath $MapPath).Path
 if ($GamePath) { $GamePath = (Resolve-Path -LiteralPath $GamePath).Path }
@@ -37,6 +41,8 @@ New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
   position = $Position; direction = $Direction
   hideLabels = [bool]$HideLabels; hideEdges = [bool]$HideEdges; hideModels = [bool]$HideModels
   warmupSeconds = $WarmupSeconds; play = [bool]$Play; moveForward = [bool]$MoveForward
+  selectAll = [bool]($SelectAll -or $MoveSelection); moveSelection = [bool]$MoveSelection
+  fourPanes = [bool]$FourPanes
   glCallTiming = [bool]$GlCallTiming
   loadTiming = [bool]$LoadTiming
 } | ConvertTo-Json | Set-Content (Join-Path $outputDir 'capture.json')
@@ -61,7 +67,7 @@ $start.Environment['TB_RENDER_PROFILE_DIRECTION'] = $Direction
 $start.Environment['TB_RENDER_PROFILE_GL_TIMING'] = if ($GlCallTiming) { '1' } else { '0' }
 $start.Environment.Remove('TB_RENDER_PROFILE_LOAD_TIMING') | Out-Null
 if ($LoadTiming) { $start.Environment['TB_RENDER_PROFILE_LOAD_TIMING'] = '1' }
-foreach ($flag in @('TB_RENDER_PROFILE_HIDE_LABELS', 'TB_RENDER_PROFILE_HIDE_EDGES', 'TB_RENDER_PROFILE_HIDE_MODELS', 'TB_RENDER_PROFILE_PLAY', 'TB_RENDER_PROFILE_MOVE_FORWARD')) {
+foreach ($flag in @('TB_RENDER_PROFILE_HIDE_LABELS', 'TB_RENDER_PROFILE_HIDE_EDGES', 'TB_RENDER_PROFILE_HIDE_MODELS', 'TB_RENDER_PROFILE_PLAY', 'TB_RENDER_PROFILE_MOVE_FORWARD', 'TB_RENDER_PROFILE_SELECT_ALL', 'TB_RENDER_PROFILE_MOVE_SELECTION', 'TB_RENDER_PROFILE_FOUR_PANES')) {
   $start.Environment.Remove($flag) | Out-Null
 }
 if ($HideLabels) { $start.Environment['TB_RENDER_PROFILE_HIDE_LABELS'] = '1' }
@@ -71,6 +77,9 @@ if ($Play) { $start.Environment['TB_RENDER_PROFILE_PLAY'] = '1' }
 if ($MoveForward) {
   $start.Environment['TB_RENDER_PROFILE_MOVE_FORWARD'] = '1'
 }
+if ($SelectAll) { $start.Environment['TB_RENDER_PROFILE_SELECT_ALL'] = '1' }
+if ($MoveSelection) { $start.Environment['TB_RENDER_PROFILE_MOVE_SELECTION'] = '1' }
+if ($FourPanes) { $start.Environment['TB_RENDER_PROFILE_FOUR_PANES'] = '1' }
 Write-Host "Profiling $map for $Seconds seconds after $WarmupSeconds seconds warmup (Play=$Play)."
 $process = [System.Diagnostics.Process]::Start($start)
 $stdout = $process.StandardOutput.ReadToEndAsync()
@@ -90,6 +99,12 @@ $viewId = $metadata[0].view_id
 $windows = @($records | Where-Object { $_.kind -eq 'window' -and $_.view_id -eq $viewId })
 # Keep only complete reporting windows inside the measured phase.
 $measurement = Get-Content -Raw -LiteralPath "$jsonl.measurement.json" | ConvertFrom-Json
+if ($SelectAll -or $MoveSelection) {
+  $measurement.selection | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $outputDir 'selection.json')
+  if ($MoveSelection) {
+    $measurement.selection.updates | Select-Object sync_ms, to_present_ms, @{Name='dx'; Expression={$_.delta[0]}}, @{Name='dy'; Expression={$_.delta[1]}}, @{Name='dz'; Expression={$_.delta[2]}} | Export-Csv (Join-Path $outputDir 'move-updates.csv') -NoTypeInformation
+  }
+}
 $measurementStart = [DateTimeOffset]::Parse($measurement.start_utc)
 $measurementEnd = [DateTimeOffset]::Parse($measurement.end_utc)
 $windows = @($windows | Where-Object {

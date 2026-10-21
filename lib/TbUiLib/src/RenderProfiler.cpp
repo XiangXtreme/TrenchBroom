@@ -102,6 +102,8 @@ struct RenderProfiler::Impl
     object.insert("view", view);
     object.insert("view_id", QString::number(reinterpret_cast<quintptr>(this), 16));
     object.insert("utc", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+    // Each view owns a file handle; refresh its position after another view appends.
+    file.seek(file.size());
     file.write(QJsonDocument{object}.toJson(QJsonDocument::Compact) + '\n');
     file.flush();
   }

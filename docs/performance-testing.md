@@ -115,6 +115,74 @@ if they continue into measurement. `WorstWindowP95Ms` is the largest per-window 
 P95 across the entire run. Check test output and the PNG for missing assets before
 comparing results. WAD/model availability affects workload.
 
+### Whole-Map Movement
+
+Use `-SelectAll` for a stationary selected-map baseline, or `-MoveSelection` to
+select all nodes and repeatedly drag them. Add `-FourPanes` to use the four-pane
+layout and drag in a 2D view; otherwise the drag runs in the single 3D view.
+For `kz_skyline.map`, an overview camera avoids near-surface snapping and a
+horizontal ray parallel to the 3D movement plane:
+
+```powershell
+.\scripts\profile-render.ps1 `
+  -MapPath 'D:\steam\steamapps\common\JACK\mapper\Source\kz_skyline.map' `
+  -GamePath 'D:\steam\steamapps\common\Half-Life' `
+  -Position '10000 1000 5000' -Direction '-1 0 -0.5' `
+  -WarmupSeconds 5 -Seconds 8 -MoveSelection -FourPanes
+```
+
+The capture sends internal mouse events through the view's normal picking and
+drag controllers, bypassing OS mouse injection and input-event queuing. It moves
+between cursor positions 64 pixels either side of the starting hit, checks that
+every update changes the selection bounds, and waits for the next 3D
+`frameSwapped` signal without framebuffer readback. A four-pane presentation also
+includes the other visible views. A second warmup follows selection, excluding its
+initial cache rebuild from the measured movement or stationary phase.
+
+`selection.json` records selection counts, bounds, grid and texture-lock settings,
+selection latency, release latency, undo time, and each movement sample.
+`move-updates.csv` contains synchronous picking/controller/command time
+(`sync_ms`), the time from that update's start to Qt presentation
+(`to_present_ms`), and the actual world-space delta. The latter includes the former;
+do not add them. These are scripted update times, not physical mouse-to-photon
+latencies. Since the controller runs before painting, its synchronous work appears
+in frame intervals rather than `cpu.input` or `cpu.frame`. GPU and renderer stages
+remain separately available in `render.jsonl` and `timings.csv`.
+
+The move is committed once on release, then undone. The capture verifies restored
+bounds and an unmodified document, and never saves the source map. Selection
+captures cannot be combined with `-Play`. Multiple views append complete JSONL
+records using refreshed file positions, so a shared capture remains parseable.
+
+On 2026-10-21, Release captures on an i9-12900HX / RTX 4060 Laptop GPU selected
+3,382 nodes: 3,027 brushes and 355 entities. Each run used the camera above,
+five-second warmups, an eight-second measurement, a 16-unit grid, texture lock,
+4x MSAA, and no FPS cap. The single 3D viewport was 1368x737; the four-pane 3D
+viewport was 690x375.
+
+| Capture | 3D presentation FPS | Mean move sync | Mean update to presentation | Update P95 |
+| --- | ---: | ---: | ---: | ---: |
+| Selected, stationary, single 3D | 152.6 | n/a | n/a | n/a |
+| Whole-map drag, single 3D | 7.7 | 85.1 ms | 130.5 ms | 154.4 ms |
+| Selected, stationary, four panes | 151.5 | n/a | n/a | n/a |
+| Whole-map 2D drag, four panes | 7.5 | 82.2 ms | 135.9 ms | 156.2 ms |
+
+The movement rows contain 62 and 59 effective updates respectively. In the
+four-pane drag, selection took 868.6 ms synchronously / 930.4 ms to presentation;
+release took 1.1 ms / 28.6 ms, and undo took 56.1 ms synchronously. The 3D render
+stage averaged 23.5 ms, including 15.1 ms per frame rebuilding brush render
+caches, while its GPU stage averaged 7.4 ms. GPU and nested CPU stages overlap;
+these are not additive. The synchronous 82.2 ms still includes picking, geometry
+transforms, commands and observers; this capture does not split those costs.
+
+The captures are `20261021-130152-153`, `20261021-130054-569`,
+`20261021-130844-053`, and `20261021-130731-250`, in table order. Six original WAD
+paths were unresolved, as in earlier captures, so these are measurements of the
+available asset workload. The source file SHA-256 remained
+`ABC8D0B7342D4407562DF7F7D97FB72B06F9BC9906422DCC605E8CDF307B7071`.
+
+### Loading Milestones
+
 Add `-LoadTiming` to write `render.jsonl.loading.json`. Its cumulative milestones
 start immediately before `MapDocument::loadDocument`, excluding process startup,
 test setup, and application-service construction: document load returned, window
@@ -151,6 +219,8 @@ WAD references recorded in earlier captures, not a complete-asset or cold-start
 guarantee. Readiness includes one 250 ms quiet check for the editor and another for
 Play; actual display scanout and assets requested by later camera movement are not
 measured.
+
+### Timing Fields
 
 The raw log separates:
 
