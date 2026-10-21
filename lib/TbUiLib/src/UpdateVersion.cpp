@@ -94,6 +94,10 @@ std::strong_ordering operator<=>(const TemporalVersion& lhs, const TemporalVersi
   {
     return cmp;
   }
+  if (const auto cmp = lhs.patch <=> rhs.patch; cmp != 0)
+  {
+    return cmp;
+  }
   if (lhs.rc && rhs.rc)
   {
     return *lhs.rc <=> *rhs.rc;
@@ -142,7 +146,7 @@ bool operator==(const UpdateVersion& lhs, const UpdateVersion& rhs)
 std::optional<UpdateVersion> parseUpdateVersion(const QString& tag)
 {
   static const auto temporalPattern =
-    QRegularExpression{R"(^v(\d{4})\.(\d+)(?:-RC(\d+))?$)"};
+    QRegularExpression{R"(^v(\d{4})\.(\d+)(?:\.(\d+))?(?:-RC(\d+))?$)"};
   static const auto semanticPattern =
     QRegularExpression{R"(^v(\d+)\.(\d+)\.(\d+)(?:-RC(\d+))?$)"};
 
@@ -150,11 +154,14 @@ std::optional<UpdateVersion> parseUpdateVersion(const QString& tag)
   {
     const auto year = getCapture(temporalMatch, 1);
     const auto version = getCapture(temporalMatch, 2);
-    const auto rc = getCapture(temporalMatch, 3);
+    const auto patch = getCapture(temporalMatch, 3);
+    const auto rc = getCapture(temporalMatch, 4);
 
-    if (year && version && (!rc || rc))
+    if (
+      year && version && (!temporalMatch.hasCaptured(3) || patch)
+      && (!temporalMatch.hasCaptured(4) || rc))
     {
-      return TemporalVersion{*year, *version, rc};
+      return TemporalVersion{*year, *version, patch.value_or(0), rc};
     }
   }
   else if (const auto semanticMatch = semanticPattern.match(tag);
@@ -165,7 +172,7 @@ std::optional<UpdateVersion> parseUpdateVersion(const QString& tag)
     const auto patch = getCapture(semanticMatch, 3);
     const auto rc = getCapture(semanticMatch, 4);
 
-    if (major && minor && patch && (!rc || rc))
+    if (major && minor && patch && (!semanticMatch.hasCaptured(4) || rc))
     {
       return SemanticVersion{*major, *minor, *patch, rc};
     }
@@ -186,9 +193,10 @@ QString describeUpdateVersion(const UpdateVersion& version)
           .arg(semanticVersion.rc ? QString{"-RC%1"}.arg(*semanticVersion.rc) : "");
       },
       [](const TemporalVersion& temporalVersion) {
-        return QString{"v%1.%2%3"}
+        return QString{"v%1.%2%3%4"}
           .arg(temporalVersion.year)
           .arg(temporalVersion.no)
+          .arg(temporalVersion.patch ? QString{".%1"}.arg(temporalVersion.patch) : "")
           .arg(temporalVersion.rc ? QString{"-RC%1"}.arg(*temporalVersion.rc) : "");
       }),
     version);
@@ -200,18 +208,18 @@ auto buildAssetPattern()
 {
 #if defined(Q_OS_WIN)
   return QRegularExpression{
-    R"(TrenchBroom-Win64-AMD64-v\d{4}\.\d+(?:-RC(\d+))?-Release.zip)"};
+    R"(TrenchBroom-Win64-AMD64-v\d{4}\.\d+(?:\.\d+)?(?:-RC(\d+))?-Release\.zip$)"};
 #elif defined(Q_OS_MACOS)
 #if defined(__arm64__)
   return QRegularExpression{
-    R"(TrenchBroom-macOS-arm64-v\d{4}\.\d+(?:-RC(\d+))?-Release.zip)"};
+    R"(TrenchBroom-macOS-arm64-v\d{4}\.\d+(?:\.\d+)?(?:-RC(\d+))?-Release\.zip$)"};
 #else
   return QRegularExpression{
-    R"(TrenchBroom-macOS-x86_64-v\d{4}\.\d+(?:-RC(\d+))?-Release.zip)"};
+    R"(TrenchBroom-macOS-x86_64-v\d{4}\.\d+(?:\.\d+)?(?:-RC(\d+))?-Release\.zip$)"};
 #endif
 #else
   return QRegularExpression{
-    R"(TrenchBroom-Linux-x86_64-v\d{4}\.\d+(?:-RC(\d+))?-Release.zip)"};
+    R"(TrenchBroom-Linux-x86_64-v\d{4}\.\d+(?:\.\d+)?(?:-RC(\d+))?-Release\.zip$)"};
 #endif
 }
 } // namespace

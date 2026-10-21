@@ -60,40 +60,56 @@ TEST_CASE("UpdateVersion")
       < UpdateVersion{SemanticVersion{1, 2, 3, 2}}));
 
   CHECK(
-    !(UpdateVersion{TemporalVersion{2022, 2, _}}
-      < UpdateVersion{TemporalVersion{2022, 2, _}}));
+    !(UpdateVersion{TemporalVersion{2022, 2, 0, _}}
+      < UpdateVersion{TemporalVersion{2022, 2, 0, _}}));
   CHECK(
-    !(UpdateVersion{TemporalVersion{2022, 2, _}}
-      < UpdateVersion{TemporalVersion{2022, 1, _}}));
+    !(UpdateVersion{TemporalVersion{2022, 2, 0, _}}
+      < UpdateVersion{TemporalVersion{2022, 1, 0, _}}));
   CHECK(
-    !(UpdateVersion{TemporalVersion{2022, 2, _}}
-      < UpdateVersion{TemporalVersion{2021, 2, _}}));
+    !(UpdateVersion{TemporalVersion{2022, 2, 0, _}}
+      < UpdateVersion{TemporalVersion{2021, 2, 0, _}}));
   CHECK(
-    UpdateVersion{TemporalVersion{2022, 2, _}}
-    < UpdateVersion{TemporalVersion{2022, 3, _}});
+    UpdateVersion{TemporalVersion{2022, 2, 0, _}}
+    < UpdateVersion{TemporalVersion{2022, 3, 0, _}});
   CHECK(
-    UpdateVersion{TemporalVersion{2022, 2, _}}
-    < UpdateVersion{TemporalVersion{2023, 1, _}});
+    UpdateVersion{TemporalVersion{2022, 2, 0, _}}
+    < UpdateVersion{TemporalVersion{2023, 1, 0, _}});
 
   CHECK(
-    !(UpdateVersion{TemporalVersion{2022, 2, 1}}
-      < UpdateVersion{TemporalVersion{2022, 2, 1}}));
+    !(UpdateVersion{TemporalVersion{2022, 2, 0, 1}}
+      < UpdateVersion{TemporalVersion{2022, 2, 0, 1}}));
   CHECK(
-    UpdateVersion{TemporalVersion{2022, 2, 1}}
-    < UpdateVersion{TemporalVersion{2022, 2, 2}});
+    UpdateVersion{TemporalVersion{2022, 2, 0, 1}}
+    < UpdateVersion{TemporalVersion{2022, 2, 0, 2}});
 
   CHECK(
-    UpdateVersion{TemporalVersion{2022, 2, 1}}
-    < UpdateVersion{TemporalVersion{2022, 2, _}});
+    UpdateVersion{TemporalVersion{2022, 2, 0, 1}}
+    < UpdateVersion{TemporalVersion{2022, 2, 0, _}});
   CHECK(
-    !(UpdateVersion{TemporalVersion{2022, 2, _}}
-      < UpdateVersion{TemporalVersion{2022, 2, 1}}));
+    !(UpdateVersion{TemporalVersion{2022, 2, 0, _}}
+      < UpdateVersion{TemporalVersion{2022, 2, 0, 1}}));
+
+  CHECK(
+    UpdateVersion{TemporalVersion{2026, 10}}
+    < UpdateVersion{TemporalVersion{2026, 10, 1}});
+  CHECK(
+    UpdateVersion{TemporalVersion{2026, 10, 1}}
+    < UpdateVersion{TemporalVersion{2026, 10, 2}});
+  CHECK(
+    UpdateVersion{TemporalVersion{2026, 10, 2}}
+    < UpdateVersion{TemporalVersion{2026, 11}});
+  CHECK(
+    UpdateVersion{TemporalVersion{2026, 10, 1, 1}}
+    < UpdateVersion{TemporalVersion{2026, 10, 1}});
+  CHECK(
+    UpdateVersion{TemporalVersion{2026, 10, 1}}
+    < UpdateVersion{TemporalVersion{2026, 10, 2, 1}});
 
   CHECK(
     UpdateVersion{SemanticVersion{1, 2, 3, _}}
-    < UpdateVersion{TemporalVersion{2022, 2, _}});
+    < UpdateVersion{TemporalVersion{2022, 2, 0, _}});
   CHECK(
-    !(UpdateVersion{TemporalVersion{2022, 2, _}}
+    !(UpdateVersion{TemporalVersion{2022, 2, 0, _}}
       < UpdateVersion{SemanticVersion{1, 2, 3, _}}));
 }
 
@@ -112,7 +128,13 @@ TEST_CASE("Update version free functions")
     {"v3.2.x",      std::nullopt},
     {"v3.2.1",      SemanticVersion{3, 2, 1}},
     {"v2025.1",     TemporalVersion{2025, 1}},
-    {"v2025.1-RC2", TemporalVersion{2025, 1, 2}},
+    {"v2025.1-RC2", TemporalVersion{2025, 1, 0, 2}},
+    {"v2026.10.1",  TemporalVersion{2026, 10, 1}},
+    {"v2026.10.1-RC2", TemporalVersion{2026, 10, 1, 2}},
+    {"v2026.10.0",  TemporalVersion{2026, 10}},
+    {"v2026.10.1.2", std::nullopt},
+    {"v2026.10.99999999999999999999", std::nullopt},
+    {"v2026.10.1-RC99999999999999999999", std::nullopt},
     }));
     // clang-format on
 
@@ -121,51 +143,39 @@ TEST_CASE("Update version free functions")
     CHECK(parseUpdateVersion(str) == expectedVersion);
   }
 
+  SECTION("describeUpdateVersion")
+  {
+    CHECK(describeUpdateVersion(TemporalVersion{2026, 10}) == "v2026.10");
+    CHECK(describeUpdateVersion(TemporalVersion{2026, 10, 1}) == "v2026.10.1");
+    CHECK(describeUpdateVersion(TemporalVersion{2026, 10, 1, 2}) == "v2026.10.1-RC2");
+    CHECK(describeUpdateVersion(SemanticVersion{3, 2, 1}) == "v3.2.1");
+  }
+
   SECTION("chooseAsset")
   {
-    SECTION("with release candidates")
-    {
-      const auto assets = QList<upd::Asset>{
-        {"TrenchBroom-Win64-AMD64-v2025.3-RC3-Release.zip", QUrl{}, 0},
-        {"TrenchBroom-macOS-arm64-v2025.3-RC3-Release.zip", QUrl{}, 0},
-        {"TrenchBroom-macOS-x86_64-v2025.3-RC3-Release.zip", QUrl{}, 0},
-        {"TrenchBroom-Linux-x86_64-v2025.3-RC3-Release.zip", QUrl{}, 0},
-      };
+    const auto version =
+      GENERATE("v2025.3-RC3", "v2025.3", "v2026.10.1", "v2026.10.1-RC2");
+    CAPTURE(version);
+    const auto suffix = QString{"%1-Release.zip"}.arg(version);
+    const auto assets = QList<upd::Asset>{
+      {"TrenchBroom-Win64-AMD64-" + suffix + ".md5", QUrl{}, 0},
+      {"TrenchBroom-Win64-AMD64-" + suffix, QUrl{}, 0},
+      {"TrenchBroom-macOS-arm64-" + suffix, QUrl{}, 0},
+      {"TrenchBroom-macOS-x86_64-" + suffix, QUrl{}, 0},
+      {"TrenchBroom-Linux-x86_64-" + suffix, QUrl{}, 0},
+    };
 
 #if defined(Q_OS_WIN)
-      CHECK(chooseAsset(assets) == assets[0]);
+    CHECK(chooseAsset(assets) == assets[1]);
 #elif defined(Q_OS_MACOS)
 #if defined(__arm64__)
-      CHECK(chooseAsset(assets) == assets[1]);
+    CHECK(chooseAsset(assets) == assets[2]);
 #else
-      CHECK(chooseAsset(assets) == assets[2]);
+    CHECK(chooseAsset(assets) == assets[3]);
 #endif
 #else
-      CHECK(chooseAsset(assets) == assets[3]);
+    CHECK(chooseAsset(assets) == assets[4]);
 #endif
-    }
-
-    SECTION("with release versions")
-    {
-      const auto assets = QList<upd::Asset>{
-        {"TrenchBroom-Win64-AMD64-v2025.3-Release.zip", QUrl{}, 0},
-        {"TrenchBroom-macOS-arm64-v2025.3-Release.zip", QUrl{}, 0},
-        {"TrenchBroom-macOS-x86_64-v2025.3-Release.zip", QUrl{}, 0},
-        {"TrenchBroom-Linux-x86_64-v2025.3-Release.zip", QUrl{}, 0},
-      };
-
-#if defined(Q_OS_WIN)
-      CHECK(chooseAsset(assets) == assets[0]);
-#elif defined(Q_OS_MACOS)
-#if defined(__arm64__)
-      CHECK(chooseAsset(assets) == assets[1]);
-#else
-      CHECK(chooseAsset(assets) == assets[2]);
-#endif
-#else
-      CHECK(chooseAsset(assets) == assets[3]);
-#endif
-    }
   }
 }
 

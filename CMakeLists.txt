@@ -44,6 +44,10 @@ option(TB_BUILD_MCP_STDIO_SHIM "Build the legacy TrenchBroom MCP stdio shim" OFF
 
 include(CTest)
 
+if(BUILD_TESTING)
+    add_test(NAME AppVersion COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tests/VersionTest.cmake")
+endif()
+
 # Configure CCache if available and requested
 if(TB_ENABLE_CCACHE)
   find_program(CCACHE_PATH ccache)
@@ -117,8 +121,8 @@ include(cmake/Lto.cmake)
 
 # Populate version variables using git
 get_git_describe("${GIT_EXECUTABLE}" "${CMAKE_SOURCE_DIR}" GIT_DESCRIBE)
-get_app_version(GIT_DESCRIBE APP_VERSION_YEAR APP_VERSION_NUMBER APP_VERSION_RC)
-get_app_version_str(APP_VERSION_YEAR APP_VERSION_NUMBER APP_VERSION_RC APP_VERSION_STR)
+get_app_version(GIT_DESCRIBE APP_VERSION_YEAR APP_VERSION_NUMBER APP_VERSION_PATCH APP_VERSION_RC)
+get_app_version_str(APP_VERSION_YEAR APP_VERSION_NUMBER APP_VERSION_PATCH APP_VERSION_RC APP_VERSION_STR)
 set(APP_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
 
 # Some global variables used in several targets

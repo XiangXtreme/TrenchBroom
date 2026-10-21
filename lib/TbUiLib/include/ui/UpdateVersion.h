@@ -45,9 +45,10 @@ struct TemporalVersion
 {
   int year;
   int no;
+  int patch = 0;
   std::optional<int> rc = std::nullopt;
 
-  kdl_reflect_decl(TemporalVersion, year, no, rc);
+  kdl_reflect_decl(TemporalVersion, year, no, patch, rc);
 };
 
 std::strong_ordering operator<=>(const TemporalVersion& lhs, const TemporalVersion& rhs);
