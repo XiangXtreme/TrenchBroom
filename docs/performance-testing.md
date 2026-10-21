@@ -261,6 +261,72 @@ Brush cache validation still costs 14.9-15.6 ms per 3D frame, within a 23.7-24.5
 CPU frame. Whole-map dragging remains around 9-10 FPS: further substantial gains
 require reducing per-update geometry work and render-cache rebuilding.
 
+#### Movement Cost Attribution
+
+Temporary CPU scopes on revision `efb1e72d9` measured the same four-pane drag
+through the real input/controller path. Three independent Release captures,
+`20261021-143719-882`, `20261021-143812-381` and `20261021-144058-714`, recorded
+72, 70 and 71 effective movement updates. Their mean synchronous input times
+were 55.36, 56.81 and 56.26 ms; mean update-to-presentation times were 111.73,
+114.69 and 113.46 ms. All runs passed the move and undo checks, and the source
+map SHA-256 remained unchanged. Camera, assets and settings matched the previous
+section, including the six unresolved WAD paths.
+
+The third capture added separate scopes for Outliner property refresh, selection
+synchronization and transaction notification cleanup. These non-overlapping parts
+of its synchronous input processing averaged:
+
+| Part | Mean per effective update | Share of synchronous input |
+| --- | ---: | ---: |
+| Model postprocessing | 20.61 ms | 36.7% |
+| Transaction creation, collation and discarded-command destruction | 5.54 ms | 9.9% |
+| Transaction completion/document change notifications | 3.96 ms | 7.0% |
+| Geometry transform tasks and result collection | 8.99 ms | 16.0% |
+| Node contents swap and bounds propagation | 7.57 ms | 13.5% |
+| Outliner row updates and property refresh | 3.61 ms | 6.4% |
+| MapRenderer node-change notification | 4.23 ms | 7.5% |
+| Remaining input, collection and command overhead | 1.67 ms | 3.0% |
+
+Rounded components sum to the 56.18 ms input scope. The benchmark's 56.26 ms
+`sync_ms` additionally includes scope teardown and writing its diagnostic line.
+The first two captures agreed on the principal costs: model postprocessing
+20.41/20.84 ms, geometry tasks 8.97/9.20 ms, contents/bounds 7.20/7.46 ms,
+Outliner rows 3.36/3.48 ms, renderer notification 4.11/4.25 ms, and total
+transaction commit 9.34/9.58 ms. The table splits that last aggregate and does
+not add it again.
+
+Within the third capture's 20.61 ms model postprocessing, tags cost 9.25 ms,
+search-index maintenance 4.82 ms, entity models 2.33 ms, materials 2.30 ms,
+entity definitions 1.05 ms, links 0.82 ms, and selection invalidation 0.04 ms.
+Outliner row refresh cost 3.40 ms and its property refresh 0.21 ms; document
+selection synchronization was not invoked during the measured movement events.
+The transaction notification scope excludes subsequent destruction, which was
+negligible in the additional cleanup scope. These scopes do not attribute
+deferred Qt painting or all event-loop work to individual panels.
+
+Separately, the three captures spent 25.40/25.72/25.68 ms in each 3D CPU frame,
+including 16.35/16.55/16.52 ms per frame rebuilding brush render caches. GPU
+queries averaged 7.47/7.76/7.22 ms. These are nested render timings, outside the
+input scope; GPU and CPU work can overlap, and the other panes and Qt composition
+also contribute to update-to-presentation time. They must not be summed into a
+complete frame budget. Presentation throughput remained 9.0/8.8/8.9 FPS.
+
+Outliner synchronization caused most of the original select-all pause, but its
+measured synchronous refresh is a small part of the remaining drag cost. The
+larger targets are repeated model postprocessing, geometry mutation, command
+collation and render-cache rebuilding on each movement update. Property-sensitive
+invalidation and a drag preview that reuses geometry are candidates for further
+investigation; these captures do not establish their savings or correctness.
+All temporary scopes were removed after sampling.
+
+A subsequent capture after rebuilding without the probes,
+`20261021-144348-816`, passed 294 assertions across 68 effective updates and
+emitted no probe records. It averaged 57.98 ms synchronous input, 117.80 ms to
+presentation and 8.6 FPS, with a 212.44 ms maximum frame interval. The short-run
+variation remains visible; this investigation attributes costs rather than
+claiming a new performance improvement. The Release application was also rebuilt
+after removing the scopes.
+
 ### Loading Milestones
 
 Add `-LoadTiming` to write `render.jsonl.loading.json`. Its cumulative milestones
