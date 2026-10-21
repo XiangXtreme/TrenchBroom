@@ -23,6 +23,7 @@
 
 #include "vm/vec.h"
 
+#include <functional>
 #include <memory>
 
 namespace tb::ui
@@ -37,11 +38,13 @@ class DrawShapeToolController3D : public ToolController
 private:
   DrawShapeTool& m_tool;
   MapDocument& m_document;
+  std::function<bool()> m_creationMode;
 
   vm::vec3d m_initialPoint;
 
 public:
-  DrawShapeToolController3D(DrawShapeTool& tool, MapDocument& document);
+  DrawShapeToolController3D(
+    DrawShapeTool& tool, MapDocument& document, std::function<bool()> creationMode = {});
 
 private:
   Tool& tool() override;

@@ -19,6 +19,7 @@
 
 #include "base/PreferenceManager.h"
 #include "gl/OrthographicCamera.h"
+#include "gl/PerspectiveCamera.h"
 #include "mdl/BrushNode.h"
 #include "mdl/GroupNode.h"
 #include "mdl/Map.h"
@@ -26,6 +27,7 @@
 #include "prefs/Preferences.h"
 #include "ui/DrawShapeTool.h"
 #include "ui/DrawShapeToolController2D.h"
+#include "ui/DrawShapeToolController3D.h"
 #include "ui/DrawShapeToolExtensionManager.h"
 #include "ui/GestureTracker.h"
 #include "ui/InputState.h"
@@ -104,6 +106,34 @@ TEST_CASE("DrawShapeTool")
     REQUIRE(tool.extensionManager().setCurrentExtensionIndex(
       indexOfExtensionNamed(tool.extensionManager(), "Stairs")));
     canDraw = false;
+    CHECK_FALSE(chain.cancel());
+    CHECK(tool.extensionManager().currentExtension().name() == "Stairs");
+    canDraw = true;
+    CHECK(chain.cancel());
+  }
+
+  SECTION("3D drawing follows the current base mode")
+  {
+    auto canDraw = false;
+    auto chain = ToolChain{};
+    chain.append(std::make_unique<DrawShapeToolController3D>(
+      tool, document, [&]() { return canDraw; }));
+    auto camera = gl::PerspectiveCamera{};
+    camera.moveTo({0, -128, 128});
+    camera.lookAt({0, 0, 0}, {0, 0, 1});
+    auto input = InputState{0, 0};
+    input.mouseDown(MouseButtons::Left);
+    input.setPickRequest(
+      {vm::ray3d{vm::vec3d{camera.position()}, vm::vec3d{camera.direction()}}, camera});
+    CHECK_FALSE(chain.acceptMouseDrag(input));
+    canDraw = true;
+    auto tracker = chain.acceptMouseDrag(input);
+    REQUIRE(tracker);
+    tracker->cancel();
+    canDraw = false;
+    CHECK_FALSE(chain.acceptMouseDrag(input));
+    REQUIRE(tool.extensionManager().setCurrentExtensionIndex(
+      indexOfExtensionNamed(tool.extensionManager(), "Stairs")));
     CHECK_FALSE(chain.cancel());
     CHECK(tool.extensionManager().currentExtension().name() == "Stairs");
     canDraw = true;

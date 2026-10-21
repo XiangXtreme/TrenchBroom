@@ -622,18 +622,29 @@ TEST_CASE("SelectionTool")
       CHECK(map.selection() == mdl::makeSelection(map, {outsideBrushNode}));
     }
 
-    SECTION("selection mode respects hits face selection and selection guards")
+    SECTION("selection mode starts a box over unselected geometry")
+    {
+      selectMode = true;
+      auto start = makeInputState({0, 0, 128});
+      start.setModifierKeys(ModifierKeys::None);
+      auto result = mdl::PickResult{};
+      pick(map, start.pickRay(), result);
+      REQUIRE_FALSE(result.empty());
+      start.setPickResult(std::move(result));
+      auto tracker = tool.acceptMouseDrag(start);
+      REQUIRE(tracker);
+      auto end = makeInputState({48, 48, 128});
+      REQUIRE(tracker->update(end));
+      end.mouseUp(MouseButtons::Left);
+      tracker->end(end);
+      CHECK(map.selection() == mdl::makeSelection(map, {insideBrushNode}));
+    }
+
+    SECTION("selection mode respects face selection and selection guards")
     {
       selectMode = true;
       auto input = makeInputState({-48, -48, 128});
       input.setModifierKeys(ModifierKeys::None);
-      SECTION("object hit")
-      {
-        input.setPickRequest({vm::ray3d{{0, 0, 128}, {0, 0, -1}}, camera});
-        auto result = mdl::PickResult{};
-        pick(map, input.pickRay(), result);
-        input.setPickResult(std::move(result));
-      }
       SECTION("face modifier")
       {
         input.setModifierKeys(ModifierKeys::Shift);

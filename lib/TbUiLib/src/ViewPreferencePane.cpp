@@ -274,7 +274,7 @@ QWidget* ViewPreferencePane::createViewPreferences()
 
   layout->addSection("Map Views");
   layout->addRow("Layout", viewLayoutLayout);
-  layout->addRow(tr("Default 2D tool"), m_default2DToolCombo);
+  layout->addRow(tr("Default editing mode"), m_default2DToolCombo);
   layout->addRow("Brightness", m_brightnessSlider);
   layout->addRow("Grid", m_gridAlphaSlider);
   layout->addRow("FOV", m_fovSlider);

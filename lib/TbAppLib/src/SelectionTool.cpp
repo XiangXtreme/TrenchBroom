@@ -547,9 +547,7 @@ std::unique_ptr<GestureTracker> SelectionTool::acceptMouseDrag(
     && canHandleLeftClick(inputState, editorContext)
     && (inputState.modifierKeys() == ModifierKeys::None
         || inputState.modifierKeys() == ModifierKeys::CtrlCmd
-        || inputState.modifierKeys() == ModifierKeys::Alt)
-    && !firstHit(inputState, type(mdl::nodeHitType()) && isNodeSelectable(editorContext))
-          .isMatch())
+        || inputState.modifierKeys() == ModifierKeys::Alt))
   {
     const auto mode = inputState.modifierKeysDown(ModifierKeys::Alt)
                         ? BoxSelectionMode::Remove

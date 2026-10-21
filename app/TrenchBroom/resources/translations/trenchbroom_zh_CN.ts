@@ -4109,8 +4109,8 @@ They may contain new features or bug fixes that are not yet part of a stable rel
 <context>
     <name>tb::ui::ViewPreferencePane</name>
     <message>
-        <source>Default 2D tool</source>
-        <translation>默认 2D 工具</translation>
+        <source>Default editing mode</source>
+        <translation>默认编辑模式</translation>
     </message>
     <message>
         <source>Create Brush</source>

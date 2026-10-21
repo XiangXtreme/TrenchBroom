@@ -335,8 +335,10 @@ void MapView3D::initializeToolChain(MapViewToolBox& toolBox)
   addToolController(std::make_unique<SetBrushFaceAttributesTool>(m_document));
   addToolController(std::make_unique<PathToolController>(toolBox.pathTool()));
   addToolController(std::make_unique<SelectionTool>(m_document));
-  addToolController(
-    std::make_unique<DrawShapeToolController3D>(toolBox.drawShapeTool(), m_document));
+  addToolController(std::make_unique<DrawShapeToolController3D>(
+    toolBox.drawShapeTool(), m_document, [&toolBox]() {
+      return toolBox.brushCreationModeActive();
+    }));
 }
 
 void MapView3D::connectObservers()

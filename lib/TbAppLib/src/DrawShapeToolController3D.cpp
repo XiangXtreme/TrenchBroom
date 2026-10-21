@@ -35,6 +35,8 @@
 #include "vm/line.h"
 #include "vm/plane.h"
 
+#include <utility>
+
 namespace tb::ui
 {
 namespace
@@ -230,9 +232,10 @@ private:
 } // namespace
 
 DrawShapeToolController3D::DrawShapeToolController3D(
-  DrawShapeTool& tool, MapDocument& document)
+  DrawShapeTool& tool, MapDocument& document, std::function<bool()> creationMode)
   : m_tool{tool}
   , m_document{document}
+  , m_creationMode{std::move(creationMode)}
 {
 }
 
@@ -251,7 +254,9 @@ std::unique_ptr<GestureTracker> DrawShapeToolController3D::acceptMouseDrag(
 {
   using namespace mdl::HitFilters;
 
-  if (!inputState.mouseButtonsPressed(MouseButtons::Left))
+  if (
+    (m_creationMode && !m_creationMode())
+    || !inputState.mouseButtonsPressed(MouseButtons::Left))
   {
     return nullptr;
   }
@@ -281,7 +286,7 @@ std::unique_ptr<GestureTracker> DrawShapeToolController3D::acceptMouseDrag(
 
 bool DrawShapeToolController3D::cancel()
 {
-  return m_tool.cancel();
+  return (!m_creationMode || m_creationMode()) && m_tool.cancel();
 }
 
 } // namespace tb::ui

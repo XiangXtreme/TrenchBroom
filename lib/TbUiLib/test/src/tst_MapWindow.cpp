@@ -64,6 +64,7 @@
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
+#include "mdl/PickResult.h"
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "ui/ActionExecutionContext.h"
@@ -80,6 +81,7 @@
 #include "ui/MapViewLayout.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
+#include "ui/MoveObjectsTool.h"
 #include "ui/PieMenu.h"
 #include "ui/PlayModeFullScreen.h"
 #include "ui/PythonConsole.h"
@@ -138,6 +140,7 @@ void sendMouseMove(QWidget& widget, const QPoint& pos)
   auto event = QMouseEvent{
     QEvent::MouseMove,
     QPointF{pos},
+    QPointF{widget.mapTo(widget.window(), pos)},
     QPointF{widget.mapToGlobal(pos)},
     Qt::NoButton,
     Qt::NoButton,
@@ -150,6 +153,20 @@ void sendMouseRelease(QWidget& widget, const QPoint& pos)
   auto event = QMouseEvent{
     QEvent::MouseButtonRelease,
     QPointF{pos},
+    QPointF{widget.mapTo(widget.window(), pos)},
+    QPointF{widget.mapToGlobal(pos)},
+    Qt::LeftButton,
+    Qt::NoButton,
+    Qt::NoModifier};
+  QApplication::sendEvent(&widget, &event);
+}
+
+void sendMousePress(QWidget& widget, const QPoint& pos)
+{
+  auto event = QMouseEvent{
+    QEvent::MouseButtonPress,
+    QPointF{pos},
+    QPointF{widget.mapTo(widget.window(), pos)},
     QPointF{widget.mapToGlobal(pos)},
     Qt::LeftButton,
     Qt::LeftButton,
@@ -201,7 +218,7 @@ TEST_CASE("MapWindow")
   auto window = MapWindow{appController, std::move(document)};
   UNSCOPED_INFO("MapWindow created");
 
-  SECTION("2D base modes route empty drags and restore selection with Escape")
+  SECTION("2D base modes route drags and restore selection with Escape")
   {
     auto* container = window.findChild<SwitchableMapViewContainer*>();
     REQUIRE(container);
@@ -211,6 +228,25 @@ TEST_CASE("MapWindow")
     QApplication::processEvents();
     auto* view = window.findChild<MapView2D*>();
     REQUIRE(view);
+    const auto showWindows = qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1;
+    const auto originalCursorPos = QCursor::pos();
+    const auto restoreCursor = qScopeGuard([&]() {
+      if (showWindows)
+      {
+        QCursor::setPos(originalCursorPos);
+      }
+    });
+    window.activateWindow();
+    if (showWindows)
+    {
+      window.raise();
+      REQUIRE(QTest::qWaitForWindowActive(&window));
+      QCursor::setPos(view->mapToGlobal(view->rect().center()));
+    }
+    view->setFocus();
+    QApplication::processEvents();
+    QTest::mouseClick(view, Qt::LeftButton);
+    REQUIRE(container->active());
     auto& map = window.document().map();
     auto& toolBox = window.toolBox();
 
@@ -218,7 +254,8 @@ TEST_CASE("MapWindow")
     auto* brushAction = window.findAction("Menu/Edit/Tools/Create Brush Mode");
     REQUIRE(selectAction);
     REQUIRE(brushAction);
-    selectAction->trigger();
+    toolBox.setSelectMode(false);
+    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
     CHECK(toolBox.selectModeActive());
     CHECK(selectAction->isChecked());
     CHECK_FALSE(brushAction->isChecked());
@@ -233,28 +270,48 @@ TEST_CASE("MapWindow")
     const auto startY = center.y() - 60.0f;
     const auto endX = center.x() + 60.0f;
     const auto endY = center.y() + 60.0f;
-    const auto drag = [&]() {
-      auto& processor = static_cast<ToolBoxConnector&>(*view);
-      processor.processEvent(
-        MouseEvent{MouseEvent::Type::Down, MouseEvent::Button::Left, startX, startY});
-      processor.processEvent(MouseEvent{
-        MouseEvent::Type::DragStart, MouseEvent::Button::Left, startX, startY});
+    const auto drag = [&](const QPoint& start, const QPoint& end) {
+      CAPTURE(start.x(), start.y(), end.x(), end.y());
+      sendMouseMove(*view, start);
+      view->grabFramebuffer();
+      sendMousePress(*view, start);
+      sendMouseMove(*view, end);
+      // Input is processed while rendering; force a frame on native windows too.
+      view->grabFramebuffer();
       REQUIRE(toolBox.dragging());
-      processor.processEvent(
-        MouseEvent{MouseEvent::Type::Drag, MouseEvent::Button::Left, endX, endY});
-      processor.processEvent(
-        MouseEvent{MouseEvent::Type::DragEnd, MouseEvent::Button::Left, endX, endY});
-      processor.processEvent(
-        MouseEvent{MouseEvent::Type::Up, MouseEvent::Button::Left, endX, endY});
+      // InputEventRecorder discards drags shorter than 100 ms as accidental motion.
+      QTest::qWait(110);
+      sendMouseRelease(*view, end);
+      view->grabFramebuffer();
+      CHECK_FALSE(toolBox.dragging());
     };
+    const auto start = QPoint{qRound(startX), qRound(startY)};
+    const auto end = QPoint{qRound(endX), qRound(endY)};
+    const auto brushCenter = QPoint{qRound(center.x()), qRound(center.y())};
     const auto count = map.worldNode().defaultLayer()->childCount();
-    drag();
+    drag(start, end);
     CHECK(map.selection().nodes == std::vector<mdl::Node*>{brush});
     CHECK(map.worldNode().defaultLayer()->childCount() == count);
-    brushAction->trigger();
+
+    const auto brushBounds = brush->logicalBounds();
+    mdl::deselectAll(map);
+    sendMouseMove(*view, brushCenter);
+    view->grabFramebuffer();
+    REQUIRE_FALSE(view->pickResult().empty());
+    drag(brushCenter, end);
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{brush});
+    CHECK(brush->logicalBounds() == brushBounds);
+    CHECK(map.worldNode().defaultLayer()->childCount() == count);
+    REQUIRE(toolBox.moveObjectsTool().active());
+    drag(brushCenter, end);
+    CHECK(brush->logicalBounds() != brushBounds);
+    map.undoCommand();
+    CHECK(brush->logicalBounds() == brushBounds);
+
+    QTest::keyClick(view, Qt::Key_B, Qt::ShiftModifier);
     CHECK(brushAction->isChecked());
     CHECK_FALSE(selectAction->isChecked());
-    drag();
+    drag(start, end);
     CHECK(map.worldNode().defaultLayer()->childCount() == count + 1);
     CHECK(toolBox.brushCreationModeActive());
     view->cancel();
@@ -262,6 +319,65 @@ TEST_CASE("MapWindow")
     CHECK(map.selection().hasNodes());
     view->cancel();
     CHECK_FALSE(map.selection().hasAny());
+  }
+
+  SECTION("3D selection mode blocks brush creation after Shift S")
+  {
+    window.resize(1200, 900);
+    window.show();
+    QApplication::processEvents();
+    auto* view = window.findChild<MapView3D*>();
+    REQUIRE(view);
+    const auto showWindows = qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1;
+    const auto originalCursorPos = QCursor::pos();
+    const auto restoreCursor = qScopeGuard([&]() {
+      if (showWindows)
+      {
+        QCursor::setPos(originalCursorPos);
+      }
+    });
+    window.activateWindow();
+    if (showWindows)
+    {
+      window.raise();
+      REQUIRE(QTest::qWaitForWindowActive(&window));
+      QCursor::setPos(view->mapToGlobal(view->rect().center()));
+    }
+    view->setFocus();
+    QApplication::processEvents();
+    QTest::mouseClick(view, Qt::LeftButton);
+    auto* container = window.findChild<SwitchableMapViewContainer*>();
+    REQUIRE(container);
+    REQUIRE(container->active());
+    auto& map = window.document().map();
+    auto& toolBox = window.toolBox();
+    toolBox.setSelectMode(false);
+    QTest::keyClick(view, Qt::Key_S, Qt::ShiftModifier);
+    REQUIRE(toolBox.selectModeActive());
+    const auto count = map.worldNode().defaultLayer()->childCount();
+    const auto start = view->rect().center();
+    const auto end = start + QPoint{60, 60};
+    sendMouseMove(*view, start);
+    view->grabFramebuffer();
+    sendMousePress(*view, start);
+    sendMouseMove(*view, end);
+    view->grabFramebuffer();
+    CHECK_FALSE(toolBox.dragging());
+    QTest::qWait(110);
+    sendMouseRelease(*view, end);
+    view->grabFramebuffer();
+    CHECK(map.worldNode().defaultLayer()->childCount() == count);
+
+    QTest::keyClick(view, Qt::Key_B, Qt::ShiftModifier);
+    REQUIRE(toolBox.brushCreationModeActive());
+    sendMousePress(*view, start);
+    sendMouseMove(*view, end);
+    view->grabFramebuffer();
+    REQUIRE(toolBox.dragging());
+    toolBox.cancelMouseDrag();
+    sendMouseRelease(*view, end);
+    view->grabFramebuffer();
+    CHECK(map.worldNode().defaultLayer()->childCount() == count);
   }
 
 
