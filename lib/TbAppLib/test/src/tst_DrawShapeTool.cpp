@@ -18,15 +18,20 @@
  */
 
 #include "base/PreferenceManager.h"
+#include "gl/OrthographicCamera.h"
 #include "mdl/BrushNode.h"
 #include "mdl/GroupNode.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Selection.h"
 #include "prefs/Preferences.h"
 #include "ui/DrawShapeTool.h"
+#include "ui/DrawShapeToolController2D.h"
 #include "ui/DrawShapeToolExtensionManager.h"
+#include "ui/GestureTracker.h"
+#include "ui/InputState.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/ToolChain.h"
 
 #include "kd/range_utils.h"
 
@@ -61,6 +66,49 @@ TEST_CASE("DrawShapeTool")
   auto tool = DrawShapeTool{document};
 
   constexpr auto bounds = vm::bbox3d{{0, 0, 0}, {64, 64, 64}};
+
+  SECTION("2D drawing follows the current base mode")
+  {
+    auto canDraw = false;
+    auto chain = ToolChain{};
+    chain.append(std::make_unique<DrawShapeToolController2D>(
+      tool, document, [&]() { return canDraw; }));
+    auto camera = gl::OrthographicCamera{};
+    camera.setDirection({0, 0, -1}, {0, 1, 0});
+    auto input = InputState{0, 0};
+    input.mouseDown(MouseButtons::Left);
+    input.setPickRequest({vm::ray3d{{0, 0, 128}, {0, 0, -1}}, camera});
+    CHECK_FALSE(chain.acceptMouseDrag(input));
+    canDraw = true;
+    auto tracker = chain.acceptMouseDrag(input);
+    REQUIRE(tracker);
+    input.setPickRequest({vm::ray3d{{64, 64, 128}, {0, 0, -1}}, camera});
+    REQUIRE(tracker->update(input));
+    input.mouseUp(MouseButtons::Left);
+    tracker->end(input);
+    CHECK(map.selection().nodes.size() == 1);
+    auto* firstBrush = map.selection().nodes.front();
+    input.mouseDown(MouseButtons::Left);
+    input.setPickRequest({vm::ray3d{{96, 0, 128}, {0, 0, -1}}, camera});
+    tracker = chain.acceptMouseDrag(input);
+    REQUIRE(tracker);
+    input.setPickRequest({vm::ray3d{{160, 64, 128}, {0, 0, -1}}, camera});
+    REQUIRE(tracker->update(input));
+    input.mouseUp(MouseButtons::Left);
+    tracker->end(input);
+    REQUIRE(map.selection().nodes.size() == 1);
+    CHECK(map.selection().nodes.front() != firstBrush);
+    map.undoCommand();
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{firstBrush});
+    deselectAll(map);
+    REQUIRE(tool.extensionManager().setCurrentExtensionIndex(
+      indexOfExtensionNamed(tool.extensionManager(), "Stairs")));
+    canDraw = false;
+    CHECK_FALSE(chain.cancel());
+    CHECK(tool.extensionManager().currentExtension().name() == "Stairs");
+    canDraw = true;
+    CHECK(chain.cancel());
+  }
 
   SECTION("createBrushes groups multiple brushes and names the group after the shape")
   {

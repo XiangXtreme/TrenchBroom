@@ -145,6 +145,11 @@ QWidget* ViewPreferencePane::createViewPreferences()
   m_layoutCombo->addItem("Three Panes");
   m_layoutCombo->addItem("Four Panes");
 
+  m_default2DToolCombo = new QComboBox{};
+  m_default2DToolCombo->setObjectName("ViewPreference_Default2DTool");
+  m_default2DToolCombo->addItem(tr("Create Brush"), false);
+  m_default2DToolCombo->addItem(tr("Select"), true);
+
   m_link2dCameras = new QCheckBox{"Sync 2D views"};
   m_link2dCameras->setToolTip("All 2D views pan and zoom together.");
 
@@ -269,6 +274,7 @@ QWidget* ViewPreferencePane::createViewPreferences()
 
   layout->addSection("Map Views");
   layout->addRow("Layout", viewLayoutLayout);
+  layout->addRow(tr("Default 2D tool"), m_default2DToolCombo);
   layout->addRow("Brightness", m_brightnessSlider);
   layout->addRow("Grid", m_gridAlphaSlider);
   layout->addRow("FOV", m_fovSlider);
@@ -291,6 +297,10 @@ QWidget* ViewPreferencePane::createViewPreferences()
 
 void ViewPreferencePane::bindEvents()
 {
+  connect(m_default2DToolCombo, &QComboBox::activated, this, [this](const int index) {
+    PreferenceManager::instance().set(
+      Preferences::Default2DSelectMode, m_default2DToolCombo->itemData(index).toBool());
+  });
   connect(
     m_fpsLimitSpin, &QSpinBox::valueChanged, this, &ViewPreferencePane::fpsLimitChanged);
   connect(
@@ -366,6 +376,7 @@ void ViewPreferencePane::doResetToDefaults()
 {
   auto& prefs = PreferenceManager::instance();
   prefs.resetToDefault(Preferences::MapViewLayout);
+  prefs.resetToDefault(Preferences::Default2DSelectMode);
   prefs.resetToDefault(Preferences::Link2DCameras);
   prefs.resetToDefault(Preferences::Brightness);
   prefs.resetToDefault(Preferences::GridAlpha);
@@ -385,6 +396,7 @@ void ViewPreferencePane::doResetToDefaults()
 void ViewPreferencePane::updateControls()
 {
   const auto layoutBlocker = QSignalBlocker{m_layoutCombo};
+  const auto defaultToolBlocker = QSignalBlocker{m_default2DToolCombo};
   const auto link2DCamerasBlocker = QSignalBlocker{m_link2dCameras};
   const auto brightnessBlocker = QSignalBlocker{m_brightnessSlider};
   const auto gridAlphaBlocker = QSignalBlocker{m_gridAlphaSlider};
@@ -408,6 +420,8 @@ void ViewPreferencePane::updateControls()
   auto& prefs = PreferenceManager::instance();
 
   m_layoutCombo->setCurrentIndex(prefs.getPendingValue(Preferences::MapViewLayout));
+  m_default2DToolCombo->setCurrentIndex(
+    prefs.getPendingValue(Preferences::Default2DSelectMode) ? 1 : 0);
   m_link2dCameras->setChecked(prefs.getPendingValue(Preferences::Link2DCameras));
   m_brightnessSlider->setValue(
     brightnessToUI(prefs.getPendingValue(Preferences::Brightness)));

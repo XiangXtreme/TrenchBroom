@@ -19,6 +19,7 @@
 
 #include "base/PreferenceManager.h"
 #include "gl/OrthographicCamera.h"
+#include "gl/PerspectiveCamera.h"
 #include "mdl/Brush.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushFace.h"
@@ -571,7 +572,85 @@ TEST_CASE("SelectionTool")
       return inputState;
     };
 
-    auto tool = SelectionTool{document};
+    auto selectMode = false;
+    auto tool = SelectionTool{document, [&]() { return selectMode; }};
+
+    SECTION("selection mode replaces extends and subtracts selection")
+    {
+      selectMode = true;
+      auto modifiers = ModifierKeys::None;
+      auto expected = std::vector<mdl::Node*>{insideBrushNode};
+      selectNodes(map, {outsideBrushNode});
+      SECTION("replace") {}
+      SECTION("add")
+      {
+        modifiers = ModifierKeys::CtrlCmd;
+        expected.push_back(outsideBrushNode);
+      }
+      SECTION("subtract")
+      {
+        selectNodes(map, {insideBrushNode});
+        modifiers = ModifierKeys::Alt;
+        expected = {outsideBrushNode};
+      }
+      const auto before = map.selection();
+      auto start = makeInputState({-48, -48, 128});
+      start.setModifierKeys(modifiers);
+      auto tracker = tool.acceptMouseDrag(start);
+      REQUIRE(tracker);
+      auto end = makeInputState({48, 48, 128});
+      end.setModifierKeys(modifiers);
+      REQUIRE(tracker->update(end));
+      end.mouseUp(MouseButtons::Left);
+      tracker->end(end);
+      CHECK_THAT(map.selection().nodes, UnorderedEquals(expected));
+      map.undoCommand();
+      CHECK(map.selection() == before);
+    }
+
+    SECTION("selection mode cancels without changing selection")
+    {
+      selectMode = true;
+      selectNodes(map, {outsideBrushNode});
+      auto start = makeInputState({-48, -48, 128});
+      start.setModifierKeys(ModifierKeys::None);
+      auto tracker = tool.acceptMouseDrag(start);
+      REQUIRE(tracker);
+      auto end = makeInputState({48, 48, 128});
+      REQUIRE(tracker->update(end));
+      tracker->cancel();
+      CHECK(map.selection() == mdl::makeSelection(map, {outsideBrushNode}));
+    }
+
+    SECTION("selection mode respects hits face selection and selection guards")
+    {
+      selectMode = true;
+      auto input = makeInputState({-48, -48, 128});
+      input.setModifierKeys(ModifierKeys::None);
+      SECTION("object hit")
+      {
+        input.setPickRequest({vm::ray3d{{0, 0, 128}, {0, 0, -1}}, camera});
+        auto result = mdl::PickResult{};
+        pick(map, input.pickRay(), result);
+        input.setPickResult(std::move(result));
+      }
+      SECTION("face modifier")
+      {
+        input.setModifierKeys(ModifierKeys::Shift);
+      }
+      SECTION("blocked selection")
+      {
+        map.editorContext().setBlockSelection(true);
+      }
+      SECTION("3D view")
+      {
+        auto perspective = gl::PerspectiveCamera{};
+        input.setPickRequest({input.pickRay(), perspective});
+        CHECK_FALSE(tool.acceptMouseDrag(input));
+        return;
+      }
+      CHECK_FALSE(tool.acceptMouseDrag(input));
+    }
 
     SECTION("disabled")
     {

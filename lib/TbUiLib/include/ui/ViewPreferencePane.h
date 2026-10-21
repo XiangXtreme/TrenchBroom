@@ -36,6 +36,7 @@ class ViewPreferencePane : public PreferencePane
   Q_OBJECT
 private:
   QComboBox* m_layoutCombo = nullptr;
+  QComboBox* m_default2DToolCombo = nullptr;
   QCheckBox* m_link2dCameras = nullptr;
   SliderWithLabel* m_brightnessSlider = nullptr;
   SliderWithLabel* m_gridAlphaSlider = nullptr;

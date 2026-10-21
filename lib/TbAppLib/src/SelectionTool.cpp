@@ -49,6 +49,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace tb::ui
@@ -259,12 +260,32 @@ public:
   void cancel() override { m_map.cancelTransaction(); }
 };
 
+std::unique_ptr<GestureTracker> startBoxSelection(
+  Tool& tool,
+  mdl::Map& map,
+  const InputState& inputState,
+  const BoxSelectionMode mode = BoxSelectionMode::Replace)
+{
+  const auto plane = vm::plane3d{
+    map.referenceBounds().min,
+    vm::vec3d{vm::get_abs_max_component_axis(inputState.camera().direction())}};
+  if (const auto distance = vm::intersect_ray_plane(inputState.pickRay(), plane))
+  {
+    const auto position = vm::point_at_distance(inputState.pickRay(), *distance);
+    return createHandleDragTracker(
+      BoxSelectionDragDelegate{tool, map, mode}, inputState, position, position);
+  }
+  return nullptr;
+}
+
 } // namespace
 
-SelectionTool::SelectionTool(MapDocument& document)
+SelectionTool::SelectionTool(
+  MapDocument& document, std::function<bool()> boxSelectionMode)
   : ToolController{}
   , Tool{true}
   , m_document{document}
+  , m_boxSelectionMode{std::move(boxSelectionMode)}
 {
 }
 
@@ -520,6 +541,23 @@ std::unique_ptr<GestureTracker> SelectionTool::acceptMouseDrag(
   auto& map = m_document.map();
   const auto& editorContext = map.editorContext();
 
+  if (
+    m_boxSelectionMode && m_boxSelectionMode()
+    && inputState.camera().orthographicProjection()
+    && canHandleLeftClick(inputState, editorContext)
+    && (inputState.modifierKeys() == ModifierKeys::None
+        || inputState.modifierKeys() == ModifierKeys::CtrlCmd
+        || inputState.modifierKeys() == ModifierKeys::Alt)
+    && !firstHit(inputState, type(mdl::nodeHitType()) && isNodeSelectable(editorContext))
+          .isMatch())
+  {
+    const auto mode = inputState.modifierKeysDown(ModifierKeys::Alt)
+                        ? BoxSelectionMode::Remove
+                      : isMultiClick(inputState) ? BoxSelectionMode::Add
+                                                 : BoxSelectionMode::Replace;
+    return startBoxSelection(*this, map, inputState, mode);
+  }
+
   if (!handleClick(inputState, editorContext) || !isMultiClick(inputState))
   {
     return nullptr;
@@ -562,21 +600,7 @@ std::unique_ptr<GestureTracker> SelectionTool::acceptMouseDrag(
           ModifierKeyPressed::Yes, ModifierKeyPressed::No, ModifierKeyPressed::No)
         && pref(Preferences::Enable2DBoxSelection))
       {
-        const auto bounds = map.referenceBounds();
-        const auto plane = vm::plane3d{
-          bounds.min,
-          vm::vec3d{vm::get_abs_max_component_axis(inputState.camera().direction())}};
-
-        if (const auto distance = vm::intersect_ray_plane(inputState.pickRay(), plane))
-        {
-          const auto initialHandlePosition =
-            vm::point_at_distance(inputState.pickRay(), *distance);
-          return createHandleDragTracker(
-            BoxSelectionDragDelegate{*this, map},
-            inputState,
-            initialHandlePosition,
-            initialHandlePosition);
-        }
+        return startBoxSelection(*this, map, inputState);
       }
       return nullptr;
     }

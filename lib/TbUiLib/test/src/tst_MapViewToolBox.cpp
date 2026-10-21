@@ -24,6 +24,7 @@
 #include <QStackedLayout>
 #include <QWidget>
 
+#include "base/PreferenceManager.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EditorContext.h"
@@ -40,6 +41,7 @@
 #include "mdl/NodeHandles.h"
 #include "mdl/PropertyDefinition.h"
 #include "mdl/WorldNode.h"
+#include "prefs/Preferences.h"
 #include "ui/CatchConfig.h"
 #include "ui/ChamferTool.h"
 #include "ui/ChamferToolPage.h"
@@ -159,6 +161,35 @@ TEST_CASE("MapViewToolBox")
   auto parent = QWidget{};
   auto bookCtrl = QStackedLayout{&parent};
   auto toolBox = MapViewToolBox{document, &bookCtrl};
+
+  SECTION("base mode survives modal tools and document refresh")
+  {
+    toolBox.setSelectMode(true);
+    CHECK(toolBox.selectModeActive());
+    CHECK_FALSE(toolBox.brushCreationModeActive());
+    toolBox.togglePathTool();
+    CHECK_FALSE(toolBox.selectModeActive());
+    CHECK_FALSE(toolBox.brushCreationModeActive());
+    toolBox.deactivateCurrentTool();
+    CHECK(toolBox.selectModeActive());
+    toolBox.togglePathTool();
+    toolBox.setSelectMode(false);
+    CHECK_FALSE(toolBox.pathToolActive());
+    CHECK(toolBox.brushCreationModeActive());
+    document.documentWasLoadedNotifier();
+    CHECK(toolBox.brushCreationModeActive());
+    setPref(Preferences::Default2DSelectMode, true);
+    CHECK(toolBox.selectModeActive());
+  }
+
+  SECTION("default base mode is used by newly created toolboxes")
+  {
+    setPref(Preferences::Default2DSelectMode, true);
+    auto secondParent = QWidget{};
+    auto secondBook = QStackedLayout{&secondParent};
+    auto secondToolBox = MapViewToolBox{document, &secondBook};
+    CHECK(secondToolBox.selectModeActive());
+  }
 
   SECTION("path tool entry toggles and creates path entities")
   {

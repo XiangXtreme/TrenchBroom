@@ -61,6 +61,7 @@ class MapViewToolBox : public ToolBox
 {
 private:
   MapDocument& m_document;
+  bool m_selectMode;
   QStackedLayout* m_bookCtrl = nullptr;
 
   std::unique_ptr<ClipTool> m_clipTool;
@@ -92,10 +93,17 @@ private:
   NotifierConnection m_notifierConnection;
 
 public:
+  Notifier<> baseToolDidChangeNotifier;
+
   MapViewToolBox(MapDocument& map, QStackedLayout* bookCtrl);
   ~MapViewToolBox() override;
 
 public: // tools
+  bool selectMode() const;
+  bool selectModeActive() const;
+  bool brushCreationModeActive() const;
+  void setSelectMode(bool selectMode);
+
   const ClipTool& clipTool() const;
   ClipTool& clipTool();
 

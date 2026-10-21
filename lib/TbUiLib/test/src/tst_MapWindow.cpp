@@ -45,6 +45,7 @@
 #include "base/PreferenceManager.h"
 #include "base/Result.h"
 #include "fs/TestEnvironment.h"
+#include "gl/Camera.h"
 #include "gl/GlManager.h"
 #include "gl/Resource.h"
 #include "gl/ResourceManager.h"
@@ -73,9 +74,11 @@
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapViewLayout.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/PieMenu.h"
 #include "ui/PlayModeFullScreen.h"
@@ -197,6 +200,69 @@ TEST_CASE("MapWindow")
   UNSCOPED_INFO("creating MapWindow");
   auto window = MapWindow{appController, std::move(document)};
   UNSCOPED_INFO("MapWindow created");
+
+  SECTION("2D base modes route empty drags and restore selection with Escape")
+  {
+    auto* container = window.findChild<SwitchableMapViewContainer*>();
+    REQUIRE(container);
+    container->switchToMapView(MapViewLayout::FourPanes);
+    window.resize(1200, 900);
+    window.show();
+    QApplication::processEvents();
+    auto* view = window.findChild<MapView2D*>();
+    REQUIRE(view);
+    auto& map = window.document().map();
+    auto& toolBox = window.toolBox();
+
+    auto* selectAction = window.findAction("Menu/Edit/Tools/Select Mode");
+    auto* brushAction = window.findAction("Menu/Edit/Tools/Create Brush Mode");
+    REQUIRE(selectAction);
+    REQUIRE(brushAction);
+    selectAction->trigger();
+    CHECK(toolBox.selectModeActive());
+    CHECK(selectAction->isChecked());
+    CHECK_FALSE(brushAction->isChecked());
+
+    auto* brush = new mdl::BrushNode{
+      mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()}.createCube(
+        32.0, "test")
+      | kdl::value()};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {brush}}});
+    const auto center = view->camera().project(vm::vec3f{0, 0, 0});
+    const auto startX = center.x() - 60.0f;
+    const auto startY = center.y() - 60.0f;
+    const auto endX = center.x() + 60.0f;
+    const auto endY = center.y() + 60.0f;
+    const auto drag = [&]() {
+      auto& processor = static_cast<ToolBoxConnector&>(*view);
+      processor.processEvent(
+        MouseEvent{MouseEvent::Type::Down, MouseEvent::Button::Left, startX, startY});
+      processor.processEvent(MouseEvent{
+        MouseEvent::Type::DragStart, MouseEvent::Button::Left, startX, startY});
+      REQUIRE(toolBox.dragging());
+      processor.processEvent(
+        MouseEvent{MouseEvent::Type::Drag, MouseEvent::Button::Left, endX, endY});
+      processor.processEvent(
+        MouseEvent{MouseEvent::Type::DragEnd, MouseEvent::Button::Left, endX, endY});
+      processor.processEvent(
+        MouseEvent{MouseEvent::Type::Up, MouseEvent::Button::Left, endX, endY});
+    };
+    const auto count = map.worldNode().defaultLayer()->childCount();
+    drag();
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{brush});
+    CHECK(map.worldNode().defaultLayer()->childCount() == count);
+    brushAction->trigger();
+    CHECK(brushAction->isChecked());
+    CHECK_FALSE(selectAction->isChecked());
+    drag();
+    CHECK(map.worldNode().defaultLayer()->childCount() == count + 1);
+    CHECK(toolBox.brushCreationModeActive());
+    view->cancel();
+    CHECK(toolBox.selectModeActive());
+    CHECK(map.selection().hasNodes());
+    view->cancel();
+    CHECK_FALSE(map.selection().hasAny());
+  }
 
 
   SECTION("uses modern workbench surfaces and status controls")

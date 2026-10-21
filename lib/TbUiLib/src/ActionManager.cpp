@@ -1492,6 +1492,36 @@ void ActionManager::createToolsMenu()
 {
   auto& toolsMenu = createMainMenu("Tools");
   toolsMenu.addItem(addAction(Action{
+    "Menu/Edit/Tools/Select Mode",
+    "Select Mode",
+    ActionContext::Any,
+    KeySequence{"Shift+S"},
+    [](auto& context) { context.mapWindow().toolBox().setSelectMode(true); },
+    [](const auto& context) {
+      return context.hasDocument() && context.mapWindow().toolBox().enabled();
+    },
+    [](const auto& context) {
+      return context.hasDocument() && context.mapWindow().toolBox().selectModeActive();
+    },
+    std::filesystem::path{"SelectMode.svg"},
+  }));
+  toolsMenu.addItem(addAction(Action{
+    "Menu/Edit/Tools/Create Brush Mode",
+    "Create Brush Mode",
+    ActionContext::Any,
+    KeySequence{"Shift+B"},
+    [](auto& context) { context.mapWindow().toolBox().setSelectMode(false); },
+    [](const auto& context) {
+      return context.hasDocument() && context.mapWindow().toolBox().enabled();
+    },
+    [](const auto& context) {
+      return context.hasDocument()
+             && context.mapWindow().toolBox().brushCreationModeActive();
+    },
+    std::filesystem::path{"CreateBrushMode.svg"},
+  }));
+  toolsMenu.addSeparator();
+  toolsMenu.addItem(addAction(Action{
     "Menu/Edit/Tools/Brush Tool",
     "Brush Tool",
     ActionContext::Any,
@@ -2214,7 +2244,9 @@ Menu& ActionManager::createMainMenu(std::string name)
 
 void ActionManager::createToolbar()
 {
-  m_toolBar.addItem(existingAction("Controls/Map view/Deactivate current tool"));
+  m_toolBar.addItem(existingAction("Menu/Edit/Tools/Select Mode"));
+  m_toolBar.addItem(existingAction("Menu/Edit/Tools/Create Brush Mode"));
+  m_toolBar.addSeparator();
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Brush Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Clip Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Vertex Tool"));

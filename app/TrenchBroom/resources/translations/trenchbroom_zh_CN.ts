@@ -12,6 +12,14 @@
 <context>
     <name>QObject</name>
     <message>
+        <source>Select Mode</source>
+        <translation>选择模式</translation>
+    </message>
+    <message>
+        <source>Create Brush Mode</source>
+        <translation>创建 Brush 模式</translation>
+    </message>
+    <message>
         <location filename="../../../../lib/TbUiLib/src/ActionBuilder.cpp" line="41"/>
         <source>%1 (%2)</source>
         <translation>%1 (%2)</translation>
@@ -4100,6 +4108,18 @@ They may contain new features or bug fixes that are not yet part of a stable rel
 </context>
 <context>
     <name>tb::ui::ViewPreferencePane</name>
+    <message>
+        <source>Default 2D tool</source>
+        <translation>默认 2D 工具</translation>
+    </message>
+    <message>
+        <source>Create Brush</source>
+        <translation>创建 Brush</translation>
+    </message>
+    <message>
+        <source>Select</source>
+        <translation>选择</translation>
+    </message>
     <message>
         <source>FPS limit</source>
         <translation>限制 FPS</translation>

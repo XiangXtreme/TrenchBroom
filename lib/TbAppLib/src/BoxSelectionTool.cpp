@@ -163,9 +163,11 @@ void SelectionBoxRenderer::render(
   }
 }
 
-BoxSelectionDragDelegate::BoxSelectionDragDelegate(Tool& tool, mdl::Map& map)
+BoxSelectionDragDelegate::BoxSelectionDragDelegate(
+  Tool& tool, mdl::Map& map, const BoxSelectionMode mode)
   : m_tool{tool}
   , m_map{map}
+  , m_mode{mode}
 {
 }
 
@@ -235,10 +237,20 @@ void BoxSelectionDragDelegate::end(const InputState& inputState, const DragState
     const auto selectedNodes = selectNodesForBounds(m_map, m_selectionBounds, viewAxis);
 
     auto transaction = mdl::Transaction{m_map, "Box Select"};
-    mdl::deselectAll(m_map);
-    if (!selectedNodes.empty())
+    if (m_mode == BoxSelectionMode::Remove)
     {
-      mdl::selectNodes(m_map, selectedNodes);
+      mdl::deselectNodes(m_map, selectedNodes);
+    }
+    else
+    {
+      if (m_mode == BoxSelectionMode::Replace || m_map.selection().hasBrushFaces())
+      {
+        mdl::deselectAll(m_map);
+      }
+      if (!selectedNodes.empty())
+      {
+        mdl::selectNodes(m_map, selectedNodes);
+      }
     }
     transaction.commit();
     m_renderer.clear();

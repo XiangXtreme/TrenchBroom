@@ -22,9 +22,11 @@
 #include <QStackedLayout>
 #include <QWidget>
 
+#include "base/PreferenceManager.h"
 #include "mdl/EditorContext.h"
 #include "mdl/Map.h"
 #include "mdl/Selection.h"
+#include "prefs/Preferences.h"
 #include "ui/AssembleBrushTool.h"
 #include "ui/ChamferTool.h"
 #include "ui/ChamferToolPage.h"
@@ -60,6 +62,7 @@ namespace tb::ui
 
 MapViewToolBox::MapViewToolBox(MapDocument& document, QStackedLayout* bookCtrl)
   : m_document{document}
+  , m_selectMode{pref(Preferences::Default2DSelectMode)}
 {
   createTools(bookCtrl);
   connectObservers();
@@ -71,6 +74,37 @@ MapViewToolBox::~MapViewToolBox()
   disconnectObservers();
   clearTransientState(InputState{0.0f, 0.0f});
   m_prefabTool->clearPreview();
+}
+
+bool MapViewToolBox::selectMode() const
+{
+  return m_selectMode;
+}
+
+bool MapViewToolBox::selectModeActive() const
+{
+  return m_selectMode && !anyModalToolActive();
+}
+
+bool MapViewToolBox::brushCreationModeActive() const
+{
+  return !m_selectMode && !anyModalToolActive();
+}
+
+void MapViewToolBox::setSelectMode(const bool selectMode)
+{
+  if (dragging())
+  {
+    cancelMouseDrag();
+  }
+  deactivateAllTools();
+  if (m_selectMode != selectMode)
+  {
+    m_selectMode = selectMode;
+    updateToolPage();
+    baseToolDidChangeNotifier();
+    refreshViewsNotifier(drawShapeTool());
+  }
 }
 
 ClipTool& MapViewToolBox::clipTool()
@@ -689,6 +723,14 @@ void MapViewToolBox::createTools(QStackedLayout* bookCtrl)
 void MapViewToolBox::connectObservers()
 {
   m_notifierConnection +=
+    PreferenceManager::instance().preferenceDidChangeNotifier.connect(
+      [this](const auto& path) {
+        if (path == Preferences::Default2DSelectMode.path)
+        {
+          setSelectMode(pref(Preferences::Default2DSelectMode));
+        }
+      });
+  m_notifierConnection +=
     toolActivatedNotifier.connect(this, &MapViewToolBox::toolActivated);
   m_notifierConnection +=
     toolDeactivatedNotifier.connect(this, &MapViewToolBox::toolDeactivated);
@@ -752,7 +794,7 @@ void MapViewToolBox::updateToolPage()
   }
   else if (
     shearToolActive() || vertexToolActive() || edgeToolActive() || faceToolActive()
-    || clipToolActive() || pathToolActive())
+    || clipToolActive() || pathToolActive() || selectMode())
   {
     m_bookCtrl->setCurrentWidget(m_emptyToolPage);
   }

@@ -941,6 +941,8 @@ void MapWindow::connectObservers()
 
   m_notifierConnection +=
     m_mapView->toolBox().toolActivatedNotifier.connect(this, &MapWindow::toolActivated);
+  m_notifierConnection += m_mapView->toolBox().baseToolDidChangeNotifier.connect(
+    this, &MapWindow::updateActionState);
   m_notifierConnection += m_mapView->toolBox().toolDeactivatedNotifier.connect(
     this, &MapWindow::toolDeactivated);
   m_notifierConnection += m_mapView->toolBox().toolHandleSelectionChangedNotifier.connect(

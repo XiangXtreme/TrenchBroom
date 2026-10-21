@@ -153,9 +153,12 @@ void MapView2D::initializeToolChain(MapViewToolBox& toolBox)
     std::make_unique<CreateEntityToolController2D>(toolBox.createEntityTool()));
   addToolController(std::make_unique<PrefabToolController2D>(toolBox.prefabTool()));
   addToolController(std::make_unique<PathToolController>(toolBox.pathTool()));
-  addToolController(std::make_unique<SelectionTool>(m_document));
-  addToolController(
-    std::make_unique<DrawShapeToolController2D>(toolBox.drawShapeTool(), m_document));
+  addToolController(std::make_unique<SelectionTool>(
+    m_document, [&toolBox]() { return toolBox.selectModeActive(); }));
+  addToolController(std::make_unique<DrawShapeToolController2D>(
+    toolBox.drawShapeTool(), m_document, [&toolBox]() {
+      return toolBox.brushCreationModeActive();
+    }));
 }
 
 void MapView2D::connectObservers()

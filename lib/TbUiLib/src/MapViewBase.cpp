@@ -262,6 +262,12 @@ void MapViewBase::connectObservers()
     m_toolBox.toolActivatedNotifier.connect(this, &MapViewBase::toolChanged);
   m_notifierConnection +=
     m_toolBox.toolDeactivatedNotifier.connect(this, &MapViewBase::toolChanged);
+  m_notifierConnection += m_toolBox.baseToolDidChangeNotifier.connect([this]() {
+    closeSmartFaceSelection();
+    updatePickResult();
+    updateActionStates();
+    update();
+  });
 
   auto& prefs = PreferenceManager::instance();
   m_notifierConnection +=
@@ -774,6 +780,11 @@ void MapViewBase::cancel()
   }
   if (!ToolBoxConnector::cancel())
   {
+    if (camera().orthographicProjection() && !m_toolBox.selectMode())
+    {
+      m_toolBox.setSelectMode(true);
+      return;
+    }
     auto& map = m_document.map();
     if (map.selection().hasAny())
     {

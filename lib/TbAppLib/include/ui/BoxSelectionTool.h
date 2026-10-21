@@ -51,6 +51,13 @@ public:
 };
 
 
+enum class BoxSelectionMode
+{
+  Replace,
+  Add,
+  Remove,
+};
+
 class BoxSelectionDragDelegate : public HandleDragTrackerDelegate
 {
 private:
@@ -58,9 +65,11 @@ private:
   mdl::Map& m_map;
   vm::bbox3d m_selectionBounds;
   SelectionBoxRenderer m_renderer;
+  BoxSelectionMode m_mode;
 
 public:
-  BoxSelectionDragDelegate(Tool& tool, mdl::Map& map);
+  BoxSelectionDragDelegate(
+    Tool& tool, mdl::Map& map, BoxSelectionMode mode = BoxSelectionMode::Replace);
 
   HandlePositionProposer start(
     const InputState& inputState,

@@ -22,6 +22,7 @@
 #include "ui/Tool.h"
 #include "ui/ToolController.h"
 
+#include <functional>
 #include <memory>
 
 namespace tb
@@ -45,9 +46,11 @@ class SelectionTool : public ToolController, public Tool
 {
 private:
   MapDocument& m_document;
+  std::function<bool()> m_boxSelectionMode;
 
 public:
-  explicit SelectionTool(MapDocument& document);
+  explicit SelectionTool(
+    MapDocument& document, std::function<bool()> boxSelectionMode = {});
 
   Tool& tool() override;
   const Tool& tool() const override;

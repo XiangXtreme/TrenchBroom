@@ -21,6 +21,7 @@
 
 #include "ui/ToolController.h"
 
+#include <functional>
 #include <memory>
 
 namespace tb::ui
@@ -34,9 +35,11 @@ class DrawShapeToolController2D : public ToolController
 private:
   DrawShapeTool& m_tool;
   MapDocument& m_document;
+  std::function<bool()> m_creationMode;
 
 public:
-  DrawShapeToolController2D(DrawShapeTool& tool, MapDocument& document);
+  DrawShapeToolController2D(
+    DrawShapeTool& tool, MapDocument& document, std::function<bool()> creationMode = {});
 
 private:
   Tool& tool() override;

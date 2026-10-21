@@ -29,6 +29,8 @@
 
 #include "vm/intersection.h"
 
+#include <utility>
+
 namespace tb::ui
 {
 namespace
@@ -202,9 +204,10 @@ private:
 } // namespace
 
 DrawShapeToolController2D::DrawShapeToolController2D(
-  DrawShapeTool& tool, MapDocument& document)
+  DrawShapeTool& tool, MapDocument& document, std::function<bool()> creationMode)
   : m_tool{tool}
   , m_document{document}
+  , m_creationMode{std::move(creationMode)}
 {
 }
 
@@ -221,7 +224,9 @@ const Tool& DrawShapeToolController2D::tool() const
 std::unique_ptr<GestureTracker> DrawShapeToolController2D::acceptMouseDrag(
   const InputState& inputState)
 {
-  if (!inputState.mouseButtonsPressed(MouseButtons::Left))
+  if (
+    (m_creationMode && !m_creationMode())
+    || !inputState.mouseButtonsPressed(MouseButtons::Left))
   {
     return nullptr;
   }
@@ -235,7 +240,9 @@ std::unique_ptr<GestureTracker> DrawShapeToolController2D::acceptMouseDrag(
   }
 
   auto& map = m_document.map();
-  if (map.selection().hasAny())
+  // An explicit creation mode supports consecutive brushes. Keep the implicit
+  // tool's empty-selection requirement for callers without that mode.
+  if (!m_creationMode && map.selection().hasAny())
   {
     return nullptr;
   }
@@ -261,7 +268,7 @@ std::unique_ptr<GestureTracker> DrawShapeToolController2D::acceptMouseDrag(
 
 bool DrawShapeToolController2D::cancel()
 {
-  return m_tool.cancel();
+  return (!m_creationMode || m_creationMode()) && m_tool.cancel();
 }
 
 } // namespace tb::ui

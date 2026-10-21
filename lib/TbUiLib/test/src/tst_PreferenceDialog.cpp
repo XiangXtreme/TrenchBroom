@@ -138,6 +138,17 @@ TEST_CASE("PreferenceDialog.preferencePanes")
   {
     auto pane = std::make_unique<ViewPreferencePane>();
 
+    auto* defaultTool = pane->findChild<QComboBox*>("ViewPreference_Default2DTool");
+    REQUIRE(defaultTool);
+    CHECK(defaultTool->count() == 2);
+    defaultTool->setCurrentIndex(1);
+    REQUIRE(QMetaObject::invokeMethod(
+      defaultTool, "activated", Qt::DirectConnection, Q_ARG(int, 1)));
+    CHECK(
+      PreferenceManager::instance().getPendingValue(Preferences::Default2DSelectMode));
+    pane->resetToDefaults();
+    CHECK(defaultTool->currentIndex() == 0);
+
     auto* fpsLimitSpin =
       pane->findChild<QSpinBox*>(QStringLiteral("ViewPreference_FpsLimitSpin"));
     REQUIRE(fpsLimitSpin != nullptr);
