@@ -158,6 +158,7 @@ private:
 
   struct BrushInfo
   {
+    GoldSrcEntityRenderSettings entitySettings;
     AllocationTracker::Block* vertexHolderKey = nullptr;
     AllocationTracker::Block* edgeIndicesKey = nullptr;
     size_t coloredEdgeVertexOffset = 0;
@@ -339,7 +340,8 @@ private:
   bool shouldDrawFaceInTransparentPass(
     const mdl::BrushNode& brushNode,
     const mdl::BrushFace& face,
-    const gl::Material* material) const;
+    const gl::Material* material,
+    const GoldSrcEntityRenderSettings& entitySettings) const;
   void validateBrush(const mdl::BrushNode& brushNode);
 
   /**

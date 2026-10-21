@@ -398,6 +398,62 @@ tests, the UI suite (one native Play capture test intentionally skipped under it
 background-window policy), all 49 application/tool tests, and a Release
 `TrenchBroom` build.
 
+#### Brush Cache Computation Reuse
+
+Brush validation now parses GoldSrc entity render settings once per rendered
+brush and retains them with its render allocations. Face-pass classification,
+transparent items and both opaque-item collection passes reuse the same settings.
+Existing entity/child invalidation refreshes this data after property edits;
+changing the render context's GoldSrc mode still invalidates the renderer.
+UV generation prepares the scaled axes, texture size and normal once per face.
+It preserves the original conversion to float before applying offset and texture
+size. Vertex capacity accounts for face-local copies of vertices (two per edge
+of the closed brush), rather than reserving only unique brush vertices.
+
+Temporary scopes in `20261021-171930-205` (original computation) and
+`20261021-172245-840` (reuse) measured the following per-validation costs:
+vertex-cache generation 7.92 / 6.36 ms, face indices 7.00 / 2.04 ms, and opaque
+item collection 1.53 / 0.54 ms. Vertex insertion itself took 0.53 / 0.52 ms.
+The scopes add measurement overhead and were removed before final validation.
+
+Normal Release captures used the same whole-map movement setup above, five
+seconds of warmup and eight seconds of measurement, without concurrent builds
+or tests. A later control restored the original UV computation, reservation and
+repeated entity parsing, while retaining the new `BrushInfo` layout and private
+function signature. The optimized implementation was then restored and rebuilt.
+
+| Capture | Move sync, mean | To presentation, mean | To presentation, P95 | 3D FPS |
+| --- | ---: | ---: | ---: | ---: |
+| Reuse, four panes 1 | 52.83 ms | 113.84 ms | 138.02 ms | 8.9 |
+| Reuse, four panes 2 | 49.79 ms | 109.51 ms | 123.36 ms | 9.3 |
+| Reuse, single 3D | 51.66 ms | 97.11 ms | 110.68 ms | 10.4 |
+| Original computation control, four panes | 52.20 ms | 117.53 ms | 133.96 ms | 8.6 |
+| Reuse restored, four panes | 51.49 ms | 112.93 ms | 129.85 ms | 8.9 |
+
+Captures are `20261021-172755-708`, `20261021-172829-948`,
+`20261021-172926-958`, `20261021-173113-003` and `20261021-173241-007`,
+with 71, 74, 83, 69 and 71 effective updates, respectively. Their per-frame
+brush validation times were 12.07, 11.95, 11.67, 18.36 and 12.13 ms; total 3D
+CPU frame times were 22.75, 22.58, 21.90, 29.00 and 23.01 ms. The adjacent
+control/restored pair reduced brush validation by 34% and CPU rendering by 21%,
+but mean movement-to-presentation time improved only 4%. Maximum presentation
+times in these five runs were 153.84, 140.88, 120.37, 143.85 and 140.32 ms.
+Synchronous geometry edits and other editor work remain substantial; these
+results do not establish a large overall FPS gain or smooth whole-map dragging.
+Nested render timings and input-to-presentation timings must not be added.
+
+Every capture passed undo bounds restoration and unmodified-document checks.
+The original map's SHA-256 is unchanged, and the same six WAD paths remain
+unresolved. The final four-pane runs retained 417 transparent items, 370 model
+pass entities, 948 model draws and 225408 edge vertex references per frame.
+Opaque ranges and padding vary with allocation order between processes. The
+captured framebuffer still shows the selected map with its dense labels.
+Regression tests compare every cached position, normal and UV with the face API
+for Standard/Valve brushes, non-square textures, rotated negative UV scales,
+movement with alignment locking on/off, content restoration and material changes.
+Render tests cover refreshed amount/color/mode/conveyor settings and GoldSrc
+context toggles; the real-GL entity preview tests also pass.
+
 ### Loading Milestones
 
 Add `-LoadTiming` to write `render.jsonl.loading.json`. Its cumulative milestones

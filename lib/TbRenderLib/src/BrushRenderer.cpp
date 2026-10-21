@@ -613,15 +613,12 @@ void addMarkedEdgeVertices(
 bool BrushRenderer::shouldDrawFaceInTransparentPass(
   const mdl::BrushNode& brushNode,
   const mdl::BrushFace& face,
-  const gl::Material* material) const
+  const gl::Material* material,
+  const GoldSrcEntityRenderSettings& entitySettings) const
 {
-  if (m_goldSrcRendering)
+  if (entitySettings.mode != 0)
   {
-    const auto settings = brushEntityRenderSettings(brushNode, true);
-    if (settings.mode != 0)
-    {
-      return settings.transparent();
-    }
+    return entitySettings.transparent();
   }
   // A material with real per-pixel blending must always be drawn in the transparent pass
   // (with depth-writes off) regardless of the X-ray/hidden-brush preference below --
@@ -676,6 +673,7 @@ void BrushRenderer::validateBrush(const mdl::BrushNode& brushNode)
   }
 
   BrushInfo& info = m_brushInfo[&brushNode];
+  info.entitySettings = brushEntityRenderSettings(brushNode, m_goldSrcRendering);
 
   // collect vertices
   auto& brushCache = brushNode.brushRendererBrushCache();
@@ -750,7 +748,8 @@ void BrushRenderer::validateBrush(const mdl::BrushNode& brushNode)
       if (cache.face->isMarked() && !(m_skipSkyFaces && isSkyFace(*cache.face)))
       {
         contract_assert(cache.material == material);
-        if (shouldDrawFaceInTransparentPass(brushNode, *cache.face, material))
+        if (shouldDrawFaceInTransparentPass(
+              brushNode, *cache.face, material, info.entitySettings))
         {
           transparentIndexCount += triIndicesCountForPolygon(cache.vertexCount);
         }
@@ -783,7 +782,8 @@ void BrushRenderer::validateBrush(const mdl::BrushNode& brushNode)
         const auto& cache = facesSortedByMaterial[j];
         if (
           cache.face->isMarked() && !(m_skipSkyFaces && isSkyFace(*cache.face))
-          && shouldDrawFaceInTransparentPass(brushNode, *cache.face, material))
+          && shouldDrawFaceInTransparentPass(
+            brushNode, *cache.face, material, info.entitySettings))
         {
           addTriIndicesForPolygon(
             currentDest,
@@ -827,7 +827,8 @@ void BrushRenderer::validateBrush(const mdl::BrushNode& brushNode)
         const auto& cache = facesSortedByMaterial[j];
         if (
           cache.face->isMarked() && !(m_skipSkyFaces && isSkyFace(*cache.face))
-          && !shouldDrawFaceInTransparentPass(brushNode, *cache.face, material))
+          && !shouldDrawFaceInTransparentPass(
+            brushNode, *cache.face, material, info.entitySettings))
         {
           addTriIndicesForPolygon(
             currentDest,
@@ -857,7 +858,7 @@ std::shared_ptr<std::vector<TransparentDrawItem>> BrushRenderer::
         key.block->pos,
         key.block->size,
         key.sortPosition,
-        brushEntityRenderSettings(*brushNode, m_goldSrcRendering)});
+        info.entitySettings});
     }
   }
   return items;
@@ -874,7 +875,7 @@ std::shared_ptr<std::vector<TransparentDrawItem>> BrushRenderer::collectOpaqueDr
   auto affectedMaterials = std::unordered_set<const gl::Material*>{};
   for (const auto& [brushNode, info] : m_brushInfo)
   {
-    const auto settings = brushEntityRenderSettings(*brushNode, true);
+    const auto& settings = info.entitySettings;
     if (settings.mode != 0 || settings.conveyorSpeed != 0.0f)
     {
       for (const auto& [material, key] : info.opaqueFaceIndicesKeys)
@@ -885,7 +886,7 @@ std::shared_ptr<std::vector<TransparentDrawItem>> BrushRenderer::collectOpaqueDr
   }
   for (const auto& [brushNode, info] : m_brushInfo)
   {
-    const auto settings = brushEntityRenderSettings(*brushNode, true);
+    const auto& settings = info.entitySettings;
     for (const auto& [material, key] : info.opaqueFaceIndicesKeys)
     {
       if (affectedMaterials.contains(material))

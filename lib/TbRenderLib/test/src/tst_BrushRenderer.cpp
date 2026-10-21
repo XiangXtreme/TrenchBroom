@@ -344,6 +344,58 @@ TEST_CASE("BrushRenderer rendering")
     CHECK(drawnEntityModes == std::vector<int>{0});
   }
 
+  SECTION("brush invalidation refreshes cached entity settings across render modes")
+  {
+    renderContext.setGoldSrcRendering(true);
+    auto scrollMaterial =
+      gl::Material{"SCROLLarrows", createTextureResource(gl::Texture{128, 32})};
+    auto entity = mdl::EntityNode{mdl::Entity{{{"classname", "func_conveyor"}}}};
+    auto* brush = new mdl::BrushNode{makeCubeBrushNode(scrollMaterial).brush()};
+    entity.addChild(brush);
+    auto renderer = BrushRenderer{};
+    renderer.addBrush(*brush);
+    renderContext.setAnimationTime(0.5);
+    const auto draw = [&] {
+      drawnEntityModes.clear();
+      drawnEntityAlphas.clear();
+      drawnColors.clear();
+      drawnOffsets.clear();
+      auto batch = RenderBatch{vboManager};
+      renderer.render(renderContext, batch);
+      batch.render(renderContext);
+      REQUIRE(drawnEntityModes.size() == 1);
+    };
+    for (const auto mode : {2, 5, 4, 0, 1, 3})
+    {
+      auto changed = entity.entity();
+      changed.addOrUpdateProperty("rendermode", std::to_string(mode));
+      changed.addOrUpdateProperty("renderamt", mode == 2 ? "100" : "160");
+      changed.addOrUpdateProperty("rendercolor", mode == 2 ? "255 0 0" : "0 0 255");
+      changed.addOrUpdateProperty("speed", mode == 2 ? "64" : "-32");
+      entity.setEntity(std::move(changed));
+      renderer.invalidateBrush(*brush);
+      draw();
+      const auto settings = goldSrcEntityRenderSettings(&entity.entity());
+      CHECK(drawnEntityModes.front() == settings.mode);
+      CHECK(drawnEntityAlphas.front() == settings.alpha);
+      CHECK(drawnColors.front() == settings.color);
+      CHECK(
+        drawnOffsets.front()
+        == goldSrcConveyorOffset(settings, "SCROLLarrows", 128, 0.5));
+      CHECK(renderContext.animationRequested());
+    }
+    renderContext.setGoldSrcRendering(false);
+    draw();
+    CHECK(drawnEntityModes.front() == 0);
+    CHECK(drawnEntityAlphas.front() == 1.0f);
+    CHECK(drawnColors.front() == vm::vec3f{1, 1, 1});
+    CHECK(drawnOffsets.front() == 0.0f);
+    renderContext.setGoldSrcRendering(true);
+    draw();
+    CHECK(drawnEntityModes.front() == 3);
+    CHECK(drawnEntityAlphas.front() == 160.0f / 255.0f);
+  }
+
   SECTION("opaque conveyors animate while other brushes sharing the texture stay still")
   {
     renderContext.setGoldSrcRendering(true);

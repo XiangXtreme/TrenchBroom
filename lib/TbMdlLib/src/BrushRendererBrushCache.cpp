@@ -22,6 +22,7 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushGeometry.h"
 #include "mdl/BrushNode.h"
+#include "mdl/UvUtils.h"
 
 #include "kd/contracts.h"
 
@@ -63,7 +64,7 @@ void BrushRendererBrushCache::validateVertexCache(const mdl::BrushNode& brushNod
   const auto& brush = brushNode.brush();
 
   m_cachedVertices.clear();
-  m_cachedVertices.reserve(brush.vertexCount());
+  m_cachedVertices.reserve(2 * brush.edgeCount());
 
   m_cachedFacesSortedByMaterial.clear();
   m_cachedFacesSortedByMaterial.reserve(brush.faceCount());
@@ -71,6 +72,12 @@ void BrushRendererBrushCache::validateVertexCache(const mdl::BrushNode& brushNod
   for (const auto& face : brush.faces())
   {
     const auto indexOfFirstVertexRelativeToBrush = m_cachedVertices.size();
+
+    const auto uvAttributes = face.uvAttributes();
+    const auto uAxis = safeScaleAxis(face.uAxis(), uvAttributes.scale.x());
+    const auto vAxis = safeScaleAxis(face.vAxis(), uvAttributes.scale.y());
+    const auto textureSize = face.textureSize();
+    const auto normal = vm::vec3f{face.boundary().normal};
 
     // The boundary is in CCW order, but the renderer expects CW order:
     auto& boundary = face.geometry()->boundary();
@@ -87,10 +94,13 @@ void BrushRendererBrushCache::validateVertexCache(const mdl::BrushNode& brushNod
       vertex->setPayload(static_cast<GLuint>(currentIndex));
 
       const auto& position = vertex->position();
-      m_cachedVertices.emplace_back(
-        vm::vec3f{position}, vm::vec3f{face.boundary().normal}, face.uvCoords(position));
-
-      currentHalfEdge = currentHalfEdge->previous();
+      // Keep the float conversion before offset and texture-size adjustment, as in
+      // UvCoordSystem::uvCoords, while preparing the face's axes only once.
+      const auto uv =
+        (vm::vec2f{float(vm::dot(position, uAxis)), float(vm::dot(position, vAxis))}
+         + uvAttributes.offset)
+        / textureSize;
+      m_cachedVertices.emplace_back(vm::vec3f{position}, normal, uv);
     }
 
     // face cache
