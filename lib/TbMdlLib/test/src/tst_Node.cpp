@@ -264,6 +264,18 @@ public:
   }
 };
 
+class BoundsObserverNode : public TestNode
+{
+public:
+  std::vector<Node*> changedDescendants;
+
+private:
+  void doDescendantPhysicalBoundsDidChange(Node& node) override
+  {
+    changedDescendants.push_back(&node);
+  }
+};
+
 class DestroyableNode : public TestNode
 {
 private:
@@ -339,6 +351,37 @@ auto makeCollectVisitedNodesVisitor(std::vector<Node*>& visited)
 
 TEST_CASE("Node")
 {
+  SECTION("child physical bounds changes propagate once per ancestor")
+  {
+    const auto worldBounds = vm::bbox3d{8192.0};
+    auto root = BoundsObserverNode{};
+    auto* outer = new GroupNode{Group{"outer"}};
+    auto* inner = new GroupNode{Group{"inner"}};
+    auto* entity = new EntityNode{Entity{}};
+    auto* brush = new BrushNode{
+      BrushBuilder{MapFormat::Standard, worldBounds}.createCube(32, "material")
+      | kdl::value()};
+    root.addChild(outer);
+    outer->addChild(inner);
+    inner->addChild(entity);
+    entity->addChild(brush);
+
+    const auto initialBounds = brush->physicalBounds();
+    CHECK(outer->physicalBounds() == initialBounds);
+    CHECK(inner->physicalBounds() == initialBounds);
+    CHECK(entity->physicalBounds() == initialBounds);
+    root.changedDescendants.clear();
+
+    auto moved = brush->brush();
+    const auto delta = vm::vec3d{128, 64, 32};
+    REQUIRE(moved.transform(worldBounds, vm::translation_matrix(delta), true));
+    brush->setBrush(std::move(moved));
+    CHECK(root.changedDescendants == std::vector<Node*>{outer, inner, entity, brush});
+    CHECK(outer->physicalBounds() == initialBounds.translate(delta));
+    CHECK(inner->physicalBounds() == initialBounds.translate(delta));
+    CHECK(entity->physicalBounds() == initialBounds.translate(delta));
+  }
+
   SECTION("destructor")
   {
     auto rootNode = std::make_unique<TestNode>();

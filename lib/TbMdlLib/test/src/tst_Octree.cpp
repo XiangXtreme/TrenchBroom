@@ -236,6 +236,109 @@ using inner_node = tree::inner_node;
 
 TEST_CASE("octree")
 {
+  SECTION("update")
+  {
+    SECTION("within the same cell")
+    {
+      auto tree = octree<double, int>{32.0};
+      auto expected = octree<double, int>{32.0};
+      for (auto* t : {&tree, &expected})
+      {
+        REQUIRE(t->insert({{33, 33, 33}, {40, 40, 40}}, 1));
+        REQUIRE(t->insert({{34, 34, 34}, {41, 41, 41}}, 2));
+      }
+
+      tree.update({{50, 50, 50}, {60, 60, 60}}, 1);
+      CHECK(tree == expected);
+      CHECK(tree.find_containers({55, 55, 55}) == std::vector<int>{1, 2});
+      CHECK(tree.remove(1));
+      CHECK(tree.remove(2));
+      CHECK(tree.empty());
+    }
+
+    SECTION("within an expanded root")
+    {
+      auto tree = octree<double, int>{32.0};
+      auto expected = octree<double, int>{32.0};
+      for (auto* t : {&tree, &expected})
+      {
+        REQUIRE(t->insert({{-1, -1, -1}, {1, 1, 1}}, 1));
+        REQUIRE(t->insert({{-128, -128, -128}, {128, 128, 128}}, 2));
+      }
+
+      tree.update({{-40, -40, -40}, {40, 40, 40}}, 1);
+      CHECK(tree == expected);
+      CHECK(tree.find_containers({39, 39, 39}) == std::vector<int>{1, 2});
+      CHECK(tree.remove(1));
+      CHECK(tree.remove(2));
+      CHECK(tree.empty());
+    }
+
+    SECTION("moving between cells and resizing")
+    {
+      auto tree = octree<double, int>{32.0};
+      REQUIRE(tree.insert({{33, 33, 33}, {40, 40, 40}}, 1));
+      tree.update({{65, 65, 65}, {70, 70, 70}}, 1);
+      CHECK(tree.find_containers({35, 35, 35}).empty());
+      CHECK(tree.find_containers({68, 68, 68}) == std::vector<int>{1});
+
+      tree.update({{-128, -128, -128}, {128, 128, 128}}, 1);
+      CHECK(tree.find_containers({-100, -100, -100}) == std::vector<int>{1});
+      tree.update({{-1, -1, -1}, {1, 1, 1}}, 1);
+      CHECK(tree.find_containers({-100, -100, -100}).empty());
+      CHECK(tree.find_containers({0, 0, 0}) == std::vector<int>{1});
+      tree.update({{1, 1, 1}, {2, 2, 2}}, 1);
+      CHECK(tree.find_containers({-100, -100, -100}).empty());
+      CHECK(tree.find_containers({1, 1, 1}) == std::vector<int>{1});
+      CHECK(tree.remove(1));
+      CHECK(tree.empty());
+    }
+
+    SECTION("repeated bulk updates match reinsertion queries")
+    {
+      auto tree = octree<double, int>{32.0};
+      auto reference = octree<double, int>{32.0};
+      for (int i = 0; i < 128; ++i)
+      {
+        const auto p = vm::vec3d{double(i - 64), double(i % 7 - 3), double(i % 11)};
+        REQUIRE(tree.insert({p, p + vm::vec3d{16, 24, 8}}, i));
+        REQUIRE(reference.insert({p, p + vm::vec3d{16, 24, 8}}, i));
+      }
+      for (int step = 0; step < 16; ++step)
+      {
+        for (int i = 0; i < 128; ++i)
+        {
+          const auto p = vm::vec3d{
+            double(i - 64 + step * 8), double(i % 7 - 3), double(i % 11 - step)};
+          const auto bounds = vm::bbox3d{p, p + vm::vec3d{16, 24, 8}};
+          tree.update(bounds, i);
+          REQUIRE(reference.remove(i));
+          REQUIRE(reference.insert(bounds, i));
+        }
+        for (int x = -128; x <= 256; x += 16)
+        {
+          const auto p = vm::vec3d{double(x), 1, 1};
+          const auto sameResults = [](auto actual, auto expected) {
+            std::ranges::sort(actual);
+            std::ranges::sort(expected);
+            CHECK(actual == expected);
+          };
+          sameResults(tree.find_containers(p), reference.find_containers(p));
+          const auto bounds = vm::bbox3d{p, p + vm::vec3d{8, 8, 8}};
+          sameResults(
+            tree.find_intersectors(bounds), reference.find_intersectors(bounds));
+          const auto ray = vm::ray3d{p, {0, 0, 1}};
+          sameResults(tree.find_intersectors(ray), reference.find_intersectors(ray));
+        }
+      }
+      for (int i = 0; i < 128; ++i)
+      {
+        CHECK(tree.remove(i));
+      }
+      CHECK(tree.empty());
+    }
+  }
+
   SECTION("insert")
   {
     auto tree = octree<double, int>{32.0};

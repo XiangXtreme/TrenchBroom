@@ -111,7 +111,6 @@ private: // implement methods inherited from Node
   void doChildWasRemoved(Node& node) override;
 
   void doNodePhysicalBoundsDidChange() override;
-  void doChildPhysicalBoundsDidChange() override;
 
   bool doSelectable() const override;
 

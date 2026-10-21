@@ -246,12 +246,6 @@ void GroupNode::doNodePhysicalBoundsDidChange()
   invalidateBounds();
 }
 
-void GroupNode::doChildPhysicalBoundsDidChange()
-{
-  invalidateBounds();
-  nodePhysicalBoundsDidChange();
-}
-
 bool GroupNode::doSelectable() const
 {
   return true;

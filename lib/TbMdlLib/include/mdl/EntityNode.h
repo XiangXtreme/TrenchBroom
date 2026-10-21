@@ -77,7 +77,6 @@ private: // implement Node interface
   void doChildWasRemoved(Node& node) override;
 
   void doNodePhysicalBoundsDidChange() override;
-  void doChildPhysicalBoundsDidChange() override;
 
   bool doSelectable() const override;
 

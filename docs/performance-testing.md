@@ -222,6 +222,45 @@ overlap and exclude the separately measured synchronous move command. Further wo
 must address per-update scene mutation and cache rebuilding; the measured change
 does not establish smooth whole-map dragging.
 
+#### Spatial Update Follow-up
+
+Moving an indexed object within the same octree cell now keeps its existing
+entry. Root entries also retain their shared, possibly expanded root address
+when the new bounds still require root storage. Moving to another cell still
+removes and reinserts the object, including when bounds grow or shrink.
+
+Entity and group nodes previously propagated child bounds changes a second time
+after the base node had already invalidated their bounds and notified ancestors.
+Removing those overrides leaves one notification per ancestor and avoids repeated
+parent bounds calculations and spatial-index updates in nested hierarchies.
+Regression coverage checks notification counts, cached ancestor bounds, nested
+brush-entity queries, and repeated octree updates against remove/reinsert queries.
+
+The same Release workload, with no concurrent builds or tests, produced:
+
+| Capture | Select sync / to presentation | 3D FPS | Mean move sync | Mean update to presentation | Update P95 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Four panes, follow-up run 1 | 24.0 / 83.8 ms | 9.2 | 56.6 ms | 113.8 ms | 136.6 ms |
+| Four panes, follow-up run 2 | 23.2 / 81.8 ms | 9.3 | 54.1 ms | 107.6 ms | 128.6 ms |
+| Single 3D, follow-up run 1 | 25.9 / 79.4 ms | 10.0 | 56.3 ms | 101.7 ms | 119.7 ms |
+| Single 3D, follow-up run 2 | 25.9 / 80.8 ms | 10.4 | 54.9 ms | 100.5 ms | 124.8 ms |
+
+Captures are `20261021-142357-390`, `20261021-142527-853`,
+`20261021-142445-550` and `20261021-142657-585` in table order, with 71, 75, 79
+and 80 effective updates. The mean of the two four-pane run means improved about
+11% for synchronous movement and 7% to presentation against the previous section's
+two optimized runs. Single-3D improvements are smaller, and its second P95 exceeds
+the previous single-3D result; these short captures do not establish uniformly
+better frame pacing.
+
+All four runs restored the original bounds and unmodified state with undo. The
+source map SHA-256 remained unchanged, the same six WAD paths were unresolved,
+and GPU temperature after the first three captures was 69 C. Inspection of the
+four-pane framebuffer found the expected selected scene with dense entity labels.
+Brush cache validation still costs 14.9-15.6 ms per 3D frame, within a 23.7-24.5 ms
+CPU frame. Whole-map dragging remains around 9-10 FPS: further substantial gains
+require reducing per-update geometry work and render-cache rebuilding.
+
 ### Loading Milestones
 
 Add `-LoadTiming` to write `render.jsonl.loading.json`. Its cumulative milestones

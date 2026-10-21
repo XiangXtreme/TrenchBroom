@@ -143,12 +143,6 @@ void EntityNode::doNodePhysicalBoundsDidChange()
   invalidateBounds();
 }
 
-void EntityNode::doChildPhysicalBoundsDidChange()
-{
-  invalidateBounds();
-  nodePhysicalBoundsDidChange();
-}
-
 bool EntityNode::doSelectable() const
 {
   return !hasChildren();

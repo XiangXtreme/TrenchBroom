@@ -243,6 +243,40 @@ TEST_CASE("WorldNode")
     }
   }
 
+  SECTION("nested brush entity bounds and spatial queries follow child movement")
+  {
+    auto worldNode = WorldNode{{}, {}, mapFormat};
+    auto* outer = new GroupNode{Group{"outer"}};
+    auto* inner = new GroupNode{Group{"inner"}};
+    auto* entity = new EntityNode{Entity{}};
+    auto* brush = new BrushNode{
+      BrushBuilder{mapFormat, worldBounds}.createCube(32, "material") | kdl::value()};
+    worldNode.defaultLayer()->addChild(outer);
+    outer->addChild(inner);
+    inner->addChild(entity);
+    entity->addChild(brush);
+
+    for (int step = 1; step <= 8; ++step)
+    {
+      const auto oldPosition = brush->physicalBounds().center();
+      REQUIRE(outer->physicalBounds() == brush->physicalBounds());
+      REQUIRE(inner->physicalBounds() == brush->physicalBounds());
+      REQUIRE(entity->physicalBounds() == brush->physicalBounds());
+
+      transformNode(*brush, vm::translation_matrix(vm::vec3d{128, 64, 32}), worldBounds);
+      const auto position = brush->physicalBounds().center();
+      CHECK_THAT(
+        worldNode.nodeTree().find_containers(position),
+        UnorderedEquals(std::vector<Node*>{entity, brush}));
+      auto oldContainers = std::vector<Node*>{};
+      worldNode.findNodesContaining(oldPosition, oldContainers);
+      CHECK(oldContainers.empty());
+      CHECK(outer->physicalBounds() == brush->physicalBounds());
+      CHECK(inner->physicalBounds() == brush->physicalBounds());
+      CHECK(entity->physicalBounds() == brush->physicalBounds());
+    }
+  }
+
   SECTION("rebuildNodeTree")
   {
     auto worldNode = WorldNode{{}, {}, mapFormat};

@@ -494,6 +494,19 @@ public:
   {
     contract_pre(!vm::is_nan(newBounds.min) && !vm::is_nan(newBounds.max));
 
+    const auto i_address = m_node_address_for_data.find(data);
+    contract_pre(i_address != m_node_address_for_data.end());
+    const auto address = detail::get_container(newBounds, m_min_size);
+    // Root data shares the current root address, which may have grown since insertion.
+    if (
+      i_address->second == address
+      || (m_node_address_for_data.size() > 1 && is_root(address)
+          && i_address->second == get_address(*m_root)
+          && i_address->second.contains(address)))
+    {
+      return;
+    }
+
     contract_assert(remove(data));
     insert(newBounds, data);
   }
