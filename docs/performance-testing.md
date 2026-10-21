@@ -442,6 +442,30 @@ Synchronous geometry edits and other editor work remain substantial; these
 results do not establish a large overall FPS gain or smooth whole-map dragging.
 Nested render timings and input-to-presentation timings must not be added.
 
+#### Brush Movement Geometry Copy Elision
+
+Brush movement now creates the transformed brush from copied face attributes and
+rebuilds its destination geometry directly. The previous path first copied the
+complete brush topology and then discarded that topology when the transformed
+faces were rebuilt. The new path preserves the existing face transformation,
+world-bounds validation, UV-lock behavior, and failure atomicity while avoiding
+that intermediate topology copy.
+
+The focused `Brush` and `Map_Geometry` tests compare the new operation with the
+existing in-place operation across Standard and Valve maps, alignment locking,
+translation, rotation, non-uniform scale, reflection, collapsed geometry and
+world-bounds failure. They also verify that source geometry remains unchanged and
+that the returned brush owns independent geometry.
+
+Two Release captures of the same `kz_skyline.map` whole-map movement workload
+after this change reported 47.91 / 56.25 ms mean movement synchronization,
+108.14 / 124.10 ms mean movement-to-presentation, and 9.3 / 8.3 FPS. The earlier
+baseline captures reported 51.09 ms synchronization, 110.60 ms to presentation,
+and 9.0 FPS. The spread between the two new runs is larger than the observed
+difference, so this change should be treated as a low-risk allocation reduction,
+not as evidence of a large interactive-FPS improvement. The dominant measured
+cost remains CPU scene construction and presentation scheduling.
+
 Every capture passed undo bounds restoration and unmodified-document checks.
 The original map's SHA-256 is unchanged, and the same six WAD paths remain
 unresolved. The final four-pane runs retained 417 transparent items, 370 model

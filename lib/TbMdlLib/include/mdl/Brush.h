@@ -349,6 +349,15 @@ public:
   Result<void> transform(
     const vm::bbox3d& worldBounds, const vm::mat4x4d& transformation, bool lockMaterials);
 
+  /**
+   * Returns a transformed copy without cloning the geometry that will be rebuilt.
+   * Leaves this brush unchanged, including when the transformation fails.
+   */
+  Result<Brush> transformed(
+    const vm::bbox3d& worldBounds,
+    const vm::mat4x4d& transformation,
+    bool lockMaterials) const;
+
 public:
   bool contains(const vm::bbox3d& bounds) const;
   bool contains(const Brush& brush) const;

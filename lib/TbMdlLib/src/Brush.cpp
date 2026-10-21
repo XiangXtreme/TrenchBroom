@@ -1494,6 +1494,26 @@ Result<void> Brush::transform(
   return updateGeometryFromFaces(worldBounds);
 }
 
+Result<Brush> Brush::transformed(
+  const vm::bbox3d& worldBounds,
+  const vm::mat4x4d& transformation,
+  const bool lockMaterials) const
+{
+  auto faces = m_faces;
+  for (size_t i = 0; i < faces.size(); ++i)
+  {
+    // Face transforms only read geometry to obtain the UV alignment invariant.
+    // Borrow the source face until transformation, then rebuild owned geometry below.
+    faces[i].setGeometry(m_faces[i].geometry());
+    if (!faces[i].transform(transformation, lockMaterials))
+    {
+      return Error{"Brush has invalid face"};
+    }
+    faces[i].setGeometry(nullptr);
+  }
+  return Brush::create(worldBounds, std::move(faces));
+}
+
 bool Brush::contains(const vm::bbox3d& bounds) const
 {
   if (!this->bounds().contains(bounds))

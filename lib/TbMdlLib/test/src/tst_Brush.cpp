@@ -344,6 +344,99 @@ TEST_CASE("Brush")
     }
   }
 
+  SECTION("transformed")
+  {
+    const auto format = GENERATE(MapFormat::Standard, MapFormat::Valve);
+    const auto lockMaterials = GENERATE(false, true);
+    const auto worldBounds = vm::bbox3d{65536.0};
+    auto material =
+      gl::Material{"material", gl::createTextureResource(gl::Texture{128, 32})};
+    auto source = BrushBuilder{format, worldBounds}.createCuboid(
+                    vm::bbox3d{{12000, -3000, 100}, {12301, -2701, 357}}, "material")
+                  | kdl::value();
+    for (auto& face : source.faces())
+    {
+      REQUIRE(face.setUvAttributes({{13.25f, -7.75f}, {-0.75f, 2.5f}, 32.0f}));
+      face.setMaterial(&material);
+      face.select();
+      face.setFilePosition(42, 1);
+    }
+    const auto original = source;
+    const auto originalVertices = source.vertexPositions();
+    auto originalGeometry = std::vector<BrushFaceGeometry*>{};
+    for (const auto& face : source.faces())
+    {
+      originalGeometry.push_back(face.geometry());
+    }
+
+    auto transformation = vm::mat4x4d::identity();
+    SECTION("translation")
+    {
+      transformation = vm::translation_matrix(vm::vec3d{17, -31, 9});
+    }
+    SECTION("rotation")
+    {
+      transformation = vm::rotation_matrix(vm::vec3d{0, 0, 1}, vm::to_radians(31.0));
+    }
+    SECTION("nonuniform scale")
+    {
+      transformation = vm::scaling_matrix(vm::vec3d{1.2, 0.75, 2});
+    }
+    SECTION("reflection")
+    {
+      transformation = vm::scaling_matrix(vm::vec3d{-1, 1, 1});
+    }
+    SECTION("collapsed geometry")
+    {
+      transformation = vm::scaling_matrix(vm::vec3d{0, 1, 1});
+    }
+    SECTION("outside world bounds")
+    {
+      transformation = vm::translation_matrix(vm::vec3d{100000, 0, 0});
+    }
+
+    auto expected = source;
+    const auto expectedResult =
+      expected.transform(worldBounds, transformation, lockMaterials);
+    auto actualResult = source.transformed(worldBounds, transformation, lockMaterials);
+    REQUIRE(actualResult.is_success() == expectedResult.is_success());
+    CHECK(source == original);
+    CHECK(source.vertexPositions() == originalVertices);
+    for (size_t i = 0; i < source.faceCount(); ++i)
+    {
+      CHECK(source.face(i).geometry() == originalGeometry[i]);
+    }
+    if (actualResult.is_success())
+    {
+      auto actual = std::move(actualResult) | kdl::value();
+      CHECK(actual == expected);
+      CHECK(actual.bounds() == expected.bounds());
+      CHECK_THAT(actual.vertexPositions(), UnorderedEquals(expected.vertexPositions()));
+      REQUIRE(actual.faceCount() == expected.faceCount());
+      for (size_t i = 0; i < actual.faceCount(); ++i)
+      {
+        const auto& face = actual.face(i);
+        const auto& expectedFace = expected.face(i);
+        CHECK(
+          std::ranges::find(originalGeometry, face.geometry()) == originalGeometry.end());
+        CHECK(face.material() == &material);
+        CHECK(face.selected());
+        CHECK(face.lineNumber() == 42);
+        CHECK(face.vertexPositions() == expectedFace.vertexPositions());
+        for (const auto& position : face.vertexPositions())
+        {
+          CHECK(face.uvCoords(position) == expectedFace.uvCoords(position));
+        }
+      }
+      source = Brush{};
+      CHECK(actual.bounds() == expected.bounds());
+      for (size_t i = 0; i < actual.faceCount(); ++i)
+      {
+        CHECK(actual.face(i).vertexPositions() == expected.face(i).vertexPositions());
+      }
+    }
+  }
+
   SECTION("cloneFaceAttributesFrom")
   {
     const auto worldBounds = vm::bbox3d{4096.0};

@@ -166,10 +166,11 @@ bool transformNodes(
           || (containingGroup && containingGroup->closed()
               && collectLinkedNodes({&map.worldNode()}, brushNode).size() > 1);
 
-        auto brush = brushNode.brush();
-        return brush.transform(map.worldBounds(), transformation, lockAlignment)
-               | kdl::and_then([&]() -> TransformResult {
-                   return std::make_pair(&brushNode, NodeContents{std::move(brush)});
+        return brushNode.brush().transformed(
+                 map.worldBounds(), transformation, lockAlignment)
+               | kdl::transform([&](Brush&& brush) {
+                   return std::pair<Node*, NodeContents>{
+                     &brushNode, NodeContents{std::move(brush)}};
                  });
       },
       [&](PatchNode& patchNode) -> TransformResult {
