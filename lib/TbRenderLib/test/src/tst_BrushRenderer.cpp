@@ -271,6 +271,10 @@ TEST_CASE("BrushRenderer rendering")
     renderer.invalidateMaterials({&unrelatedMaterial});
     CHECK_FALSE(renderer.valid());
     CHECK(timing.counters["brushes.invalidate_all"] == 1);
+    renderer.invalidateBrush(first);
+    renderer.invalidateBrush(second);
+    renderer.invalidate();
+    CHECK(timing.counters["brushes.invalidate_all"] == 1);
     draw();
 
     timing.counters.clear();
@@ -280,6 +284,22 @@ TEST_CASE("BrushRenderer rendering")
     drawnIndices.clear();
     draw();
     CHECK(drawnIndices == indices);
+
+    timing.counters.clear();
+    renderer.removeBrush(first);
+    renderer.removeBrush(second);
+    CHECK(timing.counters["brushes.invalidate_all"] == 1);
+    draw();
+    renderer.removeBrush(unrelated);
+    CHECK(renderer.valid());
+
+    timing.counters.clear();
+    renderer.addBrush(first);
+    renderer.addBrush(second);
+    CHECK_FALSE(renderer.valid());
+    drawnIndices.clear();
+    draw();
+    CHECK_FALSE(drawnIndices.empty());
   }
 
   SECTION("GoldSrc entities sharing a material retain their individual render amounts")

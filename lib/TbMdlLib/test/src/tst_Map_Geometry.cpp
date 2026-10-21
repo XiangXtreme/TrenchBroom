@@ -278,6 +278,49 @@ TEST_CASE("Map_Geometry")
   {
     auto& map = fixture.create();
 
+    SECTION("transforms multiple task batches atomically with undo and redo")
+    {
+      auto nodes = std::vector<Node*>{};
+      auto originalBounds = std::vector<vm::bbox3d>{};
+      const auto builder = BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+      for (int i = 0; i < 130; ++i)
+      {
+        const auto bounds =
+          vm::bbox3d{{0, 0, 0}, {16, 16, 16}}.translate(vm::vec3d{double(i) * 32, 0, 0});
+        auto* node =
+          new BrushNode{builder.createCuboid(bounds, "material") | kdl::value()};
+        nodes.push_back(node);
+        originalBounds.push_back(bounds);
+      }
+      addNodes(map, {{&parentForNodes(map), nodes}});
+      selectNodes(map, nodes);
+      const auto delta = vm::vec3d{16, 32, 48};
+      REQUIRE(translateSelection(map, delta));
+      for (size_t i = 0; i < nodes.size(); ++i)
+      {
+        CHECK(nodes[i]->logicalBounds() == originalBounds[i].translate(delta));
+      }
+      map.undoCommand();
+      for (size_t i = 0; i < nodes.size(); ++i)
+      {
+        CHECK(nodes[i]->logicalBounds() == originalBounds[i]);
+      }
+      map.redoCommand();
+      for (size_t i = 0; i < nodes.size(); ++i)
+      {
+        CHECK(nodes[i]->logicalBounds() == originalBounds[i].translate(delta));
+      }
+
+      const auto beforeFailure = map.selectionBounds();
+      CHECK_FALSE(transformNodes(
+        map, nodes, "Invalid Transform", vm::scaling_matrix(vm::vec3d{0, 0, 0})));
+      CHECK(map.selectionBounds() == beforeFailure);
+      for (size_t i = 0; i < nodes.size(); ++i)
+      {
+        CHECK(nodes[i]->logicalBounds() == originalBounds[i].translate(delta));
+      }
+    }
+
     GIVEN("An entity")
     {
       auto* entityNode = new EntityNode{Entity{}};

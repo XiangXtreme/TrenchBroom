@@ -48,6 +48,31 @@ C sorted(C c)
 
 TEST_CASE("string_compare")
 {
+  SECTION("literal prefixes preserve glob semantics")
+  {
+    CHECK(cs::str_matches_glob("func_wall", "func_*"));
+    CHECK(cs::str_matches_glob("func_", "func_*"));
+    CHECK_FALSE(cs::str_matches_glob("func", "func_*"));
+    CHECK_FALSE(cs::str_matches_glob("FUNC_wall", "func_*"));
+    CHECK(ci::str_matches_glob("FUNC_wall", "func_*"));
+    CHECK_FALSE(ci::str_matches_glob("fun", "func_*"));
+    CHECK(cs::str_matches_glob("clip", "clip"));
+    CHECK_FALSE(cs::str_matches_glob("clipper", "clip"));
+    CHECK_FALSE(cs::str_matches_glob("cli", "clip"));
+    CHECK(ci::str_matches_glob("CLIP", "clip"));
+    CHECK(cs::str_matches_glob("clip7", "clip%"));
+    CHECK_FALSE(cs::str_matches_glob("clipx", "clip%"));
+    CHECK(cs::str_matches_glob("clip", "clip%*"));
+    CHECK(cs::str_matches_glob("clip7x", "clip%*x"));
+    CHECK(cs::str_matches_glob("clip?", "clip\\?"));
+    CHECK(cs::str_matches_glob("clip*", "clip\\*"));
+    CHECK_FALSE(cs::str_matches_glob("clipx", "clip\\x"));
+    CHECK(cs::str_matches_glob("clip\\", "clip\\"));
+    CHECK_FALSE(cs::str_matches_glob("clip", "clip\\"));
+    CHECK(ci::str_matches_glob("CLIP?", "clip\\?"));
+    CHECK(ci::str_matches_glob("CLIP42x", "clip%*X"));
+  }
+
   SECTION("cs")
   {
     using namespace cs;

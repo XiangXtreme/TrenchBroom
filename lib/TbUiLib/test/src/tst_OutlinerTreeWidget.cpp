@@ -20,6 +20,7 @@
 #include <QApplication>
 #include <QHeaderView>
 #include <QScrollBar>
+#include <QSignalSpy>
 #include <QTreeWidgetItem>
 #include <QtTest/QTest>
 
@@ -253,6 +254,37 @@ TEST_CASE("OutlinerTreeWidget")
     CHECK(map.selection().hasOnlyEntities());
     REQUIRE(map.selection().entities.size() == 1);
     CHECK(map.selection().entities.front() == fixture.lightEntity);
+  }
+
+  SECTION("batches document selection across disjoint rows and parents")
+  {
+    auto* secondGroupedEntity =
+      new mdl::EntityNode{mdl::Entity{{{"classname", "path_track"}}}};
+    mdl::addNodes(map, {{fixture.group, {secondGroupedEntity}}});
+    processOutlinerTreeUpdates();
+    auto changes =
+      QSignalSpy{tree.selectionModel(), &QItemSelectionModel::selectionChanged};
+    mdl::selectNodes(map, {fixture.infoEntity, fixture.groupedEntity});
+    processOutlinerTreeUpdates();
+
+    REQUIRE(tree.selectedItems().size() == 2);
+    CHECK(itemForNode(tree, fixture.infoEntity)->isSelected());
+    CHECK(itemForNode(tree, fixture.groupedEntity)->isSelected());
+    CHECK_FALSE(itemForNode(tree, secondGroupedEntity)->isSelected());
+    CHECK_FALSE(itemForNode(tree, fixture.lightEntity)->isSelected());
+    CHECK(changes.count() == 1);
+
+    mdl::selectAllNodes(map);
+    processOutlinerTreeUpdates();
+    CHECK(itemForNode(tree, fixture.infoEntity)->isSelected());
+    CHECK(itemForNode(tree, fixture.lightEntity)->isSelected());
+    CHECK(itemForNode(tree, fixture.group)->isSelected());
+    CHECK_FALSE(itemForNode(tree, fixture.groupedEntity)->isSelected());
+    CHECK_FALSE(itemForNode(tree, secondGroupedEntity)->isSelected());
+
+    mdl::deselectAll(map);
+    processOutlinerTreeUpdates();
+    CHECK(tree.selectedItems().empty());
   }
 
   SECTION("keeps lock and visibility columns interactive")

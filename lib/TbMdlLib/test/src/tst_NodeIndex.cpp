@@ -153,6 +153,18 @@ TEST_CASE("NodeIndex")
       i.removeNode(brushNode);
       CHECK_THAT(i.findNodes("material_0"), UnorderedEquals(std::vector<Node*>{}));
       CHECK_THAT(i.findNodes("material_1"), UnorderedEquals(std::vector<Node*>{}));
+      CHECK(i.findNodes("default_material").empty());
+
+      auto updatedBrush = brushNode.brush();
+      updatedBrush.face(1).setMaterialName("changed_material");
+      brushNode.setBrush(std::move(updatedBrush));
+      i.addNode(brushNode);
+      CHECK_THAT(
+        i.findNodes("default_material"), UnorderedEquals(std::vector<Node*>{&brushNode}));
+      CHECK_THAT(
+        i.findNodes("changed_material"), UnorderedEquals(std::vector<Node*>{&brushNode}));
+      i.removeNode(brushNode);
+      CHECK(i.findNodes("*").empty());
     }
 
     SECTION("PatchNode")
@@ -233,6 +245,34 @@ TEST_CASE("NodeIndex")
     i.clear();
 
     CHECK_THAT(i.findNodes("some_key"), UnorderedEquals(std::vector<Node*>{}));
+
+    i.addNode(entityNode);
+    CHECK_THAT(i.findNodes("some_key"), UnorderedEquals(std::vector<Node*>{&entityNode}));
+  }
+
+  SECTION("refreshes changed keys while retaining shared and unchanged keys")
+  {
+    auto first = EntityNode{Entity{{{"classname", "light"}, {"targetname", "shared"}}}};
+    auto second = EntityNode{Entity{{{"classname", "light"}, {"targetname", "shared"}}}};
+    i.addNode(first);
+    i.addNode(second);
+    i.addNode(first);
+
+    auto entity = first.entity();
+    entity.addOrUpdateProperty("targetname", "changed");
+    first.setEntity(std::move(entity));
+    i.addNode(first);
+    CHECK_THAT(i.findNodes("shared"), UnorderedEquals(std::vector<Node*>{&second}));
+    CHECK_THAT(i.findNodes("changed"), UnorderedEquals(std::vector<Node*>{&first}));
+    CHECK_THAT(
+      i.findNodes("light"), UnorderedEquals(std::vector<Node*>{&first, &second}));
+
+    i.removeNode(first);
+    CHECK(i.findNodes("changed").empty());
+    CHECK_THAT(i.findNodes("light"), UnorderedEquals(std::vector<Node*>{&second}));
+    i.removeNode(first);
+    i.removeNode(second);
+    CHECK(i.findNodes("*").empty());
   }
 }
 

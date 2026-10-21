@@ -36,6 +36,8 @@
 #include "kd/compact_trie.h"
 #include "kd/vector_utils.h"
 
+#include <algorithm>
+
 namespace tb::mdl
 {
 namespace
@@ -88,37 +90,57 @@ std::string NodeIndex::escapePattern(std::string_view str)
 
 void NodeIndex::addNode(Node& node)
 {
-  const auto addToIndex = [&](const std::string_view key) {
-    m_index->insert(key, &node);
-  };
+  auto keys = std::vector<std::string>{};
+  const auto collectKey = [&](const std::string_view key) { keys.emplace_back(key); };
 
   node.accept(kdl::overload(
-    [&](WorldNode& worldNode) { withEntityNode(worldNode, addToIndex); },
+    [&](WorldNode& worldNode) { withEntityNode(worldNode, collectKey); },
     [](LayerNode&) {},
-    [&](GroupNode& groupNode) { withGroupNode(groupNode, addToIndex); },
-    [&](EntityNode& entityNode) { withEntityNode(entityNode, addToIndex); },
-    [&](BrushNode& brushNode) { withBrushNode(brushNode, addToIndex); },
-    [&](PatchNode& patchNode) { withPatchNode(patchNode, addToIndex); }));
+    [&](GroupNode& groupNode) { withGroupNode(groupNode, collectKey); },
+    [&](EntityNode& entityNode) { withEntityNode(entityNode, collectKey); },
+    [&](BrushNode& brushNode) { withBrushNode(brushNode, collectKey); },
+    [&](PatchNode& patchNode) { withPatchNode(patchNode, collectKey); }));
+  keys = kdl::vec_sort_and_remove_duplicates(std::move(keys));
+
+  // Geometry changes usually keep all searchable strings. Update only changed keys.
+  auto& previousKeys = m_nodeKeys[&node];
+  if (previousKeys == keys)
+  {
+    return;
+  }
+  for (const auto& key : previousKeys)
+  {
+    if (!std::ranges::binary_search(keys, key))
+    {
+      m_index->remove(key, &node);
+    }
+  }
+  for (const auto& key : keys)
+  {
+    if (!std::ranges::binary_search(previousKeys, key))
+    {
+      m_index->insert(key, &node);
+    }
+  }
+  previousKeys = std::move(keys);
 }
 
 void NodeIndex::removeNode(Node& node)
 {
-  const auto removeFromIndex = [&](const std::string_view key) {
-    m_index->remove(key, &node);
-  };
-
-  node.accept(kdl::overload(
-    [&](WorldNode& worldNode) { withEntityNode(worldNode, removeFromIndex); },
-    [](LayerNode&) {},
-    [&](GroupNode& groupNode) { withGroupNode(groupNode, removeFromIndex); },
-    [&](EntityNode& entityNode) { withEntityNode(entityNode, removeFromIndex); },
-    [&](BrushNode& brushNode) { withBrushNode(brushNode, removeFromIndex); },
-    [&](PatchNode& patchNode) { withPatchNode(patchNode, removeFromIndex); }));
+  if (const auto it = m_nodeKeys.find(&node); it != m_nodeKeys.end())
+  {
+    for (const auto& key : it->second)
+    {
+      m_index->remove(key, &node);
+    }
+    m_nodeKeys.erase(it);
+  }
 }
 
 void NodeIndex::clear()
 {
   m_index = std::make_unique<NodeStringIndex>();
+  m_nodeKeys.clear();
 }
 
 std::vector<Node*> NodeIndex::doFindNodes(const std::string_view pattern) const

@@ -1831,12 +1831,14 @@ void OutlinerTreeWidget::syncSelectionFromDocument()
     }
   }
 
+  auto selectedIndexes = std::vector<QModelIndex>{};
+  auto* current = static_cast<QTreeWidgetItem*>(nullptr);
   for (const auto* node : nodesToSelect)
   {
     if (auto* item = findItemForNode(node))
     {
-      item->setSelected(true);
-      setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
+      selectedIndexes.push_back(indexFromItem(item));
+      current = item;
 
       for (auto* p = item->parent(); p != nullptr; p = p->parent())
       {
@@ -1855,6 +1857,29 @@ void OutlinerTreeWidget::syncSelectionFromDocument()
         }
       }
     }
+  }
+
+  // Submit disjoint row ranges together so Qt does not merge and notify once per node.
+  std::ranges::sort(selectedIndexes, [](const auto& lhs, const auto& rhs) {
+    return lhs.parent() == rhs.parent() ? lhs.row() < rhs.row()
+                                        : lhs.parent() < rhs.parent();
+  });
+  auto treeSelection = QItemSelection{};
+  for (size_t i = 0; i < selectedIndexes.size();)
+  {
+    const auto first = selectedIndexes[i];
+    auto last = first;
+    while (++i < selectedIndexes.size() && selectedIndexes[i].parent() == first.parent()
+           && selectedIndexes[i].row() == last.row() + 1)
+    {
+      last = selectedIndexes[i];
+    }
+    treeSelection.select(first, last.siblingAtColumn(columnCount() - 1));
+  }
+  selectionModel()->select(treeSelection, QItemSelectionModel::ClearAndSelect);
+  if (current)
+  {
+    setCurrentItem(current, 0, QItemSelectionModel::NoUpdate);
   }
 
   --m_suppressScrollToSelectionCount;

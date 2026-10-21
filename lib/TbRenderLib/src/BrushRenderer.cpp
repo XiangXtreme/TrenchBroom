@@ -282,6 +282,11 @@ BrushRenderer::BrushRenderer()
 
 void BrushRenderer::invalidate()
 {
+  if (m_invalidBrushes.size() == m_allBrushes.size())
+  {
+    return;
+  }
+
   RenderTiming::count("brushes.invalidate_all", 1);
   for (auto* brushNode : m_allBrushes)
   {
@@ -946,6 +951,7 @@ void BrushRenderer::removeBrush(const mdl::BrushNode& brushNode)
 
   if (m_useReadable2DBrushOutlines)
   {
+    m_invalidBrushes.erase(&brushNode);
     removeBrushFromVbo(brushNode);
     invalidate();
     return;

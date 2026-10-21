@@ -308,8 +308,22 @@ template <typename CharEqual>
 bool str_matches_glob(
   const std::string_view str, const std::string_view pattern, const CharEqual& char_equal)
 {
+  const auto prefixSize = pattern.find_first_of("\\*?%");
+  if (prefixSize == std::string_view::npos)
+  {
+    return str_is_equal(str, pattern, char_equal);
+  }
+  if (!str_is_prefix(str, pattern.substr(0, prefixSize), char_equal))
+  {
+    return false;
+  }
+  if (prefixSize == pattern.size() - 1 && pattern.back() == '*')
+  {
+    return true;
+  }
+
   using match_task = std::pair<std::size_t, std::size_t>;
-  std::vector<match_task> match_tasks({{0u, 0u}});
+  std::vector<match_task> match_tasks({{prefixSize, prefixSize}});
 
   while (!match_tasks.empty())
   {

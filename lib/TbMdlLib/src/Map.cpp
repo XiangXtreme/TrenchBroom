@@ -1702,7 +1702,7 @@ void Map::nodesWereRemoved(const std::vector<Node*>& nodes)
 void Map::nodesWillChange(const std::vector<Node*>& nodes)
 {
   removeEntityLinks(nodes, false);
-  removeFromNodeIndex(nodes, false);
+  // Keep the previous strings so nodesDidChange can update the index incrementally.
 }
 
 void Map::nodesDidChange(const std::vector<Node*>& nodes)

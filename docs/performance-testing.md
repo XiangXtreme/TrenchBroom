@@ -181,6 +181,47 @@ paths were unresolved, as in earlier captures, so these are measurements of the
 available asset workload. The source file SHA-256 remained
 `ABC8D0B7342D4407562DF7F7D97FB72B06F9BC9906422DCC605E8CDF307B7071`.
 
+#### Bulk Selection and Movement Optimization
+
+Temporary CPU probes on the same workload attributed 774.9 ms of an 852.8 ms
+selection command to Outliner selection synchronization, and another 72.1 ms to
+renderer selection notifications. These timings are nested within the command.
+During dragging, model change processing averaged 34.8 ms within an 80.8 ms
+transform, including tag updates and search-index maintenance. The probes were
+removed after the investigation.
+
+The optimized path submits Outliner row ranges in one Qt selection update,
+coalesces repeated invalidations of shared readable outlines, and retains each
+node's distinct searchable strings so only changed keys enter or leave the trie.
+Tag glob matching handles literal prefixes directly. Transform tasks operate in
+small batches, with preallocated result storage to avoid copying brush geometry
+when collecting results. Geometry validation, material locking and undo still run
+for each effective movement update.
+
+Fresh Release processes with the same map, camera, assets, grid and timing settings
+above produced the following results, without concurrent builds or tests:
+
+| Capture | Select sync / to presentation | 3D FPS | Mean move sync | Mean update to presentation | Update P95 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Four-pane baseline | 868.6 / 930.4 ms | 7.5 | 82.2 ms | 135.9 ms | 156.2 ms |
+| Four panes, optimized run 1 | 26.8 / 90.9 ms | 8.7 | 61.2 ms | 116.6 ms | 138.7 ms |
+| Four panes, optimized run 2 | 26.7 / 101.1 ms | 8.3 | 63.8 ms | 121.2 ms | 146.0 ms |
+| Single 3D baseline | n/a | 7.7 | 85.1 ms | 130.5 ms | 154.4 ms |
+| Single 3D, optimized | 23.0 / 71.0 ms | 9.6 | 58.8 ms | 105.6 ms | 123.3 ms |
+
+Optimized captures are `20261021-134959-570`, `20261021-135058-886` and
+`20261021-135220-537`, containing 69, 66 and 76 effective updates. Undo restored
+the original bounds and unmodified document in every run. The source SHA-256
+remained unchanged; the six original WAD paths were still unresolved. GPU
+temperature after the first optimized run was 70 C.
+
+Selection synchronization is substantially faster, but whole-map dragging remains
+slow. The four-pane 3D CPU frame still averages 23.9-25.0 ms, including 15.2-15.9 ms
+per frame rebuilding brush render caches, with a 7.5-7.8 ms GPU stage. These stages
+overlap and exclude the separately measured synchronous move command. Further work
+must address per-update scene mutation and cache rebuilding; the measured change
+does not establish smooth whole-map dragging.
+
 ### Loading Milestones
 
 Add `-LoadTiming` to write `render.jsonl.loading.json`. Its cumulative milestones

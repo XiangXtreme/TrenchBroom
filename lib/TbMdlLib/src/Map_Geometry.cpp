@@ -145,44 +145,70 @@ bool transformNodes(
   const auto updateAngleProperty =
     map.worldNode().entityPropertyConfig().updateAnglePropertyAfterTransform;
 
-  auto tasks =
-    nodesToTransform | std::views::transform([&](auto& node) {
-      return std::function{[&]() {
-        return node->accept(kdl::overload(
-          [&](WorldNode&) -> TransformResult { contract_assert(false); },
-          [&](LayerNode&) -> TransformResult { contract_assert(false); },
-          [&](GroupNode& groupNode) -> TransformResult {
-            auto group = groupNode.group();
-            group.transform(transformation);
-            return std::make_pair(&groupNode, NodeContents{std::move(group)});
-          },
-          [&](EntityNode& entityNode) -> TransformResult {
-            auto entity = entityNode.entity();
-            entity.transform(transformation, updateAngleProperty);
-            return std::make_pair(&entityNode, NodeContents{std::move(entity)});
-          },
-          [&](BrushNode& brushNode) -> TransformResult {
-            const auto* containingGroup = brushNode.containingGroup();
-            const bool lockAlignment =
-            alignmentLock
-            || (containingGroup && containingGroup->closed() && collectLinkedNodes({&map.worldNode()}, brushNode).size() > 1);
+  const auto transformNode = [&](Node* node) -> TransformResult {
+    return node->accept(kdl::overload(
+      [&](WorldNode&) -> TransformResult { contract_assert(false); },
+      [&](LayerNode&) -> TransformResult { contract_assert(false); },
+      [&](GroupNode& groupNode) -> TransformResult {
+        auto group = groupNode.group();
+        group.transform(transformation);
+        return std::make_pair(&groupNode, NodeContents{std::move(group)});
+      },
+      [&](EntityNode& entityNode) -> TransformResult {
+        auto entity = entityNode.entity();
+        entity.transform(transformation, updateAngleProperty);
+        return std::make_pair(&entityNode, NodeContents{std::move(entity)});
+      },
+      [&](BrushNode& brushNode) -> TransformResult {
+        const auto* containingGroup = brushNode.containingGroup();
+        const bool lockAlignment =
+          alignmentLock
+          || (containingGroup && containingGroup->closed()
+              && collectLinkedNodes({&map.worldNode()}, brushNode).size() > 1);
 
-            auto brush = brushNode.brush();
-            return brush.transform(map.worldBounds(), transformation, lockAlignment)
-                   | kdl::and_then([&]() -> TransformResult {
-                       return std::make_pair(&brushNode, NodeContents{std::move(brush)});
-                     });
-          },
-          [&](PatchNode& patchNode) -> TransformResult {
-            auto patch = patchNode.patch();
-            patch.transform(transformation);
-            return std::make_pair(&patchNode, NodeContents{std::move(patch)});
-          }));
-      }};
+        auto brush = brushNode.brush();
+        return brush.transform(map.worldBounds(), transformation, lockAlignment)
+               | kdl::and_then([&]() -> TransformResult {
+                   return std::make_pair(&brushNode, NodeContents{std::move(brush)});
+                 });
+      },
+      [&](PatchNode& patchNode) -> TransformResult {
+        auto patch = patchNode.patch();
+        patch.transform(transformation);
+        return std::make_pair(&patchNode, NodeContents{std::move(patch)});
+      }));
+  };
+
+  // Amortize queue locks and futures across small batches of independent nodes.
+  auto tasks = std::vector<std::function<std::vector<TransformResult>()>>{};
+  const auto batchSize = std::clamp(nodesToTransform.size() / 64, size_t{1}, size_t{32});
+  for (size_t begin = 0; begin < nodesToTransform.size(); begin += batchSize)
+  {
+    const auto end = std::min(begin + batchSize, nodesToTransform.size());
+    tasks.emplace_back([&, begin, end]() {
+      auto results = std::vector<TransformResult>{};
+      results.reserve(end - begin);
+      for (auto i = begin; i < end; ++i)
+      {
+        results.push_back(transformNode(nodesToTransform[i]));
+      }
+      return results;
     });
+  }
+
+  // Reserve before folding: growing result storage can deep-copy brush geometry.
+  auto results = std::vector<TransformResult>{};
+  results.reserve(nodesToTransform.size());
+  for (auto& batch : map.taskManager().run_tasks_and_wait(tasks))
+  {
+    for (auto& result : batch)
+    {
+      results.push_back(std::move(result));
+    }
+  }
 
   const auto success =
-    map.taskManager().run_tasks_and_wait(tasks) | kdl::fold
+    results | kdl::fold
     | kdl::transform([&](auto nodesToUpdate) {
         return updateNodeContents(
           map, commandName, std::move(nodesToUpdate), collectContainingGroups(nodes));

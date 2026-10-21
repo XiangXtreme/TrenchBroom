@@ -158,6 +158,27 @@ TEST_CASE("Map_NodeIndex")
     CHECK(map.findNodes("some_other_key") == std::vector<Node*>{entityNode});
   }
 
+  SECTION("movement updates searchable origins through undo redo and removal")
+  {
+    auto* node = new EntityNode{Entity{{{"classname", "light"}, {"origin", "0 0 0"}}}};
+    addNodes(map, {{&parentForNodes(map), {node}}});
+    selectNodes(map, {node});
+    REQUIRE(translateSelection(map, {16, 32, 48}));
+    CHECK(map.findNodes("0 0 0").empty());
+    CHECK(map.findNodes("16 32 48") == std::vector<Node*>{node});
+    CHECK(map.findNodes("light") == std::vector<Node*>{node});
+
+    map.undoCommand();
+    CHECK(map.findNodes("16 32 48").empty());
+    CHECK(map.findNodes("0 0 0") == std::vector<Node*>{node});
+    map.redoCommand();
+    CHECK(map.findNodes("0 0 0").empty());
+    CHECK(map.findNodes("16 32 48") == std::vector<Node*>{node});
+    removeNodes(map, {node});
+    CHECK(map.findNodes("16 32 48").empty());
+    CHECK(map.findNodes("light").empty());
+  }
+
   SECTION("Linked Groups")
   {
     auto* groupNode = new GroupNode{Group{"group"}};

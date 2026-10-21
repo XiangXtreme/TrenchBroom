@@ -24,6 +24,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace tb::mdl
@@ -36,6 +37,7 @@ class NodeIndex
 {
 private:
   std::unique_ptr<NodeStringIndex> m_index;
+  std::unordered_map<Node*, std::vector<std::string>> m_nodeKeys;
 
 public:
   NodeIndex();
@@ -43,6 +45,7 @@ public:
 
   static std::string escapePattern(std::string_view str);
 
+  /** Adds a node or refreshes the searchable strings of an already indexed node. */
   void addNode(Node& node);
   void removeNode(Node& node);
 
