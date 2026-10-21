@@ -43,6 +43,8 @@
 #include "kd/flat_set.h"
 #include "kd/vector_utils.h"
 
+#include <ostream>
+
 #include <catch2/catch_test_macros.hpp>
 
 namespace tb::mdl
@@ -63,6 +65,23 @@ public:
   }
 
   size_t selectOption(const std::vector<std::string>&) override { return m_option; }
+};
+
+class BoundsTagMatcher : public TagMatcher
+{
+public:
+  std::unique_ptr<TagMatcher> clone() const override
+  {
+    return std::make_unique<BoundsTagMatcher>();
+  }
+
+  bool matches(const Taggable& taggable) const override
+  {
+    const auto* brush = dynamic_cast<const BrushNode*>(&taggable);
+    return brush && brush->logicalBounds().center().x() > 32.0;
+  }
+
+  void appendToStream(std::ostream& str) const override { str << "BoundsTagMatcher"; }
 };
 
 } // namespace
@@ -150,6 +169,84 @@ TEST_CASE("Map_TagManagement")
   auto* materialC = materialManager.material("yet_another_material");
 
   const auto& tagManager = map.tagManager();
+
+  SECTION("geometry changes preserve current face tags across undo and redo")
+  {
+    auto* entity = new EntityNode{Entity{{{"classname", "brush_entity"}}}};
+    auto* brush = createBrushNode(map, "some_material");
+    entity->addChild(brush);
+    addNodes(map, {{&parentForNodes(map), {entity}}});
+    selectNodes(map, {entity});
+    const auto bounds = brush->logicalBounds();
+    const auto& ownerTag = tagManager.smartTag("entity");
+    const auto& surfaceTag = tagManager.smartTag("surfaceparm_single");
+    REQUIRE(brush->hasTag(ownerTag));
+    REQUIRE_FALSE(brush->brush().face(0).hasTag(surfaceTag));
+    REQUIRE(translateSelection(map, vm::vec3d{64, 0, 0}));
+
+    // Simulate newly processed material metadata while old contents are in undo.
+    materialA->setSurfaceParms({"parm2"});
+    brush->updateTags(map.tagManager());
+    const auto checkFaces = [&]() {
+      CHECK(brush->hasTag(ownerTag));
+      for (const auto& face : brush->brush().faces())
+      {
+        CHECK(face.material() == materialA);
+        CHECK(face.hasTag(surfaceTag));
+      }
+      CHECK(materialA->usageCount() == brush->brush().faceCount());
+    };
+    auto changesObserved = 0;
+    const auto connection = map.nodesDidChangeNotifier.connect([&](const auto&) {
+      ++changesObserved;
+      checkFaces();
+    });
+    map.undoCommand();
+    CHECK(brush->logicalBounds() == bounds);
+    checkFaces();
+    map.redoCommand();
+    CHECK(brush->logicalBounds() == bounds.translate(vm::vec3d{64, 0, 0}));
+    checkFaces();
+    CHECK(changesObserved == 2);
+  }
+
+  SECTION("content changes preserve edits to manual face tags")
+  {
+    auto* brush = createBrushNode(map, "some_material");
+    addNodes(map, {{&parentForNodes(map), {brush}}});
+    auto manualTag = Tag{"manual", {}};
+    manualTag.setIndex(60);
+    auto contents = brush->brush();
+    contents.face(0).addTag(manualTag);
+    REQUIRE(
+      updateNodeContents(map, "Tag Face", {{brush, NodeContents{std::move(contents)}}}));
+    CHECK(brush->brush().face(0).hasTag(manualTag));
+    map.undoCommand();
+    CHECK_FALSE(brush->brush().face(0).hasTag(manualTag));
+    map.redoCommand();
+    CHECK(brush->brush().face(0).hasTag(manualTag));
+  }
+
+  SECTION("geometry dependent tag matchers are refreshed")
+  {
+    auto config = MapFixtureConfig{};
+    config.gameInfo.gameConfig.smartTags = {
+      SmartTag{"bounds", {}, std::make_unique<BoundsTagMatcher>()}};
+    auto geometryFixture = MapFixture{};
+    auto& geometryMap = geometryFixture.create(config);
+    auto* brush = createBrushNode(geometryMap);
+    addNodes(geometryMap, {{&parentForNodes(geometryMap), {brush}}});
+    selectNodes(geometryMap, {brush});
+    const auto& tag = geometryMap.tagManager().smartTag("bounds");
+    REQUIRE_FALSE(tag.canPreserveTagsOnGeometryChange());
+    REQUIRE_FALSE(brush->hasTag(tag));
+    REQUIRE(translateSelection(geometryMap, vm::vec3d{64, 0, 0}));
+    CHECK(brush->hasTag(tag));
+    geometryMap.undoCommand();
+    CHECK_FALSE(brush->hasTag(tag));
+    geometryMap.redoCommand();
+    CHECK(brush->hasTag(tag));
+  }
 
   SECTION("registerSmartTags")
   {

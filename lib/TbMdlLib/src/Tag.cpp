@@ -31,6 +31,16 @@
 namespace tb::mdl
 {
 
+bool TagMatcher::canPreserveTagsOnGeometryChange() const
+{
+  return false;
+}
+
+bool SmartTag::canPreserveTagsOnGeometryChange() const
+{
+  return m_matcher->canPreserveTagsOnGeometryChange();
+}
+
 Tag::Tag(const size_t index, std::string name, std::vector<TagAttribute> attributes)
   : m_index{index}
   , m_name{std::move(name)}

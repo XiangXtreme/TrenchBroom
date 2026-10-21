@@ -26,9 +26,18 @@
 #include "mdl/Layer.h"
 
 #include <variant>
+#include <vector>
 
 namespace tb::mdl
 {
+class Node;
+
+struct NodeContentsChange
+{
+  std::vector<Node*> nodes;
+  std::vector<Node*> indexedNodes;
+  bool updateTags = true;
+};
 
 class NodeContents
 {

@@ -17,6 +17,7 @@
  along with TrenchBroom. If not, see <http:www.gnu.org/licenses/>.
  */
 
+#include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/CatchConfig.h"
 #include "mdl/EditorContext.h"
@@ -177,6 +178,31 @@ TEST_CASE("Map_NodeIndex")
     removeNodes(map, {node});
     CHECK(map.findNodes("16 32 48").empty());
     CHECK(map.findNodes("light").empty());
+  }
+
+  SECTION("material edits after movement update searchable brush strings")
+  {
+    auto* brush = createBrushNode(map, "before_move");
+    addNodes(map, {{&parentForNodes(map), {brush}}});
+    selectNodes(map, {brush});
+    REQUIRE(translateSelection(map, {16, 32, 48}));
+    CHECK(map.findNodes("before_move") == std::vector<Node*>{brush});
+
+    auto contents = brush->brush();
+    for (auto& face : contents.faces())
+    {
+      face.setMaterialName("after_move");
+    }
+    REQUIRE(updateNodeContents(
+      map, "Change Materials", {{brush, NodeContents{std::move(contents)}}}));
+    CHECK(map.findNodes("before_move").empty());
+    CHECK(map.findNodes("after_move") == std::vector<Node*>{brush});
+    map.undoCommand();
+    CHECK(map.findNodes("after_move").empty());
+    CHECK(map.findNodes("before_move") == std::vector<Node*>{brush});
+    map.redoCommand();
+    CHECK(map.findNodes("before_move").empty());
+    CHECK(map.findNodes("after_move") == std::vector<Node*>{brush});
   }
 
   SECTION("Linked Groups")

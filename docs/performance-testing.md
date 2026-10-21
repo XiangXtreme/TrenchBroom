@@ -327,6 +327,77 @@ variation remains visible; this investigation attributes costs rather than
 claiming a new performance improvement. The Release application was also rebuilt
 after removing the scopes.
 
+#### Content Change Postprocessing Optimization
+
+Content swaps now compare the live and replacement contents before notifying
+observers. Search indexing runs only for nodes whose searchable properties,
+group names or material names changed. Resource binding visits the entity and
+geometry contents actually replaced instead of revisiting a brush entity's
+unchanged children or a transformed group's entire subtree. Undo contents still
+release their resource references; replacement contents bind against the current
+resource managers before UI/render observers receive the change notification.
+The full notification path remains in use for resource reloads and default world
+properties.
+
+Built-in material, surface-flag and owner-classname matchers explicitly allow
+preserving tags after geometry edits with unchanged matcher inputs. Other
+matchers retain full reevaluation. Unchanged faces take their current tags from
+the live brush, so undo does not restore stale matches from before a material
+metadata update. Manual tag changes and changes to face count, material, surface
+attributes or owning entity classname still trigger tag updates. Regression
+tests cover current material tags through move/undo/redo, manual face tags,
+geometry-dependent custom matchers, observer-visible resource bindings and
+searchable material edits after movement. Existing model, asset, entity-link,
+linked-group and tool tests cover the broader notification change.
+
+The same map, camera, asset set, grid and warmup/measurement settings produced
+the following Release captures without concurrent builds or tests:
+
+| Capture | Effective updates | Mean move sync | Mean update to presentation | Update P95 | 3D FPS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Four panes, run 1 | 71 | 47.30 ms | 112.75 ms | 225.22 ms | 8.9 |
+| Four panes, run 2 | 77 | 45.43 ms | 104.30 ms | 117.43 ms | 9.8 |
+| Four panes, diagnostic scopes | 74 | 47.34 ms | 108.14 ms | 125.82 ms | 9.3 |
+| Four panes, scopes removed | 76 | 46.72 ms | 106.39 ms | 124.09 ms | 9.5 |
+| Single 3D, scopes removed | 79 | 50.73 ms | 101.50 ms | 118.88 ms | 10.0 |
+
+Captures are `20261021-151149-415`, `20261021-151226-055`,
+`20261021-151505-658`, `20261021-170937-167` and `20261021-171020-757`, in table
+order. The first run contains long stalls: maximum move-to-presentation time
+263.85 ms, maximum frame interval 283.67 ms, and maximum GPU query 76.67 ms.
+Their cause remains unresolved; that run is retained rather than discarded.
+Across the three captures without diagnostic scopes, the mean of the four-pane
+run means is 46.48 ms synchronous input, about 16% below the previous spatial
+update follow-up's 55.35 ms. Mean update-to-presentation time is 107.81 ms versus
+110.70 ms previously, a smaller change amid the observed variation. The single
+3D result does not establish better presentation throughput than the earlier
+10.0/10.4 FPS captures.
+
+Temporary diagnostic scopes measured 3,627 replaced contents per update: the
+3,382 selected nodes plus fully moved brush-entity owners. Only 355 entity
+property sets required search indexing in ordinary subsequent updates. Across
+74 effective updates, change classification averaged 1.55 ms and model
+postprocessing averaged 8.31 ms, compared with the earlier 20.61 ms postprocessing
+scope. The first update required a tag refresh; the remaining 73 did not. This
+is about 60% less time inside postprocessing, or about 52% less when including
+the new classification work. The diagnostic scopes were removed afterward.
+
+The final two four-pane runs without diagnostic scopes still spent
+25.82/26.12 ms per 3D CPU frame, including 16.39/16.68 ms per frame rebuilding
+brush render caches. Their GPU queries averaged 7.78/7.76 ms. Those render
+timings are separate from synchronous input and overlap internally; cache
+rebuilding, geometry mutation and command processing remain substantial targets.
+This change does not make whole-map dragging smooth.
+
+All five captures passed bounds restoration and unmodified-document checks after
+undo. The source map retained its SHA-256, and the same six WAD paths remained
+unresolved. GPU temperature after the captures was 71 C. Inspection of the
+four-pane framebuffer showed the selected map and its dense entity labels.
+Validation included strict compilation, all 135 model tests, 5 model test-helper
+tests, the UI suite (one native Play capture test intentionally skipped under its
+background-window policy), all 49 application/tool tests, and a Release
+`TrenchBroom` build.
+
 ### Loading Milestones
 
 Add `-LoadTiming` to write `render.jsonl.loading.json`. Its cumulative milestones

@@ -278,6 +278,10 @@ class TagMatcher
 public:
   virtual ~TagMatcher();
 
+  // Opt in only for matchers depending on material/surface attributes and the
+  // owning entity's classname. Other matchers must run again after geometry edits.
+  virtual bool canPreserveTagsOnGeometryChange() const;
+
 public:
   /**
    * Evaluates this tag matcher against the given taggable by calling
@@ -366,6 +370,8 @@ public:
    * @return true if this smart tag matches the given taggable and false otherwise
    */
   bool matches(const Taggable& taggable) const;
+
+  bool canPreserveTagsOnGeometryChange() const;
 
   /**
    * Updates the given tag depending on whether or not the matcher matches against it.

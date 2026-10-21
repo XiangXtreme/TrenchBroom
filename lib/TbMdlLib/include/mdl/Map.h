@@ -88,6 +88,7 @@ enum class VisualEffect;
 
 struct EnvironmentConfig;
 struct GameInfo;
+struct NodeContentsChange;
 struct SelectionChange;
 struct SoftMapBounds;
 
@@ -421,8 +422,14 @@ private: // observers
   void nodesWereAdded(const std::vector<Node*>& nodes);
   void nodesWillBeRemoved(const std::vector<Node*>& nodes);
   void nodesWereRemoved(const std::vector<Node*>& nodes);
-  void nodesWillChange(const std::vector<Node*>& nodes);
-  void nodesDidChange(const std::vector<Node*>& nodes);
+
+public:
+  // Process derived map state before notifying UI/render observers.
+  void notifyNodesWillChange(const std::vector<Node*>& nodes);
+  void notifyNodesDidChange(const std::vector<Node*>& nodes);
+  void notifyNodeContentsDidChange(const NodeContentsChange& change);
+
+private:
   void brushFacesDidChange(const std::vector<BrushFaceHandle>& brushFaces);
   void resourcesWereProcessed(const std::vector<gl::ResourceId>&);
   void selectionWillChange();
@@ -433,6 +440,22 @@ private: // observers
   void entityDefinitionsDidChange();
   void modsWillChange();
   void modsDidChange();
+};
+
+class NotifyNodesChange
+{
+private:
+  Map& m_map;
+  const std::vector<Node*>& m_nodes;
+  const NodeContentsChange* m_contentsChange;
+
+public:
+  NotifyNodesChange(Map& map, const std::vector<Node*>& nodes);
+  NotifyNodesChange(Map& map, const NodeContentsChange& change);
+  ~NotifyNodesChange();
+
+  NotifyNodesChange(const NotifyNodesChange&) = delete;
+  NotifyNodesChange& operator=(const NotifyNodesChange&) = delete;
 };
 
 } // namespace mdl

@@ -72,6 +72,7 @@
 #include "mdl/MixedBrushContentsValidator.h"
 #include "mdl/ModelUtils.h"
 #include "mdl/Node.h"
+#include "mdl/NodeContents.h"
 #include "mdl/NodeHandleManager.h"
 #include "mdl/NodeHandles.h"
 #include "mdl/NodeIndex.h"
@@ -259,25 +260,21 @@ Result<std::unique_ptr<WorldNode>> createWorldNode(
   return worldNode;
 }
 
-void setWorldDefaultProperties(
-  WorldNode& worldNode,
-  EntityDefinitionManager& entityDefinitionManager,
-  Notifier<const std::vector<Node*>&>& nodesWillChangeNotifier,
-  Notifier<const std::vector<Node*>&>& nodesDidChangeNotifier)
+void setWorldDefaultProperties(Map& map)
 {
+  auto& worldNode = map.worldNode();
+  auto& entityDefinitionManager = map.entityDefinitionManager();
   const auto definition =
     entityDefinitionManager.definition(EntityPropertyValues::WorldspawnClassname);
 
   if (definition && worldNode.entityPropertyConfig().setDefaultProperties)
   {
     const auto nodes = std::vector<Node*>{&worldNode};
-    nodesWillChangeNotifier(nodes);
+    const auto notify = NotifyNodesChange{map, nodes};
 
     auto entity = worldNode.entity();
     setDefaultProperties(*definition, entity, SetDefaultPropertyMode::SetAll);
     worldNode.setEntity(std::move(entity));
-
-    nodesDidChangeNotifier(nodes);
   }
 }
 
@@ -531,11 +528,7 @@ Map::Map(
       resourceManager,
       logger}
 {
-  setWorldDefaultProperties(
-    *m_worldNode,
-    *m_entityDefinitionManager,
-    nodesWillChangeNotifier,
-    nodesDidChangeNotifier);
+  setWorldDefaultProperties(*this);
 }
 
 Map::Map(
@@ -1584,8 +1577,6 @@ void Map::connectObservers()
   m_notifierConnection +=
     nodesWillBeRemovedNotifier.connect(this, &Map::nodesWillBeRemoved);
   m_notifierConnection += nodesWereRemovedNotifier.connect(this, &Map::nodesWereRemoved);
-  m_notifierConnection += nodesWillChangeNotifier.connect(this, &Map::nodesWillChange);
-  m_notifierConnection += nodesDidChangeNotifier.connect(this, &Map::nodesDidChange);
 
   m_notifierConnection +=
     selectionDidChangeNotifier.connect(this, &Map::selectionDidChange);
@@ -1699,13 +1690,14 @@ void Map::nodesWereRemoved(const std::vector<Node*>& nodes)
   m_cachedSelectionBounds = std::nullopt;
 }
 
-void Map::nodesWillChange(const std::vector<Node*>& nodes)
+void Map::notifyNodesWillChange(const std::vector<Node*>& nodes)
 {
   removeEntityLinks(nodes, false);
   // Keep the previous strings so nodesDidChange can update the index incrementally.
+  nodesWillChangeNotifier(nodes);
 }
 
-void Map::nodesDidChange(const std::vector<Node*>& nodes)
+void Map::notifyNodesDidChange(const std::vector<Node*>& nodes)
 {
   setEntityDefinitions(nodes);
   setEntityModels(nodes);
@@ -1716,6 +1708,66 @@ void Map::nodesDidChange(const std::vector<Node*>& nodes)
 
   m_selection.invalidate();
   m_cachedSelectionBounds = std::nullopt;
+  nodesDidChangeNotifier(nodes);
+}
+
+void Map::notifyNodeContentsDidChange(const NodeContentsChange& change)
+{
+  auto entityNodes = std::vector<Node*>{};
+  auto materialNodes = std::vector<Node*>{};
+  for (auto* node : change.nodes)
+  {
+    node->accept(kdl::overload(
+      [&](WorldNode& world) { entityNodes.push_back(&world); },
+      [](LayerNode&) {},
+      [](GroupNode&) {},
+      [&](EntityNode& entity) { entityNodes.push_back(&entity); },
+      [&](BrushNode& brush) { materialNodes.push_back(&brush); },
+      [&](PatchNode& patch) { materialNodes.push_back(&patch); }));
+  }
+  setEntityDefinitions(entityNodes);
+  setEntityModels(entityNodes);
+  if (!materialNodes.empty())
+  {
+    setMaterials(materialNodes);
+  }
+  if (change.updateTags)
+  {
+    updateNodeTags(collectNodesAndDescendants(change.nodes));
+  }
+  addToNodeIndex(change.indexedNodes, false);
+  addEntityLinks(change.nodes, false);
+  m_selection.invalidate();
+  m_cachedSelectionBounds = std::nullopt;
+  nodesDidChangeNotifier(change.nodes);
+}
+
+NotifyNodesChange::NotifyNodesChange(Map& map, const std::vector<Node*>& nodes)
+  : m_map{map}
+  , m_nodes{nodes}
+  , m_contentsChange{nullptr}
+{
+  m_map.notifyNodesWillChange(m_nodes);
+}
+
+NotifyNodesChange::NotifyNodesChange(Map& map, const NodeContentsChange& change)
+  : m_map{map}
+  , m_nodes{change.nodes}
+  , m_contentsChange{&change}
+{
+  m_map.notifyNodesWillChange(m_nodes);
+}
+
+NotifyNodesChange::~NotifyNodesChange()
+{
+  if (m_contentsChange)
+  {
+    m_map.notifyNodeContentsDidChange(*m_contentsChange);
+  }
+  else
+  {
+    m_map.notifyNodesDidChange(m_nodes);
+  }
 }
 
 void Map::brushFacesDidChange(const std::vector<BrushFaceHandle>& brushFaces)

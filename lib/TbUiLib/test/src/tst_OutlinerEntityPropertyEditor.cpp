@@ -241,7 +241,7 @@ TEST_CASE("OutlinerEntityPropertyEditor")
 
     mdl::setEntityProperty(map, "active", "changed", false);
     const auto changedNodes = std::vector<mdl::Node*>{entityNode};
-    map.nodesDidChangeNotifier(changedNodes);
+    map.notifyNodesDidChange(changedNodes);
     processOutlinerUpdates();
 
     CHECK(valueEdit->placeholderText() == "<inactive>");
@@ -312,7 +312,7 @@ TEST_CASE("OutlinerEntityPropertyEditor")
 
     mdl::setEntityProperty(map, "skyname", "morning", false);
     const auto changedNodes = std::vector<mdl::Node*>{&map.worldNode()};
-    map.nodesDidChangeNotifier(changedNodes);
+    map.notifyNodesDidChange(changedNodes);
     processOutlinerUpdates();
 
     skynameEdit = propertyValueEdit(editor, "skyname");
@@ -375,7 +375,7 @@ TEST_CASE("OutlinerEntityPropertyEditor")
 
     mdl::setEntityProperty(map, "skyname", "morning", false);
     const auto changedNodes = std::vector<mdl::Node*>{&map.worldNode()};
-    map.nodesDidChangeNotifier(changedNodes);
+    map.notifyNodesDidChange(changedNodes);
     processOutlinerUpdates();
 
     skynameEdit = propertyValueEdit(editor, "skyname");

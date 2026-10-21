@@ -65,6 +65,7 @@ private:
 
 public:
   explicit MaterialNameTagMatcher(std::string pattern);
+  bool canPreserveTagsOnGeometryChange() const override { return true; }
   std::unique_ptr<TagMatcher> clone() const override;
   bool matches(const Taggable& taggable) const override;
   void appendToStream(std::ostream& str) const override;
@@ -82,6 +83,7 @@ private:
 public:
   explicit SurfaceParmTagMatcher(std::string parameter);
   explicit SurfaceParmTagMatcher(kdl::flat_set<std::string> parameters);
+  bool canPreserveTagsOnGeometryChange() const override { return true; }
   std::unique_ptr<TagMatcher> clone() const override;
   bool matches(const Taggable& taggable) const override;
   void appendToStream(std::ostream& str) const override;
@@ -126,6 +128,7 @@ class ContentFlagsTagMatcher : public FlagsTagMatcher
 {
 public:
   explicit ContentFlagsTagMatcher(int flags);
+  bool canPreserveTagsOnGeometryChange() const override { return true; }
   std::unique_ptr<TagMatcher> clone() const override;
 };
 
@@ -133,6 +136,7 @@ class SurfaceFlagsTagMatcher : public FlagsTagMatcher
 {
 public:
   explicit SurfaceFlagsTagMatcher(int flags);
+  bool canPreserveTagsOnGeometryChange() const override { return true; }
   std::unique_ptr<TagMatcher> clone() const override;
 };
 
@@ -148,6 +152,7 @@ private:
 public:
   EntityClassNameTagMatcher(std::string pattern, std::string material);
   std::unique_ptr<TagMatcher> clone() const override;
+  bool canPreserveTagsOnGeometryChange() const override { return true; }
 
 public:
   bool matches(const Taggable& taggable) const override;

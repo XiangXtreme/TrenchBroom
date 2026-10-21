@@ -160,8 +160,7 @@ void setEnabledMaterialCollections(
 void reloadMaterialCollections(Map& map)
 {
   const auto nodes = std::vector<Node*>{&map.worldNode()};
-  const auto notifyNodes =
-    NotifyBeforeAndAfter{map.nodesWillChangeNotifier, map.nodesDidChangeNotifier, nodes};
+  const auto notifyNodes = NotifyNodesChange{map, nodes};
   const auto notifyMaterialCollections = NotifyBeforeAndAfter{
     map.materialCollectionsWillChangeNotifier, map.materialCollectionsDidChangeNotifier};
 
@@ -172,8 +171,7 @@ void reloadMaterialCollections(Map& map)
 void reloadEntityDefinitions(Map& map)
 {
   const auto nodes = std::vector<Node*>{&map.worldNode()};
-  const auto notifyNodes =
-    NotifyBeforeAndAfter{map.nodesWillChangeNotifier, map.nodesDidChangeNotifier, nodes};
+  const auto notifyNodes = NotifyNodesChange{map, nodes};
   const auto notifyEntityDefinitions = NotifyBeforeAndAfter{
     map.entityDefinitionsWillChangeNotifier, map.entityDefinitionsDidChangeNotifier};
 
