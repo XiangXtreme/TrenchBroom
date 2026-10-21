@@ -113,4 +113,14 @@ TEST_CASE("SkyRenderer.skyBrushFaceVertexCount")
   }
 }
 
+TEST_CASE("SkyRenderer.skyBrushFaceVertexCount recognizes uppercase material names")
+{
+  auto fixture = mdl::MapFixture{};
+  auto& map = fixture.create();
+  auto* skyBrush = mdl::createBrushNode(map, "SKY");
+  mdl::addNodes(map, {{&mdl::parentForNodes(map), {static_cast<mdl::Node*>(skyBrush)}}});
+
+  CHECK(skyBrushFaceVertexCount(map) > 0);
+}
+
 } // namespace tb::render
