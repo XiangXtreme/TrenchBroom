@@ -64,7 +64,16 @@ jobs:
             if (object.type !== 'commit' || object.sha !== run.head_sha) {
               throw new Error('Release tag no longer matches the successful CI commit');
             }
-            const {data: release} = await github.rest.repos.getReleaseByTag({...repo, tag});
+            // GitHub does not expose draft releases through getReleaseByTag.
+            // List releases so the assets uploaded by the platform jobs can
+            // be verified before promoting the matching draft.
+            const {data: releases} = await github.rest.repos.listReleases({
+              ...repo, per_page: 100
+            });
+            const release = releases.find(candidate => candidate.tag_name === tag);
+            if (!release) {
+              throw new Error(`No release draft found for ${tag}`);
+            }
             if (release.prerelease) {
               throw new Error('Prereleases require a separate publishing policy');
             }
