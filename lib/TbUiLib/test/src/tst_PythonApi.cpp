@@ -1398,6 +1398,12 @@ if entity.brushes:
     brush = entity.brushes[0]
     assert brush.entity.classname == entity.classname
     assert "Brush(" in repr(brush)
+    assert isinstance(brush.bounds, dict)
+    assert "min" in brush.bounds and "max" in brush.bounds
+    assert isinstance(entity.bounds, dict)
+    assert "min" in entity.bounds and "max" in entity.bounds
+    assert isinstance(entity.origin, tuple)
+    assert len(entity.origin) == 3
 
 # Selection helpers
 sel = tb.documents.current().selection

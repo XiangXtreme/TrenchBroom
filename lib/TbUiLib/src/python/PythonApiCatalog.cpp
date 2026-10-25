@@ -560,6 +560,9 @@ constexpr auto EntitySymbols = std::array{
   PythonApiSymbol{
     "brushes", Property, "list[Brush]", PythonApiValueType{PythonApiType::Brush, 1u}},
   PythonApiSymbol{"properties", Property, "dict[str, str]"},
+  PythonApiSymbol{
+    "origin", Property, "tuple[float, float, float]", std::nullopt, PythonApiEffect::Read},
+  PythonApiSymbol{"bounds", Property, "dict", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{"keys", Method, "() -> list[str]", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{
     "values", Method, "() -> list[str]", std::nullopt, PythonApiEffect::Read},
@@ -575,6 +578,7 @@ constexpr auto BrushSymbols = std::array{
   PythonApiSymbol{"id", Property, "str"},
   PythonApiSymbol{
     "entity", Property, "Entity", PythonApiValueType{PythonApiType::Entity}},
+  PythonApiSymbol{"bounds", Property, "dict", std::nullopt, PythonApiEffect::Read},
   PythonApiSymbol{
     "faces",
     Method,

@@ -128,6 +128,9 @@ TEST_CASE("McpPythonExecution", "[.][McpBridgeServer][PythonApi]")
     };
     CHECK(symbol("Face.material").value("writable").toBool());
     CHECK_FALSE(symbol("Face.vertices").value("writable").toBool());
+    CHECK_FALSE(symbol("Brush.bounds").value("writable").toBool());
+    CHECK_FALSE(symbol("Entity.bounds").value("writable").toBool());
+    CHECK_FALSE(symbol("Entity.origin").value("writable").toBool());
     CHECK(symbol("tb.entities.tie_brushes").value("effect") == "edit");
     CHECK(symbol("tb.history.undo").value("effect") == "action");
     CHECK(symbol("tb.assets.search").value("effect") == "read");
@@ -516,6 +519,39 @@ result = state
     REQUIRE(retained.ok);
     CHECK(retained.result.value("historicalReplay").toBool());
     CHECK(map.modificationCount() == after);
+  }
+
+  SECTION("unsaved document execution allows omitting path while rejecting mismatched path")
+  {
+    const auto targetOnlyFingerprint = QJsonObject{
+      {"fingerprint", inspected.result.value("fingerprint")},
+    };
+    const auto okWithoutPath = server.dispatchRequest(mcp::McpBridgeRequest{
+      "exec-without-path",
+      "tb_execute_python",
+      {{"executionId", "exec-without-path"},
+       {"code", "import trenchbroom as tb\nresult = {'ok': True}"},
+       {"document", targetOnlyFingerprint},
+       {"mode", "transaction"}},
+      {}});
+    REQUIRE(okWithoutPath.ok);
+    CHECK(okWithoutPath.result.value("result").toObject().value("ok").toBool());
+
+    const auto targetBadPath = QJsonObject{
+      {"fingerprint", inspected.result.value("fingerprint")},
+      {"path", "wrong_file.map"},
+    };
+    const auto failedBadPath = server.dispatchRequest(mcp::McpBridgeRequest{
+      "exec-bad-path",
+      "tb_execute_python",
+      {{"executionId", "exec-bad-path"},
+       {"code", "import trenchbroom as tb\nresult = {'ok': True}"},
+       {"document", targetBadPath},
+       {"mode", "transaction"}},
+      {}});
+    REQUIRE_FALSE(failedBadPath.ok);
+    REQUIRE(failedBadPath.error);
+    CHECK(failedBadPath.error->message.contains("document path does not match"));
   }
 
   SECTION("worldspawn property edits preserve selection before subsequent brush edits")

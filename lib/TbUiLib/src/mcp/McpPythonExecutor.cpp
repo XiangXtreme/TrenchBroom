@@ -148,14 +148,24 @@ McpBridgeToolResult McpPythonExecutor::execute(
   }
   const auto expectedPath = requested.value("path").toString().trimmed();
   const auto actualPath = active.value("path").toString();
-  if (
-    (!actualPath.isEmpty() && expectedPath.isEmpty())
-    || (!expectedPath.isEmpty() && expectedPath != actualPath))
+  const auto persistent = active.value("persistent").toBool(false);
+  if (persistent && expectedPath.isEmpty())
   {
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::Forbidden,
-      actualPath.isEmpty() ? "MCP Python document path does not match the active document"
-                           : "MCP Python requires the saved document path",
+      "MCP Python requires the saved document path",
+      QJsonObject{
+        {"mutatedDocument", false},
+        {"retrySafe", true},
+        {"expectedPath", expectedPath},
+        {"actualPath", actualPath},
+      });
+  }
+  if (!expectedPath.isEmpty() && expectedPath != actualPath)
+  {
+    return McpBridgeToolResult::failure(
+      mcp::McpErrorCode::Forbidden,
+      "MCP Python document path does not match the active document",
       QJsonObject{
         {"mutatedDocument", false},
         {"retrySafe", true},

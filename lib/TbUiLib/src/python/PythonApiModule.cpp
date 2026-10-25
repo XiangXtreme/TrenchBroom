@@ -4484,6 +4484,10 @@ void defineModule(py::module_& module)
       })
     .def_property_readonly(
       "classname", [](EntityHandle& self) { return self.get().entity().classname(); })
+    .def_property_readonly(
+      "origin", [](EntityHandle& self) { return vec3ToTuple(self.get().entity().origin()); })
+    .def_property_readonly(
+      "bounds", [](EntityHandle& self) { return boundsSnapshot(self.get().logicalBounds()); })
     .def_property_readonly("brushes", entityBrushes)
     .def_property_readonly(
       "properties",
@@ -4613,6 +4617,8 @@ void defineModule(py::module_& module)
         return nodeId(DocumentHandle{self.document, self.generation}.get(), self.get());
       })
     .def_property_readonly("entity", brushEntity)
+    .def_property_readonly(
+      "bounds", [](BrushHandle& self) { return boundsSnapshot(self.get().logicalBounds()); })
     .def(
       "faces",
       [](BrushHandle& self) {
