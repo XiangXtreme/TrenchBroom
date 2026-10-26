@@ -379,6 +379,16 @@ bool MapView3D::event(QEvent* event)
     return true;
   }
 
+  if (event->type() == QEvent::ShortcutOverride)
+  {
+    auto* keyEvent = static_cast<QKeyEvent*>(event);
+    if (isRightClickDragging() && m_flyModeHelper->matchesFlyKey(*keyEvent))
+    {
+      event->accept();
+      return true;
+    }
+  }
+
   return MapViewBase::event(event);
 }
 
@@ -465,6 +475,11 @@ void MapView3D::mouseMoveEvent(QMouseEvent* event)
 
 void MapView3D::mousePressEvent(QMouseEvent* event)
 {
+  if (event->button() == Qt::RightButton)
+  {
+    m_rightMouseDown = true;
+  }
+
   if (!m_playMode->active())
   {
     MapViewBase::mousePressEvent(event);
@@ -473,6 +488,11 @@ void MapView3D::mousePressEvent(QMouseEvent* event)
 
 void MapView3D::mouseReleaseEvent(QMouseEvent* event)
 {
+  if (event->button() == Qt::RightButton)
+  {
+    m_rightMouseDown = false;
+  }
+
   if (!m_playMode->active())
   {
     MapViewBase::mouseReleaseEvent(event);
@@ -510,6 +530,7 @@ void MapView3D::wheelEvent(QWheelEvent* event)
 
 void MapView3D::focusInEvent(QFocusEvent* event)
 {
+  m_rightMouseDown = false;
   m_flyModeHelper->resetKeys();
 
   MapViewBase::focusInEvent(event);
@@ -517,6 +538,7 @@ void MapView3D::focusInEvent(QFocusEvent* event)
 
 void MapView3D::focusOutEvent(QFocusEvent* event)
 {
+  m_rightMouseDown = false;
   m_flyModeHelper->resetKeys();
   if (!m_changingPlayPresentation)
   {
@@ -536,6 +558,23 @@ void MapView3D::bindEvents()
 {
   // Fly mode animation
   connect(this, &QOpenGLWidget::frameSwapped, this, &MapView3D::updateFlyMode);
+}
+
+bool MapView3D::isRightClickDragging() const
+{
+  if ((QGuiApplication::mouseButtons() & Qt::RightButton) != 0)
+  {
+    return true;
+  }
+  if (m_rightMouseDown)
+  {
+    return true;
+  }
+  if (isRightMouseButtonDown())
+  {
+    return true;
+  }
+  return false;
 }
 
 void MapView3D::updateFlyMode()
@@ -939,6 +978,7 @@ void MapView3D::renderTools(
 
 void MapView3D::beforePopupMenu()
 {
+  m_rightMouseDown = false;
   m_flyModeHelper->resetKeys();
 }
 

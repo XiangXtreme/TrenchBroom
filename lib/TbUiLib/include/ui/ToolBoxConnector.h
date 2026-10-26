@@ -102,6 +102,10 @@ private:
 protected:
   bool clearModifierKeys();
   void updateModifierKeys();
+  bool isRightMouseButtonDown() const
+  {
+    return m_inputState.mouseButtonsPressed(MouseButtons::Right);
+  }
 
 private:
   void showPopupMenu();

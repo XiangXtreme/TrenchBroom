@@ -62,6 +62,7 @@ public:
   /**
    * Returns whether the camera is currently moving due to a fly key being held down.
    */
+  bool matchesFlyKey(const QKeyEvent& event) const;
   bool anyKeyDown() const;
   void resetKeys();
 

@@ -119,11 +119,11 @@ void FlyModeHelper::keyDown(QKeyEvent* event)
   {
     m_down = true;
   }
-  if (event->key() == Qt::Key_Shift)
+  if (event->key() == Qt::Key_Shift || (event->modifiers() & Qt::ShiftModifier))
   {
     m_fast = true;
   }
-  if (event->key() == Qt::Key_Alt)
+  if (event->key() == Qt::Key_Alt || (event->modifiers() & Qt::AltModifier))
   {
     m_slow = true;
   }
@@ -183,6 +183,20 @@ void FlyModeHelper::keyUp(QKeyEvent* event)
   {
     m_slow = false;
   }
+}
+
+bool FlyModeHelper::matchesFlyKey(const QKeyEvent& event) const
+{
+  const auto& forward = pref(Preferences::CameraFlyForward);
+  const auto& backward = pref(Preferences::CameraFlyBackward);
+  const auto& left = pref(Preferences::CameraFlyLeft);
+  const auto& right = pref(Preferences::CameraFlyRight);
+  const auto& up = pref(Preferences::CameraFlyUp);
+  const auto& down = pref(Preferences::CameraFlyDown);
+
+  return eventMatchesShortcut(forward, event) || eventMatchesShortcut(backward, event)
+         || eventMatchesShortcut(left, event) || eventMatchesShortcut(right, event)
+         || eventMatchesShortcut(up, event) || eventMatchesShortcut(down, event);
 }
 
 bool FlyModeHelper::anyKeyDown() const

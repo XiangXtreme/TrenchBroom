@@ -1434,10 +1434,10 @@
 		1: "Triangle Tracing (Transparency)"
 		2: "Slow, Triangle Plane Bounds"
 	]
-	zhlt_studiobsp(choices) : "Bake Model into BSP" : "" =
+	zhlt_studiobsp(choices) : "Bake Model Geometry into BSP" : "" =
 	[
-		"": "No"
-		1: "Yes"
+		"": "No (Keep as MDL Studio Model in Engine)"
+		1: "Yes (Convert to func_wall Brushes)"
 	]
 	zhlt_studiobsp_doublesided(choices) : "Generated Back Faces" : 1 =
 	[
@@ -1445,12 +1445,14 @@
 		1: "Textured"
 	]
 	zhlt_studiobsp_thickness(string) : "Fallback / Collision Thickness" : "1"
-	zhlt_studiobsp_collision(choices) : "Player Collision Hulls" : 0 =
+	zhlt_studiobsp_collision(choices) : "Player Collision Mode" : 0 =
 	[
-		0: "No"
-		1: "Yes"
+		0: "No Collision"
+		1: "Standard CSG Brush Collision"
+		2: "ExactHull (Smooth, Simple distance)"
+		3: "ExactHull + Legacytrim (Smooth, Slope-hugging distance)"
 	]
-	zhlt_studiobsp_world(choices) : "BSP Placement Mode" : 0 =
+	zhlt_studiobsp_world(choices) : "BSP Placement Mode (Bake Model only)" : 0 =
 	[
 		0: "Optimized func_wall Submodel"
 		1: "Direct World Hull 0 (More Nodes / Leaves)"

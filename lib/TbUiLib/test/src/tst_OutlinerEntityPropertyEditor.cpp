@@ -551,6 +551,24 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     CHECK(selectedEntity(map).entity().property("message") == nullptr);
     CHECK(propertyRow(editor, "message") == nullptr);
   }
+
+  SECTION("handles empty or malformed color property values without throwing")
+  {
+    auto* entityNode = new mdl::EntityNode{mdl::Entity{{
+      {"classname", "light"},
+      {"fog_colour", ""},
+      {"_color", "invalid color text"},
+    }}};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {entityNode}}});
+    mdl::selectNodes(map, {entityNode});
+    REQUIRE_NOTHROW(processOutlinerUpdates());
+
+    auto* colorRow = propertyRow(editor, "fog_colour");
+    REQUIRE(colorRow != nullptr);
+    auto* colorButton = colorRow->findChild<QToolButton*>("outlinerPropertyColorButton");
+    REQUIRE(colorButton != nullptr);
+    CHECK(colorButton->property("displayColor").value<QColor>() == QColor{Qt::black});
+  }
 }
 
 } // namespace tb::ui

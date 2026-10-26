@@ -345,8 +345,13 @@ std::optional<QColor> parseEntityColorToQColor(
   const std::string& propertyKey,
   const std::string& propertyValue)
 {
-  return mdl::parseEntityColorPropertyValue(entityDefinition, propertyKey, propertyValue)
-         | kdl::transform([](const auto& v) { return toQColor(v.color); }) | kdl::value();
+  const auto parsed =
+    mdl::parseEntityColorPropertyValue(entityDefinition, propertyKey, propertyValue);
+  if (parsed.is_success())
+  {
+    return toQColor(parsed.value().color);
+  }
+  return std::nullopt;
 }
 
 constexpr size_t SpawnflagsNumFlags = 24;

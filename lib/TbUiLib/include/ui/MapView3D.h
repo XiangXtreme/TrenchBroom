@@ -68,6 +68,7 @@ private:
   bool m_mouseTrackingBeforePlay = false;
   bool m_awaitingCursorWarp = false;
   bool m_grabbedMouse = false;
+  bool m_rightMouseDown = false;
   int m_wheelAccumulator = 0;
   QPointF m_lastPlayMousePos;
 
@@ -120,6 +121,7 @@ private: // interaction events
   void bindEvents();
 
 private: // other events
+  bool isRightClickDragging() const;
   void updateFlyMode();
   void resetFlyModeKeys();
 

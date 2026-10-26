@@ -516,6 +516,53 @@ TEST_CASE("MapWindow")
     CHECK(map.worldNode().defaultLayer()->childCount() == count);
   }
 
+  SECTION("3D right click drag suppresses Shift+S mode toggle")
+  {
+    window.resize(1200, 900);
+    window.show();
+    QApplication::processEvents();
+    auto* view = window.findChild<MapView3D*>();
+    REQUIRE(view);
+    view->setFocus();
+    QApplication::processEvents();
+
+    auto& toolBox = window.toolBox();
+    toolBox.setSelectMode(false);
+    REQUIRE(toolBox.brushCreationModeActive());
+
+    const auto center = view->rect().center();
+    auto rightPress = QMouseEvent{
+      QEvent::MouseButtonPress,
+      QPointF{center},
+      QPointF{view->mapTo(view->window(), center)},
+      QPointF{view->mapToGlobal(center)},
+      Qt::RightButton,
+      Qt::RightButton,
+      Qt::NoModifier};
+    QApplication::sendEvent(view, &rightPress);
+
+    auto overrideEvent =
+      QKeyEvent{QEvent::ShortcutOverride, Qt::Key_S, Qt::ShiftModifier};
+    QApplication::sendEvent(view, &overrideEvent);
+    CHECK(overrideEvent.isAccepted());
+    CHECK(toolBox.brushCreationModeActive());
+
+    auto rightRelease = QMouseEvent{
+      QEvent::MouseButtonRelease,
+      QPointF{center},
+      QPointF{view->mapTo(view->window(), center)},
+      QPointF{view->mapToGlobal(center)},
+      Qt::RightButton,
+      Qt::NoButton,
+      Qt::NoModifier};
+    QApplication::sendEvent(view, &rightRelease);
+
+    auto overrideEventAfterRelease =
+      QKeyEvent{QEvent::ShortcutOverride, Qt::Key_S, Qt::ShiftModifier};
+    QApplication::sendEvent(view, &overrideEventAfterRelease);
+    CHECK_FALSE(overrideEventAfterRelease.isAccepted());
+  }
+
 
   SECTION("uses modern workbench surfaces and status controls")
   {
