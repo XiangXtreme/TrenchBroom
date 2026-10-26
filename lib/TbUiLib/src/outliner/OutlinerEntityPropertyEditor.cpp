@@ -529,10 +529,14 @@ QString propertyValueTypeName(const mdl::PropertyValueType& type)
     type);
 }
 
+QString toUnicodeFromFgd(const std::string& string)
+{
+  return QString::fromUtf8(string.data(), static_cast<qsizetype>(string.size()));
+}
+
 QString makePropertyTooltip(
   const std::string& key,
-  const mdl::PropertyDefinition* propertyDef,
-  const mdl::MapTextEncoding& encoding)
+  const mdl::PropertyDefinition* propertyDef)
 {
   auto lines = QStringList{};
   if (
@@ -540,60 +544,47 @@ QString makePropertyTooltip(
     && propertyDef->shortDescription != key)
   {
     lines.push_back(
-      QString{
-        "<div style='font-size: 11pt; font-weight: bold; line-height: 1.2;'>%1 "
-        "<span style='font-size: 9pt; font-weight: normal; color: #888888;'>[%2]</span></div>"}
-        .arg(mapStringToUnicode(encoding, propertyDef->shortDescription).toHtmlEscaped())
+      QString{"<b>%1</b> (%2)"}
+        .arg(toUnicodeFromFgd(propertyDef->shortDescription).toHtmlEscaped())
         .arg(QString::fromStdString(key).toHtmlEscaped()));
   }
   else
   {
     lines.push_back(
-      QString{
-        "<div style='font-size: 11pt; font-weight: bold; line-height: 1.2;'>%1</div>"}
-        .arg(QString::fromStdString(key).toHtmlEscaped()));
+      QString{"<b>%1</b>"}.arg(QString::fromStdString(key).toHtmlEscaped()));
   }
 
   if (propertyDef != nullptr)
   {
     auto meta = QStringList{};
     meta.push_back(
-      QString{"%1: <span style='color: #cccccc;'>%2</span>"}
+      QString{"%1: %2"}
         .arg(QCoreApplication::translate("OutlinerEntityPropertyEditor", "Type"))
         .arg(propertyValueTypeName(propertyDef->valueType)));
     if (const auto defVal = mdl::PropertyDefinition::defaultValue(*propertyDef))
     {
       meta.push_back(
-        QString{"%1: <span style='color: #cccccc;'>%2</span>"}
+        QString{"%1: %2"}
           .arg(QCoreApplication::translate("OutlinerEntityPropertyEditor", "Default"))
-          .arg(mapStringToUnicode(encoding, *defVal).toHtmlEscaped()));
+          .arg(toUnicodeFromFgd(*defVal).toHtmlEscaped()));
     }
     if (propertyDef->readOnly)
     {
       meta.push_back(
-        QString{"<span style='color: #e09040;'>%1</span>"}.arg(
-          QCoreApplication::translate("OutlinerEntityPropertyEditor", "Read Only")));
+        QCoreApplication::translate("OutlinerEntityPropertyEditor", "Read Only"));
     }
-    lines.push_back(
-      QString{"<div style='font-size: 9pt; color: #888888; margin-top: 3px;'>%1</div>"}
-        .arg(meta.join(" &nbsp;|&nbsp; ")));
+    lines.push_back(QString{"<small>%1</small>"}.arg(meta.join(" &nbsp;|&nbsp; ")));
 
     if (!propertyDef->longDescription.empty())
     {
       lines.push_back(
-        QString{
-          "<div style='margin-top: 6px; padding-top: 6px; border-top: 1px solid #444444; "
-          "font-size: 9.5pt; color: #d8d8d8; line-height: 1.4;'>%1</div>"}
-          .arg(mapStringToUnicode(encoding, propertyDef->longDescription)
-                 .toHtmlEscaped()
-                 .replace("\n", "<br>")));
+        toUnicodeFromFgd(propertyDef->longDescription)
+          .toHtmlEscaped()
+          .replace("\n", "<br>"));
     }
   }
 
-  return QString{
-    "<div style='font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif; "
-    "font-size: 9.5pt;'>%1</div>"}
-    .arg(lines.join(""));
+  return lines.join("<br>");
 }
 } // namespace
 
@@ -956,8 +947,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   const auto* entityDefinition = mdl::selectEntityDefinition(entityNodes);
   if (entityDefinition != nullptr && !entityDefinition->description.empty())
   {
-    const auto classDesc =
-      mapStringToUnicode(m_document.map().encoding(), entityDefinition->description);
+    const auto classDesc = toUnicodeFromFgd(entityDefinition->description);
     m_propertiesPanel->getTitleBar()->setToolTip(
       QString{"<b>%1</b>: %2"}.arg(className.toHtmlEscaped(), classDesc.toHtmlEscaped()));
     m_selectionSummary->setToolTip(
@@ -1001,11 +991,10 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     const auto isSmartEdit = pref(Preferences::EntityPropertiesSmartEdit);
     const auto* propertyDef = mdl::selectPropertyDefinition(key, entityNodes);
 
-    auto labelText = mapStringToUnicode(m_document.map().encoding(), key);
+    auto labelText = QString::fromStdString(key);
     if (isSmartEdit && propertyDef != nullptr && !propertyDef->shortDescription.empty())
     {
-      labelText =
-        mapStringToUnicode(m_document.map().encoding(), propertyDef->shortDescription);
+      labelText = toUnicodeFromFgd(propertyDef->shortDescription);
     }
 
     auto* keyLabel = new ElidedLabel{labelText, Qt::ElideRight, row};
@@ -1015,8 +1004,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     keyLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     keyLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
-    const auto rowTooltip =
-      makePropertyTooltip(key, propertyDef, m_document.map().encoding());
+    const auto rowTooltip = makePropertyTooltip(key, propertyDef);
     keyLabel->setToolTip(rowTooltip);
 
     QLineEdit* valueEdit = nullptr;
@@ -1036,10 +1024,8 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
 
         for (const auto& option : choiceType->options)
         {
-          const auto value =
-            mapStringToUnicode(m_document.map().encoding(), option.value);
-          const auto label = mapStringToUnicode(
-            m_document.map().encoding(), option.value + " : " + option.description);
+          const auto value = toUnicodeFromFgd(option.value);
+          const auto label = toUnicodeFromFgd(option.value + " : " + option.description);
           valueCombo->addItem(label, value);
         }
 

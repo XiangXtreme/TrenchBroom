@@ -413,9 +413,9 @@
 // Worldspawn
 //
 
-@SolidClass = worldspawn : "世界根实体 - 包含地图基础属性与全局参数"
+@SolidClass = worldspawn : "世界根实体 (地图全局属性)"
 [
-	message(string) : "提示文本 / 声音路径 (message)"
+	message(string) : "提示文本/音效路径"
 	skyname(string) : "天空盒贴图前缀" 
 	sounds(integer) : "音效方案预设" : 0
 	light(integer) : "Default light level" : 0
@@ -423,9 +423,9 @@
 	MaxRange(string) : "Max viewable distance" : "4096"
 	startdark(choices) : "Level Fade In" : "" =
 	[	
-		"" : "否 (No)"
+		"" : "否"
 
-		1 : "是 (Yes)"
+		1 : "是"
 
 	]
 	newunit(choices) : "New Level Unit" : "" = 
@@ -457,22 +457,22 @@
 
 @BaseClass = Master
 [ 
-	master(string) : "主控实体 (master)" 
+	master(string) : "主控实体" 
 ]
 
 @BaseClass = Target 
 [ 
-	target(target_destination) : "触发目标 (target)" 
+	target(target_destination) : "触发目标" 
 ]
 
 @BaseClass = Targetname 
 [ 
-	targetname(target_source) : "实体名称 (targetname)"
+	targetname(target_source) : "实体名称"
 ]
 
 @BaseClass base(Target) = Targetx 
 [
-	delay(string) : "触发延迟时间 (秒)" : "0"
+	delay(string) : "触发延迟时间(秒)" : "0"
 	killtarget(target_destination) : "触发后彻底销毁的目标"
 ]
 
@@ -484,7 +484,7 @@
 
 @BaseClass = RenderFxChoices
 [
-	renderfx(choices) :"渲染特殊效果 (Render FX)" : "" =
+	renderfx(choices) :"渲染特殊效果" : "" =
 	[
 		"": "正常渲染 (Normal)"
 
@@ -531,7 +531,7 @@
 
 @BaseClass base(RenderFxChoices) = RenderFields 
 [
-	rendermode(choices) : "渲染模式 (Render Mode)" : "" =
+	rendermode(choices) : "渲染模式" : "" =
 	[
 		"": "Normal - no light"
 
@@ -569,8 +569,8 @@
 		5: "加法发光混合 (Additive)"
 
 	]
-	renderamt(integer) : "透明度/亮度 (0-255)" : 255
-	rendercolor(color255) : "渲染着色 (R G B)" : "0 0 0"
+	renderamt(integer) : "不透明度/亮度 (0-255)" : 255
+	rendercolor(color255) : "渲染着色颜色 (R G B)" : "0 0 0"
 ]
 
 // LRCHLT Texture light additions
@@ -621,7 +621,7 @@
 @BaseClass base(Targetname, Global, Target, RenderFields, Angles) = BaseTank
 [
 	// Mainly for use with 1009 team settings (game_team_master)
-	master(string) : "主控实体 (master)"
+	master(string) : "主控实体"
 	spawnflags(flags) =
 	[
 		1 : "Active" : 0
@@ -667,9 +667,9 @@
 
 @BaseClass base(Targetname, Global) = Breakable
 [
-	target(target_destination) : "触发目标 (target)"
-	delay(string) : "触发延迟时间 (秒)" : "0"
-	health(integer) : "生命值 / 破坏耐受上限" : 1
+	target(target_destination) : "触发目标"
+	delay(string) : "触发延迟时间(秒)" : "0"
+	health(integer) : "生命值/破坏耐久" : 1
 	material(choices) :"Material type" : "" =
 	[
 		//*   <b>Gibs:</b> models/glassgibs.mdl
@@ -750,12 +750,12 @@
 
 @BaseClass base(Targetname, Global, Master, RenderFields, Angles, Appearflags) = Door
 [
-	target(target_destination) : "触发目标 (target)"
+	target(target_destination) : "触发目标"
 	//*-----------------------------------------------------------------
 	//*This delay only applies to the Target, not the Fire on Open/Close
 	//*fields.
 	//*-----------------------------------------------------------------
-	delay(integer) : "触发延迟时间 (秒)" : 0
+	delay(integer) : "触发延迟时间(秒)" : 0
 	killtarget(target_destination) : "触发后彻底销毁的目标"
 	speed(integer) : "移动速度" : 100
 	//* -----------------------------------------------------------------
@@ -814,12 +814,12 @@
 	]
 //* Setting wait to -1 also prevents the door from reversing when it comes into
 //* contact with the player, as seen on the bunker door in Crossfire.
-	wait(integer) : "自动复位延迟 (秒)" : 4
-	lip(integer) : "残留边距 / 凸出距离" : 0
+	wait(integer) : "自动复位延迟(秒)" : 4
+	lip(integer) : "残留边距/凸出距离" : 0
 	dmg(integer) : "伤害数值" : 0
-	message(string) : "提示文本 / 声音路径 (message)"
-	netname(string) : "路径目标 (netname)"
-	health(integer) : "生命值 / 破坏耐受上限" : 0
+	message(string) : "提示文本/音效路径"
+	netname(string) : "路径目标"
+	health(integer) : "生命值/破坏耐久" : 0
 	spawnflags(flags) =
 	[
 		1 : "初始处于开启状态" : 0
@@ -941,7 +941,7 @@
 	//* The number of pieces to create.
 	m_iGibs(integer) : "Number of Gibs" : 3
 	//* Delay (in seconds) between shots. If 0, all the gibs are fired at once.
-	delay(string) : "触发延迟时间 (秒)" : "0"
+	delay(string) : "触发延迟时间(秒)" : "0"
 	//* How fast the gibs are fired
 	m_flVelocity(integer) : "Gib Velocity" : 200
 	//* Course variance
@@ -959,7 +959,7 @@
 //* that such a light won't be able to switch on and off.
 @BaseClass = Light 
 [
-	_light(color255) : "光照颜色与亮度 (R G B Brightness)" : "255 255 255 200"
+	_light(color255) : "光照颜色与亮度 (R G B 强度)" : "255 255 255 200"
       //* This field will have no effect on a dynamic (i.e. named) light.
 	style(Choices) : "Appearance (no name allowed)" : "" =
 	[
@@ -1626,9 +1626,9 @@
 
 @BaseClass base(Targetname, Master, Target) = Trigger
 [
-	delay(string) : "触发延迟时间 (秒)" : "0"
+	delay(string) : "触发延迟时间(秒)" : "0"
 	killtarget(target_destination) : "触发后彻底销毁的目标"
-	netname(target_destination) : "路径目标 (netname)"
+	netname(target_destination) : "路径目标"
 //* style commented out, seems to serve no purpose besides adding 
 //* to the lightdata load.
 //*	style(integer) : "Style" : 32
@@ -1662,7 +1662,7 @@
 		14: "Lightswitch"
 
 	]
-	message(string) : "提示文本 / 声音路径 (message)"
+	message(string) : "提示文本/音效路径"
 	spawnflags(flags) = 
 	[
 //*		1: "monsters":0
@@ -1677,21 +1677,21 @@
 
 @BaseClass = ZHLT
 [
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : "" =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : "" =
 	[
 		"": "no"
 
 		1: "yes"
 
 	]
-	zhlt_noclip(choices) :"无碰撞穿越通行 (Passable/Noclip)" : "" =
+	zhlt_noclip(choices) :"无碰撞穿越通行" : "" =
 	[
 		"": "no"
 
 		1: "yes"
 
 	]
-	zhlt_lightflags(choices) :"ZHLT光照特性 (Light flags)" : "" =
+	zhlt_lightflags(choices) :"ZHLT光照特性" : "" =
 	[
 		"": "正常渲染 (Normal)"
 
@@ -1704,7 +1704,7 @@
 		5: "不透明遮光 + 非凸面光照修复"
 
 	]
-	zhlt_customshadow(string) : "自定义阴影贴图 (Custom shadow)"
+	zhlt_customshadow(string) : "自定义阴影贴图"
 	light_origin(string) : "Light Origin (Zhlt 2.2+)"
 ]
 
@@ -1712,10 +1712,10 @@
 // Entities
 //
 
-@PointClass base(Targetname) iconsprite("sprites/CS/AmbientGeneric.spr") = ambient_generic : "环境音效播放器 - 在指定位置或全局播放音效/音乐"
+@PointClass base(Targetname) iconsprite("sprites/CS/AmbientGeneric.spr") = ambient_generic : "环境音效播放器"
 [
-	message(sound) : "提示文本 / 声音路径 (message)"
-	health(integer) : "生命值 / 破坏耐受上限" : 10
+	message(sound) : "提示文本/音效路径"
+	health(integer) : "生命值/破坏耐久" : 10
 	preset(choices) :"Dynamic Presets" : "" =
 	[
 		"": "None"
@@ -1817,7 +1817,7 @@
 	]
 ]
 
-@PointClass base(Angles) iconsprite("sprites/CS/Armoury.spr") size(-16 -16 0, 16 16 16) = armoury_entity : "地面武器装备 - 放置在地面上的武器、弹药或防弹衣" 
+@PointClass base(Angles) iconsprite("sprites/CS/Armoury.spr") size(-16 -16 0, 16 16 16) = armoury_entity : "地面武器装备" 
 [
 	item(choices)  : "Item" : "" = 
 	[
@@ -1863,21 +1863,21 @@
 //*
 //*note: count always resets to only one item after first round
 //*
-	count(integer) : "补给总数量" : 1
+	count(integer) : "补给道具总数" : 1
 ]
 
-@PointClass base(Targetname, Angles, RenderFields) size(-16 -16 0, 16 16 72) Studio() = cycler : "模型展示实体 - 展示指定模型动作与序列" 
+@PointClass base(Targetname, Angles, RenderFields) size(-16 -16 0, 16 16 72) Studio() = cycler : "模型动作展示" 
 [
 	model(studio) : "Model / Sprite"
 ]
 
-@PointClass base(Targetname, Angles) sprite() = cycler_sprite : "精灵展示实体 - 展示动态精灵贴图动画" 
+@PointClass base(Targetname, Angles) sprite() = cycler_sprite : "精灵贴图展示" 
 [
 	model(sprite) : "Sprite"
-	body(integer) : "模型身体部件编号 (Body)" : 0
-	skin(integer) : "模型皮肤编号 (Skin)" : 0
+	body(integer) : "模型身体部件编号" : 0
+	skin(integer) : "模型皮肤编号" : 0
 	framerate(integer) : "动画播放帧率 (FPS)" : 10
-	renderfx(choices) :"渲染特殊效果 (Render FX)" : 0 =
+	renderfx(choices) :"渲染特殊效果" : 0 =
 	[
 		0: "正常渲染 (Normal)"
 
@@ -1914,31 +1914,31 @@
 		16: "全息投影 (扭曲+半透)"
 
 	]
-	rendermode(choices) : "渲染模式 (Render Mode)" : 0 =
+	rendermode(choices) : "渲染模式" : 0 =
 	[
 		0: "正常渲染 (Normal)"
 
 		1: "色彩混合 (Color)"
 
-		2: "纹理透明 (镂空贴图)"
+		2: "纹理镂空透明 (Texture)"
 
 		3: "发光光晕 (Glow)"
 
-		4: "实体透明 (半透明)"
+		4: "实体透明 (Solid)"
 
 		5: "加法发光混合 (Additive)"
 
 	]
-	renderamt(integer) : "透明度/亮度 (0-255)"
-	rendercolor(color255) : "渲染着色 (R G B)" : "0 0 0"
-	zhlt_studioshadow(choices) : "模型阻光阴影 (Studio shadow)" : "" =
+	renderamt(integer) : "不透明度/亮度 (0-255)"
+	rendercolor(color255) : "渲染着色颜色 (R G B)" : "0 0 0"
+	zhlt_studioshadow(choices) : "模型阻光阴影" : "" =
 	[
 		"": "正常渲染 (Normal)"
 
 		1: "完全不透明 (遮挡光线)"
 
 	]
-	zhlt_shadowmode(choices) : "阴影追踪精度模式 (Shadow mode)" : 1 =
+	zhlt_shadowmode(choices) : "阴影追踪精度模式" : 1 =
 	[
 		0: "Fast, Model Bounds"
 
@@ -1986,7 +1986,7 @@
 [
 	model(studio) : "Model / Sprite" : "sprites/dot.spr"
 	framerate(string) : "动画播放帧率 (FPS)" : "10.0"
-	scale(string) : "缩放倍率" : "1.0"
+	scale(string) : "模型缩放倍率" : "1.0"
 	spawnflags(flags) =
 	[
 		32: "可切换开关状态" : 0
@@ -1999,10 +1999,10 @@
 //
 
 //* the beam can lead to network lag due to continous changing animation.
-@PointClass base(Targetname, BeamStartEnd, RenderFxChoices) size(-16 -16 -16, 16 16 16) iconsprite("sprites/CS/beam.spr") = env_beam : "持续激光束 - 两点之间产生闪电或激光光束"
+@PointClass base(Targetname, BeamStartEnd, RenderFxChoices) size(-16 -16 -16, 16 16 16) iconsprite("sprites/CS/beam.spr") = env_beam : "持续激光束"
 [
-	renderamt(integer) : "透明度/亮度 (0-255)" : 100
-	rendercolor(color255) : "渲染着色 (R G B)" : "0 0 0"
+	renderamt(integer) : "不透明度/亮度 (0-255)" : 100
+	rendercolor(color255) : "渲染着色颜色 (R G B)" : "0 0 0"
 	//* If you only give the beam one endpoint, then radius will specifies how
 	//* far away the other endpoint should be (randomly) placed.
 	Radius(integer) : "Radius" : 256
@@ -2044,10 +2044,10 @@
 	]
 ]
 
-@PointClass base(Targetname, Angles) size(-4 -4 -4, 4 4 4) Studio("models/can.mdl") = env_beverage : "售货机饮料罐 - 售货机掉落的饮料罐实体"
+@PointClass base(Targetname, Angles) size(-4 -4 -4, 4 4 4) Studio("models/can.mdl") = env_beverage : "售货机饮料罐"
 [
-	health(integer) : "生命值 / 破坏耐受上限" : 10
-	skin(choices) : "模型皮肤编号 (Skin)" : "" = 
+	health(integer) : "生命值/破坏耐久" : 10
+	skin(choices) : "模型皮肤编号" : "" = 
 	[
 		"" : "Coca-Cola"
 
@@ -2066,7 +2066,7 @@
 	]
 ]
 
-@PointClass base(Targetname, Angles) size(-16 -16 -16, 16 16 16) color(255 0 0) iconsprite("sprites/CS/blood.spr") = env_blood : "喷血特效 - 在指定位置生成喷血效果" 
+@PointClass base(Targetname, Angles) size(-16 -16 -16, 16 16 16) color(255 0 0) iconsprite("sprites/CS/blood.spr") = env_blood : "喷血特效" 
 [
 	color(choices) : "Blood Color" : "" =
 	[
@@ -2093,7 +2093,7 @@
 
 //* Bubbles cannot drift sideways with this entity; use an env_model and
 //* "valve/models/pipe_bubbles.mdl" instead.
-@SolidClass base(Targetname) = env_bubbles : "水下气泡发生区 - 在画刷体积内持续产生上升气泡" 
+@SolidClass base(Targetname) = env_bubbles : "水下气泡发生区" 
 [
 	density(integer) : "Bubble density" : 2
 	frequency(integer) : "Bubble frequency" : 2
@@ -2105,7 +2105,7 @@
 	]
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/envexplosion.spr") = env_explosion : "爆炸特效 - 产生爆炸火光、声音并造成范围伤害" 
+@PointClass base(Targetname) iconsprite("sprites/CS/envexplosion.spr") = env_explosion : "爆炸特效" 
 [
 	iMagnitude(Integer) : "Magnitude" : 100
 	spawnflags(flags) =
@@ -2125,7 +2125,7 @@
 	]
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/EnvFunnel.spr") = env_funnel : "能量汇聚漏斗 - 产生粒子向中心汇聚的漏斗特效" 
+@PointClass base(Targetname) iconsprite("sprites/CS/EnvFunnel.spr") = env_funnel : "能量汇聚漏斗" 
 [
 	spawnflags(flags) =
 	[
@@ -2134,7 +2134,7 @@
 	]
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/EnvGlobal.spr") color(255 255 128) = env_global : "全局游戏状态变量 - 跨关卡或全局存储的状态标志"
+@PointClass base(Targetname) iconsprite("sprites/CS/EnvGlobal.spr") color(255 255 128) = env_global : "全局状态变量"
 [
 	globalstate(string) : "Global State to Set"
 	triggermode(choices) : "Trigger Mode" : "" =
@@ -2164,13 +2164,13 @@
 	]
 ]
 
-@PointClass sprite() base(Targetname, RenderFields) size(-4 -4 -4, 4 4 4) color(30 100 0) sprite() = env_glow : "发光光晕 - 在指定位置产生微光光晕" 
+@PointClass sprite() base(Targetname, RenderFields) size(-4 -4 -4, 4 4 4) color(30 100 0) sprite() = env_glow : "发光光晕" 
 [
 	model(sprite) : "Sprite" : "sprites/glow01.spr"
-	scale(integer) : "缩放倍率" : 1
+	scale(integer) : "模型缩放倍率" : 1
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/fade.spr") = env_fade : "屏幕淡入淡出 - 控制玩家屏幕变暗、变白或淡入淡出" 
+@PointClass base(Targetname) iconsprite("sprites/CS/fade.spr") = env_fade : "屏幕淡入淡出" 
 [
 	spawnflags(flags) =
 	[
@@ -2183,11 +2183,11 @@
 	]
 	duration(string) : "Duration (seconds)" : "2"
 	holdtime(string) : "Hold Fade (seconds)" : "0"
-	renderamt(integer) : "透明度/亮度 (0-255)" : 255
-	rendercolor(color255) : "渲染着色 (R G B)" : "0 0 0"
+	renderamt(integer) : "不透明度/亮度 (0-255)" : 255
+	rendercolor(color255) : "渲染着色颜色 (R G B)" : "0 0 0"
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/envfog.spr") = env_fog : "全局体积雾 - 在地图中产生环境雾气"
+@PointClass base(Targetname) iconsprite("sprites/CS/envfog.spr") = env_fog : "全局体积雾"
 [
 	// No longer used
 	// fadein(integer) : "Fade in time" : 0
@@ -2196,7 +2196,7 @@
 	// startdist(integer) : "Fog start position" : 0
         // enddist(integer) : "Fog end position" : 1000
 	density(string) : "Fog density (0.01 > value > 0)" : "0.001"
-	rendercolor(color255) : "渲染着色 (R G B)" : "255 255 255"
+	rendercolor(color255) : "渲染着色颜色 (R G B)" : "255 255 255"
 	spawnflags(flags) =
 	[
 		1 : "Start active"   : 0
@@ -2205,11 +2205,11 @@
 ]
 
 //*may cause network lag due to changing animation.
-@PointClass base(Targetname, RenderFxChoices, Angles) size(-16 -16 -16, 16 16 16) iconsprite("sprites/CS/laser.spr") = env_laser : "瞄准激光线 - 发射笔直的瞄准激光线"
+@PointClass base(Targetname, RenderFxChoices, Angles) size(-16 -16 -16, 16 16 16) iconsprite("sprites/CS/laser.spr") = env_laser : "瞄准激光线"
 [
 	LaserTarget(target_destination) : "Target of Laser" 
-	renderamt(integer) : "透明度/亮度 (0-255)" : 100
-	rendercolor(color255) : "渲染着色 (R G B)" : "0 0 0"
+	renderamt(integer) : "不透明度/亮度 (0-255)" : 100
+	rendercolor(color255) : "渲染着色颜色 (R G B)" : "0 0 0"
 	width(integer) : "Width of beam (pixels*0.1 0-255)" : 20
 	NoiseAmplitude(integer) : "Amount of noise (0-255)" : 0
 	texture(sprite) : "Sprite Name" : "sprites/laserbeam.spr"
@@ -2230,9 +2230,9 @@
 	]
 ]
 
-@PointClass base(Targetname, Target) iconsprite("sprites/CS/Announcement.spr") = env_message : "屏幕文字提示 - 显示预设在 titles.txt 中的屏幕文字" 
+@PointClass base(Targetname, Target) iconsprite("sprites/CS/Announcement.spr") = env_message : "屏幕文字提示" 
 [
-	message(string) : "提示文本 / 声音路径 (message)"
+	message(string) : "提示文本/音效路径"
 	spawnflags(flags) =
 	[
 		1: "Play Once" : 0
@@ -2259,9 +2259,9 @@
 ]
 
 //*beta tested by [dmv]Cross, works in STEAM CS 1.6
-@PointClass base(Targetname) iconsprite("sprites/CS/EnvRain.spr") = env_rain : "环境降雨 - 在指定区域内生成下雨天气效果" []
+@PointClass base(Targetname) iconsprite("sprites/CS/EnvRain.spr") = env_rain : "环境降雨天气" []
 
-@PointClass base(Targetname, Target, RenderFields) size(-16 -16 -16, 16 16 16) color(100 100 0) iconsprite("sprites/CS/render.spr") = env_render : "动态修改渲染属性 - 触发时修改目标实体的渲染模式与透明度"
+@PointClass base(Targetname, Target, RenderFields) size(-16 -16 -16, 16 16 16) color(100 100 0) iconsprite("sprites/CS/render.spr") = env_render : "修改目标渲染属性"
 [
 	spawnflags(flags) =
 	[
@@ -2276,7 +2276,7 @@
 	]
 ]
 
-@PointClass base(Targetname) size(-16 -16 -16, 16 16 16) iconsprite("editor/env_shake.png") = env_shake : "屏幕震动 - 触发时使附近玩家的屏幕剧烈震动"
+@PointClass base(Targetname) size(-16 -16 -16, 16 16 16) iconsprite("editor/env_shake.png") = env_shake : "屏幕剧烈震动"
 [
 	spawnflags(flags) =
 	[
@@ -2289,10 +2289,10 @@
 	frequency(string) : "0.1 = jerk, 255.0 = rumble" : "2.5"
 ]
 
-@PointClass base(gibshooterbase, RenderFields) Studio("models/CS/envshooter.mdl") size(-16 -16 -16, 16 16 16) = env_shooter : "碎片发射器 - 发射模型或碎片粒子"
+@PointClass base(gibshooterbase, RenderFields) Studio("models/CS/envshooter.mdl") size(-16 -16 -16, 16 16 16) = env_shooter : "碎片/模型发射器"
 [
 	shootmodel(studio) : "发射物模型文件" : "models/can.mdl"
-	shootsounds(choices) :"发射射击声音" : -1 =
+	shootsounds(choices) :"发射声音方案" : -1 =
 	[
 		-1: "None"
 
@@ -2312,14 +2312,14 @@
 		4: "Concrete"  
 
 	]
-	scale(string) : "缩放倍率" : ""
-	skin(integer) : "模型皮肤编号 (Skin)" : 0
+	scale(string) : "模型缩放倍率" : ""
+	skin(integer) : "模型皮肤编号" : 0
 ]
 
 //*
 //*this changes sound for the player UNTIL IT IS RESET by another env sound.  make sure you reset it!
 //*
-@PointClass iconsprite("sprites/CS/EnvSound.spr") = env_sound : "DSP环境音效区域 - 改变区域内玩家听到的环境混响混音" 
+@PointClass iconsprite("sprites/CS/EnvSound.spr") = env_sound : "DSP环境音效混响区" 
 [
 	radius(integer) : "Radius" : 128
 	roomtype(Choices) : "Room Type" : "" =
@@ -2395,9 +2395,9 @@
 ]
 
 //*beta tested by [dmv]Cross, works in STEAM CS 1.6
-@PointClass base(Targetname) iconsprite("sprites/CS/EnvSnow.spr") = env_snow : "环境降雪 - 在指定区域内生成下雪天气效果" []
+@PointClass base(Targetname) iconsprite("sprites/CS/EnvSnow.spr") = env_snow : "环境降雪天气" []
 
-@PointClass base(Targetname, Angles) size(-16 -16 -16, 16 16 16) iconsprite("sprites/CS/EnvSpark.spr") = env_spark : "火花喷射器 - 在指定位置定时喷射电火花" 
+@PointClass base(Targetname, Angles) size(-16 -16 -16, 16 16 16) iconsprite("sprites/CS/EnvSpark.spr") = env_spark : "电火花喷射器" 
 [
 	MaxDelay(string) : "Max Delay" : "0"
 	spawnflags(flags) =
@@ -2409,11 +2409,11 @@
 	]
 ]
 
-@PointClass sprite() base(Targetname, Angles, RenderFields) size(-4 -4 -4, 4 4 4) = env_sprite : "精灵贴图特效 - 显示发光光晕或精灵贴图动画" 
+@PointClass sprite() base(Targetname, Angles, RenderFields) size(-4 -4 -4, 4 4 4) = env_sprite : "精灵贴图光晕" 
 [
 	framerate(string) : "动画播放帧率 (FPS)" : "10.0"
 	model(sprite) : "Sprite Name" : "sprites/glow01.spr"
-	scale(integer) : "缩放倍率" : 1
+	scale(integer) : "模型缩放倍率" : 1
 	spawnflags(flags) =
 	[
 		1: "Start on" : 0
@@ -2428,7 +2428,7 @@
 // game entities (requires Half-Life 1.0.0.9)
 //
 
-@PointClass base(Targetname, Master, Targetx) iconsprite("sprites/CS/GameCounter.spr") = game_counter : "逻辑计数器 - 接收多次触发计数达到设定值后激活目标"
+@PointClass base(Targetname, Master, Targetx) iconsprite("sprites/CS/GameCounter.spr") = game_counter : "逻辑计数器"
 [
 	spawnflags(flags) =
 	[
@@ -2438,10 +2438,10 @@
 
 	]
 	frags(integer) : "获得/扣除得分" : 0
-	health(integer) : "生命值 / 破坏耐受上限" : 10
+	health(integer) : "生命值/破坏耐久" : 10
 ]
 
-@PointClass base(Targetname, Master, Target) iconsprite("sprites/CS/GameCounterSet.spr") = game_counter_set : "重置计数器数值 - 动态修改 game_counter 的当前数值"
+@PointClass base(Targetname, Master, Target) iconsprite("sprites/CS/GameCounterSet.spr") = game_counter_set : "重置计数器数值"
 [
 	spawnflags(flags) =
 	[
@@ -2451,16 +2451,16 @@
 	frags(integer) : "获得/扣除得分" : 10
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/GameEnd.spr") = game_end : "结束游戏回合 - 触发时立即结束当前对局回合" 
+@PointClass base(Targetname) iconsprite("sprites/CS/GameEnd.spr") = game_end : "立即结束对局回合" 
 [
-	master(string) : "主控实体 (master)" 
+	master(string) : "主控实体" 
 ]
 
 //* buggy entity, must use with weapon strip to avoid giving duplicate 
 //* weapons to a player and causing a crash.
-@PointClass base(Targetname) iconsprite("sprites/CS/GamePlayerEquip.spr") = game_player_equip : "出生装备分配器 - 玩家出生时自动分配武器、弹药及道具"
+@PointClass base(Targetname) iconsprite("sprites/CS/GamePlayerEquip.spr") = game_player_equip : "出生装备分配器"
 [
-	master(string) : "主控实体 (master)"
+	master(string) : "主控实体"
 	spawnflags(flags) =
 	[
 		1: "仅按下使用键触发 (禁止触碰触发)" : 0
@@ -2468,230 +2468,230 @@
 	]
 	weapon_knife (choices) : "Give Knife" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 
 	weapon_usp (choices) : "Give USP45 (45acp Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_glock18 (choices) : "Give Glock 18 (9mm Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_deagle (choices) : "Give Desert Eagle (50ae Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_p228 (choices) : "Give P-228 (357sig Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_elite (choices) : "Give Beretta Elites (9mm Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_fiveseven (choices) : "Give Five-Seven (57mm Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_m3 (choices) : "Give Benelli M3 (12 Gauge)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_xm1014 (choices) : "Give Benelli XM1014 (12 Gauge)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_mp5navy (choices) : "Give MP5/Navy (9mm Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_tmp (choices) : "Give TMP (9mm Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_p90 (choices) : "Give FN P90 (57mm Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 
 	weapon_mac10 (choices) : "Give Mac-10 (45acp Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_ump45 (choices) : "Give UMP 45 (45acp Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_ak47 (choices) : "Give AK-47 (762nato Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_sg552 (choices) : "Give SG552 (556nato Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_m4a1 (choices) : "Give M4A1 (556nato Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_aug (choices) : "Give Aug (556nato Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_scout (choices) : "Give Scout (762nato Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_awp (choices) : "Give AWP (338magnum Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_g3sg1 (choices) : "Give G3/SG-1 (762nato Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_sg550 (choices) : "Give SG550 (556nato Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_m249 (choices) : "Give M249 (556natobox Calibre)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 	weapon_famas (choices) : "CS 1.6 Famas (762nato)" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 
 	weapon_galil (choices) : "CS 1.6 Galil (556natobox)"  : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 
 	weapon_shield (choices) : "CS 1.6 Police Riot Shield" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 	
 	item_kevlar (choices) : "Give Kevlar Vest" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	item_assaultsuit (choices) : "Give Kevlar Vest+Ballistic Helmet" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_flashbang (choices) : "Give Flash Bang" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1"
 
@@ -2701,39 +2701,39 @@
 
 	weapon_hegrenade (choices) : "Give High-Explosive Grenade" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_smokegrenade (choices) : "Give Smoke Grenade" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	item_thighpack (choices) : "Give Defuse Kit" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	weapon_c4 (choices) : "Give C4 Plastique Bomb" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 
 	ammo_9mm (choices) : "Give 9mm Parabellum Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (30 Bullets Per Clip)"
 
@@ -2747,7 +2747,7 @@
 
 	ammo_45acp (choices) : "Give .45 ACP Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (12 Bullets Per Clip)"
 
@@ -2771,7 +2771,7 @@
 
 	ammo_50ae (choices) : "Give .50 Deagle Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (7 Bullets Per Clip)"
 
@@ -2787,7 +2787,7 @@
 
 	ammo_57mm (choices) : "Give 5.7mm Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (50 Bullets Per Clip)"
 
@@ -2797,7 +2797,7 @@
 
 	ammo_357sig (choices) : "Give .357 SIG Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (13 Bullets Per Clip)"
 
@@ -2811,7 +2811,7 @@
 
 	ammo_buckshot (choices) : "Give 12 Gauge Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (8 Shells Per Clip)"
 
@@ -2825,7 +2825,7 @@
 
 	ammo_762nato (choices) : "Give 7.62mm NATO Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (30 Bullets Per Clip)"
 
@@ -2837,7 +2837,7 @@
 
 	ammo_556nato (choices) : "Give 5.56mm NATO Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (30 Bullets Per Clip)"
 
@@ -2849,7 +2849,7 @@
 
 	ammo_556natobox (choices) : "Give 5.56mm NATO Box Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (30 Bullets Per Clip)"
 
@@ -2870,7 +2870,7 @@
 
 	ammo_338magnum (choices) : "Give .338 AWP Ammo" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Clip (10 Bullets Per Clip)"
 
@@ -2882,7 +2882,7 @@
 
 	item_healthkit (choices) : "Give Health Kit" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Healthkit = 15 Health Points"
 
@@ -2902,7 +2902,7 @@
 
 	item_battery (choices) : "Give HL HEV Battery" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "1 Battery = 15 Kevlar Points"
 
@@ -2922,7 +2922,7 @@
 
 	item_longjump (choices) : "Give HL Long Jump Module" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "Yes (An Unrealistic Item)"
 
@@ -2930,16 +2930,16 @@
 
 	spark_shower (choices) : "Make sparks" : "" = 
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]	
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/GamePlayerHurt.spr") = game_player_hurt : "扣除玩家生命值 - 触发时扣除激活者的生命值"
+@PointClass base(Targetname) iconsprite("sprites/CS/GamePlayerHurt.spr") = game_player_hurt : "扣除玩家生命值"
 [
-	master(string) : "主控实体 (master)" 
+	master(string) : "主控实体" 
 	dmg(string) : "伤害数值" : "999"
 	spawnflags(flags) =
 	[
@@ -2948,9 +2948,9 @@
 	]
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/GamePlayerTeam.spr") = game_player_team : "切换玩家队伍 - 强制将玩家转移至CT或T阵营"
+@PointClass base(Targetname) iconsprite("sprites/CS/GamePlayerTeam.spr") = game_player_team : "切换玩家阵营"
 [
-	master(string) : "主控实体 (master)"
+	master(string) : "主控实体"
 	spawnflags(flags) =
 	[
 		1 : "Remove On fire" : 0
@@ -2960,12 +2960,12 @@
 		4 : "Gib Player" : 0
 
 	]
-	target(string) : "触发目标 (target)" 
+	target(string) : "触发目标" 
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/GameScore.spr") = game_score : "调整玩家得分 - 给激活玩家增加或扣除击杀/团队积分" 
+@PointClass base(Targetname) iconsprite("sprites/CS/GameScore.spr") = game_score : "调整玩家得分" 
 [
-	master(string) : "主控实体 (master)" 
+	master(string) : "主控实体" 
 	spawnflags(flags) =
 	[
 		1: "Allow Negative" : 0
@@ -2977,7 +2977,7 @@
 	points(integer) : "Points to add (+/-)" : 1
 ]
 
-@PointClass base(Targetname, Master, Targetx) iconsprite("sprites/CS/GameTeamMaster.spr") = game_team_master : "队伍控制主控 - 根据玩家所属队伍限制或允许触发"
+@PointClass base(Targetname, Master, Targetx) iconsprite("sprites/CS/GameTeamMaster.spr") = game_team_master : "阵营控制主控"
 [
 	spawnflags(flags) =
 	[
@@ -2996,7 +2996,7 @@
 	teamindex(integer) : "Team Index (-1 = no team)" : -1
 ]
 
-@PointClass base(Targetname, Master, Targetx) iconsprite("sprites/CS/GameTeamSet.spr") = game_team_set : "修改玩家队伍设置 - 调整玩家的团队设置参数"
+@PointClass base(Targetname, Master, Targetx) iconsprite("sprites/CS/GameTeamSet.spr") = game_team_set : "设置阵营参数"
 [
 	spawnflags(flags) =
 	[
@@ -3005,14 +3005,14 @@
 	]
 ]
 
-@PointClass base(Targetname, Master, Target) iconsprite("sprites/CS/GameText.spr") = game_text : "HUD屏幕文字提示 - 在玩家屏幕指定坐标显示彩色提示文本" 
+@PointClass base(Targetname, Master, Target) iconsprite("sprites/CS/GameText.spr") = game_text : "HUD屏幕文字提示" 
 [
 	spawnflags(flags) =
 	[
 		1: "All Players" : 0
 
 	]
-	message(string) : "提示文本 / 声音路径 (message)"
+	message(string) : "提示文本/音效路径"
 	x(string) : "X (0 - 1.0 = left to right) (-1 centers)" : "-1"
 	y(string) : "Y (0 - 1.0 = top to bottom) (-1 centers)" : "-1"
 	effect(Choices) : "Text Effect" : "" =
@@ -3043,22 +3043,22 @@
 	]
 ]
 
-@SolidClass base(Targetname) = game_zone_player : "玩家区域判定器 - 检测并统计区域内玩家的数量及所属阵营"
+@SolidClass base(Targetname) = game_zone_player : "玩家区域人数判定"
 [
-	master(string) : "主控实体 (master)" 
+	master(string) : "主控实体" 
 	intarget(target_destination) : "Target for IN players"
 	outtarget(target_destination) : "Target for OUT players"
 	incount(target_destination) : "Counter for IN players"
 	outcount(target_destination) : "Counter for OUT players"
 ]
 
-@PointClass base(gibshooterbase) iconsprite("sprites/CS/gib.spr") = gibshooter : "血肉碎片发射器 - 受触发时向周围喷射人体血肉碎块" []
+@PointClass base(gibshooterbase) iconsprite("sprites/CS/gib.spr") = gibshooter : "血肉碎块喷射器" []
 
-@PointClass studio() base(PlayerClass, RenderFields, HostageAnim) = hostage_entity : "人质 - CS经典人质目标，可跟随CT并呼救" 
+@PointClass studio() base(PlayerClass, RenderFields, HostageAnim) = hostage_entity : "人质" 
 [
 	model(studio) : "Model" : "models/hostage.mdl"
-	skin(integer) : "模型皮肤编号 (Skin)" : 0
-	body(integer) : "模型身体部件编号 (Body)" : 0
+	skin(integer) : "模型皮肤编号" : 0
+	body(integer) : "模型身体部件编号" : 0
 ]
 
 
@@ -3066,8 +3066,8 @@
 // Info entities
 //
 
-@PointClass iconsprite("sprites/CS/BombTarget.spr") = info_bomb_target : "C4包点定位点 - 用于雷达和HUD图标指示的包点坐标" []
-@PointClass iconsprite("sprites/CS/MapParams.spr") color(255 128 0) = info_texlights : "纹理发光定义 - 直接在地图中定义特定材质的发光强度与颜色" 
+@PointClass iconsprite("sprites/CS/BombTarget.spr") = info_bomb_target : "C4包点雷达定位点" []
+@PointClass iconsprite("sprites/CS/MapParams.spr") color(255 128 0) = info_texlights : "材质贴图发光配置" 
 [	
 // not shure if the spawn flag is supported
 	spawnflags(flags) =
@@ -3077,12 +3077,12 @@
 	]
 ]
 
-@PointClass iconsprite("sprites/CS/InfoCompileParameters.spr") = info_compile_parameters : "编译参数配置实体 - 在地图内直接定义ZHLT/VHLT编译器运行参数"
+@PointClass iconsprite("sprites/CS/InfoCompileParameters.spr") = info_compile_parameters : "编译器运行参数配置"
 [
 	texdata(string) : "纹理数据大小上限" : "4096"
    	estimate(choices) :"Estimate Compile Times?" : "" =
 	[
-		"": "否 (No)"
+		"": "否"
 
 		1: "yes"
 
@@ -3105,7 +3105,7 @@
 
     ]
 
-hlcsg(choices) : "HLCSG 额外参数" : 1 =
+hlcsg(choices) : "HLCSG 额外编译参数" : 1 =
     [
         1 : "正常渲染 (Normal)"
 
@@ -3123,23 +3123,23 @@ hlcsg(choices) : "HLCSG 额外参数" : 1 =
     ]
     noclipeconomy(choices) : "Strip Uneeded Clipnodes?" : "" = 
     [
-        "" : "是 (Yes)"
+        "" : "是"
 
-        1 : "否 (No)"
+        1 : "否"
 
     ]
     noskyclip(choices) : "Clip sky" : "" =
     [
-        "" : "是 (Yes)"
+        "" : "是"
 
-        1 : "否 (No)"
+        1 : "否"
 
     ]
     nocliphull(choices) : "Generate clipping hulls" : "" =
     [
-        "" : "是 (Yes)"
+        "" : "是"
 
-        1 : "否 (No)"
+        1 : "否"
 
     ]
     cliptype(choices) : "clipping type" : 3 =
@@ -3158,7 +3158,7 @@ hlcsg(choices) : "HLCSG 额外参数" : 1 =
     hullfile(string) : "Custom Hullfile"
     wadconfig(string) : "Custom Wad Configuration"
 
-hlbsp(choices) : "HLBSP 额外参数" : 1 =
+hlbsp(choices) : "HLBSP 额外编译参数" : 1 =
     [
         "" : "Off" 
 
@@ -3168,7 +3168,7 @@ hlbsp(choices) : "HLBSP 额外参数" : 1 =
 
     ]
 
-hlvis(choices) : "HLVIS 额外参数" : 2 = 
+hlvis(choices) : "HLVIS 额外编译参数" : 2 = 
     [ 
         "" : "Off"
 
@@ -3180,7 +3180,7 @@ hlvis(choices) : "HLVIS 额外参数" : 2 =
 
     ]
 
-hlrad(choices) : "HLRAD 额外参数" : 1 =
+hlrad(choices) : "HLRAD 额外编译参数" : 1 =
     [
         "" : "Off"
 
@@ -3216,9 +3216,9 @@ hlrad(choices) : "HLRAD 额外参数" : 1 =
 ]
 
 
-@PointClass iconsprite("sprites/CS/HostageRescue.spr") = info_hostage_rescue : "人质解救中心点 - 人质解救图标与位置" []
+@PointClass iconsprite("sprites/CS/HostageRescue.spr") = info_hostage_rescue : "人质解救点" []
 
-@PointClass iconsprite("sprites/CS/MapParams.spr") = info_map_parameters : "地图全局规则配置 - 配置炸弹倒计时、购买限制、队伍优势等全局参数"
+@PointClass iconsprite("sprites/CS/MapParams.spr") = info_map_parameters : "地图全局对局规则配置"
 [
 	buying(choices)  : "Weapon_Buying" : "" =
 	[
@@ -3234,9 +3234,9 @@ hlrad(choices) : "HLRAD 额外参数" : 1 =
 	bombradius(integer) : "Bomb Radius" : 500
 ]
 
-@PointClass base(Targetname) iconsprite("sprites/CS/null.spr") = info_null : "聚光灯聚焦点/辅助定位点 - 作为 light_spot 的聚光目标点" []
+@PointClass base(Targetname) iconsprite("sprites/CS/null.spr") = info_null : "聚光目标点/定位锚点" []
 
-@PointClass base(PlayerClass, PlayerAnim) studio() = info_player_deathmatch : "恐怖分子出生点 (T Spawn) - 恐怖分子阵营玩家的回合出生位置"
+@PointClass base(PlayerClass, PlayerAnim) studio() = info_player_deathmatch : "恐怖分子出生点 (T)"
 [
 model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	[
@@ -3247,13 +3247,13 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	]
 ]
 
-@PointClass base(PlayerClass, Sequence) model({ "path": "models/player.mdl", "frame": Sequence, "skin": skin }) = info_player_start : "反恐精英出生点 (CT Spawn) - 反恐精英阵营玩家的回合出生位置" []
+@PointClass base(PlayerClass, Sequence) model({ "path": "models/player.mdl", "frame": Sequence, "skin": skin }) = info_player_start : "反恐精英出生点 (CT)" []
 
-@PointClass base(Targetname) size(-4 -4 -4, 4 4 4) color(200 100 50) iconsprite("sprites/CS/EnvTarget.spr") = info_target : "通用目标点 - 用于作为光束、怪物或视野朝向的目标锚点" []
+@PointClass base(Targetname) size(-4 -4 -4, 4 4 4) color(200 100 50) iconsprite("sprites/CS/EnvTarget.spr") = info_target : "通用目标定位点" []
 
-@PointClass size(-8 -8 0, 8 8 16) base(Targetname, PlayerClass) iconsprite("sprites/CS/infoteleportdestination.spr") = info_teleport_destination : "传送目标点 - trigger_teleport 传送玩家到达的目的地" []
+@PointClass size(-8 -8 0, 8 8 16) base(Targetname, PlayerClass) iconsprite("sprites/CS/infoteleportdestination.spr") = info_teleport_destination : "传送目的地目标点" []
 
-@PointClass studio("models/player/vip/vip.mdl") base(PlayerClass, PlayerAnim) = info_vip_start : "VIP玩家出生点 - 刺杀模式 (AS) 中VIP角色的回合出生位置" []
+@PointClass studio("models/player/vip/vip.mdl") base(PlayerClass, PlayerAnim) = info_vip_start : "VIP玩家出生点" []
 
 @PointClass decal() base(Targetname, Appearflags) = infodecal : "Decal"
 [
@@ -3278,9 +3278,9 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 // Light entities
 //
 
-@PointClass iconsprite("sprites/lightbulb.spr") base(Targetname, Target, Light) = light : "全向点光源 - 向四周球形均匀发射光线的不可见点光源" []
+@PointClass iconsprite("sprites/lightbulb.spr") base(Targetname, Target, Light) = light : "全向点光源" []
 
-@PointClass base(Targetname, Target, Light) iconsprite("sprites/CS/LightEnvironment.spr") = light_environment : "天空日光/平行光 - 由天空盒材质向下方照射的太阳光与天际漫射光" 
+@PointClass base(Targetname, Target, Light) iconsprite("sprites/CS/LightEnvironment.spr") = light_environment : "太阳光/天空日光" 
 [
 	angles(string) : "三维朝向角度 (Pitch Yaw Roll)" : "0 270 0"
 	pitch(integer) : "垂直仰角 (Pitch)" : -90
@@ -3288,16 +3288,16 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	_diffuse_light(color255) : "Shade" : "255 255 128 200"
 ]
 
-@PointClass base(Targetname, Target, Angles, Light) iconsprite("sprites/CS/LightSpot.spr") = light_spot : "聚光灯/聚光灯束 - 沿指定锥形角度照射的定向聚光灯" 
+@PointClass base(Targetname, Target, Angles, Light) iconsprite("sprites/CS/LightSpot.spr") = light_spot : "定向聚光灯" 
 [
 	pitch(integer) : "垂直仰角 (Pitch)" : -90
 	_cone(integer) : "Inner (bright) angle" : 30
 	_cone2(integer) : "Outer (fading) angle" : 45
 	_sky(Choices) : "天际漫反射光 (Ambient Sky)" : "" = 
 	[ 
-		"" : "否 (No)"
+		"" : "否"
 
-		1 : "是 (Yes)"
+		1 : "是"
 
 	]
 ]
@@ -3310,7 +3310,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 //* 
 //*  Beware: the seconds countdown will continue thru round ends causing some events to happen into the next round.
 //*------------------------------------------------------------------------------------------------------------
-@PointClass base(Targetname) color(255 128 0) size(-16 -16 -16, 16 16 16) iconsprite("editor/multi_manager.png") = multi_manager : "多重目标触发器 - 触发后按不同延迟时间依次激活多个目标实体"
+@PointClass base(Targetname) color(255 128 0) size(-16 -16 -16, 16 16 16) iconsprite("editor/multi_manager.png") = multi_manager : "多重目标延迟触发器"
 [
 	spawnflags(Flags) = 
 	[
@@ -3324,12 +3324,12 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 //*
 //*multiple inputs to one switch, the AND gate
 //*
-@PointClass base(Targetname, Target) color(128 255 128) iconsprite("sprites/CS/MultiSource.spr") = multisource : "多源逻辑与门 - 必须当所有输入源均处于激活状态时才导通信号" 
+@PointClass base(Targetname, Target) color(128 255 128) iconsprite("sprites/CS/MultiSource.spr") = multisource : "多源逻辑与门" 
 [
 	globalstate(string) : "Global State Master"
 ]
 
-@PointClass base(Targetname, Angles) size(16 16 16) color(247 181 82) iconsprite("sprites/CS/PathCorner.spr") = path_corner : "路径拐角节点 - func_train 移动平台的路径巡航节点"
+@PointClass base(Targetname, Angles) size(16 16 16) color(247 181 82) iconsprite("sprites/CS/PathCorner.spr") = path_corner : "路径巡航拐角节点"
 [
 	spawnflags(Flags) =
 	[
@@ -3340,17 +3340,17 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 		4: "Fire once" : 0
 
 	]
-	target(target_destination) : "触发目标 (target)"
-	message(target_destination) : "提示文本 / 声音路径 (message)"
-	wait(integer) : "自动复位延迟 (秒)" : 0
+	target(target_destination) : "触发目标"
+	message(target_destination) : "提示文本/音效路径"
+	wait(integer) : "自动复位延迟(秒)" : 0
 //*if speed more than 2000 problems may result
 	speed(integer) : "移动速度" : 0
 	yaw_speed(integer) : "New Train rot. Speed" : 0
 ]
 
-@PointClass base(Targetname) size(16 16 16) iconsprite("sprites/CS/PathTrack.spr") = path_track : "列车轨道节点 - func_tracktrain 轨道列车的高级控制节点"
+@PointClass base(Targetname) size(16 16 16) iconsprite("sprites/CS/PathTrack.spr") = path_track : "列车轨道控制节点"
 [
-	target(target_destination) : "触发目标 (target)"
+	target(target_destination) : "触发目标"
 	spawnflags(Flags) =
 	[
 		1: "Disabled" : 0
@@ -3362,9 +3362,9 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 		8: "Disable train" : 0
 
 	]
-	message(target_destination) : "提示文本 / 声音路径 (message)"
+	message(target_destination) : "提示文本/音效路径"
 	altpath(target_destination) : "Branch Path"
-	netname(target_destination) : "路径目标 (netname)"
+	netname(target_destination) : "路径目标"
 //if speed more than 2000 problems may result
 	speed(integer) : "移动速度" : 0
 ]
@@ -3377,7 +3377,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 
 @PointClass studio("models/scientist.mdl") base(PlayerClass, RenderFields, HostageAnim) size(-16 -16 0, 16 16 72) = monster_scientist : "Scientist Hostage" 
 [
-      body(Choices) : "模型身体部件编号 (Body)" : -1 =
+      body(Choices) : "模型身体部件编号" : -1 =
 	[
 		-1 : "Random"
 
@@ -3401,7 +3401,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 //
 //will only trigger ONCE per MAP, will not reset or retrigger for a new round!
 //
-@PointClass base(Targetx) iconsprite("sprites/CS/TriggerAuto.spr") = trigger_auto : "回合开始自动触发 - 每回合开始或地图加载时自动发射触发信号"
+@PointClass base(Targetx) iconsprite("sprites/CS/TriggerAuto.spr") = trigger_auto : "回合开始自动触发"
 [
 	spawnflags(Flags) =
 	[
@@ -3423,9 +3423,9 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 //
 //before team selection, engine will cycle thru all camera views whether usable or not to show views of level.
 //
-@PointClass base(Targetname, Targetx, Angles) Studio("models\CS\TriggerCamera.mdl") = trigger_camera : "过场观察摄像机 - 切换玩家视角至固定机位或巡航观察视角" 
+@PointClass base(Targetname, Targetx, Angles) Studio("models\CS\TriggerCamera.mdl") = trigger_camera : "过场观察摄像机" 
 [
-	wait(integer) : "自动复位延迟 (秒)" : 10
+	wait(integer) : "自动复位延迟(秒)" : 10
 	moveto(string) : "Path Corner"
 	spawnflags(flags) =
 	[
@@ -3459,7 +3459,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 		1 : "No Message" : 0 
 
 	]
-	count(integer) : "补给总数量" : 2
+	count(integer) : "补给道具总数" : 2
 ]
 
 @SolidClass base(Targetname, Master) = trigger_autosave : "Auto save" []
@@ -3467,19 +3467,19 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 //
 //gravity changes player state, will have to be reset to normal as player leaves low friction area.
 //
-@SolidClass base(Trigger) = trigger_gravity : "局部重力改变区 - 改变进入该区域内玩家的重力倍率"
+@SolidClass base(Trigger) = trigger_gravity : "局部重力倍率改变区"
 [
 	gravity(integer) : "重力倍率 (1.0 = 正常)" : 1
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Targetname, Master, Target) = trigger_hurt : "伤害判定触发区 - 持续对进入区域的玩家造成辐射/毒气/跌落伤害" 
+@SolidClass base(Targetname, Master, Target) = trigger_hurt : "伤害判定触发区" 
 [
-	delay(string) : "触发延迟时间 (秒)" : "0"
+	delay(string) : "触发延迟时间(秒)" : "0"
 	spawnflags(flags) = 
 	[ 
 		1: "Target Once" : 0 
@@ -3537,33 +3537,33 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 		4194304 : "SLOWFREEZE"
 
 	]
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Trigger) = trigger_multiple : "多重重复触发区 - 玩家或物体进入时多次触发目标实体" 
+@SolidClass base(Trigger) = trigger_multiple : "多重重复触发区" 
 [
-	wait(integer) : "自动复位延迟 (秒)" : 10
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	wait(integer) : "自动复位延迟(秒)" : 10
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Trigger) = trigger_once : "单次生效触发区 - 首次被触碰触发后立即自我销毁，不再触发" 
+@SolidClass base(Trigger) = trigger_once : "单次生效触发区" 
 [
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Trigger, Angles) = trigger_push : "强力推力区 (弹簧床/风道) - 将玩家或物体沿设定角度与速度持续弹射推进"
+@SolidClass base(Trigger, Angles) = trigger_push : "推力/弹簧床弹射区"
 [
 	spawnflags(flags) = 
 	[ 
@@ -3578,7 +3578,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	speed(integer) : "移动速度" : 40
 ]
 
-@PointClass base(Targetname, Targetx) iconsprite("sprites/CS/TriggerRelay.spr") = trigger_relay : "信号中继延迟器 - 作为触发链中间节点，延迟指定时间后传递信号"
+@PointClass base(Targetname, Targetx) iconsprite("sprites/CS/TriggerRelay.spr") = trigger_relay : "信号中继延迟器"
 [
 	spawnflags(flags) =
 	[
@@ -3596,9 +3596,9 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	]
 ]
 
-@SolidClass base(Trigger) = trigger_teleport : "传送触发区 - 将触碰的玩家瞬间传送至指定目标点" 
+@SolidClass base(Trigger) = trigger_teleport : "瞬间传送触发区" 
 [
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
@@ -3617,23 +3617,23 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 // Function entities
 //
 
-@SolidClass = func_bomb_target : "C4包点区域 - 恐怖分子可放置C4炸弹的画刷区域"
+@SolidClass = func_bomb_target : "C4包点区域"
 [
-	target(target_destination) : "触发目标 (target)"
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	target(target_destination) : "触发目标"
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Breakable, RenderFields, ZHLT, TexLightType) = func_breakable : "可破坏物体 - 可被射击或受到伤害击碎的物体(木箱/玻璃等)" 
+@SolidClass base(Breakable, RenderFields, ZHLT, TexLightType) = func_breakable : "可破坏物体 (木箱/玻璃)" 
 [
 	onlydamagedby(choices) : "Break on grenade touch" : 0 =
 	[
-		0: "否 (No)"
+		0: "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 	spawnflags(flags) =
@@ -3650,13 +3650,13 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(Targetname, Global, Master, Target, RenderFields, Angles, ZHLT, TexLightType) = func_button : "按键开关 - 玩家触摸、按下使用键或射击触发的按钮" 
+@SolidClass base(Targetname, Global, Master, Target, RenderFields, Angles, ZHLT, TexLightType) = func_button : "按键开关" 
 [
 	speed(integer) : "移动速度" : 5
-	netname(target_destination) : "路径目标 (netname)"
+	netname(target_destination) : "路径目标"
 	//* Path Target overrides Targetted Object
-	health(integer) : "生命值 / 破坏耐受上限" : 0
-	lip(integer) : "残留边距 / 凸出距离" : 0
+	health(integer) : "生命值/破坏耐久" : 0
+	lip(integer) : "残留边距/凸出距离" : 0
 	//* The number against each sound (except Lightswitch) corresponds to the wav file
 	//* played. e.g. Buzz (10) plays "buttons/button10.wav".
 	sounds(choices) : "音效方案预设" : "" = 
@@ -3688,8 +3688,8 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 		14: "Lightswitch"
 
 	]
-	wait(integer) : "自动复位延迟 (秒)" : 3
-	delay(string) : "触发延迟时间 (秒)" : "0"
+	wait(integer) : "自动复位延迟(秒)" : 3
+	delay(string) : "触发延迟时间(秒)" : "0"
 	spawnflags(flags) =
 	[
 		1: "Don't move" : 0
@@ -3791,7 +3791,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass = func_buyzone : "购买区域 - 玩家允许打开购买菜单购买武器装备的区域" 
+@SolidClass = func_buyzone : "武器购买区域" 
 [
 	team(choices) : "所属阵营限制" : "" =
 	[
@@ -3802,14 +3802,14 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 		2: "Counter-terrorist"
 
 	]
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Targetname, Global, RenderFields, Angles, ZHLT, TexLightType) = func_conveyor : "传送带 - 使站在上方的玩家和物体朝指定方向移动的表面" 
+@SolidClass base(Targetname, Global, RenderFields, Angles, ZHLT, TexLightType) = func_conveyor : "移动传送带" 
 [
 	spawnflags(flags) =
 	[
@@ -3822,9 +3822,9 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(Door, ZHLT, TexLightType) = func_door : "滑动门 - 沿指定直线方向平移开启的滑动门" []
+@SolidClass base(Door, ZHLT, TexLightType) = func_door : "直线平移滑动门" []
 
-@SolidClass base(Door, Angles, ZHLT, TexLightType) = func_door_rotating : "旋转门 - 绕旋转轴心旋转开启的门" 
+@SolidClass base(Door, Angles, ZHLT, TexLightType) = func_door_rotating : "轴心旋转门" 
 [
 	spawnflags(flags) =
 	[
@@ -3840,9 +3840,9 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 	distance(integer) : "Distance (deg)" : 90
 ]
 //*may not work in LINUX system servers.
-@SolidClass = func_escapezone : "恐怖分子逃脱区 - 逃跑模式 (ES) 下恐怖分子的逃跑到达判定区" 
+@SolidClass = func_escapezone : "恐怖分子逃脱区" 
 [
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
@@ -3853,7 +3853,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 //* friction changes player state, will have to be reset to normal as player leaves low friction area.
 //* 0% = No friction, 100% = Normal Friction
 //*
-@SolidClass base(RenderFields, ZHLT, Appearflags, TexLightType) = func_friction : "地面摩擦力调整区 - 改变玩家在表面行走时的摩擦力(冰面/泥地)" 
+@SolidClass base(RenderFields, ZHLT, Appearflags, TexLightType) = func_friction : "地面摩擦力调整区" 
 [
 	modifier(integer) : "Percentage of standard (0 - 100)" : 15
 ]
@@ -3865,7 +3865,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 //     I do not really know what the "Disable On Grenade" field is for. 
 //     This entity actually will work on multiplayer games but will only function ONCE per MAP, not per round.
 
-@SolidClass = func_grencatch : "手雷检测区 - 检测手雷扔入的区域"
+@SolidClass = func_grencatch : "手雷检测区"
 [
       triggerongrenade(string) : "Trigger When Grenade Hits"
 	grenadetype(choices): "grenade type" : "flash" =
@@ -3876,7 +3876,7 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 
 	]
       disableongrenade(string) : "Disable On Grenade"
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
@@ -3884,35 +3884,35 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 
 ]
 
-@SolidClass base(Targetname, Global, RenderFields, ZHLT, TexLightType) = func_guntarget : "移动靶标 - 沿路径轨道移动并可被击中的靶标" 
+@SolidClass base(Targetname, Global, RenderFields, ZHLT, TexLightType) = func_guntarget : "移动射击靶标" 
 [
-	target(target_source) : "触发目标 (target)"
+	target(target_source) : "触发目标"
 	speed(integer) : "移动速度" : 100
-	message(target_source) : "提示文本 / 声音路径 (message)"
-	health(integer) : "生命值 / 破坏耐受上限" : 0
+	message(target_source) : "提示文本/音效路径"
+	health(integer) : "生命值/破坏耐久" : 0
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(Global, RenderFields, ZHLT, TexLightType) = func_healthcharger: "生命值充能壁柜 - 玩家按下使用键按住汲取生命值的医疗机" 
+@SolidClass base(Global, RenderFields, ZHLT, TexLightType) = func_healthcharger: "生命值充能壁柜" 
 [
 	//* dmdelay may not work in CS
 	dmdelay(integer) : "Deathmatch recharge delay" : 0
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass = func_hostage_rescue : "人质解救区 - 反恐精英将人质带至此区域以完成解救" 
+@SolidClass = func_hostage_rescue : "人质解救区" 
 [
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Targetname, RenderFields, ZHLT, TexLightType) = func_illusionary : "无碰撞幻象画刷 - 完全没有碰撞体积的装饰画刷" 
+@SolidClass base(Targetname, RenderFields, ZHLT, TexLightType) = func_illusionary : "无碰撞幻象画刷" 
 [
 
-	skin(choices) : "模型皮肤编号 (Skin)" : -1 =
+	skin(choices) : "模型皮肤编号" : -1 =
 	[
 		-1: "Empty"
 
@@ -3931,16 +3931,16 @@ model(choices)  : "Model (editor)" : "models/player/guerilla/guerilla.mdl" =
 ]
 
 //* Creates an invisible, climbable field.
-@SolidClass base(Targetname) = func_ladder : "梯子爬行区 - 贴有 AAATRIGGER 或梯子材质的攀爬判定区域" 
+@SolidClass base(Targetname) = func_ladder : "梯子攀爬区" 
 [
-zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Targetname) = func_mortar_field : "迫击炮轰炸区 - 触发时在区域内产生随机迫击炮爆炸" 
+@SolidClass base(Targetname) = func_mortar_field : "迫击炮轰炸区" 
 [
 	m_flSpread(integer) : "Spread Radius" : 64
 	m_iCount(integer) : "Repeat Count" : 1
@@ -3955,7 +3955,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 	m_iszXController(target_destination) : "X Controller"
 	m_iszYController(target_destination) : "Y Controller"
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
@@ -3964,7 +3964,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 
 //* Only partially implemented, some keys don't work properly. 
 //* NOTE: the continous changing animation can lead to lag.
-@SolidClass base(Targetname, Global, Angles, RenderFields, ZHLT, Appearflags, TexLightType) = func_pendulum : "钟摆摆动物体 - 绕轴心往复摆动的实体" 
+@SolidClass base(Targetname, Global, Angles, RenderFields, ZHLT, Appearflags, TexLightType) = func_pendulum : "钟摆摆动物体" 
 [
 	speed(integer) : "移动速度" : 100
 	distance(integer) : "Distance (deg)" : 90
@@ -3987,7 +3987,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 //*	_minlight(integer) : "_minlight" : 0
 ]
 
-@SolidClass base(Targetname, Global, RenderFields, PlatSounds, ZHLT, TexLightType) = func_plat : "升降平台 - 触发时上升或下降的升降电梯" 
+@SolidClass base(Targetname, Global, RenderFields, PlatSounds, ZHLT, TexLightType) = func_plat : "升降电梯平台" 
 [
 	spawnflags(Flags) =
 	[
@@ -4016,7 +4016,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(Breakable, RenderFields, ZHLT, TexLightType) = func_pushable : "可推动箱子 - 玩家可以推行、走动或推动移动的物理画刷"
+@SolidClass base(Breakable, RenderFields, ZHLT, TexLightType) = func_pushable : "可推动箱子"
 [
 	size(choices) : "Hull Size" : "" =
 	[
@@ -4047,20 +4047,20 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(Global, RenderFields, ZHLT, TexLightType) = func_recharge: "护甲充能壁柜 - 玩家按下使用键按住补充护甲防弹衣的充能机" 
+@SolidClass base(Global, RenderFields, ZHLT, TexLightType) = func_recharge: "护甲充能壁柜" 
 [
 	 dmdelay(integer) : "Deathmatch recharge delay" : 0
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
 //* Like func_button, except it rotates.
-@SolidClass base(Targetname, Global, Master, Target, Angles, RenderFields, ZHLT, TexLightType) = func_rot_button : "旋转按钮 - 按下使用键时绕轴心旋转按下的旋钮/把手" 
+@SolidClass base(Targetname, Global, Master, Target, Angles, RenderFields, ZHLT, TexLightType) = func_rot_button : "旋转按钮手柄" 
 [
-	delay(string) : "触发延迟时间 (秒)" : "0"
+	delay(string) : "触发延迟时间(秒)" : "0"
 	//* changetarget will change the button's target's TARGET field to the button's changetarget when button is pressed.
 	changetarget(target_destination) : "ChangeTarget Name"
 	speed(integer) : "移动速度" : 50
-	health(integer) : "生命值 / 破坏耐受上限" : 0
+	health(integer) : "生命值/破坏耐久" : 0
 	//* The number against each sound corresponds to the wav file
 	//* played. e.g. Squeaky (1) plays "buttons/lever1.wav".
 	sounds(choices) : "音效方案预设" : 21 = 
@@ -4076,7 +4076,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 		25: "Gas Clunk"
 
 	]
-	wait(choices) : "自动复位延迟 (秒)" : 3 =
+	wait(choices) : "自动复位延迟(秒)" : 3 =
 	[
 		-1: "Stays pressed"
 
@@ -4102,7 +4102,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(Targetname, Global, Angles, RenderFields, ZHLT, TexLightType) = func_rotating : "持续旋转物体 - 持续绕轴心旋转的风扇、轮子或齿轮"
+@SolidClass base(Targetname, Global, Angles, RenderFields, ZHLT, TexLightType) = func_rotating : "持续旋转风扇/轮子"
 [
 	speed(integer)	: "移动速度" : 0
 	volume(integer) : "Volume (10 = loudest)" : 10
@@ -4125,7 +4125,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 
 	]
 	//* The sound to play while active. This will only be used if "Fan Sounds" is set to "No Sound".
-	message(sound) : "提示文本 / 声音路径 (message)"
+	message(sound) : "提示文本/音效路径"
 	spawnflags(flags) =
 	[
 		1 : "Start ON" 		: 0
@@ -4158,7 +4158,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	dmg(integer) : "伤害数值" : 0
 ]
 
-@SolidClass base(BaseTank, ZHLT, TexLightType) = func_tank : "固定机枪炮塔 - 玩家可操作瞄准并射击子弹的固定炮塔" 
+@SolidClass base(BaseTank, ZHLT, TexLightType) = func_tank : "固定机枪炮塔" 
 [
 	bullet(choices) : "Bullets" : "" = 
 	[
@@ -4173,37 +4173,37 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 ]
 
-@SolidClass = func_tankcontrols : "机枪操作触发区 - 玩家进入此画刷区域按使用键操作机枪"
+@SolidClass = func_tankcontrols : "机枪操作触发位"
 [
-	target(target_destination) : "触发目标 (target)"
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	target(target_destination) : "触发目标"
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(BaseTank, ZHLT, TexLightType) = func_tanklaser : "激光炮塔 - 发射高能激光的固定炮塔" 
+@SolidClass base(BaseTank, ZHLT, TexLightType) = func_tanklaser : "激光发射炮塔" 
 [
 	laserentity(target_source) : "env_laser Entity"
 ]
 
-@SolidClass base(BaseTank, ZHLT, TexLightType) = func_tankmortar : "迫击炮塔 - 发射高爆迫击炮弹的固定炮塔" 
+@SolidClass base(BaseTank, ZHLT, TexLightType) = func_tankmortar : "迫击炮炮塔" 
 [
 	iMagnitude(Integer) : "Explosion Magnitude" : 100
 ]
 
-@SolidClass base(Trackchange) = func_trackautochange : "自动道岔切换器 - 火车到达时自动切换方向的轨道道岔"
+@SolidClass base(Trackchange) = func_trackautochange : "自动轨道道岔"
 [
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(Trackchange, ZHLT, TexLightType) = func_trackchange : "轨道道岔切换器 - 手动或触发切换两个轨道的道岔"
+@SolidClass base(Trackchange, ZHLT, TexLightType) = func_trackchange : "轨道道岔切换器"
 [
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(Targetname, Global, Angles, RenderFields, ZHLT, TexLightType) = func_tracktrain : "高级轨道列车 - 可受控沿 path_track 轨道行驶的复杂列车" 
+@SolidClass base(Targetname, Global, Angles, RenderFields, ZHLT, TexLightType) = func_tracktrain : "高级控制轨道列车" 
 [
 	spawnflags(flags) =
 	[
@@ -4214,7 +4214,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 		8 : "无碰撞穿透 (可直接穿过)" : 0
 
 	]
-	target(target_destination) : "触发目标 (target)"
+	target(target_destination) : "触发目标"
 //*
 //*if startspeed is not 0, then maybe no train sounds
 //*
@@ -4268,9 +4268,9 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 //* space when you compile the level.
 //*(note- a func_train gets its lighting info from where it sits when 
 //* compiled) 
-@SolidClass base(Targetname, Global, RenderFields, ZHLT, TexLightType) = func_train : "轨道平移平台 - 沿 path_corner 路径自动平移的平台" 
+@SolidClass base(Targetname, Global, RenderFields, ZHLT, TexLightType) = func_train : "巡航平移平台" 
 [
-	target(target_source) : "触发目标 (target)"
+	target(target_source) : "触发目标"
 	movesnd(choices) : "移动时播放的声音" : "" = 
 	[
 		"": "No Sound"
@@ -4353,7 +4353,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 //*
 	avelocity(string) : "Angular velocity (Y Z X)" : "0 0 0"
 	dmg(integer) : "伤害数值" : 0
-	skin(choices) : "模型皮肤编号 (Skin)" : "" =
+	skin(choices) : "模型皮肤编号" : "" =
 	[
 		 "": "default"
 
@@ -4382,17 +4382,17 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass = func_traincontrols : "列车控制触发区 - 玩家进入按使用键控制火车启动/加减速"
+@SolidClass = func_traincontrols : "列车控制触发位"
 [
-	target(target_destination) : "触发目标 (target)"
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	target(target_destination) : "触发目标"
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Targetname, Angles, RenderFields, ZHLT, TexLightType) = func_vehicle : "可驾驶载具 - 玩家可坐入并驾驶方向、油门的车辆" 
+@SolidClass base(Targetname, Angles, RenderFields, ZHLT, TexLightType) = func_vehicle : "可驾驶载具车辆" 
 [
 	spawnflags(flags) =
 	[
@@ -4403,7 +4403,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 		8 : "无碰撞穿透 (可直接穿过)" : 0
 
 	]
-	target(target_destination) : "触发目标 (target)"
+	target(target_destination) : "触发目标"
 	sounds(choices) : "音效方案预设" : "" =
 	[
 		"": "None"
@@ -4435,31 +4435,31 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass = func_vehiclecontrols : "载具驾驶操作位 - 玩家进入按使用键上车驾驶的触发区域"
+@SolidClass = func_vehiclecontrols : "载具驾驶操作位"
 [
-	target(target_destination) : "触发目标 (target)"
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	target(target_destination) : "触发目标"
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass = func_vip_safetyzone : "VIP安全区 - 保护VIP玩家的安全区判定" 
+@SolidClass = func_vip_safetyzone : "VIP安全保护区" 
 [
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
 	]
 ]
 
-@SolidClass base(Targetname, Global, RenderFields, ZHLT, TexLightType, Appearflags) = func_wall : "静态实体墙 - 独立于世界的实体墙，常用于透明材质或光照隔离" 
+@SolidClass base(Targetname, Global, RenderFields, ZHLT, TexLightType, Appearflags) = func_wall : "静态实体墙" 
 [
 	_minlight(string) : "Minimum light level" : "0"
 ]
 
-@SolidClass base(func_wall) = func_wall_toggle : "可切换开关墙 - 触发时可以在存在与隐藏之间切换的墙体" 
+@SolidClass base(func_wall) = func_wall_toggle : "可切换开关实体墙" 
 [
 	spawnflags(flags) =
 	[
@@ -4468,7 +4468,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 ]
 
-@SolidClass base(Door) = func_water : "动态液体水体 - 可上升、下降或流动的液体水体画刷" 
+@SolidClass base(Door) = func_water : "动态液体水体" 
 [
 	spawnflags(flags) =
 	[
@@ -4477,7 +4477,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 		256:"仅按下使用键触发 (禁止触碰触发)" : 0
 
 	]
-	skin(choices) : "模型皮肤编号 (Skin)" : -3 =
+	skin(choices) : "模型皮肤编号" : -3 =
 	[
 		-1: "Empty"
 
@@ -4499,7 +4499,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 // and will be delayed and rechecked until the player carry (all) those/that weapon(s).
 // Like func_grencatch, this entity can only be used once per map, not per round.
 
-@SolidClass base(Master) = func_weaponcheck : "武器检测器 - 检测玩家是否持有特定武器的实体" 
+@SolidClass base(Master) = func_weaponcheck : "武器持有检测器" 
 [
 	item1(choices) : "Weapon #1" =
 	[
@@ -5136,12 +5136,12 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	trigger_noitems_delay(integer) : "Delay before check again"
 	any_weapon(choices) : "All type of weapon?" : 0 =
 	[
-		0: "否 (No)"
+		0: "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
-	zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
+	zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 	[
 		1: "yes"
 
@@ -5154,7 +5154,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 //
 
 
-@SolidClass base(Master, Target, Angles, RenderFields, ZHLT) = button_target : "受击目标按钮 - 受到射击或攻击时激活的按钮实体"
+@SolidClass base(Master, Target, Angles, RenderFields, ZHLT) = button_target : "受击目标按钮"
 [
 	spawnflags(flags) =
 	[
@@ -5165,7 +5165,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 ]
 
-@SolidClass base(Door, ZHLT) = momentary_door : "瞬态按住门 - 按住按钮时才持续移动、松开即停的门" 
+@SolidClass base(Door, ZHLT) = momentary_door : "按住移动门" 
 [
 	spawnflags(flags) =
 	[
@@ -5174,9 +5174,9 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 ]
 
-@SolidClass base(Targetname, Master, Angles, RenderFields, ZHLT) = momentary_rot_button : "瞬态旋转手柄 - 玩家按住使用键持续旋转的手柄/阀门" 
+@SolidClass base(Targetname, Master, Angles, RenderFields, ZHLT) = momentary_rot_button : "按住旋转手柄" 
 [
-	target(target_destination) : "触发目标 (target)"
+	target(target_destination) : "触发目标"
 	speed(integer) : "移动速度" : 50
 	sounds(choices) : "音效方案预设" : "" = 
 	[
@@ -5231,27 +5231,27 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 ]
 // func_detail
 // 功能类似于Source引擎的func_detail细节画刷，不切割世界BSP树结构，极大降低面数与编译耗时。
-@SolidClass = func_detail : "细节画刷 - 不切割主世界树结构 (BSP)，大幅优化编译速度与面数"
+@SolidClass = func_detail : "细节画刷 (不切BSP世界树)"
 [
 	// 细节层级建议保留为1。对于极小物件可设为2，避免切割其他细节画刷的面。
-	zhlt_detaillevel(integer) : "细节层级 (Detail level)" : 1
+	zhlt_detaillevel(integer) : "细节层级" : 1
 	// For large shapes such as terrain and walls, set this to no less than their detail level, so that they can chop the faces of adjacent world brushes.
-	zhlt_chopdown(integer) : "降低层级以切割下方画刷 (Chop down)" : 0
+	zhlt_chopdown(integer) : "降低层级以切割下方画刷" : 0
 	// Usually you don't have to use this.
-	zhlt_chopup(integer) : "提高层级以便被切割 (Chop up)" : 0
+	zhlt_chopup(integer) : "提高层级以便被切割" : 0
 	// For brushes in the same detail level and have overlapping faces (which are on the same plane), this priority determines which one will appear.
-	zhlt_coplanarpriority(integer) : "共面重叠优先级 (Coplanar priority)" : 0
+	zhlt_coplanarpriority(integer) : "共面重叠优先级" : 0
 	// 细节碰撞网格层级：设为0将减少碰撞节点数，但会失去更精确的Ambiguous leafnode判定。
-	zhlt_clipnodedetaillevel(integer) : "碰撞网格细节层级 (Clipnode detail)" : 1
+	zhlt_clipnodedetaillevel(integer) : "碰撞网格细节层级" : 1
 	// 非常实用的选项：开启后将彻底去除画刷碰撞，大幅减少碰撞节点(clipnode)消耗。
-	zhlt_noclip(choices) : "无碰撞穿越通行 (Passable/Noclip)" : "" =
+	zhlt_noclip(choices) : "无碰撞穿越通行" : "" =
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
-	zhlt_cliptype(choices) : "碰撞生成模式 (Cliptype)" : "simple" =
+	zhlt_cliptype(choices) : "碰撞体生成模式" : "simple" =
 	[
 		"simple": "精简模式 (推荐，大幅减少碰撞节点)"
 
@@ -5264,12 +5264,12 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 
 // info_hullshape
 // It replaces the default cuboid shape of the player when generating collision hulls for certain brushes.
-@SolidClass = info_hullshape : "碰撞体积外形定义 - 自定义复杂画刷生成的玩家碰撞外形"
+@SolidClass = info_hullshape : "自定义碰撞体积外形"
 [
-	targetname(target_source) : "实体名称 (targetname)"
+	targetname(target_source) : "实体名称"
 	defaulthulls(choices) : "Set as default shape" : "" =
 	[
-		"": "否 (No)"
+		"": "否"
 
 		2: "for hull 1"
 
@@ -5280,9 +5280,9 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 	disabled(choices) : "Disable this entity" : "" =
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 ]
@@ -5291,13 +5291,13 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 
 // light_shadow
 // It creates toggleable shadow for func_door, func_breakable, ...
-@PointClass color(255 255 0) = light_shadow : "动态阴影控制点 - 用于在可破坏物体或门上生成开关阴影"
+@PointClass color(255 255 0) = light_shadow : "动态阴影控制点"
 [
 	// 控制指定固体画刷的动态阴影。该实体必须在 lightflags 中启用 Opaque 遮光。
 	// The solid entity must have 'Opaque' set in its lightflags.
-	target(target_destination) : "触发目标 (target)"
+	target(target_destination) : "触发目标"
 	// 切换本实体的开/关状态将导致目标实体的阴影出现或消失。
-	targetname(target_source) : "实体名称 (targetname)"
+	targetname(target_source) : "实体名称"
 	style(choices) : "Appearance (no name allowed)" : "" =
 	[
 		"" : "正常渲染 (Normal)"
@@ -5346,12 +5346,12 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 
 // light_bounce
 // Use as complement for light_shadow.
-@PointClass color(255 255 0) = light_bounce : "光线反弹控制点 - 辅助计算反弹漫反射光线"
+@PointClass color(255 255 0) = light_bounce : "反弹光控制点"
 [
 	// Control the light bounced from this solid entity.
-	target(target_destination) : "触发目标 (target)"
+	target(target_destination) : "触发目标"
 	// When the targeted entity disappear, switch on the light_shadow and switch off the light_bounce at the same time.
-	targetname(target_source) : "实体名称 (targetname)"
+	targetname(target_source) : "实体名称"
 	style(choices) : "Appearance (no name allowed)" : "" =
 	[
 		"" : "正常渲染 (Normal)"
@@ -5401,13 +5401,13 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 // info_overview_point
 // It makes all entities visible from this place. This is useful for overview mode (dev_overview 1).
 // If "Reversed" is selected, this place will become visible from the entire map. This is useful for large skybox model.
-@PointClass color(255 0 0) = info_overview_point : "全景雷达截图点 - 用于生成地图小地图 Overview 雷达图的俯视观察点"
+@PointClass color(255 0 0) = info_overview_point : "小地图雷达截图观察点"
 [
 	reverse(choices) : "Reversed (3D skybox)" : "" =
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 ]
@@ -5418,14 +5418,14 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 // For the time being, ONE target is good enough.
 @PointClass color(255 200 200) = info_portal : "Create a portal to the selected info_leaf, from the leaf the info_portal is inside. Forces target leaf to be visible from the current one."
 [
-	target(target_source) : "触发目标 (target)"
+	target(target_source) : "触发目标"
 	neighbor(integer) : "TODO: Layers of neighboring leaves to be affected" : 1
 ]
 
 // info_leaf
 @PointClass color(200 200 255) = info_leaf : "Works with info_portal. Used to select a leaf the info_leaf is inside."
 [
-	targetname(target_destination) : "实体名称 (targetname)"
+	targetname(target_destination) : "实体名称"
 ]
 
 // info_sunlight
@@ -5433,22 +5433,22 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 // If you are using multiple light_environments, you will probably need this entity.
 @PointClass color(255 255 0) = info_sunlight : "light_environment information that affects model brightness"
 [
-	target(target_destination) : "触发目标 (target)"
+	target(target_destination) : "触发目标"
 	angles(string) : "三维朝向角度 (Pitch Yaw Roll)" : "0 0 0"
 	pitch(integer) : "垂直仰角 (Pitch)" : -90
-	_light(color255) : "光照颜色与亮度 (R G B Brightness)" : "0 0 0 100"
+	_light(color255) : "光照颜色与亮度 (R G B 强度)" : "0 0 0 100"
 ]
 
 // func_group
 // It is not a real entity. Brushes in this entity are still world brushes.
-@SolidClass = func_group : "画刷群组 - 仅在编辑器内用于编组画刷，编译后合并入世界"
+@SolidClass = func_group : "画刷群组 (仅编辑器可见)"
 [
-	zhlt_coplanarpriority(integer) : "共面重叠优先级 (Coplanar priority)" : 0
-	zhlt_noclip(choices) : "无碰撞穿越通行 (Passable/Noclip)" : "" =
+	zhlt_coplanarpriority(integer) : "共面重叠优先级" : 0
+	zhlt_noclip(choices) : "无碰撞穿越通行" : "" =
 	[
-		"": "否 (No)"
+		"": "否"
 
-		1: "是 (Yes)"
+		1: "是"
 
 	]
 ]
@@ -5465,7 +5465,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 // It defines texture lights.
 // Add any texture name as a key and their brightness as the value.
 // Don't need to set colors because hlrad knows texture colors.
-@PointClass color(255 0 0) = info_texlights : "纹理发光定义 - 直接在地图中定义特定材质的发光强度与颜色"
+@PointClass color(255 0 0) = info_texlights : "材质贴图发光配置"
 [
 ]
 
@@ -5495,14 +5495,14 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 // light_surface
 // It defines texture lights.
 // It is recommended to replace lights.rad and info_texlights with this entity.
-@PointClass color(255 255 0) = light_surface : "高级表面发光 - 指定画刷表面高级发光特性"
+@PointClass color(255 255 0) = light_surface : "高级表面发光"
 [
 	_tex(string) : "Texture name" : "" // texture name (not case sensitive)
 	_frange(string) : " Filter max distance" : "" // max distance from face center to this entity
 	_fdist(string) : " Filter max dist to plane" : "" // max distance from face plane to this entity
 	_fclass(string) : " Filter entity classname" : ""
 	_fname(string) : " Filter entity name" : ""
-	_light(color255) : "光照颜色与亮度 (R G B Brightness)" : "255 255 255 80" // value >= 80 will ensure full brightness. Colored brightness is not recommended.
+	_light(color255) : "光照颜色与亮度 (R G B 强度)" : "255 255 255 80" // value >= 80 will ensure full brightness. Colored brightness is not recommended.
 	_texcolor(color255) : " Color(replace texture color)" : "" // emit light as if the texture is in this color
 	//  Note:
 	//    If you want to set cone angle or any other value to 0,
@@ -5527,9 +5527,9 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	[
 		"": "Auto"
 
-		1: "是 (Yes)"
+		1: "是"
 
-		2: "否 (No)"
+		2: "否"
 
 	]
 	// 'light_surface' will not be recognized by the game if we don't change its classname.
@@ -5540,7 +5540,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 		"light_spot" : "light_spot"
 
 	]
-	targetname(target_source) : "实体名称 (targetname)" : "" // create a new light style with this name
+	targetname(target_source) : "实体名称" : "" // create a new light style with this name
 	style(choices) : " Appearance (no name allowed)" : "" = // use predefined light styles which have predefined patterns
 	[
 		"" : "正常渲染 (Normal)"
@@ -5581,28 +5581,28 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 ]
 
-@SolidClass = remec_multi_bhop_block : "连跳静态方块 (KZ) - KZ模式静态连跳方块实体"
+@SolidClass = remec_multi_bhop_block : "连跳静态方块 (KZ)"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
+	targetname(target_source) : "实体名称" : ""
 	destination(target_destination) : "Where to teleport player" : ""
-	delay(string) : "触发延迟时间 (秒)" : "0.100000"
+	delay(string) : "触发延迟时间(秒)" : "0.100000"
 ]
 
-@SolidClass = remec_delayed_teleport : "延迟传送器 - 玩家进入后延迟指定秒数触发传送"
+@SolidClass = remec_delayed_teleport : "延迟传送器"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
-	delay(string) : "触发延迟时间 (秒)" : "0.000000"
-	target(target_destination) : "触发目标 (target)" : ""
-	wait(integer) : "自动复位延迟 (秒)" : 10
+	targetname(target_source) : "实体名称" : ""
+	delay(string) : "触发延迟时间(秒)" : "0.000000"
+	target(target_destination) : "触发目标" : ""
+	wait(integer) : "自动复位延迟(秒)" : 10
 	killtarget(target_destination) : "触发后彻底销毁的目标" : ""
-	netname(target_destination) : "路径目标 (netname)" : ""
-	master(target_destination) : "主控实体 (master)" : ""
+	netname(target_destination) : "路径目标" : ""
+	master(target_destination) : "主控实体" : ""
 	sounds(choices) : "音效方案预设" : 0 =
 	[
 		0 : "No Sound"
 
 	]
-	message(string) : "提示文本 / 声音路径 (message)" : ""
+	message(string) : "提示文本/音效路径" : ""
 	spawnflags(flags) = 
 	[
 		1: "Monsters" : 0
@@ -5614,10 +5614,10 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 ]
 
-@SolidClass = remec_auto_reset_wall : "自动复位阻挡墙 - 触发后短暂消失并自动复原的阻挡墙"
+@SolidClass = remec_auto_reset_wall : "自动复原阻挡墙"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
-	delay(string) : "触发延迟时间 (秒)" : "0.000000"
+	targetname(target_source) : "实体名称" : ""
+	delay(string) : "触发延迟时间(秒)" : "0.000000"
 	delay2(string) : "Delay before reset trigger" : "1.000000"
 	spawnflags(flags) = 
 	[
@@ -5628,7 +5628,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 	globalname(string) : "全局变量名" : ""
 	_minlight(string) : "Minimum light level" : ""
-	renderfx(choices) : "渲染特殊效果 (Render FX)" : 0 =
+	renderfx(choices) : "渲染特殊效果" : 0 =
 	[
 		0 : "正常渲染 (Normal)"
 
@@ -5665,24 +5665,24 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 		16 : "全息投影 (扭曲+半透)"
 
 	]
-	rendermode(choices) : "渲染模式 (Render Mode)" : 0 =
+	rendermode(choices) : "渲染模式" : 0 =
 	[
 		0 : "正常渲染 (Normal)"
 
 		1 : "色彩混合 (Color)"
 
-		2 : "纹理透明 (镂空贴图)"
+		2 : "纹理镂空透明 (Texture)"
 
 		3 : "发光光晕 (Glow)"
 
-		4 : "实体透明 (半透明)"
+		4 : "实体透明 (Solid)"
 
 		5 : "加法发光混合 (Additive)"
 
 	]
-	renderamt(string) : "透明度/亮度 (0-255)" : ""
-	rendercolor(color255) : "渲染着色 (R G B)" : "0 0 0"
-	zhlt_lightflags(choices) : "ZHLT光照特性 (Light flags)" : 0 =
+	renderamt(string) : "不透明度/亮度 (0-255)" : ""
+	rendercolor(color255) : "渲染着色颜色 (R G B)" : "0 0 0"
+	zhlt_lightflags(choices) : "ZHLT光照特性" : 0 =
 	[
 		0 : "默认光照"
 
@@ -5700,8 +5700,8 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 
 @PointClass sprite() = remec_lit_model : "cycler_sprite with light and more"
 [
-	targetname(string) : "实体名称 (targetname)" : ""
-	origin(string) : "中心定位原点 (Origin)" : "0 0 0"
+	targetname(string) : "实体名称" : ""
+	origin(string) : "中心原点坐标" : "0 0 0"
 	angles(string) : "三维朝向角度 (Pitch Yaw Roll)" : "0 0 0"
 	model(string) : "Path to model" : ""
 	texture(string) : "Light emitting texture" : "black_HIDDEN"
@@ -5722,28 +5722,28 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	avelocity(string) : "Angular velocity if rotating" : "0 0 0"
 ]
 
-@SolidClass = remec_n_trigger : "N次计数触发器 - 累计触发N次后才激活输出"
+@SolidClass = remec_n_trigger : "N次触发计数器"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
-	target(target_destination) : "触发目标 (target)" : ""
-	count(string) : "补给总数量" : "2"
-	delay(string) : "触发延迟时间 (秒)" : "0.000000"
+	targetname(target_source) : "实体名称" : ""
+	target(target_destination) : "触发目标" : ""
+	count(string) : "补给道具总数" : "2"
+	delay(string) : "触发延迟时间(秒)" : "0.000000"
 ]
 
 @PointClass = remec_trigger_sequence : "Trigger targets in a specific sequence"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
+	targetname(target_source) : "实体名称" : ""
 	sequence(string) : "Sequence in which to trigger targets" : ""
 ]
 
 @SolidClass = remec_auto_reset_switch : "Switches target on and off after a delay"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
-	delay(string) : "触发延迟时间 (秒)" : "0.000000"
+	targetname(target_source) : "实体名称" : ""
+	delay(string) : "触发延迟时间(秒)" : "0.000000"
 	delay2(string) : "Delay before reset trigger" : "1.000000"
-	target(target_destination) : "触发目标 (target)" : ""
+	target(target_destination) : "触发目标" : ""
 	globalname(string) : "全局变量名" : ""
-	renderfx(choices) : "渲染特殊效果 (Render FX)" : 0 =
+	renderfx(choices) : "渲染特殊效果" : 0 =
 	[
 		0 : "正常渲染 (Normal)"
 
@@ -5780,25 +5780,25 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 		16 : "全息投影 (扭曲+半透)"
 
 	]
-	rendermode(choices) : "渲染模式 (Render Mode)" : 0 =
+	rendermode(choices) : "渲染模式" : 0 =
 	[
 		0 : "正常渲染 (Normal)"
 
 		1 : "色彩混合 (Color)"
 
-		2 : "纹理透明 (镂空贴图)"
+		2 : "纹理镂空透明 (Texture)"
 
 		3 : "发光光晕 (Glow)"
 
-		4 : "实体透明 (半透明)"
+		4 : "实体透明 (Solid)"
 
 		5 : "加法发光混合 (Additive)"
 
 	]
-	renderamt(string) : "透明度/亮度 (0-255)" : ""
-	rendercolor(color255) : "渲染着色 (R G B)" : "0 0 0"
+	renderamt(string) : "不透明度/亮度 (0-255)" : ""
+	rendercolor(color255) : "渲染着色颜色 (R G B)" : "0 0 0"
 	angles(string) : "三维朝向角度 (Pitch Yaw Roll)" : "0 0 0"
-	zhlt_lightflags(choices) : "ZHLT光照特性 (Light flags)" : 0 =
+	zhlt_lightflags(choices) : "ZHLT光照特性" : 0 =
 	[
 		0 : "默认光照"
 
@@ -5813,9 +5813,9 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	]
 	light_origin(target_destination) : "Light Origin Target" : ""
 	speed(integer) : "移动速度" : 5
-	health(string) : "生命值 / 破坏耐受上限" : ""
-	lip(integer) : "残留边距 / 凸出距离" : 0
-	master(target_destination) : "主控实体 (master)" : ""
+	health(string) : "生命值/破坏耐久" : ""
+	lip(integer) : "残留边距/凸出距离" : 0
+	master(target_destination) : "主控实体" : ""
 	sounds(choices) : "音效方案预设" : 0 =
 	[
 		0 : "None"
@@ -5845,7 +5845,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 		14 : "Lightswitch"
 
 	]
-	wait(integer) : "自动复位延迟 (秒)" : 3
+	wait(integer) : "自动复位延迟(秒)" : 3
 	spawnflags(flags) = 
 	[
 		1: "Don't move" : 0
@@ -5946,7 +5946,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	_minlight(string) : "Minimum light level" : ""
 ]
 
-@SolidClass = remec_hp_booster : "无限生命补给站 - 瞬间补满或提升生命值"
+@SolidClass = remec_hp_booster : "无限生命补给站"
 [
 	bottomheight(string) : "Bottom block height" : "16.000000"
 	bottomrendermode(string) : "Bottom block render mode" : "1"
@@ -5958,28 +5958,28 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 	toprendercolor(color255) : "Top block FX Color (R G B)" : "0 0 0"
 ]
 
-@SolidClass = remec_slip_ramp : "滑坡冲浪斜面 (Surf) - 冲浪模式 (Surf) 专用滑行斜坡实体"
+@SolidClass = remec_slip_ramp : "滑坡冲浪斜面 (Surf)"
 [
 	standingshapename(target_source) : "Name of standing hullshape" : "remec_slip_ramp_sh"
 	crouchingshapename(target_source) : "Name of crouching hullshape" : "remec_slip_ramp_ch"
-	zhlt_detaillevel(integer) : "细节层级 (Detail level)" : 1
-	zhlt_chopdown(integer) : "降低层级以切割下方画刷 (Chop down)" : 0
-	zhlt_chopup(integer) : "提高层级以便被切割 (Chop up)" : 0
-	zhlt_clipnodedetaillevel(integer) : "碰撞网格细节层级 (Clipnode detail)" : 1
-	zhlt_noclip(choices) : "无碰撞穿越通行 (Passable/Noclip)" : 0 =
+	zhlt_detaillevel(integer) : "细节层级" : 1
+	zhlt_chopdown(integer) : "降低层级以切割下方画刷" : 0
+	zhlt_chopup(integer) : "提高层级以便被切割" : 0
+	zhlt_clipnodedetaillevel(integer) : "碰撞网格细节层级" : 1
+	zhlt_noclip(choices) : "无碰撞穿越通行" : 0 =
 	[
-		0 : "否 (No)"
+		0 : "否"
 
-		1 : "是 (Yes)"
+		1 : "是"
 
 	]
 ]
 
 @PointClass = remec_trigger_random_target : "Trigger a random target from a list"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
-	origin(string) : "中心定位原点 (Origin)" : ""
-	delay(string) : "触发延迟时间 (秒)" : "0.100000"
+	targetname(target_source) : "实体名称" : ""
+	origin(string) : "中心原点坐标" : ""
+	delay(string) : "触发延迟时间(秒)" : "0.100000"
 	starttype(choices) : "Start type" : 1 =
 	[
 		1 : "Start automatically"
@@ -5998,7 +5998,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 
 @PointClass = remec_multi_manager : "No limit Multi Manager"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
+	targetname(target_source) : "实体名称" : ""
 	spawnflags(flags) = 
 	[
 		1: "multithreaded" : 0
@@ -6008,7 +6008,7 @@ zhlt_invisible(choices) :"完全隐形不进渲染 (Invisible)" : 1 =
 
 @SolidClass = remec_multi_target_teleport : "Teleport to multiple switchable targets"
 [
-	targetname(target_source) : "实体名称 (targetname)" : ""
+	targetname(target_source) : "实体名称" : ""
 	trigger(target_destination) : "Button/trigger that should change the target" : ""
 ]
 
