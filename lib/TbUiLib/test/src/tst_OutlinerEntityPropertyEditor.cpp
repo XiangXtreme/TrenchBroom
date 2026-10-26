@@ -635,6 +635,41 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     setPref(Preferences::EntityPropertiesSmartEdit, true);
   }
 
+  SECTION("SmartEdit with brush entity SolidClass")
+  {
+    setPref(Preferences::EntityPropertiesSmartEdit, true);
+
+    map.entityDefinitionManager().setDefinitions({{
+      "func_detail",
+      RgbB{255, 255, 255},
+      "Detail brushes",
+      {
+        {"zhlt_detaillevel",
+         mdl::PropertyValueTypes::Integer{1},
+         "Detail level",
+         "Detail level description"},
+      },
+      std::nullopt,
+    }});
+    const auto* definition = map.entityDefinitionManager().definition("func_detail");
+    REQUIRE(definition != nullptr);
+
+    auto* brushNode = mdl::createBrushNode(map);
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {brushNode}}});
+    mdl::selectNodes(map, {brushNode});
+    auto* entityNode = mdl::createBrushEntity(map, *definition);
+    REQUIRE(entityNode != nullptr);
+    mdl::setEntityProperty(map, "zhlt_detaillevel", "1", false);
+    processOutlinerUpdates();
+
+    auto* row = propertyRow(editor, "zhlt_detaillevel");
+    REQUIRE(row != nullptr);
+    auto* keyLabel =
+      static_cast<ElidedLabel*>(row->findChild<QWidget*>("outlinerPropertyKey"));
+    REQUIRE(keyLabel != nullptr);
+    CHECK(keyLabel->text() == "Detail level");
+  }
+
   SECTION("Add property key completer is populated with entity definition keys")
   {
     map.entityDefinitionManager().setDefinitions({{
