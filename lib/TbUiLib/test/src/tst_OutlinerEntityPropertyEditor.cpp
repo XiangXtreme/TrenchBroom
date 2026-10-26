@@ -20,6 +20,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
+#include <QCompleter>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPalette>
@@ -41,6 +42,9 @@
 #include "mdl/WorldNode.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "base/PreferenceManager.h"
+#include "prefs/Preferences.h"
+#include "ui/ElidedLabel.h"
 #include "ui/SmartSkyboxEditor.h"
 #include "ui/outliner/OutlinerEntityPropertyEditor.h"
 
@@ -568,6 +572,94 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     auto* colorButton = colorRow->findChild<QToolButton*>("outlinerPropertyColorButton");
     REQUIRE(colorButton != nullptr);
     CHECK(colorButton->property("displayColor").value<QColor>() == QColor{Qt::black});
+  }
+
+  SECTION("SmartEdit toggle and rich property tooltips")
+  {
+    setPref(Preferences::EntityPropertiesSmartEdit, true);
+
+    map.entityDefinitionManager().setDefinitions({{
+      "smartedit_test",
+      RgbB{255, 255, 255},
+      "SmartEdit test entity description",
+      {
+        {"chop_down",
+         mdl::PropertyValueTypes::Integer{0},
+         "Lower level to chop",
+         "Detail brushes chop lower brushes"},
+      },
+      mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}},
+    }});
+    const auto* definition = map.entityDefinitionManager().definition("smartedit_test");
+    REQUIRE(definition != nullptr);
+
+    auto* entityNode = mdl::createPointEntity(map, *definition, {0, 0, 0});
+    mdl::selectNodes(map, {entityNode});
+    mdl::setEntityProperty(map, "chop_down", "1", false);
+    processOutlinerUpdates();
+
+    auto* smartEditToggle =
+      editor.findChild<QToolButton*>("outlinerPropertySmartEditToggle");
+    REQUIRE(smartEditToggle != nullptr);
+    CHECK(smartEditToggle->isChecked());
+
+    auto* chopRow = propertyRow(editor, "chop_down");
+    REQUIRE(chopRow != nullptr);
+
+    auto* keyLabel =
+      static_cast<ElidedLabel*>(chopRow->findChild<QWidget*>("outlinerPropertyKey"));
+    REQUIRE(keyLabel != nullptr);
+    CHECK(keyLabel->text() == "Lower level to chop");
+    CHECK(keyLabel->toolTip().contains("Lower level to chop"));
+    CHECK(keyLabel->toolTip().contains("chop_down"));
+    CHECK(keyLabel->toolTip().contains("Detail brushes chop lower brushes"));
+
+    auto* valueEdit = chopRow->findChild<QLineEdit*>("outlinerPropertyValue");
+    REQUIRE(valueEdit != nullptr);
+    CHECK(valueEdit->toolTip().contains("Lower level to chop"));
+    CHECK(valueEdit->toolTip().contains("chop_down"));
+
+    // Toggle SmartEdit OFF -> reverts to raw key
+    QTest::mouseClick(smartEditToggle, Qt::LeftButton);
+    processOutlinerUpdates();
+    CHECK_FALSE(pref(Preferences::EntityPropertiesSmartEdit));
+
+    chopRow = propertyRow(editor, "chop_down");
+    REQUIRE(chopRow != nullptr);
+    keyLabel =
+      static_cast<ElidedLabel*>(chopRow->findChild<QWidget*>("outlinerPropertyKey"));
+    REQUIRE(keyLabel != nullptr);
+    CHECK(keyLabel->text() == "chop_down");
+
+    // Restore pref
+    setPref(Preferences::EntityPropertiesSmartEdit, true);
+  }
+
+  SECTION("Add property key completer is populated with entity definition keys")
+  {
+    map.entityDefinitionManager().setDefinitions({{
+      "completer_test",
+      RgbB{255, 255, 255},
+      "Test entity",
+      {
+        {"test_prop_a", mdl::PropertyValueTypes::String{}, "Prop A", ""},
+        {"test_prop_b", mdl::PropertyValueTypes::Integer{}, "Prop B", ""},
+      },
+      mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}},
+    }});
+    const auto* definition = map.entityDefinitionManager().definition("completer_test");
+    REQUIRE(definition != nullptr);
+
+    auto* entityNode = mdl::createPointEntity(map, *definition, {0, 0, 0});
+    mdl::selectNodes(map, {entityNode});
+    processOutlinerUpdates();
+
+    auto* addKey = editor.findChild<QLineEdit*>("outlinerPropertyAddKey");
+    REQUIRE(addKey != nullptr);
+    REQUIRE(addKey->completer() != nullptr);
+    auto* model = addKey->completer()->model();
+    REQUIRE(model != nullptr);
+    CHECK(model->rowCount() == 2);
   }
 }
 

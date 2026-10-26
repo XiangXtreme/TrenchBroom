@@ -10,6 +10,9 @@ class QLabel;
 class QLineEdit;
 class QScrollArea;
 class QVBoxLayout;
+class QToolButton;
+class QCompleter;
+class QStringListModel;
 
 namespace tb::mdl
 {
@@ -36,6 +39,10 @@ private:
   QScrollArea* m_scrollArea = nullptr;
   QWidget* m_scrollContents = nullptr;
   QVBoxLayout* m_scrollLayout = nullptr;
+
+  QToolButton* m_smartEditButton = nullptr;
+  QCompleter* m_addKeyCompleter = nullptr;
+  QStringListModel* m_completerModel = nullptr;
 
   QWidget* m_addPropertyBar = nullptr;
   QLineEdit* m_addKey = nullptr;

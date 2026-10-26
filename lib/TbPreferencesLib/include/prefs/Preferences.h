@@ -239,6 +239,8 @@ inline auto EnableMSAA = Preference<bool>{"render/Enable multisampling", true};
 
 inline auto AlignmentLock = Preference<bool>{"Editor/Texture lock", true};
 inline auto UvLock = Preference<bool>{"Editor/UV lock", false};
+inline auto EntityPropertiesSmartEdit =
+  Preference<bool>{"Editor/Entity properties SmartEdit", true};
 inline auto GroupBrushesCreatedByShapeTool =
   Preference<bool>{"Editor/Group brushes created by shape tool", true};
 

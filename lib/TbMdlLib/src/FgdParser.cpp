@@ -104,6 +104,29 @@ FgdTokenizer::FgdTokenizer(const std::string_view str)
 {
 }
 
+std::string FgdTokenizer::takeLastComment()
+{
+  auto result = std::move(m_lastComment);
+  m_lastComment.clear();
+  return result;
+}
+
+void FgdTokenizer::clearLastComment()
+{
+  m_lastComment.clear();
+  m_accumulatedComment.clear();
+}
+
+FgdTokenizer::Token FgdTokenizer::returnToken(Token token)
+{
+  if (!m_accumulatedComment.empty())
+  {
+    m_lastComment = std::move(m_accumulatedComment);
+    m_accumulatedComment.clear();
+  }
+  return token;
+}
+
 const std::string FgdTokenizer::WordDelims = " \t\n\r()[]?;:,=";
 
 FgdTokenizer::Token FgdTokenizer::emitToken()
@@ -120,35 +143,50 @@ FgdTokenizer::Token FgdTokenizer::emitToken()
       advance();
       if (curChar() == '/')
       {
+        advance();
+        const auto* start = curPos();
         discardUntil("\n\r");
+        const auto* end = curPos();
+        const auto rawComment =
+          std::string_view{start, static_cast<size_t>(end - start)};
+        const auto lineText = kdl::str_trim(rawComment);
+        const auto trimmedLine = kdl::str_trim(lineText, "-=*#/ ");
+        if (!trimmedLine.empty())
+        {
+          if (!m_accumulatedComment.empty())
+          {
+            m_accumulatedComment += "\n";
+          }
+          m_accumulatedComment += lineText;
+        }
       }
       break;
     case '(':
       advance();
-      return Token{FgdToken::OParenthesis, c, c + 1, offset(c), startLine, startColumn};
+      return returnToken(Token{FgdToken::OParenthesis, c, c + 1, offset(c), startLine, startColumn});
     case ')':
       advance();
-      return Token{FgdToken::CParenthesis, c, c + 1, offset(c), startLine, startColumn};
+      return returnToken(Token{FgdToken::CParenthesis, c, c + 1, offset(c), startLine, startColumn});
     case '[':
       advance();
-      return Token{FgdToken::OBracket, c, c + 1, offset(c), startLine, startColumn};
+      return returnToken(Token{FgdToken::OBracket, c, c + 1, offset(c), startLine, startColumn});
     case ']':
       advance();
-      return Token{FgdToken::CBracket, c, c + 1, offset(c), startLine, startColumn};
+      return returnToken(Token{FgdToken::CBracket, c, c + 1, offset(c), startLine, startColumn});
     case '=':
       advance();
-      return Token{FgdToken::Equality, c, c + 1, offset(c), startLine, startColumn};
+      return returnToken(Token{FgdToken::Equality, c, c + 1, offset(c), startLine, startColumn});
     case ',':
       advance();
-      return Token{FgdToken::Comma, c, c + 1, offset(c), startLine, startColumn};
+      return returnToken(Token{FgdToken::Comma, c, c + 1, offset(c), startLine, startColumn});
     case ':':
       advance();
-      return Token{FgdToken::Colon, c, c + 1, offset(c), startLine, startColumn};
+      return returnToken(Token{FgdToken::Colon, c, c + 1, offset(c), startLine, startColumn});
     case '"': { // quoted string
       advance();
       c = curPos();
       const auto* e = readQuotedString();
-      return Token{FgdToken::String, c, e, offset(c), startLine, startColumn};
+      return returnToken(Token{FgdToken::String, c, e, offset(c), startLine, startColumn});
     }
     case ' ':
     case '\t':
@@ -165,7 +203,7 @@ FgdTokenizer::Token FgdTokenizer::emitToken()
 
       if (curChar() == '"')
       {
-        return Token{FgdToken::Plus, c, e, offset(c), startLine, startColumn};
+        return returnToken(Token{FgdToken::Plus, c, e, offset(c), startLine, startColumn});
       }
       else
       {
@@ -178,13 +216,13 @@ FgdTokenizer::Token FgdTokenizer::emitToken()
       const auto* e = readInteger(WordDelims);
       if (e != nullptr)
       {
-        return Token{FgdToken::Integer, c, e, offset(c), startLine, startColumn};
+        return returnToken(Token{FgdToken::Integer, c, e, offset(c), startLine, startColumn});
       }
 
       e = readDecimal(WordDelims);
       if (e != nullptr)
       {
-        return Token{FgdToken::Decimal, c, e, offset(c), startLine, startColumn};
+        return returnToken(Token{FgdToken::Decimal, c, e, offset(c), startLine, startColumn});
       }
 
       e = readUntil(WordDelims);
@@ -196,12 +234,12 @@ FgdTokenizer::Token FgdTokenizer::emitToken()
       }
       else
       {
-        return Token{FgdToken::Word, c, e, offset(c), startLine, startColumn};
+        return returnToken(Token{FgdToken::Word, c, e, offset(c), startLine, startColumn});
       }
     }
     }
   }
-  return Token{FgdToken::Eof, nullptr, nullptr, length(), line(), column()};
+  return returnToken(Token{FgdToken::Eof, nullptr, nullptr, length(), line(), column()});
 }
 
 FgdParser::FgdParser(
@@ -447,6 +485,7 @@ void FgdParser::skipMainClass()
 {
   m_tokenizer.nextToken(FgdToken::Equality);
   m_tokenizer.nextToken(FgdToken::OBracket);
+  m_tokenizer.clearLastComment();
 
   auto token = Token{};
   do
@@ -560,6 +599,7 @@ std::vector<PropertyDefinition> FgdParser::parsePropertyDefinitions(ParserStatus
   auto propertyDefinitions = std::vector<PropertyDefinition>{};
 
   m_tokenizer.nextToken(FgdToken::OBracket);
+  m_tokenizer.clearLastComment();
   auto token =
     m_tokenizer.peekToken(FgdToken::Word | FgdToken::Integer | FgdToken::CBracket);
 
@@ -586,6 +626,7 @@ std::vector<PropertyDefinition> FgdParser::parsePropertyDefinitions(ParserStatus
 
 PropertyDefinition FgdParser::parsePropertyDefinition(ParserStatus& status)
 {
+  auto commentDoc = m_tokenizer.takeLastComment();
   auto token = m_tokenizer.nextToken(FgdToken::Word | FgdToken::Integer);
 
   const auto location = token.location();
@@ -596,14 +637,24 @@ PropertyDefinition FgdParser::parsePropertyDefinition(ParserStatus& status)
   {
     if (token.hasType(FgdToken::Word))
     {
-      return parseInputPropertyDefinition(status);
+      auto prop = parseInputPropertyDefinition(status);
+      if (prop.longDescription.empty() && !commentDoc.empty())
+      {
+        prop.longDescription = std::move(commentDoc);
+      }
+      return prop;
     }
   }
   else if (kdl::ci::str_is_equal(propertyKeyOrIOKeyword, "output"))
   {
     if (token.hasType(FgdToken::Word))
     {
-      return parseOutputPropertyDefinition(status);
+      auto prop = parseOutputPropertyDefinition(status);
+      if (prop.longDescription.empty() && !commentDoc.empty())
+      {
+        prop.longDescription = std::move(commentDoc);
+      }
+      return prop;
     }
   }
 
@@ -613,54 +664,63 @@ PropertyDefinition FgdParser::parsePropertyDefinition(ParserStatus& status)
   const auto typeName = token.data();
   m_tokenizer.nextToken(FgdToken::CParenthesis);
 
-  if (kdl::ci::str_is_equal(typeName, "target_destination"))
-  {
-    return parseTargetDestinationPropertyDefinition(status, std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "target_source"))
-  {
-    return parseTargetSourcePropertyDefinition(status, std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "string"))
-  {
-    return parseStringPropertyDefinition(status, std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "integer"))
-  {
-    return parseIntegerPropertyDefinition(status, std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "float"))
-  {
-    return parseFloatPropertyDefinition(status, std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "choices"))
-  {
-    return parseChoicesPropertyDefinition(status, std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "flags"))
-  {
-    return parseFlagsPropertyDefinition(std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "origin"))
-  {
-    return parseOriginPropertyDefinition(status, std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "color1"))
-  {
-    return parseColorPropertyDefinition(
-      status, ColorType::Color1, std::move(propertyKey));
-  }
-  if (kdl::ci::str_is_equal(typeName, "color255"))
-  {
-    return parseColorPropertyDefinition(
-      status, ColorType::Color255, std::move(propertyKey));
-  }
+  auto parseDef = [&]() -> PropertyDefinition {
+    if (kdl::ci::str_is_equal(typeName, "target_destination"))
+    {
+      return parseTargetDestinationPropertyDefinition(status, std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "target_source"))
+    {
+      return parseTargetSourcePropertyDefinition(status, std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "string"))
+    {
+      return parseStringPropertyDefinition(status, std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "integer"))
+    {
+      return parseIntegerPropertyDefinition(status, std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "float"))
+    {
+      return parseFloatPropertyDefinition(status, std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "choices"))
+    {
+      return parseChoicesPropertyDefinition(status, std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "flags"))
+    {
+      return parseFlagsPropertyDefinition(std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "origin"))
+    {
+      return parseOriginPropertyDefinition(status, std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "color1"))
+    {
+      return parseColorPropertyDefinition(
+        status, ColorType::Color1, std::move(propertyKey));
+    }
+    if (kdl::ci::str_is_equal(typeName, "color255"))
+    {
+      return parseColorPropertyDefinition(
+        status, ColorType::Color255, std::move(propertyKey));
+    }
 
-  status.debug(
-    location,
-    fmt::format(
-      "Unknown property definition type '{}' for property '{}'", typeName, propertyKey));
-  return parseUnknownPropertyDefinition(status, std::move(propertyKey));
+    status.debug(
+      location,
+      fmt::format(
+        "Unknown property definition type '{}' for property '{}'", typeName, propertyKey));
+    return parseUnknownPropertyDefinition(status, std::move(propertyKey));
+  };
+
+  auto prop = parseDef();
+  if (prop.longDescription.empty() && !commentDoc.empty())
+  {
+    prop.longDescription = std::move(commentDoc);
+  }
+  return prop;
 }
 
 PropertyDefinition FgdParser::parseTargetSourcePropertyDefinition(
@@ -748,6 +808,7 @@ PropertyDefinition FgdParser::parseChoicesPropertyDefinition(
 
   m_tokenizer.nextToken(FgdToken::Equality);
   m_tokenizer.nextToken(FgdToken::OBracket);
+  m_tokenizer.clearLastComment();
 
   auto token = m_tokenizer.nextToken(
     FgdToken::Integer | FgdToken::Decimal | FgdToken::String | FgdToken::CBracket);
@@ -780,6 +841,7 @@ PropertyDefinition FgdParser::parseFlagsPropertyDefinition(std::string propertyK
 
   m_tokenizer.nextToken(FgdToken::Equality);
   m_tokenizer.nextToken(FgdToken::OBracket);
+  m_tokenizer.clearLastComment();
 
   auto token = m_tokenizer.nextToken(FgdToken::Integer | FgdToken::CBracket);
 

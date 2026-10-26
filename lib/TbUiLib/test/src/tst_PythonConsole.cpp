@@ -250,7 +250,7 @@ TEST_CASE("PythonConsole")
   console.updateCompleter(true);
   labels = completionLabels();
   CHECK(std::ranges::find(labels, QStringLiteral("faces")) != labels.end());
-  CHECK(std::ranges::find(labels, QStringLiteral("bounds")) == labels.end());
+  CHECK(std::ranges::find(labels, QStringLiteral("bounds")) != labels.end());
 
   // Lists do not expose their element members until explicitly indexed.
   input->setPlainText(QStringLiteral("sel.brush.entity.brushes."));

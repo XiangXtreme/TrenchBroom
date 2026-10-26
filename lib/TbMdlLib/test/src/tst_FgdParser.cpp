@@ -714,6 +714,49 @@ TEST_CASE("FgdParser")
         });
     }
 
+    SECTION("parsePropertyDefinitionWithDocComments")
+    {
+      const auto file = R"(
+      @PointClass = info_notnull : "Wildcard entity"
+      [
+         // Useful documentation comment for sounds
+         sounds(integer) : "CD track to play" : 1
+         // Multi-line documentation
+         // second line of comments
+         sounds2(string) : "Track title" : "ambient"
+         // Explicit long description overrides comment
+         sounds3(integer) : "Volume" : 10 : "Explicit override"
+      ])";
+
+      auto parser = FgdParser{file, RgbaF{1.0f, 1.0f, 1.0f, 1.0f}};
+      auto status = TestParserStatus{};
+
+      CHECK(
+        parser.parseDefinitions(status)
+        == std::vector<mdl::EntityDefinition>{
+          {
+            "info_notnull",
+            RgbaF{1.0f, 1.0f, 1.0f, 1.0f},
+            "Wildcard entity",
+            {
+              {"sounds",
+               mdl::PropertyValueTypes::Integer{1},
+               "CD track to play",
+               "Useful documentation comment for sounds"},
+              {"sounds2",
+               mdl::PropertyValueTypes::String{"ambient"},
+               "Track title",
+               "Multi-line documentation\nsecond line of comments"},
+              {"sounds3",
+               mdl::PropertyValueTypes::Integer{10},
+               "Volume",
+               "Explicit override"},
+            },
+            mdl::PointEntityDefinition{{{-8, -8, -8}, {8, 8, 8}}, {}, {}},
+          },
+        });
+    }
+
     SECTION("parseReadOnlyPropertyDefinition")
     {
       const auto file = R"(

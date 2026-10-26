@@ -75,9 +75,16 @@ class FgdTokenizer : public Tokenizer<FgdToken::Type>
 public:
   explicit FgdTokenizer(std::string_view str);
 
+  std::string takeLastComment();
+  void clearLastComment();
+
 private:
   static const std::string WordDelims;
+  std::string m_lastComment;
+  std::string m_accumulatedComment;
+
   Token emitToken() override;
+  Token returnToken(Token token);
 };
 
 class FgdParser : public EntityDefinitionParser, public Parser<FgdToken::Type>

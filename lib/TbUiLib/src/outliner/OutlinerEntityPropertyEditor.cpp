@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QCompleter>
 #include <QEvent>
 #include <QFileDialog>
 #include <QFrame>
@@ -17,12 +18,15 @@
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QStringList>
+#include <QStringListModel>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 
 #include "base/Color.h"
+#include "base/PreferenceManager.h"
+#include "prefs/Preferences.h"
 #include "mdl/EntityColorPropertyValue.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityNodeBase.h"
@@ -460,6 +464,121 @@ QIcon colorSwatchIcon(const QColor& color, const QPalette& palette)
   painter.drawRoundedRect(pixmap.rect().adjusted(0, 0, -1, -1), 2, 2);
   return QIcon{pixmap};
 }
+
+QString propertyValueTypeName(const mdl::PropertyValueType& type)
+{
+  return std::visit(
+    [](const auto& valueType) -> QString {
+      using T = std::decay_t<decltype(valueType)>;
+      if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::LinkTarget>)
+      {
+        return "target";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::LinkSource>)
+      {
+        return "target_source";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::String>)
+      {
+        return "string";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Boolean>)
+      {
+        return "boolean";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Integer>)
+      {
+        return "integer";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Float>)
+      {
+        return "float";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Choice>)
+      {
+        return "choice";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Flags>)
+      {
+        return "flags";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Origin>)
+      {
+        return "origin";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Input>)
+      {
+        return "input";
+      }
+      else if constexpr (std::is_same_v<T, mdl::PropertyValueTypes::Output>)
+      {
+        return "output";
+      }
+      else if constexpr (
+        std::is_same_v<T, mdl::PropertyValueTypes::Color<RgbF>>
+        || std::is_same_v<T, mdl::PropertyValueTypes::Color<RgbB>>
+        || std::is_same_v<T, mdl::PropertyValueTypes::Color<Rgb>>)
+      {
+        return "color";
+      }
+      else
+      {
+        return "unknown";
+      }
+    },
+    type);
+}
+
+QString makePropertyTooltip(
+  const std::string& key,
+  const mdl::PropertyDefinition* propertyDef,
+  const mdl::MapTextEncoding& encoding)
+{
+  auto lines = QStringList{};
+  if (
+    propertyDef != nullptr && !propertyDef->shortDescription.empty()
+    && propertyDef->shortDescription != key)
+  {
+    lines.push_back(
+      QString{"<b>%1</b> (<code>%2</code>)"}
+        .arg(mapStringToUnicode(encoding, propertyDef->shortDescription).toHtmlEscaped())
+        .arg(QString::fromStdString(key).toHtmlEscaped()));
+  }
+  else
+  {
+    lines.push_back(
+      QString{"<b><code>%1</code></b>"}.arg(QString::fromStdString(key).toHtmlEscaped()));
+  }
+
+  if (propertyDef != nullptr)
+  {
+    auto meta = QStringList{};
+    meta.push_back(
+      QString{"Type: %1"}.arg(propertyValueTypeName(propertyDef->valueType)));
+    if (const auto defVal = mdl::PropertyDefinition::defaultValue(*propertyDef))
+    {
+      meta.push_back(
+        QString{"Default: %1"}.arg(mapStringToUnicode(encoding, *defVal).toHtmlEscaped()));
+    }
+    if (propertyDef->readOnly)
+    {
+      meta.push_back("ReadOnly");
+    }
+    lines.push_back(
+      QString{"<span style='color: gray;'>%1</span>"}.arg(meta.join(" &nbsp;|&nbsp; ")));
+
+    if (!propertyDef->longDescription.empty())
+    {
+      lines.push_back(
+        QString{"<hr style='border: none; border-top: 1px solid gray;'>%1"}
+          .arg(mapStringToUnicode(encoding, propertyDef->longDescription)
+                 .toHtmlEscaped()
+                 .replace("\n", "<br>")));
+    }
+  }
+
+  return lines.join("<br>");
+}
 } // namespace
 
 OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
@@ -471,6 +590,27 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   m_propertiesPanel->setObjectName("OutlinerPropertyPanel");
   m_propertiesPanel->getTitleBar()->setObjectName("OutlinerPropertySectionHeader");
   m_propertiesPanel->getPanel()->setObjectName("OutlinerPropertyPanelBody");
+
+  auto* titleBarLayout =
+    qobject_cast<QHBoxLayout*>(m_propertiesPanel->getTitleBar()->layout());
+  m_smartEditButton = createBitmapToggleButton(
+    "InspectorEntity.svg",
+    tr("Toggle SmartEdit (Show friendly names / Raw keys)"),
+    m_propertiesPanel->getTitleBar());
+  m_smartEditButton->setObjectName("outlinerPropertySmartEditToggle");
+  m_smartEditButton->setProperty("tbControlRole", "compact");
+  m_smartEditButton->setIconSize(QSize{14, 14});
+  m_smartEditButton->setFixedSize(QSize{22, 22});
+  m_smartEditButton->setChecked(pref(Preferences::EntityPropertiesSmartEdit));
+  if (titleBarLayout != nullptr)
+  {
+    titleBarLayout->addWidget(m_smartEditButton, 0, Qt::AlignRight);
+  }
+
+  connect(m_smartEditButton, &QAbstractButton::toggled, this, [this](const bool checked) {
+    setPref(Preferences::EntityPropertiesSmartEdit, checked);
+    scheduleUpdate(true);
+  });
 
   m_selectionSummary = new QLabel{m_propertiesPanel->getPanel()};
   m_selectionSummary->setObjectName("outlinerPropertySelectionSummary");
@@ -501,6 +641,13 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   m_addKey->setObjectName("outlinerPropertyAddKey");
   m_addKey->setPlaceholderText(tr("Key"));
   m_addKey->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+
+  m_addKeyCompleter = new QCompleter{this};
+  m_addKeyCompleter->setCaseSensitivity(Qt::CaseInsensitive);
+  m_addKeyCompleter->setFilterMode(Qt::MatchContains);
+  m_completerModel = new QStringListModel{m_addKeyCompleter};
+  m_addKeyCompleter->setModel(m_completerModel);
+  m_addKey->setCompleter(m_addKeyCompleter);
 
   m_addValue = new QLineEdit{m_addPropertyBar};
   m_addValue->setObjectName("outlinerPropertyAddValue");
@@ -564,6 +711,20 @@ void OutlinerEntityPropertyEditor::connectObservers()
     refreshVisiblePropertyValues();
     refreshEmbeddedEditors();
   });
+  m_notifierConnection +=
+    PreferenceManager::instance().preferenceDidChangeNotifier.connect(
+      [this](const auto& path) {
+        if (path == Preferences::EntityPropertiesSmartEdit.path)
+        {
+          const auto smartEdit = pref(Preferences::EntityPropertiesSmartEdit);
+          if (m_smartEditButton->isChecked() != smartEdit)
+          {
+            const QSignalBlocker blocker{m_smartEditButton};
+            m_smartEditButton->setChecked(smartEdit);
+          }
+          scheduleUpdate(true);
+        }
+      });
 }
 
 void OutlinerEntityPropertyEditor::scheduleUpdate(const bool force)
@@ -777,6 +938,33 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   m_selectionSummary->setVisible(entityNodes.size() > 1);
 
   const auto* entityDefinition = mdl::selectEntityDefinition(entityNodes);
+  if (entityDefinition != nullptr && !entityDefinition->description.empty())
+  {
+    const auto classDesc =
+      mapStringToUnicode(m_document.map().encoding(), entityDefinition->description);
+    m_propertiesPanel->getTitleBar()->setToolTip(
+      QString{"<b>%1</b>: %2"}.arg(className.toHtmlEscaped(), classDesc.toHtmlEscaped()));
+    m_selectionSummary->setToolTip(
+      QString{"<b>%1</b>: %2"}.arg(className.toHtmlEscaped(), classDesc.toHtmlEscaped()));
+  }
+  else
+  {
+    m_propertiesPanel->getTitleBar()->setToolTip(QString{});
+    m_selectionSummary->setToolTip(QString{});
+  }
+
+  auto completions = QStringList{};
+  if (entityDefinition != nullptr)
+  {
+    for (const auto& propDef : entityDefinition->propertyDefinitions)
+    {
+      completions.push_back(QString::fromStdString(propDef.key));
+    }
+  }
+  completions.sort(Qt::CaseInsensitive);
+  completions.removeDuplicates();
+  m_completerModel->setStringList(completions);
+
   const auto keys = buildKeyOrderWithInactiveDefinitions(entityNodes, entityDefinition);
   const auto& wadKey = m_document.map().gameInfo().gameConfig.materialConfig.property;
   const auto canShowWadEditor = wadKey.has_value() && entityNodes.size() == 1
@@ -794,19 +982,31 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     row->setProperty("propertyKey", QString::fromStdString(key));
     row->setAttribute(Qt::WA_StyledBackground, true);
 
-    auto* keyLabel = new ElidedLabel{
-      mapStringToUnicode(m_document.map().encoding(), key), Qt::ElideRight, row};
+    const auto isSmartEdit = pref(Preferences::EntityPropertiesSmartEdit);
+    const auto* propertyDef = mdl::selectPropertyDefinition(key, entityNodes);
+
+    auto labelText = mapStringToUnicode(m_document.map().encoding(), key);
+    if (isSmartEdit && propertyDef != nullptr && !propertyDef->shortDescription.empty())
+    {
+      labelText =
+        mapStringToUnicode(m_document.map().encoding(), propertyDef->shortDescription);
+    }
+
+    auto* keyLabel = new ElidedLabel{labelText, Qt::ElideRight, row};
     keyLabel->setObjectName("outlinerPropertyKey");
     keyLabel->setProperty("propertyKey", QString::fromStdString(key));
     keyLabel->setMinimumWidth(0);
     keyLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     keyLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
+    const auto rowTooltip =
+      makePropertyTooltip(key, propertyDef, m_document.map().encoding());
+    keyLabel->setToolTip(rowTooltip);
+
     QLineEdit* valueEdit = nullptr;
     QComboBox* valueCombo = nullptr;
 
-    const auto* propertyDef = mdl::selectPropertyDefinition(key, entityNodes);
-    if (propertyDef)
+    if (propertyDef != nullptr)
     {
       if (
         const auto* choiceType =
@@ -854,13 +1054,15 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
 
     const auto consensus = consensusValue(key, entityNodes);
     const auto inactive = propertyDef != nullptr && !consensus.anyPresent;
-    if (valueCombo)
+    if (valueCombo != nullptr)
     {
       valueCombo->setProperty("inactive", inactive);
+      valueCombo->setToolTip(rowTooltip);
     }
-    if (valueEdit)
+    if (valueEdit != nullptr)
     {
       valueEdit->setProperty("inactive", inactive);
+      valueEdit->setToolTip(rowTooltip);
     }
     if (inactive)
     {
