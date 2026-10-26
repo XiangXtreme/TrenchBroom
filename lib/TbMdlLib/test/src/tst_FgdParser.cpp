@@ -82,6 +82,35 @@ TEST_CASE("FgdParser")
     }
   }
 
+  SECTION("parse Chinese UTF-8 content")
+  {
+    const auto file = R"(
+// 细节画刷实体
+@SolidClass = func_detail : "细节画刷"
+[
+	// 细节层级建议保留为1
+	zhlt_detaillevel(integer) : "细节层级" : 1
+	zhlt_noclip(choices) : "无碰撞穿透" : 0 =
+	[
+		0 : "否"
+		1 : "是"
+	]
+]
+)";
+    auto parser = FgdParser{file, RgbaF{1.0f, 1.0f, 1.0f, 1.0f}};
+    auto status = TestParserStatus{};
+    const auto result = parser.parseDefinitions(status);
+    REQUIRE(result.is_success());
+    const auto& defs = result.value();
+    REQUIRE(defs.size() == 1);
+    CHECK(defs.front().name == "func_detail");
+    CHECK(defs.front().description == "细节画刷");
+    REQUIRE(defs.front().propertyDefinitions.size() == 2);
+    CHECK(defs.front().propertyDefinitions[0].shortDescription == "细节层级");
+    CHECK(defs.front().propertyDefinitions[0].longDescription == "细节层级建议保留为1");
+    CHECK(defs.front().propertyDefinitions[1].shortDescription == "无碰撞穿透");
+  }
+
   SECTION("empty and whitespace input")
   {
     SECTION("parseEmptyFile")

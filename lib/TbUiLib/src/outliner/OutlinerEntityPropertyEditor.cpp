@@ -540,44 +540,60 @@ QString makePropertyTooltip(
     && propertyDef->shortDescription != key)
   {
     lines.push_back(
-      QString{"<b>%1</b> (<code>%2</code>)"}
+      QString{
+        "<div style='font-size: 11pt; font-weight: bold; line-height: 1.2;'>%1 "
+        "<span style='font-size: 9pt; font-weight: normal; color: #888888;'>[%2]</span></div>"}
         .arg(mapStringToUnicode(encoding, propertyDef->shortDescription).toHtmlEscaped())
         .arg(QString::fromStdString(key).toHtmlEscaped()));
   }
   else
   {
     lines.push_back(
-      QString{"<b><code>%1</code></b>"}.arg(QString::fromStdString(key).toHtmlEscaped()));
+      QString{
+        "<div style='font-size: 11pt; font-weight: bold; line-height: 1.2;'>%1</div>"}
+        .arg(QString::fromStdString(key).toHtmlEscaped()));
   }
 
   if (propertyDef != nullptr)
   {
     auto meta = QStringList{};
     meta.push_back(
-      QString{"Type: %1"}.arg(propertyValueTypeName(propertyDef->valueType)));
+      QString{"%1: <span style='color: #cccccc;'>%2</span>"}
+        .arg(QCoreApplication::translate("OutlinerEntityPropertyEditor", "Type"))
+        .arg(propertyValueTypeName(propertyDef->valueType)));
     if (const auto defVal = mdl::PropertyDefinition::defaultValue(*propertyDef))
     {
       meta.push_back(
-        QString{"Default: %1"}.arg(mapStringToUnicode(encoding, *defVal).toHtmlEscaped()));
+        QString{"%1: <span style='color: #cccccc;'>%2</span>"}
+          .arg(QCoreApplication::translate("OutlinerEntityPropertyEditor", "Default"))
+          .arg(mapStringToUnicode(encoding, *defVal).toHtmlEscaped()));
     }
     if (propertyDef->readOnly)
     {
-      meta.push_back("ReadOnly");
+      meta.push_back(
+        QString{"<span style='color: #e09040;'>%1</span>"}.arg(
+          QCoreApplication::translate("OutlinerEntityPropertyEditor", "Read Only")));
     }
     lines.push_back(
-      QString{"<span style='color: gray;'>%1</span>"}.arg(meta.join(" &nbsp;|&nbsp; ")));
+      QString{"<div style='font-size: 9pt; color: #888888; margin-top: 3px;'>%1</div>"}
+        .arg(meta.join(" &nbsp;|&nbsp; ")));
 
     if (!propertyDef->longDescription.empty())
     {
       lines.push_back(
-        QString{"<hr style='border: none; border-top: 1px solid gray;'>%1"}
+        QString{
+          "<div style='margin-top: 6px; padding-top: 6px; border-top: 1px solid #444444; "
+          "font-size: 9.5pt; color: #d8d8d8; line-height: 1.4;'>%1</div>"}
           .arg(mapStringToUnicode(encoding, propertyDef->longDescription)
                  .toHtmlEscaped()
                  .replace("\n", "<br>")));
     }
   }
 
-  return lines.join("<br>");
+  return QString{
+    "<div style='font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif; "
+    "font-size: 9.5pt;'>%1</div>"}
+    .arg(lines.join(""));
 }
 } // namespace
 
