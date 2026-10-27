@@ -1437,7 +1437,8 @@
 	zhlt_studiobsp(choices) : "Bake Model Geometry into BSP" : "" =
 	[
 		"": "No (Keep as MDL Studio Model in Engine)"
-		1: "Yes (Convert to func_wall Brushes)"
+		1: "Yes (Convert to visible func_wall Brushes)"
+		2: "Collision Only (Invisible, No MDL at runtime)"
 	]
 	zhlt_studiobsp_doublesided(choices) : "Generated Back Faces" : 1 =
 	[
