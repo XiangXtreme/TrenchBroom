@@ -95,6 +95,7 @@ target_sources(TbMdlLibTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Octree.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Palette.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ParseCompilationConfig.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ParseConfigExpression.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ParseGameConfig.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ParseGameEngineConfig.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PatchNode.cpp
@@ -104,6 +105,7 @@ target_sources(TbMdlLibTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Polyhedron.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PortalFile.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Quake3ShaderParser.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_RockFormation.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Selection.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Tagging.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Transaction.cpp

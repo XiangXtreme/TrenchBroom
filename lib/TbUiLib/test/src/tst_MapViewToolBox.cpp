@@ -280,7 +280,7 @@ TEST_CASE("MapViewToolBox")
     toolBox.toggleRotateTool();
     const auto faceIndex = *brushNode->brush().findFace(vm::vec3d{1, 0, 0});
     mdl::deselectAll(map);
-    mdl::selectBrushFaces(map, {{brushNode, faceIndex}});
+    mdl::selectBrushFaces(map, {{*brushNode, faceIndex}});
     toolBox.toggleSweepTool();
 
     CHECK(toolBox.sweepToolActive());
@@ -301,7 +301,7 @@ TEST_CASE("MapViewToolBox")
     const auto sourceFaceIndex = *sourceNode->brush().findFace(vm::vec3d{1, 0, 0});
     const auto targetFaceIndex = *targetNode->brush().findFace(vm::vec3d{-1, 0, 0});
     mdl::selectBrushFaces(
-      map, {{sourceNode, sourceFaceIndex}, {targetNode, targetFaceIndex}});
+      map, {{*sourceNode, sourceFaceIndex}, {*targetNode, targetFaceIndex}});
 
     toolBox.toggleSweepTool();
     REQUIRE(toolBox.sweepToolActive());

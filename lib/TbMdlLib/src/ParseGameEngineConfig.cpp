@@ -21,10 +21,10 @@
 
 #include "base/Uuid.h"
 #include "el/EvaluationContext.h"
-#include "el/ParseExpression.h"
 #include "el/Value.h"
 #include "mdl/GameEngineConfig.h"
 #include "mdl/GameEngineProfile.h"
+#include "mdl/ParseConfigExpression.h"
 
 #include "kd/ranges/to.h"
 
@@ -39,22 +39,20 @@ namespace tb::mdl
 namespace
 {
 
-GameEngineProfile toProfile(const el::EvaluationContext& context, const el::Value& value)
+GameEngineProfile toProfile(const el::Value& value)
 {
   return {
-    .id = value.contains(context, "id") ? value.at(context, "id").stringValue(context)
-                                        : generateUuid(),
-    .name = value.at(context, "name").stringValue(context),
-    .path = std::filesystem::path{value.at(context, "path").stringValue(context)},
-    .parameterSpec = value.at(context, "parameters").stringValue(context),
+    .id = value.contains("id") ? value.at("id").stringValue() : generateUuid(),
+    .name = value.at("name").stringValue(),
+    .path = std::filesystem::path{value.at("path").stringValue()},
+    .parameterSpec = value.at("parameters").stringValue(),
   };
 }
 
-std::vector<GameEngineProfile> toProfiles(
-  const el::EvaluationContext& context, const el::Value& value)
+std::vector<GameEngineProfile> toProfiles(const el::Value& value)
 {
-  return value.arrayValue(context) | std::views::transform([&](const auto& profileValue) {
-           return toProfile(context, profileValue);
+  return value.arrayValue() | std::views::transform([&](const auto& profileValue) {
+           return toProfile(profileValue);
          })
          | kdl::ranges::to<std::vector>();
 }
@@ -64,24 +62,23 @@ Result<GameEngineConfig> toGameEngineConfig(
 {
   const auto root = expression.evaluate(context);
 
-  if (const auto version = root.at(context, "version").numberValue(context);
-      version != 1.0)
+  if (const auto version = root.at("version").numberValue();
+      version != 1.0 && version != 2.0)
   {
     return Error{fmt::format("Unsupported game engine config version {}", version)};
   }
 
-  return GameEngineConfig{toProfiles(context, root.at(context, "profiles"))};
+  return GameEngineConfig{toProfiles(root.at("profiles"))};
 }
 
 } // namespace
 
 Result<GameEngineConfig> parseGameEngineConfig(const std::string_view str)
 {
-  return el::parseExpression(el::ParseMode::Strict, str)
-         | kdl::and_then([&](const auto& expression) {
-             return el::withEvaluationContext(
-               [&](auto& context) { return toGameEngineConfig(context, expression); });
-           });
+  return parseConfigExpression(str, 1) | kdl::and_then([&](const auto& expression) {
+           return el::withEvaluationContext(
+             [&](auto& context) { return toGameEngineConfig(context, expression); });
+         });
 }
 
 } // namespace tb::mdl

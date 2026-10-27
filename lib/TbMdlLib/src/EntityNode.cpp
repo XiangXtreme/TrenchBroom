@@ -250,12 +250,12 @@ Node* EntityNode::doGetContainer()
 
 LayerNode* EntityNode::doGetContainingLayer()
 {
-  return findContainingLayer(this);
+  return findContainingLayer(*this);
 }
 
 GroupNode* EntityNode::doGetContainingGroup()
 {
-  return findContainingGroup(this);
+  return findContainingGroup(*this);
 }
 
 void EntityNode::invalidateBounds()

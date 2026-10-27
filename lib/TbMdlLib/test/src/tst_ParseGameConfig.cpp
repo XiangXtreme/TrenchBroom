@@ -19,6 +19,7 @@
 
 #include "TestEnvironment.h"
 #include "el/Expression.h"
+#include "el/TestUtils.h"
 #include "fs/DiskIO.h"
 #include "fs/Reader.h"
 #include "fs/TraversalMode.h"
@@ -30,8 +31,11 @@
 
 #include <filesystem>
 #include <string>
+#include <tuple>
+#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace tb::mdl
 {
@@ -70,6 +74,107 @@ TEST_CASE("GameConfigParser")
     SECTION("parseEmptyConfig")
     {
       CHECK(parseGameConfig("  {  } ").is_error());
+    }
+  }
+
+  SECTION("version")
+  {
+    SECTION("parseUnsupportedVersion")
+    {
+      CHECK(
+        parseGameConfig(R"({ "version": 8 })")
+        == Result<GameConfig>{
+          Error{"At line 1, column 14: Unsupported game configuration version 8; valid "
+                "versions are: 9, 10"}});
+      CHECK(
+        parseGameConfig(R"({ "version": "8" })")
+        == Result<GameConfig>{
+          Error{"At line 1, column 14: Unsupported game configuration version 8; valid "
+                "versions are: 9, 10"}});
+    }
+
+    SECTION("parseVersionNotConvertibleToNumber")
+    {
+      CHECK(
+        parseGameConfig(R"({ "version": "abc" })")
+        == Result<GameConfig>{Error{
+          R"(At line 1, column 14: Cannot convert value '"abc"' of type 'String' to type 'Number')"}});
+      CHECK(
+        parseGameConfig(R"({ "version": [9] })")
+        == Result<GameConfig>{Error{
+          "At line 1, column 14: Cannot convert value '[9]' of type 'Array' to type "
+          "'Number'"}});
+    }
+
+    SECTION("parseVersionConvertibleToNumber")
+    {
+      const auto config = R"(
+{
+    "version": "9",
+    "name": "Quake",
+    "fileformats": [
+        { "format": "Standard" }
+    ],
+    "filesystem": {
+        "searchpath": "id1",
+        "packageformat": { "extension": "pak", "format": "idpak" }
+    },
+    "materials": {
+        "root": "textures",
+        "extensions": ["D"],
+        "palette": "gfx/palette.lmp",
+        "attribute": "wad"
+    },
+    "entities": {
+        "definitions": [ "Quake.fgd" ],
+        "defaultcolor": "0.6 0.6 0.6 1.0"
+    }
+}
+)";
+
+      CHECK(parseGameConfig(config).is_success());
+    }
+
+    SECTION("parseStringEscapingByVersion")
+    {
+      // version 9 uses legacy string escaping, where every backslash escapes a
+      // following backslash or quote
+      using T = std::tuple<std::string, std::string>;
+      const auto [version, expectedExclude] = GENERATE(values<T>({
+        {"9", R"(skip\*)"},
+        {"10", R"(skip\\*)"},
+      }));
+      CAPTURE(version);
+
+      const auto config = R"(
+{
+    "version": )" + version
+                          + R"(,
+    "name": "Quake",
+    "fileformats": [
+        { "format": "Standard" }
+    ],
+    "filesystem": {
+        "searchpath": "id1",
+        "packageformat": { "extension": "pak", "format": "idpak" }
+    },
+    "materials": {
+        "root": "textures",
+        "extensions": ["D"],
+        "excludes": ["skip\\*"]
+    },
+    "entities": {
+        "definitions": [ "Quake.fgd" ],
+        "defaultcolor": "0.6 0.6 0.6 1.0"
+    }
+}
+)";
+
+      const auto gameConfig = parseGameConfig(config);
+      REQUIRE(gameConfig);
+      CHECK(
+        gameConfig.value().materialConfig.excludes
+        == std::vector<std::string>{expectedExclude});
     }
   }
 
@@ -965,6 +1070,44 @@ TEST_CASE("GameConfigParser")
           std::nullopt, // soft map bounds
           {}            // compilation tools
         });
+    }
+  }
+
+  SECTION("entities")
+  {
+    SECTION("parseSwitchDefaultScaleExpression")
+    {
+      const auto config = R"(
+{
+    "version": 9,
+    "name": "Quake",
+    "fileformats": [
+        { "format": "Standard" }
+    ],
+    "filesystem": {
+        "searchpath": "id1",
+        "packageformat": { "extension": "pak", "format": "idpak" }
+    },
+    "materials": {
+        "root": "textures",
+        "extensions": ["D"],
+        "palette": "gfx/palette.lmp",
+        "attribute": "wad"
+    },
+    "entities": {
+        "definitions": [ "Quake.fgd" ],
+        "defaultcolor": "0.6 0.6 0.6 1.0",
+        "scale": {{ modelscale_vec -> modelscale_vec, 2 }}
+    }
+}
+)";
+
+      CHECK(
+        (parseGameConfig(config) | kdl::value()).entityConfig.scaleExpression
+        == el::swt({
+          el::cs(el::var("modelscale_vec"), el::var("modelscale_vec")),
+          el::lit(2),
+        }));
     }
   }
 }

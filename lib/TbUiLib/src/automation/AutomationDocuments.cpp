@@ -11,6 +11,7 @@
 
 #include "ui/automation/AutomationDocuments.h"
 
+#include "kd/filesystem_utils.h"
 #include "fs/DiskIO.h"
 #include "mdl/ExportOptions.h"
 #include "mdl/GameInfo.h"
@@ -45,7 +46,7 @@ Result<std::tuple<std::string, mdl::MapFormat>> detectGameAndFormat(
   const std::filesystem::path& path,
   const mdl::GameInfo* const fallbackGameInfo)
 {
-  const auto header = fs::Disk::withInputStream(path, mdl::readMapHeader);
+  const auto header = kdl::with_istream(path, mdl::readMapHeader);
   if (header.is_error())
   {
     return Error{errorMessage(header)};

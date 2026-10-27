@@ -44,6 +44,7 @@ public:
   void setWordDelimiters(
     const QRegularExpression& leftDelimiter, const QRegularExpression& rightDelimiter);
   void setMultiCompleter(QCompleter* completer);
+  QCompleter* multiCompleter() const { return m_multiCompleter; }
 
 protected:
   void keyPressEvent(QKeyEvent* event) override;

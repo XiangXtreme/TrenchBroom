@@ -795,11 +795,11 @@ void MapRenderer::selectionDidChange(const mdl::SelectionChange& selectionChange
 {
   for (const auto& face : selectionChange.deselectedBrushFaces)
   {
-    updateAndInvalidateNode(*face.node());
+    updateAndInvalidateNode(face.node());
   }
   for (const auto& face : selectionChange.selectedBrushFaces)
   {
-    updateAndInvalidateNode(*face.node());
+    updateAndInvalidateNode(face.node());
   }
   // These need to be recursive otherwise selecting a Group doesn't render the contents
   // selected

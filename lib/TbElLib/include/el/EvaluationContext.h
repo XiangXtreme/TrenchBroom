@@ -20,16 +20,11 @@
 #pragma once
 
 #include "Exceptions.h"
-#include "Expression.h"
 #include "Value.h"
-#include "base/FileLocation.h"
 #include "base/Macros.h"
 #include "base/Result.h"
 
-#include <memory>
-#include <optional>
 #include <string>
-#include <unordered_map>
 
 namespace tb::el
 {
@@ -37,22 +32,13 @@ namespace tb::el
 class EvaluationContext
 {
 private:
-  std::unique_ptr<VariableStore> m_variables;
-  std::unordered_map<Value, ExpressionNode> m_trace;
+  const VariableStore& m_variables;
 
   EvaluationContext();
   explicit EvaluationContext(const VariableStore& variables);
 
 public:
-  ~EvaluationContext();
-
   Value variableValue(const std::string& name) const;
-
-  std::optional<ExpressionNode> expression(const Value& value) const;
-  std::optional<FileLocation> location(const Value& value) const;
-
-  Value trace(Value value, const ExpressionNode& expression);
-  Value trace(Value value, const Value& original);
 
   template <typename F, typename... Args>
   friend auto withEvaluationContext(const F& f, Args&&... args);

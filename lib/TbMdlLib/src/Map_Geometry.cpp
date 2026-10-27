@@ -934,7 +934,7 @@ bool csgConvexMerge(Map& map, const std::string& commandName)
              auto& parentNode = !map.selection().brushes.empty()
                                   ? *map.selection().brushes.front()->parent()
                                 : !map.selection().brushFaces.empty()
-                                  ? *map.selection().brushFaces.front().node()->parent()
+                                  ? *map.selection().brushFaces.front().node().parent()
                                   : parentForNodes(map);
 
              auto* brushNode = new BrushNode{std::move(b)};

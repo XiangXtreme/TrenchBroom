@@ -48,6 +48,7 @@
 
 #include "UiComponentSnapshot.h"
 #include "base/PreferenceManager.h"
+#include "kd/filesystem_utils.h"
 #include "fs/DiskIO.h"
 #include "gl/Camera.h"
 #include "gl/Material.h"
@@ -153,7 +154,7 @@ bool configureGamePath(
     return false;
   }
 
-  return fs::Disk::withInputStream(pathFromQString(fileNames.front()), mdl::readMapHeader)
+  return kdl::with_istream(pathFromQString(fileNames.front()), mdl::readMapHeader)
          | kdl::transform([&](const auto& detectedGameAndFormat) {
              const auto& gameName = detectedGameAndFormat.first;
              if (!gameName)

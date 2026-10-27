@@ -454,12 +454,12 @@ bool setFaceUVsWithSplit(Map& map, const std::vector<FaceUVUpdate>& updates)
   for (const auto& update : updates)
   {
     if (
-      update.face.faceIndex() >= update.face.node()->brush().faceCount()
+      update.face.faceIndex() >= update.face.node().brush().faceCount()
       || update.points.size() != update.uvs.size())
     {
       return false;
     }
-    updatesByBrush[update.face.node()].push_back(&update);
+    updatesByBrush[&update.face.node()].push_back(&update);
   }
 
   if (std::ranges::none_of(updates, [](const auto& update) {
@@ -527,7 +527,7 @@ bool setFaceUVsWithSplit(Map& map, const std::vector<FaceUVUpdate>& updates)
         if (update == splitUpdate)
         {
           const auto triangleUpdate = triangleUpdateForFace(
-            BrushFaceHandle{brushNode, *pieceFaceIndex}, pieceFace, *update);
+            BrushFaceHandle{*brushNode, *pieceFaceIndex}, pieceFace, *update);
           if (!triangleUpdate || !applyFaceUV(pieceFace, *triangleUpdate))
           {
             return false;

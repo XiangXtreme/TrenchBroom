@@ -92,7 +92,7 @@ TEST_CASE("SkyRenderer.skyBrushFaceVertexCount")
 
   SECTION("selected sky face is marked for tinting")
   {
-    mdl::selectBrushFaces(map, {mdl::BrushFaceHandle{skyBrush, 0u}});
+    mdl::selectBrushFaces(map, {mdl::BrushFaceHandle{*skyBrush, 0u}});
 
     CHECK(selectedSkyBrushFaceVertexCount(map) > 0);
     CHECK(selectedSkyBrushFaceVertexCount(map) < skyBrushFaceVertexCount(map));

@@ -2,6 +2,7 @@
 
 #include "fs/DiskIO.h"
 
+#include "kd/filesystem_utils.h"
 #include "kd/path_utils.h"
 
 #include <cstdint>
@@ -310,7 +311,7 @@ Result<void> scaleGoldSrcMdlFile(const std::filesystem::path& absPath, const flo
            std::memcpy(data.data(), buffered.begin(), buffered.size());
 
            return scaleGoldSrcMdlBuffer(data, s) | kdl::and_then([&]() -> Result<void> {
-                    return fs::Disk::withOutputStream(
+                    return kdl::with_ostream(
                       absPath,
                       std::ios::out | std::ios::binary | std::ios::trunc,
                       [&](auto& stream) -> Result<void> {

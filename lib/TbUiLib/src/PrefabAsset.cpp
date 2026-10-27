@@ -21,6 +21,7 @@
 
 #include <QColor>
 
+#include "kd/filesystem_utils.h"
 #include "base/Error.h"
 #include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
@@ -252,7 +253,7 @@ Result<void> writePrefabAsset(const std::filesystem::path& path, const std::stri
 
   return fs::Disk::createDirectory(path.parent_path())
          | kdl::and_then([&](auto) -> Result<void> {
-             return fs::Disk::withOutputStream(
+             return kdl::with_ostream(
                path,
                std::ios::out | std::ios::binary | std::ios::trunc,
                [&](auto& stream) -> Result<void> {

@@ -1555,7 +1555,7 @@ void MapViewBase::showPopupMenuLater()
     const auto* entityNode = dynamic_cast<const mdl::EntityNodeBase*>(hitNode);
     if (!entityNode)
     {
-      entityNode = mdl::findContainingEntity(hitNode);
+      entityNode = mdl::findContainingEntity(*hitNode);
     }
 
     if (entityNode && entityNode != &map.worldNode())
@@ -1881,7 +1881,7 @@ mdl::Node* MapViewBase::findNewGroupForObjects(const std::vector<mdl::Node*>& no
   const auto hits = pickResult().all(type(mdl::nodeHitType()));
   if (!hits.empty())
   {
-    auto* newGroup = mdl::findOutermostClosedGroup(mdl::hitToNode(hits.front()));
+    auto* newGroup = mdl::findOutermostClosedGroup(*mdl::hitToNode(hits.front()));
     if (newGroup && canReparentNodes(nodes, newGroup))
     {
       return newGroup;
@@ -1914,7 +1914,7 @@ mdl::GroupNode* MapViewBase::findGroupToMergeGroupsInto(
   const auto hits = pickResult().all(type(mdl::nodeHitType()));
   if (!hits.empty())
   {
-    if (auto* mergeTarget = findOutermostClosedGroup(mdl::hitToNode(hits.front())))
+    if (auto* mergeTarget = findOutermostClosedGroup(*mdl::hitToNode(hits.front())))
     {
       if (std::ranges::all_of(selection.nodes, [&](const auto* node) {
             return node == mergeTarget || canReparentNode(node, mergeTarget);
@@ -1944,7 +1944,7 @@ mdl::Node& MapViewBase::findNewParentEntityForNodes(
     pickResult().first(type(mdl::BrushNode::BrushHitType | mdl::PatchNode::PatchHitType));
   if (auto* hitNode = mdl::hitToNode(hit))
   {
-    if (auto* newParent = mdl::findContainingEntity(hitNode);
+    if (auto* newParent = mdl::findContainingEntity(*hitNode);
         newParent && newParent != &map.worldNode() && canReparentNodes(nodes, newParent))
     {
       return *newParent;

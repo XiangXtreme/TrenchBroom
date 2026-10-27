@@ -91,7 +91,7 @@ bool removeNodes(mdl::Map& map, std::vector<mdl::Node*> nodes)
   auto selectedNodes = map.selection().nodes;
   std::erase_if(selectedNodes, [&](const auto* node) { return !removed(node); });
   auto selectedFaces = map.selection().brushFaces;
-  std::erase_if(selectedFaces, [&](const auto& face) { return !removed(face.node()); });
+  std::erase_if(selectedFaces, [&](const auto& face) { return !removed(&face.node()); });
   mdl::deselectBrushFaces(map, selectedFaces);
   mdl::deselectNodes(map, selectedNodes);
   return map.executeAndStore(mdl::AddRemoveNodesCommand::remove(nodesByParent));

@@ -19,8 +19,8 @@
 
 #include "el/Value.h"
 
-#include "el/EvaluationContext.h"
 #include "el/Exceptions.h"
+#include "el/Expression.h" // IWYU pragma: keep
 
 #include "kd/overload.h"
 #include "kd/ranges/to.h"
@@ -28,6 +28,8 @@
 #include "kd/string_format.h"
 #include "kd/string_utils.h"
 #include "kd/vector_utils.h"
+
+#include "vm/vec_io.h"
 
 #include <cmath>
 #include <iterator>
@@ -37,6 +39,35 @@
 
 namespace tb::el
 {
+
+static_assert(
+  sizeof(Value) <= 40, "Values are copied often, store large types in a shared pointer");
+
+namespace
+{
+
+template <typename T>
+concept AnyRange =
+  std::is_same_v<T, LeftBoundedRange> || std::is_same_v<T, RightBoundedRange>
+  || std::is_same_v<T, BoundedRange>;
+
+void appendNumber(std::ostream& str, const NumberType n)
+{
+  static constexpr auto RoundingThreshold = 0.00001;
+  if (std::abs(n - std::round(n)) < RoundingThreshold)
+  {
+    str.precision(0);
+    str.setf(std::ios::fixed);
+  }
+  else
+  {
+    str.precision(17);
+    str.unsetf(std::ios::fixed);
+  }
+  str << n;
+}
+
+} // namespace
 
 NullType::NullType() = default;
 const NullType NullType::Value = NullType{};
@@ -48,67 +79,77 @@ const Value Value::Null = Value{NullType::Value};
 const Value Value::Undefined = Value{UndefinedType::Value};
 
 Value::Value()
-  : m_value{std::make_shared<VariantType>(NullType::Value)}
+  : m_value{NullType::Value}
 {
 }
 
 Value::Value(const BooleanType value)
-  : m_value{std::make_shared<VariantType>(value)}
+  : m_value{value}
 {
 }
 
 Value::Value(StringType value)
-  : m_value{std::make_shared<VariantType>(std::move(value))}
+  : m_value{std::make_shared<const StringType>(std::move(value))}
 {
 }
 
 Value::Value(const char* value)
-  : m_value{std::make_shared<VariantType>(StringType(value))}
+  : m_value{std::make_shared<const StringType>(value)}
 {
 }
 
 Value::Value(const NumberType value)
-  : m_value{std::make_shared<VariantType>(value)}
+  : m_value{value}
 {
 }
 
 Value::Value(const int value)
-  : m_value{std::make_shared<VariantType>(static_cast<NumberType>(value))}
+  : m_value{static_cast<NumberType>(value)}
 {
 }
 
 Value::Value(const long value)
-  : m_value{std::make_shared<VariantType>(static_cast<NumberType>(value))}
+  : m_value{static_cast<NumberType>(value)}
 {
 }
 
 Value::Value(const size_t value)
-  : m_value{std::make_shared<VariantType>(static_cast<NumberType>(value))}
+  : m_value{static_cast<NumberType>(value)}
 {
 }
 
 Value::Value(ArrayType value)
-  : m_value{std::make_shared<VariantType>(std::move(value))}
+  : m_value{std::make_shared<const ArrayType>(std::move(value))}
 {
 }
 
 Value::Value(MapType value)
-  : m_value{std::make_shared<VariantType>(std::move(value))}
+  : m_value{std::make_shared<const MapType>(std::move(value))}
 {
 }
 
 Value::Value(RangeType value)
-  : m_value{std::make_shared<VariantType>(std::move(value))}
+  : m_value{std::visit([](const auto& range) { return VariantType{range}; }, value)}
+{
+}
+
+Value::Value(Vec3Type value)
+  : m_value{value}
+{
+}
+
+Value::Value(BBoxType value)
+  : m_value{std::make_shared<const BBoxType>(value)}
 {
 }
 
 Value::Value(NullType value)
-  : m_value{std::make_shared<VariantType>(value)}
+  : m_value{value}
 {
 }
 
 Value::Value(UndefinedType value)
-  : m_value{std::make_shared<VariantType>(value)}
+  : m_value{value}
 {
 }
 
@@ -117,14 +158,16 @@ ValueType Value::type() const
   return std::visit(
     kdl::overload(
       [](const BooleanType&) { return ValueType::Boolean; },
-      [](const StringType&) { return ValueType::String; },
+      [](const std::shared_ptr<const StringType>&) { return ValueType::String; },
       [](const NumberType&) { return ValueType::Number; },
-      [](const ArrayType&) { return ValueType::Array; },
-      [](const MapType&) { return ValueType::Map; },
-      [](const RangeType&) { return ValueType::Range; },
+      [](const std::shared_ptr<const ArrayType>&) { return ValueType::Array; },
+      [](const std::shared_ptr<const MapType>&) { return ValueType::Map; },
+      [](const AnyRange auto&) { return ValueType::Range; },
+      [](const Vec3Type&) { return ValueType::Vec3; },
+      [](const std::shared_ptr<const BBoxType>&) { return ValueType::BBox; },
       [](const NullType&) { return ValueType::Null; },
       [](const UndefinedType&) { return ValueType::Undefined; }),
-    *m_value);
+    m_value);
 }
 
 bool Value::hasType(ValueType type) const
@@ -142,7 +185,7 @@ std::string Value::describe() const
   return asString(false);
 }
 
-const BooleanType& Value::booleanValue(const EvaluationContext& context) const
+const BooleanType& Value::booleanValue() const
 {
   return std::visit(
     kdl::overload(
@@ -152,29 +195,27 @@ const BooleanType& Value::booleanValue(const EvaluationContext& context) const
         return b;
       },
       [&](const auto&) -> const BooleanType& {
-        throw DereferenceError{
-          context.location(*this), describe(), type(), ValueType::Boolean};
+        throw DereferenceError{location(), describe(), type(), ValueType::Boolean};
       }),
-    *m_value);
+    m_value);
 }
 
-const StringType& Value::stringValue(const EvaluationContext& context) const
+const StringType& Value::stringValue() const
 {
   return std::visit(
     kdl::overload(
-      [&](const StringType& s) -> const StringType& { return s; },
+      [&](const std::shared_ptr<const StringType>& s) -> const StringType& { return *s; },
       [&](const NullType&) -> const StringType& {
         static const StringType s;
         return s;
       },
       [&](const auto&) -> const StringType& {
-        throw DereferenceError{
-          context.location(*this), describe(), type(), ValueType::String};
+        throw DereferenceError{location(), describe(), type(), ValueType::String};
       }),
-    *m_value);
+    m_value);
 }
 
-const NumberType& Value::numberValue(const EvaluationContext& context) const
+const NumberType& Value::numberValue() const
 {
   return std::visit(
     kdl::overload(
@@ -184,72 +225,89 @@ const NumberType& Value::numberValue(const EvaluationContext& context) const
         return n;
       },
       [&](const auto&) -> const NumberType& {
-        throw DereferenceError{
-          context.location(*this), describe(), type(), ValueType::Number};
+        throw DereferenceError{location(), describe(), type(), ValueType::Number};
       }),
-    *m_value);
+    m_value);
 }
 
-IntegerType Value::integerValue(const EvaluationContext& context) const
+IntegerType Value::integerValue() const
 {
-  return static_cast<IntegerType>(numberValue(context));
+  return static_cast<IntegerType>(numberValue());
 }
 
-const ArrayType& Value::arrayValue(const EvaluationContext& context) const
+const ArrayType& Value::arrayValue() const
 {
   return std::visit(
     kdl::overload(
-      [&](const ArrayType& a) -> const ArrayType& { return a; },
+      [&](const std::shared_ptr<const ArrayType>& a) -> const ArrayType& { return *a; },
       [&](const NullType&) -> const ArrayType& {
         static const ArrayType a(0);
         return a;
       },
       [&](const auto&) -> const ArrayType& {
-        throw DereferenceError{
-          context.location(*this), describe(), type(), ValueType::Array};
+        throw DereferenceError{location(), describe(), type(), ValueType::Array};
       }),
-    *m_value);
+    m_value);
 }
 
-const MapType& Value::mapValue(const EvaluationContext& context) const
+const MapType& Value::mapValue() const
 {
   return std::visit(
     kdl::overload(
-      [&](const MapType& m) -> const MapType& { return m; },
+      [&](const std::shared_ptr<const MapType>& m) -> const MapType& { return *m; },
       [&](const NullType&) -> const MapType& {
         static const MapType m;
         return m;
       },
       [&](const auto&) -> const MapType& {
-        throw DereferenceError{
-          context.location(*this), describe(), type(), ValueType::Map};
+        throw DereferenceError{location(), describe(), type(), ValueType::Map};
       }),
-    *m_value);
+    m_value);
 }
 
-const RangeType& Value::rangeValue(const EvaluationContext& context) const
+RangeType Value::rangeValue() const
 {
   return std::visit(
     kdl::overload(
-      [&](const RangeType& r) -> const RangeType& { return r; },
-      [&](const auto&) -> const RangeType& {
-        throw DereferenceError{
-          context.location(*this), describe(), type(), ValueType::Range};
+      [&](const AnyRange auto& r) -> RangeType { return r; },
+      [&](const auto&) -> RangeType {
+        throw DereferenceError{location(), describe(), type(), ValueType::Range};
       }),
-    *m_value);
+    m_value);
 }
 
-std::vector<std::string> Value::asStringList(const EvaluationContext& context) const
+const Vec3Type& Value::vec3Value() const
 {
-  return arrayValue(context) | std::views::transform([&](const auto& entry) {
-           return entry.stringValue(context);
-         })
+  return std::visit(
+    kdl::overload(
+      [&](const Vec3Type& v) -> const Vec3Type& { return v; },
+      [&](const auto&) -> const Vec3Type& {
+        throw DereferenceError{location(), describe(), type(), ValueType::Vec3};
+      }),
+    m_value);
+}
+
+const BBoxType& Value::bboxValue() const
+{
+  return std::visit(
+    kdl::overload(
+      [&](const std::shared_ptr<const BBoxType>& b) -> const BBoxType& { return *b; },
+      [&](const auto&) -> const BBoxType& {
+        throw DereferenceError{location(), describe(), type(), ValueType::BBox};
+      }),
+    m_value);
+}
+
+std::vector<std::string> Value::asStringList() const
+{
+  return arrayValue()
+         | std::views::transform([&](const auto& entry) { return entry.stringValue(); })
          | kdl::ranges::to<std::vector>();
 }
 
-std::vector<std::string> Value::asStringSet(const EvaluationContext& context) const
+std::vector<std::string> Value::asStringSet() const
 {
-  return kdl::vec_sort_and_remove_duplicates(asStringList(context));
+  return kdl::vec_sort_and_remove_duplicates(asStringList());
 }
 
 size_t Value::length() const
@@ -257,14 +315,16 @@ size_t Value::length() const
   return std::visit(
     kdl::overload(
       [](const BooleanType&) -> size_t { return 1u; },
-      [](const StringType& s) -> size_t { return s.length(); },
+      [](const std::shared_ptr<const StringType>& s) -> size_t { return s->length(); },
       [](const NumberType&) -> size_t { return 1u; },
-      [](const ArrayType& a) -> size_t { return a.size(); },
-      [](const MapType& m) -> size_t { return m.size(); },
-      [](const RangeType&) -> size_t { return 2u; },
+      [](const std::shared_ptr<const ArrayType>& a) -> size_t { return a->size(); },
+      [](const std::shared_ptr<const MapType>& m) -> size_t { return m->size(); },
+      [](const AnyRange auto&) -> size_t { return 2u; },
+      [](const Vec3Type&) -> size_t { return 3u; },
+      [](const std::shared_ptr<const BBoxType>&) -> size_t { return 2u; },
       [](const NullType&) -> size_t { return 0u; },
       [](const UndefinedType&) -> size_t { return 0u; }),
-    *m_value);
+    m_value);
 }
 
 bool Value::convertibleTo(const ValueType toType) const
@@ -281,6 +341,8 @@ bool Value::convertibleTo(const ValueType toType) const
         case ValueType::Array:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Undefined:
         case ValueType::Null:
           break;
@@ -288,7 +350,8 @@ bool Value::convertibleTo(const ValueType toType) const
 
         return false;
       },
-      [&](const StringType& s) {
+      [&](const std::shared_ptr<const StringType>& sp) {
+        const auto& s = *sp;
         switch (toType)
         {
         case ValueType::Boolean:
@@ -296,9 +359,12 @@ bool Value::convertibleTo(const ValueType toType) const
           return true;
         case ValueType::Number:
           return kdl::str_is_blank(s) || kdl::str_to_double(s) != std::nullopt;
+        case ValueType::Vec3:
+          return vm::parse<double, 3>(s, vm::parse_mode::strict).has_value();
         case ValueType::Array:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
@@ -316,6 +382,8 @@ bool Value::convertibleTo(const ValueType toType) const
         case ValueType::Array:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
@@ -323,7 +391,7 @@ bool Value::convertibleTo(const ValueType toType) const
 
         return false;
       },
-      [&](const ArrayType&) {
+      [&](const std::shared_ptr<const ArrayType>&) {
         switch (toType)
         {
         case ValueType::Array:
@@ -333,6 +401,8 @@ bool Value::convertibleTo(const ValueType toType) const
         case ValueType::Number:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
@@ -340,7 +410,7 @@ bool Value::convertibleTo(const ValueType toType) const
 
         return false;
       },
-      [&](const MapType&) {
+      [&](const std::shared_ptr<const MapType>&) {
         switch (toType)
         {
         case ValueType::Map:
@@ -350,6 +420,8 @@ bool Value::convertibleTo(const ValueType toType) const
         case ValueType::Number:
         case ValueType::Array:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
@@ -357,7 +429,7 @@ bool Value::convertibleTo(const ValueType toType) const
 
         return false;
       },
-      [&](const RangeType&) {
+      [&](const AnyRange auto&) {
         switch (toType)
         {
         case ValueType::Range:
@@ -367,6 +439,46 @@ bool Value::convertibleTo(const ValueType toType) const
         case ValueType::Number:
         case ValueType::Array:
         case ValueType::Map:
+        case ValueType::Vec3:
+        case ValueType::BBox:
+        case ValueType::Null:
+        case ValueType::Undefined:
+          break;
+        }
+
+        return false;
+      },
+      [&](const Vec3Type&) {
+        switch (toType)
+        {
+        case ValueType::Vec3:
+        case ValueType::String:
+          return true;
+        case ValueType::Boolean:
+        case ValueType::Number:
+        case ValueType::Array:
+        case ValueType::Map:
+        case ValueType::Range:
+        case ValueType::BBox:
+        case ValueType::Null:
+        case ValueType::Undefined:
+          break;
+        }
+
+        return false;
+      },
+      [&](const std::shared_ptr<const BBoxType>&) {
+        switch (toType)
+        {
+        case ValueType::BBox:
+          return true;
+        case ValueType::Boolean:
+        case ValueType::Number:
+        case ValueType::String:
+        case ValueType::Array:
+        case ValueType::Map:
+        case ValueType::Range:
+        case ValueType::Vec3:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
@@ -385,6 +497,8 @@ bool Value::convertibleTo(const ValueType toType) const
         case ValueType::Map:
           return true;
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Undefined:
           break;
         }
@@ -402,16 +516,18 @@ bool Value::convertibleTo(const ValueType toType) const
         case ValueType::Array:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
           break;
         }
 
         return false;
       }),
-    *m_value);
+    m_value);
 }
 
-Value Value::convertTo(EvaluationContext& context, const ValueType toType) const
+Value Value::convertTo(const ValueType toType) const
 {
   return std::visit(
     kdl::overload(
@@ -421,68 +537,81 @@ Value Value::convertTo(EvaluationContext& context, const ValueType toType) const
         case ValueType::Boolean:
           return *this;
         case ValueType::String:
-          return context.trace(Value{b ? "true" : "false"}, *this);
+          return Value{b ? "true" : "false"}.producedBy(*this);
         case ValueType::Number:
-          return context.trace(Value{b ? 1.0 : 0.0}, *this);
+          return Value{b ? 1.0 : 0.0}.producedBy(*this);
         case ValueType::Array:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Undefined:
         case ValueType::Null:
           break;
         }
 
-        throw ConversionError{context.location(*this), describe(), type(), toType};
+        throw ConversionError{location(), describe(), type(), toType};
       },
-      [&](const StringType& s) -> Value {
+      [&](const std::shared_ptr<const StringType>& sp) -> Value {
+        const auto& s = *sp;
         switch (toType)
         {
         case ValueType::Boolean:
-          return context.trace(
-            Value{!kdl::cs::str_is_equal(s, "false") && !s.empty()}, *this);
+          return Value{!kdl::cs::str_is_equal(s, "false") && !s.empty()}.producedBy(
+            *this);
         case ValueType::String:
           return *this;
         case ValueType::Number: {
           if (kdl::str_is_blank(s))
           {
-            return context.trace(Value{0.0}, *this);
+            return Value{0.0}.producedBy(*this);
           }
           if (const auto x = kdl::str_to_double(s))
           {
-            return context.trace(Value{*x}, *this);
+            return Value{*x}.producedBy(*this);
           }
-          throw ConversionError{context.location(*this), describe(), type(), toType};
+          throw ConversionError{location(), describe(), type(), toType};
+        }
+        case ValueType::Vec3: {
+          if (const auto v = vm::parse<double, 3>(s, vm::parse_mode::strict))
+          {
+            return Value{*v}.producedBy(*this);
+          }
+          throw ConversionError{location(), describe(), type(), toType};
         }
         case ValueType::Array:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
         }
 
-        throw ConversionError{context.location(*this), describe(), type(), toType};
+        throw ConversionError{location(), describe(), type(), toType};
       },
       [&](const NumberType& n) -> Value {
         switch (toType)
         {
         case ValueType::Boolean:
-          return context.trace(Value{n != 0.0}, *this);
+          return Value{n != 0.0}.producedBy(*this);
         case ValueType::String:
-          return context.trace(Value{describe()}, *this);
+          return Value{describe()}.producedBy(*this);
         case ValueType::Number:
           return *this;
         case ValueType::Array:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
         }
 
-        throw ConversionError{context.location(*this), describe(), type(), toType};
+        throw ConversionError{location(), describe(), type(), toType};
       },
-      [&](const ArrayType&) -> Value {
+      [&](const std::shared_ptr<const ArrayType>&) -> Value {
         switch (toType)
         {
         case ValueType::Array:
@@ -492,14 +621,16 @@ Value Value::convertTo(EvaluationContext& context, const ValueType toType) const
         case ValueType::Number:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
         }
 
-        throw ConversionError{context.location(*this), describe(), type(), toType};
+        throw ConversionError{location(), describe(), type(), toType};
       },
-      [&](const MapType&) -> Value {
+      [&](const std::shared_ptr<const MapType>&) -> Value {
         switch (toType)
         {
         case ValueType::Map:
@@ -509,14 +640,16 @@ Value Value::convertTo(EvaluationContext& context, const ValueType toType) const
         case ValueType::Number:
         case ValueType::Array:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
         }
 
-        throw ConversionError{context.location(*this), describe(), type(), toType};
+        throw ConversionError{location(), describe(), type(), toType};
       },
-      [&](const RangeType&) -> Value {
+      [&](const AnyRange auto&) -> Value {
         switch (toType)
         {
         case ValueType::Range:
@@ -526,34 +659,84 @@ Value Value::convertTo(EvaluationContext& context, const ValueType toType) const
         case ValueType::Number:
         case ValueType::Array:
         case ValueType::Map:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
         case ValueType::Undefined:
           break;
         }
 
-        throw ConversionError{context.location(*this), describe(), type(), toType};
+        throw ConversionError{location(), describe(), type(), toType};
+      },
+      [&](const Vec3Type& v) -> Value {
+        switch (toType)
+        {
+        case ValueType::Vec3:
+          return *this;
+        case ValueType::String: {
+          auto str = std::ostringstream{};
+          appendNumber(str, v.x());
+          str << " ";
+          appendNumber(str, v.y());
+          str << " ";
+          appendNumber(str, v.z());
+          return Value{str.str()}.producedBy(*this);
+        }
+        case ValueType::Boolean:
+        case ValueType::Number:
+        case ValueType::Array:
+        case ValueType::Map:
+        case ValueType::Range:
+        case ValueType::BBox:
+        case ValueType::Null:
+        case ValueType::Undefined:
+          break;
+        }
+
+        throw ConversionError{location(), describe(), type(), toType};
+      },
+      [&](const std::shared_ptr<const BBoxType>&) -> Value {
+        switch (toType)
+        {
+        case ValueType::BBox:
+          return *this;
+        case ValueType::Boolean:
+        case ValueType::Number:
+        case ValueType::String:
+        case ValueType::Array:
+        case ValueType::Map:
+        case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::Null:
+        case ValueType::Undefined:
+          break;
+        }
+
+        throw ConversionError{location(), describe(), type(), toType};
       },
       [&](const NullType&) -> Value {
         switch (toType)
         {
         case ValueType::Boolean:
-          return context.trace(Value{false}, *this);
+          return Value{false}.producedBy(*this);
         case ValueType::Null:
           return *this;
         case ValueType::Number:
-          return context.trace(Value{0.0}, *this);
+          return Value{0.0}.producedBy(*this);
         case ValueType::String:
-          return context.trace(Value{""}, *this);
+          return Value{""}.producedBy(*this);
         case ValueType::Array:
-          return context.trace(Value{ArrayType{0}}, *this);
+          return Value{ArrayType{0}}.producedBy(*this);
         case ValueType::Map:
-          return context.trace(Value{MapType{}}, *this);
+          return Value{MapType{}}.producedBy(*this);
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Undefined:
           break;
         }
 
-        throw ConversionError{context.location(*this), describe(), type(), toType};
+        throw ConversionError{location(), describe(), type(), toType};
       },
       [&](const UndefinedType&) -> Value {
         switch (toType)
@@ -566,21 +749,22 @@ Value Value::convertTo(EvaluationContext& context, const ValueType toType) const
         case ValueType::Array:
         case ValueType::Map:
         case ValueType::Range:
+        case ValueType::Vec3:
+        case ValueType::BBox:
         case ValueType::Null:
           break;
         }
 
-        throw ConversionError{context.location(*this), describe(), type(), toType};
+        throw ConversionError{location(), describe(), type(), toType};
       }),
-    *m_value);
+    m_value);
 }
 
-std::optional<Value> Value::tryConvertTo(
-  EvaluationContext& context, const ValueType toType) const
+std::optional<Value> Value::tryConvertTo(const ValueType toType) const
 {
   try
   {
-    return convertTo(context, toType);
+    return convertTo(toType);
   }
   catch (const ConversionError&)
   {
@@ -596,30 +780,25 @@ std::string Value::asString(const bool multiline) const
 }
 
 void Value::appendToStream(
-  std::ostream& str, const bool multiline, const std::string& indent) const
+  std::ostream& str,
+  const bool multiline,
+  const std::string& indent,
+  const StringEscaping escaping) const
 {
   std::visit(
     kdl::overload(
       [&](const BooleanType& b) { str << (b ? "true" : "false"); },
-      [&](const StringType& s) {
+      [&](const std::shared_ptr<const StringType>& sp) {
+        const auto& s = *sp;
         // Unescaping happens in Parser::parseLiteral
-        str << "\"" << kdl::str_escape(s, "\\\"") << "\"";
+        const auto escaped = escaping == StringEscaping::Legacy
+                               ? kdl::str_escape(s, "\\\"")
+                               : kdl::str_escape_delimiter(s, '"');
+        str << "\"" << escaped << "\"";
       },
-      [&](const NumberType& n) {
-        static constexpr auto RoundingThreshold = 0.00001;
-        if (std::abs(n - std::round(n)) < RoundingThreshold)
-        {
-          str.precision(0);
-          str.setf(std::ios::fixed);
-        }
-        else
-        {
-          str.precision(17);
-          str.unsetf(std::ios::fixed);
-        }
-        str << n;
-      },
-      [&](const ArrayType& a) {
+      [&](const NumberType& n) { appendNumber(str, n); },
+      [&](const std::shared_ptr<const ArrayType>& ap) {
+        const auto& a = *ap;
         if (a.empty())
         {
           str << "[]";
@@ -635,7 +814,7 @@ void Value::appendToStream(
           for (size_t i = 0; i < a.size(); ++i)
           {
             str << childIndent;
-            a[i].appendToStream(str, multiline, childIndent);
+            a[i].appendToStream(str, multiline, childIndent, escaping);
             if (i < a.size() - 1)
             {
               str << ",";
@@ -656,7 +835,8 @@ void Value::appendToStream(
           str << "]";
         }
       },
-      [&](const MapType& m) {
+      [&](const std::shared_ptr<const MapType>& mp) {
+        const auto& m = *mp;
         if (m.empty())
         {
           str << "{}";
@@ -679,7 +859,7 @@ void Value::appendToStream(
           {
             str << childIndent << "\"" << key << "\""
                 << ": ";
-            value.appendToStream(str, multiline, childIndent);
+            value.appendToStream(str, multiline, childIndent, escaping);
             if (i++ < m.size() - 1)
             {
               str << ",";
@@ -704,22 +884,32 @@ void Value::appendToStream(
           str << "}";
         }
       },
-      [&](const RangeType& r) {
-        str << "[";
-        std::visit(
-          kdl::overload(
-            [&](const LeftBoundedRange& lbr) { str << lbr.first << ".."; },
-            [&](const RightBoundedRange& rbr) { str << ".." << rbr.last; },
-            [&](const BoundedRange& br) { str << br.first << ".." << br.last; }),
-          r);
-        str << "]";
+      [&](const LeftBoundedRange& lbr) { str << "[" << lbr.first << "..]"; },
+      [&](const RightBoundedRange& rbr) { str << "[.." << rbr.last << "]"; },
+      [&](const BoundedRange& br) { str << "[" << br.first << ".." << br.last << "]"; },
+      [&](const Vec3Type& v) {
+        str << "vec(";
+        appendNumber(str, v.x());
+        str << ", ";
+        appendNumber(str, v.y());
+        str << ", ";
+        appendNumber(str, v.z());
+        str << ")";
+      },
+      [&](const std::shared_ptr<const BBoxType>& bp) {
+        const auto& b = *bp;
+        str << "bbox(";
+        Value{b.min}.appendToStream(str, multiline, indent);
+        str << ", ";
+        Value{b.max}.appendToStream(str, multiline, indent);
+        str << ")";
       },
       [&](const NullType&) { str << "null"; },
       [&](const UndefinedType&) { str << "undefined"; }),
-    *m_value);
+    m_value);
 }
 
-bool Value::contains(const EvaluationContext&, const size_t index) const
+bool Value::contains(const size_t index) const
 {
   switch (type())
   {
@@ -730,6 +920,8 @@ bool Value::contains(const EvaluationContext&, const size_t index) const
   case ValueType::Boolean:
   case ValueType::Number:
   case ValueType::Range:
+  case ValueType::Vec3:
+  case ValueType::BBox:
   case ValueType::Null:
   case ValueType::Undefined:
     break;
@@ -737,57 +929,58 @@ bool Value::contains(const EvaluationContext&, const size_t index) const
   return false;
 }
 
-bool Value::contains(const EvaluationContext& context, const std::string& key) const
+bool Value::contains(const std::string& key) const
 {
-  const MapType& map = mapValue(context);
+  const MapType& map = mapValue();
   const auto it = map.find(key);
   return it != std::end(map);
 }
 
-std::vector<std::string> Value::keys(const EvaluationContext& context) const
+std::vector<std::string> Value::keys() const
 {
-  return mapValue(context) | std::views::keys | kdl::ranges::to<std::vector>();
+  return mapValue() | std::views::keys | kdl::ranges::to<std::vector>();
 }
 
-Value Value::at(const EvaluationContext& context, const size_t index) const
+Value Value::at(const size_t index) const
 {
   switch (type())
   {
   case ValueType::String: {
-    const auto& str = stringValue(context);
+    const auto& str = stringValue();
     if (index < str.length())
     {
       return Value{str.substr(index, 1)};
     }
-    throw IndexOutOfBoundsError{context.location(*this), *this, index};
+    throw IndexOutOfBoundsError{location(), *this, index};
   }
   case ValueType::Array: {
-    const auto& array = arrayValue(context);
+    const auto& array = arrayValue();
     if (index < array.size())
     {
       return array[index];
     }
-    throw IndexOutOfBoundsError{context.location(*this), *this, index};
+    throw IndexOutOfBoundsError{location(), *this, index};
   }
   case ValueType::Map:
   case ValueType::Boolean:
   case ValueType::Number:
   case ValueType::Range:
+  case ValueType::Vec3:
+  case ValueType::BBox:
   case ValueType::Null:
   case ValueType::Undefined:
     break;
   }
 
-  throw IndexError{context.location(*this), *this, index};
+  throw IndexError{location(), *this, index};
 }
 
-Value Value::atOrDefault(
-  const EvaluationContext& context, const size_t index, Value defaultValue) const
+Value Value::atOrDefault(const size_t index, Value defaultValue) const
 {
   switch (type())
   {
   case ValueType::String: {
-    const auto& str = stringValue(context);
+    const auto& str = stringValue();
     if (index < str.length())
     {
       return Value{str.substr(index, 1)};
@@ -795,7 +988,7 @@ Value Value::atOrDefault(
     return defaultValue;
   }
   case ValueType::Array: {
-    const auto& array = arrayValue(context);
+    const auto& array = arrayValue();
     if (index < array.size())
     {
       return array[index];
@@ -806,46 +999,49 @@ Value Value::atOrDefault(
   case ValueType::Boolean:
   case ValueType::Number:
   case ValueType::Range:
+  case ValueType::Vec3:
+  case ValueType::BBox:
   case ValueType::Null:
   case ValueType::Undefined:
     break;
   }
 
-  throw IndexError{context.location(*this), *this, index};
+  throw IndexError{location(), *this, index};
 }
 
-Value Value::at(const EvaluationContext& context, const std::string& key) const
+Value Value::at(const std::string& key) const
 {
   switch (type())
   {
   case ValueType::Map: {
-    const auto& map = mapValue(context);
+    const auto& map = mapValue();
     if (const auto it = map.find(key); it != map.end())
     {
       return it->second;
     }
-    throw IndexOutOfBoundsError{context.location(*this), *this, key};
+    throw IndexOutOfBoundsError{location(), *this, key};
   }
   case ValueType::String:
   case ValueType::Array:
   case ValueType::Boolean:
   case ValueType::Number:
   case ValueType::Range:
+  case ValueType::Vec3:
+  case ValueType::BBox:
   case ValueType::Null:
   case ValueType::Undefined:
     break;
   }
 
-  throw IndexError{context.location(*this), *this, key};
+  throw IndexError{location(), *this, key};
 }
 
-Value Value::atOrDefault(
-  const EvaluationContext& context, const std::string& key, Value defaultValue) const
+Value Value::atOrDefault(const std::string& key, Value defaultValue) const
 {
   switch (type())
   {
   case ValueType::Map: {
-    const auto& map = mapValue(context);
+    const auto& map = mapValue();
     if (const auto it = map.find(key); it != map.end())
     {
       return it->second;
@@ -857,46 +1053,97 @@ Value Value::atOrDefault(
   case ValueType::Boolean:
   case ValueType::Number:
   case ValueType::Range:
+  case ValueType::Vec3:
+  case ValueType::BBox:
   case ValueType::Null:
   case ValueType::Undefined:
     break;
   }
 
-  throw IndexError{context.location(*this), *this, key};
+  throw IndexError{location(), *this, key};
+}
+
+std::optional<FileLocation> Value::location() const
+{
+  if (m_line == 0)
+  {
+    return std::nullopt;
+  }
+  return FileLocation{
+    m_line, m_column != 0 ? std::optional<size_t>{m_column} : std::nullopt};
+}
+
+Value Value::producedBy(const ExpressionNode& expressionNode) const&
+{
+  return Value{*this}.producedBy(expressionNode);
+}
+
+Value Value::producedBy(const ExpressionNode& expressionNode) &&
+{
+  if (m_line == 0)
+  {
+    if (const auto& location = expressionNode.location())
+    {
+      m_line = static_cast<std::uint32_t>(location->line);
+      m_column = static_cast<std::uint32_t>(location->column.value_or(0));
+    }
+  }
+  return std::move(*this);
+}
+
+Value Value::producedBy(const Value& original) const&
+{
+  return Value{*this}.producedBy(original);
+}
+
+Value Value::producedBy(const Value& original) &&
+{
+  if (m_line == 0)
+  {
+    m_line = original.m_line;
+    m_column = original.m_column;
+  }
+  return std::move(*this);
 }
 
 bool operator==(const Value& lhs, const Value& rhs)
 {
-  return lhs.m_value == rhs.m_value
-         || std::visit(
-           kdl::overload(
-             [](const BooleanType& lhsBool, const BooleanType& rhsBool) {
-               return lhsBool == rhsBool;
-             },
-             [](const StringType& lhsString, const StringType& rhsString) {
-               return lhsString == rhsString;
-             },
-             [](const NumberType& lhsNumber, const NumberType& rhsNumber) {
-               return lhsNumber == rhsNumber;
-             },
-             [](const ArrayType& lhsArray, const ArrayType& rhsArray) {
-               return lhsArray == rhsArray;
-             },
-             [](
-               const MapType& lhsMap, const MapType& rhsMap) { return lhsMap == rhsMap; },
-             [](const RangeType& lhsRange, const RangeType& rhsRange) {
-               return lhsRange == rhsRange;
-             },
-             [](const NullType&, const NullType&) { return true; },
-             [](const UndefinedType&, const UndefinedType&) { return true; },
-             [](const auto&, const auto&) { return false; }),
-           *lhs.m_value,
-           *rhs.m_value);
-}
-
-bool operator!=(const Value& lhs, const Value& rhs)
-{
-  return !(lhs == rhs);
+  return std::visit(
+    kdl::overload(
+      [](const BooleanType& lhsBool, const BooleanType& rhsBool) {
+        return lhsBool == rhsBool;
+      },
+      [](
+        const std::shared_ptr<const StringType>& lhsString,
+        const std::shared_ptr<const StringType>& rhsString) {
+        return lhsString == rhsString || *lhsString == *rhsString;
+      },
+      [](const NumberType& lhsNumber, const NumberType& rhsNumber) {
+        return lhsNumber == rhsNumber || (std::isnan(lhsNumber) && std::isnan(rhsNumber));
+      },
+      [](
+        const std::shared_ptr<const ArrayType>& lhsArray,
+        const std::shared_ptr<const ArrayType>& rhsArray) {
+        return lhsArray == rhsArray || *lhsArray == *rhsArray;
+      },
+      [](
+        const std::shared_ptr<const MapType>& lhsMap,
+        const std::shared_ptr<const MapType>& rhsMap) {
+        return lhsMap == rhsMap || *lhsMap == *rhsMap;
+      },
+      []<AnyRange R>(
+        const R& lhsRange, const R& rhsRange) { return lhsRange == rhsRange; },
+      [](const Vec3Type& lhsVec3, const Vec3Type& rhsVec3) { return lhsVec3 == rhsVec3; },
+      [](
+        const std::shared_ptr<const BBoxType>& lhsBBox,
+        const std::shared_ptr<const BBoxType>& rhsBBox) {
+        return lhsBBox == rhsBBox || *lhsBBox == *rhsBBox;
+      },
+      [](const NullType&, const NullType&) { return true; },
+      [](const UndefinedType&, const UndefinedType&) { return true; },
+      [](const auto&, const auto&) { return false; }),
+    lhs.m_value,
+    rhs.m_value);
 }
 
 std::ostream& operator<<(std::ostream& lhs, const Value& rhs)

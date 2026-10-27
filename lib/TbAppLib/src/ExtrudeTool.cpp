@@ -119,8 +119,8 @@ std::optional<EdgeInfo> getEdgeInfo(
     return std::nullopt;
   }
 
-  const auto leftFaceHandle = mdl::BrushFaceHandle{&brushNode, *leftFaceIndex};
-  const auto rightFaceHandle = mdl::BrushFaceHandle{&brushNode, *rightFaceIndex};
+  const auto leftFaceHandle = mdl::BrushFaceHandle{brushNode, *leftFaceIndex};
+  const auto rightFaceHandle = mdl::BrushFaceHandle{brushNode, *rightFaceIndex};
 
   return {{leftFaceHandle, rightFaceHandle, leftDot, rightDot, segment, dist}};
 }
@@ -166,7 +166,7 @@ std::vector<mdl::BrushFaceHandle> collectCoincidentFaces(
             continue;
           }
 
-          result.emplace_back(&brushNode, i);
+          result.emplace_back(brushNode, i);
         }
       },
       [](mdl::PatchNode&) {}));
@@ -317,7 +317,7 @@ std::optional<EdgeInfo> selectOverridingEdge(
                     return camera.pickLineSegmentHandle(
                              pickRay, edgeInfo.segment, pref(Preferences::HandleRadius))
                            && hasOverlappingEdgeInOtherBrush(
-                             nodes, edgeInfo.leftFaceHandle.node(), edgeInfo.segment);
+                             nodes, &edgeInfo.leftFaceHandle.node(), edgeInfo.segment);
                   });
 
   if (eligible.empty())
@@ -390,7 +390,7 @@ bool applySplitBrushes(
     if (brushes[i].original)
     {
       nodesToUpdate.emplace_back(
-        handles[i].faceHandle.node(), std::move(*brushes[i].original));
+        &handles[i].faceHandle.node(), std::move(*brushes[i].original));
     }
     if (reuseNodes && brushes[i].split)
     {
@@ -414,7 +414,7 @@ bool applySplitBrushes(
       if (brushes[i].split)
       {
         auto* node = new mdl::BrushNode{std::move(*brushes[i].split)};
-        newNodes[handles[i].faceHandle.node()->parent()].push_back(node);
+        newNodes[handles[i].faceHandle.node().parent()].push_back(node);
         splitNodes[i] = node;
       }
     }
@@ -441,7 +441,7 @@ bool applySplitBrushes(
     {
       if (const auto faceIndex = node->brush().findFace(handles[i].faceNormal()))
       {
-        dragState.currentDragFaces.emplace_back(node, *faceIndex);
+        dragState.currentDragFaces.emplace_back(*node, *faceIndex);
       }
     }
   }
@@ -708,7 +708,7 @@ bool stampBrushes(mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragS
                | kdl::ranges::to<std::vector>();
 
              const auto newDragFaceNormal = dragHandle.faceNormal();
-             auto* brushNode = dragHandle.faceHandle.node();
+             auto& brushNode = dragHandle.faceHandle.node();
 
              return brushBuilder.createBrush(points, face.materialName())
                     | kdl::transform([&](auto brush) {
@@ -716,13 +716,13 @@ bool stampBrushes(mdl::Map& map, const vm::vec3d& delta, ExtrudeDragState& dragS
                           dragHandle, brush, map.materialManager());
 
                         auto* newBrushNode = new mdl::BrushNode(std::move(brush));
-                        newNodes[brushNode->parent()].push_back(newBrushNode);
+                        newNodes[brushNode.parent()].push_back(newBrushNode);
 
                         if (
                           const auto newDragFaceIndex =
                             newBrushNode->brush().findFace(newDragFaceNormal))
                         {
-                          newDragFaces.emplace_back(newBrushNode, *newDragFaceIndex);
+                          newDragFaces.emplace_back(*newBrushNode, *newDragFaceIndex);
                         }
                       });
            })
@@ -760,7 +760,7 @@ std::vector<vm::polygon3d> getPolygons(const std::vector<ExtrudeDragHandle>& dra
 
 ExtrudeDragHandle::ExtrudeDragHandle(mdl::BrushFaceHandle i_faceHandle)
   : faceHandle{std::move(i_faceHandle)}
-  , brushAtDragStart{faceHandle.node()->brush()}
+  , brushAtDragStart{faceHandle.node().brush()}
 {
 }
 
@@ -959,7 +959,7 @@ std::vector<mdl::BrushFaceHandle> ExtrudeTool::getDragFaces(
 
   for (const auto& dragHandle : dragHandles)
   {
-    const auto& brush = dragHandle.faceHandle.node()->brush();
+    const auto& brush = dragHandle.faceHandle.node().brush();
     if (const auto faceIndex = brush.findFace(dragHandle.faceNormal()))
     {
       dragFaces.emplace_back(dragHandle.faceHandle.node(), *faceIndex);

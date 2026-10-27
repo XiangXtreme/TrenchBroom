@@ -65,7 +65,7 @@ TEST_CASE("SweepTool")
 
     CHECK(!tool.applies());
 
-    selectBrushFaces(map, {{brushNode, 0}});
+    selectBrushFaces(map, {{*brushNode, 0}});
     CHECK(tool.applies());
   }
 
@@ -85,7 +85,7 @@ TEST_CASE("SweepTool")
     addNodes(map, {{&parentForNodes(map), {brushNode}}});
 
     const auto faceIndex = *brushNode->brush().findFace(vm::vec3d{1, 0, 0});
-    selectBrushFaces(map, {{brushNode, faceIndex}});
+    selectBrushFaces(map, {{*brushNode, faceIndex}});
 
     REQUIRE(tool.activate());
     tool.setParameters(parameters);
@@ -126,7 +126,7 @@ TEST_CASE("SweepTool")
       // Reactivate so the tool captures the updated source attributes as independent
       // data.
       REQUIRE(tool.deactivate());
-      selectBrushFaces(map, {{brushNode, capFaceIndex}});
+      selectBrushFaces(map, {{*brushNode, capFaceIndex}});
       REQUIRE(tool.activate());
       tool.setParameters(
         SweepParameters{1, 1, SweepPathMode::Straight, SweepAlignment::Free});
@@ -365,7 +365,7 @@ TEST_CASE("SweepTool")
     addNodes(map, {{entityNode, {brushNode}}});
 
     const auto faceIndex = *brushNode->brush().findFace(vm::vec3d{1, 0, 0});
-    selectBrushFaces(map, {{brushNode, faceIndex}});
+    selectBrushFaces(map, {{*brushNode, faceIndex}});
 
     REQUIRE(tool.activate());
     tool.setParameters(parameters);
@@ -396,7 +396,7 @@ TEST_CASE("SweepTool")
 
     const auto sourceFaceIndex = *sourceNode->brush().findFace(vm::vec3d{1, 0, 0});
     const auto targetFaceIndex = *targetNode->brush().findFace(vm::vec3d{-1, 0, 0});
-    selectBrushFaces(map, {{sourceNode, sourceFaceIndex}, {targetNode, targetFaceIndex}});
+    selectBrushFaces(map, {{*sourceNode, sourceFaceIndex}, {*targetNode, targetFaceIndex}});
 
     REQUIRE(tool.activate());
     tool.setParameters(
@@ -461,10 +461,10 @@ TEST_CASE("SweepTool")
     selectBrushFaces(
       map,
       {
-        {sourceLower, sourceLowerFace},
-        {sourceUpper, sourceUpperFace},
-        {targetUpper, targetUpperFace},
-        {targetLower, targetLowerFace},
+        {*sourceLower, sourceLowerFace},
+        {*sourceUpper, sourceUpperFace},
+        {*targetUpper, targetUpperFace},
+        {*targetLower, targetLowerFace},
       });
 
     REQUIRE(tool.activate());
@@ -510,7 +510,7 @@ TEST_CASE("SweepTool")
 
     const auto faceIndexA = *brushNodeA->brush().findFace(vm::vec3d{1, 0, 0});
     const auto faceIndexB = *brushNodeB->brush().findFace(vm::vec3d{-1, 0, 0});
-    selectBrushFaces(map, {{brushNodeA, faceIndexA}, {brushNodeB, faceIndexB}});
+    selectBrushFaces(map, {{*brushNodeA, faceIndexA}, {*brushNodeB, faceIndexB}});
 
     REQUIRE(tool.activate());
     tool.setParameters(SweepParameters{2, 1, SweepPathMode::SBend, SweepAlignment::Free});

@@ -9,6 +9,7 @@ target_sources(TbMdlLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/BezierPatch.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Brush.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/BrushBuilder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/RockFormation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/BrushFace.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/BrushFaceHandle.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/BrushFaceReader.cpp
@@ -148,6 +149,7 @@ target_sources(TbMdlLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ParallelUvCoordSystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ParaxialUvCoordSystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ParseCompilationConfig.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ParseConfigExpression.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ParseGameConfig.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ParseGameEngineConfig.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ParseModelDefinition.cpp

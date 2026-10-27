@@ -21,6 +21,8 @@
 #include "el/Value.h"
 #include "el/VariableStore.h"
 
+#include "kd/result_io.h" // IWYU pragma: keep
+
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
@@ -56,6 +58,9 @@ TEST_CASE("Interpolate")
         interpolate(variables, " asdfasdf ${'asdf'}${' AND'}  sdf ")
         == " asdfasdf asdf AND  sdf ");
       CHECK(interpolate(variables, " ${ true } ") == " true ");
+      CHECK(
+        interpolate(variables, " ${ vec(1234567.5, 0.125, -4) } ")
+        == " 1234567.5 0.125 -4 ");
       CHECK(
         interpolate(variables, " ${ 'this'+' and ' }${'that'} ") == " this and that ");
     }

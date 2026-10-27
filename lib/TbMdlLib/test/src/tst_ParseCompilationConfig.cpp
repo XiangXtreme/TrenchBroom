@@ -62,6 +62,12 @@ TEST_CASE("CompilationConfigParser")
       const auto config = "  { 'profiles': {} } ";
       CHECK(parseCompilationConfig(config).is_error());
     }
+
+    SECTION("parseUnsupportedVersion")
+    {
+      const auto config = "  { 'version': 3, 'profiles': [] } ";
+      CHECK(parseCompilationConfig(config).is_error());
+    }
   }
 
   SECTION("profiles")
@@ -291,6 +297,40 @@ TEST_CASE("CompilationConfigParser")
                "the target"},
            }},
         }});
+    }
+
+    SECTION("parseOneProfileWithNameAndOneExportTaskWithEntityToAddWithMissingKey")
+    {
+      const auto config = R"(
+{
+  'version': 1,
+  'profiles': [
+    {
+      'name' : 'A profile',
+      'workdir' : '',
+      'tasks' : [ { 'type' : 'export', 'entityToAdd': [ { 'value': 'info_player_start' } ], 'target' : 'the target' } ]
+    }
+  ]
+})";
+
+      CHECK(parseCompilationConfig(config).is_error());
+    }
+
+    SECTION("parseOneProfileWithNameAndOneExportTaskWithEntityToAddWithMissingValue")
+    {
+      const auto config = R"(
+{
+  'version': 1,
+  'profiles': [
+    {
+      'name' : 'A profile',
+      'workdir' : '',
+      'tasks' : [ { 'type' : 'export', 'entityToAdd': [ { 'key': 'classname' } ], 'target' : 'the target' } ]
+    }
+  ]
+})";
+
+      CHECK(parseCompilationConfig(config).is_error());
     }
   }
 
@@ -661,6 +701,36 @@ TEST_CASE("CompilationConfigParser")
            mdl::CompilationCopyFiles{
              K(enabled),
              "${WORK_DIR_PATH}/${MAP_BASE_NAME}.bsp",
+             R"(C:\quake2\chaos\maps\)"},
+         }},
+      }});
+  }
+
+  SECTION("parseBackslashesInVersion2")
+  {
+    const auto config = R"(
+{
+  "profiles": [{
+    "name": "Full Compile",
+    "tasks": [{
+      "source": "\\server\maps\${MAP_BASE_NAME}.bsp",
+      "target": "C:\quake2\chaos\maps\\",
+      "type": "copy"
+    }],
+    "workdir": "${MAP_DIR_PATH}"
+  }],
+  "version": 2
+})";
+
+    CHECK(
+      parseCompilationConfig(config)
+      == mdl::CompilationConfig{{
+        {"Full Compile",
+         "${MAP_DIR_PATH}",
+         {
+           mdl::CompilationCopyFiles{
+             K(enabled),
+             R"(\\server\maps\${MAP_BASE_NAME}.bsp)",
              R"(C:\quake2\chaos\maps\)"},
          }},
       }});

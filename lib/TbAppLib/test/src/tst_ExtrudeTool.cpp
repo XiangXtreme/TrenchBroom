@@ -194,7 +194,7 @@ TEST_CASE("ExtrudeTool")
       CHECK(
         hit.target<ExtrudeHitData>()
         == ExtrudeHitData{
-          {brushNode1, *brushNode1->brush().findFace(expectedFaceNormal)},
+          {*brushNode1, *brushNode1->brush().findFace(expectedFaceNormal)},
           expectedDragReference,
           expectedHandlePosition});
     }
@@ -235,7 +235,7 @@ TEST_CASE("ExtrudeTool")
       CHECK(
         hit.target<ExtrudeHitData>()
         == ExtrudeHitData{
-          {brushNode1, *brushNode1->brush().findFace(vm::vec3d{0, 0, 1})},
+          {*brushNode1, *brushNode1->brush().findFace(vm::vec3d{0, 0, 1})},
           vm::line3d{hit.hitPoint(), {0, 0, 1}},
           hit.hitPoint()});
     }
@@ -268,7 +268,7 @@ TEST_CASE("ExtrudeTool")
       CHECK(
         hit.target<ExtrudeHitData>()
         == ExtrudeHitData{
-          {brushNode1, *brushNode1->brush().findFace(expectedFaceNormal)},
+          {*brushNode1, *brushNode1->brush().findFace(expectedFaceNormal)},
           expectedDragReference,
           expectedHandlePosition});
     }
@@ -302,7 +302,7 @@ TEST_CASE("ExtrudeTool")
     // both coplanar top faces are chosen as drag handles, one per brush
     CHECK_THAT(
       tool.proposedDragHandles()
-        | std::views::transform([](const auto& h) { return h.faceHandle.node(); }),
+        | std::views::transform([](const auto& h) { return &h.faceHandle.node(); }),
       UnorderedRangeEquals(std::vector<mdl::BrushNode*>{brushNode1, brushNode2}));
 
     CHECK_THAT(
@@ -343,7 +343,7 @@ TEST_CASE("ExtrudeTool")
     // both coincident faces are chosen as drag handles, one per brush
     CHECK_THAT(
       tool.proposedDragHandles()
-        | std::views::transform([](const auto& h) { return h.faceHandle.node(); }),
+        | std::views::transform([](const auto& h) { return &h.faceHandle.node(); }),
       UnorderedRangeEquals(std::vector<mdl::BrushNode*>{brushNode1, brushNode2}));
 
     // the picked coplanar face faces +Z, the opposing face faces -Z
@@ -386,7 +386,7 @@ TEST_CASE("ExtrudeTool")
     // must not be linked in
     CHECK_THAT(
       tool.proposedDragHandles()
-        | std::views::transform([](const auto& h) { return h.faceHandle.node(); }),
+        | std::views::transform([](const auto& h) { return &h.faceHandle.node(); }),
       RangeEquals(std::vector<mdl::BrushNode*>{brushNode1}));
 
     CHECK_THAT(
@@ -435,12 +435,12 @@ TEST_CASE("ExtrudeTool")
       CHECK(
         extrudeHit.target<ExtrudeHitData>().face
         == mdl::BrushFaceHandle{
-          frontBrush, *frontBrush->brush().findFace(vm::vec3d{0, 1, 0})});
+          *frontBrush, *frontBrush->brush().findFace(vm::vec3d{0, 1, 0})});
 
       // both coincident seam faces become drag handles, one per brush
       CHECK_THAT(
         tool.proposedDragHandles()
-          | std::views::transform([](const auto& h) { return h.faceHandle.node(); }),
+          | std::views::transform([](const auto& h) { return &h.faceHandle.node(); }),
         UnorderedRangeEquals(std::vector<mdl::BrushNode*>{frontBrush, backBrush}));
       CHECK_THAT(
         tool.proposedDragHandles() | std::views::transform([](const auto& h) {
@@ -468,7 +468,7 @@ TEST_CASE("ExtrudeTool")
       CHECK(
         extrudeHit.target<ExtrudeHitData>().face
         == mdl::BrushFaceHandle{
-          occluderBrush, *occluderBrush->brush().findFace(vm::vec3d{0, -1, 0})});
+          *occluderBrush, *occluderBrush->brush().findFace(vm::vec3d{0, -1, 0})});
     }
 
     SECTION("a face interior away from any edge is picked normally")
@@ -482,7 +482,7 @@ TEST_CASE("ExtrudeTool")
       CHECK(
         extrudeHit.target<ExtrudeHitData>().face
         == mdl::BrushFaceHandle{
-          frontBrush, *frontBrush->brush().findFace(vm::vec3d{0, 0, 1})});
+          *frontBrush, *frontBrush->brush().findFace(vm::vec3d{0, 0, 1})});
     }
   }
 
@@ -522,7 +522,7 @@ TEST_CASE("ExtrudeTool")
     // both coincident seam faces become drag handles, one per brush
     CHECK_THAT(
       tool.proposedDragHandles()
-        | std::views::transform([](const auto& h) { return h.faceHandle.node(); }),
+        | std::views::transform([](const auto& h) { return &h.faceHandle.node(); }),
       UnorderedRangeEquals(std::vector<mdl::BrushNode*>{leftBrush, rightBrush}));
     CHECK_THAT(
       tool.proposedDragHandles() | std::views::transform([](const auto& h) {
@@ -563,7 +563,7 @@ TEST_CASE("ExtrudeTool")
     CHECK(
       extrudeHit.target<ExtrudeHitData>().face
       == mdl::BrushFaceHandle{
-        frontBrush, *frontBrush->brush().findFace(vm::vec3d{0, 0, 1})});
+        *frontBrush, *frontBrush->brush().findFace(vm::vec3d{0, 0, 1})});
   }
 
   SECTION("A non-collinear edge of a different touching brush does not override the face")
@@ -598,7 +598,7 @@ TEST_CASE("ExtrudeTool")
     CHECK(
       extrudeHit.target<ExtrudeHitData>().face
       == mdl::BrushFaceHandle{
-        frontBrush, *frontBrush->brush().findFace(vm::vec3d{0, 0, 1})});
+        *frontBrush, *frontBrush->brush().findFace(vm::vec3d{0, 0, 1})});
   }
 
   SECTION("findDragFaces")
@@ -729,7 +729,7 @@ TEST_CASE("ExtrudeTool")
         {
           const auto& handle = dragState.initialDragHandles[i];
           const auto initialBounds = handle.brushAtDragStart.bounds();
-          auto* source = handle.faceHandle.node();
+          auto* source = &handle.faceHandle.node();
           auto* preview = dragState.splitBrushNodes[i];
           const auto cut = initialBounds.max.y() + distance;
           if (cut <= initialBounds.min.y())
@@ -761,7 +761,7 @@ TEST_CASE("ExtrudeTool")
       CHECK(map.selection().nodes == initialSelection);
       for (const auto& handle : dragState.initialDragHandles)
       {
-        CHECK(handle.faceHandle.node()->brush() == handle.brushAtDragStart);
+        CHECK(handle.faceHandle.node().brush() == handle.brushAtDragStart);
       }
     }
 
@@ -971,7 +971,7 @@ TEST_CASE("ExtrudeTool")
     };
     tool.beginExtrude();
     REQUIRE(tool.extrude(delta(8), state));
-    auto* preview = state.currentDragFaces.front().node();
+    auto* preview = &state.currentDragFaces.front().node();
     REQUIRE(preview != source);
     const auto selection = map.selection().nodes;
     const auto linkId = preview->linkId();
@@ -996,7 +996,7 @@ TEST_CASE("ExtrudeTool")
       const auto distance = double(9 + i % 16);
       REQUIRE(tool.extrude(delta(distance), state));
       REQUIRE(state.currentDragFaces.size() == 1);
-      CHECK(state.currentDragFaces.front().node() == preview);
+      CHECK(&state.currentDragFaces.front().node() == preview);
       CHECK(preview->logicalBounds().max.z() == 32.0 + delta(distance).z());
       CHECK(preview->linkId() == linkId);
       CHECK(map.selection().nodes == selection);
@@ -1120,7 +1120,7 @@ TEST_CASE("ExtrudeTool")
       {
         REQUIRE(state.currentDragFaces.size() == 1);
         CHECK(source->parent()->childCount() == initialCount + 1);
-        const auto* preview = state.currentDragFaces.front().node();
+        const auto* preview = &state.currentDragFaces.front().node();
         CHECK(preview->logicalBounds().max.z() == 32.0 + distance);
         CHECK(
           source->logicalBounds().min.z() == (distance < 0.0 ? 32.0 + distance : -32.0));
@@ -1133,7 +1133,7 @@ TEST_CASE("ExtrudeTool")
     CHECK(state.currentDragFaces == faces);
     CHECK(state.totalDelta == vm::vec3d{0, 0, 8});
     CHECK(map.selection().nodes == selection);
-    CHECK(faces.front().node()->logicalBounds().max.z() == 40.0);
+    CHECK(faces.front().node().logicalBounds().max.z() == 40.0);
 
     REQUIRE(tool.extrude(vm::vec3d::zero(), state));
     CHECK(source->parent()->childCount() == initialCount);
@@ -1220,7 +1220,7 @@ TEST_CASE("ExtrudeTool")
     CAPTURE(previousDistance);
     tool.beginExtrude();
     REQUIRE(tool.extrude({0, 0, previousDistance}, state));
-    const auto previousBrush = state.currentDragFaces.front().node()->brush();
+    const auto previousBrush = state.currentDragFaces.front().node().brush();
     const auto previousSource = source->brush();
     const auto previousLinkedBounds = linked->logicalBounds();
     const auto previousCount = group->childCount();
@@ -1228,13 +1228,13 @@ TEST_CASE("ExtrudeTool")
     REQUIRE_FALSE(tool.extrude({0, 0, 24}, state));
     CHECK(state.totalDelta == vm::vec3d{0, 0, previousDistance});
     REQUIRE(state.currentDragFaces.size() == 1);
-    CHECK(state.currentDragFaces.front().node()->brush() == previousBrush);
+    CHECK(state.currentDragFaces.front().node().brush() == previousBrush);
     CHECK(source->brush() == previousSource);
     CHECK(linked->logicalBounds() == previousLinkedBounds);
     CHECK(group->childCount() == previousCount);
     CHECK(linked->childCount() == previousCount);
     REQUIRE(tool.extrude({0, 0, 12}, state));
-    CHECK(state.currentDragFaces.front().node()->logicalBounds().max.z() == 44.0);
+    CHECK(state.currentDragFaces.front().node().logicalBounds().max.z() == 44.0);
     tool.cancel();
     CHECK(group->childCount() == 1);
     CHECK(linked->childCount() == 1);

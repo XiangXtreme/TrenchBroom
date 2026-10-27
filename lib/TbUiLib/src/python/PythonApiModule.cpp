@@ -1640,7 +1640,7 @@ std::vector<mdl::EntityNodeBase*> selectedEntityNodes(SelectionHandle& selection
   }
   for (const auto& faceHandle : mapSelection.brushFaces)
   {
-    result.push_back(faceHandle.node()->entity());
+    result.push_back(faceHandle.node().entity());
   }
 
   return kdl::vec_sort_and_remove_duplicates(std::move(result));
@@ -1753,7 +1753,7 @@ std::vector<mdl::BrushFaceHandle> selectedTriangleFaceHandles(SelectionHandle& s
     {
       for (size_t i = 0; i < brushNode->brush().faceCount(); ++i)
       {
-        faceHandles.emplace_back(brushNode, i);
+        faceHandles.emplace_back(*brushNode, i);
       }
     }
   }
@@ -1842,7 +1842,7 @@ std::vector<FaceHandle> selectedBrushFaces(SelectionHandle& selection)
   result.reserve(faceHandles.size());
   for (const auto& faceHandle : faceHandles)
   {
-    auto* brushNode = faceHandle.node();
+    auto* brushNode = &faceHandle.node();
     result.push_back(FaceHandle{
       &selection.getDocument(),
       selection.generation,
@@ -3239,7 +3239,7 @@ bool setDocumentFaceUVsImpl(
       materialName = py::cast<std::string>(update["material"]);
     }
     updates.push_back(mdl::FaceUVUpdate{
-      mdl::BrushFaceHandle{&brushNode, face.faceIndex},
+      mdl::BrushFaceHandle{brushNode, face.faceIndex},
       vertices,
       std::move(uvs),
       std::move(materialName),
@@ -3290,7 +3290,7 @@ bool setFaceUVLoops(FaceHandle& face, const py::iterable& loopObjects)
   const auto ok = mdl::setFaceUVs(
     document.map(),
     {{
-      mdl::BrushFaceHandle{&brushNode, face.faceIndex},
+      mdl::BrushFaceHandle{brushNode, face.faceIndex},
       vertices,
       uvs,
     }});
@@ -3305,7 +3305,7 @@ void setFaceMaterial(FaceHandle& face, const std::string& materialName)
   editDocument(document, "Python API Set Face Material", [&](auto& map) {
     return mdl::setBrushFaceAttributes(
       map,
-      {mdl::BrushFaceHandle{&brushNode, face.faceIndex}},
+      {mdl::BrushFaceHandle{brushNode, face.faceIndex}},
       {.materialName = materialName});
   });
 }
@@ -3343,7 +3343,7 @@ size_t setFacesMaterial(const py::iterable& faces, const std::string& materialNa
       throw py::value_error{"All faces must belong to the same document"};
     }
     auto& brushNode = face.getBrushNode();
-    brushFaces.emplace_back(&brushNode, face.faceIndex);
+    brushFaces.emplace_back(brushNode, face.faceIndex);
   }
 
   editDocument(document, "Python API Set Face Materials", [&](auto& map) {
@@ -3391,7 +3391,7 @@ size_t applyMaterialByFilter(
       throw py::value_error{"All brushes must belong to the same document"};
     }
     auto& brushNode = brush.get();
-    const auto brushFaces = mdl::toHandles(&brushNode);
+    const auto brushFaces = mdl::toHandles(brushNode);
     faces.insert(faces.end(), brushFaces.begin(), brushFaces.end());
   }
 
@@ -3511,7 +3511,7 @@ size_t alignFaces(const py::iterable& faces, const std::string& mode)
       throw py::value_error{"All faces must belong to the same document"};
     }
     auto& brushNode = face.getBrushNode();
-    brushFaces.emplace_back(&brushNode, face.faceIndex);
+    brushFaces.emplace_back(brushNode, face.faceIndex);
   }
 
   editDocument(document, "Python API Align Face Texture", [&](auto& map) {
@@ -3524,7 +3524,7 @@ size_t copyFaceAttributes(FaceHandle& source, const py::iterable& targets)
 {
   auto& document = DocumentHandle{source.document, source.generation}.get();
   auto& sourceBrush = source.getBrushNode();
-  const auto sourceHandle = mdl::BrushFaceHandle{&sourceBrush, source.faceIndex};
+  const auto sourceHandle = mdl::BrushFaceHandle{sourceBrush, source.faceIndex};
 
   auto targetHandles = std::vector<FaceHandle>{};
   for (const auto& target : targets)
@@ -3556,7 +3556,7 @@ size_t copyFaceAttributes(FaceHandle& source, const py::iterable& targets)
       throw py::value_error{"Source and targets must belong to the same document"};
     }
     auto& brushNode = target.getBrushNode();
-    brushFaces.emplace_back(&brushNode, target.faceIndex);
+    brushFaces.emplace_back(brushNode, target.faceIndex);
   }
 
   editDocument(document, "Python API Copy Face Texture", [&](auto& map) {
@@ -3585,7 +3585,7 @@ size_t replaceMaterial(
     for (auto face : allFaces(document))
     {
       auto& brush = face.getBrushNode();
-      candidates.emplace_back(&brush, face.faceIndex);
+      candidates.emplace_back(brush, face.faceIndex);
     }
   }
   else
@@ -3623,7 +3623,7 @@ void updateFace(FaceHandle& face, mdl::UpdateBrushFaceAttributes update)
 
   editDocument(document, "Python API Set Face Attributes", [&](auto& map) {
     return mdl::setBrushFaceAttributes(
-      map, {mdl::BrushFaceHandle{&brushNode, face.faceIndex}}, update);
+      map, {mdl::BrushFaceHandle{brushNode, face.faceIndex}}, update);
   });
 }
 

@@ -1495,7 +1495,7 @@ else:
       new mdl::BrushNode{builder.createCube(64.0, "selection") | kdl::value()};
     mdl::addNodes(map, {{&mdl::parentForNodes(map), {entityNode}}});
     mdl::addNodes(map, {{entityNode, {brushNode}}});
-    mdl::selectBrushFaces(map, {mdl::BrushFaceHandle{brushNode, 0u}});
+    mdl::selectBrushFaces(map, {mdl::BrushFaceHandle{*brushNode, 0u}});
 
     env.createFile(
       "api_face_selection_properties.py",
@@ -1633,7 +1633,7 @@ assert len(doc.selection.brushes) == 0
 
     const auto faceIndex = brushNode->brush().findFace(vm::vec3d{0, -1, 0});
     REQUIRE(faceIndex);
-    mdl::selectBrushFaces(map, {{brushNode, *faceIndex}});
+    mdl::selectBrushFaces(map, {{*brushNode, *faceIndex}});
 
     auto env = fs::TestEnvironment{};
     env.createFile(
@@ -1724,7 +1724,7 @@ assert [loop["uv"] for loop in face.uv_loops] == uvs, face.uv_loops
     auto* brushNode =
       new mdl::BrushNode{builder.createCube(64.0, "original") | kdl::value()};
     mdl::addNodes(map, {{&mdl::parentForNodes(map), {brushNode}}});
-    mdl::selectBrushFaces(map, {{brushNode, 0u}, {brushNode, 1u}});
+    mdl::selectBrushFaces(map, {{*brushNode, 0u}, {*brushNode, 1u}});
 
     auto env = fs::TestEnvironment{};
     env.createFile(
@@ -2240,7 +2240,7 @@ for handle in (cached_material, cached_collection):
     auto* brushNode =
       new mdl::BrushNode{builder.createCube(64.0, "old_sync") | kdl::value()};
     mdl::addNodes(map, {{&mdl::parentForNodes(map), {brushNode}}});
-    mdl::selectBrushFaces(map, {{brushNode, 0u}});
+    mdl::selectBrushFaces(map, {{*brushNode, 0u}});
 
     const auto pluginDir = std::filesystem::path{"python/examples/blender_brush_sync"};
     REQUIRE(std::filesystem::exists(pluginDir / "trenchbroom-plugin.json"));

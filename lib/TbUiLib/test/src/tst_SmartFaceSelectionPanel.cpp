@@ -115,7 +115,7 @@ TEST_CASE("SmartFaceSelectionPanel")
     auto secondNode = mdl::BrushNode{
       builder.createCuboid({{64, 0, 0}, {128, 64, 64}}, "material") | kdl::value()};
     const auto topFace = [](auto& node) {
-      return mdl::BrushFaceHandle{&node, *node.brush().findFace(vm::vec3d{0, 0, 1})};
+      return mdl::BrushFaceHandle{node, *node.brush().findFace(vm::vec3d{0, 0, 1})};
     };
 
     auto directedPanel = SmartFaceSelectionPanel{

@@ -188,7 +188,7 @@ auto initializeFaces(const auto& faces)
            const auto& face = faceHandle.face();
            auto polygon = face.polygon();
            const auto& vertices = polygon.vertices();
-           const auto& brush = faceHandle.node()->brush();
+           const auto& brush = faceHandle.node().brush();
 
            auto sideAttributes = std::vector<std::optional<SweepFaceAttributes>>{};
            sideAttributes.reserve(vertices.size());
@@ -203,7 +203,7 @@ auto initializeFaces(const auto& faces)
 
            return SweepFace{
              std::move(polygon),
-             faceHandle.node()->parent(),
+             faceHandle.node().parent(),
              captureFaceAttributes(face),
              std::move(sideAttributes),
            };
