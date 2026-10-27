@@ -6,19 +6,24 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
   actions: write
 
 jobs:
-  linux:
-    uses: ./.github/workflows/ci-linux.yml
-    secrets: inherit
-
-  macos:
-    uses: ./.github/workflows/ci-macos.yml
-    secrets: inherit
+  # Linux and macOS jobs are disabled for this Windows-focused branch to avoid
+  # long queue timeouts (e.g. hosted macos-15 runner capacity constraints) and
+  # excessive GitHub Actions minute consumption. Re-enable if multi-platform testing is needed.
+  #
+  # linux:
+  #   uses: ./.github/workflows/ci-linux.yml
+  #   secrets: inherit
+  #
+  # macos:
+  #   uses: ./.github/workflows/ci-macos.yml
+  #   secrets: inherit
 
   windows:
     uses: ./.github/workflows/ci-windows.yml

@@ -27,6 +27,7 @@
 #include <chrono>
 #include <fstream>
 #include <string>
+#include <thread>
 
 #include <catch2/interfaces/catch_interfaces_capture.hpp>
 
@@ -131,7 +132,19 @@ void TestEnvironment::createFileAtomically(
   }
 
   // the temporary file is in the same directory, so this replaces the file atomically
-  std::filesystem::rename(tempPath, filePath);
+  // On Windows, the destination file may be temporarily locked by another thread
+  // (e.g. QPreferenceStore reading/saving or file watcher/antivirus), so retry briefly.
+  auto error = std::error_code{};
+  for (int attempt = 0; attempt < 50; ++attempt)
+  {
+    std::filesystem::rename(tempPath, filePath, error);
+    if (!error)
+    {
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{20});
+  }
+  throw std::filesystem::filesystem_error("rename", tempPath, filePath, error);
 }
 
 void TestEnvironment::createSymLink(
