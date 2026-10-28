@@ -108,6 +108,15 @@ public:
   /** Copies the current library revision into the project immediately. */
   Result<project::Asset> captureLibraryAsset(
     const std::string& libraryId, const std::string& libraryAssetId);
+  /** Project snapshot already captured from a library resource, if any. */
+  Result<std::optional<project::Asset>> projectAssetForLibraryAsset(
+    const std::string& libraryId, const std::string& libraryAssetId) const;
+  /**
+   * Materializes the current library revision in the session cache for browsing and
+   * preview. Nothing is added to the project and the cache is disposable.
+   */
+  Result<std::filesystem::path> libraryAssetFile(
+    const std::string& libraryId, const std::string& libraryAssetId);
   /** Compares captured snapshots with the libraries; never modifies the project. */
   Result<std::vector<project::LibraryUpdate>> checkLibraryUpdates(bool rescan = false);
   /** Applies selected updates as one project transaction, or none at all. */

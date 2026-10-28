@@ -20,6 +20,7 @@
 #include "ui/ModelBrowser.h"
 
 #include <QComboBox>
+#include <QFileDialog>
 #include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QImage>
@@ -33,6 +34,7 @@
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStackedWidget>
+#include <QStringList>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -73,6 +75,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/PrefabAsset.h"
+#include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/QWidgetUtils.h"
@@ -235,11 +238,19 @@ ModelBrowser::ModelBrowser(
   bindEvents(appController);
   connectObservers();
   updateFolderEdit();
+  updateSourceControls();
   if (m_project)
+  {
     connect(m_project.get(), &ProjectSession::contentsChanged, this, [this]() {
       markAssetsDirty();
       scheduleAssetRefresh();
     });
+    connect(m_project.get(), &ProjectSession::libraryLinksChanged, this, [this]() {
+      refreshLibraryChoices();
+      markAssetsDirty();
+      scheduleAssetRefresh();
+    });
+  }
 }
 
 ModelBrowser::~ModelBrowser()
@@ -298,6 +309,25 @@ void ModelBrowser::createGui(AppController& appController)
   m_iconSizeCombo->addItem("300%", 3.0f);
   updateIconSizeCombo();
 
+  // The source selector makes the two layers explicit: game files are neither project
+  // content nor library content, and a library entry never looks like a map dependency.
+  m_sourceCombo = new QComboBox{};
+  m_sourceCombo->setObjectName("ModelBrowser_Source");
+  m_sourceCombo->setMinimumWidth(96);
+  m_sourceCombo->setToolTip(tr("Asset source"));
+  m_sourceCombo->addItem(tr("Game Files"), int(BrowserSource::GameFiles));
+  if (m_project)
+  {
+    m_sourceCombo->addItem(tr("Project"), int(BrowserSource::Project));
+    m_sourceCombo->addItem(tr("Asset Library"), int(BrowserSource::AssetLibrary));
+  }
+
+  m_libraryCombo = new QComboBox{};
+  m_libraryCombo->setObjectName("ModelBrowser_Library");
+  m_libraryCombo->setMinimumWidth(120);
+  m_libraryCombo->setToolTip(tr("Asset library"));
+  m_libraryCombo->setVisible(false);
+
   m_searchBox = createSearchBox();
   m_searchBox->setObjectName("ModelBrowser_Search");
 
@@ -305,6 +335,8 @@ void ModelBrowser::createGui(AppController& appController)
   pathRowLayout->setContentsMargins(0, 0, 0, 0);
   pathRowLayout->setSpacing(0);
   pathRowLayout->addWidget(m_pathStack, 1);
+  pathRowLayout->addWidget(m_sourceCombo, 0);
+  pathRowLayout->addWidget(m_libraryCombo, 0);
   pathRowLayout->addWidget(m_savePrefabButton, 0);
   pathRowLayout->addWidget(m_iconSizeCombo, 0);
   pathRowLayout->addWidget(m_reloadButton, 0);
@@ -461,8 +493,50 @@ void ModelBrowser::bindEvents(AppController& appController)
   connect(m_reloadButton, &QToolButton::clicked, this, [&]() {
     m_lastWriteTimes.clear();
     m_assetRefreshPending = false;
+    if (m_source != BrowserSource::GameFiles)
+      refreshLibraryChoices();
     rescanWatchedDirectory();
   });
+
+  connect(
+    m_sourceCombo,
+    QOverload<int>::of(&QComboBox::currentIndexChanged),
+    this,
+    [&](const int index) {
+      setAssetSource(BrowserSource(m_sourceCombo->itemData(index).toInt()));
+    });
+
+  connect(
+    m_libraryCombo,
+    QOverload<int>::of(&QComboBox::currentIndexChanged),
+    this,
+    [&](const int index) {
+      const auto value = m_libraryCombo->itemData(index).toString();
+      if (value == "choose")
+      {
+        chooseLibrary();
+        return;
+      }
+      m_libraryId = value.toStdString();
+      markAssetsDirty();
+      scheduleAssetRefresh();
+    });
+
+  connect(
+    m_view,
+    &ModelBrowserView::libraryAssetCaptureRequested,
+    this,
+    &ModelBrowser::captureLibraryAsset);
+  connect(
+    m_view,
+    &ModelBrowserView::libraryAssetUpdateRequested,
+    this,
+    &ModelBrowser::updateProjectAsset);
+  connect(
+    m_view,
+    &ModelBrowserView::libraryAssetFindUsesRequested,
+    this,
+    &ModelBrowser::findProjectAssetUses);
 
   connect(
     m_savePrefabButton, &QToolButton::clicked, this, [&]() { saveSelectionAsPrefab(); });
@@ -518,6 +592,10 @@ void ModelBrowser::documentWasLoaded()
 
 void ModelBrowser::modsDidChange()
 {
+  if (m_source != BrowserSource::GameFiles)
+  {
+    return;
+  }
   if (m_folderPath != AssetRootPath)
   {
     setFolderPath(AssetRootPath);
@@ -1004,36 +1082,132 @@ void ModelBrowser::scheduleDeferredAssetRefreshAfterDocumentLoad()
   });
 }
 
-std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets() const
+std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
 {
-  if (m_project && !m_folderPath.is_absolute())
+  if (!m_project)
+    return std::nullopt;
+  const auto catalog = m_project->store().assets();
+  if (catalog.is_error())
+    return std::nullopt;
+  auto assets = std::vector<BrowserAsset>{};
+  for (const auto& asset : catalog.value())
   {
-    const auto catalog = m_project->store().assets();
-    if (catalog.is_error())
-      return std::nullopt;
-    auto assets = std::vector<BrowserAsset>{};
-    for (const auto& asset : catalog.value())
+    const auto path = pathFromQString(QString::fromStdString(asset.publishPath));
+    const auto type = asset.type == project::AssetType::Map ? BrowserCellType::Map
+                      : asset.type == project::AssetType::Texture
+                        ? BrowserCellType::Texture
+                        : assetTypeForExtension(path);
+    if (type == BrowserCellType::Folder)
+      continue;
+    const auto file = m_project->assetFile(asset);
+    if (file.is_error())
+      continue;
+    auto entry = BrowserAsset{type, path, file.value()};
+    entry.source = BrowserSource::Project;
+    entry.projectId = m_project->store().info().id;
+    entry.assetId = asset.id;
+    entry.revision = asset.revision;
+    entry.displayName = asset.displayName;
+    entry.catalogPath = pathFromQString(QString::fromStdString(asset.virtualPath));
+    if (!asset.library.empty())
     {
-      const auto path = pathFromQString(QString::fromStdString(asset.publishPath));
-      const auto type = asset.type == project::AssetType::Map ? BrowserCellType::Map
-                        : asset.type == project::AssetType::Texture
-                          ? BrowserCellType::Texture
-                          : assetTypeForExtension(path);
-      if (type == BrowserCellType::Folder)
-        continue;
-      const auto file = m_project->assetFile(asset);
-      if (file.is_error())
-        continue;
-      auto entry = BrowserAsset{type, path, file.value()};
-      entry.projectId = m_project->store().info().id;
-      entry.assetId = asset.id;
-      entry.revision = asset.revision;
-      entry.displayName = asset.displayName;
-      entry.catalogPath = pathFromQString(QString::fromStdString(asset.virtualPath));
-      assets.push_back(std::move(entry));
+      entry.libraryId = asset.library.libraryId;
+      entry.libraryAssetId = asset.library.libraryAssetId;
+      entry.libraryRevision = asset.library.libraryRevision;
+      entry.libraryContentHash = asset.library.libraryContentHash;
+      entry.projectAssetId = asset.id;
+      entry.projectRevision = asset.revision;
+      entry.projectPublishPath = path;
     }
-    return assets;
+    assets.push_back(std::move(entry));
   }
+  return assets;
+}
+
+std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
+{
+  if (!m_project || m_libraryId.empty())
+    return std::nullopt;
+  auto state = m_project->libraryState(m_libraryId, false);
+  if (state.is_error())
+    return std::nullopt;
+  if (!state.value().available)
+    return std::nullopt;
+
+  // Update state is project state, so it is queried once per scan instead of per entry.
+  auto updates = std::vector<project::LibraryUpdate>{};
+  if (const auto result = m_project->checkLibraryUpdates(); result.is_success())
+    updates = std::move(result).value();
+
+  auto assets = std::vector<BrowserAsset>{};
+  for (const auto& asset : state.value().assets)
+  {
+    const auto type = asset.type == project::AssetType::Map ? BrowserCellType::Map
+                      : asset.type == project::AssetType::Texture
+                          || asset.type == project::AssetType::Skybox
+                        ? BrowserCellType::Texture
+                        : assetTypeForExtension(
+                            pathFromQString(QString::fromStdString(asset.virtualPath)));
+    if (type == BrowserCellType::Folder)
+      continue;
+    auto entry =
+      BrowserAsset{type, pathFromQString(QString::fromStdString(asset.virtualPath))};
+    entry.source = BrowserSource::AssetLibrary;
+    // A non-empty project ID marks a catalog-backed entry, which is what makes the
+    // browser show display names and search them.
+    entry.projectId = m_libraryId;
+    entry.libraryId = m_libraryId;
+    entry.libraryAssetId = asset.id;
+    entry.libraryRevision = asset.revision;
+    entry.libraryContentHash = asset.contentHash;
+    entry.displayName = asset.displayName;
+    entry.catalogPath = entry.path;
+    entry.missing = asset.missing;
+
+    if (const auto captured =
+          m_project->projectAssetForLibraryAsset(m_libraryId, asset.id);
+        captured.is_success() && captured.value())
+    {
+      const auto& projectAsset = *captured.value();
+      entry.assetId = projectAsset.id;
+      entry.projectAssetId = projectAsset.id;
+      entry.projectRevision = projectAsset.revision;
+      entry.projectPublishPath =
+        pathFromQString(QString::fromStdString(projectAsset.publishPath));
+      if (const auto file = m_project->assetFile(projectAsset); file.is_success())
+        entry.absolutePath = file.value();
+      const auto update = std::ranges::find_if(updates, [&](const auto& candidate) {
+        return candidate.projectAssetId == projectAsset.id;
+      });
+      entry.projectUpdateAvailable =
+        update != updates.end()
+        && update->state == project::LibraryUpdateState::NewVersion;
+    }
+    else if (type != BrowserCellType::Texture)
+    {
+      // Only browsable resources need a preview file; textures are represented by their
+      // snapshot and are not previewed in this view.
+      if (const auto file = m_project->libraryAssetFile(m_libraryId, asset.id);
+          file.is_success())
+        entry.absolutePath = file.value();
+    }
+    assets.push_back(std::move(entry));
+  }
+  return assets;
+}
+
+std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets()
+{
+  switch (m_source)
+  {
+  case BrowserSource::Project:
+    return scanProjectAssets();
+  case BrowserSource::AssetLibrary:
+    return scanLibraryAssets();
+  case BrowserSource::GameFiles:
+    break;
+  }
+
   if (m_folderPath.is_absolute())
   {
     return collectBrowserAssets(
@@ -1098,6 +1272,204 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets() const
     assetBrowserRoots());
 }
 
+void ModelBrowser::setAssetSource(const BrowserSource source)
+{
+  if (m_source == source)
+  {
+    return;
+  }
+  m_source = source;
+  m_folderPath.clear();
+  m_currentFolderPath.clear();
+  updateFolderEdit();
+  refreshLibraryChoices();
+  updateSourceControls();
+  m_assetRefreshPending = true;
+  scheduleAssetRefresh();
+}
+
+void ModelBrowser::updateSourceControls()
+{
+  if (m_libraryCombo)
+    m_libraryCombo->setVisible(m_source == BrowserSource::AssetLibrary);
+  if (m_sourceCombo)
+  {
+    const QSignalBlocker blocker{m_sourceCombo};
+    for (auto index = 0; index < m_sourceCombo->count(); ++index)
+    {
+      if (BrowserSource(m_sourceCombo->itemData(index).toInt()) == m_source)
+      {
+        m_sourceCombo->setCurrentIndex(index);
+        break;
+      }
+    }
+  }
+  // Saving a selection as a prefab is a game-file action.
+  if (m_savePrefabButton)
+    m_savePrefabButton->setVisible(m_source == BrowserSource::GameFiles);
+}
+
+void ModelBrowser::refreshLibraryChoices()
+{
+  if (!m_libraryCombo)
+    return;
+
+  const QSignalBlocker blocker{m_libraryCombo};
+  m_libraryCombo->clear();
+  m_libraryError.clear();
+  if (!m_project)
+  {
+    m_libraryId.clear();
+    m_libraryCombo->setEnabled(false);
+    return;
+  }
+
+  auto requestedIndex = -1;
+  if (const auto libraries = m_project->libraries(); libraries.is_success())
+  {
+    for (const auto& library : libraries.value())
+    {
+      const auto name = QString::fromStdString(library.info.name);
+      m_libraryCombo->addItem(
+        library.available ? name : tr("%1 (unavailable)").arg(name),
+        QString::fromStdString(library.info.id));
+      if (!library.error.empty())
+        m_libraryCombo->setItemData(
+          m_libraryCombo->count() - 1,
+          QString::fromStdString(library.error),
+          Qt::ToolTipRole);
+      if (library.info.id == m_libraryId)
+        requestedIndex = m_libraryCombo->count() - 1;
+    }
+  }
+  m_libraryCombo->addItem(tr("Choose Asset Library…"), QString{"choose"});
+  m_libraryCombo->setEnabled(true);
+
+  if (requestedIndex < 0)
+  {
+    // Keep a selected library even when it is currently unreachable, otherwise the
+    // browser would silently switch away from a project's origin.
+    if (m_libraryCombo->count() <= 1)
+      m_libraryId.clear();
+    requestedIndex = 0;
+  }
+  if (m_libraryCombo->count() > 1)
+  {
+    const auto value = m_libraryCombo->itemData(requestedIndex).toString();
+    if (value != "choose" && m_libraryId.empty())
+      m_libraryId = value.toStdString();
+  }
+  m_libraryCombo->setCurrentIndex(requestedIndex);
+}
+
+void ModelBrowser::chooseLibrary()
+{
+  if (!m_project)
+    return;
+  const auto folder = QFileDialog::getExistingDirectory(
+    this, tr("Attach Asset Library"), {}, QFileDialog::ShowDirsOnly);
+  if (folder.isEmpty())
+  {
+    refreshLibraryChoices();
+    return;
+  }
+  const auto path = pathFromQString(folder);
+  const auto attached = m_project->attachLibrary(path);
+  if (attached.is_error())
+  {
+    QMessageBox::critical(
+      this,
+      tr("Asset Library"),
+      QString::fromStdString(std::get<Error>(attached.error()).msg));
+    refreshLibraryChoices();
+    return;
+  }
+  if (const auto libraries = m_project->libraries(); libraries.is_success())
+  {
+    for (const auto& library : libraries.value())
+    {
+      if (pathFromQString(QString::fromStdString(library.info.path)) == path)
+      {
+        m_libraryId = library.info.id;
+        break;
+      }
+    }
+  }
+  refreshLibraryChoices();
+  markAssetsDirty();
+  scheduleAssetRefresh();
+}
+
+void ModelBrowser::captureLibraryAsset(
+  const QString& libraryId, const QString& libraryAssetId)
+{
+  if (!m_project)
+    return;
+  const auto captured =
+    m_project->captureLibraryAsset(libraryId.toStdString(), libraryAssetId.toStdString());
+  if (captured.is_error())
+  {
+    QMessageBox::critical(
+      this,
+      tr("Asset Library"),
+      QString::fromStdString(std::get<Error>(captured.error()).msg));
+    return;
+  }
+  markAssetsDirty();
+  scheduleAssetRefresh();
+}
+
+void ModelBrowser::updateProjectAsset(const QString& projectAssetId)
+{
+  if (!m_project)
+    return;
+  const auto updated = m_project->updateLibraryAssets({projectAssetId.toStdString()});
+  if (updated.is_error())
+  {
+    QMessageBox::critical(
+      this,
+      tr("Asset Library"),
+      QString::fromStdString(std::get<Error>(updated.error()).msg));
+    return;
+  }
+  markAssetsDirty();
+  scheduleAssetRefresh();
+}
+
+void ModelBrowser::findProjectAssetUses(const QString& projectAssetId)
+{
+  if (!m_project)
+    return;
+  const auto audit = auditGoldSrcProjectResources(*m_project);
+  if (audit.is_error())
+  {
+    QMessageBox::critical(
+      this, tr("Find Uses"), QString::fromStdString(std::get<Error>(audit.error()).msg));
+    return;
+  }
+
+  const auto id = projectAssetId.toStdString();
+  auto lines = QStringList{};
+  for (const auto& use : audit.value().uses)
+  {
+    if (std::ranges::find(use.assetIds, id) == use.assetIds.end())
+      continue;
+    lines << tr("%1 — %2 (%3)")
+               .arg(QString::fromStdString(use.mapPath))
+               .arg(QString::fromStdString(use.location))
+               .arg(QString::fromStdString(use.reference));
+  }
+  auto message = QMessageBox{
+    QMessageBox::Information,
+    tr("Find Uses"),
+    tr("%1 uses in project maps").arg(lines.size()),
+    QMessageBox::Ok,
+    this};
+  if (!lines.isEmpty())
+    message.setDetailedText(lines.join('\n'));
+  message.exec();
+}
+
 void ModelBrowser::reloadModels()
 {
   auto nextAssets = scanAssets();
@@ -1118,6 +1490,7 @@ void ModelBrowser::reloadModels()
   m_lastWriteTimes = assetLastWriteTimes(m_assets);
 
   rebuildFolderTree();
+  m_view->setIncludeDefaultRoots(m_source == BrowserSource::GameFiles);
   m_view->setAssets(m_folderPath, m_assets);
   m_view->setCurrentFolderPath(m_currentFolderPath);
 }
@@ -1237,6 +1610,13 @@ void ModelBrowser::setWatchedDirectory()
     m_fileSystemWatcher->removePaths(m_fileSystemWatcher->directories());
   }
 
+  // Project and library entries live in the project file or in a library catalog, so
+  // there is no directory to watch; both notify through ProjectSession instead.
+  if (m_source != BrowserSource::GameFiles)
+  {
+    return;
+  }
+
   if (m_folderPath.is_absolute())
   {
     if (fs::Disk::pathInfo(m_folderPath) == fs::PathInfo::Directory)
@@ -1321,6 +1701,7 @@ void ModelBrowser::rescanWatchedDirectory()
   m_assets = std::move(*nextAssets);
   m_lastWriteTimes = std::move(newLastWriteTimes);
   rebuildFolderTree();
+  m_view->setIncludeDefaultRoots(m_source == BrowserSource::GameFiles);
   m_view->setAssets(m_folderPath, m_assets);
   m_view->setCurrentFolderPath(m_currentFolderPath);
 }

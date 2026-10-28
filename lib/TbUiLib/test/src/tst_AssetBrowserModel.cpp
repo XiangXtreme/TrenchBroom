@@ -108,6 +108,70 @@ TEST_CASE("AssetBrowserModel")
     REQUIRE(found.size() == 2);
     CHECK(found.back().cellData.path == map.path);
   }
+  SECTION("library entries group by container and report snapshot state")
+  {
+    auto wall = BrowserAsset{BrowserCellType::Texture, "custom.wad/WALL01"};
+    wall.source = BrowserSource::AssetLibrary;
+    wall.projectId = "library";
+    wall.libraryId = "library";
+    wall.libraryAssetId = "asset-wall";
+    wall.libraryRevision = 2;
+    wall.displayName = "WALL01";
+    wall.catalogPath = wall.path;
+    CHECK(isLibraryAsset(wall));
+    CHECK_FALSE(hasProjectSnapshot(wall));
+    CHECK(browserAssetStatus(wall).isEmpty());
+
+    auto floor = wall;
+    floor.path = "custom.wad/FLOOR01";
+    floor.catalogPath = floor.path;
+    floor.libraryAssetId = "asset-floor";
+    floor.displayName = "FLOOR01";
+
+    // The WAD container appears as a group folder even though the library is a flat
+    // catalog of member assets.
+    const auto grouped = modelBrowserEntries({}, {wall, floor}, {}, {}, false);
+    REQUIRE(grouped.size() == 1);
+    CHECK(grouped.front().cellData.type == BrowserCellType::Folder);
+    CHECK(grouped.front().cellData.path == std::filesystem::path{"custom.wad"});
+
+    const auto inside = modelBrowserEntries({}, {wall, floor}, "custom.wad", {}, false);
+    REQUIRE(inside.size() == 3); // ".." plus both members
+    CHECK(inside[1].title == "FLOOR01");
+    CHECK(inside[2].title == "WALL01");
+
+    // Marking the entry as captured reports the project revision and the update badge.
+    wall.projectAssetId = "project-asset";
+    wall.projectRevision = 3;
+    wall.projectPublishPath = "textures/WALL01.wad";
+    CHECK(hasProjectSnapshot(wall));
+    CHECK(browserAssetStatus(wall).contains("3"));
+    wall.projectUpdateAvailable = true;
+    CHECK(browserAssetStatus(wall).contains("update", Qt::CaseInsensitive));
+    wall.missing = true;
+    CHECK(browserAssetStatus(wall).contains("Missing", Qt::CaseInsensitive));
+
+    // A newer library revision invalidates previews and entity models through the project
+    // snapshot path, not the library path.
+    auto previous = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};
+    previous.source = BrowserSource::AssetLibrary;
+    previous.libraryId = "library";
+    previous.libraryAssetId = "asset-box";
+    previous.libraryRevision = 1;
+    previous.projectPublishPath = "models/box.mdl";
+    auto current = previous;
+    current.libraryRevision = 2;
+    CHECK_FALSE(sameBrowserAssetContent(previous, current));
+    CHECK(
+      changedAssetPaths({}, {}, {previous}, {current})
+      == std::vector<std::filesystem::path>{"models/box.mdl"});
+    // An uncaptured library resource has no engine path and must not be reloaded as if it
+    // were a map dependency.
+    auto uncaptured = previous;
+    uncaptured.projectPublishPath.clear();
+    CHECK(changedAssetPaths({}, {}, {}, {uncaptured}).empty());
+  }
+
   SECTION("classifies supported asset extensions")
   {
     CHECK(assetTypeForExtension("models/foo.mdl") == BrowserCellType::Model);

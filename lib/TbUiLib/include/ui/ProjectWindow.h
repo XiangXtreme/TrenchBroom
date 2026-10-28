@@ -51,6 +51,10 @@ private:
   void reimportSelected();
   void exportSelected();
   void checkResources(std::optional<std::string> assetId = std::nullopt);
+  void attachAssetLibrary();
+  void checkLibraryUpdates(bool rescan);
+  // Shows the update review when a captured resource has a newer library revision.
+  void maybePromptForLibraryUpdates();
   void createCheckpoint();
   void compareCheckpoint();
   void restoreCheckpoint();

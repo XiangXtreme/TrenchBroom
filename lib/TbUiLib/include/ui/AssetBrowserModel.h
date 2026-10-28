@@ -48,6 +48,19 @@ enum class BrowserCellType
   Texture,
 };
 
+/**
+ * Where a browser entry comes from.
+ *
+ * The browser shows one layer at a time but always keeps the marker, so a project
+ * resource never looks like a library resource and vice versa.
+ */
+enum class BrowserSource
+{
+  GameFiles,
+  Project,
+  AssetLibrary,
+};
+
 struct BrowserCellData
 {
   BrowserCellType type;
@@ -65,6 +78,23 @@ struct BrowserAsset
   std::string assetId;
   std::uint64_t revision = 0;
   std::filesystem::path catalogPath;
+
+  BrowserSource source = BrowserSource::GameFiles;
+  // Library identity. Empty unless this entry was enumerated from an asset library.
+  std::string libraryId;
+  std::string libraryAssetId;
+  std::uint64_t libraryRevision = 0;
+  std::string libraryContentHash;
+  // Project snapshot already captured from that library resource, if any.
+  std::string projectAssetId;
+  std::uint64_t projectRevision = 0;
+  // Engine path of that snapshot. Empty until the resource is captured, which is what
+  // keeps a library entry from being used as a map dependency before it is embedded.
+  std::filesystem::path projectPublishPath;
+  // The library holds a newer revision than the project snapshot.
+  bool projectUpdateAvailable = false;
+  // The library asset or its source file is gone.
+  bool missing = false;
 
   BrowserAsset();
   BrowserAsset(BrowserCellType i_type, std::filesystem::path i_path);
@@ -96,9 +126,20 @@ const std::vector<std::filesystem::path>& assetBrowserExtensions();
 
 BrowserCellType assetTypeForExtension(const std::filesystem::path& path);
 
+const char* browserSourceName(BrowserSource source);
+
 bool isEntityModelAsset(const BrowserAsset& asset);
 
 bool sameBrowserAssetContent(const BrowserAsset& lhs, const BrowserAsset& rhs);
+
+/** Short, stable status marker shown next to a catalog entry. */
+QString browserAssetStatus(const BrowserAsset& asset);
+
+/** True when the entry was enumerated from an asset library catalog. */
+bool isLibraryAsset(const BrowserAsset& asset);
+
+/** True when the entry is the project snapshot of a captured library resource. */
+bool hasProjectSnapshot(const BrowserAsset& asset);
 
 std::vector<std::filesystem::path> entityModelAssetPaths(
   const std::vector<BrowserAsset>& assets);
@@ -125,6 +166,9 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const std::filesystem::path& rootFolderPath,
   const std::vector<BrowserAsset>& assets,
   const std::filesystem::path& currentFolderPath,
-  const QString& searchText);
+  const QString& searchText,
+  // Game files are browsed through fixed roots; project and library listings only show
+  // the folders their own entries imply.
+  bool includeDefaultRoots = true);
 
 } // namespace tb::ui

@@ -101,6 +101,9 @@ private:
   bool m_hasSelection = false;
   BrowserCellType m_selectedType = BrowserCellType::Folder;
   std::filesystem::path m_selectedPath;
+  // Game files are browsed through fixed roots; catalog listings only show the folders
+  // their own entries imply.
+  bool m_includeDefaultRoots = true;
 
 public:
   ModelBrowserView(
@@ -110,6 +113,7 @@ public:
   void setAssets(std::filesystem::path rootFolderPath, std::vector<BrowserAsset> assets);
   void setCurrentFolderPath(std::filesystem::path currentFolderPath);
   void setSearchText(QString searchText);
+  void setIncludeDefaultRoots(bool includeDefaultRoots);
 
 private:
   void resourcesWereProcessed(const std::vector<mdl::ResourceId>& resources);
@@ -167,12 +171,19 @@ private:
   QString tooltip(const Cell& cell) override;
 
   const BrowserCellData& cellData(const Cell& cell) const;
+  const BrowserAsset* assetAt(const std::filesystem::path& path) const;
 
 signals:
   void folderActivated(const QString& folderPath);
   void mapActivated(const QString& mapPath);
   void renamePrefabRequested(const QString& prefabPath);
   void deletePrefabRequested(const QString& prefabPath);
+  /** Adds a library resource to the project so it becomes a real dependency. */
+  void libraryAssetCaptureRequested(
+    const QString& libraryId, const QString& libraryAssetId);
+  /** Applies the current library revision to an existing project snapshot. */
+  void libraryAssetUpdateRequested(const QString& projectAssetId);
+  void libraryAssetFindUsesRequested(const QString& projectAssetId);
 };
 
 } // namespace tb::ui

@@ -18,6 +18,7 @@
 #include <QMessageBox>
 #include <QSaveFile>
 #include <QSplitter>
+#include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -28,12 +29,14 @@
 #include "mdl/MapHeader.h"
 #include "ui/AppController.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ProjectLibraryDialog.h"
 #include "ui/ProjectResourceDialog.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectTextureImport.h"
 #include "ui/QPathUtils.h"
 
 #include <algorithm>
+#include <map>
 #include <sstream>
 
 namespace tb::ui
@@ -116,6 +119,14 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   file->addAction(tr("Import Files…"), this, &ProjectWindow::importFiles);
   file->addAction(tr("Check Resources…"), this, [this]() { checkResources(); });
   file->addAction(tr("Close Project"), this, &QWidget::close);
+  auto* library = menuBar()->addMenu(tr("Library"));
+  library->addAction(
+    tr("Attach Asset Library…"), this, &ProjectWindow::attachAssetLibrary);
+  library->addAction(
+    tr("Check for Asset Updates…"), this, [this]() { checkLibraryUpdates(false); });
+  library->addAction(tr("Rescan Library and Check for Updates…"), this, [this]() {
+    checkLibraryUpdates(true);
+  });
   auto* asset = menuBar()->addMenu(tr("Asset"));
   asset->addAction(tr("Open Map"), this, &ProjectWindow::openSelected);
   asset->addAction(tr("Reimport…"), this, &ProjectWindow::reimportSelected);
@@ -141,7 +152,13 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   m_assets = new QTreeWidget{splitter};
   m_assets->setObjectName("ProjectAssets");
   m_assets->setHeaderLabels(
-    {tr("Asset"), tr("Type"), tr("Virtual Path"), tr("Revision"), tr("Import Status")});
+    {tr("Asset"),
+     tr("Type"),
+     tr("Virtual Path"),
+     tr("Revision"),
+     tr("Origin"),
+     tr("Import Status"),
+     tr("Library Status")});
   m_assets->setRootIsDecorated(false);
   m_assets->setSortingEnabled(true);
   m_assets->header()->setSectionResizeMode(2, QHeaderView::Stretch);
@@ -163,7 +180,10 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
     m_session.get(), &ProjectSession::runtimeError, this, [this](const QString& message) {
       QMessageBox::critical(this, tr("Project Asset Cache"), message);
     });
+  connect(
+    m_session.get(), &ProjectSession::libraryLinksChanged, this, &ProjectWindow::refresh);
   refresh();
+  QTimer::singleShot(0, this, [this]() { maybePromptForLibraryUpdates(); });
 }
 
 const std::shared_ptr<ProjectSession>& ProjectWindow::session() const
@@ -193,6 +213,37 @@ void ProjectWindow::checkResources(std::optional<std::string> assetId)
     },
     this};
   dialog.exec();
+}
+
+void ProjectWindow::attachAssetLibrary()
+{
+  const auto folder = QFileDialog::getExistingDirectory(
+    this, tr("Attach Asset Library"), {}, QFileDialog::ShowDirsOnly);
+  if (folder.isEmpty())
+    return;
+  if (report(m_session->attachLibrary(pathFromQString(folder))))
+    refresh();
+}
+
+void ProjectWindow::checkLibraryUpdates(const bool rescan)
+{
+  auto dialog = ProjectLibraryDialog{*m_session, rescan, this};
+  dialog.exec();
+  refresh();
+}
+
+void ProjectWindow::maybePromptForLibraryUpdates()
+{
+  // Only a project that already references a library can have library updates, and the
+  // user can defer the prompt for this session.
+  if (m_session->libraryUpdatesDeferred())
+    return;
+  const auto updates = m_session->checkLibraryUpdates(false);
+  if (updates.is_error() || std::ranges::none_of(updates.value(), [](const auto& update) {
+        return update.needsAttention();
+      }))
+    return;
+  checkLibraryUpdates(false);
 }
 
 bool ProjectWindow::report(const Result<void>& result)
@@ -231,6 +282,31 @@ void ProjectWindow::refresh()
     report(Error{std::get<Error>(assets.error()).msg});
     return;
   }
+  // Library state is project state: a captured snapshot keeps working even when the
+  // library is gone, so an unreadable library only downgrades this column.
+  auto updateStates = std::map<std::string, QString>{};
+  if (const auto updates = m_session->checkLibraryUpdates(); updates.is_success())
+  {
+    for (const auto& update : updates.value())
+    {
+      switch (update.state)
+      {
+      case project::LibraryUpdateState::UpToDate:
+        break;
+      case project::LibraryUpdateState::NewVersion:
+        updateStates[update.projectAssetId] = update.ignored
+                                                ? tr("Library update ignored")
+                                                : tr("New library version available");
+        break;
+      case project::LibraryUpdateState::Missing:
+        updateStates[update.projectAssetId] = tr("No longer readable in library");
+        break;
+      case project::LibraryUpdateState::LibraryUnavailable:
+        updateStates[update.projectAssetId] = tr("Library not accessible");
+        break;
+      }
+    }
+  }
   m_assets->clear();
   for (const auto& asset : assets.value())
   {
@@ -240,21 +316,33 @@ void ProjectWindow::refresh()
       !name.contains(m_search->text(), Qt::CaseInsensitive)
       && !path.contains(m_search->text(), Qt::CaseInsensitive))
       continue;
+    const auto update = updateStates.find(asset.id);
     auto* item = new QTreeWidgetItem{
       m_assets,
       {name,
        QString::fromLatin1(project::assetTypeName(asset.type)),
        path,
        QString::number(asset.revision),
+       asset.library.empty()
+         ? tr("Imported")
+         : tr("Library rev %1").arg(qulonglong(asset.library.libraryRevision)),
        asset.type == project::AssetType::Map ? tr("MAP document")
        : QJsonDocument::fromJson(QByteArray::fromStdString(asset.conversionRecipe))
            .object()
            .value("formatValidated")
            .toBool()
          ? tr("Converted; format checked")
-         : tr("Stored; engine validation pending")}};
+         : tr("Stored; engine validation pending"),
+       update == updateStates.end() ? QString{} : update->second}};
     item->setData(0, Qt::UserRole, QString::fromStdString(asset.id));
     item->setToolTip(0, QString::fromStdString(asset.id));
+    if (!asset.library.empty())
+      item->setToolTip(
+        4,
+        tr("Captured from library asset %1 (%2)")
+          .arg(
+            QString::fromStdString(asset.library.sourceContainer),
+            QString::fromStdString(asset.library.libraryAssetId)));
     if (selected == asset.id)
       m_assets->setCurrentItem(item);
   }

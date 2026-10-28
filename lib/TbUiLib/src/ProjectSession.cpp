@@ -786,6 +786,46 @@ Result<project::Asset> ProjectSession::captureLibraryAsset(
   return result;
 }
 
+Result<std::optional<project::Asset>> ProjectSession::projectAssetForLibraryAsset(
+  const std::string& libraryId, const std::string& libraryAssetId) const
+{
+  return m_store->findAssetByLibraryAsset(libraryId, libraryAssetId);
+}
+
+Result<std::filesystem::path> ProjectSession::libraryAssetFile(
+  const std::string& libraryId, const std::string& libraryAssetId)
+{
+  auto library = openLibrary(libraryId);
+  if (library.is_error())
+    return std::get<Error>(library.error());
+  auto asset = library.value()->findAsset(libraryAssetId);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (!asset.value())
+    return Error{"Asset library resource not found."};
+
+  const auto& entry = *asset.value();
+  const auto extension =
+    entry.type == project::AssetType::Texture
+      ? std::string{".wad"}
+      : std::filesystem::path{entry.virtualPath}.extension().string();
+  // The revision is part of the cache path, so a newer library revision can never be
+  // previewed from a stale file.
+  const auto path = pathFromQString(m_workspace.path()) / "library-preview" / libraryId
+                    / libraryAssetId / std::to_string(entry.revision)
+                    / (entry.displayName + extension);
+  if (QFile::exists(pathAsQString(path)))
+    return path;
+
+  auto content = library.value()->readContent(libraryAssetId);
+  if (content.is_error())
+    return std::get<Error>(content.error());
+  auto compatible = project::compatibleLibraryContent(entry, content.value());
+  if (compatible.is_error())
+    return std::get<Error>(compatible.error());
+  return writeBytes(path, compatible.value()) | kdl::transform([&]() { return path; });
+}
+
 Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
   const bool rescan)
 {

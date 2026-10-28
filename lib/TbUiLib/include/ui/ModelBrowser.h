@@ -22,6 +22,7 @@
 #include <QWidget>
 
 #include "base/NotifierConnection.h"
+#include "project/LibrarySync.h"
 #include "ui/AssetBrowserModel.h"
 #include "ui/ModelBrowserView.h"
 
@@ -64,6 +65,8 @@ private:
   QHBoxLayout* m_breadcrumbLayout = nullptr;
   QToolButton* m_savePrefabButton = nullptr;
   QToolButton* m_reloadButton = nullptr;
+  QComboBox* m_sourceCombo = nullptr;
+  QComboBox* m_libraryCombo = nullptr;
   QComboBox* m_iconSizeCombo = nullptr;
   QLineEdit* m_folderEdit = nullptr;
   QLineEdit* m_searchBox = nullptr;
@@ -74,6 +77,11 @@ private:
 
   QFileSystemWatcher* m_fileSystemWatcher = nullptr;
   QTimer* m_rescanTimer = nullptr;
+
+  BrowserSource m_source = BrowserSource::GameFiles;
+  std::string m_libraryId;
+  std::vector<project::LibraryUpdate> m_libraryUpdates;
+  QString m_libraryError;
 
   std::filesystem::path m_folderPath;
   std::filesystem::path m_currentFolderPath;
@@ -121,7 +129,16 @@ private:
   void ensureAssetsLoaded();
   void scheduleAssetRefresh();
   void scheduleDeferredAssetRefreshAfterDocumentLoad();
-  std::optional<std::vector<BrowserAsset>> scanAssets() const;
+  std::optional<std::vector<BrowserAsset>> scanAssets();
+  std::optional<std::vector<BrowserAsset>> scanProjectAssets() const;
+  std::optional<std::vector<BrowserAsset>> scanLibraryAssets() const;
+  void setAssetSource(BrowserSource source);
+  void updateSourceControls();
+  void refreshLibraryChoices();
+  void chooseLibrary();
+  void captureLibraryAsset(const QString& libraryId, const QString& libraryAssetId);
+  void updateProjectAsset(const QString& projectAssetId);
+  void findProjectAssetUses(const QString& projectAssetId);
   void reloadModels();
   void rebuildFolderTree();
 

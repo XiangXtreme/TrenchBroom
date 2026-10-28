@@ -236,11 +236,34 @@ void ModelBrowserView::setAssets(
   std::filesystem::path rootFolderPath, std::vector<BrowserAsset> assets)
 {
   m_rootFolderPath = std::move(rootFolderPath);
+  // A newer library revision keeps the same catalog path, so its stale preview has to be
+  // dropped explicitly instead of waiting for the path to disappear.
+  for (const auto& previous : m_assets)
+  {
+    const auto it = std::ranges::find_if(assets, [&](const auto& asset) {
+      return asset.source == previous.source && asset.path == previous.path;
+    });
+    if (
+      it != assets.end()
+      && (it->libraryRevision != previous.libraryRevision || it->absolutePath != previous.absolutePath))
+    {
+      m_assetPreviews.erase(previous.path);
+    }
+  }
   removeStalePreviews(assets);
   m_assets = std::move(assets);
   m_currentFolderPath.clear();
   m_hasSelection = false;
   stopSoundPreview();
+  invalidate();
+  update();
+}
+
+void ModelBrowserView::setIncludeDefaultRoots(const bool includeDefaultRoots)
+{
+  if (m_includeDefaultRoots == includeDefaultRoots)
+    return;
+  m_includeDefaultRoots = includeDefaultRoots;
   invalidate();
   update();
 }
@@ -303,8 +326,12 @@ void ModelBrowserView::doReloadLayout(Layout& layout)
   const auto font = gl::FontDescriptor{fontPath, size_t(fontSize)};
   const auto maxCellWidth = layout.maxCellWidth();
   const auto cellSize = assetCellSize();
-  for (const auto& entry :
-       modelBrowserEntries(m_rootFolderPath, m_assets, m_currentFolderPath, m_searchText))
+  for (const auto& entry : modelBrowserEntries(
+         m_rootFolderPath,
+         m_assets,
+         m_currentFolderPath,
+         m_searchText,
+         m_includeDefaultRoots))
   {
     const auto titleHeight = fontManager().font(font).measure(entry.title).y();
 
@@ -608,6 +635,15 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
     {
       emit mapActivated(pathAsGenericQString(item.path));
     }
+    else if (const auto* asset = assetAt(item.path); asset && isLibraryAsset(*asset))
+    {
+      // Double-clicking a library entry is the explicit "use this resource" action: it
+      // copies the current revision into the project instead of creating a path
+      // dependency.
+      emit libraryAssetCaptureRequested(
+        QString::fromStdString(asset->libraryId),
+        QString::fromStdString(asset->libraryAssetId));
+    }
   }
 }
 
@@ -621,6 +657,34 @@ void ModelBrowserView::doContextMenu(
   }
 
   const auto& item = cellData(*cell);
+  if (const auto* asset = assetAt(item.path); asset && isLibraryAsset(*asset))
+  {
+    auto menu = QMenu{this};
+    const auto libraryId = QString::fromStdString(asset->libraryId);
+    const auto libraryAssetId = QString::fromStdString(asset->libraryAssetId);
+    auto* capture = menu.addAction(
+      asset->projectAssetId.empty() ? tr("Add to Project")
+                                    : tr("Use Current Library Version"));
+    connect(capture, &QAction::triggered, this, [=]() {
+      emit libraryAssetCaptureRequested(libraryId, libraryAssetId);
+    });
+    if (!asset->projectAssetId.empty())
+    {
+      const auto projectAssetId = QString::fromStdString(asset->projectAssetId);
+      auto* update = menu.addAction(tr("Update Project Resource"));
+      update->setEnabled(asset->projectUpdateAvailable);
+      connect(update, &QAction::triggered, this, [=]() {
+        emit libraryAssetUpdateRequested(projectAssetId);
+      });
+      auto* uses = menu.addAction(tr("Find Uses in Project"));
+      connect(uses, &QAction::triggered, this, [=]() {
+        emit libraryAssetFindUsesRequested(projectAssetId);
+      });
+    }
+    menu.exec(event->globalPos());
+    return;
+  }
+
   if (item.type == BrowserCellType::Prefab)
   {
     auto menu = QMenu{this};
@@ -1457,6 +1521,31 @@ bool ModelBrowserView::dndEnabled()
 QString ModelBrowserView::dndData(const Cell& cell)
 {
   const auto& item = cellData(cell);
+  if (const auto* asset = assetAt(item.path); asset && isLibraryAsset(*asset))
+  {
+    // Only a captured resource has an engine path. An uncaptured library entry must not
+    // become a map dependency behind the user's back.
+    if (asset->projectPublishPath.empty())
+    {
+      return "";
+    }
+    switch (item.type)
+    {
+    case BrowserCellType::Model:
+      return QString{"model:"} + pathAsGenericQString(asset->projectPublishPath);
+    case BrowserCellType::Sprite:
+      return QString{"sprite:"} + pathAsGenericQString(asset->projectPublishPath);
+    case BrowserCellType::Sound:
+      return QString{"sound:"} + pathAsGenericQString(asset->projectPublishPath);
+    case BrowserCellType::Folder:
+    case BrowserCellType::Map:
+    case BrowserCellType::Texture:
+    case BrowserCellType::Prefab:
+      return "";
+    }
+    return "";
+  }
+
   switch (item.type)
   {
   case BrowserCellType::Model:
@@ -1485,7 +1574,25 @@ QString ModelBrowserView::tooltip(const Cell& cell)
       item.path.empty() ? m_rootFolderPath : (m_rootFolderPath / item.path);
     return QString::fromStdString(folderAbs.generic_string());
   }
+  if (const auto* asset = assetAt(item.path))
+  {
+    const auto status = browserAssetStatus(*asset);
+    if (!status.isEmpty())
+    {
+      return QString{"%1\n%2 — %3"}
+        .arg(QString::fromStdString(item.path.generic_string()))
+        .arg(QString::fromLatin1(browserSourceName(asset->source)))
+        .arg(status);
+    }
+  }
   return QString::fromStdString(item.path.generic_string());
+}
+
+const BrowserAsset* ModelBrowserView::assetAt(const std::filesystem::path& path) const
+{
+  const auto it =
+    std::ranges::find_if(m_assets, [&](const auto& asset) { return asset.path == path; });
+  return it == m_assets.end() ? nullptr : &*it;
 }
 
 const BrowserCellData& ModelBrowserView::cellData(const Cell& cell) const

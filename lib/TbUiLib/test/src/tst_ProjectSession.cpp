@@ -497,6 +497,34 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(sandbox.session->libraryUpdatesDeferred());
   }
 
+  SECTION("browses library resources without adding them to the project")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    requireProject(sandbox.session->save());
+    CHECK_FALSE(sandbox.session->modified());
+    // Merely looking at a library resource must not create a project dependency.
+    CHECK_FALSE(requireProject(
+      sandbox.session->projectAssetForLibraryAsset(libraryId, wallLibraryId)));
+    const auto preview =
+      requireProject(sandbox.session->libraryAssetFile(libraryId, wallLibraryId));
+    CHECK(std::filesystem::exists(preview));
+    const auto bytes = readProjectFile(preview);
+    REQUIRE(bytes.size() > 4);
+    // The preview is the GoldSrc compatible result, so the browser shows what a capture
+    // would actually embed.
+    CHECK(std::string(reinterpret_cast<const char*>(bytes.data()), 4) == "WAD3");
+    CHECK(requireProject(sandbox.session->store().assets()).empty());
+    CHECK_FALSE(sandbox.session->modified());
+
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    const auto linked = requireProject(
+      sandbox.session->projectAssetForLibraryAsset(libraryId, wallLibraryId));
+    REQUIRE(linked);
+    CHECK(linked->id == captured.id);
+    CHECK(linked->library.libraryRevision == 1);
+  }
+
   SECTION("a newer library revision reaches every open map at once")
   {
     auto config = mdl::QuakeFixtureConfig;

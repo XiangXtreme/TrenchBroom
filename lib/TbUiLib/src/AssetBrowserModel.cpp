@@ -19,6 +19,8 @@
 
 #include "ui/AssetBrowserModel.h"
 
+#include <QObject>
+
 #include "base/Macros.h"
 #include "ui/QPathUtils.h"
 
@@ -53,6 +55,8 @@ std::string displayNameForPath(const std::filesystem::path& path)
 
 bool sameAssetIdentity(const BrowserAsset& lhs, const BrowserAsset& rhs)
 {
+  if (!lhs.libraryAssetId.empty() || !rhs.libraryAssetId.empty())
+    return lhs.libraryId == rhs.libraryId && lhs.libraryAssetId == rhs.libraryAssetId;
   if (!lhs.assetId.empty() || !rhs.assetId.empty())
     return lhs.projectId == rhs.projectId && lhs.assetId == rhs.assetId;
   return lhs.type == rhs.type && lhs.path == rhs.path;
@@ -92,7 +96,52 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.absolutePath == rhs.absolutePath && lhs.displayName == rhs.displayName
          && lhs.lastModified == rhs.lastModified && lhs.projectId == rhs.projectId
          && lhs.assetId == rhs.assetId && lhs.revision == rhs.revision
-         && lhs.catalogPath == rhs.catalogPath;
+         && lhs.catalogPath == rhs.catalogPath && lhs.source == rhs.source
+         && lhs.libraryId == rhs.libraryId && lhs.libraryAssetId == rhs.libraryAssetId
+         && lhs.libraryRevision == rhs.libraryRevision
+         && lhs.libraryContentHash == rhs.libraryContentHash
+         && lhs.projectAssetId == rhs.projectAssetId
+         && lhs.projectRevision == rhs.projectRevision
+         && lhs.projectPublishPath == rhs.projectPublishPath
+         && lhs.projectUpdateAvailable == rhs.projectUpdateAvailable
+         && lhs.missing == rhs.missing;
+}
+
+const char* browserSourceName(const BrowserSource source)
+{
+  switch (source)
+  {
+  case BrowserSource::GameFiles:
+    return "Game files";
+  case BrowserSource::Project:
+    return "Project";
+  case BrowserSource::AssetLibrary:
+    return "Asset library";
+  }
+  return "Unknown";
+}
+
+bool isLibraryAsset(const BrowserAsset& asset)
+{
+  return asset.source == BrowserSource::AssetLibrary;
+}
+
+bool hasProjectSnapshot(const BrowserAsset& asset)
+{
+  return !asset.projectAssetId.empty() || !asset.assetId.empty();
+}
+
+QString browserAssetStatus(const BrowserAsset& asset)
+{
+  if (asset.missing)
+    return QObject::tr("Missing in library");
+  if (asset.projectUpdateAvailable)
+    return QObject::tr("Library update available");
+  if (isLibraryAsset(asset) && hasProjectSnapshot(asset))
+    return QObject::tr("In project (rev %1)").arg(qulonglong(asset.projectRevision));
+  if (asset.source == BrowserSource::Project && asset.revision > 0)
+    return QObject::tr("Project rev %1").arg(qulonglong(asset.revision));
+  return {};
 }
 
 const std::vector<std::pair<BrowserCellType, std::filesystem::path>>& goldSrcAssetRoots()
@@ -163,7 +212,9 @@ bool sameBrowserAssetContent(const BrowserAsset& lhs, const BrowserAsset& rhs)
 {
   return sameAssetIdentity(lhs, rhs) && lhs.type == rhs.type && lhs.path == rhs.path
          && lhs.absolutePath == rhs.absolutePath && lhs.revision == rhs.revision
-         && lhs.lastModified == rhs.lastModified;
+         && lhs.libraryRevision == rhs.libraryRevision
+         && lhs.projectUpdateAvailable == rhs.projectUpdateAvailable
+         && lhs.missing == rhs.missing && lhs.lastModified == rhs.lastModified;
 }
 
 std::vector<std::filesystem::path> entityModelAssetPaths(
@@ -174,7 +225,10 @@ std::vector<std::filesystem::path> entityModelAssetPaths(
   {
     if (isEntityModelAsset(asset))
     {
-      result.push_back(asset.path);
+      // Library entries refer to the engine path of their project snapshot; an
+      // uncaptured library resource has none yet.
+      result.push_back(
+        asset.projectPublishPath.empty() ? asset.path : asset.projectPublishPath);
     }
   }
   return result;
@@ -289,6 +343,22 @@ std::vector<std::filesystem::path> changedAssetPaths(
       continue;
     }
 
+    // Library entries are identified by their catalog identity, but the map only knows
+    // the engine path of the project snapshot. An uncaptured library resource has no such
+    // path and cannot be a map dependency yet.
+    if (isLibraryAsset(asset))
+    {
+      const auto old = std::ranges::find_if(oldAssets, [&](const auto& previous) {
+        return sameAssetIdentity(previous, asset);
+      });
+      const auto revisionChanged = old == oldAssets.end()
+                                   || old->libraryRevision != asset.libraryRevision
+                                   || old->missing != asset.missing;
+      if (revisionChanged && !asset.projectPublishPath.empty())
+        changedPaths.push_back(asset.projectPublishPath);
+      continue;
+    }
+
     if (!asset.assetId.empty())
     {
       const auto old = std::ranges::find_if(oldAssets, [&](const auto& previous) {
@@ -331,7 +401,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const std::filesystem::path& rootFolderPath,
   const std::vector<BrowserAsset>& assets,
   const std::filesystem::path& currentFolderPath,
-  const QString& searchText)
+  const QString& searchText,
+  const bool includeDefaultRoots)
 {
   const auto trimmedSearchText = searchText.trimmed();
   const auto hasSearch = !trimmedSearchText.isEmpty();
@@ -353,7 +424,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   auto folderChildren = std::vector<std::filesystem::path>{};
   auto assetChildren = std::vector<BrowserAsset>{};
 
-  if (rootFolderPath.empty() && normalizedCurrentFolderPath.empty())
+  if (
+    includeDefaultRoots && rootFolderPath.empty() && normalizedCurrentFolderPath.empty())
   {
     for (const auto& [type, rootPath] : assetBrowserRoots())
     {
