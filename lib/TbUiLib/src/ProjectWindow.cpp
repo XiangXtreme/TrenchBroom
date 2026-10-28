@@ -118,6 +118,8 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   });
   file->addAction(tr("Import Files…"), this, &ProjectWindow::importFiles);
   file->addAction(tr("Check Resources…"), this, [this]() { checkResources(); });
+  file->addAction(
+    tr("Export Compile Snapshot…"), this, &ProjectWindow::exportCompileSnapshot);
   file->addAction(tr("Close Project"), this, &QWidget::close);
   auto* library = menuBar()->addMenu(tr("Library"));
   library->addAction(
@@ -213,6 +215,34 @@ void ProjectWindow::checkResources(std::optional<std::string> assetId)
     },
     this};
   dialog.exec();
+}
+
+void ProjectWindow::exportCompileSnapshot()
+{
+  const auto id = selectedAsset();
+  if (!id)
+  {
+    QMessageBox::information(
+      this, tr("Export Compile Snapshot"), tr("Select a map in the project first."));
+    return;
+  }
+  const auto asset = m_session->store().findAsset(*id);
+  if (asset.is_error())
+  {
+    report(Error{std::get<Error>(asset.error()).msg});
+    return;
+  }
+  if (!asset.value() || asset.value()->type != project::AssetType::Map)
+  {
+    QMessageBox::information(
+      this, tr("Export Compile Snapshot"), tr("Select a map in the project first."));
+    return;
+  }
+  const auto folder = QFileDialog::getExistingDirectory(
+    this, tr("Export Compile Snapshot"), {}, QFileDialog::ShowDirsOnly);
+  if (folder.isEmpty())
+    return;
+  report(m_session->exportCompileSnapshot(*id, pathFromQString(folder)));
 }
 
 void ProjectWindow::attachAssetLibrary()

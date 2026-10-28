@@ -132,6 +132,17 @@ public:
     const std::string& projectAssetId, std::uint64_t revision);
 
   Result<std::filesystem::path> prepareMap(const std::string& id);
+  /**
+   * Writes a fixed compile input for one project map.
+   *
+   * The folder contains the map source, a WAD with exactly the textures that map
+   * references, a WAD list for the compiler and the non-texture resources the map uses.
+   * It is a snapshot: the project and its libraries may change afterwards without
+   * affecting a compile started from it, and nothing in it points at a library.
+   */
+  Result<void> exportCompileSnapshot(
+    const std::string& mapAssetId, const std::filesystem::path& folder);
+
   // Reads live edits without selecting revisions, saving the project or clearing dirty
   // state.
   Result<std::vector<std::uint8_t>> workingMapContents(const std::string& id) const;

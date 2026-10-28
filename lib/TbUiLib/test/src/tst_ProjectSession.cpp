@@ -2,13 +2,17 @@
  Copyright (C) 2026 XiangXtreme
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
+#include <QBuffer>
+#include <QColor>
 #include <QFile>
+#include <QImage>
 #include <QTemporaryDir>
 
 #include "gl/MaterialManager.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
+#include "mdl/MapHeader.h"
 #include "mdl/Map_Entities.h"
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
@@ -20,6 +24,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <sstream>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -79,6 +84,43 @@ void writeFile(const std::filesystem::path& path, const std::vector<std::uint8_t
   file.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
 }
 
+// Minimal but real PNG payload, so an image dependency goes through the same decode and
+// GoldSrc conversion path as an imported texture.
+std::vector<std::uint8_t> pngBytes(const QColor color, const int size = 8)
+{
+  auto image = QImage{size, size, QImage::Format_RGBA8888};
+  image.fill(color);
+  auto buffer = QBuffer{};
+  REQUIRE(buffer.open(QIODevice::WriteOnly));
+  REQUIRE(image.save(&buffer, "PNG"));
+  const auto bytes = buffer.data();
+  return {bytes.begin(), bytes.end()};
+}
+
+// Structurally valid version 10 studio model declaring the given skin texture names.
+std::vector<std::uint8_t> modelWithSkins(const std::vector<std::string>& skins)
+{
+  constexpr auto headerSize = std::size_t{244};
+  constexpr auto textureEntrySize = std::size_t{80};
+  auto model = std::vector<std::uint8_t>(headerSize, 0);
+  const auto writeU32 = [&](const std::size_t offset, const std::uint32_t value) {
+    for (std::size_t i = 0; i < 4; ++i)
+      model[offset + i] = std::uint8_t((value >> (i * 8)) & 0xff);
+  };
+  writeU32(0, 0x54534449); // "IDST"
+  writeU32(4, 10);
+  writeU32(180, std::uint32_t(skins.size()));
+  writeU32(184, std::uint32_t(headerSize));
+  for (const auto& skin : skins)
+  {
+    auto entry = std::vector<std::uint8_t>(textureEntrySize, 0);
+    for (std::size_t i = 0; i < skin.size() && i < 64; ++i)
+      entry[i] = std::uint8_t(skin[i]);
+    model.insert(model.end(), entry.begin(), entry.end());
+  }
+  return model;
+}
+
 const project::LibraryAsset& libraryAssetNamed(
   const std::vector<project::LibraryAsset>& assets, const std::string& name)
 {
@@ -124,6 +166,12 @@ struct LibrarySandbox
     writeFile(
       libraryFolder / std::filesystem::path{relativePath},
       requireProject(project::buildGoldSrcWad(miptex)));
+  }
+
+  void write(
+    const std::string& relativePath, const std::vector<std::uint8_t>& bytes) const
+  {
+    writeFile(libraryFolder / std::filesystem::path{relativePath}, bytes);
   }
 
   void createLibrary(const std::string& name = "Studio") const
@@ -523,6 +571,118 @@ TEST_CASE("ProjectSessionAssetLibrary")
     REQUIRE(linked);
     CHECK(linked->id == captured.id);
     CHECK(linked->library.libraryRevision == 1);
+  }
+
+  SECTION("capturing a model embeds its dependency closure")
+  {
+    sandbox.write("models/crate.mdl", modelWithSkins({"crate_skin.bmp"}));
+    sandbox.write("textures/crate_skin.png", pngBytes(QColor{200, 120, 40}));
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+
+    const auto assets = sandbox.libraryAssets();
+    const auto model = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.type == project::AssetType::Model; });
+    REQUIRE(model != assets.end());
+    const auto skin = std::ranges::find_if(assets, [](const auto& asset) {
+      return asset.virtualPath == "textures/crate_skin.png";
+    });
+    REQUIRE(skin != assets.end());
+
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, model->id));
+    CHECK(captured.type == project::AssetType::Model);
+    CHECK(captured.publishPath == "models/crate.mdl");
+
+    // The model is unusable without its skin, so the capture pulls the closure in.
+    const auto projectAssets = requireProject(sandbox.session->store().assets());
+    REQUIRE(projectAssets.size() == 2);
+    const auto dependencies =
+      requireProject(sandbox.session->store().dependencies(captured.id));
+    REQUIRE(dependencies.size() == 1);
+    CHECK(dependencies.front().kind == "model-skin");
+    const auto skinAsset = requireProject(
+      sandbox.session->store().findAsset(dependencies.front().dependencyId));
+    REQUIRE(skinAsset);
+    CHECK(skinAsset->type == project::AssetType::Texture);
+    CHECK(skinAsset->library.libraryAssetId == skin->id);
+    CHECK(requireProject(sandbox.session->store().dependents(skinAsset->id)).size() == 1);
+
+    // The closure is snapshotted, so losing the library keeps both resources usable.
+    std::filesystem::remove_all(sandbox.libraryFolder);
+    requireProject(sandbox.session->save());
+    sandbox.session.reset();
+    sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+    CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
+    CHECK(
+      requireProject(sandbox.session->store().readAsset(
+                       skinAsset->id, project::ContentKind::Compatible))
+        .size()
+      > 0);
+  }
+
+  SECTION("exports a fixed compile snapshot that no longer touches the library")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+
+    auto stream = std::ostringstream{};
+    mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Valve, "Snapshot");
+    // A GoldSrc map is Valve 220; the compiler reads the version from the entity. Braces
+    // stay on their own line because that is what TrenchBroom writes and what external
+    // tools expect to see.
+    stream << R"({
+"classname" "worldspawn"
+"mapversion" "220"
+{
+( 0 0 0 ) ( 128 0 0 ) ( 0 128 0 ) WALL01 [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 0 0 128 ) ( 0 128 128 ) ( 128 0 128 ) WALL01 [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 0 0 0 ) ( 0 128 0 ) ( 0 0 128 ) WALL01 [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 128 0 0 ) ( 128 0 128 ) ( 128 128 0 ) WALL01 [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 0 0 0 ) ( 0 0 128 ) ( 128 0 0 ) WALL01 [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 0 128 0 ) ( 128 128 0 ) ( 0 128 128 ) WALL01 [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+}
+}
+)";
+    const auto mapText = stream.str();
+    auto mapImport = project::AssetImport{};
+    mapImport.type = project::AssetType::Map;
+    mapImport.virtualPath = "maps/compile.map";
+    mapImport.displayName = "Compile";
+    mapImport.original = {mapText.begin(), mapText.end()};
+    mapImport.compatible = mapImport.original;
+    const auto map = requireProject(sandbox.session->importAsset(mapImport));
+
+    const auto folder = sandbox.root / "snapshot";
+    requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
+    CHECK(readProjectFile(folder / "map.map") == mapImport.compatible);
+
+    // Only the textures this map references are exported, and they arrive as GoldSrc
+    // miptex entries the compiler can embed.
+    const auto wad = project::readGoldSrcWad(readProjectFile(folder / "textures.wad"));
+    REQUIRE(wad.is_success());
+    REQUIRE(wad.value().textures.size() == 1);
+    CHECK(wad.value().textures.front().name == "WALL01");
+    CHECK(wad.value().textures.front().valid);
+
+    const auto config = readProjectFile(folder / "wads.cfg");
+    CHECK(std::string(config.begin(), config.end()) == "textures.wad\n");
+    const auto metadata = readProjectFile(folder / "snapshot.txt");
+    const auto metadataText = std::string(metadata.begin(), metadata.end());
+    CHECK(metadataText.find("texture WALL01") != std::string::npos);
+    CHECK(metadataText.find(map.id) != std::string::npos);
+    // No library path may leak into the fixed input.
+    CHECK(metadataText.find(sandbox.libraryFolder.generic_string()) == std::string::npos);
+
+    // Removing the library must not change what a compile of this project would see.
+    std::filesystem::remove_all(sandbox.libraryFolder);
+    const auto secondFolder = sandbox.root / "snapshot-after-loss";
+    requireProject(sandbox.session->exportCompileSnapshot(map.id, secondFolder));
+    CHECK(
+      readProjectFile(secondFolder / "textures.wad")
+      == readProjectFile(folder / "textures.wad"));
+    CHECK(
+      readProjectFile(secondFolder / "map.map") == readProjectFile(folder / "map.map"));
   }
 
   SECTION("a newer library revision reaches every open map at once")

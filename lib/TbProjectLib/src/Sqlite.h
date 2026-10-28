@@ -227,6 +227,12 @@ public:
     check(m_db, code);
     return false;
   }
+  // A statement stepped to completion must be reset before it can be bound again.
+  void reset()
+  {
+    check(m_db, sqlite3_reset(m_stmt));
+    sqlite3_clear_bindings(m_stmt);
+  }
   void run()
   {
     if (next())

@@ -64,4 +64,43 @@ inline std::vector<std::uint8_t> makeMiptex(
   return miptex;
 }
 
+inline void writeU32(
+  std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::uint32_t value)
+{
+  for (std::size_t i = 0; i < 4; ++i)
+    bytes[offset + i] = std::uint8_t((value >> (i * 8)) & 0xff);
+}
+
+inline void writeName(
+  std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::string_view name)
+{
+  const auto count = name.size() < 64 ? name.size() : std::size_t{64};
+  for (std::size_t i = 0; i < count; ++i)
+    bytes[offset + i] = std::uint8_t(name[i]);
+}
+
+// Builds a structurally valid GoldSrc studio model header (version 10) that declares the
+// given skin texture names, which is everything dependency capture reads.
+inline std::vector<std::uint8_t> makeModel(const std::vector<std::string>& skins)
+{
+  constexpr std::size_t headerSize = 244;
+  constexpr std::size_t textureEntrySize = 80;
+  auto model = std::vector<std::uint8_t>(headerSize, 0);
+  writeU32(model, 0, 0x54534449); // "IDST"
+  writeU32(model, 4, 10);
+  writeName(model, 8, "test.mdl");
+  writeU32(model, 180, std::uint32_t(skins.size()));
+  writeU32(model, 184, std::uint32_t(headerSize));
+  for (const auto& skin : skins)
+  {
+    auto entry = std::vector<std::uint8_t>(textureEntrySize, 0);
+    writeU32(entry, 68, 1); // width
+    writeU32(entry, 72, 1); // height
+    for (std::size_t i = 0; i < skin.size() && i < 64; ++i)
+      entry[i] = std::uint8_t(skin[i]);
+    model.insert(model.end(), entry.begin(), entry.end());
+  }
+  return model;
+}
+
 } // namespace tb::test

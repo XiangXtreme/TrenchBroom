@@ -19,9 +19,13 @@
 #include "mdl/Map.h"
 #include "project/GoldSrcWad.h"
 #include "ui/MapDocument.h"
+#include "ui/ProjectResourceAudit.h"
 #include "ui/QPathUtils.h"
 
+#include <fmt/ranges.h>
+
 #include <algorithm>
+#include <functional>
 
 namespace tb::ui
 {
@@ -315,6 +319,128 @@ Result<void> ProjectSession::removeAsset(const std::string& id)
     return Error{"Close this map before removing it."};
   return m_store->removeAsset(id) | kdl::transform([&]() { changed(); });
 }
+Result<void> ProjectSession::exportCompileSnapshot(
+  const std::string& mapAssetId, const std::filesystem::path& folder)
+{
+  const auto map = m_store->findAsset(mapAssetId);
+  if (map.is_error())
+    return std::get<Error>(map.error());
+  if (!map.value() || map.value()->type != project::AssetType::Map)
+    return Error{"Select a project map before exporting a compile snapshot."};
+  const auto contents = workingMapContents(mapAssetId);
+  if (contents.is_error())
+    return std::get<Error>(contents.error());
+
+  // Only the references this map actually makes are collected, so the snapshot can never
+  // carry the whole project or library into a compile.
+  const auto audit = auditGoldSrcProjectResources(*this);
+  if (audit.is_error())
+    return std::get<Error>(audit.error());
+  auto used = std::vector<std::string>{};
+  for (const auto& use : audit.value().uses)
+  {
+    if (use.mapId != mapAssetId)
+      continue;
+    for (const auto& id : use.assetIds)
+      if (std::ranges::find(used, id) == used.end())
+        used.push_back(id);
+  }
+  std::ranges::sort(used);
+
+  auto miptexByName = std::map<std::string, std::vector<std::uint8_t>>{};
+  auto resources = std::vector<std::pair<std::string, std::vector<std::uint8_t>>>{};
+  auto metadata = std::vector<std::string>{
+    "# TB compile snapshot",
+    "project=" + m_store->info().id,
+    "map=" + mapAssetId,
+    "mapRevision=" + std::to_string(map.value()->revision)};
+  for (const auto& id : used)
+  {
+    const auto asset = m_store->findAsset(id);
+    if (asset.is_error())
+      return std::get<Error>(asset.error());
+    if (!asset.value())
+      continue;
+    const auto& entry = *asset.value();
+    const auto compatible = m_store->readAsset(id, project::ContentKind::Compatible);
+    if (compatible.is_error())
+      return std::get<Error>(compatible.error());
+    metadata.push_back(fmt::format(
+      "asset path={} type={} id={} revision={} hash={}",
+      entry.publishPath,
+      project::assetTypeName(entry.type),
+      entry.id,
+      entry.revision,
+      entry.contentHash));
+    if (entry.type != project::AssetType::Texture)
+    {
+      resources.emplace_back(entry.publishPath, compatible.value());
+      continue;
+    }
+    const auto wad = project::readGoldSrcWad(compatible.value());
+    if (wad.is_error())
+      return Error{"Project texture '" + entry.displayName + "' is not a GoldSrc WAD."};
+    for (const auto& texture : wad.value().textures)
+      if (texture.valid)
+        miptexByName.emplace(texture.name, texture.miptex);
+  }
+
+  auto entries = std::vector<std::vector<std::uint8_t>>{};
+  entries.reserve(miptexByName.size());
+  for (auto& [name, miptex] : miptexByName)
+  {
+    metadata.push_back("texture " + name);
+    entries.push_back(std::move(miptex));
+  }
+  const auto wad = project::buildGoldSrcWad(entries);
+  if (wad.is_error())
+    return std::get<Error>(wad.error());
+
+  auto error = std::error_code{};
+  std::filesystem::create_directories(folder, error);
+  if (error)
+    return Error{"Cannot create compile snapshot folder: " + error.message()};
+  const auto write = [](
+                       const std::filesystem::path& path,
+                       const std::vector<std::uint8_t>& bytes) -> Result<void> {
+    auto file = QSaveFile{pathAsQString(path)};
+    if (
+      !file.open(QIODevice::WriteOnly)
+      || file.write(reinterpret_cast<const char*>(bytes.data()), qint64(bytes.size()))
+           != qint64(bytes.size())
+      || !file.commit())
+      return Error{file.errorString().toStdString()};
+    return {};
+  };
+  const auto text = [](const std::string& value) {
+    return std::vector<std::uint8_t>{value.begin(), value.end()};
+  };
+
+  if (const auto result = write(folder / "map.map", contents.value()); result.is_error())
+    return result;
+  if (const auto result = write(folder / "textures.wad", wad.value()); result.is_error())
+    return result;
+  // hltools reads an explicit WAD list; the paths stay relative so the snapshot can be
+  // compiled from any machine as long as the compiler runs inside the folder.
+  if (const auto result = write(folder / "wads.cfg", text("textures.wad\n"));
+      result.is_error())
+    return result;
+  if (const auto result = write(
+        folder / "snapshot.txt", text(fmt::format("{}\n", fmt::join(metadata, "\n"))));
+      result.is_error())
+    return result;
+  for (const auto& [path, bytes] : resources)
+  {
+    const auto target = folder / pathFromQString(QString::fromStdString(path));
+    std::filesystem::create_directories(target.parent_path(), error);
+    if (error)
+      return Error{"Cannot create compile snapshot folder: " + error.message()};
+    if (const auto result = write(target, bytes); result.is_error())
+      return result;
+  }
+  return {};
+}
+
 Result<std::filesystem::path> ProjectSession::prepareMap(const std::string& id)
 {
   return m_store->findAsset(id)
@@ -337,7 +463,10 @@ Result<void> ProjectSession::refreshRuntime()
   return m_store->assets() | kdl::and_then([&](const auto& assets) -> Result<void> {
            auto runtimeAssets = assets;
            std::erase_if(runtimeAssets, [](const auto& asset) {
-             return asset.type == project::AssetType::Map;
+             // Maps are documents, not cache files. A skybox group is an organization
+             // node whose faces are materialized as their own texture assets.
+             return asset.type == project::AssetType::Map
+                    || asset.type == project::AssetType::Skybox;
            });
            if (m_runtime && runtimeAssets == m_runtimeAssets)
              return {};
@@ -762,28 +891,84 @@ Result<project::Asset> ProjectSession::captureLibraryAsset(
   auto library = openLibrary(libraryId);
   if (library.is_error())
     return std::get<Error>(library.error());
-  auto asset = library.value()->findAsset(libraryAssetId);
-  if (asset.is_error())
-    return std::get<Error>(asset.error());
-  if (!asset.value() || asset.value()->missing)
-    return Error{"Asset library resource is missing or inaccessible."};
+  auto& source = *library.value();
 
-  // Selecting the same library resource twice updates its snapshot instead of creating a
-  // second project asset with the same identity.
-  auto existing = m_store->findAssetByLibraryAsset(libraryId, libraryAssetId);
-  if (existing.is_error())
-    return std::get<Error>(existing.error());
-  auto import = captureImport(*library.value(), *asset.value(), existing.value());
-  if (import.is_error())
-    return std::get<Error>(import.error());
-  auto result = existing.value()
-                  ? m_store->replaceAsset(existing.value()->id, import.value())
-                  : m_store->importAsset(import.value());
-  if (result.is_error())
-    return std::get<Error>(result.error());
+  auto captured = std::map<std::string, std::string>{};
+  // Captures one library resource and its declared dependencies. Dependencies are only
+  // ever created when missing: a library change must never silently rewrite an existing
+  // project snapshot, so only the explicitly requested resource is refreshed.
+  std::function<Result<std::string>(const std::string&, bool)> capture =
+    [&](const std::string& id, const bool refresh) -> Result<std::string> {
+    if (const auto it = captured.find(id); it != captured.end())
+      return it->second;
+
+    auto existing = m_store->findAssetByLibraryAsset(libraryId, id);
+    if (existing.is_error())
+      return std::get<Error>(existing.error());
+    auto asset = source.findAsset(id);
+    if (asset.is_error())
+      return std::get<Error>(asset.error());
+    if (!asset.value() || asset.value()->missing)
+      return Error{"Asset library resource is missing or inaccessible."};
+
+    auto projectAsset = std::optional<project::Asset>{};
+    if (existing.value())
+    {
+      projectAsset = *existing.value();
+      if (refresh)
+      {
+        auto import = captureImport(source, *asset.value(), existing.value());
+        if (import.is_error())
+          return std::get<Error>(import.error());
+        auto replaced = m_store->replaceAsset(projectAsset->id, import.value());
+        if (replaced.is_error())
+          return std::get<Error>(replaced.error());
+        projectAsset = std::move(replaced).value();
+      }
+    }
+    else
+    {
+      auto import = captureImport(source, *asset.value(), std::nullopt);
+      if (import.is_error())
+        return std::get<Error>(import.error());
+      auto created = m_store->importAsset(import.value());
+      if (created.is_error())
+        return std::get<Error>(created.error());
+      projectAsset = std::move(created).value();
+    }
+    captured[id] = projectAsset->id;
+
+    // A model or skybox is only usable with its closure, so the edges are re-established
+    // even for an already captured resource.
+    auto dependencies = source.dependencies(id);
+    if (dependencies.is_error())
+      return std::get<Error>(dependencies.error());
+    for (const auto& dependency : dependencies.value())
+    {
+      auto dependencyId = capture(dependency.dependencyId, false);
+      if (dependencyId.is_error())
+        return Error{
+          "Cannot capture " + projectAsset->displayName + ": "
+          + std::get<Error>(dependencyId.error()).msg};
+      auto added =
+        m_store->addDependency(projectAsset->id, dependencyId.value(), dependency.kind);
+      if (added.is_error())
+        return std::get<Error>(added.error());
+    }
+    return projectAsset->id;
+  };
+
+  auto projectAssetId = capture(libraryAssetId, true);
+  if (projectAssetId.is_error())
+    return std::get<Error>(projectAssetId.error());
   changed();
   emit libraryLinksChanged();
-  return result;
+  auto result = m_store->findAsset(projectAssetId.value());
+  if (result.is_error())
+    return std::get<Error>(result.error());
+  if (!result.value())
+    return Error{"Project asset not found."};
+  return *result.value();
 }
 
 Result<std::optional<project::Asset>> ProjectSession::projectAssetForLibraryAsset(

@@ -348,6 +348,7 @@ void migrateFromVersion1(sqlite3* db)
     Statement{db, "UPDATE revisions SET content_hash=? WHERE asset_id=? AND revision=?"};
   for (std::size_t index = 0; index < revisions.size(); ++index)
   {
+    update.reset();
     update.bind(1, hashes[index]);
     update.bind(2, revisions[index].first);
     update.bind(3, revisions[index].second);

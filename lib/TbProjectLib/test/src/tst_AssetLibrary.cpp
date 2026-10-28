@@ -310,6 +310,73 @@ TEST_CASE("AssetLibrary")
     CHECK(assets[0].contentHash == assets[1].contentHash);
   }
 
+  SECTION("links model skins and companions discovered in the library")
+  {
+    workspace.write("models/props/crate.mdl", test::makeModel({"crate_skin.bmp"}));
+    workspace.write("textures/crate_skin.png", {'P', 'N', 'G', 1});
+    workspace.write("models/props/crateT.mdl", test::makeModel({}));
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+
+    const auto assets = require(library->assets());
+    const auto model = std::ranges::find_if(assets, [](const auto& asset) {
+      return asset.virtualPath == "models/props/crate.mdl";
+    });
+    REQUIRE(model != assets.end());
+    CHECK(model->type == AssetType::Model);
+    const auto dependencies = require(library->dependencies(model->id));
+    REQUIRE(dependencies.size() == 2);
+    auto kinds = std::vector<std::string>{};
+    for (const auto& dependency : dependencies)
+    {
+      kinds.push_back(dependency.kind);
+      // Both dependencies resolve to real assets, and never to the model itself.
+      CHECK(dependency.dependencyId != model->id);
+      CHECK(require(library->findAsset(dependency.dependencyId)).has_value());
+    }
+    std::ranges::sort(kinds);
+    CHECK(kinds == std::vector<std::string>{"model-companion", "model-skin"});
+
+    // Re-scanning keeps the edges without duplicating them.
+    require(library->scan());
+    CHECK(require(library->dependencies(model->id)).size() == 2);
+  }
+
+  SECTION("groups the six faces of a skybox into one asset")
+  {
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+      workspace.write(
+        std::string{"env/desert"} + face + ".png",
+        std::vector<std::uint8_t>{'P', 'N', 'G', std::uint8_t(face[0])});
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+
+    const auto assets = require(library->assets());
+    const auto skybox = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.type == AssetType::Skybox; });
+    REQUIRE(skybox != assets.end());
+    CHECK(skybox->virtualPath == "env/desert");
+    CHECK(skybox->displayName == "desert");
+    CHECK(skybox->nativeFormat == "skybox");
+    CHECK(skybox->sourceMember.empty());
+    CHECK(require(library->dependencies(skybox->id)).size() == 6);
+    // The six faces stay independent assets with their own identity and revision.
+    CHECK(require(library->assets(AssetType::Texture)).size() == 6);
+
+    // Losing a face invalidates the group. The catalog keeps the row but reports it as
+    // missing instead of silently shrinking the skybox to five faces.
+    workspace.remove("env/desertdn.png");
+    require(library->scan());
+    const auto remaining = require(library->assets());
+    const auto skyboxes = std::ranges::count_if(
+      remaining, [](const auto& asset) { return asset.type == AssetType::Skybox; });
+    CHECK(skyboxes == 1);
+    const auto grouped = std::ranges::find_if(
+      remaining, [](const auto& asset) { return asset.type == AssetType::Skybox; });
+    REQUIRE(grouped != remaining.end());
+    CHECK(grouped->missing);
+  }
+
   SECTION("rejects duplicate members and invalid lumps without losing the archive")
   {
     const auto duplicate = test::makeMiptex("WALL01", 16, 16, 5);
