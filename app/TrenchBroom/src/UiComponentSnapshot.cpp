@@ -140,6 +140,34 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
   inputLayout->addRow(
     QStringLiteral("Number"), makeControlRow({spinBox, doubleSpinBox, disabledSpinBox}));
 
+  auto* vectorRows = new QWidget{};
+  auto* vectorLayout = new QHBoxLayout{vectorRows};
+  vectorLayout->setContentsMargins(0, 0, 0, 0);
+  for (int column = 0; column < 3; ++column)
+  {
+    auto* channels = new QVBoxLayout{};
+    channels->setSpacing(0);
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      auto* channel = new QDoubleSpinBox{};
+      channel->setProperty("tbControlRole", "vector");
+      channel->setProperty(
+        "tbVectorPosition",
+        axis == 0   ? "first"
+        : axis == 2 ? "last"
+                    : "middle");
+      channel->setAlignment(Qt::AlignCenter);
+      channel->setButtonSymbols(QAbstractSpinBox::NoButtons);
+      channel->setDecimals(3);
+      channel->setValue(1.0);
+      channel->setEnabled(column != 2);
+      channel->setProperty("multiSelected", column == 1);
+      channels->addWidget(channel);
+    }
+    vectorLayout->addLayout(channels);
+  }
+  inputLayout->addRow(QStringLiteral("Vector"), vectorRows);
+
   auto* plainTextEdit =
     new QPlainTextEdit{QStringLiteral("Multi-line input\nSecond line")};
   plainTextEdit->setFixedHeight(64);

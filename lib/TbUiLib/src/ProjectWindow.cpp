@@ -28,6 +28,7 @@
 #include "mdl/MapHeader.h"
 #include "ui/AppController.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ProjectResourceDialog.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectTextureImport.h"
 #include "ui/QPathUtils.h"
@@ -113,6 +114,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
       report(m_session->saveCopy(pathFromQString(path)));
   });
   file->addAction(tr("Import Files…"), this, &ProjectWindow::importFiles);
+  file->addAction(tr("Check Resources…"), this, [this]() { checkResources(); });
   file->addAction(tr("Close Project"), this, &QWidget::close);
   auto* asset = menuBar()->addMenu(tr("Asset"));
   asset->addAction(tr("Open Map"), this, &ProjectWindow::openSelected);
@@ -120,6 +122,10 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   asset->addAction(tr("Rename…"), this, &ProjectWindow::renameSelected);
   asset->addAction(tr("Move…"), this, &ProjectWindow::moveSelected);
   asset->addAction(tr("Export Copy…"), this, &ProjectWindow::exportSelected);
+  asset->addAction(tr("Find Uses…"), this, [this]() {
+    if (const auto id = selectedAsset())
+      checkResources(id);
+  });
   auto* history = menuBar()->addMenu(tr("History"));
   history->addAction(tr("Create Version…"), this, &ProjectWindow::createCheckpoint);
   history->addAction(
@@ -163,6 +169,30 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
 const std::shared_ptr<ProjectSession>& ProjectWindow::session() const
 {
   return m_session;
+}
+
+void ProjectWindow::checkResources(std::optional<std::string> assetId)
+{
+  const auto* game =
+    m_appController.gameManager().gameInfo(m_session->store().info().gameId);
+  if (
+    !game
+    || !std::ranges::any_of(
+      game->gameConfig.materialConfig.extensions, [](const auto& ext) {
+        return pathAsQString(ext).compare(".c", Qt::CaseInsensitive) == 0;
+      }))
+  {
+    report(Error{"Resource checking currently requires a GoldSrc game configuration."});
+    return;
+  }
+  auto dialog = ProjectResourceDialog{
+    *m_session,
+    std::move(assetId),
+    [this](const auto& id) {
+      report(m_appController.mapWindowManager().loadProjectMap(m_session, id));
+    },
+    this};
+  dialog.exec();
 }
 
 bool ProjectWindow::report(const Result<void>& result)

@@ -75,6 +75,9 @@ public:
   Result<void> restore(const std::string& id);
 
   Result<std::filesystem::path> prepareMap(const std::string& id);
+  // Reads live edits without selecting revisions, saving the project or clearing dirty
+  // state.
+  Result<std::vector<std::uint8_t>> workingMapContents(const std::string& id) const;
   Result<std::filesystem::path> assetFile(const project::Asset& asset) const;
   Result<void> registerDocument(MapDocument& document, const std::string& id);
   void unregisterDocument(MapDocument& document);

@@ -26,7 +26,6 @@
 
 #include "base/Color.h"
 #include "base/PreferenceManager.h"
-#include "prefs/Preferences.h"
 #include "mdl/EntityColorPropertyValue.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityNodeBase.h"
@@ -35,11 +34,14 @@
 #include "mdl/Map.h"
 #include "mdl/Map_Entities.h"
 #include "mdl/PropertyDefinition.h"
+#include "prefs/Preferences.h"
 #include "ui/BitmapButton.h"
 #include "ui/ElidedLabel.h"
 #include "ui/FileDialogDefaultDir.h"
 #include "ui/FlagsEditor.h"
 #include "ui/MapDocument.h"
+#include "ui/MapViewBase.h"
+#include "ui/MapWindow.h"
 #include "ui/QColorUtils.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStringUtils.h"
@@ -48,6 +50,7 @@
 #include "ui/SmartWadEditor.h"
 #include "ui/TitleBar.h"
 #include "ui/TitledPanel.h"
+#include "ui/TransformCard.h"
 #include "ui/ViewUtils.h"
 
 #include "kd/string_compare.h"
@@ -535,8 +538,7 @@ QString toUnicodeFromFgd(const std::string& string)
 }
 
 QString makePropertyTooltip(
-  const std::string& key,
-  const mdl::PropertyDefinition* propertyDef)
+  const std::string& key, const mdl::PropertyDefinition* propertyDef)
 {
   auto lines = QStringList{};
   if (
@@ -577,10 +579,9 @@ QString makePropertyTooltip(
 
     if (!propertyDef->longDescription.empty())
     {
-      lines.push_back(
-        toUnicodeFromFgd(propertyDef->longDescription)
-          .toHtmlEscaped()
-          .replace("\n", "<br>"));
+      lines.push_back(toUnicodeFromFgd(propertyDef->longDescription)
+                        .toHtmlEscaped()
+                        .replace("\n", "<br>"));
     }
   }
 
@@ -790,6 +791,10 @@ void OutlinerEntityPropertyEditor::updateFromSelection()
 
 void OutlinerEntityPropertyEditor::refreshVisiblePropertyValues()
 {
+  if (m_transformCard != nullptr)
+  {
+    m_transformCard->updateFromSelection();
+  }
   const auto entityNodes = m_document.map().selection().allEntities();
   if (entityNodes.empty())
   {
@@ -886,6 +891,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   m_embeddedSkyboxEditor = nullptr;
   m_embeddedSpawnflagsEditorContainer = nullptr;
   m_embeddedSpawnflagsEditor = nullptr;
+  m_transformCard = nullptr;
 
   const auto clearLayout = [&](auto&& self, QLayout* l) -> void {
     while (auto* item = l->takeAt(0))
@@ -970,6 +976,31 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   completions.sort(Qt::CaseInsensitive);
   completions.removeDuplicates();
   m_completerModel->setStringList(completions);
+
+  const auto isWorldspawnOnly =
+    (firstClass == mdl::EntityPropertyValues::WorldspawnClassname
+     && !m_document.map().selection().hasBrushes());
+  if (!isWorldspawnOnly)
+  {
+    m_transformCard = new TransformCard{m_document, m_scrollContents};
+    m_transformCard->setObjectName("TransformCard");
+    m_transformCard->setExpanded(m_transformCardExpanded);
+    connect(m_transformCard, &TransformCard::editingFinished, this, [this]() {
+      if (auto* mapWindow = qobject_cast<MapWindow*>(window()))
+      {
+        if (auto* view = mapWindow->currentMapViewBase())
+        {
+          view->setFocus(Qt::OtherFocusReason);
+        }
+      }
+    });
+    connect(
+      m_transformCard,
+      &CollapsibleTitledPanel::toggled,
+      this,
+      [this](const bool expanded) { m_transformCardExpanded = expanded; });
+    m_scrollLayout->addWidget(m_transformCard, 0);
+  }
 
   const auto keys = buildKeyOrderWithInactiveDefinitions(entityNodes, entityDefinition);
   const auto& wadKey = m_document.map().gameInfo().gameConfig.materialConfig.property;

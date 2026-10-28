@@ -50,9 +50,14 @@ component design: colors, borders, state transitions, icon scale, and corner hie
 remain related to the default control.
 
 - `standard`: the implicit default for forms and panels.
-- `compact`: a lower-height control used only inside a toolbar or status surface.
+- `compact`: a lower-height control used inside a toolbar or status surface, or as an
+  inline companion toggle for a stacked vector.
 - `prominent`: a primary search or command input whose larger hit area is part of the
   workflow.
+- `vector`: stacked numeric channels with shared corners, centered values and no step
+  buttons. Used for spatial vectors where horizontal dragging is the primary adjustment;
+  20 px minimum height keeps the three channels compact. Normal numeric focus, hover,
+  disabled and selection states still apply. `tbVectorPosition` marks first/middle/last.
 - `navigation`: an icon or tab used to change application regions rather than execute a
   document command.
 - `outlined`: an icon command whose persistent boundary communicates a mode or selectable

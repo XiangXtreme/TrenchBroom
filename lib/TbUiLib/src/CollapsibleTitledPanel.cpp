@@ -84,6 +84,7 @@ void CollapsibleTitledPanel::setExpanded(const bool expanded)
   {
     m_expanded = expanded;
     updateExpanded();
+    emit toggled(m_expanded);
   }
 }
 

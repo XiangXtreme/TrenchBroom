@@ -50,6 +50,7 @@ private:
   void moveSelected();
   void reimportSelected();
   void exportSelected();
+  void checkResources(std::optional<std::string> assetId = std::nullopt);
   void createCheckpoint();
   void compareCheckpoint();
   void restoreCheckpoint();

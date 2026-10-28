@@ -271,6 +271,26 @@ Result<void> ProjectSession::refreshRuntime()
          });
 }
 
+Result<std::vector<std::uint8_t>> ProjectSession::workingMapContents(
+  const std::string& id) const
+{
+  const auto asset = m_store->findAsset(id);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (!asset.value() || asset.value()->type != project::AssetType::Map)
+    return Error{"Map asset not found."};
+  const auto* document = documentFor(id);
+  if (!document || !document->map().modified())
+    return m_store->readAsset(id, project::ContentKind::Compatible);
+
+  // Keep audit snapshots separate from the temporary revisions used by save/history.
+  auto snapshot = QTemporaryDir{m_workspace.path() + "/map-read-XXXXXX"};
+  if (!snapshot.isValid())
+    return Error{"Cannot create map snapshot directory."};
+  const auto path = pathFromQString(snapshot.path()) / "live.map";
+  return document->map().saveTo(path) | kdl::and_then([&]() { return readBytes(path); });
+}
+
 void ProjectSession::bindDocument(MapDocument& document)
 {
   document.map().gameFileSystem().setProjectDirectory(pathFromQString(m_runtime->path()));

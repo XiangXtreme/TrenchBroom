@@ -26,6 +26,7 @@ class FlagsEditor;
 class MapDocument;
 class SmartSkyboxEditor;
 class SmartWadEditor;
+class TransformCard;
 
 class OutlinerEntityPropertyEditor : public QWidget
 {
@@ -59,6 +60,8 @@ private:
   QWidget* m_embeddedSpawnflagsEditorContainer = nullptr;
   FlagsEditor* m_embeddedSpawnflagsEditor = nullptr;
   bool m_spawnflagsEditorExpanded = false;
+  TransformCard* m_transformCard = nullptr;
+  bool m_transformCardExpanded = true;
 
   bool m_updateQueued = false;
   bool m_forceUpdate = false;

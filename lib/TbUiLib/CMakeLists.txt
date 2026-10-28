@@ -176,6 +176,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabAsset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectSession.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectResourceAudit.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectResourceDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectTextureImport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabTool.cpp
@@ -243,6 +245,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TitledPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ToolBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ToolBoxConnector.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TransformCard.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TwoPaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UiSnapshot.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UvEditor.cpp
@@ -424,6 +427,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupButton.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabAsset.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectResourceAudit.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectResourceDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectSession.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabTool.h
@@ -491,6 +496,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TitledPanel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ToolBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ToolBoxConnector.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TransformCard.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TwoPaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UiSnapshot.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UvEditor.h

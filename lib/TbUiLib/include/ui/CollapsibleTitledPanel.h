@@ -51,6 +51,9 @@ public:
   QByteArray saveState() const;
   bool restoreState(const QByteArray& state);
 
+signals:
+  void toggled(bool expanded);
+
 private:
   void updateExpanded();
 };

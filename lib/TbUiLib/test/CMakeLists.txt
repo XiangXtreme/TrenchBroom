@@ -40,6 +40,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PieMenuSettingsDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PopupButton.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ProjectSession.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ProjectResourceAudit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PreferenceDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PrefabAsset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PrefabTool.cpp
@@ -74,6 +75,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TestWindowPolicy.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TextOutputAdapter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Theme.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TransformCard.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_UiSnapshot.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_UpdateVersion.cpp
 

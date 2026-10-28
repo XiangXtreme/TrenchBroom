@@ -88,7 +88,9 @@
 #include "ui/PlayModeFullScreen.h"
 #include "ui/PythonConsole.h"
 #include "ui/QPathUtils.h"
+#include "ui/SpinControl.h"
 #include "ui/SwitchableMapViewContainer.h"
+#include "ui/TransformCard.h"
 #include "ui/python/PythonScripting.h"
 
 #include <utility>
@@ -240,6 +242,68 @@ TEST_CASE("MapWindow")
   UNSCOPED_INFO("creating MapWindow");
   auto window = MapWindow{appController, std::move(document)};
   UNSCOPED_INFO("MapWindow created");
+
+  SECTION("transform confirmation returns focus to the last map view")
+  {
+    auto* container = window.findChild<SwitchableMapViewContainer*>();
+    REQUIRE(container);
+    container->switchToMapView(MapViewLayout::FourPanes);
+    window.resize(1200, 900);
+    window.show();
+    window.switchToInspectorPage(InspectorPage::Outliner);
+    auto& map = window.document().map();
+    auto* entity =
+      new mdl::EntityNode{mdl::Entity{{{"classname", "light"}, {"origin", "10 20 30"}}}};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {entity}}});
+    mdl::selectNodes(map, {entity});
+    QApplication::processEvents();
+    auto* view = window.findChild<MapView2D*>();
+    REQUIRE(view);
+    view->setFocus();
+    // Record the view explicitly as background windows do not get native activation.
+    window.focusChange(nullptr, view);
+    auto* card = window.findChild<TransformCard*>();
+    REQUIRE(card);
+    auto* x = card->findChild<SpinControl*>("TransformCard_PosX");
+    REQUIRE(x);
+    auto expectedX = 42.0;
+    SECTION("enter")
+    {
+      x->setFocus(Qt::TabFocusReason);
+      auto inputFocus = QFocusEvent{QEvent::FocusIn, Qt::TabFocusReason};
+      QApplication::sendEvent(x, &inputFocus);
+      x->findChild<QLineEdit*>()->setText("42");
+      QTest::keyClick(x, Qt::Key_Return);
+    }
+    SECTION("horizontal drag release")
+    {
+      expectedX = 30.0;
+      x->setFocus(Qt::MouseFocusReason);
+      auto* edit = x->findChild<QLineEdit*>();
+      const auto start = edit->mapToGlobal(edit->rect().center());
+      const auto mouse = [&](QEvent::Type type, QPoint offset) {
+        const auto release = type == QEvent::MouseButtonRelease;
+        auto event = QMouseEvent{
+          type,
+          QPointF{edit->rect().center() + offset},
+          QPointF{start + offset},
+          type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+          release ? Qt::NoButton : Qt::LeftButton,
+          Qt::NoModifier};
+        QApplication::sendEvent(edit, &event);
+      };
+      mouse(QEvent::MouseButtonPress, {});
+      mouse(QEvent::MouseMove, QPoint{20, 0});
+      mouse(QEvent::MouseMove, QPoint{40, 0});
+      mouse(QEvent::MouseButtonRelease, QPoint{40, 0});
+    }
+    CHECK(entity->entity().origin() == vm::vec3d{expectedX, 20, 30});
+    CHECK(window.focusWidget() == view);
+    CHECK(window.currentMapViewBase() == view);
+    CHECK_FALSE(x->hasFocus());
+    map.undoCommand();
+    CHECK(entity->entity().origin() == vm::vec3d{10, 20, 30});
+  }
 
   SECTION("2D base modes route drags and toggle with Shift S")
   {
