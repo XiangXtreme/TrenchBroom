@@ -18,6 +18,7 @@
 | 同文件：`textedit_begin`、`do_but_textedit`、`do_but_textedit_select` | 开始文本编辑时全选；再次点击定位光标，拖动选择文本，双击选择词；Enter 确认，Esc/右键取消；Tab/Shift+Tab 切换字段 |
 | 同文件：`event_to_snap`、`numedit_apply_snapf`、`numedit_but_NUM` | Shift 精调，Ctrl 吸附，Ctrl+Shift 使用较小吸附间隔；拖动过程中修饰键变化重新计算吸附 |
 | 同文件：`do_button`、`handle_button_event` | 悬停复制/粘贴、属性上下文菜单、空文本恢复 RNA 默认值属于属性系统的通用处理 |
+| `source/blender/editors/interface/interface_widgets.cc`：`widget_draw_text`；`interface.cc`：`button_drag_multi_edit_get` | 连选字段在输入期间绘制主字段的同一编辑字符串；中间态文本也实时一致，确认后统一写入属性 |
 | `source/blender/makesrna/intern/rna_object.cc`：`rna_def_object` | Scale 标记 `PROP_PROPORTIONAL`；Location、Euler Rotation 与 Scale 有各自的单位、精度、范围和步长 |
 
 官方手册补充：[Input Fields](https://docs.blender.org/manual/en/latest/interface/controls/buttons/fields.html)。
@@ -31,9 +32,9 @@
 | 初次单击松手 | 进入文本编辑，全选当前数字；角度后缀不属于待替换数字 |
 | 编辑中再次点击或拖动 | 交给原生文本编辑器定位光标或选择文本 |
 | Ctrl+单击 | 立即全选数字并进入文本编辑，松手不清除选区 |
-| 横向拖动 | 超过阈值后建立基准，随后实时修改地图；松手形成一个撤销步骤 |
+| 横向拖动 | 超过阈值后建立基准，随后实时修改地图；松手形成一个撤销步骤，释放数值框焦点并返回上次的地图视图 |
 | 纵向划过 X/Y/Z | 高亮同一向量组中被线段经过的可编辑轴；锁定轴跳过；往回划可缩小范围 |
-| 连选后松手 | 保持高亮，主字段全选数字；键入值后确认，所有选中字段取同值 |
+| 连选后松手 | 保持高亮，主字段全选数字；所有选中字段实时镜像主字段输入，包含负号、删除、粘贴等中间态；确认后统一写入地图，取消则恢复各自原值 |
 | 连选后转为横拖 | 固定选中轴集合；Location/Rotation 保留各轴差值，Scale 保留各轴比例 |
 | 连选 Scale 时主轴原值为零 | 使用加法增量，避免除零 |
 | 显式连选与比例链同时启用 | 显式连选决定修改的轴和值；比例链用于单轴编辑时联动未锁轴 |
@@ -61,6 +62,6 @@
 ## 验证
 
 `tst_TransformCard.cpp` 覆盖鼠标 FocusIn 先于 Press 的事件顺序、点击替换数字、纵向连选、
-回划和锁定轴、横向转折、比例拖动、吸附、文本确认/取消与撤销事务。
-`tst_MapWindow.cpp` 覆盖编辑结束后返回原地图视图的焦点路由。
+回划和锁定轴、横向转折、比例拖动、吸附、连选输入实时镜像、文本确认/取消与撤销事务。
+`tst_MapWindow.cpp` 覆盖回车确认和横拖松手后返回原地图视图的焦点路由。
 后台测试确认 Qt 事件和焦点状态；真实窗口的激活、鼠标捕获及操作手感仍需人工试用。
