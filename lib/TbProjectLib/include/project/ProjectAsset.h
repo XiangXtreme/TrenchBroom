@@ -132,6 +132,13 @@ struct AssetImport
   LibraryLink library;
 };
 
+/** One project asset revision replacement, applied as part of a batch. */
+struct AssetUpdate
+{
+  std::string assetId;
+  AssetImport import;
+};
+
 struct Asset
 {
   std::string id;

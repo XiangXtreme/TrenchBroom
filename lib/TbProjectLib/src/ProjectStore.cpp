@@ -546,56 +546,84 @@ Result<Asset> ProjectStore::importAsset(const AssetImport& import)
   });
 }
 
+namespace
+{
+
+// Shared by replaceAsset and updateAssets so a batch has exactly the semantics of a
+// single replacement.
+Asset applyImport(sqlite3* db, const std::string& id, const AssetImport& import)
+{
+  auto asset = requireAsset(db, id);
+  if (asset.type != import.type)
+    throw StoreError{"Reimport cannot change an asset's type."};
+  asset.sourceName = import.sourceName;
+  asset.conversionRecipe = import.conversionRecipe;
+  asset.contentHash = contentHash(import.compatible);
+  asset.library = import.library;
+  const auto original = storeContent(db, import.original);
+  const auto compatible = storeContent(db, import.compatible);
+  // Reusing an immutable revision is only valid when the snapshot provenance is the same
+  // too; a library update that happens to carry identical bytes still has to be recorded
+  // so "which library revision is this project on" stays truthful.
+  auto existing = Statement{
+    db,
+    "SELECT revision FROM revisions WHERE asset_id=? AND source_name=? AND recipe=? "
+    "AND original=? AND compatible=? AND display_name=? AND virtual_path=? AND "
+    "content_hash=? AND library_id=? AND library_asset_id=? AND library_revision=? "
+    "AND library_hash=? AND source_container=? AND source_member=? "
+    "ORDER BY revision DESC LIMIT 1"};
+  existing.bind(1, id);
+  existing.bind(2, asset.sourceName);
+  existing.bind(3, asset.conversionRecipe);
+  existing.bind(4, original);
+  existing.bind(5, compatible);
+  existing.bind(6, asset.displayName);
+  existing.bind(7, asset.virtualPath);
+  existing.bind(8, asset.contentHash);
+  existing.bind(9, asset.library.libraryId);
+  existing.bind(10, asset.library.libraryAssetId);
+  existing.bind(11, asset.library.libraryRevision);
+  existing.bind(12, asset.library.libraryContentHash);
+  existing.bind(13, asset.library.sourceContainer);
+  existing.bind(14, asset.library.sourceMember);
+  if (existing.next())
+  {
+    asset.revision = existing.integer(0);
+    auto head = Statement{db, "UPDATE heads SET revision=? WHERE asset_id=?"};
+    head.bind(1, asset.revision);
+    head.bind(2, id);
+    head.run();
+  }
+  else
+    writeRevision(db, asset, original, compatible);
+  return asset;
+}
+
+} // namespace
+
 Result<Asset> ProjectStore::replaceAsset(const std::string& id, const AssetImport& import)
 {
   return attempt([&] {
     auto* db = m_impl->database.get();
     auto transaction = Transaction{db};
-    auto asset = requireAsset(db, id);
-    if (asset.type != import.type)
-      throw StoreError{"Reimport cannot change an asset's type."};
-    asset.sourceName = import.sourceName;
-    asset.conversionRecipe = import.conversionRecipe;
-    asset.contentHash = contentHash(import.compatible);
-    asset.library = import.library;
-    const auto original = storeContent(db, import.original);
-    const auto compatible = storeContent(db, import.compatible);
-    // Reusing an immutable revision is only valid when the snapshot provenance is the
-    // same too; a library update that happens to carry identical bytes still has to be
-    // recorded so "which library revision is this project on" stays truthful.
-    auto existing = Statement{
-      db,
-      "SELECT revision FROM revisions WHERE asset_id=? AND source_name=? AND recipe=? "
-      "AND original=? AND compatible=? AND display_name=? AND virtual_path=? AND "
-      "content_hash=? AND library_id=? AND library_asset_id=? AND library_revision=? "
-      "AND library_hash=? AND source_container=? AND source_member=? "
-      "ORDER BY revision DESC LIMIT 1"};
-    existing.bind(1, id);
-    existing.bind(2, asset.sourceName);
-    existing.bind(3, asset.conversionRecipe);
-    existing.bind(4, original);
-    existing.bind(5, compatible);
-    existing.bind(6, asset.displayName);
-    existing.bind(7, asset.virtualPath);
-    existing.bind(8, asset.contentHash);
-    existing.bind(9, asset.library.libraryId);
-    existing.bind(10, asset.library.libraryAssetId);
-    existing.bind(11, asset.library.libraryRevision);
-    existing.bind(12, asset.library.libraryContentHash);
-    existing.bind(13, asset.library.sourceContainer);
-    existing.bind(14, asset.library.sourceMember);
-    if (existing.next())
-    {
-      asset.revision = existing.integer(0);
-      auto head = Statement{db, "UPDATE heads SET revision=? WHERE asset_id=?"};
-      head.bind(1, asset.revision);
-      head.bind(2, id);
-      head.run();
-    }
-    else
-      writeRevision(db, asset, original, compatible);
+    auto asset = applyImport(db, id, import);
     transaction.commit();
     return asset;
+  });
+}
+
+Result<std::vector<Asset>> ProjectStore::updateAssets(
+  const std::vector<AssetUpdate>& updates)
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    auto result = std::vector<Asset>{};
+    result.reserve(updates.size());
+    for (const auto& update : updates)
+      result.push_back(applyImport(db, update.assetId, update.import));
+    transaction.commit();
+    return result;
   });
 }
 

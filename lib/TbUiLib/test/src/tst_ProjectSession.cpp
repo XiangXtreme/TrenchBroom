@@ -10,10 +10,16 @@
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Entities.h"
+#include "project/AssetLibrary.h"
+#include "project/GoldSrcWad.h"
+#include "project/LibrarySync.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+
+#include <algorithm>
+#include <fstream>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -51,6 +57,95 @@ project::AssetImport testAsset()
   asset.compatible = asset.original;
   return asset;
 }
+
+// Builds a real GoldSrc miptex by converting an image, so palette and mip layout match
+// what the editor produces for imported textures.
+std::vector<std::uint8_t> miptexFor(
+  const std::string& name, const std::size_t size, const unsigned char fill)
+{
+  auto converted = img::convertGoldSrcTexture(
+    {size, size, std::vector<unsigned char>(size * size * 4, fill)}, name);
+  REQUIRE(converted.is_success());
+  auto archive = project::readGoldSrcWad(converted.value().wad);
+  REQUIRE(archive.is_success());
+  REQUIRE(archive.value().textures.size() == 1);
+  return archive.value().textures.front().miptex;
+}
+
+void writeFile(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
+{
+  std::filesystem::create_directories(path.parent_path());
+  auto file = std::ofstream{path, std::ios::binary};
+  file.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+}
+
+const project::LibraryAsset& libraryAssetNamed(
+  const std::vector<project::LibraryAsset>& assets, const std::string& name)
+{
+  const auto it = std::ranges::find_if(
+    assets, [&](const auto& asset) { return asset.sourceMember == name; });
+  REQUIRE(it != assets.end());
+  return *it;
+}
+
+const project::LibraryUpdate& updateFor(
+  const std::vector<project::LibraryUpdate>& updates, const std::string& projectAssetId)
+{
+  const auto it = std::ranges::find_if(
+    updates, [&](const auto& update) { return update.projectAssetId == projectAssetId; });
+  REQUIRE(it != updates.end());
+  return *it;
+}
+
+/** Temporary project plus asset library folder, wired together on demand. */
+struct LibrarySandbox
+{
+  QTemporaryDir temporary;
+  std::filesystem::path root;
+  std::filesystem::path projectPath;
+  std::filesystem::path libraryFolder;
+  std::shared_ptr<ProjectSession> session;
+
+  LibrarySandbox()
+  {
+    REQUIRE(temporary.isValid());
+    root = pathFromQString(temporary.path());
+    projectPath = root / "snapshot.tbproj";
+    libraryFolder = root / "library";
+    std::filesystem::create_directories(libraryFolder);
+    session =
+      requireProject(ProjectSession::create(projectPath, "Snapshot", "Half-Life"));
+  }
+
+  void writeWad(
+    const std::vector<std::vector<std::uint8_t>>& miptex,
+    const std::string& relativePath = "custom.wad") const
+  {
+    writeFile(
+      libraryFolder / std::filesystem::path{relativePath},
+      requireProject(project::buildGoldSrcWad(miptex)));
+  }
+
+  void createLibrary(const std::string& name = "Studio") const
+  {
+    auto library = requireProject(project::AssetLibrary::create(libraryFolder, name));
+    requireProject(library->scan());
+  }
+
+  std::vector<project::LibraryAsset> libraryAssets() const
+  {
+    auto library = requireProject(project::AssetLibrary::open(libraryFolder));
+    return requireProject(library->assets());
+  }
+  std::string libraryId() const
+  {
+    return requireProject(project::AssetLibrary::open(libraryFolder))->info().id;
+  }
+  void rescanLibrary() const
+  {
+    requireProject(requireProject(project::AssetLibrary::open(libraryFolder))->scan());
+  }
+};
 } // namespace
 
 TEST_CASE("ProjectSession")
@@ -227,6 +322,251 @@ TEST_CASE("ProjectSession")
     requireProject(session->registerDocument(first, firstAsset.id));
     CHECK(first.map().materialManager().material("portable") != nullptr);
     session->unregisterDocument(first);
+  }
+}
+
+TEST_CASE("ProjectSessionAssetLibrary")
+{
+  auto sandbox = LibrarySandbox{};
+  const auto wall = miptexFor("WALL01", 16, 255);
+  const auto floor = miptexFor("FLOOR01", 32, 128);
+  sandbox.writeWad({wall, floor});
+  sandbox.createLibrary();
+  const auto libraryId = sandbox.libraryId();
+  const auto wallLibraryId = libraryAssetNamed(sandbox.libraryAssets(), "WALL01").id;
+  const auto floorLibraryId = libraryAssetNamed(sandbox.libraryAssets(), "FLOOR01").id;
+
+  SECTION("captures the current revision immediately and survives library loss")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    CHECK(captured.revision == 1);
+    CHECK(captured.library.libraryAssetId == wallLibraryId);
+    CHECK(captured.library.libraryRevision == 1);
+    CHECK(captured.publishPath == "textures/WALL01.wad");
+    const auto snapshot = requireProject(
+      sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible));
+
+    // A library that is gone must not affect the project in any way.
+    std::filesystem::remove_all(sandbox.libraryFolder);
+    requireProject(sandbox.session->save());
+    sandbox.session.reset();
+    sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+    CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
+    CHECK(
+      requireProject(
+        sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible))
+      == snapshot);
+    CHECK(
+      requireProject(sandbox.session->assetFile(captured)).filename() == "WALL01.wad");
+
+    const auto libraries = requireProject(sandbox.session->libraries());
+    REQUIRE(libraries.size() == 1);
+    CHECK_FALSE(libraries.front().available);
+    const auto updates = requireProject(sandbox.session->checkLibraryUpdates());
+    REQUIRE(updates.size() == 1);
+    CHECK(updates.front().state == project::LibraryUpdateState::LibraryUnavailable);
+  }
+
+  SECTION("keeps the old snapshot while the library moves ahead")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    const auto floorCaptured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, floorLibraryId));
+    const auto capturedContent = requireProject(
+      sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible));
+
+    // Only WALL01 changes; FLOOR01 keeps its bytes so the WAD still has one asset per
+    // texture.
+    sandbox.writeWad({miptexFor("WALL01", 16, 32), floor});
+    sandbox.rescanLibrary();
+
+    CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
+    CHECK(
+      requireProject(
+        sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible))
+      == capturedContent);
+
+    const auto updates = requireProject(sandbox.session->checkLibraryUpdates());
+    REQUIRE(updates.size() == 2);
+    CHECK(
+      updateFor(updates, captured.id).state == project::LibraryUpdateState::NewVersion);
+    CHECK(updateFor(updates, captured.id).needsAttention());
+    // A single changed WAD member must not mark its siblings as outdated.
+    CHECK(
+      updateFor(updates, floorCaptured.id).state
+      == project::LibraryUpdateState::UpToDate);
+  }
+
+  SECTION("updates selected resources and keeps the previous revision")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    const auto firstRevision = requireProject(
+      sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible));
+    sandbox.writeWad({miptexFor("WALL01", 16, 32), floor});
+    sandbox.rescanLibrary();
+
+    const auto updated =
+      requireProject(sandbox.session->updateLibraryAssets({captured.id}));
+    REQUIRE(updated.size() == 1);
+    CHECK(updated.front().id == captured.id);
+    CHECK(updated.front().revision == 2);
+    CHECK(updated.front().library.libraryRevision == 2);
+    CHECK(sandbox.session->modified());
+    CHECK(
+      requireProject(
+        sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible))
+      != firstRevision);
+    CHECK(
+      requireProject(sandbox.session->store().readAsset(
+        captured.id, project::ContentKind::Compatible, 1))
+      == firstRevision);
+    CHECK(
+      updateFor(requireProject(sandbox.session->checkLibraryUpdates()), captured.id).state
+      == project::LibraryUpdateState::UpToDate);
+
+    // The update is reversible: selecting the old revision brings the prompt back.
+    const auto restored =
+      requireProject(sandbox.session->restoreAssetRevision(captured.id, 1));
+    CHECK(restored.revision == 1);
+    CHECK(
+      requireProject(
+        sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible))
+      == firstRevision);
+    CHECK(
+      updateFor(requireProject(sandbox.session->checkLibraryUpdates()), captured.id).state
+      == project::LibraryUpdateState::NewVersion);
+  }
+
+  SECTION("an update that cannot be completed leaves every asset untouched")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    const auto unrelated = requireProject(sandbox.session->importAsset(testAsset()));
+    sandbox.writeWad({miptexFor("WALL01", 16, 32), floor});
+    sandbox.rescanLibrary();
+
+    // The batch contains an asset without library origin, so nothing may be written.
+    CHECK(sandbox.session->updateLibraryAssets({captured.id, unrelated.id}).is_error());
+    CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
+
+    // A missing library source also aborts without touching the snapshot.
+    std::filesystem::remove(sandbox.libraryFolder / "custom.wad");
+    sandbox.rescanLibrary();
+    CHECK(sandbox.session->updateLibraryAssets({captured.id}).is_error());
+    CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
+    CHECK(
+      updateFor(requireProject(sandbox.session->checkLibraryUpdates()), captured.id).state
+      == project::LibraryUpdateState::Missing);
+    // Ignoring is project state and survives a save/reopen.
+    const auto missingUpdate =
+      updateFor(requireProject(sandbox.session->checkLibraryUpdates()), captured.id);
+    CHECK_FALSE(missingUpdate.ignored);
+    requireProject(sandbox.session->save());
+    sandbox.session.reset();
+    sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+    CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
+    CHECK(requireProject(sandbox.session->checkLibraryUpdates()).size() == 1);
+  }
+
+  SECTION("ignored and deferred updates stay quiet until asked again")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    sandbox.writeWad({miptexFor("WALL01", 16, 32), floor});
+    sandbox.rescanLibrary();
+
+    const auto updates = requireProject(sandbox.session->checkLibraryUpdates());
+    const auto& update = updateFor(updates, captured.id);
+    REQUIRE(update.available);
+    requireProject(
+      sandbox.session->ignoreLibraryUpdate(captured.id, update.available->contentHash));
+    const auto ignored = requireProject(sandbox.session->checkLibraryUpdates());
+    CHECK(updateFor(ignored, captured.id).ignored);
+    CHECK_FALSE(updateFor(ignored, captured.id).needsAttention());
+
+    CHECK_FALSE(sandbox.session->libraryUpdatesDeferred());
+    sandbox.session->deferLibraryUpdates();
+    CHECK(sandbox.session->libraryUpdatesDeferred());
+  }
+
+  SECTION("a newer library revision reaches every open map at once")
+  {
+    auto config = mdl::QuakeFixtureConfig;
+    config.gameInfo.gameConfig.materialConfig.extensions = {".C"};
+    auto firstFixture = MapDocumentFixture{};
+    auto secondFixture = MapDocumentFixture{};
+    auto& first = firstFixture.create(config);
+    auto& second = secondFixture.create(config);
+
+    auto mapImport = project::AssetImport{};
+    mapImport.type = project::AssetType::Map;
+    mapImport.virtualPath = "maps/first.map";
+    mapImport.displayName = "First";
+    mapImport.compatible = {'{', '\n', '}', '\n'};
+    mapImport.original = mapImport.compatible;
+    const auto firstMap = requireProject(sandbox.session->importAsset(mapImport));
+    mapImport.virtualPath = "maps/second.map";
+    const auto secondMap = requireProject(sandbox.session->importAsset(mapImport));
+    requireProject(sandbox.session->registerDocument(first, firstMap.id));
+    requireProject(sandbox.session->registerDocument(second, secondMap.id));
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    CHECK(first.map().materialManager().material("WALL01") != nullptr);
+    CHECK(second.map().materialManager().material("wall01") != nullptr);
+    const auto before = readProjectFile(
+      first.map().gameFileSystem().projectDirectory() / "textures/WALL01.wad");
+
+    sandbox.writeWad({miptexFor("WALL01", 16, 32), floor});
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->updateLibraryAssets({captured.id}));
+
+    // Both maps are served from the same project asset revision, so a single update is
+    // visible in every open document.
+    const auto firstRoot = first.map().gameFileSystem().projectDirectory();
+    const auto secondRoot = second.map().gameFileSystem().projectDirectory();
+    CHECK(firstRoot == secondRoot);
+    const auto after = readProjectFile(firstRoot / "textures/WALL01.wad");
+    CHECK(after != before);
+    CHECK(readProjectFile(secondRoot / "textures/WALL01.wad") == after);
+    CHECK(first.map().materialManager().material("WALL01") != nullptr);
+    CHECK(second.map().materialManager().material("WALL01") != nullptr);
+    sandbox.session->unregisterDocument(first);
+    sandbox.session->unregisterDocument(second);
+  }
+
+  SECTION("same named library resources cannot silently replace each other")
+  {
+    sandbox.writeWad({wall}, "a/duplicate.wad");
+    sandbox.writeWad({miptexFor("WALL01", 16, 32)}, "b/duplicate.wad");
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto assets = sandbox.libraryAssets();
+    const auto first = std::ranges::find_if(assets, [](const auto& asset) {
+      return asset.sourceContainer == "a/duplicate.wad";
+    });
+    const auto second = std::ranges::find_if(assets, [](const auto& asset) {
+      return asset.sourceContainer == "b/duplicate.wad";
+    });
+    REQUIRE(first != assets.end());
+    REQUIRE(second != assets.end());
+    CHECK(first->displayName == second->displayName);
+    CHECK(first->contentHash != second->contentHash);
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, first->id));
+    CHECK(captured.publishPath == "textures/WALL01.wad");
+    // Different content with the same engine texture name is a conflict, not a rename.
+    CHECK(sandbox.session->captureLibraryAsset(libraryId, second->id).is_error());
+    CHECK(requireProject(sandbox.session->store().assets()).size() == 1);
   }
 }
 } // namespace tb::ui

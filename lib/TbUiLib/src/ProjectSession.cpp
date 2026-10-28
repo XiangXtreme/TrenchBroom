@@ -7,12 +7,17 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLockFile>
 #include <QSaveFile>
 
 #include "base/Uuid.h"
+#include "img/DecodeImage.h"
+#include "img/GoldSrcTexture.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
+#include "project/GoldSrcWad.h"
 #include "ui/MapDocument.h"
 #include "ui/QPathUtils.h"
 
@@ -57,6 +62,111 @@ Result<std::vector<std::uint8_t>> readBytes(const std::filesystem::path& path)
   if (file.error() != QFileDevice::NoError)
     return Error{file.errorString().toStdString()};
   return std::vector<std::uint8_t>{bytes.begin(), bytes.end()};
+}
+
+// Library paths are stored in the project as UTF-8 text, not as untyped narrow strings,
+// so a project opened on another machine keeps a readable hint.
+std::string storedPath(const std::filesystem::path& path)
+{
+  return pathAsQString(path).toUtf8().toStdString();
+}
+
+std::filesystem::path pathFromStoredPath(const std::string& path)
+{
+  return pathFromQString(QString::fromStdString(path));
+}
+
+std::string fileNameOf(const std::string& path)
+{
+  const auto slash = path.find_last_of('/');
+  return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+std::string stemOf(const std::string& path)
+{
+  const auto name = fileNameOf(path);
+  const auto dot = name.find_last_of('.');
+  return dot == std::string::npos ? name : name.substr(0, dot);
+}
+
+const char* publishRoot(const project::AssetType type)
+{
+  switch (type)
+  {
+  case project::AssetType::Texture:
+  case project::AssetType::Skybox:
+    return "textures";
+  case project::AssetType::Model:
+    return "models";
+  case project::AssetType::Sprite:
+    return "sprites";
+  case project::AssetType::Sound:
+    return "sound";
+  case project::AssetType::Prefab:
+    return "prefabs";
+  case project::AssetType::Map:
+    return "maps";
+  case project::AssetType::Material:
+    break;
+  }
+  return "materials";
+}
+
+// GoldSrc names are short ASCII identifiers; anything else is replaced so a library file
+// name cannot create an unloadable texture.
+std::string goldSrcTextureName(const std::string& stem, const bool masked)
+{
+  auto name = std::string{};
+  for (const auto c : stem)
+    name += (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+                || c == '_' || c == '-'
+              ? c
+              : '_';
+  if (name.empty())
+    name = "texture";
+  if (masked && name.front() != '{')
+    name.insert(name.begin(), '{');
+  if (name.size() > 15)
+    name.resize(15);
+  return name;
+}
+
+// Project virtual path of a captured library asset. The library path is only a hint; the
+// GameSrc roots decide where the engine will look for the resource.
+std::string publishPathFor(
+  const project::LibraryAsset& asset, const std::vector<std::uint8_t>& nativeContent)
+{
+  const auto root = std::string{publishRoot(asset.type)};
+  if (asset.type == project::AssetType::Texture)
+  {
+    const auto name =
+      asset.nativeFormat == "goldsrc-miptex"
+        ? project::goldSrcMiptexName(nativeContent)
+        : stemOf(
+            asset.sourceContainer.empty() ? asset.virtualPath : asset.sourceContainer);
+    const auto textureName =
+      name.empty() ? goldSrcTextureName(stemOf(asset.virtualPath), false) : name;
+    return "textures/" + textureName + ".wad";
+  }
+  if (asset.virtualPath == root || asset.virtualPath.starts_with(root + "/"))
+    return asset.virtualPath;
+  return root + "/" + fileNameOf(asset.virtualPath);
+}
+
+std::string captureRecipeFor(
+  const img::GoldSrcTexture& texture, const std::uint32_t alpha)
+{
+  return QJsonDocument{QJsonObject{
+                         {"importer", "goldsrc-texture"},
+                         {"version", 1},
+                         {"name", QString::fromStdString(texture.name)},
+                         {"width", int(texture.preview.width)},
+                         {"height", int(texture.preview.height)},
+                         {"masked", texture.masked},
+                         {"alphaThreshold", int(alpha)},
+                         {"formatValidated", true}}}
+    .toJson(QJsonDocument::Compact)
+    .toStdString();
 }
 } // namespace
 
@@ -151,6 +261,8 @@ Result<project::Asset> ProjectSession::importAsset(const project::AssetImport& a
 {
   return m_store->importAsset(asset) | kdl::transform([&](auto result) {
            changed();
+           if (!result.library.empty())
+             emit libraryLinksChanged();
            return result;
          });
 }
@@ -161,6 +273,8 @@ Result<project::Asset> ProjectSession::replaceAsset(
     return Error{"Close this map before reimporting it."};
   return m_store->replaceAsset(id, asset) | kdl::transform([&](auto result) {
            changed();
+           if (!result.library.empty())
+             emit libraryLinksChanged();
            return result;
          });
 }
@@ -489,5 +603,306 @@ Result<void> ProjectSession::restore(const std::string& id)
   if (hasOpenMaps())
     return Error{"Close project maps before restoring a version."};
   return m_store->restore(id) | kdl::transform([&](auto) { changed(); });
+}
+
+Result<std::unique_ptr<project::AssetLibrary>> ProjectSession::openLibrary(
+  const std::string& libraryId) const
+{
+  const auto libraries = m_store->libraries();
+  if (libraries.is_error())
+    return std::get<Error>(libraries.error());
+  const auto& infos = libraries.value();
+  const auto it =
+    std::ranges::find_if(infos, [&](const auto& info) { return info.id == libraryId; });
+  if (it == infos.end())
+    return Error{"Asset library is not attached to this project."};
+  return project::AssetLibrary::open(pathFromStoredPath(it->path));
+}
+
+Result<void> ProjectSession::attachLibrary(const std::filesystem::path& folder)
+{
+  auto library = project::AssetLibrary::open(folder);
+  if (library.is_error())
+    return std::get<Error>(library.error());
+  const auto& info = library.value()->info();
+  return m_store->attachLibrary(info.id, info.name, storedPath(folder))
+         | kdl::transform([&]() {
+             changed();
+             emit libraryLinksChanged();
+           });
+}
+
+Result<std::vector<ProjectSession::LibraryConnection>> ProjectSession::libraries() const
+{
+  const auto infos = m_store->libraries();
+  if (infos.is_error())
+    return std::get<Error>(infos.error());
+  auto result = std::vector<LibraryConnection>{};
+  result.reserve(infos.value().size());
+  for (const auto& info : infos.value())
+  {
+    auto connection = LibraryConnection{info, false, {}};
+    auto library = project::AssetLibrary::open(pathFromStoredPath(info.path));
+    if (library.is_error())
+      connection.error = std::get<Error>(library.error()).msg;
+    else
+      connection.available = true;
+    result.push_back(std::move(connection));
+  }
+  return result;
+}
+
+Result<project::LibraryState> ProjectSession::libraryState(
+  const std::string& libraryId, const bool rescan) const
+{
+  // Unavailable libraries are a normal state, not an error: the project must keep working
+  // and reporting its own snapshot.
+  auto state = project::LibraryState{libraryId, {}, {}, false, {}, {}};
+  const auto infos = m_store->libraries();
+  if (infos.is_error())
+    return std::get<Error>(infos.error());
+  const auto& entries = infos.value();
+  const auto it =
+    std::ranges::find_if(entries, [&](const auto& info) { return info.id == libraryId; });
+  if (it == entries.end())
+  {
+    state.error = "Asset library is not attached to this project.";
+    return state;
+  }
+  state.name = it->name;
+  state.folder = pathFromStoredPath(it->path);
+  auto library = project::AssetLibrary::open(state.folder);
+  if (library.is_error())
+  {
+    state.error = std::get<Error>(library.error()).msg;
+    return state;
+  }
+  if (rescan)
+  {
+    const auto scan = library.value()->scan();
+    if (scan.is_error())
+    {
+      state.error = std::get<Error>(scan.error()).msg;
+      return state;
+    }
+  }
+  auto assets = library.value()->assets();
+  if (assets.is_error())
+  {
+    state.error = std::get<Error>(assets.error()).msg;
+    return state;
+  }
+  state.assets = std::move(assets).value();
+  state.available = true;
+  return state;
+}
+
+Result<project::AssetImport> ProjectSession::captureImport(
+  const project::AssetLibrary& library,
+  const project::LibraryAsset& asset,
+  const std::optional<project::Asset>& existing) const
+{
+  auto native = library.readContent(asset.id);
+  if (native.is_error())
+    return std::get<Error>(native.error());
+  auto original = library.readOriginal(asset.id);
+  if (original.is_error())
+    return std::get<Error>(original.error());
+
+  auto import = project::AssetImport{};
+  import.type = asset.type;
+  import.displayName = existing ? existing->displayName : asset.displayName;
+  import.library = project::LibraryLink{
+    library.info().id,
+    asset.id,
+    asset.revision,
+    asset.contentHash,
+    asset.sourceContainer,
+    asset.sourceMember};
+  import.sourceName =
+    fileNameOf(asset.sourceContainer.empty() ? asset.virtualPath : asset.sourceContainer);
+  import.original = std::move(original).value();
+
+  if (project::libraryAssetNeedsConversion(asset))
+  {
+    auto decoded = img::decodeImage(native.value().data(), native.value().size());
+    if (decoded.is_error())
+      return std::get<Error>(decoded.error());
+    const auto& image = decoded.value();
+    // Keep the texture name of an existing snapshot so map faces keep resolving.
+    const auto name = existing ? stemOf(existing->publishPath)
+                               : goldSrcTextureName(
+                                   stemOf(asset.virtualPath),
+                                   image.alphaDomain != img::ImageAlphaDomain::Opaque);
+    auto converted = img::convertGoldSrcTexture(image, name);
+    if (converted.is_error())
+      return std::get<Error>(converted.error());
+    const auto& texture = converted.value();
+    import.compatible = texture.wad;
+    import.virtualPath =
+      existing ? existing->virtualPath : "textures/" + texture.name + ".wad";
+    import.conversionRecipe =
+      project::captureRecipe(asset, captureRecipeFor(texture, 128));
+    return import;
+  }
+
+  auto compatible = project::compatibleLibraryContent(asset, native.value());
+  if (compatible.is_error())
+    return std::get<Error>(compatible.error());
+  import.compatible = std::move(compatible).value();
+  import.virtualPath =
+    existing ? existing->virtualPath : publishPathFor(asset, native.value());
+  import.conversionRecipe = project::captureRecipe(asset);
+  return import;
+}
+
+Result<project::Asset> ProjectSession::captureLibraryAsset(
+  const std::string& libraryId, const std::string& libraryAssetId)
+{
+  auto library = openLibrary(libraryId);
+  if (library.is_error())
+    return std::get<Error>(library.error());
+  auto asset = library.value()->findAsset(libraryAssetId);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (!asset.value() || asset.value()->missing)
+    return Error{"Asset library resource is missing or inaccessible."};
+
+  // Selecting the same library resource twice updates its snapshot instead of creating a
+  // second project asset with the same identity.
+  auto existing = m_store->findAssetByLibraryAsset(libraryId, libraryAssetId);
+  if (existing.is_error())
+    return std::get<Error>(existing.error());
+  auto import = captureImport(*library.value(), *asset.value(), existing.value());
+  if (import.is_error())
+    return std::get<Error>(import.error());
+  auto result = existing.value()
+                  ? m_store->replaceAsset(existing.value()->id, import.value())
+                  : m_store->importAsset(import.value());
+  if (result.is_error())
+    return std::get<Error>(result.error());
+  changed();
+  emit libraryLinksChanged();
+  return result;
+}
+
+Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
+  const bool rescan)
+{
+  const auto linked = m_store->libraryLinkedAssets();
+  if (linked.is_error())
+    return std::get<Error>(linked.error());
+  const auto& assets = linked.value();
+
+  auto states = std::vector<project::LibraryState>{};
+  auto visited = std::vector<std::string>{};
+  for (const auto& asset : assets)
+  {
+    if (std::ranges::find(visited, asset.library.libraryId) != visited.end())
+      continue;
+    visited.push_back(asset.library.libraryId);
+    auto state = libraryState(asset.library.libraryId, rescan);
+    if (state.is_error())
+      return std::get<Error>(state.error());
+    states.push_back(std::move(state).value());
+  }
+
+  auto ignores = std::map<std::string, std::vector<std::string>>{};
+  for (const auto& asset : assets)
+  {
+    auto ignored = m_store->ignoredLibraryUpdates(asset.id);
+    if (ignored.is_error())
+      return std::get<Error>(ignored.error());
+    if (!ignored.value().empty())
+      ignores.emplace(asset.id, std::move(ignored).value());
+  }
+  return project::evaluateLibraryUpdates(assets, states, ignores);
+}
+
+Result<std::vector<project::Asset>> ProjectSession::updateLibraryAssets(
+  const std::vector<std::string>& projectAssetIds)
+{
+  // Everything is read and converted before the first write, so a missing library or a
+  // failed conversion cannot leave half of the selection updated.
+  auto requests = std::vector<project::AssetUpdate>{};
+  requests.reserve(projectAssetIds.size());
+  for (const auto& id : projectAssetIds)
+  {
+    auto asset = m_store->findAsset(id);
+    if (asset.is_error())
+      return std::get<Error>(asset.error());
+    if (!asset.value())
+      return Error{"Project asset not found."};
+    if (asset.value()->library.empty())
+      return Error{"Asset was not captured from an asset library."};
+    auto library = openLibrary(asset.value()->library.libraryId);
+    if (library.is_error())
+      return std::get<Error>(library.error());
+    auto current = library.value()->findAsset(asset.value()->library.libraryAssetId);
+    if (current.is_error())
+      return std::get<Error>(current.error());
+    if (!current.value() || current.value()->missing)
+      return Error{
+        "Asset library resource '" + asset.value()->displayName
+        + "' is missing or inaccessible; the project keeps its current snapshot."};
+    if (current.value()->contentHash == asset.value()->library.libraryContentHash)
+      continue;
+    auto import = captureImport(*library.value(), *current.value(), asset.value());
+    if (import.is_error())
+      return std::get<Error>(import.error());
+    requests.push_back({id, std::move(import).value()});
+  }
+  if (requests.empty())
+    return std::vector<project::Asset>{};
+
+  auto result = m_store->updateAssets(requests);
+  if (result.is_error())
+    return std::get<Error>(result.error());
+  changed();
+  emit libraryLinksChanged();
+  return result;
+}
+
+Result<void> ProjectSession::ignoreLibraryUpdate(
+  const std::string& projectAssetId, const std::string& libraryHash)
+{
+  return m_store->ignoreLibraryUpdate(projectAssetId, libraryHash)
+         | kdl::transform([&]() { emit libraryLinksChanged(); });
+}
+
+void ProjectSession::deferLibraryUpdates()
+{
+  if (m_libraryUpdatesDeferred)
+    return;
+  m_libraryUpdatesDeferred = true;
+  emit stateChanged();
+}
+
+bool ProjectSession::libraryUpdatesDeferred() const
+{
+  return m_libraryUpdatesDeferred;
+}
+
+Result<project::Asset> ProjectSession::restoreAssetRevision(
+  const std::string& projectAssetId, const std::uint64_t revision)
+{
+  auto asset = m_store->findAsset(projectAssetId);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (!asset.value())
+    return Error{"Project asset not found."};
+  auto target = *asset.value();
+  target.revision = revision;
+  auto selected = m_store->selectRevisions({target});
+  if (selected.is_error())
+    return std::get<Error>(selected.error());
+  changed();
+  emit libraryLinksChanged();
+  auto restored = m_store->findAsset(projectAssetId);
+  if (restored.is_error())
+    return std::get<Error>(restored.error());
+  if (!restored.value())
+    return Error{"Project asset not found."};
+  return *restored.value();
 }
 } // namespace tb::ui

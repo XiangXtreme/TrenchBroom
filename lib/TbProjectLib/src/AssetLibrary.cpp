@@ -655,6 +655,13 @@ Result<LibraryScan> AssetLibrary::scan()
 
     auto transaction = detail::Transaction{db};
     auto indexed = loadIndexedAssets(db);
+    // A row may only be relocated when its own location is gone. Without this, a WAD
+    // whose bytes happen to match another WAD could steal the row of an asset that is
+    // still present at its recorded path.
+    auto discoveredIds = std::unordered_set<std::string>{};
+    discoveredIds.reserve(discovery.assets.size());
+    for (const auto& discovered : discovery.assets)
+      discoveredIds.insert(discovered.id);
 
     auto claimed = std::unordered_set<std::string>{};
     for (const auto& discovered : discovery.assets)
@@ -730,7 +737,7 @@ Result<LibraryScan> AssetLibrary::scan()
       auto relocated = std::optional<IndexedAsset*>{};
       for (auto& [id, asset] : indexed)
       {
-        if (asset.claimed || claimed.contains(id))
+        if (asset.claimed || claimed.contains(id) || discoveredIds.contains(id))
           continue;
         if (
           asset.contentHash == discovered.contentHash

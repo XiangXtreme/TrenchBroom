@@ -285,6 +285,31 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->assets(std::nullopt, "sprites")).size() == 1);
   }
 
+  SECTION("keeps identical textures in different containers as separate assets")
+  {
+    workspace.write("a/duplicate.wad", require(buildGoldSrcWad({wall})));
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+    const auto indexed = require(library->assets());
+    REQUIRE(indexed.size() == 1);
+    const auto original = indexed.front();
+
+    // Adding a container with identical bytes must not relocate the identity of the
+    // texture that is still present where it was indexed.
+    workspace.write("b/duplicate.wad", require(buildGoldSrcWad({wall})));
+    const auto scan = require(library->scan());
+    CHECK(scan.added == 1);
+    CHECK(scan.relocated == 0);
+    CHECK(scan.missing == 0);
+    const auto assets = require(library->assets());
+    REQUIRE(assets.size() == 2);
+    CHECK(assets[0].virtualPath == "a/duplicate.wad/WALL01");
+    CHECK(assets[0].id == original.id);
+    CHECK(assets[1].virtualPath == "b/duplicate.wad/WALL01");
+    CHECK(assets[1].id != original.id);
+    CHECK(assets[0].contentHash == assets[1].contentHash);
+  }
+
   SECTION("rejects duplicate members and invalid lumps without losing the archive")
   {
     const auto duplicate = test::makeMiptex("WALL01", 16, 16, 5);

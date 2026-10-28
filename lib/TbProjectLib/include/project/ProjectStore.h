@@ -50,6 +50,10 @@ public:
   Result<Asset> importAsset(const AssetImport& import);
   // Reimport replaces content and recipe, preserving ID, type, name and folder.
   Result<Asset> replaceAsset(const std::string& id, const AssetImport& import);
+  // Applies every update in one storage transaction. A single rejected update leaves all
+  // assets, revisions and references exactly as they were, which is what makes a
+  // multi-asset library update safe to cancel or retry.
+  Result<std::vector<Asset>> updateAssets(const std::vector<AssetUpdate>& updates);
   Result<Asset> renameAsset(const std::string& id, const std::string& displayName);
   Result<Asset> moveAsset(const std::string& id, const std::string& virtualPath);
   Result<void> removeAsset(const std::string& id);
