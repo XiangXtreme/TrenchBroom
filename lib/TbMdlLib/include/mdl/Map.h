@@ -32,6 +32,7 @@
 #include "vm/bbox.h"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -139,6 +140,8 @@ private:
   std::filesystem::path m_path = DefaultDocumentName;
   size_t m_lastSaveModificationCount = 0;
   size_t m_modificationCount = 0;
+  // A project document saves through its owning session. Standalone MAPs use disk IO.
+  std::function<Result<void>()> m_saveHandler;
 
   Selection m_selection;
   mutable std::optional<vm::bbox3d> m_cachedSelectionBounds;
@@ -298,6 +301,8 @@ public: // persistence
   Result<void> save();
   Result<void> saveAs(const std::filesystem::path& path);
   Result<void> saveTo(const std::filesystem::path& path) const;
+  void setSaveHandler(std::function<Result<void>()> handler);
+  void markSaved();
   Result<void> exportAs(const ExportOptions& options) const;
 
   bool persistent() const;

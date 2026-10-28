@@ -67,6 +67,7 @@ private:
   AssetPreviewState spritePreview(const BrowserAsset& asset) const;
   AssetPreviewState soundPreview(const BrowserAsset& asset) const;
   AssetPreviewState prefabPreview(const BrowserAsset& asset) const;
+  AssetPreviewState texturePreview(const BrowserAsset& asset) const;
 };
 
 using AssetPreviewMap = std::map<std::filesystem::path, AssetPreviewState>;

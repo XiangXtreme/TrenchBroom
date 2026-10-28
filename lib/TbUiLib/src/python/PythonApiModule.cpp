@@ -2920,6 +2920,8 @@ std::string assetTypeName(const BrowserCellType type)
     return "sound";
   case BrowserCellType::Folder:
   case BrowserCellType::Prefab:
+  case BrowserCellType::Map:
+  case BrowserCellType::Texture:
     return "unknown";
   }
   return "unknown";

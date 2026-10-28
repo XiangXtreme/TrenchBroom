@@ -21,11 +21,16 @@
 
 #include <QAudioOutput>
 #include <QContextMenuEvent>
+#include <QFile>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMediaPlayer>
 #include <QMenu>
 #include <QMessageBox>
 #include <QScrollBar>
+#include <QTemporaryDir>
 #include <QUrl>
 
 #include "base/Logger.h"
@@ -55,6 +60,7 @@
 #include "ui/AppController.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
+#include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/Theme.h"
 
@@ -103,6 +109,10 @@ std::optional<RgbaF> assetPlaceholderColor(
     return RgbaF{0.48f, 0.35f, 0.82f, lightBackground ? 0.14f : 0.28f};
   case BrowserCellType::Prefab:
     return RgbaF{0.12f, 0.48f, 0.34f, lightBackground ? 0.12f : 0.24f};
+  case BrowserCellType::Map:
+    return RgbaF{0.15f, 0.45f, 0.75f, lightBackground ? 0.12f : 0.24f};
+  case BrowserCellType::Texture:
+    return RgbaF{0.65f, 0.42f, 0.15f, lightBackground ? 0.12f : 0.24f};
   case BrowserCellType::Folder:
   case BrowserCellType::Model:
     return std::nullopt;
@@ -144,10 +154,12 @@ bool shouldRenderErrorText(const BrowserCellType type, const AssetPreviewState* 
   {
   case BrowserCellType::Sprite:
   case BrowserCellType::Sound:
+  case BrowserCellType::Texture:
     return preview && preview->status != AssetPreviewStatus::Ready;
   case BrowserCellType::Folder:
   case BrowserCellType::Model:
   case BrowserCellType::Prefab:
+  case BrowserCellType::Map:
     return false;
   }
 
@@ -156,13 +168,14 @@ bool shouldRenderErrorText(const BrowserCellType type, const AssetPreviewState* 
 
 bool canRenderImagePreview(const BrowserCellType type)
 {
-  return type == BrowserCellType::Sprite || type == BrowserCellType::Prefab;
+  return type == BrowserCellType::Sprite || type == BrowserCellType::Prefab
+         || type == BrowserCellType::Texture;
 }
 
 bool canLoadPreview(const BrowserCellType type)
 {
   return type == BrowserCellType::Sprite || type == BrowserCellType::Prefab
-         || type == BrowserCellType::Sound;
+         || type == BrowserCellType::Sound || type == BrowserCellType::Texture;
 }
 
 } // namespace
@@ -189,6 +202,7 @@ bool soundPreviewButtonHitTest(
 ModelBrowserView::ModelBrowserView(
   AppController& appController, QScrollBar* scrollBar, MapDocument& document)
   : CellView{appController, scrollBar}
+  , m_appController{appController}
   , m_document{document}
   , m_scrollBar{scrollBar}
 {
@@ -406,7 +420,7 @@ void ModelBrowserView::removeStalePreviews(const std::vector<BrowserAsset>& asse
       m_assets, it->first, [](const auto& asset) { return asset.path; });
     if (
       oldAssetIt == std::end(m_assets)
-      || oldAssetIt->lastModified != assetIt->second.lastModified)
+      || !sameBrowserAssetContent(*oldAssetIt, assetIt->second))
     {
       if (m_spritePreviewTextures.contains(it->first))
       {
@@ -590,6 +604,10 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
     {
       emit folderActivated(QString::fromStdString(item.path.generic_string()));
     }
+    else if (item.type == BrowserCellType::Map)
+    {
+      emit mapActivated(pathAsGenericQString(item.path));
+    }
   }
 }
 
@@ -663,7 +681,71 @@ void ModelBrowserView::doContextMenu(
       return;
     }
 
-    const auto result = io::scaleGoldSrcMdlFile(absPath, float(scale));
+    const auto project = m_appController.projectFor(m_document);
+    auto temporary = QTemporaryDir{};
+    auto scaledPath = absPath;
+    auto projectAsset = std::optional<project::Asset>{};
+    if (project)
+    {
+      const auto assets = project->store().assets(project::AssetType::Model);
+      if (assets.is_error())
+      {
+        QMessageBox::warning(
+          this, tr("Error"), QString::fromStdString(std::get<Error>(assets.error()).msg));
+        return;
+      }
+      for (const auto& asset : assets.value())
+        if (pathFromQString(QString::fromStdString(asset.publishPath)) == modelPath)
+          projectAsset = asset;
+      if (!projectAsset || !temporary.isValid())
+      {
+        QMessageBox::warning(
+          this, tr("Error"), tr("Cannot prepare the project model for scaling."));
+        return;
+      }
+      scaledPath = pathFromQString(temporary.path()) / "scaled.mdl";
+      if (!QFile::copy(pathAsQString(absPath), pathAsQString(scaledPath)))
+      {
+        QMessageBox::warning(this, tr("Error"), tr("Cannot copy the model for scaling."));
+        return;
+      }
+    }
+    auto result = io::scaleGoldSrcMdlFile(scaledPath, float(scale));
+    if (result.is_success() && projectAsset)
+    {
+      auto file = QFile{pathAsQString(scaledPath)};
+      if (!file.open(QIODevice::ReadOnly))
+        result = Error{file.errorString().toStdString()};
+      else
+      {
+        const auto bytes = file.readAll();
+        auto input = project::AssetImport{};
+        input.type = project::AssetType::Model;
+        input.sourceName = projectAsset->sourceName;
+        auto recipe = QJsonDocument::fromJson(
+                        QByteArray::fromStdString(projectAsset->conversionRecipe))
+                        .object();
+        auto operations = recipe.value("operations").toArray();
+        operations.append(
+          QJsonObject{{"operation", "scale-mdl"}, {"version", 1}, {"factor", scale}});
+        recipe.insert("operations", operations);
+        input.conversionRecipe =
+          QJsonDocument{recipe}.toJson(QJsonDocument::Compact).toStdString();
+        const auto original =
+          project->store().readAsset(projectAsset->id, project::ContentKind::Original);
+        if (file.error() != QFileDevice::NoError)
+          result = Error{file.errorString().toStdString()};
+        else if (original.is_error())
+          result = std::get<Error>(original.error());
+        else
+        {
+          input.original = original.value();
+          input.compatible.assign(bytes.begin(), bytes.end());
+          result =
+            project->replaceAsset(projectAsset->id, input) | kdl::transform([](auto) {});
+        }
+      }
+    }
     if (result.is_error())
     {
       const auto err = result.error();
@@ -894,15 +976,20 @@ void ModelBrowserView::renderAssetPlaceholders(
                 cy + 6.2f * unit,
                 iconColor);
             }
-            if (shouldRenderErrorText(item.type, preview))
+            if (
+              item.type == BrowserCellType::Map
+              || shouldRenderErrorText(item.type, preview))
             {
-              const auto errorText = std::string{"ERROR"};
+              const auto errorText =
+                std::string{item.type == BrowserCellType::Map ? "MAP" : "ERROR"};
               auto& font = fontManager().font(errorFont);
               const auto textSize = font.measure(errorText);
               const auto textOffset = vm::vec2f{
                 bounds.left() + std::max((bounds.width - textSize.x()) / 2.0f, 0.0f),
                 height - (bounds.top() - y) - (bounds.height - textSize.y()) / 2.0f};
-              const auto textColor = browserErrorColor(palette()).to<RgbaF>().toVec();
+              const auto textColor = item.type == BrowserCellType::Map
+                                       ? browserTextColor(palette()).to<RgbaF>().toVec()
+                                       : browserErrorColor(palette()).to<RgbaF>().toVec();
               const auto textQuads = font.quads(errorText, false, textOffset);
               const auto textVertices = TextVertex::toList(kdl::views::zip(
                 textQuads | kdl::views::stride(2),
@@ -1381,6 +1468,8 @@ QString ModelBrowserView::dndData(const Cell& cell)
   case BrowserCellType::Prefab:
     return QString{"prefab:"} + pathAsGenericQString(item.path);
   case BrowserCellType::Folder:
+  case BrowserCellType::Map:
+  case BrowserCellType::Texture:
     return "";
   }
 

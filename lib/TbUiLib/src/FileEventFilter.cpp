@@ -50,7 +50,9 @@ bool FileEventFilter::eventFilter(QObject* watched, QEvent* event)
   }
   else if (event->type() == QEvent::ApplicationActivate)
   {
-    if (m_appController.mapWindowManager().allMapWindowsClosed())
+    if (
+      m_appController.mapWindowManager().allMapWindowsClosed()
+      && !m_appController.hasOpenProjects())
     {
       m_appController.showWelcomeWindow();
     }

@@ -108,6 +108,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/ObjExportDialog.h"
 #include "ui/PluginInspector.h"
+#include "ui/ProjectSession.h"
 #include "ui/PythonConsole.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStringUtils.h"
@@ -214,9 +215,13 @@ QString lastCompilationProfileSettingsKey(const std::string& gameName)
 
 using namespace std::chrono_literals;
 
-MapWindow::MapWindow(AppController& appController, std::unique_ptr<MapDocument> document)
+MapWindow::MapWindow(
+  AppController& appController,
+  std::unique_ptr<MapDocument> document,
+  std::shared_ptr<ProjectSession> project)
   : m_appController{appController}
   , m_document{std::move(document)}
+  , m_project{std::move(project)}
   , m_lastInputTime{std::chrono::system_clock::now()}
   , m_autosaveTimer{new QTimer{this}}
   , m_updateTitleSignalDelayer{new SignalDelayer{500ms, this}}
@@ -247,6 +252,12 @@ MapWindow::MapWindow(AppController& appController, std::unique_ptr<MapDocument> 
 
   connectObservers();
   bindEvents();
+  if (m_project)
+    connect(
+      m_project.get(),
+      &ProjectSession::stateChanged,
+      this,
+      &MapWindow::updateTitleDelayed);
 
   restoreWidgetGeometry(this);
   restoreWidgetState(this);
@@ -278,6 +289,8 @@ MapWindow::MapWindow(AppController& appController, std::unique_ptr<MapDocument> 
 
 MapWindow::~MapWindow()
 {
+  if (m_project)
+    m_project->unregisterDocument(*m_document);
   for (auto* view : findChildren<MapView3D*>())
   {
     view->stopPlayMode();
@@ -335,6 +348,11 @@ void MapWindow::positionOnScreen(QWidget* reference)
   }
 }
 
+const std::shared_ptr<ProjectSession>& MapWindow::project() const
+{
+  return m_project;
+}
+
 const MapDocument& MapWindow::document() const
 {
   return *m_document;
@@ -384,9 +402,13 @@ QAction* MapWindow::findAction(const std::filesystem::path& path)
 void MapWindow::updateTitle()
 {
   const auto& map = m_document->map();
-  setWindowModified(map.modified());
-  setWindowTitle(tr("%1[*] - TrenchBroom").arg(pathAsQString(map.filename())));
-  setWindowFilePath(pathAsQPath(map.path()));
+  setWindowModified(m_project ? m_project->modified() : map.modified());
+  setWindowTitle(
+    m_project
+      ? tr("%1 — %2[*] - TrenchBroom")
+          .arg(pathAsQString(map.filename()), pathAsQString(m_project->path().filename()))
+      : tr("%1[*] - TrenchBroom").arg(pathAsQString(map.filename())));
+  setWindowFilePath(pathAsQPath(m_project ? m_project->path() : map.path()));
 }
 
 void MapWindow::updateTitleDelayed()
@@ -486,6 +508,11 @@ void MapWindow::removeRecentDocumentsMenu()
 
 void MapWindow::updateRecentDocumentsMenu()
 {
+  if (m_project)
+  {
+    m_appController.recentDocuments().updatePath(m_project->path());
+    return;
+  }
   const auto& map = m_document->map();
   const auto path = map.path();
   if (path.is_absolute())
@@ -1191,6 +1218,23 @@ bool MapWindow::saveDocument()
 
 bool MapWindow::saveDocumentAs()
 {
+  if (m_project)
+  {
+    const auto path = QFileDialog::getSaveFileName(
+      this,
+      tr("Save Project Copy"),
+      pathAsQString(m_project->path()),
+      "TB projects (*.tbproj)");
+    if (path.isEmpty())
+      return false;
+    const auto result = m_project->saveCopy(pathFromQString(path));
+    if (result.is_error())
+      QMessageBox::critical(
+        this,
+        tr("Save Project Copy"),
+        QString::fromStdString(std::get<Error>(result.error()).msg));
+    return result.is_success();
+  }
   auto& map = m_document->map();
 
   const auto defaultPath = map.persistent()
@@ -1232,6 +1276,19 @@ void MapWindow::revertDocument()
   auto& map = m_document->map();
   if (map.persistent() && confirmRevertDocument())
   {
+    if (m_project)
+    {
+      const auto id = m_project->assetFor(*m_document);
+      if (!id)
+        return;
+      const auto prepared = m_project->prepareMap(*id);
+      if (prepared.is_error())
+      {
+        logger().error() << "Failed to revert project map: "
+                         << std::get<Error>(prepared.error()).msg;
+        return;
+      }
+    }
     m_document->reload() | kdl::transform_error([&](auto e) {
       logger().error() << "Failed to revert document: " << e.msg;
     });
@@ -1313,8 +1370,11 @@ bool MapWindow::confirmOrDiscardChanges()
   const auto result = QMessageBox::question(
     this,
     "TrenchBroom",
-    tr("%1 has been modified. Do you want to save the changes?")
-      .arg(pathAsQString(map.filename())),
+    m_project ? tr("%1 has been modified. Save the entire project, including changes in "
+                   "other open maps?")
+                  .arg(pathAsQString(map.filename()))
+              : tr("%1 has been modified. Do you want to save the changes?")
+                  .arg(pathAsQString(map.filename())),
     QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
 
   if (result == QMessageBox::Yes)
@@ -2877,6 +2937,8 @@ void MapWindow::closeEvent(QCloseEvent* event)
   saveWidgetState(m_inspector);
   saveWidgetState(m_infoPanel);
 
+  if (m_project)
+    m_project->unregisterDocument(*m_document);
   m_appController.mapWindowManager().removeMapWindow(this);
   event->accept();
   m_discardChangesOnClose = false;

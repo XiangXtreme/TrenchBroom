@@ -4,6 +4,7 @@ target_sources(TbImgLib
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/DecodeBmpPalette.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/DecodeImage.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/GoldSrcTexture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Image.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ImageAlphaDomain.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ImageSupport.cpp

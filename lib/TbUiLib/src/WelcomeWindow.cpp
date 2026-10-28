@@ -110,6 +110,10 @@ QWidget* WelcomeWindow::createAppPanel()
   buttonLayout->setSpacing(LayoutConstants::WideHMargin);
   buttonLayout->addStretch();
   buttonLayout->addWidget(m_createNewDocumentButton);
+  auto* newProject = new QPushButton{tr("New project...")};
+  connect(
+    newProject, &QPushButton::clicked, this, [this]() { m_appController.newProject(); });
+  buttonLayout->addWidget(newProject);
   buttonLayout->addWidget(m_openOtherDocumentButton);
   buttonLayout->addStretch();
 

@@ -20,14 +20,23 @@
 #include "ui/MapWindowManager.h"
 
 #include <QApplication>
+#include <QFile>
+#include <QTemporaryDir>
 
 #include "gl/GlManager.h"
+#include "mdl/GameConfig.h"
 #include "mdl/GameInfo.h"
+#include "mdl/GameManager.h"
+#include "mdl/Map.h"
+#include "mdl/MapHeader.h"
 #include "ui/AppController.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
+#include "ui/ProjectSession.h"
+#include "ui/QPathUtils.h"
 
 #include "kd/contracts.h"
+#include "kd/filesystem_utils.h"
 
 #include <algorithm>
 #include <memory>
@@ -126,6 +135,100 @@ Result<void> MapWindowManager::loadDocument(
     std::move(path));
 }
 
+Result<void> MapWindowManager::createProjectMap(
+  std::shared_ptr<ProjectSession> project,
+  const std::string& name,
+  const mdl::MapFormat format)
+{
+  const auto* game =
+    m_appController.gameManager().gameInfo(project->store().info().gameId);
+  if (!game)
+    return Error{"Project game configuration is unavailable."};
+  auto created = MapDocument::createDocument(
+    m_appController.environmentConfig(),
+    *game,
+    format,
+    MapDocument::DefaultWorldBounds,
+    m_appController.taskManager(),
+    m_appController.glManager().resourceManager());
+  if (created.is_error())
+    return std::get<Error>(created.error());
+  auto temporary = QTemporaryDir{};
+  if (!temporary.isValid())
+    return Error{"Cannot create temporary map directory."};
+  const auto path = pathFromQString(temporary.path()) / "new.map";
+  const auto saved = created.value()->map().saveTo(path);
+  if (saved.is_error())
+    return std::get<Error>(saved.error());
+  auto file = QFile{pathAsQString(path)};
+  if (!file.open(QIODevice::ReadOnly))
+    return Error{file.errorString().toStdString()};
+  const auto bytes = file.readAll();
+  if (file.error() != QFileDevice::NoError)
+    return Error{file.errorString().toStdString()};
+  auto input = project::AssetImport{};
+  input.type = project::AssetType::Map;
+  input.virtualPath = "maps/" + name + ".map";
+  input.displayName = name;
+  input.original.assign(bytes.begin(), bytes.end());
+  input.compatible = input.original;
+  return project->importAsset(input) | kdl::and_then([&](const auto& asset) {
+           return loadProjectMap(project, asset.id);
+         });
+}
+
+Result<void> MapWindowManager::loadProjectMap(
+  std::shared_ptr<ProjectSession> project, const std::string& assetId)
+{
+  if (const auto* existing = project->documentFor(assetId))
+  {
+    for (auto* window : m_mapWindows)
+      if (&window->document() == existing)
+        activateMapWindow(*window);
+    return {};
+  }
+  const auto* game =
+    m_appController.gameManager().gameInfo(project->store().info().gameId);
+  if (!game)
+    return Error{"Project game configuration is unavailable."};
+  return project->prepareMap(assetId)
+         | kdl::and_then([&](const auto& path) -> Result<void> {
+             auto header = kdl::with_istream(path, mdl::readMapHeader);
+             if (header.is_error())
+               return std::get<Error>(header.error());
+             const auto& [gameName, format] = header.value();
+             if (gameName && *gameName != project->store().info().gameId)
+               return Error{"Map game does not match the project's game."};
+             if (format == mdl::MapFormat::Unknown)
+               return Error{
+                 "Map needs a TrenchBroom map-format header. Open and save it as a "
+                 "standalone map before importing."};
+             auto loaded = MapDocument::loadDocument(
+               m_appController.environmentConfig(),
+               *game,
+               format,
+               MapDocument::DefaultWorldBounds,
+               path,
+               m_appController.taskManager(),
+               m_appController.glManager().resourceManager());
+             if (loaded.is_error())
+               return std::get<Error>(loaded.error());
+             auto document = std::move(loaded).value();
+             auto registered = project->registerDocument(*document, assetId);
+             if (registered.is_error())
+               return std::get<Error>(registered.error());
+             auto* window = new MapWindow{m_appController, std::move(document), project};
+             window->positionOnScreen(topMapWindow());
+             m_mapWindows.insert(m_mapWindows.begin(), window);
+             if (m_showMapWindows)
+             {
+               window->show();
+               window->activateWindow();
+             }
+             return {};
+           });
+}
+
 bool MapWindowManager::allMapWindowsClosed() const
 {
   return m_mapWindows.empty();
@@ -150,7 +253,7 @@ void MapWindowManager::onFocusChange(QWidget* /* old */, QWidget* now)
 
 bool MapWindowManager::shouldCreateWindowForDocument() const
 {
-  return !m_singleMapWindow || m_mapWindows.empty();
+  return !m_singleMapWindow || m_mapWindows.empty() || topMapWindow()->project();
 }
 
 MapWindow* MapWindowManager::createMapWindow(std::unique_ptr<MapDocument> document)

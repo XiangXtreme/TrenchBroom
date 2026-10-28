@@ -25,7 +25,11 @@
 #include "fs/File.h"
 #include "fs/PathInfo.h"
 #include "fs/Reader.h"
+#include "fs/TraversalMode.h"
+#include "fs/WadFileSystem.h"
+#include "gl/Texture.h"
 #include "mdl/GameFileSystem.h"
+#include "mdl/LoadMipTexture.h"
 #include "ui/PrefabAsset.h"
 #include "ui/QPathUtils.h"
 
@@ -54,12 +58,56 @@ AssetPreviewState AssetPreviewProvider::preview(const BrowserAsset& asset) const
     return soundPreview(asset);
   case BrowserCellType::Prefab:
     return prefabPreview(asset);
+  case BrowserCellType::Texture:
+    return texturePreview(asset);
   case BrowserCellType::Folder:
   case BrowserCellType::Model:
+  case BrowserCellType::Map:
     return {AssetPreviewStatus::Unsupported, std::nullopt};
   }
 
   return {AssetPreviewStatus::Unsupported, std::nullopt};
+}
+
+AssetPreviewState AssetPreviewProvider::texturePreview(const BrowserAsset& asset) const
+{
+  const auto& path = asset.absolutePath.empty() ? asset.path : asset.absolutePath;
+  const auto file = fs::Disk::openFile(path);
+  if (file.is_error())
+    return {AssetPreviewStatus::Missing, std::nullopt};
+  auto wad = fs::WadFileSystem{file.value()};
+  if (wad.reload().is_error())
+    return {AssetPreviewStatus::Error, std::nullopt};
+  const auto entries = wad.find({}, fs::TraversalMode::Flat);
+  if (entries.is_error())
+    return {AssetPreviewStatus::Error, std::nullopt};
+  // A WAD collection is represented by its first decodable GoldSrc texture.
+  // Individual textures remain available through the material selector.
+  for (const auto& entry : entries.value())
+  {
+    if (!mdl::isHlMipTexture(entry))
+      continue;
+    const auto lump = wad.openFile(entry);
+    if (lump.is_error())
+      continue;
+    auto reader = lump.value()->reader().buffer();
+    const auto name = entry.stem().string();
+    auto decoded = mdl::loadHlMipTexture(reader, name.starts_with('{'));
+    if (decoded.is_error())
+      continue;
+    const auto& texture = decoded.value();
+    const auto& buffers = texture.buffersIfLoaded();
+    if (buffers.empty())
+      continue;
+    const auto& pixels = buffers.front();
+    return {
+      AssetPreviewStatus::Ready,
+      GoldSrcSpritePreview{
+        texture.width(),
+        texture.height(),
+        std::vector<std::uint8_t>{pixels.data(), pixels.data() + pixels.size()}}};
+  }
+  return {AssetPreviewStatus::Error, std::nullopt};
 }
 
 AssetPreviewState AssetPreviewProvider::spritePreview(const BrowserAsset& asset) const

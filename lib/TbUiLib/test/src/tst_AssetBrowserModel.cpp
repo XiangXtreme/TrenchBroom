@@ -61,6 +61,53 @@ std::vector<std::string> rootStrings(
 
 TEST_CASE("AssetBrowserModel")
 {
+  SECTION("project revisions invalidate previews independently of file timestamps")
+  {
+    auto before = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};
+    before.projectId = "project";
+    before.assetId = "box";
+    before.revision = 1;
+    auto after = before;
+    after.revision = 2;
+    CHECK_FALSE(sameBrowserAssetContent(before, after));
+    CHECK(
+      changedAssetPaths({}, {}, {before}, {after})
+      == std::vector<std::filesystem::path>{"models/box.mdl"});
+    after = before;
+    after.catalogPath = "Favorites/box.mdl";
+    CHECK(sameBrowserAssetContent(before, after));
+    CHECK_FALSE(before == after);
+    CHECK(changedAssetPaths({}, {}, {before}, {after}).empty());
+    const auto entries = modelBrowserEntries({}, {after}, "Favorites", {});
+    REQUIRE(entries.size() == 2);
+    CHECK(entries.back().cellData.path == before.path);
+    after = before;
+    after.projectId = "another-project";
+    CHECK_FALSE(sameBrowserAssetContent(before, after));
+    after = before;
+    after.absolutePath = "another-cache/box.mdl";
+    CHECK_FALSE(sameBrowserAssetContent(before, after));
+  }
+  SECTION("project maps and texture collections share virtual folders and search")
+  {
+    auto map = BrowserAsset{BrowserCellType::Map, "maps/test.map"};
+    map.projectId = "project";
+    map.catalogPath = "Industrial/Layout.map";
+    map.displayName = "Factory";
+    auto texture = BrowserAsset{BrowserCellType::Texture, "textures/brick.wad"};
+    texture.projectId = "project";
+    texture.catalogPath = "Industrial/Brick.wad";
+    texture.displayName = "Red brick";
+    const auto entries = modelBrowserEntries({}, {map, texture}, "Industrial", {});
+    REQUIRE(entries.size() == 3);
+    CHECK(entries[1].cellData.type == BrowserCellType::Map);
+    CHECK(entries[1].cellData.path == map.path);
+    CHECK(entries[2].cellData.type == BrowserCellType::Texture);
+    CHECK(entries[2].title == "Red brick");
+    const auto found = modelBrowserEntries({}, {map, texture}, {}, "Factory");
+    REQUIRE(found.size() == 2);
+    CHECK(found.back().cellData.path == map.path);
+  }
   SECTION("classifies supported asset extensions")
   {
     CHECK(assetTypeForExtension("models/foo.mdl") == BrowserCellType::Model);

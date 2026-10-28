@@ -53,6 +53,8 @@ std::string displayNameForPath(const std::filesystem::path& path)
 
 bool sameAssetIdentity(const BrowserAsset& lhs, const BrowserAsset& rhs)
 {
+  if (!lhs.assetId.empty() || !rhs.assetId.empty())
+    return lhs.projectId == rhs.projectId && lhs.assetId == rhs.assetId;
   return lhs.type == rhs.type && lhs.path == rhs.path;
 }
 
@@ -88,7 +90,9 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
 {
   return lhs.type == rhs.type && lhs.path == rhs.path
          && lhs.absolutePath == rhs.absolutePath && lhs.displayName == rhs.displayName
-         && lhs.lastModified == rhs.lastModified;
+         && lhs.lastModified == rhs.lastModified && lhs.projectId == rhs.projectId
+         && lhs.assetId == rhs.assetId && lhs.revision == rhs.revision
+         && lhs.catalogPath == rhs.catalogPath;
 }
 
 const std::vector<std::pair<BrowserCellType, std::filesystem::path>>& goldSrcAssetRoots()
@@ -153,6 +157,13 @@ BrowserCellType assetTypeForExtension(const std::filesystem::path& path)
 bool isEntityModelAsset(const BrowserAsset& asset)
 {
   return asset.type == BrowserCellType::Model || asset.type == BrowserCellType::Sprite;
+}
+
+bool sameBrowserAssetContent(const BrowserAsset& lhs, const BrowserAsset& rhs)
+{
+  return sameAssetIdentity(lhs, rhs) && lhs.type == rhs.type && lhs.path == rhs.path
+         && lhs.absolutePath == rhs.absolutePath && lhs.revision == rhs.revision
+         && lhs.lastModified == rhs.lastModified;
 }
 
 std::vector<std::filesystem::path> entityModelAssetPaths(
@@ -278,6 +289,18 @@ std::vector<std::filesystem::path> changedAssetPaths(
       continue;
     }
 
+    if (!asset.assetId.empty())
+    {
+      const auto old = std::ranges::find_if(oldAssets, [&](const auto& previous) {
+        return sameAssetIdentity(previous, asset);
+      });
+      if (
+        old == oldAssets.end() || old->revision != asset.revision
+        || old->path != asset.path)
+        changedPaths.push_back(asset.path);
+      continue;
+    }
+
     if (const auto it = newWriteTimes.find(asset.path); it != std::end(newWriteTimes))
     {
       const auto oldIt = oldWriteTimes.find(asset.path);
@@ -290,7 +313,8 @@ std::vector<std::filesystem::path> changedAssetPaths(
 
   for (const auto& oldPath : oldEntityModelPaths)
   {
-    if (!newWriteTimes.contains(oldPath))
+    if (std::ranges::none_of(
+          newAssets, [&](const auto& asset) { return asset.path == oldPath; }))
     {
       changedPaths.push_back(oldPath);
     }
@@ -343,7 +367,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
 
   for (const auto& asset : assets)
   {
-    const auto& assetPath = asset.path;
+    const auto& assetPath = asset.catalogPath.empty() ? asset.path : asset.catalogPath;
     if (assetPath.empty())
     {
       continue;
@@ -359,7 +383,9 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
                                   ? folderPath
                                   : folderPath.lexically_relative(currentFolderAbs);
 
-    const auto assetNameMatches = matches(assetPath.filename());
+    const auto assetNameMatches =
+      matches(assetPath.filename())
+      || (!asset.projectId.empty() && QString::fromStdString(asset.displayName).contains(trimmedSearchText, Qt::CaseInsensitive));
 
     if (relFromCurrent.empty() || relFromCurrent == std::filesystem::path{"."})
     {
@@ -436,7 +462,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
                                     : assetPath.lexically_relative(currentFolderAbs))
         : assetPath.filename();
     entries.push_back(
-      {BrowserCellData{asset.type, assetPath}, titlePath.generic_string()});
+      {BrowserCellData{asset.type, assetPath},
+       asset.projectId.empty() ? titlePath.generic_string() : asset.displayName});
   }
 
   return entries;

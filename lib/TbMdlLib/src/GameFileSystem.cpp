@@ -42,6 +42,21 @@
 namespace tb::mdl
 {
 
+const std::filesystem::path& GameFileSystem::projectDirectory() const
+{
+  return m_projectDirectory;
+}
+
+void GameFileSystem::setProjectDirectory(std::filesystem::path path)
+{
+  if (m_projectMount)
+    unmount(*m_projectMount);
+  m_projectMount.reset();
+  m_projectDirectory = std::move(path);
+  if (!m_projectDirectory.empty())
+    m_projectMount = mount("", std::make_unique<fs::DiskFileSystem>(m_projectDirectory));
+}
+
 void GameFileSystem::initialize(
   const EnvironmentConfig& environmentConfig,
   const GameConfig& gameConfig,
@@ -50,6 +65,8 @@ void GameFileSystem::initialize(
   Logger& logger)
 {
   unmountAll();
+  m_projectMount.reset();
+  m_wadMountPoints.clear();
 
   addDefaultAssetPaths(environmentConfig, gameConfig, logger);
 
@@ -57,6 +74,8 @@ void GameFileSystem::initialize(
   {
     addGameFileSystems(gameConfig, gamePath, additionalSearchPaths, logger);
   }
+  if (!m_projectDirectory.empty())
+    setProjectDirectory(m_projectDirectory);
 }
 
 void GameFileSystem::reloadWads(
@@ -67,6 +86,25 @@ void GameFileSystem::reloadWads(
 {
   unmountWads();
   mountWads(rootPath, wadSearchPaths, wadPaths, logger);
+  // Project copies take precedence over WADs found in the local game install.
+  if (!m_projectDirectory.empty())
+  {
+    fs::Disk::find(
+      m_projectDirectory / "textures",
+      fs::TraversalMode::Recursive,
+      fs::makeExtensionPathMatcher({".wad"}))
+      | kdl::transform([&](auto paths) {
+          std::ranges::sort(paths);
+          mountWads(rootPath, {}, paths, logger);
+        })
+      | kdl::transform_error([&](auto e) {
+          // An empty project has no texture directory yet.
+          if (
+            fs::Disk::pathInfo(m_projectDirectory / "textures")
+            == fs::PathInfo::Directory)
+            logger.error() << "Could not load project textures: " << e.msg;
+        });
+  }
 }
 
 void GameFileSystem::addDefaultAssetPaths(

@@ -21,6 +21,7 @@
 #include <QRgb>
 
 #include "fs/TestEnvironment.h"
+#include "img/GoldSrcTexture.h"
 #include "mdl/GameFileSystem.h"
 #include "ui/AssetPreviewProvider.h"
 #include "ui/PrefabAsset.h"
@@ -109,6 +110,27 @@ TEST_CASE("AssetPreviewProvider")
   auto env = fs::TestEnvironment{};
   auto gameFileSystem = mdl::GameFileSystem{};
   auto provider = AssetPreviewProvider{gameFileSystem};
+
+  SECTION("project WAD preview reads back converted colors and transparency")
+  {
+    auto image = img::Image{16, 16, std::vector<unsigned char>(16 * 16 * 4, 255)};
+    image.pixels[3] = 0;
+    auto converted = img::convertGoldSrcTexture(image, "{brick");
+    REQUIRE(converted.is_success());
+    const auto path = env.dir() / "brick.wad";
+    writeBytes(path, converted.value().wad);
+    const auto preview = provider.preview(
+      BrowserAsset{BrowserCellType::Texture, "textures/brick.wad", path});
+    REQUIRE(preview.status == AssetPreviewStatus::Ready);
+    REQUIRE(preview.sprite);
+    CHECK(preview.sprite->width == 16u);
+    CHECK(preview.sprite->height == 16u);
+    CHECK(preview.sprite->rgba == converted.value().preview.pixels);
+    writeBytes(path, {'b', 'a', 'd'});
+    CHECK(
+      provider.preview(BrowserAsset{BrowserCellType::Texture, path, path}).status
+      == AssetPreviewStatus::Error);
+  }
 
   SECTION("valid SPR returns ready sprite preview")
   {

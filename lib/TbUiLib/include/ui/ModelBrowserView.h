@@ -74,6 +74,7 @@ private:
   static constexpr auto CameraUp = vm::vec3f{0, 0, 1};
 
 private:
+  AppController& m_appController;
   MapDocument& m_document;
   vm::quatf m_rotation;
   QScrollBar* m_scrollBar = nullptr;
@@ -169,6 +170,7 @@ private:
 
 signals:
   void folderActivated(const QString& folderPath);
+  void mapActivated(const QString& mapPath);
   void renamePrefabRequested(const QString& prefabPath);
   void deletePrefabRequested(const QString& prefabPath);
 };

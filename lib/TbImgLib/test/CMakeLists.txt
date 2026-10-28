@@ -4,6 +4,7 @@ EMBED_UTF8_MANIFEST(TbImgLibTest)
 target_sources(TbImgLibTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_DecodeBmpPalette.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_DecodeImage.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcTexture.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ImageSupport.cpp
 )
 

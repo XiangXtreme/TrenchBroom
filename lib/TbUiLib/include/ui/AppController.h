@@ -20,6 +20,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QtSystemDetection>
 
@@ -27,6 +28,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <vector>
 
 class QJsonObject;
 
@@ -65,6 +67,9 @@ namespace ui
 class AboutDialog;
 class ActionManager;
 class MapWindowManager;
+class MapDocument;
+class ProjectSession;
+class ProjectWindow;
 class McpBridgeServer;
 class McpHttpServer;
 class RecentDocuments;
@@ -105,6 +110,8 @@ private:
   QString m_mcpStartupError;
   std::unique_ptr<WelcomeWindow> m_welcomeWindow;
   std::unique_ptr<AboutDialog> m_aboutDialog;
+  std::vector<QPointer<ProjectWindow>> m_projectWindows;
+  bool m_showProjectWindows = true;
 
 public:
   AppController(
@@ -154,6 +161,10 @@ public:
   bool newDocument();
   void openDocument();
   bool openDocument(const std::filesystem::path& path);
+  void newProject();
+  bool openProject(const std::filesystem::path& path);
+  bool hasOpenProjects() const;
+  std::shared_ptr<ProjectSession> projectFor(const MapDocument& document) const;
 
   void showWelcomeWindow();
 

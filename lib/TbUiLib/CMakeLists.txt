@@ -175,6 +175,9 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupButton.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabAsset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectSession.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectTextureImport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabTool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabToolController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PreferenceDialog.cpp
@@ -421,6 +424,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupButton.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabAsset.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectSession.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabTool.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabToolController.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PreferenceDialog.h
@@ -527,6 +532,7 @@ target_link_libraries(TbUiLib
     TbBaseLib
     TbMcpLib
     TbMdlLib
+    TbProjectLib
     TbPreferencesLib
     TbRenderLib
     UpdateLib

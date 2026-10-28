@@ -25,6 +25,7 @@
 
 #include "kd/path_hash.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -43,6 +44,8 @@ enum class BrowserCellType
   Sprite,
   Sound,
   Prefab,
+  Map,
+  Texture,
 };
 
 struct BrowserCellData
@@ -58,6 +61,10 @@ struct BrowserAsset
   std::filesystem::path absolutePath;
   std::string displayName;
   std::optional<std::filesystem::file_time_type> lastModified;
+  std::string projectId;
+  std::string assetId;
+  std::uint64_t revision = 0;
+  std::filesystem::path catalogPath;
 
   BrowserAsset();
   BrowserAsset(BrowserCellType i_type, std::filesystem::path i_path);
@@ -90,6 +97,8 @@ const std::vector<std::filesystem::path>& assetBrowserExtensions();
 BrowserCellType assetTypeForExtension(const std::filesystem::path& path);
 
 bool isEntityModelAsset(const BrowserAsset& asset);
+
+bool sameBrowserAssetContent(const BrowserAsset& lhs, const BrowserAsset& rhs);
 
 std::vector<std::filesystem::path> entityModelAssetPaths(
   const std::vector<BrowserAsset>& assets);

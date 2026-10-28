@@ -143,7 +143,7 @@ Result<std::string> readPrefabAssetText(
   }
 
   const auto prefix = std::filesystem::path{"prefabs"};
-  if (kdl::path_has_prefix(path, prefix))
+  if (gameFileSystem.projectDirectory().empty() && kdl::path_has_prefix(path, prefix))
   {
     return ui::readPrefabAsset(
       configuredPrefabDirectory() / path.lexically_relative(prefix));

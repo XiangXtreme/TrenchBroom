@@ -886,6 +886,14 @@ void ActionManager::createFileMenu()
 {
   auto& fileMenu = createMainMenu("File");
   fileMenu.addItem(addAction(Action{
+    "Menu/File/New Project",
+    "New Project...",
+    ActionContext::Any,
+    KeySequence{},
+    [](auto& context) { context.appController().newProject(); },
+    [](const auto&) { return true; },
+  }));
+  fileMenu.addItem(addAction(Action{
     "Menu/File/New",
     "New Document",
     ActionContext::Any,

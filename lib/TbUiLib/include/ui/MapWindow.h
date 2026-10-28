@@ -87,6 +87,7 @@ enum class MapViewLayout;
 class MapViewToolBox;
 class ObjExportDialog;
 class PythonConsole;
+class ProjectSession;
 class SignalDelayer;
 class SwitchableMapViewContainer;
 class Tool;
@@ -97,6 +98,7 @@ class MapWindow : public QMainWindow
 private:
   AppController& m_appController;
   std::unique_ptr<MapDocument> m_document;
+  std::shared_ptr<ProjectSession> m_project;
 
   std::chrono::time_point<std::chrono::system_clock> m_lastInputTime;
   QTimer* m_autosaveTimer = nullptr;
@@ -150,7 +152,11 @@ private:
   bool m_discardChangesOnClose = false;
 
 public:
-  MapWindow(AppController& appController, std::unique_ptr<MapDocument> document);
+  MapWindow(
+    AppController& appController,
+    std::unique_ptr<MapDocument> document,
+    std::shared_ptr<ProjectSession> project = {});
+  const std::shared_ptr<ProjectSession>& project() const;
   ~MapWindow() override;
 
   void positionOnScreen(QWidget* reference);

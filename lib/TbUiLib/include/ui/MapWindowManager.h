@@ -54,6 +54,7 @@ namespace ui
 class AppController;
 class MapDocument;
 class MapWindow;
+class ProjectSession;
 
 class MapWindowManager : public QObject
 {
@@ -81,6 +82,12 @@ public:
     std::filesystem::path path);
 
   std::vector<MapWindow*> mapWindows() const;
+  Result<void> createProjectMap(
+    std::shared_ptr<ProjectSession> project,
+    const std::string& name,
+    mdl::MapFormat format);
+  Result<void> loadProjectMap(
+    std::shared_ptr<ProjectSession> project, const std::string& assetId);
   MapWindow* topMapWindow() const;
   bool activateMapWindow(MapWindow& mapWindow);
   bool allMapWindowsClosed() const;

@@ -55,6 +55,8 @@
 #include "ui/MapWindowManager.h"
 #include "ui/PieMenuSettingsDialog.h"
 #include "ui/PreferenceDialog.h"
+#include "ui/ProjectSession.h"
+#include "ui/ProjectWindow.h"
 #include "ui/PythonPluginManagerDialog.h"
 #include "ui/QPathUtils.h"
 #include "ui/RecentDocuments.h"
@@ -201,6 +203,7 @@ AppController::AppController(
   , m_mcpHttpServer{std::make_unique<McpHttpServer>(*m_mcpBridgeServer)}
   , m_welcomeWindow{std::make_unique<WelcomeWindow>(*this)}
   , m_aboutDialog{std::make_unique<AboutDialog>(*this)}
+  , m_showProjectWindows{options.showMapWindows}
 {
   using namespace std::chrono_literals;
 
@@ -236,6 +239,8 @@ Result<std::unique_ptr<AppController>> AppController::create(
 
 AppController::~AppController()
 {
+  for (const auto& window : m_projectWindows)
+    delete window.data();
   m_mcpHttpServer->stop();
   m_mcpBridgeServer->stop();
   processGlResources();
@@ -374,7 +379,8 @@ void AppController::openDocument()
     nullptr,
     tr("Open Map"),
     fileDialogDefaultDirectory(FileDialogDir::Map),
-    "Map files (*.map);;Any files (*.*)");
+    "TB projects and maps (*.tbproj *.map);;TB projects (*.tbproj);;Map files "
+    "(*.map);;Any files (*.*)");
 
   if (const auto path = pathFromQString(pathStr); !path.empty())
   {
@@ -385,6 +391,8 @@ void AppController::openDocument()
 
 bool AppController::openDocument(const std::filesystem::path& path)
 {
+  if (pathAsQString(path.extension()).compare(".tbproj", Qt::CaseInsensitive) == 0)
+    return openProject(path);
   // if std::filesystem::absolute fails, the file won't be found and we'll log it later
   auto ec = std::error_code{};
   auto absPath =
@@ -427,6 +435,104 @@ bool AppController::openDocument(const std::filesystem::path& path)
              return false;
            })
          | kdl::value();
+}
+
+void AppController::newProject()
+{
+  const auto game = GameDialog::showNewDocumentDialog(*this);
+  if (!game)
+    return;
+  const auto filename = QFileDialog::getSaveFileName(
+    nullptr, tr("Create Project"), {}, "TB projects (*.tbproj)");
+  if (filename.isEmpty())
+    return;
+  const auto path = pathFromQString(filename);
+  auto result = ProjectSession::create(
+    path, pathAsQString(path.stem()).toStdString(), std::get<0>(*game));
+  if (result.is_error())
+  {
+    QMessageBox::critical(
+      nullptr,
+      tr("Create Project"),
+      QString::fromStdString(std::get<Error>(result.error()).msg));
+    return;
+  }
+  // Reopen through the same ownership and duplicate-window path as existing projects.
+  auto created = std::move(result).value();
+  created.reset();
+  if (openProject(path))
+  {
+    const auto& session = m_projectWindows.back()->session();
+    const auto map =
+      mapWindowManager().createProjectMap(session, "untitled", std::get<1>(*game));
+    if (map.is_error())
+      QMessageBox::critical(
+        nullptr,
+        tr("Create Map"),
+        QString::fromStdString(std::get<Error>(map.error()).msg));
+  }
+}
+
+bool AppController::openProject(const std::filesystem::path& path)
+{
+  auto ec = std::error_code{};
+  const auto absolute = std::filesystem::weakly_canonical(path, ec);
+  if (ec)
+    return false;
+  for (const auto& window : m_projectWindows)
+  {
+    if (window && window->session()->path() == absolute)
+    {
+      if (m_showProjectWindows)
+      {
+        window->show();
+        window->raise();
+        window->activateWindow();
+      }
+      return true;
+    }
+  }
+  auto result = ProjectSession::open(absolute);
+  if (result.is_error())
+  {
+    QMessageBox::critical(
+      nullptr,
+      tr("Open Project"),
+      QString::fromStdString(std::get<Error>(result.error()).msg));
+    return false;
+  }
+  if (!gameManager().gameInfo(result.value()->store().info().gameId))
+  {
+    QMessageBox::critical(
+      nullptr,
+      tr("Open Project"),
+      tr("The game's configuration is not installed: %1")
+        .arg(QString::fromStdString(result.value()->store().info().gameId)));
+    return false;
+  }
+  std::erase_if(m_projectWindows, [](const auto& window) { return window.isNull(); });
+  auto* window = new ProjectWindow{*this, std::move(result).value()};
+  m_projectWindows.emplace_back(window);
+  if (m_showProjectWindows)
+    window->show();
+  m_recentDocuments->updatePath(absolute);
+  m_welcomeWindow->close();
+  return true;
+}
+
+std::shared_ptr<ProjectSession> AppController::projectFor(
+  const MapDocument& document) const
+{
+  for (const auto& window : m_projectWindows)
+    if (window && window->session()->assetFor(document))
+      return window->session();
+  return {};
+}
+
+bool AppController::hasOpenProjects() const
+{
+  return std::ranges::any_of(
+    m_projectWindows, [](const auto& window) { return !window.isNull(); });
 }
 
 void AppController::showWelcomeWindow()

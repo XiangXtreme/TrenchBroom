@@ -868,11 +868,16 @@ Result<std::unique_ptr<Map>> Map::reload()
 
 Result<void> Map::save()
 {
+  if (m_saveHandler)
+    return m_saveHandler();
   return saveAs(m_path);
 }
 
 Result<void> Map::saveAs(const std::filesystem::path& path)
 {
+  if (m_saveHandler)
+    return Error{
+      "Project maps must be saved through their project. Use Export for MAP files."};
   return saveTo(path).transform([&]() {
     setLastSaveModificationCount();
     setPath(path);
@@ -892,18 +897,31 @@ Result<void> Map::saveTo(const std::filesystem::path& path) const
   const auto generator =
     fmt::format("TrenchBroom {} (Build {})", VERSION_STR, BUILD_ID_STR);
 
-  kdl::with_ostream(path, [&](auto& stream) {
-    writeMapHeader(
-      stream, gameInfo().gameConfig.name, m_worldNode->mapFormat(), generator);
+  return kdl::with_ostream(
+           path,
+           [&](auto& stream) {
+             writeMapHeader(
+               stream, gameInfo().gameConfig.name, m_worldNode->mapFormat(), generator);
 
-    auto writer = NodeWriter{*m_worldNode, stream};
-    writer.setExporting(false);
-    writer.writeMap(m_taskManager);
-  }) | kdl::transform_error([&](const auto& e) {
-    m_logger.error() << "Could not save document: " << e.msg;
-  });
+             auto writer = NodeWriter{*m_worldNode, stream};
+             writer.setExporting(false);
+             writer.writeMap(m_taskManager);
+           })
+         | kdl::transform_error([&](const auto& e) {
+             m_logger.error() << "Could not save document: " << e.msg;
+             return Error{e.msg};
+           });
+}
 
-  return Result<void>{};
+void Map::setSaveHandler(std::function<Result<void>()> handler)
+{
+  m_saveHandler = std::move(handler);
+}
+
+void Map::markSaved()
+{
+  setLastSaveModificationCount();
+  mapWasSavedNotifier();
 }
 
 Result<void> Map::exportAs(const ExportOptions& options) const
@@ -1219,22 +1237,18 @@ void Map::reloadMaterials()
 
 void Map::loadMaterials()
 {
+  auto wadPaths = std::vector<std::filesystem::path>{};
+  const auto searchPaths = std::vector<std::filesystem::path>{
+    path().parent_path(), gamePath(), environmentConfig().appFolderPath};
   if (const auto* wadStr = m_worldNode->entity().property(EntityPropertyKeys::Wad))
   {
-    const auto searchPaths = std::vector<std::filesystem::path>{
-      path().parent_path(),              // relative to the map file
-      gamePath(),                        // relative to game path
-      environmentConfig().appFolderPath, // relative to the application
-    };
-
-    const auto wadPaths = splitWadProperty(*wadStr)
-                          | std::views::transform([](const auto& pathStr) {
-                              return std::filesystem::path{pathStr};
-                            })
-                          | kdl::ranges::to<std::vector>();
-    m_gameFileSystem->reloadWads(
-      gameInfo().gameConfig.materialConfig.root, searchPaths, wadPaths, logger());
+    wadPaths = splitWadProperty(*wadStr) | std::views::transform([](const auto& pathStr) {
+                 return std::filesystem::path{pathStr};
+               })
+               | kdl::ranges::to<std::vector>();
   }
+  m_gameFileSystem->reloadWads(
+    gameInfo().gameConfig.materialConfig.root, searchPaths, wadPaths, logger());
 
   // rescans the loose-file search path mounts (e.g. reloadWads above only replaces the
   // wad mounts, it doesn't pick up files added to or removed from disk directories)

@@ -70,8 +70,10 @@
 #include "ui/MapDocument.h"
 #include "ui/MapView3D.h"
 #include "ui/MapWindow.h"
+#include "ui/MapWindowManager.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/PrefabAsset.h"
+#include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/QWidgetUtils.h"
 #include "ui/SearchBox.h"
@@ -227,11 +229,17 @@ ModelBrowser::ModelBrowser(
   AppController& appController, MapDocument& document, QWidget* parent)
   : QWidget{parent}
   , m_document{document}
+  , m_project{appController.projectFor(document)}
 {
   createGui(appController);
-  bindEvents();
+  bindEvents(appController);
   connectObservers();
   updateFolderEdit();
+  if (m_project)
+    connect(m_project.get(), &ProjectSession::contentsChanged, this, [this]() {
+      markAssetsDirty();
+      scheduleAssetRefresh();
+    });
 }
 
 ModelBrowser::~ModelBrowser()
@@ -352,7 +360,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_rescanTimer->setSingleShot(true);
 }
 
-void ModelBrowser::bindEvents()
+void ModelBrowser::bindEvents(AppController& appController)
 {
   connect(m_searchBox, &QLineEdit::textChanged, this, [&](const QString& text) {
     if (m_view)
@@ -421,6 +429,25 @@ void ModelBrowser::bindEvents()
   connect(
     m_view, &ModelBrowserView::folderActivated, this, [&](const QString& folderPath) {
       setCurrentFolderPath(std::filesystem::path{folderPath.toStdString()});
+    });
+  connect(
+    m_view,
+    &ModelBrowserView::mapActivated,
+    this,
+    [this, &appController](const QString& path) {
+      if (!m_project)
+        return;
+      const auto asset =
+        std::ranges::find(m_assets, pathFromQString(path), &BrowserAsset::path);
+      if (asset == m_assets.end())
+        return;
+      const auto result =
+        appController.mapWindowManager().loadProjectMap(m_project, asset->assetId);
+      if (result.is_error())
+        QMessageBox::critical(
+          this,
+          tr("Open Map"),
+          QString::fromStdString(std::get<Error>(result.error()).msg));
     });
   connect(
     m_view, &ModelBrowserView::renamePrefabRequested, this, [&](const QString& path) {
@@ -674,6 +701,24 @@ void ModelBrowser::saveSelectionAsPrefab()
     return;
   }
 
+  if (m_project)
+  {
+    const auto text = mdl::serializeSelectedNodes(map);
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Prefab;
+    input.displayName = prefabName.toStdString();
+    input.virtualPath = "prefabs/" + input.displayName + ".tbprefab";
+    input.original.assign(text.begin(), text.end());
+    input.compatible = input.original;
+    const auto result = m_project->importAsset(input);
+    if (result.is_error())
+      QMessageBox::warning(
+        this,
+        tr("Save Prefab"),
+        QString::fromStdString(std::get<Error>(result.error()).msg));
+    return;
+  }
+
   const auto prefabDirectory = configuredPrefabDirectory();
   if (const auto result =
         checkPrefabNameAvailable(prefabDirectory, prefabName.toStdString());
@@ -719,6 +764,34 @@ void ModelBrowser::saveSelectionAsPrefab()
 
 void ModelBrowser::renamePrefab(std::filesystem::path prefabPath)
 {
+  if (m_project)
+  {
+    for (const auto& entry : m_assets)
+    {
+      if (entry.path != prefabPath || entry.assetId.empty())
+        continue;
+      bool ok = false;
+      const auto name = QInputDialog::getText(
+                          this,
+                          tr("Rename Prefab"),
+                          tr("Prefab name:"),
+                          QLineEdit::Normal,
+                          QString::fromStdString(entry.displayName),
+                          &ok)
+                          .trimmed();
+      if (ok && !name.isEmpty())
+      {
+        const auto result = m_project->renameAsset(entry.assetId, name.toStdString());
+        if (result.is_error())
+          QMessageBox::warning(
+            this,
+            tr("Rename Prefab"),
+            QString::fromStdString(std::get<Error>(result.error()).msg));
+      }
+      return;
+    }
+    return;
+  }
   const auto absPath = userPrefabAssetPath(prefabPath);
   if (absPath.empty())
   {
@@ -759,6 +832,31 @@ void ModelBrowser::renamePrefab(std::filesystem::path prefabPath)
 
 void ModelBrowser::deletePrefab(std::filesystem::path prefabPath)
 {
+  if (m_project)
+  {
+    for (const auto& entry : m_assets)
+    {
+      if (entry.path != prefabPath || entry.assetId.empty())
+        continue;
+      if (
+        QMessageBox::question(
+          this,
+          tr("Delete Prefab"),
+          tr("Delete prefab \"%1\"?").arg(QString::fromStdString(entry.displayName)))
+        == QMessageBox::Yes)
+      {
+        const auto id = entry.assetId;
+        const auto result = m_project->removeAsset(id);
+        if (result.is_error())
+          QMessageBox::warning(
+            this,
+            tr("Delete Prefab"),
+            QString::fromStdString(std::get<Error>(result.error()).msg));
+      }
+      return;
+    }
+    return;
+  }
   const auto absPath = userPrefabAssetPath(prefabPath);
   if (absPath.empty())
   {
@@ -908,6 +1006,34 @@ void ModelBrowser::scheduleDeferredAssetRefreshAfterDocumentLoad()
 
 std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets() const
 {
+  if (m_project && !m_folderPath.is_absolute())
+  {
+    const auto catalog = m_project->store().assets();
+    if (catalog.is_error())
+      return std::nullopt;
+    auto assets = std::vector<BrowserAsset>{};
+    for (const auto& asset : catalog.value())
+    {
+      const auto path = pathFromQString(QString::fromStdString(asset.publishPath));
+      const auto type = asset.type == project::AssetType::Map ? BrowserCellType::Map
+                        : asset.type == project::AssetType::Texture
+                          ? BrowserCellType::Texture
+                          : assetTypeForExtension(path);
+      if (type == BrowserCellType::Folder)
+        continue;
+      const auto file = m_project->assetFile(asset);
+      if (file.is_error())
+        continue;
+      auto entry = BrowserAsset{type, path, file.value()};
+      entry.projectId = m_project->store().info().id;
+      entry.assetId = asset.id;
+      entry.revision = asset.revision;
+      entry.displayName = asset.displayName;
+      entry.catalogPath = pathFromQString(QString::fromStdString(asset.virtualPath));
+      assets.push_back(std::move(entry));
+    }
+    return assets;
+  }
   if (m_folderPath.is_absolute())
   {
     return collectBrowserAssets(
@@ -1044,7 +1170,7 @@ void ModelBrowser::rebuildFolderTree()
 
   for (const auto& asset : m_assets)
   {
-    const auto& assetPath = asset.path;
+    const auto& assetPath = asset.catalogPath.empty() ? asset.path : asset.catalogPath;
     if (assetPath.empty())
     {
       continue;

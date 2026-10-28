@@ -28,6 +28,7 @@
 #include "kd/path_hash.h"
 
 #include <filesystem>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -49,12 +50,14 @@ namespace tb::ui
 {
 class AppController;
 class MapDocument;
+class ProjectSession;
 
 class ModelBrowser : public QWidget
 {
   Q_OBJECT
 private:
   MapDocument& m_document;
+  std::shared_ptr<ProjectSession> m_project;
 
   QStackedWidget* m_pathStack = nullptr;
   QWidget* m_breadcrumbBar = nullptr;
@@ -98,7 +101,7 @@ private:
   void showEvent(QShowEvent* event) override;
 
   void createGui(AppController& appController);
-  void bindEvents();
+  void bindEvents(AppController& appController);
   void connectObservers();
   void connectMapObservers();
 

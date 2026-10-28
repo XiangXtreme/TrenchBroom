@@ -22,6 +22,7 @@
 #include "fs/VirtualFileSystem.h"
 
 #include <filesystem>
+#include <optional>
 #include <vector>
 
 namespace tb
@@ -37,8 +38,12 @@ class GameFileSystem : public fs::VirtualFileSystem
 {
 private:
   std::vector<fs::VirtualMountPointId> m_wadMountPoints;
+  std::filesystem::path m_projectDirectory;
+  std::optional<fs::VirtualMountPointId> m_projectMount;
 
 public:
+  const std::filesystem::path& projectDirectory() const;
+  void setProjectDirectory(std::filesystem::path path);
   void initialize(
     const EnvironmentConfig& environmentConfig,
     const GameConfig& config,
