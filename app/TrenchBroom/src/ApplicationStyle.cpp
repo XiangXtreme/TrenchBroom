@@ -226,6 +226,16 @@ public:
     case QStyle::SH_ComboBox_Popup:
       // Use the compact list popup on every platform so maxVisibleItems is respected.
       return 0;
+    case QStyle::SH_BlinkCursorWhenTextSelected:
+      if (
+        widget
+        && (widget->property("tbControlRole") == "vector"
+            || (widget->parentWidget()
+                && widget->parentWidget()->property("tbControlRole") == "vector")))
+      {
+        return 0;
+      }
+      return QProxyStyle::styleHint(hint, option, widget, returnData);
     default:
       return QProxyStyle::styleHint(hint, option, widget, returnData);
     }

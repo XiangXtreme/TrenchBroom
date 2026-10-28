@@ -16,20 +16,26 @@
 | `source/blender/editors/interface/interface.cc`：`button_is_compatible` | 只连选可交互、类型和属性语义兼容的字段 |
 | `interface_handlers.cc`：`multibut_states_create`、`multibut_states_apply` | 文本输入应用同一值；拖动应用原值加增量，比例属性按原值乘比例；主字段为零时不启用比例 |
 | 同文件：`textedit_begin`、`do_but_textedit`、`do_but_textedit_select` | 开始文本编辑时全选；再次点击定位光标，拖动选择文本，双击选择词；Enter 确认，Esc/右键取消；Tab/Shift+Tab 切换字段 |
+| 同文件：`textedit_move` | 有选区时，不带 Shift 的左/右键先收拢到选区左端/右端；初始选区锚点在开头，光标在末尾 |
 | 同文件：`event_to_snap`、`numedit_apply_snapf`、`numedit_but_NUM` | Shift 精调，Ctrl 吸附，Ctrl+Shift 使用较小吸附间隔；拖动过程中修饰键变化重新计算吸附 |
 | 同文件：`do_button`、`handle_button_event` | 悬停复制/粘贴、属性上下文菜单、空文本恢复 RNA 默认值属于属性系统的通用处理 |
 | `source/blender/editors/interface/interface_widgets.cc`：`widget_draw_text`；`interface.cc`：`button_drag_multi_edit_get` | 连选字段在输入期间绘制主字段的同一编辑字符串；中间态文本也实时一致，确认后统一写入属性 |
+| `interface.cc`：`number_from_string`、`button_string_eval_number` | 数值输入先求值表达式，再应用属性范围；启用 Python 的 Blender 使用 Python 数值表达式求值 |
 | `source/blender/makesrna/intern/rna_object.cc`：`rna_def_object` | Scale 标记 `PROP_PROPORTIONAL`；Location、Euler Rotation 与 Scale 有各自的单位、精度、范围和步长 |
 
 官方手册补充：[Input Fields](https://docs.blender.org/manual/en/latest/interface/controls/buttons/fields.html)。
 行为发生分歧时，以以上本地源码版本为核对依据。
+
+Qt 适配通过统一 `ApplicationStyle` 的
+[`SH_BlinkCursorWhenTextSelected`](https://doc.qt.io/qt-6/qstyle.html#StyleHint-enum)
+控制 vector 字段选区中的插入光标，不改变普通文本框的光标策略。
 
 ## TB 数值框契约
 
 | 操作 | TB 行为 |
 | --- | --- |
 | 鼠标导致 FocusIn，随后按下 | 焦点本身不进入文本编辑；按下仍然启动手势识别 |
-| 初次单击松手 | 进入文本编辑，全选当前数字；角度后缀不属于待替换数字 |
+| 初次单击松手 | 进入文本编辑，全选当前数字；选区存在时隐藏插入光标，角度后缀不属于待替换数字 |
 | 编辑中再次点击或拖动 | 交给原生文本编辑器定位光标或选择文本 |
 | Ctrl+单击 | 立即全选数字并进入文本编辑，松手不清除选区 |
 | 横向拖动 | 超过阈值后建立基准，随后实时修改地图；松手形成一个撤销步骤，释放数值框焦点并返回上次的地图视图 |
@@ -43,6 +49,8 @@
 | Esc / 编辑中的右键 | 取消未确认文本或整次实时拖动，清理高亮及鼠标捕获，返回地图视图 |
 | Tab / Shift+Tab | 提交当前输入并继续 Qt 焦点导航；键盘进入数值框时全选数字 |
 | 编辑中的上/下方向键 | 移到数字开头/末尾；Shift 扩选，不步进修改地图 |
+| 编辑中的左/右方向键 | 有选区时先到选区左端/右端；无选区后逐字移动；Shift 继续使用原生扩选 |
+| 输入算式 | 支持加减乘除、括号、正负号、科学计数法和本地化小数，例如 `(32 + 16) / 2`；确认时求值，结果按字段范围限幅；无效算式、除零或非有限结果恢复原值，连选时各轴保持原值 |
 | 编辑中的 Ctrl+A/C/X/V/Z | 使用 Qt 文本编辑器的全选、复制、剪切、粘贴和文本撤销 |
 | 点击其它控件 | 提交当前文本；普通滚轮继续用于面板滚动；未进入编辑状态时 Ctrl+滚轮可步进 |
 | 面板销毁 | 关闭观察者和输入回调；丢弃尚未提交的文本，取消进行中的长事务 |
@@ -55,13 +63,15 @@
 - Blender 的 RNA 单位系统会影响长度属性的比例拖动、步长和吸附。
   TB Location 按地图坐标作加法偏移，Scale 连选作比例调整；三种向量之间不混合连选。
 - Scale 数值范围暂沿用 TB 的正数限制；比例计算为主轴零值保留加法回退，面板尚不提供负缩放或零缩放。
-- 文本输入目前使用 Qt 数值校验。Blender 的 Python 表达式、单位表达式、RNA 默认值重置、
+- 算术输入复用 TB 表达式解析器，保留当前字段精度；连选时同步显示完整算式，确认后统一应用结果。
+  目前支持上述基础算术，Blender 的幂运算、数学函数、完整 Python 表达式、单位表达式、RNA 默认值重置、
   悬停属性快捷键、驱动器、关键帧和属性右键菜单尚未接入此面板。
 - 普通 Brush 的独立旋转、缩放持久化见 `custom-feature-roadmap.md` 的专有项目格式待办。
 
 ## 验证
 
 `tst_TransformCard.cpp` 覆盖鼠标 FocusIn 先于 Press 的事件顺序、点击替换数字、纵向连选、
-回划和锁定轴、横向转折、比例拖动、吸附、连选输入实时镜像、文本确认/取消与撤销事务。
+回划和锁定轴、横向转折、比例拖动、吸附、方向键收拢选区、算式求值和错误恢复、
+连选输入实时镜像、文本确认/取消与撤销事务。
 `tst_MapWindow.cpp` 覆盖回车确认和横拖松手后返回原地图视图的焦点路由。
 后台测试确认 Qt 事件和焦点状态；真实窗口的激活、鼠标捕获及操作手感仍需人工试用。
