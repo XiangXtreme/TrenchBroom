@@ -66,6 +66,21 @@ public:
     ContentKind kind,
     std::optional<std::uint64_t> revision = std::nullopt) const;
 
+  // Snapshot provenance. A project only ever knows the library revisions it captured.
+  Result<std::vector<Asset>> libraryLinkedAssets() const;
+  // Finds an already captured asset for a library asset, so selecting the same library
+  // entry twice updates the snapshot instead of duplicating it.
+  Result<std::optional<Asset>> findAssetByLibraryAsset(
+    const std::string& libraryId, const std::string& libraryAssetId) const;
+  // Local hints for locating a library by ID. Paths are never asset identities.
+  Result<void> attachLibrary(
+    const std::string& id, const std::string& name, const std::string& lastPath);
+  Result<std::vector<LibraryInfo>> libraries() const;
+  Result<void> ignoreLibraryUpdate(
+    const std::string& assetId, const std::string& libraryHash);
+  Result<std::vector<std::string>> ignoredLibraryUpdates(
+    const std::string& assetId) const;
+
   Result<void> addDependency(
     const std::string& assetId, const std::string& dependencyId, const std::string& kind);
   Result<std::vector<AssetDependency>> dependencies(const std::string& assetId) const;

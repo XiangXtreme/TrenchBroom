@@ -1,8 +1,8 @@
 /*
- Copyright (C) 2026 XiangXtreme
+  Copyright (C) 2026 XiangXtreme
 
- This file is part of TrenchBroom.
- */
+  This file is part of TrenchBroom.
+*/
 
 #pragma once
 
@@ -34,6 +34,91 @@ enum class ContentKind
   Compatible,
 };
 
+/**
+ * Provenance of a project asset that was captured from an asset library.
+ *
+ * An empty `libraryAssetId` means the asset was imported directly and has no library
+ * origin. The recorded revision and content hash describe the library state that was
+ * copied into the project; they are the basis for "a new library version exists" and
+ * never change on their own.
+ */
+struct LibraryLink
+{
+  std::string libraryId;
+  std::string libraryAssetId;
+  std::uint64_t libraryRevision = 0;
+  std::string libraryContentHash;
+  // Container and member inside the library, for display and diagnostics only.
+  std::string sourceContainer;
+  std::string sourceMember;
+
+  bool empty() const { return libraryAssetId.empty(); }
+
+  friend bool operator==(const LibraryLink&, const LibraryLink&) = default;
+};
+
+struct LibraryInfo
+{
+  std::string id;
+  std::string name;
+  std::string path;
+  std::string createdAt;
+  std::string updatedAt;
+};
+
+/** A library asset as published by the library catalog, independent of any project. */
+struct LibraryAsset
+{
+  std::string id;
+  AssetType type = AssetType::Texture;
+  std::string displayName;
+  // Group-relative identity used by the browser, for example `custom.wad/WALL01`.
+  std::string virtualPath;
+  // WAD container path or parent folder, for example `wads/custom.wad`.
+  std::string group;
+  std::string sourceContainer;
+  // WAD member name; empty for standalone files.
+  std::string sourceMember;
+  // How the bytes are stored: `goldsrc-miptex`, `image`, `mdl`, `spr`, `wav`, `skybox`.
+  std::string nativeFormat;
+  // Conversion parameters or importer description, JSON encoded.
+  std::string recipe;
+  std::uint64_t revision = 0;
+  std::string contentHash;
+  std::uint64_t size = 0;
+  // Source file is gone or inaccessible; the catalog still holds the last revision.
+  bool missing = false;
+
+  friend bool operator==(const LibraryAsset&, const LibraryAsset&) = default;
+};
+
+/** One source file the library indexed, for rescan reporting and diagnostics. */
+struct LibrarySource
+{
+  std::string relativePath;
+  AssetType type = AssetType::Texture;
+  std::string contentHash;
+  std::uint64_t size = 0;
+  std::uint64_t assetCount = 0;
+  bool missing = false;
+
+  friend bool operator==(const LibrarySource&, const LibrarySource&) = default;
+};
+
+/** Result summary of a library rescan. */
+struct LibraryScan
+{
+  std::size_t added = 0;
+  std::size_t updated = 0;
+  std::size_t relocated = 0;
+  std::size_t restored = 0;
+  std::size_t missing = 0;
+  std::size_t sources = 0;
+  std::size_t invalidEntries = 0;
+  // Empty when every source was readable.
+  std::string warning;
+};
+
 struct AssetImport
 {
   AssetType type = AssetType::Texture;
@@ -43,6 +128,8 @@ struct AssetImport
   std::vector<std::uint8_t> original;
   std::vector<std::uint8_t> compatible;
   std::string conversionRecipe;
+  // Set when the import is a capture or update from an asset library.
+  LibraryLink library;
 };
 
 struct Asset
@@ -56,6 +143,9 @@ struct Asset
   std::string conversionRecipe;
   // Stable engine-facing path, independent from display names and virtual folders.
   std::string publishPath;
+  // SHA-256 of the compatible content of this revision.
+  std::string contentHash;
+  LibraryLink library;
 
   friend bool operator==(const Asset&, const Asset&) = default;
 };

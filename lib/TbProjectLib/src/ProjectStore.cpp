@@ -6,27 +6,15 @@
 
 #include "project/ProjectStore.h"
 
-#include "base/Uuid.h"
-
-#include <fcntl.h>
-#include <fmt/format.h>
-#include <sqlite3.h>
+#include "CatalogValidation.h"
+#include "Sqlite.h"
+#include "project/ContentHash.h"
 
 #include <algorithm>
 #include <cctype>
-#include <cerrno>
-#include <cstring>
 #include <limits>
 #include <map>
-#ifdef _WIN32
-#include <io.h>
-#include <sys/stat.h>
-#else
-#include <unistd.h>
-#endif
-#include <stdexcept>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 
 namespace tb::project
@@ -34,278 +22,19 @@ namespace tb::project
 namespace
 {
 
-// Internal exceptions unwind statements and transactions before returning a public
-// Result.
-class StoreError : public std::runtime_error
-{
-public:
-  using std::runtime_error::runtime_error;
-};
-
-// Reserve with OS-level exclusive creation, including empty existing files. The
-// reservation outlives the SQLite connection so failed operations can clean up.
-class NewFile
-{
-  std::filesystem::path m_path;
-  bool m_keep = false;
-
-public:
-  explicit NewFile(const std::filesystem::path& path)
-    : m_path{path}
-  {
-#ifdef _WIN32
-    const auto fd = _wopen(
-      path.c_str(), _O_CREAT | _O_EXCL | _O_WRONLY | _O_BINARY, _S_IREAD | _S_IWRITE);
-#else
-    const auto fd = ::open(path.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0600);
-#endif
-    if (fd < 0)
-      throw StoreError{fmt::format("Cannot create project: {}", std::strerror(errno))};
-#ifdef _WIN32
-    _close(fd);
-#else
-    ::close(fd);
-#endif
-  }
-  ~NewFile()
-  {
-    if (!m_keep)
-    {
-      auto ec = std::error_code{};
-      std::filesystem::remove(m_path, ec);
-    }
-  }
-  void keep() { m_keep = true; }
-};
-
-template <typename F>
-auto attempt(F&& f) -> Result<std::invoke_result_t<F>>
-{
-  try
-  {
-    if constexpr (std::is_void_v<std::invoke_result_t<F>>)
-    {
-      f();
-      return {};
-    }
-    else
-    {
-      return f();
-    }
-  }
-  catch (const StoreError& e)
-  {
-    return Error{e.what()};
-  }
-  catch (const std::filesystem::filesystem_error& e)
-  {
-    return Error{e.what()};
-  }
-}
-
-void check(sqlite3* db, const int code)
-{
-  if (code != SQLITE_OK)
-  {
-    throw StoreError{fmt::format("Project storage: {}", sqlite3_errmsg(db))};
-  }
-}
-
-void execute(sqlite3* db, const char* sql)
-{
-  check(db, sqlite3_exec(db, sql, nullptr, nullptr, nullptr));
-}
-
-std::string utf8Path(const std::filesystem::path& path)
-{
-  const auto s = path.u8string();
-  return {reinterpret_cast<const char*>(s.data()), s.size()};
-}
-
-class Database
-{
-private:
-  sqlite3* m_db = nullptr;
-
-public:
-  Database(const std::filesystem::path& path, const bool create)
-  {
-    const auto code = sqlite3_open_v2(
-      utf8Path(path).c_str(),
-      &m_db,
-      SQLITE_OPEN_READWRITE | (create ? SQLITE_OPEN_CREATE : 0),
-      nullptr);
-    if (code != SQLITE_OK)
-    {
-      const auto message = std::string{sqlite3_errmsg(m_db)};
-      sqlite3_close(m_db);
-      throw StoreError{message};
-    }
-    sqlite3_extended_result_codes(m_db, 1);
-    sqlite3_busy_timeout(m_db, 1000);
-    sqlite3_db_config(m_db, SQLITE_DBCONFIG_DEFENSIVE, 1, nullptr);
-    sqlite3_db_config(m_db, SQLITE_DBCONFIG_TRUSTED_SCHEMA, 0, nullptr);
-  }
-
-  ~Database() { sqlite3_close(m_db); }
-  Database(const Database&) = delete;
-  Database& operator=(const Database&) = delete;
-  sqlite3* get() const { return m_db; }
-};
-
-class Statement
-{
-private:
-  sqlite3* m_db;
-  sqlite3_stmt* m_stmt = nullptr;
-
-public:
-  Statement(sqlite3* db, const char* sql)
-    : m_db{db}
-  {
-    check(db, sqlite3_prepare_v2(db, sql, -1, &m_stmt, nullptr));
-  }
-  ~Statement() { sqlite3_finalize(m_stmt); }
-  Statement(const Statement&) = delete;
-  Statement& operator=(const Statement&) = delete;
-
-  void bind(const int index, const std::string_view value)
-  {
-    check(
-      m_db,
-      sqlite3_bind_text64(
-        m_stmt, index, value.data(), value.size(), SQLITE_TRANSIENT, SQLITE_UTF8));
-  }
-  void bind(const int index, const std::uint64_t value)
-  {
-    if (value > static_cast<std::uint64_t>(std::numeric_limits<sqlite3_int64>::max()))
-    {
-      throw StoreError{"Project revision is out of range."};
-    }
-    check(m_db, sqlite3_bind_int64(m_stmt, index, static_cast<sqlite3_int64>(value)));
-  }
-  void bind(const int index, const std::vector<std::uint8_t>& value)
-  {
-    if (value.empty())
-    {
-      check(m_db, sqlite3_bind_zeroblob(m_stmt, index, 0));
-    }
-    else
-    {
-      check(
-        m_db,
-        sqlite3_bind_blob64(m_stmt, index, value.data(), value.size(), SQLITE_TRANSIENT));
-    }
-  }
-  bool next()
-  {
-    const auto code = sqlite3_step(m_stmt);
-    if (code == SQLITE_ROW)
-      return true;
-    if (code == SQLITE_DONE)
-      return false;
-    check(m_db, code);
-    return false;
-  }
-  void run()
-  {
-    if (next())
-      throw StoreError{"Unexpected project storage query result."};
-  }
-  std::string text(const int column) const
-  {
-    const auto* data = sqlite3_column_text(m_stmt, column);
-    const auto size = sqlite3_column_bytes(m_stmt, column);
-    return data
-             ? std::string{reinterpret_cast<const char*>(data), static_cast<size_t>(size)}
-             : std::string{};
-  }
-  std::uint64_t integer(const int column) const
-  {
-    const auto value = sqlite3_column_int64(m_stmt, column);
-    if (value < 0)
-      throw StoreError{"Invalid negative project revision."};
-    return static_cast<std::uint64_t>(value);
-  }
-  std::vector<std::uint8_t> bytes(const int column) const
-  {
-    const auto* data =
-      static_cast<const std::uint8_t*>(sqlite3_column_blob(m_stmt, column));
-    const auto size = sqlite3_column_bytes(m_stmt, column);
-    return size ? std::vector<std::uint8_t>{data, data + size}
-                : std::vector<std::uint8_t>{};
-  }
-};
-
-class Transaction
-{
-private:
-  sqlite3* m_db;
-  bool m_committed = false;
-
-public:
-  explicit Transaction(sqlite3* db, const bool write = true)
-    : m_db{db}
-  {
-    execute(db, write ? "BEGIN IMMEDIATE" : "BEGIN");
-  }
-  ~Transaction()
-  {
-    if (!m_committed)
-      sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr);
-  }
-  Transaction(const Transaction&) = delete;
-  Transaction& operator=(const Transaction&) = delete;
-  void commit()
-  {
-    execute(m_db, "COMMIT");
-    m_committed = true;
-  }
-};
-
-void validateText(const std::string& value, const char* field)
-{
-  if (value.empty() || value.find('\0') != std::string::npos)
-  {
-    throw StoreError{fmt::format("Invalid empty or NUL-containing {}.", field)};
-  }
-}
-
-void validatePath(const std::string& path, const bool folder = false)
-{
-  if (folder && path.empty())
-    return;
-  validateText(path, "virtual path");
-  if (
-    path.front() == '/' || path.back() == '/'
-    || path.find_first_of("\\:<>\"|?*") != std::string::npos
-    || std::ranges::any_of(path, [](const unsigned char c) { return c < 32; }))
-  {
-    throw StoreError{"Virtual paths must be relative, with forward slash separators."};
-  }
-  size_t start = 0;
-  while (start < path.size())
-  {
-    const auto end = path.find('/', start);
-    const auto part = path.substr(start, end == std::string::npos ? end : end - start);
-    if (
-      part.empty() || part == "." || part == ".." || part.back() == '.'
-      || part.back() == ' ')
-    {
-      throw StoreError{"Virtual paths cannot contain empty, dot or parent components."};
-    }
-    auto stem = part.substr(0, part.find('.'));
-    std::ranges::transform(
-      stem, stem.begin(), [](const unsigned char c) { return char(std::tolower(c)); });
-    if (
-      stem == "con" || stem == "prn" || stem == "aux" || stem == "nul"
-      || (stem.size() == 4 && (stem.starts_with("com") || stem.starts_with("lpt")) && stem[3] >= '1' && stem[3] <= '9'))
-      throw StoreError{"Virtual paths cannot contain reserved device names."};
-    if (end == std::string::npos)
-      break;
-    start = end + 1;
-  }
-}
+using detail::attempt;
+using detail::check;
+using detail::Database;
+using detail::execute;
+using detail::NewFile;
+using detail::Statement;
+using detail::storeContent;
+using detail::StoreError;
+using detail::Transaction;
+using detail::utf8Path;
+using detail::validateAssetId;
+using detail::validatePath;
+using detail::validateText;
 
 Asset readAssetRow(const Statement& query)
 {
@@ -320,16 +49,34 @@ Asset readAssetRow(const Statement& query)
     query.text(4),
     query.integer(5),
     query.text(6),
-    query.text(7)};
-  if (asset.id.size() != 36 || std::ranges::any_of(asset.id, [](const unsigned char c) {
-        return !std::isxdigit(c) && c != '-';
-      }))
+    query.text(7),
+    query.text(8),
+    {}};
+  if (!detail::validAssetId(asset.id))
     throw StoreError{"Invalid project asset ID."};
   validatePath(asset.virtualPath);
   validatePath(asset.publishPath);
   validateText(asset.displayName, "display name");
   if (asset.revision == 0)
     throw StoreError{"Invalid project asset revision."};
+  // Library provenance is optional; when present it must be complete enough to locate
+  // the library asset again and to compare content.
+  const auto libraryAssetId = query.text(9);
+  if (!libraryAssetId.empty())
+  {
+    detail::validateAssetId(libraryAssetId);
+    const auto libraryId = query.text(10);
+    validateText(libraryId, "library ID");
+    const auto libraryHash = query.text(13);
+    validateText(libraryHash, "library content hash");
+    asset.library = LibraryLink{
+      libraryId,
+      libraryAssetId,
+      query.integer(11),
+      libraryHash,
+      query.text(12),
+      query.text(14)};
+  }
   return asset;
 }
 
@@ -337,7 +84,9 @@ constexpr auto AssetColumns =
   "r.asset_id,r.type,r.virtual_path,r.display_name,"
   "r.source_name,r.revision,r.recipe,"
   "(SELECT first.virtual_path FROM revisions first WHERE first.asset_id=r.asset_id ORDER "
-  "BY first.revision LIMIT 1)";
+  "BY first.revision LIMIT 1),"
+  "r.content_hash,r.library_asset_id,r.library_id,r.library_revision,r.source_container,"
+  "r.library_hash,r.source_member";
 
 std::vector<Asset> queryAssets(
   sqlite3* db, const std::optional<std::string>& checkpoint = std::nullopt)
@@ -387,33 +136,6 @@ std::vector<AssetDependency> queryDependencies(
   return result;
 }
 
-// FNV is an index hint only. Full byte comparison below prevents hash collisions from
-// aliasing distinct payloads; it is not used as an integrity or security checksum.
-std::string contentIndex(const std::vector<std::uint8_t>& data)
-{
-  auto hash = std::uint64_t{14695981039346656037ULL};
-  for (const auto byte : data)
-    hash = (hash ^ byte) * 1099511628211ULL;
-  return fmt::format("{:016x}", hash);
-}
-
-std::string storeContent(sqlite3* db, const std::vector<std::uint8_t>& data)
-{
-  const auto hash = contentIndex(data);
-  auto find = Statement{db, "SELECT id FROM content WHERE hash=? AND data=?"};
-  find.bind(1, hash);
-  find.bind(2, data);
-  if (find.next())
-    return find.text(0);
-  const auto id = generateUuid();
-  auto insert = Statement{db, "INSERT INTO content(id,hash,data) VALUES(?,?,?)"};
-  insert.bind(1, id);
-  insert.bind(2, hash);
-  insert.bind(3, data);
-  insert.run();
-  return id;
-}
-
 void writeRevision(
   sqlite3* db, Asset& asset, const std::string& original, const std::string& compatible)
 {
@@ -444,6 +166,17 @@ void writeRevision(
       || overlaps(publishPath, conflicts.text(1)))
       throw StoreError{"Project paths conflict with an existing asset or folder."};
   asset.publishPath = publishPath;
+  const auto& library = asset.library;
+  if (!library.empty())
+  {
+    validateAssetId(library.libraryAssetId);
+    validateText(library.libraryId, "library ID");
+    validateText(library.libraryContentHash, "library content hash");
+    if (library.libraryRevision == 0)
+      throw StoreError{"A captured asset needs a library revision."};
+    if (library.sourceContainer.empty())
+      throw StoreError{"A captured asset needs a library source."};
+  }
   // A restore never reuses a revision number, including for assets absent from heads.
   auto next =
     Statement{db, "SELECT COALESCE(MAX(revision),0)+1 FROM revisions WHERE asset_id=?"};
@@ -454,7 +187,9 @@ void writeRevision(
     db,
     "INSERT INTO "
     "revisions(asset_id,type,virtual_path,display_name,source_name,revision,recipe,"
-    "original,compatible) VALUES(?,?,?,?,?,?,?,?,?)"};
+    "original,compatible,content_hash,library_id,library_asset_id,library_revision,"
+    "library_hash,source_container,source_member) "
+    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"};
   insert.bind(1, asset.id);
   insert.bind(2, assetTypeName(asset.type));
   insert.bind(3, asset.virtualPath);
@@ -464,6 +199,13 @@ void writeRevision(
   insert.bind(7, asset.conversionRecipe);
   insert.bind(8, original);
   insert.bind(9, compatible);
+  insert.bind(10, asset.contentHash);
+  insert.bind(11, library.libraryId);
+  insert.bind(12, library.libraryAssetId);
+  insert.bind(13, library.libraryRevision);
+  insert.bind(14, library.libraryContentHash);
+  insert.bind(15, library.sourceContainer);
+  insert.bind(16, library.sourceMember);
   insert.run();
   auto head = Statement{
     db,
@@ -525,7 +267,7 @@ Checkpoint makeCheckpoint(
 }
 
 constexpr auto Schema =
-  "PRAGMA application_id=0x5442504a; PRAGMA user_version=1;"
+  "PRAGMA application_id=0x5442504a; PRAGMA user_version=2;"
   "CREATE TABLE project(id TEXT PRIMARY KEY,name TEXT NOT NULL,game_id TEXT NOT NULL);"
   "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
   "CREATE INDEX content_hash ON content(hash);"
@@ -536,6 +278,15 @@ constexpr auto Schema =
   "NULL,"
   "original TEXT NOT NULL REFERENCES content(id),compatible TEXT NOT NULL REFERENCES "
   "content(id),"
+  // Snapshot provenance: content identity of this revision and the library revision it
+  // was captured from. Empty library columns mean a directly imported asset.
+  "content_hash TEXT NOT NULL DEFAULT '',"
+  "library_id TEXT NOT NULL DEFAULT '',"
+  "library_asset_id TEXT NOT NULL DEFAULT '',"
+  "library_revision INTEGER NOT NULL DEFAULT 0,"
+  "library_hash TEXT NOT NULL DEFAULT '',"
+  "source_container TEXT NOT NULL DEFAULT '',"
+  "source_member TEXT NOT NULL DEFAULT '',"
   "PRIMARY KEY(asset_id,revision));"
   "CREATE TABLE heads(asset_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,virtual_path "
   "TEXT NOT NULL UNIQUE,"
@@ -543,6 +294,13 @@ constexpr auto Schema =
   "CREATE TABLE dependencies(asset_id TEXT NOT NULL REFERENCES heads(asset_id),"
   "dependency_id TEXT NOT NULL REFERENCES heads(asset_id),kind TEXT NOT NULL,"
   "PRIMARY KEY(asset_id,dependency_id,kind),CHECK(asset_id<>dependency_id));"
+  // Known asset libraries are a convenience for locating an origin; the library ID is
+  // the identity and a path is only a local hint.
+  "CREATE TABLE libraries(id TEXT PRIMARY KEY,name TEXT NOT NULL,last_path TEXT NOT NULL,"
+  "attached_at TEXT NOT NULL);"
+  // "Ignore this library revision" is project state, never library state.
+  "CREATE TABLE library_ignores(asset_id TEXT NOT NULL,library_hash TEXT NOT NULL,"
+  "created_at TEXT NOT NULL,PRIMARY KEY(asset_id,library_hash));"
   "CREATE TABLE checkpoints(id TEXT PRIMARY KEY,name TEXT NOT NULL,description TEXT NOT "
   "NULL,created_at TEXT NOT NULL);"
   "CREATE TABLE checkpoint_assets(checkpoint_id TEXT NOT NULL REFERENCES checkpoints(id),"
@@ -556,6 +314,47 @@ constexpr auto Schema =
   "checkpoint_assets(checkpoint_id,asset_id),"
   "FOREIGN KEY(checkpoint_id,dependency_id) REFERENCES "
   "checkpoint_assets(checkpoint_id,asset_id));";
+
+// Format 1 stored no snapshot provenance and no content hashes. The migration adds the
+// columns, then backfills the hash from the compatible payload so that every revision
+// can be compared against a library one. Content blobs are hashed one row at a time.
+void migrateFromVersion1(sqlite3* db)
+{
+  execute(
+    db,
+    "ALTER TABLE revisions ADD COLUMN content_hash TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE revisions ADD COLUMN library_id TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE revisions ADD COLUMN library_asset_id TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE revisions ADD COLUMN library_revision INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE revisions ADD COLUMN library_hash TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE revisions ADD COLUMN source_container TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE revisions ADD COLUMN source_member TEXT NOT NULL DEFAULT '';"
+    "CREATE TABLE libraries(id TEXT PRIMARY KEY,name TEXT NOT NULL,last_path TEXT NOT "
+    "NULL,attached_at TEXT NOT NULL);"
+    "CREATE TABLE library_ignores(asset_id TEXT NOT NULL,library_hash TEXT NOT NULL,"
+    "created_at TEXT NOT NULL,PRIMARY KEY(asset_id,library_hash));");
+  auto pending = Statement{
+    db,
+    "SELECT r.asset_id,r.revision,c.data FROM revisions r JOIN content c ON "
+    "c.id=r.compatible WHERE r.content_hash=''"};
+  auto revisions = std::vector<std::pair<std::string, std::uint64_t>>{};
+  auto hashes = std::vector<std::string>{};
+  while (pending.next())
+  {
+    hashes.push_back(contentHash(pending.bytes(2)));
+    revisions.emplace_back(pending.text(0), pending.integer(1));
+  }
+  auto update =
+    Statement{db, "UPDATE revisions SET content_hash=? WHERE asset_id=? AND revision=?"};
+  for (std::size_t index = 0; index < revisions.size(); ++index)
+  {
+    update.bind(1, hashes[index]);
+    update.bind(2, revisions[index].first);
+    update.bind(3, revisions[index].second);
+    update.run();
+  }
+  execute(db, "PRAGMA user_version=2;");
+}
 
 void configure(sqlite3* db)
 {
@@ -668,12 +467,25 @@ Result<std::unique_ptr<ProjectStore>> ProjectStore::open(
       throw StoreError{"Project path is empty."};
     auto impl = std::make_unique<Impl>(path, false);
     auto* db = impl->database.get();
+    auto version = std::uint64_t{0};
     {
-      auto version =
+      auto query =
         Statement{db, "SELECT * FROM pragma_application_id(),pragma_user_version()"};
-      if (!version.next() || version.integer(0) != 0x5442504a || version.integer(1) != 1)
-        throw StoreError{"Not a supported TB project (format version 1 required)."};
+      if (!query.next() || query.integer(0) != 0x5442504a)
+        throw StoreError{"Not a supported TB project."};
+      version = query.integer(1);
     }
+    if (version == 1)
+    {
+      // Adding provenance columns is a forward-only migration; an older build must not
+      // silently read a project it cannot interpret.
+      auto transaction = Transaction{db};
+      migrateFromVersion1(db);
+      transaction.commit();
+      version = 2;
+    }
+    if (version != 2)
+      throw StoreError{"Not a supported TB project (format version 2 required)."};
     auto info = Statement{db, "SELECT id,name,game_id FROM project"};
     if (!info.next())
       throw StoreError{"Project metadata is missing."};
@@ -686,6 +498,15 @@ Result<std::unique_ptr<ProjectStore>> ProjectStore::open(
     // Fail closed on missing tables/columns without loading content blobs.
     queryAssets(db);
     queryDependencies(db);
+    {
+      auto probe =
+        Statement{db, "SELECT asset_id,library_hash FROM library_ignores LIMIT 1"};
+      while (probe.next())
+        ;
+      auto librariesProbe = Statement{db, "SELECT id FROM libraries LIMIT 1"};
+      while (librariesProbe.next())
+        ;
+    }
     configure(db);
     return std::unique_ptr<ProjectStore>{new ProjectStore{std::move(impl)}};
   });
@@ -715,7 +536,9 @@ Result<Asset> ProjectStore::importAsset(const AssetImport& import)
       import.sourceName,
       0,
       import.conversionRecipe,
-      {}};
+      {},
+      contentHash(import.compatible),
+      import.library};
     writeRevision(
       db, asset, storeContent(db, import.original), storeContent(db, import.compatible));
     transaction.commit();
@@ -733,13 +556,20 @@ Result<Asset> ProjectStore::replaceAsset(const std::string& id, const AssetImpor
       throw StoreError{"Reimport cannot change an asset's type."};
     asset.sourceName = import.sourceName;
     asset.conversionRecipe = import.conversionRecipe;
+    asset.contentHash = contentHash(import.compatible);
+    asset.library = import.library;
     const auto original = storeContent(db, import.original);
     const auto compatible = storeContent(db, import.compatible);
+    // Reusing an immutable revision is only valid when the snapshot provenance is the
+    // same too; a library update that happens to carry identical bytes still has to be
+    // recorded so "which library revision is this project on" stays truthful.
     auto existing = Statement{
       db,
       "SELECT revision FROM revisions WHERE asset_id=? AND source_name=? AND recipe=? "
-      "AND original=? AND compatible=? AND display_name=? AND virtual_path=? ORDER BY "
-      "revision DESC LIMIT 1"};
+      "AND original=? AND compatible=? AND display_name=? AND virtual_path=? AND "
+      "content_hash=? AND library_id=? AND library_asset_id=? AND library_revision=? "
+      "AND library_hash=? AND source_container=? AND source_member=? "
+      "ORDER BY revision DESC LIMIT 1"};
     existing.bind(1, id);
     existing.bind(2, asset.sourceName);
     existing.bind(3, asset.conversionRecipe);
@@ -747,6 +577,13 @@ Result<Asset> ProjectStore::replaceAsset(const std::string& id, const AssetImpor
     existing.bind(5, compatible);
     existing.bind(6, asset.displayName);
     existing.bind(7, asset.virtualPath);
+    existing.bind(8, asset.contentHash);
+    existing.bind(9, asset.library.libraryId);
+    existing.bind(10, asset.library.libraryAssetId);
+    existing.bind(11, asset.library.libraryRevision);
+    existing.bind(12, asset.library.libraryContentHash);
+    existing.bind(13, asset.library.sourceContainer);
+    existing.bind(14, asset.library.sourceMember);
     if (existing.next())
     {
       asset.revision = existing.integer(0);
@@ -896,6 +733,105 @@ Result<std::vector<std::uint8_t>> ProjectStore::readAsset(
     if (!query.next())
       throw StoreError{"Project asset content not found."};
     return query.bytes(0);
+  });
+}
+
+Result<std::vector<Asset>> ProjectStore::libraryLinkedAssets() const
+{
+  return attempt([&] {
+    auto result = queryAssets(m_impl->database.get());
+    std::erase_if(result, [](const auto& asset) { return asset.library.empty(); });
+    return result;
+  });
+}
+
+Result<std::optional<Asset>> ProjectStore::findAssetByLibraryAsset(
+  const std::string& libraryId, const std::string& libraryAssetId) const
+{
+  return attempt([&]() -> std::optional<Asset> {
+    const auto sql = fmt::format(
+      "SELECT {} FROM revisions r JOIN heads h ON r.asset_id=h.asset_id AND "
+      "r.revision=h.revision WHERE r.library_id=? AND r.library_asset_id=?",
+      AssetColumns);
+    auto query = Statement{m_impl->database.get(), sql.c_str()};
+    query.bind(1, libraryId);
+    query.bind(2, libraryAssetId);
+    return query.next() ? std::optional{readAssetRow(query)} : std::nullopt;
+  });
+}
+
+Result<void> ProjectStore::attachLibrary(
+  const std::string& id, const std::string& name, const std::string& lastPath)
+{
+  return attempt([&] {
+    detail::validateAssetId(id);
+    validateText(name, "library name");
+    validateText(lastPath, "library path");
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    auto time = Statement{db, "SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')"};
+    time.next();
+    auto insert = Statement{
+      db,
+      "INSERT INTO libraries(id,name,last_path,attached_at) VALUES(?,?,?,?) ON "
+      "CONFLICT(id) "
+      "DO UPDATE SET name=excluded.name,last_path=excluded.last_path"};
+    insert.bind(1, id);
+    insert.bind(2, name);
+    insert.bind(3, lastPath);
+    insert.bind(4, time.text(0));
+    insert.run();
+    transaction.commit();
+  });
+}
+
+Result<std::vector<LibraryInfo>> ProjectStore::libraries() const
+{
+  return attempt([&] {
+    auto query = Statement{
+      m_impl->database.get(),
+      "SELECT id,name,last_path,attached_at FROM libraries ORDER BY name,id"};
+    auto result = std::vector<LibraryInfo>{};
+    while (query.next())
+      result.push_back({query.text(0), query.text(1), query.text(2), query.text(3), {}});
+    return result;
+  });
+}
+
+Result<void> ProjectStore::ignoreLibraryUpdate(
+  const std::string& assetId, const std::string& libraryHash)
+{
+  return attempt([&] {
+    validateText(libraryHash, "library content hash");
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    requireAsset(db, assetId);
+    auto time = Statement{db, "SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')"};
+    time.next();
+    auto insert = Statement{
+      db,
+      "INSERT INTO library_ignores(asset_id,library_hash,created_at) VALUES(?,?,?) ON "
+      "CONFLICT DO NOTHING"};
+    insert.bind(1, assetId);
+    insert.bind(2, libraryHash);
+    insert.bind(3, time.text(0));
+    insert.run();
+    transaction.commit();
+  });
+}
+
+Result<std::vector<std::string>> ProjectStore::ignoredLibraryUpdates(
+  const std::string& assetId) const
+{
+  return attempt([&] {
+    auto query = Statement{
+      m_impl->database.get(),
+      "SELECT library_hash FROM library_ignores WHERE asset_id=? ORDER BY created_at"};
+    query.bind(1, assetId);
+    auto result = std::vector<std::string>{};
+    while (query.next())
+      result.push_back(query.text(0));
+    return result;
   });
 }
 

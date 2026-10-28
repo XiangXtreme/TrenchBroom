@@ -5,12 +5,14 @@
  */
 
 #include "base/Uuid.h"
+#include "project/ContentHash.h"
 #include "project/ProjectStore.h"
 
 #include <sqlite3.h>
 
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <utility>
 
 #include <catch2/catch_test_macros.hpp>
@@ -427,6 +429,182 @@ TEST_CASE("ProjectStore")
     lock.exec("ROLLBACK");
     CHECK(require(store->assets()).empty());
     CHECK(require(store->importAsset(texture())).revision == 1);
+  }
+
+  SECTION("captures library resources as project snapshots with provenance")
+  {
+    auto store =
+      require(ProjectStore::create(workspace.path, "Snapshot", "Counter-Strike"));
+    const auto libraryId = generateUuid();
+    const auto libraryAssetId = generateUuid();
+    auto link = LibraryLink{
+      libraryId, libraryAssetId, 7, std::string(64, 'a'), "wads/custom.wad", "WALL01"};
+    auto input = texture("textures/WALL01");
+    input.library = link;
+    input.sourceName = "custom.wad";
+    const auto asset = require(store->importAsset(input));
+    CHECK(asset.revision == 1);
+    CHECK(asset.contentHash == contentHash(input.compatible));
+    CHECK(asset.library == link);
+    CHECK(asset.publishPath == "textures/WALL01");
+
+    const auto linked = require(store->libraryLinkedAssets());
+    REQUIRE(linked.size() == 1);
+    CHECK(linked.front().id == asset.id);
+    CHECK(require(store->findAssetByLibraryAsset(libraryId, libraryAssetId)) == asset);
+    CHECK_FALSE(require(store->findAssetByLibraryAsset(libraryId, generateUuid())));
+
+    require(store->attachLibrary(libraryId, "工业区素材", "D:/assets/studio"));
+    const auto libraries = require(store->libraries());
+    REQUIRE(libraries.size() == 1);
+    CHECK(libraries.front().id == libraryId);
+    CHECK(libraries.front().name == "工业区素材");
+    CHECK(libraries.front().path == "D:/assets/studio");
+    require(store->attachLibrary(libraryId, "改名素材", "E:/moved"));
+    REQUIRE(require(store->libraries()).size() == 1);
+    CHECK(require(store->libraries()).front().path == "E:/moved");
+
+    require(store->ignoreLibraryUpdate(asset.id, std::string(64, 'b')));
+    require(store->ignoreLibraryUpdate(asset.id, std::string(64, 'b')));
+    CHECK(
+      require(store->ignoredLibraryUpdates(asset.id))
+      == std::vector<std::string>{std::string(64, 'b')});
+    CHECK(store->ignoreLibraryUpdate(asset.id, "").is_error());
+    CHECK(store->ignoreLibraryUpdate("missing", std::string(64, 'b')).is_error());
+  }
+
+  SECTION("library updates create new revisions and keep the previous snapshot")
+  {
+    auto store =
+      require(ProjectStore::create(workspace.path, "Update", "Counter-Strike"));
+    const auto libraryId = generateUuid();
+    const auto libraryAssetId = generateUuid();
+    const auto first = LibraryLink{
+      libraryId, libraryAssetId, 1, std::string(64, 'a'), "custom.wad", "WALL01"};
+    auto input = texture("textures/WALL01");
+    input.library = first;
+    const auto captured = require(store->importAsset(input));
+    const auto a = require(store->importAsset(map("maps/de_a")));
+    const auto b = require(store->importAsset(map("maps/de_b")));
+    require(store->addDependency(a.id, captured.id, "face-material"));
+    require(store->addDependency(b.id, captured.id, "face-material"));
+
+    auto updated = texture("textures/WALL01");
+    updated.library = {
+      libraryId, libraryAssetId, 2, std::string(64, 'b'), "custom.wad", "WALL01"};
+    updated.compatible = {42, 43, 44};
+    const auto next = require(store->replaceAsset(captured.id, updated));
+    CHECK(next.id == captured.id);
+    CHECK(next.revision == 2);
+    CHECK(next.library.libraryRevision == 2);
+    CHECK(next.contentHash == contentHash(updated.compatible));
+    // Every map keeps referencing the same stable project asset ID.
+    CHECK(require(store->dependents(captured.id)).size() == 2);
+    CHECK(
+      require(store->readAsset(captured.id, ContentKind::Compatible))
+      == updated.compatible);
+    CHECK(
+      require(store->readAsset(captured.id, ContentKind::Compatible, 1))
+      == input.compatible);
+
+    // Replaying the same library revision reuses the immutable revision.
+    auto replay = texture("textures/WALL01");
+    replay.library = updated.library;
+    replay.compatible = updated.compatible;
+    CHECK(require(store->replaceAsset(captured.id, replay)).revision == 2);
+
+    // A failed update leaves the current revision untouched.
+    auto broken = texture("textures/WALL01");
+    broken.library = {
+      libraryId, libraryAssetId, 3, std::string(64, 'c'), "custom.wad", "WALL01"};
+    CHECK(store->replaceAsset("missing", broken).is_error());
+    CHECK(require(store->findAsset(captured.id))->revision == 2);
+    CHECK(
+      require(store->readAsset(captured.id, ContentKind::Compatible))
+      == updated.compatible);
+
+    // Rolling back to the previous library revision is an explicit revision selection.
+    require(store->selectRevisions({captured}));
+    CHECK(require(store->findAsset(captured.id))->revision == 1);
+    CHECK(
+      require(store->readAsset(captured.id, ContentKind::Compatible))
+      == input.compatible);
+  }
+
+  SECTION("rejects incomplete library provenance")
+  {
+    auto store =
+      require(ProjectStore::create(workspace.path, "Provenance", "Counter-Strike"));
+    auto missingLibrary = texture();
+    missingLibrary.library =
+      LibraryLink{"", generateUuid(), 1, std::string(64, 'a'), "a.wad", "X"};
+    CHECK(store->importAsset(missingLibrary).is_error());
+    auto missingRevision = texture();
+    missingRevision.library =
+      LibraryLink{generateUuid(), generateUuid(), 0, std::string(64, 'a'), "a.wad", "X"};
+    CHECK(store->importAsset(missingRevision).is_error());
+    auto missingContainer = texture();
+    missingContainer.library =
+      LibraryLink{generateUuid(), generateUuid(), 1, std::string(64, 'a'), "", "X"};
+    CHECK(store->importAsset(missingContainer).is_error());
+    CHECK(require(store->assets()).empty());
+  }
+
+  SECTION("migrates format 1 projects and backfills content hashes")
+  {
+    {
+      auto db = RawDatabase{workspace.path};
+      db.exec(
+        "PRAGMA application_id=0x5442504a; PRAGMA user_version=1;"
+        "CREATE TABLE project(id TEXT PRIMARY KEY,name TEXT NOT NULL,game_id TEXT NOT "
+        "NULL);"
+        "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
+        "CREATE INDEX content_hash ON content(hash);"
+        "CREATE TABLE revisions(asset_id TEXT NOT NULL,type TEXT NOT NULL,virtual_path "
+        "TEXT NOT NULL,display_name TEXT NOT NULL,source_name TEXT NOT NULL,revision "
+        "INTEGER NOT NULL CHECK(revision>0),recipe TEXT NOT NULL,original TEXT NOT NULL "
+        "REFERENCES content(id),compatible TEXT NOT NULL REFERENCES content(id),PRIMARY "
+        "KEY(asset_id,revision));"
+        "CREATE TABLE heads(asset_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,"
+        "virtual_path TEXT NOT NULL UNIQUE,FOREIGN KEY(asset_id,revision) REFERENCES "
+        "revisions(asset_id,revision));"
+        "CREATE TABLE dependencies(asset_id TEXT NOT NULL REFERENCES heads(asset_id),"
+        "dependency_id TEXT NOT NULL REFERENCES heads(asset_id),kind TEXT NOT NULL,"
+        "PRIMARY KEY(asset_id,dependency_id,kind),CHECK(asset_id<>dependency_id));"
+        "CREATE TABLE checkpoints(id TEXT PRIMARY KEY,name TEXT NOT NULL,description "
+        "TEXT "
+        "NOT NULL,created_at TEXT NOT NULL);"
+        "CREATE TABLE checkpoint_assets(checkpoint_id TEXT NOT NULL REFERENCES "
+        "checkpoints(id),asset_id TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY "
+        "KEY(checkpoint_id,asset_id),FOREIGN KEY(asset_id,revision) REFERENCES "
+        "revisions(asset_id,revision));"
+        "CREATE TABLE checkpoint_dependencies(checkpoint_id TEXT NOT NULL REFERENCES "
+        "checkpoints(id),asset_id TEXT NOT NULL,dependency_id TEXT NOT NULL,kind TEXT "
+        "NOT "
+        "NULL,PRIMARY KEY(checkpoint_id,asset_id,dependency_id,kind),FOREIGN KEY("
+        "checkpoint_id,asset_id) REFERENCES checkpoint_assets(checkpoint_id,asset_id),"
+        "FOREIGN KEY(checkpoint_id,dependency_id) REFERENCES "
+        "checkpoint_assets(checkpoint_id,asset_id));");
+      db.exec(
+        "INSERT INTO project VALUES('p','Legacy','Counter-Strike');"
+        "INSERT INTO content VALUES('c1','0','legacybytes');"
+        "INSERT INTO revisions VALUES('11111111-1111-1111-1111-111111111111','texture',"
+        "'textures/wall','wall','wall.png',1,'{}','c1','c1');"
+        "INSERT INTO heads VALUES('11111111-1111-1111-1111-111111111111',1,"
+        "'textures/wall');");
+    }
+    auto store = require(ProjectStore::open(workspace.path));
+    CHECK(store->info().name == "Legacy");
+    const auto asset = require(store->findAsset("11111111-1111-1111-1111-111111111111"));
+    REQUIRE(asset);
+    CHECK(asset->contentHash == contentHash(std::string_view{"legacybytes"}));
+    CHECK(asset->library.empty());
+    CHECK(require(store->libraryLinkedAssets()).empty());
+    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 2);
+    // The migrated project must stay writable.
+    const auto renamed = require(store->renameAsset(asset->id, "renamed"));
+    CHECK(renamed.revision == 2);
+    CHECK(renamed.contentHash == asset->contentHash);
   }
 }
 
