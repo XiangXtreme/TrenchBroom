@@ -59,12 +59,13 @@ AssetImport texture(const std::string& path = "工业区/brick")
     "brick.png",
     {0, 1, 255},
     {4, 5, 0, 128},
-    R"({"converter":"test","version":1})"};
+    R"({"converter":"test","version":1})",
+    {}};
 }
 
 AssetImport map(const std::string& path)
 {
-  return {AssetType::Map, path, path, "", {}, {'{', '\n', '}'}, ""};
+  return {AssetType::Map, path, path, "", {}, {'{', '\n', '}'}, "", {}};
 }
 
 struct RawDatabase

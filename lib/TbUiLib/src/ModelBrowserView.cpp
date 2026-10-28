@@ -665,7 +665,7 @@ void ModelBrowserView::doContextMenu(
     auto* capture = menu.addAction(
       asset->projectAssetId.empty() ? tr("Add to Project")
                                     : tr("Use Current Library Version"));
-    connect(capture, &QAction::triggered, this, [=]() {
+    connect(capture, &QAction::triggered, this, [=, this]() {
       emit libraryAssetCaptureRequested(libraryId, libraryAssetId);
     });
     if (!asset->projectAssetId.empty())
@@ -673,11 +673,11 @@ void ModelBrowserView::doContextMenu(
       const auto projectAssetId = QString::fromStdString(asset->projectAssetId);
       auto* update = menu.addAction(tr("Update Project Resource"));
       update->setEnabled(asset->projectUpdateAvailable);
-      connect(update, &QAction::triggered, this, [=]() {
+      connect(update, &QAction::triggered, this, [=, this]() {
         emit libraryAssetUpdateRequested(projectAssetId);
       });
       auto* uses = menu.addAction(tr("Find Uses in Project"));
-      connect(uses, &QAction::triggered, this, [=]() {
+      connect(uses, &QAction::triggered, this, [=, this]() {
         emit libraryAssetFindUsesRequested(projectAssetId);
       });
     }
