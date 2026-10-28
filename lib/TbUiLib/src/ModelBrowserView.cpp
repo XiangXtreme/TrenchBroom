@@ -268,6 +268,12 @@ void ModelBrowserView::setIncludeDefaultRoots(const bool includeDefaultRoots)
   update();
 }
 
+void ModelBrowserView::setPreviewPathResolver(
+  std::function<std::filesystem::path(const BrowserAsset&)> resolver)
+{
+  m_previewPathResolver = std::move(resolver);
+}
+
 void ModelBrowserView::setCurrentFolderPath(std::filesystem::path currentFolderPath)
 {
   currentFolderPath = currentFolderPath.lexically_normal();
@@ -495,8 +501,22 @@ void ModelBrowserView::loadMissingVisiblePreviews(
     return;
   }
 
+  // Library entries have no file until their compatible content is materialized, so only
+  // the cells that are about to be drawn are resolved.
+  auto previewAssets = m_assets;
+  if (m_previewPathResolver)
+  {
+    for (auto& asset : previewAssets)
+    {
+      if (
+        paths.contains(asset.path) && asset.absolutePath.empty()
+        && !asset.libraryAssetId.empty())
+        asset.absolutePath = m_previewPathResolver(asset);
+    }
+  }
+
   auto previews = loadAssetPreviews(
-    AssetPreviewProvider{m_document.map().gameFileSystem()}, m_assets, paths);
+    AssetPreviewProvider{m_document.map().gameFileSystem()}, previewAssets, paths);
   m_assetPreviews.merge(previews);
 }
 

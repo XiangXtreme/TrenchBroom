@@ -361,6 +361,15 @@ void ModelBrowser::createGui(AppController& appController)
   m_scrollBar = new QScrollBar{Qt::Vertical};
   m_view = new ModelBrowserView{appController, m_scrollBar, m_document};
   m_view->setSearchText(m_searchBox->text());
+  if (m_project)
+  {
+    // Library textures get a thumbnail from their compatible content; the file is written
+    // on demand for visible cells so browsing never copies the whole library.
+    m_view->setPreviewPathResolver([project = m_project](const BrowserAsset& asset) {
+      const auto file = project->libraryAssetFile(asset.libraryId, asset.libraryAssetId);
+      return file.is_success() ? file.value() : std::filesystem::path{};
+    });
+  }
 
   auto* browserLayout = new QHBoxLayout{};
   browserLayout->setContentsMargins(0, 0, 0, 0);
@@ -1185,8 +1194,9 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
     }
     else if (type != BrowserCellType::Texture)
     {
-      // Only browsable resources need a preview file; textures are represented by their
-      // snapshot and are not previewed in this view.
+      // Non-texture resources have a real file in the library. Textures stay unresolved
+      // here and get their compatible WAD only when a cell becomes visible, so browsing
+      // never copies the whole library into the cache.
       if (const auto file = m_project->libraryAssetFile(m_libraryId, asset.id);
           file.is_success())
         entry.absolutePath = file.value();

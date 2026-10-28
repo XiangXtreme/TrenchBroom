@@ -31,6 +31,7 @@
 #include "vm/quat.h" // IWYU pragma: keep
 
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -104,6 +105,7 @@ private:
   // Game files are browsed through fixed roots; catalog listings only show the folders
   // their own entries imply.
   bool m_includeDefaultRoots = true;
+  std::function<std::filesystem::path(const BrowserAsset&)> m_previewPathResolver;
 
 public:
   ModelBrowserView(
@@ -114,6 +116,15 @@ public:
   void setCurrentFolderPath(std::filesystem::path currentFolderPath);
   void setSearchText(QString searchText);
   void setIncludeDefaultRoots(bool includeDefaultRoots);
+  /**
+   * Resolves a previewable file for entries that have no file of their own.
+   *
+   * A library texture has no path until its compatible content is materialized, so the
+   * browser resolves it on demand for the cells it is about to draw instead of
+   * duplicating the whole library into the cache.
+   */
+  void setPreviewPathResolver(
+    std::function<std::filesystem::path(const BrowserAsset&)> resolver);
 
 private:
   void resourcesWereProcessed(const std::vector<mdl::ResourceId>& resources);
