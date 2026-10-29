@@ -88,6 +88,8 @@ void closeTab(QTabBar& tabs, const int index)
 {
   QMetaObject::invokeMethod(&tabs, "tabCloseRequested", Q_ARG(int, index));
   QApplication::processEvents();
+  QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  QApplication::processEvents();
 }
 
 } // namespace
@@ -154,11 +156,12 @@ TEST_CASE("ProjectWindow")
   SECTION("closing a tab keeps the document and its modifications")
   {
     closeTab(*tabs, 0);
-    // The view is gone from the workspace, but the document is still registered.
+    // The view is gone from the workspace, but the session keeps the document alive.
     CHECK(tabs->count() == 1);
     CHECK(tabs->tabText(0) == "beta");
-    CHECK_FALSE(alphaWindow->isVisible());
+    CHECK(windowFor(appController, *alphaDocument) == nullptr);
     CHECK(session->documentFor(alphaId) == alphaDocument);
+    CHECK(session->retainedDocument(alphaId) != nullptr);
     CHECK(session->assetFor(*alphaDocument) == std::optional{alphaId});
 
     // Editing the closed map still dirties the project, because the working copy lives in
@@ -185,9 +188,11 @@ TEST_CASE("ProjectWindow")
     reopen->menu()->actions().front()->trigger();
     QApplication::processEvents();
     CHECK(tabs->count() == 2);
-    CHECK(alphaWindow->isVisible());
-    // Reopening restores the same editing state instead of reloading the map.
+    // Reopening restores the same editing state in a new view instead of reloading.
     CHECK(session->documentFor(alphaId) == alphaDocument);
+    auto* reopenedWindow = windowFor(appController, *alphaDocument);
+    REQUIRE(reopenedWindow != nullptr);
+    CHECK(reopenedWindow->isVisible());
   }
 
   SECTION("the tab strip follows the map modification state")

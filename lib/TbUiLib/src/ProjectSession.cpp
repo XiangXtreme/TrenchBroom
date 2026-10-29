@@ -713,6 +713,35 @@ Result<void> ProjectSession::registerDocument(
   emit stateChanged();
   return {};
 }
+Result<void> ProjectSession::retainDocument(
+  std::shared_ptr<MapDocument> document, const std::string& id)
+{
+  if (!document)
+    return Error{"Cannot retain an empty map document."};
+  if (const auto* open = documentFor(id); open != nullptr && open != document.get())
+    return Error{"Another document is already open for this map."};
+
+  m_retainedDocuments[id] = std::move(document);
+  return {};
+}
+
+std::shared_ptr<MapDocument> ProjectSession::retainedDocument(const std::string& id) const
+{
+  const auto it = m_retainedDocuments.find(id);
+  return it == m_retainedDocuments.end() ? nullptr : it->second;
+}
+
+Result<void> ProjectSession::releaseDocument(const std::string& id)
+{
+  const auto it = m_retainedDocuments.find(id);
+  if (it == m_retainedDocuments.end())
+    return {};
+
+  if (auto* document = documentFor(id))
+    unregisterDocument(*document);
+  m_retainedDocuments.erase(it);
+  return {};
+}
 void ProjectSession::unregisterDocument(MapDocument& document)
 {
   if (!m_documents.contains(&document))

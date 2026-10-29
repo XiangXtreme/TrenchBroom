@@ -190,7 +190,7 @@ using namespace std::chrono_literals;
 
 MapWindow::MapWindow(
   AppController& appController,
-  std::unique_ptr<MapDocument> document,
+  std::shared_ptr<MapDocument> document,
   std::shared_ptr<ProjectSession> project)
   : m_appController{appController}
   , m_document{std::move(document)}
@@ -262,7 +262,7 @@ MapWindow::MapWindow(
 
 MapWindow::~MapWindow()
 {
-  if (m_project)
+  if (m_project && !documentRetainedByProject())
     m_project->unregisterDocument(*m_document);
   for (auto* view : findChildren<MapView3D*>())
   {
@@ -310,6 +310,14 @@ MapWindow::~MapWindow()
   // in its destructor
 }
 
+bool MapWindow::documentRetainedByProject() const
+{
+  if (!m_project)
+    return false;
+  const auto assetId = m_project->assetFor(*m_document);
+  return assetId && m_project->retainedDocument(*assetId) != nullptr;
+}
+
 void MapWindow::positionOnScreen(QWidget* reference)
 {
   restoreWidgetGeometry(this);
@@ -324,6 +332,11 @@ void MapWindow::positionOnScreen(QWidget* reference)
 const std::shared_ptr<ProjectSession>& MapWindow::project() const
 {
   return m_project;
+}
+
+std::shared_ptr<MapDocument> MapWindow::documentHandle() const
+{
+  return m_document;
 }
 
 const MapDocument& MapWindow::document() const
@@ -2841,7 +2854,7 @@ void MapWindow::closeEvent(QCloseEvent* event)
   saveWidgetState(m_inspector);
   saveWidgetState(m_infoPanel);
 
-  if (m_project)
+  if (m_project && !documentRetainedByProject())
     m_project->unregisterDocument(*m_document);
   m_appController.mapWindowManager().removeMapWindow(this);
   event->accept();

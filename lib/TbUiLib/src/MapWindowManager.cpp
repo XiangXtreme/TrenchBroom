@@ -66,6 +66,13 @@ MapWindow* MapWindowManager::topMapWindow() const
   return m_mapWindows.empty() ? nullptr : m_mapWindows.front();
 }
 
+void MapWindowManager::closeMapView(MapWindow& mapWindow)
+{
+  removeMapWindow(&mapWindow);
+  mapWindow.hide();
+  mapWindow.deleteLater();
+}
+
 bool MapWindowManager::activateMapWindow(MapWindow& mapWindow)
 {
   const auto it = std::ranges::find(m_mapWindows, &mapWindow);
@@ -183,8 +190,28 @@ Result<void> MapWindowManager::loadProjectMap(
   if (const auto* existing = project->documentFor(assetId))
   {
     for (auto* window : m_mapWindows)
+    {
       if (&window->document() == existing)
+      {
         activateMapWindow(*window);
+        return {};
+      }
+    }
+
+    // The project keeps the document when its view closes, so reopening a map only has
+    // to give the same editing state a new view.
+    if (auto retained = project->retainedDocument(assetId))
+    {
+      auto* window = new MapWindow{m_appController, std::move(retained), project};
+      window->positionOnScreen(topMapWindow());
+      m_mapWindows.insert(m_mapWindows.begin(), window);
+      if (m_showMapWindows)
+      {
+        window->show();
+        window->activateWindow();
+      }
+      return {};
+    }
     return {};
   }
   const auto* game =
@@ -217,7 +244,10 @@ Result<void> MapWindowManager::loadProjectMap(
              auto registered = project->registerDocument(*document, assetId);
              if (registered.is_error())
                return std::get<Error>(registered.error());
-             auto* window = new MapWindow{m_appController, std::move(document), project};
+             auto* window = new MapWindow{
+               m_appController,
+               std::shared_ptr<MapDocument>{std::move(document)},
+               project};
              window->positionOnScreen(topMapWindow());
              m_mapWindows.insert(m_mapWindows.begin(), window);
              if (m_showMapWindows)
@@ -260,7 +290,8 @@ MapWindow* MapWindowManager::createMapWindow(std::unique_ptr<MapDocument> docume
 {
   contract_pre(document != nullptr);
 
-  auto* mapWindow = new MapWindow{m_appController, std::move(document)};
+  auto* mapWindow =
+    new MapWindow{m_appController, std::shared_ptr<MapDocument>{std::move(document)}};
   mapWindow->positionOnScreen(topMapWindow());
   m_mapWindows.insert(m_mapWindows.begin(), mapWindow);
 

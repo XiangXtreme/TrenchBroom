@@ -98,7 +98,7 @@ class MapWindow : public QMainWindow
   Q_OBJECT
 private:
   AppController& m_appController;
-  std::unique_ptr<MapDocument> m_document;
+  std::shared_ptr<MapDocument> m_document;
   std::shared_ptr<ProjectSession> m_project;
 
   std::chrono::time_point<std::chrono::system_clock> m_lastInputTime;
@@ -158,14 +158,24 @@ private:
 public:
   MapWindow(
     AppController& appController,
-    std::unique_ptr<MapDocument> document,
+    std::shared_ptr<MapDocument> document,
     std::shared_ptr<ProjectSession> project = {});
   const std::shared_ptr<ProjectSession>& project() const;
   ~MapWindow() override;
 
   void positionOnScreen(QWidget* reference);
 
+  /**
+   * True when the project keeps the document alive on its own. Destroying the view
+   * then
+   * only ends the view, so the unsaved work and the editing session survive.
+
+   */
+  bool documentRetainedByProject() const;
+
   const MapDocument& document() const;
+  /** Shared handle to the document so a host can keep it alive after the view closes. */
+  std::shared_ptr<MapDocument> documentHandle() const;
   MapDocument& document();
 
   const MapViewToolBox& toolBox() const;

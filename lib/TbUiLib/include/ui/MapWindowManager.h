@@ -90,6 +90,13 @@ public:
     std::shared_ptr<ProjectSession> project, const std::string& assetId);
   MapWindow* topMapWindow() const;
   bool activateMapWindow(MapWindow& mapWindow);
+  /**
+   * Destroys a map view without closing its document. The caller keeps the document
+   * alive,
+   * so this is how a workspace closes a tab: the view goes away, the work
+   * stays.
+   */
+  void closeMapView(MapWindow& mapWindow);
   bool allMapWindowsClosed() const;
 
 private:

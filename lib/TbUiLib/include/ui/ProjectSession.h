@@ -44,6 +44,7 @@ class ProjectSession : public QObject, public std::enable_shared_from_this<Proje
   std::unique_ptr<project::ProjectStore> m_store;
   QByteArray m_savedDigest;
   std::map<MapDocument*, Document> m_documents;
+  std::map<std::string, std::shared_ptr<MapDocument>> m_retainedDocuments;
   std::vector<project::Asset> m_stagedMaps;
   std::vector<project::Asset> m_runtimeAssets;
   std::unique_ptr<QTemporaryDir> m_runtime;
@@ -178,6 +179,18 @@ public:
     const std::vector<std::string>& libraryAssetIds,
     std::vector<std::size_t>& planIndices);
   Result<void> registerDocument(MapDocument& document, const std::string& id);
+  /**
+   * Keeps a document alive in the session when no view shows it.
+   *
+   * Closing a map view destroys the view, not the editing session: the project keeps the
+   * unsaved work, saving still writes it, and reopening the map restores the same
+   * document instance instead of reloading it from disk.
+   */
+  Result<void> retainDocument(
+    std::shared_ptr<MapDocument> document, const std::string& id);
+  std::shared_ptr<MapDocument> retainedDocument(const std::string& id) const;
+  /** Drops a retained document and ends its editing session. */
+  Result<void> releaseDocument(const std::string& id);
   void unregisterDocument(MapDocument& document);
   Result<void> save();
   Result<void> saveCopy(const std::filesystem::path& path);

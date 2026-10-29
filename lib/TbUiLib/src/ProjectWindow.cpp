@@ -227,8 +227,13 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
     // state.
     if (const auto* document = m_session->documentFor(assetId))
     {
+      // The session keeps the document, so the view can go away without losing the work.
+      // Retaining first also means a later view destruction cannot unload it by accident.
       if (auto* window = mapWindowFor(*document))
-        window->hide();
+      {
+        report(m_session->retainDocument(window->documentHandle(), assetId));
+        m_appController.mapWindowManager().closeMapView(*window);
+      }
     }
     refreshMapTabs();
     refreshTitle();
