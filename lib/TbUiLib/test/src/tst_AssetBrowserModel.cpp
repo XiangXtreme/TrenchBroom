@@ -245,6 +245,23 @@ TEST_CASE("AssetBrowserModel")
       BrowserSourceFilter::GameFiles, BrowserSource::Project));
   }
 
+  SECTION("filters the unified listing by asset type")
+  {
+    const auto assets = std::vector<BrowserAsset>{
+      {BrowserCellType::Map, "maps/de_a.map"},
+      {BrowserCellType::Texture, "textures/wall.wad"},
+      {BrowserCellType::Model, "models/box.mdl"},
+      {BrowserCellType::Model, "models/crate.mdl"},
+    };
+
+    CHECK(filterBrowserAssets(assets, std::nullopt).size() == assets.size());
+    const auto models = filterBrowserAssets(assets, BrowserCellType::Model);
+    REQUIRE(models.size() == 2u);
+    CHECK(models[0].path == std::filesystem::path{"models/box.mdl"});
+    CHECK(models[1].path == std::filesystem::path{"models/crate.mdl"});
+    CHECK(filterBrowserAssets(assets, BrowserCellType::Sound).empty());
+  }
+
   SECTION("classifies supported asset extensions")
   {
     CHECK(assetTypeForExtension("models/foo.mdl") == BrowserCellType::Model);

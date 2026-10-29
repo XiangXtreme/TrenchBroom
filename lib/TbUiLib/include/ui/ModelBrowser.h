@@ -30,6 +30,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -66,6 +67,7 @@ private:
   QToolButton* m_savePrefabButton = nullptr;
   QToolButton* m_reloadButton = nullptr;
   QComboBox* m_sourceCombo = nullptr;
+  QComboBox* m_typeCombo = nullptr;
   QComboBox* m_libraryCombo = nullptr;
   QComboBox* m_iconSizeCombo = nullptr;
   QLineEdit* m_folderEdit = nullptr;
@@ -79,6 +81,9 @@ private:
   QTimer* m_rescanTimer = nullptr;
 
   BrowserSourceFilter m_sourceFilter = BrowserSourceFilter::GameFiles;
+  // The unified listing mixes maps, textures, models and sounds; a type filter narrows it
+  // without changing which sources are listed.
+  std::optional<BrowserCellType> m_typeFilter;
   std::string m_libraryId;
   std::vector<project::LibraryUpdate> m_libraryUpdates;
   QString m_libraryError;
@@ -135,6 +140,9 @@ private:
   std::optional<std::vector<BrowserAsset>> scanProjectAssets() const;
   std::optional<std::vector<BrowserAsset>> scanLibraryAssets() const;
   void setAssetSource(BrowserSourceFilter source);
+  void setTypeFilter(std::optional<BrowserCellType> type);
+  void applyTypeFilter();
+  std::vector<BrowserAsset> visibleAssets() const;
   void updateSourceControls();
   void refreshLibraryChoices();
   void chooseLibrary();

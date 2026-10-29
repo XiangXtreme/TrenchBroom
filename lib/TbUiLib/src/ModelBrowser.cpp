@@ -347,6 +347,20 @@ void ModelBrowser::createGui(AppController& appController)
   m_libraryCombo->setToolTip(tr("Asset library"));
   m_libraryCombo->setVisible(false);
 
+  // The unified listing mixes maps, textures, models and sounds, so the type filter is a
+  // second axis next to the source layer.
+  m_typeCombo = new QComboBox{};
+  m_typeCombo->setObjectName("ModelBrowser_Type");
+  m_typeCombo->setMinimumWidth(88);
+  m_typeCombo->setToolTip(tr("Asset type filter"));
+  m_typeCombo->addItem(tr("All Types"), -1);
+  m_typeCombo->addItem(tr("Maps"), int(BrowserCellType::Map));
+  m_typeCombo->addItem(tr("Textures"), int(BrowserCellType::Texture));
+  m_typeCombo->addItem(tr("Models"), int(BrowserCellType::Model));
+  m_typeCombo->addItem(tr("Sprites"), int(BrowserCellType::Sprite));
+  m_typeCombo->addItem(tr("Sounds"), int(BrowserCellType::Sound));
+  m_typeCombo->addItem(tr("Prefabs"), int(BrowserCellType::Prefab));
+
   m_searchBox = createSearchBox();
   m_searchBox->setObjectName("ModelBrowser_Search");
 
@@ -355,6 +369,7 @@ void ModelBrowser::createGui(AppController& appController)
   pathRowLayout->setSpacing(0);
   pathRowLayout->addWidget(m_pathStack, 1);
   pathRowLayout->addWidget(m_sourceCombo, 0);
+  pathRowLayout->addWidget(m_typeCombo, 0);
   pathRowLayout->addWidget(m_libraryCombo, 0);
   pathRowLayout->addWidget(m_savePrefabButton, 0);
   pathRowLayout->addWidget(m_iconSizeCombo, 0);
@@ -571,6 +586,15 @@ void ModelBrowser::bindEvents(AppController& appController)
     this,
     [&](const int index) {
       setAssetSource(BrowserSourceFilter(m_sourceCombo->itemData(index).toInt()));
+    });
+
+  connect(
+    m_typeCombo,
+    QOverload<int>::of(&QComboBox::currentIndexChanged),
+    this,
+    [&](const int index) {
+      const auto value = m_typeCombo->itemData(index).toInt();
+      setTypeFilter(value < 0 ? std::nullopt : std::optional{BrowserCellType(value)});
     });
 
   connect(
@@ -1049,7 +1073,7 @@ void ModelBrowser::removePrefabFromBrowser(const std::filesystem::path& prefabPa
 
   m_lastWriteTimes = assetLastWriteTimes(m_assets);
   rebuildFolderTree();
-  m_view->setAssets(m_folderPath, m_assets);
+  m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
 }
 
@@ -1381,10 +1405,38 @@ void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
   scheduleAssetRefresh();
 }
 
+void ModelBrowser::setTypeFilter(const std::optional<BrowserCellType> type)
+{
+  if (m_typeFilter == type)
+  {
+    return;
+  }
+  m_typeFilter = type;
+  // The current folder may not contain the filtered type, so start from the asset root.
+  m_currentFolderPath.clear();
+  updateFolderEdit();
+  applyTypeFilter();
+}
+
+void ModelBrowser::applyTypeFilter()
+{
+  rebuildFolderTree();
+  m_view->setIncludeDefaultRoots(
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles)
+    && !m_typeFilter);
+  m_view->setAssets(m_folderPath, visibleAssets());
+  m_view->setCurrentFolderPath(m_currentFolderPath);
+}
+
+std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
+{
+  return filterBrowserAssets(m_assets, m_typeFilter);
+}
+
 void ModelBrowser::updateSourceControls()
 {
-  const auto includesLibrary = browserFilterIncludesSource(
-    m_sourceFilter, BrowserSource::AssetLibrary);
+  const auto includesLibrary =
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::AssetLibrary);
   if (m_libraryCombo)
     m_libraryCombo->setVisible(includesLibrary);
   if (m_sourceCombo)
@@ -1601,9 +1653,10 @@ void ModelBrowser::reloadModels()
 
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles));
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles)
+    && !m_typeFilter);
   m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
-  m_view->setAssets(m_folderPath, m_assets);
+  m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
 }
 
@@ -1635,7 +1688,7 @@ void ModelBrowser::rebuildFolderTree()
   rootItem->setIcon(0, folderIcon);
   m_folderTreeItems.emplace(std::filesystem::path{}, rootItem);
 
-  if (m_folderPath.empty())
+  if (m_folderPath.empty() && !m_typeFilter)
   {
     for (const auto& [type, rootPath] : assetBrowserRoots())
     {
@@ -1653,7 +1706,7 @@ void ModelBrowser::rebuildFolderTree()
     }
   }
 
-  for (const auto& asset : m_assets)
+  for (const auto& asset : visibleAssets())
   {
     const auto& assetPath = asset.catalogPath.empty() ? asset.path : asset.catalogPath;
     if (assetPath.empty())
@@ -1817,9 +1870,10 @@ void ModelBrowser::rescanWatchedDirectory()
   m_lastWriteTimes = std::move(newLastWriteTimes);
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles));
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles)
+    && !m_typeFilter);
   m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
-  m_view->setAssets(m_folderPath, m_assets);
+  m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
 }
 

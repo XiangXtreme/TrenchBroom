@@ -180,6 +180,13 @@ std::vector<BrowserAsset> mergeBrowserAssets(
   std::vector<BrowserAsset> libraryAssets,
   std::vector<BrowserAsset> gameAssets);
 
+/**
+ * Narrows a listing to one asset type. No filter keeps every asset in its original order,
+ * so search and folder grouping see the same set the browser shows.
+ */
+std::vector<BrowserAsset> filterBrowserAssets(
+  const std::vector<BrowserAsset>& assets, std::optional<BrowserCellType> type);
+
 std::optional<std::vector<BrowserAsset>> collectBrowserAssets(
   const std::filesystem::path& folderPath,
   const std::vector<std::filesystem::path>& modRoots,

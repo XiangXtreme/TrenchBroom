@@ -27,6 +27,7 @@
 #include "kd/path_utils.h"
 
 #include <algorithm>
+#include <iterator>
 #include <ranges>
 
 namespace tb::ui
@@ -343,6 +344,21 @@ std::vector<BrowserAsset> mergeBrowserAssets(
       return lhs.type < rhs.type;
     }
     return lhs.source < rhs.source;
+  });
+  return result;
+}
+
+std::vector<BrowserAsset> filterBrowserAssets(
+  const std::vector<BrowserAsset>& assets, const std::optional<BrowserCellType> type)
+{
+  if (!type)
+  {
+    return assets;
+  }
+
+  auto result = std::vector<BrowserAsset>{};
+  std::ranges::copy_if(assets, std::back_inserter(result), [&](const auto& asset) {
+    return asset.type == *type;
   });
   return result;
 }
