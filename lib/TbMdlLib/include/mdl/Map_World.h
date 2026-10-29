@@ -33,6 +33,15 @@ class Map;
 SoftMapBounds softMapBounds(const Map& map);
 void setSoftMapBounds(Map& map, const SoftMapBounds& bounds);
 
+/**
+ * Sets one worldspawn property as a single undoable step.
+ *
+ * Worldspawn is not part of the entity selection in every view mode, so callers that
+ * target it explicitly (for example dropping a skybox onto the map) must not depend on
+ * what happens to be selected.
+ */
+void setWorldProperty(Map& map, const std::string& key, const std::string& value);
+
 std::vector<std::filesystem::path> externalSearchPaths(const Map& map);
 
 std::vector<std::string> enabledMods(const Entity& entity);

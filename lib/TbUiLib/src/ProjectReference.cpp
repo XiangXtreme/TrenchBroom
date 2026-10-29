@@ -142,6 +142,15 @@ const std::vector<UnreadableWad>& ProjectReferenceIndex::unreadableWads() const
 
 Result<std::string> gameName(const ProjectSession& session, const project::Asset& asset)
 {
+  if (asset.type == project::AssetType::Skybox)
+  {
+    // The engine addresses a skybox by its base name and appends the six face suffixes,
+    // so the captured group's path is only a storage location.
+    const auto name = stemOf(asset.publishPath);
+    if (name.empty())
+      return Error{"The captured skybox has no name."};
+    return name;
+  }
   if (asset.type != project::AssetType::Texture)
   {
     if (asset.publishPath.empty())
@@ -171,15 +180,17 @@ Result<std::string> gameName(const ProjectSession& session, const project::Asset
 
 Result<std::string> capturedGameName(const project::AssetImport& import)
 {
-  if (import.type != project::AssetType::Texture)
+  if (
+    import.type == project::AssetType::Texture
+    || import.type == project::AssetType::Skybox)
   {
-    if (import.virtualPath.empty())
-      return Error{"The captured resource has no published path."};
-    return import.virtualPath;
+    const auto name = stemOf(import.virtualPath);
+    if (name.empty())
+      return Error{"The captured resource has no game name."};
+    return name;
   }
-  const auto name = stemOf(import.virtualPath);
-  if (name.empty())
-    return Error{"The captured texture has no name."};
-  return name;
+  if (import.virtualPath.empty())
+    return Error{"The captured resource has no published path."};
+  return import.virtualPath;
 }
 } // namespace tb::ui

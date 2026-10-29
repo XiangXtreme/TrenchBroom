@@ -515,6 +515,12 @@ void ModelBrowserView::loadMissingVisiblePreviews(
       for (const auto& cell : row.cells())
       {
         const auto& item = cellData(cell);
+        const auto* asset = assetAt(item.path);
+        if (asset && asset->skybox)
+        {
+          // A skybox group is a manifest of six faces, not an image to decode.
+          continue;
+        }
         if (canLoadPreview(item.type) && !m_assetPreviews.contains(item.path))
         {
           paths.insert(item.path);
@@ -675,6 +681,10 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
     }
     else
     {
+      // A skybox group is a manifest of six faces, so there is no single image to show.
+      const auto* asset = assetAt(item.path);
+      if (asset && asset->skybox)
+        return;
       emit assetPreviewRequested(pathAsGenericQString(item.path));
     }
   }

@@ -2,8 +2,11 @@
  Copyright (C) 2026 XiangXtreme
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
+#include <QBuffer>
+#include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QImage>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -15,6 +18,7 @@
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
+#include <algorithm>
 #include <limits>
 
 #include <catch2/catch_test_macros.hpp>
@@ -58,6 +62,17 @@ std::vector<std::uint8_t> textureLump(const std::string& name)
     FAIL(std::get<Error>(archive.error()).msg);
   REQUIRE(archive.value().textures.size() == 1);
   return archive.value().textures.front().miptex;
+}
+// A real PNG payload, so a skybox face goes through the same decode and conversion path
+// as an imported image.
+QByteArray pngBytes(const QColor color, const int size = 8)
+{
+  auto image = QImage{size, size, QImage::Format_RGBA8888};
+  image.fill(color);
+  auto buffer = QBuffer{};
+  REQUIRE(buffer.open(QIODevice::WriteOnly));
+  REQUIRE(image.save(&buffer, "PNG"));
+  return buffer.data();
 }
 } // namespace
 TEST_CASE("CatalogAssetDrop")
@@ -228,6 +243,50 @@ TEST_CASE("CatalogAssetDrop")
       textureSession,
       catalogAssetDragData(mixedDrag, textureSession->store().info().id));
     CHECK(mixedPending.is_error());
+  }
+  SECTION("skybox drops name the group and capture every face")
+  {
+    const auto skyboxFolder = temporary.filePath("skybox-library");
+    REQUIRE(QDir{}.mkdir(skyboxFolder));
+    REQUIRE(QDir{}.mkdir(skyboxFolder + "/env"));
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+      write(
+        skyboxFolder + "/env/desert" + face + ".png", pngBytes(QColor{80, 120, 160}));
+    auto skyboxLibrary =
+      require(project::AssetLibrary::create(pathFromQString(skyboxFolder), "Skyboxes"));
+    require(skyboxLibrary->scan());
+    const auto skyboxEntries = require(skyboxLibrary->assets());
+    const auto skybox = std::ranges::find_if(skyboxEntries, [](const auto& entry) {
+      return entry.type == project::AssetType::Skybox;
+    });
+    REQUIRE(skybox != skyboxEntries.end());
+    auto skyboxSession = require(ProjectSession::create(
+      pathFromQString(temporary.filePath("skybox.tbproj")), "Skyboxes", "Half-Life"));
+    require(skyboxSession->attachLibrary(pathFromQString(skyboxFolder)));
+    require(skyboxSession->save());
+
+    auto skyboxEntry = BrowserAsset{BrowserCellType::Texture, {}};
+    skyboxEntry.skybox = true;
+    skyboxEntry.source = BrowserSource::AssetLibrary;
+    skyboxEntry.libraryId = skyboxLibrary->info().id;
+    skyboxEntry.libraryAssetId = skybox->id;
+    skyboxEntry.libraryRevision = skybox->revision;
+    const auto payload =
+      catalogAssetDragData(skyboxEntry, skyboxSession->store().info().id);
+    REQUIRE(isCatalogAssetDrag(payload));
+    auto pending = require(PreparedAssetDrop::prepare(skyboxSession, payload));
+    CHECK(pending->nativePayload() == "skybox:desert");
+    CHECK(require(skyboxSession->store().assets()).empty());
+    require(pending->commit());
+
+    const auto captured = require(skyboxSession->store().assets());
+    // The group and its six faces are captured as one transaction.
+    CHECK(captured.size() == 7);
+    const auto group = std::ranges::find_if(captured, [](const auto& asset) {
+      return asset.type == project::AssetType::Skybox;
+    });
+    REQUIRE(group != captured.end());
+    CHECK(require(gameName(*skyboxSession, *group)) == "desert");
   }
 }
 } // namespace tb::ui

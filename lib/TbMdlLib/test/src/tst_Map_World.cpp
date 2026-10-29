@@ -232,6 +232,36 @@ TEST_CASE("Map_World")
     }
   }
 
+  SECTION("setWorldProperty")
+  {
+    auto& map = fixture.create(QuakeFixtureConfig);
+
+    SECTION("adds a worldspawn property as one undo step")
+    {
+      setWorldProperty(map, "skyname", "desert");
+
+      REQUIRE(map.worldNode().entity().property("skyname"));
+      CHECK(*map.worldNode().entity().property("skyname") == "desert");
+      REQUIRE(map.canUndoCommand());
+
+      map.undoCommand();
+      CHECK(!map.worldNode().entity().property("skyname"));
+    }
+
+    SECTION("updates an existing worldspawn property")
+    {
+      auto& worldNode = map.worldNode();
+      auto world = worldNode.entity();
+      world.addOrUpdateProperty("skyname", "original");
+      worldNode.setEntity(std::move(world));
+
+      setWorldProperty(map, "skyname", "city");
+
+      REQUIRE(map.worldNode().entity().property("skyname"));
+      CHECK(*map.worldNode().entity().property("skyname") == "city");
+    }
+  }
+
   SECTION("defaultMod")
   {
     auto& map = fixture.create(QuakeFixtureConfig);

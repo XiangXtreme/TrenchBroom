@@ -97,6 +97,7 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.lastModified == rhs.lastModified && lhs.projectId == rhs.projectId
          && lhs.assetId == rhs.assetId && lhs.revision == rhs.revision
          && lhs.catalogPath == rhs.catalogPath && lhs.source == rhs.source
+         && lhs.skybox == rhs.skybox
          && lhs.libraryId == rhs.libraryId && lhs.libraryAssetId == rhs.libraryAssetId
          && lhs.libraryRevision == rhs.libraryRevision
          && lhs.libraryContentHash == rhs.libraryContentHash
@@ -133,15 +134,20 @@ bool hasProjectSnapshot(const BrowserAsset& asset)
 
 QString browserAssetStatus(const BrowserAsset& asset)
 {
+  const auto kind = asset.skybox ? QObject::tr("Skybox (6 faces)") : QString{};
+  const auto withKind = [&](const QString& status) {
+    return kind.isEmpty() ? status : kind + QString{" — "} + status;
+  };
   if (asset.missing)
-    return QObject::tr("Missing in library");
+    return withKind(QObject::tr("Missing in library"));
   if (asset.projectUpdateAvailable)
-    return QObject::tr("Library update available");
+    return withKind(QObject::tr("Library update available"));
   if (isLibraryAsset(asset) && hasProjectSnapshot(asset))
-    return QObject::tr("In project (rev %1)").arg(qulonglong(asset.projectRevision));
+    return withKind(
+      QObject::tr("In project (rev %1)").arg(qulonglong(asset.projectRevision)));
   if (asset.source == BrowserSource::Project && asset.revision > 0)
-    return QObject::tr("Project rev %1").arg(qulonglong(asset.revision));
-  return {};
+    return withKind(QObject::tr("Project rev %1").arg(qulonglong(asset.revision)));
+  return kind;
 }
 
 const std::vector<std::pair<BrowserCellType, std::filesystem::path>>& goldSrcAssetRoots()

@@ -6,6 +6,8 @@
 
 #include <QAbstractButton>
 #include <QApplication>
+#include <QBuffer>
+#include <QColor>
 #include <QComboBox>
 #include <QDialog>
 #include <QDir>
@@ -41,6 +43,7 @@
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/PropertyDefinition.h"
+#include "mdl/WorldNode.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/CreateEntityTool.h"
@@ -404,6 +407,106 @@ TEST_CASE("ProjectWindow")
       CHECK_FALSE(map.modified());
       CHECK_FALSE(session->modified());
     }
+  }
+
+  SECTION("the browser reopens a closed project map as a workspace tab")
+  {
+    auto* document = alphaDocument;
+    const auto mapAsset = require(session->store().findAsset(alphaId));
+    REQUIRE(mapAsset);
+    REQUIRE(mapAsset->type == project::AssetType::Map);
+
+    tabs->setCurrentIndex(1);
+    QApplication::processEvents();
+    auto* betaWindow = window.activeMapWindow();
+    REQUIRE(betaWindow != nullptr);
+    betaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
+    auto* browser = betaWindow->findChild<ModelBrowserView*>();
+    REQUIRE(browser != nullptr);
+    auto* source = betaWindow->findChild<QComboBox*>("ModelBrowser_Source");
+    REQUIRE(source != nullptr);
+    source->setCurrentIndex(source->findData(int(BrowserSource::Project)));
+
+    closeTab(*tabs, 0);
+    REQUIRE(tabs->count() == 1);
+    REQUIRE(session->documentFor(alphaId) == document);
+
+    // The browser asks the map window manager for the map the same way a double click does.
+    emit browser->mapActivated(pathAsGenericQString(mapAsset->publishPath));
+    QApplication::processEvents();
+    REQUIRE(tabs->count() == 2);
+    auto names = std::vector<QString>{};
+    for (auto index = 0; index < tabs->count(); ++index)
+      names.push_back(tabs->tabText(index));
+    CHECK(std::ranges::find(names, QString{"alpha"}) != names.end());
+    CHECK(tabs->tabText(tabs->currentIndex()) == "alpha");
+    CHECK(session->documentFor(alphaId) == document);
+  }
+
+  SECTION("catalog skybox drops capture the group and set the world sky")
+  {
+    const auto folder = directory.filePath("skybox-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    REQUIRE(QDir{}.mkdir(folder + "/env"));
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+    {
+      auto image = QImage{8, 8, QImage::Format_RGBA8888};
+      image.fill(QColor{80, 120, 160});
+      auto buffer = QBuffer{};
+      REQUIRE(buffer.open(QIODevice::WriteOnly));
+      REQUIRE(image.save(&buffer, "PNG"));
+      auto output = QFile{folder + "/env/desert" + face + ".png"};
+      REQUIRE(output.open(QIODevice::WriteOnly));
+      REQUIRE(output.write(buffer.data()) == buffer.data().size());
+    }
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Skyboxes"));
+    require(library->scan());
+    const auto entries = require(library->assets());
+    const auto skybox = std::ranges::find_if(entries, [](const auto& entry) {
+      return entry.type == project::AssetType::Skybox;
+    });
+    REQUIRE(skybox != entries.end());
+    require(session->attachLibrary(pathFromQString(folder)));
+    require(session->save());
+
+    auto texture = BrowserAsset{BrowserCellType::Texture, {}};
+    texture.skybox = true;
+    texture.source = BrowserSource::AssetLibrary;
+    texture.libraryId = library->info().id;
+    texture.libraryAssetId = skybox->id;
+    texture.libraryRevision = skybox->revision;
+    const auto payload = catalogAssetDragData(texture, session->store().info().id);
+    REQUIRE(isCatalogAssetDrag(payload));
+
+    auto* view = alphaWindow->currentMapViewBase();
+    REQUIRE(view != nullptr);
+    auto mime = QMimeData{};
+    mime.setText(payload);
+    const auto position = QPoint{1, 1};
+    auto enter =
+      QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(view, &enter);
+    REQUIRE(enter.isAccepted());
+    auto drop = QDropEvent{
+      QPointF{position}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(view, &drop);
+    CHECK(drop.isAccepted());
+
+    auto& map = alphaDocument->map();
+    REQUIRE(map.worldNode().entity().property("skyname"));
+    CHECK(*map.worldNode().entity().property("skyname") == "desert");
+    CHECK(map.modified());
+    const auto assets = require(session->store().assets());
+    CHECK(
+      std::ranges::count_if(assets, [](const auto& asset) {
+        return asset.type == project::AssetType::Skybox;
+      })
+      == 1);
+
+    REQUIRE(map.canUndoCommand());
+    map.undoCommand();
+    CHECK(!map.worldNode().entity().property("skyname"));
   }
 
   SECTION("catalog texture drops capture the dropped revision and set the face material")

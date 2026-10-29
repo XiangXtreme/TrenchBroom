@@ -1147,6 +1147,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
     const auto path = pathFromQString(QString::fromStdString(asset.publishPath));
     const auto type = asset.type == project::AssetType::Map ? BrowserCellType::Map
                       : asset.type == project::AssetType::Texture
+                          || asset.type == project::AssetType::Skybox
                         ? BrowserCellType::Texture
                         : assetTypeForExtension(path);
     if (type == BrowserCellType::Folder)
@@ -1156,6 +1157,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
       continue;
     auto entry = BrowserAsset{type, path, file.value()};
     entry.source = BrowserSource::Project;
+    entry.skybox = asset.type == project::AssetType::Skybox;
     entry.projectId = m_project->store().info().id;
     entry.assetId = asset.id;
     entry.revision = asset.revision;
@@ -1215,6 +1217,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
     entry.displayName = asset.displayName;
     entry.catalogPath = entry.path;
     entry.missing = asset.missing;
+    entry.skybox = asset.type == project::AssetType::Skybox;
     if (const auto captured =
           m_project->projectAssetForLibraryAsset(m_libraryId, asset.id);
         captured.is_success() && captured.value())

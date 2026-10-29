@@ -28,6 +28,8 @@ std::string kind(const project::AssetType type)
     return "sound";
   case project::AssetType::Texture:
     return "texture";
+  case project::AssetType::Skybox:
+    return "skybox";
   default:
     return {};
   }
@@ -59,6 +61,10 @@ QString catalogAssetDragData(const BrowserAsset& asset, const std::string& proje
   default:
     return {};
   }
+  // A skybox group is browsed as a texture cell but drops as a whole skybox: the payload
+  // must not name one face as if it were a standalone texture.
+  if (asset.skybox)
+    type = "skybox";
   const auto library = isLibraryAsset(asset);
   const auto id = library ? asset.libraryAssetId : asset.assetId;
   const auto revision = library ? asset.libraryRevision : asset.revision;
@@ -111,7 +117,9 @@ Result<std::unique_ptr<PreparedAssetDrop>> PreparedAssetDrop::prepare(
     const auto& projectAsset = *asset.value();
     result->m_expected.push_back(projectAsset);
     type = kind(projectAsset.type);
-    if (projectAsset.type == project::AssetType::Texture)
+    if (
+      projectAsset.type == project::AssetType::Texture
+      || projectAsset.type == project::AssetType::Skybox)
     {
       const auto name = gameName(*result->m_session, projectAsset);
       if (name.is_error())
@@ -174,10 +182,11 @@ Result<std::unique_ptr<PreparedAssetDrop>> PreparedAssetDrop::prepare(
           return Error{"A project dependency disappeared."};
         result->m_expected.push_back(*existing.value());
       }
-    if (type == "texture")
+    if (type == "texture" || type == "skybox")
     {
-      // A texture capture publishes a single miptex, so the name is fixed before the
-      // project is written; that keeps a drop preview honest.
+      // A texture capture publishes a single miptex and a skybox publishes its group
+      // name, so the name is fixed before the project is written; that keeps a drop
+      // preview honest.
       const auto name = capturedGameName(root.import);
       if (name.is_error())
         return std::get<Error>(name.error());

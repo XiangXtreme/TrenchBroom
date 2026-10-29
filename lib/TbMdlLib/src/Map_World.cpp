@@ -53,6 +53,15 @@ SoftMapBounds softMapBounds(const Map& map)
   return extractSoftMapBounds(map.worldNode().entity(), map.gameInfo().gameConfig);
 }
 
+void setWorldProperty(Map& map, const std::string& key, const std::string& value)
+{
+  auto& worldNode = map.worldNode();
+  auto entity = worldNode.entity();
+  entity.addOrUpdateProperty(key, value);
+  updateNodeContents(
+    map, "Set World Property", {{&worldNode, NodeContents(std::move(entity))}}, {});
+}
+
 /**
  * Note if bounds.source is SoftMapBoundsType::Game, bounds.bounds is ignored.
  */

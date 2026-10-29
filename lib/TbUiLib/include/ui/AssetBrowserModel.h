@@ -78,6 +78,9 @@ struct BrowserAsset
   std::string assetId;
   std::uint64_t revision = 0;
   std::filesystem::path catalogPath;
+  // The entry is a skybox group: its content is a manifest of six face textures, not an
+  // image, so it must not be previewed or dropped as a single texture.
+  bool skybox = false;
 
   BrowserSource source = BrowserSource::GameFiles;
   // Library identity. Empty unless this entry was enumerated from an asset library.

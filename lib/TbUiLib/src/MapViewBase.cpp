@@ -1663,19 +1663,26 @@ void MapViewBase::resizeEvent(QResizeEvent* event)
 namespace
 {
 constexpr auto MaterialDropPrefix = "texture:";
+constexpr auto SkyboxDropPrefix = "skybox:";
 
 /**
- * A catalog texture drop names a material instead of a node, so it is applied to a face
- * rather than forwarded to the tool chain.
+ * A catalog texture or skybox drop names something the map already references, so it is
+ * applied to the map rather than forwarded to the tool chain as a node to place.
  */
+bool isAppliedDrop(const std::string& payload)
+{
+  return payload.starts_with(MaterialDropPrefix) || payload.starts_with(SkyboxDropPrefix);
+}
+
 bool isMaterialDrop(const std::string& payload)
 {
   return payload.starts_with(MaterialDropPrefix);
 }
 
-std::string materialNameOf(const std::string& payload)
+/** The game name encoded in a `texture:` or `skybox:` payload. */
+std::string dropNameOf(const std::string& payload)
 {
-  return payload.substr(std::string{MaterialDropPrefix}.size());
+  return payload.substr(payload.find(':') + 1);
 }
 
 /** The face under the cursor, or the selected faces when the cursor is over the void. */
@@ -1686,6 +1693,13 @@ std::vector<mdl::BrushFaceHandle> dropTargetFaces(
   if (const auto face = mdl::hitToFaceHandle(hit))
     return {*face};
   return selection.allBrushFaces();
+}
+
+/** A texture needs a face; a skybox edits worldspawn, so it always has a target. */
+bool hasDropTarget(
+  const std::string& payload, const std::vector<mdl::BrushFaceHandle>& faces)
+{
+  return isMaterialDrop(payload) ? !faces.empty() : isAppliedDrop(payload);
 }
 } // namespace
 
@@ -1714,11 +1728,11 @@ void MapViewBase::dragEnterEvent(QDragEnterEvent* event)
     event->acceptProposedAction();
     return;
   }
-  // The tool chain refuses material drops, but the pick result is now current, so the
-  // face under the cursor decides whether the drop has a target at all.
+  // The tool chain refuses these drops, but the pick result is now current, so what is
+  // under the cursor decides whether the drop has a target at all.
   if (
-    m_assetDrop && isMaterialDrop(payload)
-    && !dropTargetFaces(pickResult(), m_document.map().selection()).empty())
+    m_assetDrop && isAppliedDrop(payload)
+    && hasDropTarget(payload, dropTargetFaces(pickResult(), m_document.map().selection())))
   {
     event->acceptProposedAction();
     return;
@@ -1750,8 +1764,8 @@ void MapViewBase::dragMoveEvent(QDragMoveEvent* event)
     return;
   }
   if (
-    m_assetDrop && isMaterialDrop(payload)
-    && !dropTargetFaces(pickResult(), m_document.map().selection()).empty())
+    m_assetDrop && isAppliedDrop(payload)
+    && hasDropTarget(payload, dropTargetFaces(pickResult(), m_document.map().selection())))
   {
     event->acceptProposedAction();
     return;
@@ -1772,10 +1786,10 @@ void MapViewBase::dropEvent(QDropEvent* event)
       return;
     }
     const auto payload = m_assetDrop->nativePayload();
-    if (isMaterialDrop(payload))
+    if (isAppliedDrop(payload))
     {
       const auto faces = dropTargetFaces(pickResult(), m_document.map().selection());
-      if (faces.empty())
+      if (!hasDropTarget(payload, faces))
       {
         m_document.logger().error()
           << "A material drop needs a face under the cursor or a face selection.";
@@ -1791,9 +1805,16 @@ void MapViewBase::dropEvent(QDropEvent* event)
         event->ignore();
         return;
       }
+      if (!isMaterialDrop(payload))
+      {
+        // The six faces were captured with the group; the map only stores the base name.
+        mdl::setWorldProperty(m_document.map(), "skyname", dropNameOf(payload));
+        event->acceptProposedAction();
+        return;
+      }
       if (
         mdl::setBrushFaceAttributes(
-          m_document.map(), faces, {.materialName = materialNameOf(payload)}))
+          m_document.map(), faces, {.materialName = dropNameOf(payload)}))
       {
         event->acceptProposedAction();
       }
