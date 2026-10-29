@@ -17,9 +17,11 @@
 #include "img/GoldSrcTexture.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
+#include "project/ContentHash.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
 #include "ui/MapDocument.h"
+#include "ui/ProjectReference.h"
 #include "ui/ProjectResourceAudit.h"
 #include "ui/QPathUtils.h"
 
@@ -432,8 +434,8 @@ Result<void> ProjectSession::exportCompileSnapshot(
       "waterskip"};
     return names.contains(normalizedTextureName(name));
   };
-  // Skybox faces are loaded from the game's gfx/env folder, never from a WAD, so a
-  // snapshot can list them but cannot embed them.
+  // Uncaptured skies can be supplied by the installed game. Captured groups resolve
+  // through the reference index and must provide all six faces below.
   const auto isEngineExternal = [](const std::string& reference) {
     return normalizedTextureName(reference).starts_with("gfx/env/");
   };
@@ -522,6 +524,93 @@ Result<void> ProjectSession::exportCompileSnapshot(
     return std::ranges::find(directAssets, id) != directAssets.end();
   };
 
+  // Sky groups address six source images, not their WAD-compatible brush textures.
+  // Publish opaque, uncompressed 24-bit TGA (bottom row first), preserving source RGB.
+  auto skyFaces = std::set<std::string>{};
+  auto skyPaths = std::set<std::string>{};
+  auto skyResources = std::map<std::string, std::vector<std::uint8_t>>{};
+  auto skyMetadata = std::vector<std::string>{};
+  for (const auto& group : assets)
+  {
+    if (group.type != project::AssetType::Skybox)
+      continue;
+    const auto name = gameName(*this, group);
+    if (name.is_error())
+      return std::get<Error>(name.error());
+    const auto dependencies = m_store->dependencies(group.id);
+    if (dependencies.is_error())
+      return std::get<Error>(dependencies.error());
+    auto suffixes = std::set<std::string>{};
+    auto size = std::size_t{0};
+    for (const auto& dependency : dependencies.value())
+    {
+      if (dependency.kind != "skybox-face")
+        continue;
+      const auto face = m_store->findAsset(dependency.dependencyId);
+      if (face.is_error())
+        return std::get<Error>(face.error());
+      if (!face.value())
+        return Error{"Skybox face is missing: " + dependency.dependencyId};
+      const auto stem = normalizedTextureName(stemOf(face.value()->sourceName));
+      const auto suffix = stem.size() >= 2 ? stem.substr(stem.size() - 2) : std::string{};
+      static const auto expected =
+        std::set<std::string>{"bk", "dn", "ft", "lf", "rt", "up"};
+      if (!expected.contains(suffix) || !suffixes.insert(suffix).second)
+        return Error{
+          "Skybox '" + name.value() + "' has an invalid or duplicate face: " + stem};
+      const auto original =
+        m_store->readAsset(face.value()->id, project::ContentKind::Original);
+      if (original.is_error())
+        return std::get<Error>(original.error());
+      const auto decoded =
+        img::decodeImage(original.value().data(), original.value().size());
+      if (decoded.is_error())
+        return Error{
+          "Cannot decode skybox face '" + stem
+          + "': " + std::get<Error>(decoded.error()).msg};
+      const auto& image = decoded.value();
+      if (
+        image.width == 0 || image.width != image.height || image.width > 65535
+        || (size != 0 && size != image.width)
+        || image.alphaDomain != img::ImageAlphaDomain::Opaque)
+        return Error{
+          "Skybox '" + name.value()
+          + "' requires six equally sized opaque square images."};
+      size = image.width;
+      auto tga = std::vector<std::uint8_t>(18, 0);
+      tga[2] = 2;
+      tga[12] = std::uint8_t(size & 255);
+      tga[13] = std::uint8_t(size >> 8);
+      tga[14] = tga[12];
+      tga[15] = tga[13];
+      tga[16] = 24;
+      tga.reserve(18 + size * size * 3);
+      for (auto y = size; y > 0; --y)
+        for (auto x = std::size_t{0}; x < size; ++x)
+        {
+          const auto offset = ((y - 1) * size + x) * 4;
+          tga.insert(
+            tga.end(),
+            {image.pixels[offset + 2], image.pixels[offset + 1], image.pixels[offset]});
+        }
+      const auto target = "gfx/env/" + name.value() + suffix + ".tga";
+      const auto normalized = normalizeGamePath(target);
+      if (!normalized || !skyPaths.insert(*normalized).second)
+        return Error{"Skybox publish path is invalid or duplicated: " + target};
+      skyMetadata.push_back(fmt::format(
+        "skybox-face path={} id={} revision={} sourceHash={} hash={}",
+        target,
+        face.value()->id,
+        face.value()->revision,
+        project::contentHash(original.value()),
+        project::contentHash(tga)));
+      skyResources.emplace(target, std::move(tga));
+      skyFaces.insert(face.value()->id);
+    }
+    if (suffixes.size() != 6)
+      return Error{"Skybox '" + name.value() + "' does not contain all six faces."};
+  }
+
   auto miptexByName = std::map<std::string, std::vector<std::uint8_t>>{};
   auto resources = std::vector<std::pair<std::string, std::vector<std::uint8_t>>>{};
   auto metadata = std::vector<std::string>{
@@ -530,6 +619,9 @@ Result<void> ProjectSession::exportCompileSnapshot(
     "map=" + mapAssetId,
     "mapFile=" + mapFileName,
     "mapRevision=" + std::to_string(map.value()->revision)};
+  for (auto& [path, bytes] : skyResources)
+    resources.emplace_back(path, std::move(bytes));
+  metadata.insert(metadata.end(), skyMetadata.begin(), skyMetadata.end());
   for (const auto& reference : externals)
     metadata.push_back("external " + reference);
   for (const auto& entry : assets)
@@ -546,6 +638,10 @@ Result<void> ProjectSession::exportCompileSnapshot(
       entry.revision,
       entry.contentHash,
       isDirect(entry.id) ? " direct" : " dependency"));
+    if (
+      entry.type == project::AssetType::Skybox
+      || (skyFaces.contains(entry.id) && directTextures[entry.id].empty()))
+      continue;
     if (entry.type != project::AssetType::Texture)
     {
       resources.emplace_back(entry.publishPath, compatible.value());

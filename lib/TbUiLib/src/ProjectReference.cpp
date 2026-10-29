@@ -44,8 +44,7 @@ std::string lowered(std::string text)
   return text;
 }
 
-UnreadableWad unreadable(
-  const project::Asset& asset, const std::string& message)
+UnreadableWad unreadable(const project::Asset& asset, const std::string& message)
 {
   return UnreadableWad{asset.id, asset.virtualPath, message};
 }
@@ -56,8 +55,7 @@ std::optional<std::string> normalizeGamePath(std::string path)
   std::replace(path.begin(), path.end(), '\\', '/');
   if (path.empty() || path.front() == '/' || path.find(':') != std::string::npos)
     return std::nullopt;
-  if (
-    std::ranges::any_of(path, [](const unsigned char c) { return c < 32 || c == 127; }))
+  if (std::ranges::any_of(path, [](const unsigned char c) { return c < 32 || c == 127; }))
     return std::nullopt;
   auto start = size_t{0};
   while (start <= path.size())
@@ -82,15 +80,26 @@ Result<ProjectReferenceIndex> ProjectReferenceIndex::build(const ProjectSession&
 
   for (const auto& asset : assets.value())
   {
-    if (
-      asset.type == project::AssetType::Map || asset.type == project::AssetType::Prefab)
+    if (asset.type == project::AssetType::Map || asset.type == project::AssetType::Prefab)
       continue;
     if (const auto path = normalizeGamePath(asset.publishPath))
       index.m_paths[*path].push_back(asset);
+    if (asset.type == project::AssetType::Skybox)
+    {
+      const auto name = gameName(session, asset);
+      if (name.is_error())
+        return std::get<Error>(name.error());
+      for (const auto* suffix : {"bk", "dn", "ft", "lf", "rt", "up"})
+        if (
+          const auto path =
+            normalizeGamePath("gfx/env/" + name.value() + suffix + ".tga"))
+          index.m_paths[*path].push_back(asset);
+    }
     if (extensionOf(asset.publishPath) != ".wad")
       continue;
 
-    const auto bytes = session.store().readAsset(asset.id, project::ContentKind::Compatible);
+    const auto bytes =
+      session.store().readAsset(asset.id, project::ContentKind::Compatible);
     if (bytes.is_error())
     {
       index.m_unreadableWads.push_back(
@@ -119,8 +128,9 @@ ReferenceMatch ProjectReferenceIndex::resolveTexture(const std::string& name) co
   const auto found = m_textures.find(lowered(name));
   if (found == m_textures.end())
     return {};
-  return found->second.size() == 1 ? ReferenceMatch{ReferenceStatus::Resolved, found->second}
-                                   : ReferenceMatch{ReferenceStatus::Ambiguous, found->second};
+  return found->second.size() == 1
+           ? ReferenceMatch{ReferenceStatus::Resolved, found->second}
+           : ReferenceMatch{ReferenceStatus::Ambiguous, found->second};
 }
 
 ReferenceMatch ProjectReferenceIndex::resolvePath(const std::string& path) const
@@ -131,8 +141,9 @@ ReferenceMatch ProjectReferenceIndex::resolvePath(const std::string& path) const
   const auto found = m_paths.find(*normalized);
   if (found == m_paths.end())
     return {};
-  return found->second.size() == 1 ? ReferenceMatch{ReferenceStatus::Resolved, found->second}
-                                   : ReferenceMatch{ReferenceStatus::Ambiguous, found->second};
+  return found->second.size() == 1
+           ? ReferenceMatch{ReferenceStatus::Resolved, found->second}
+           : ReferenceMatch{ReferenceStatus::Ambiguous, found->second};
 }
 
 const std::vector<UnreadableWad>& ProjectReferenceIndex::unreadableWads() const
@@ -158,12 +169,15 @@ Result<std::string> gameName(const ProjectSession& session, const project::Asset
     return asset.publishPath;
   }
 
-  const auto bytes = session.store().readAsset(asset.id, project::ContentKind::Compatible);
+  const auto bytes =
+    session.store().readAsset(asset.id, project::ContentKind::Compatible);
   if (bytes.is_error())
-    return Error{"Could not read the texture archive: " + std::get<Error>(bytes.error()).msg};
+    return Error{
+      "Could not read the texture archive: " + std::get<Error>(bytes.error()).msg};
   const auto archive = project::readGoldSrcWad(bytes.value());
   if (archive.is_error())
-    return Error{"Could not read the texture archive: " + std::get<Error>(archive.error()).msg};
+    return Error{
+      "Could not read the texture archive: " + std::get<Error>(archive.error()).msg};
 
   auto names = std::vector<std::string>{};
   for (const auto& texture : archive.value().textures)

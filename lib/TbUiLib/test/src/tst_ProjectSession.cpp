@@ -9,12 +9,14 @@
 #include <QTemporaryDir>
 
 #include "gl/MaterialManager.h"
+#include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
 #include "mdl/MapHeader.h"
 #include "mdl/Map_Entities.h"
 #include "project/AssetLibrary.h"
+#include "project/ContentHash.h"
 #include "project/GoldSrcWad.h"
 #include "project/LibrarySync.h"
 #include "ui/CatalogAssetDrop.h"
@@ -965,6 +967,166 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(requireProject(sandbox.session->store().assets()).empty());
     CHECK_FALSE(sandbox.session->modified());
   }
+  SECTION("skybox snapshot publishes six source images independently of the library")
+  {
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+      sandbox.write(
+        std::string{"env/desert"} + face + ".png", pngBytes(QColor{31, 93, 177}, 16));
+    auto image = QImage{16, 16, QImage::Format_RGBA8888};
+    image.fill(QColor{31, 93, 177});
+    image.setPixelColor(0, 0, QColor{255, 0, 0});
+    image.setPixelColor(15, 15, QColor{0, 255, 0});
+    auto buffer = QBuffer{};
+    REQUIRE(buffer.open(QIODevice::WriteOnly));
+    REQUIRE(image.save(&buffer, "PNG"));
+    const auto png = buffer.data();
+    sandbox.write("env/desertbk.png", {png.begin(), png.end()});
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto libraryAssets = sandbox.libraryAssets();
+    const auto sky = std::ranges::find_if(libraryAssets, [](const auto& asset) {
+      return asset.type == project::AssetType::Skybox;
+    });
+    REQUIRE(sky != libraryAssets.end());
+    const auto group =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, sky->id));
+    auto stream = std::ostringstream{};
+    mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Valve, "Sky");
+    stream << R"({
+"classname" "worldspawn"
+"skyname" "desert"
+}
+)";
+    const auto mapText = stream.str();
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.displayName = "Sky";
+    input.virtualPath = "maps/sky.map";
+    input.original = input.compatible = {mapText.begin(), mapText.end()};
+    const auto map = requireProject(sandbox.session->importAsset(input));
+    const auto folder = sandbox.root / "sky-snapshot";
+    const auto edges = requireProject(sandbox.session->store().dependencies(group.id));
+    REQUIRE(edges.size() == 6);
+
+    SECTION("missing face blocks the snapshot")
+    {
+      auto store =
+        requireProject(project::ProjectStore::open(sandbox.session->store().path()));
+      const auto groupBytes =
+        requireProject(store->readAsset(group.id, project::ContentKind::Compatible));
+      requireProject(store->removeAsset(group.id));
+      auto groupImport = project::AssetImport{};
+      groupImport.type = project::AssetType::Skybox;
+      groupImport.displayName = group.displayName;
+      groupImport.virtualPath = group.virtualPath;
+      groupImport.original = groupImport.compatible = groupBytes;
+      const auto replacement = requireProject(store->importAsset(groupImport));
+      for (auto index = std::size_t{0}; index < 5; ++index)
+        requireProject(
+          store->addDependency(replacement.id, edges[index].dependencyId, "skybox-face"));
+      CHECK(sandbox.session->exportCompileSnapshot(map.id, folder).is_error());
+      CHECK_FALSE(std::filesystem::exists(folder));
+    }
+    SECTION("duplicate face names block the snapshot")
+    {
+      auto store =
+        requireProject(project::ProjectStore::open(sandbox.session->store().path()));
+      const auto first = requireProject(store->findAsset(edges[0].dependencyId));
+      const auto second = requireProject(store->findAsset(edges[1].dependencyId));
+      REQUIRE(first);
+      REQUIRE(second);
+      auto replacement = project::AssetImport{};
+      replacement.type = first->type;
+      replacement.sourceName = second->sourceName;
+      replacement.original =
+        requireProject(store->readAsset(first->id, project::ContentKind::Original));
+      replacement.compatible =
+        requireProject(store->readAsset(first->id, project::ContentKind::Compatible));
+      requireProject(store->replaceAsset(first->id, replacement));
+      CHECK(sandbox.session->exportCompileSnapshot(map.id, folder).is_error());
+      CHECK_FALSE(std::filesystem::exists(folder));
+    }
+    SECTION("ambiguous skybox groups block the snapshot")
+    {
+      auto otherGroup = project::AssetImport{};
+      otherGroup.type = project::AssetType::Skybox;
+      otherGroup.virtualPath = "other/desert";
+      otherGroup.displayName = "Other desert";
+      otherGroup.original = otherGroup.compatible = {'s', 'k', 'y'};
+      requireProject(sandbox.session->importAsset(otherGroup));
+      CHECK(sandbox.session->exportCompileSnapshot(map.id, folder).is_error());
+      CHECK_FALSE(std::filesystem::exists(folder));
+    }
+    SECTION("damaged original image blocks publishing even when its WAD is valid")
+    {
+      auto store =
+        requireProject(project::ProjectStore::open(sandbox.session->store().path()));
+      const auto face = requireProject(store->findAsset(edges.front().dependencyId));
+      REQUIRE(face);
+      auto replacement = project::AssetImport{};
+      replacement.type = face->type;
+      replacement.sourceName = face->sourceName;
+      replacement.original = {1, 2, 3};
+      replacement.compatible =
+        requireProject(store->readAsset(face->id, project::ContentKind::Compatible));
+      requireProject(store->replaceAsset(face->id, replacement));
+      CHECK(sandbox.session->exportCompileSnapshot(map.id, folder).is_error());
+      CHECK_FALSE(std::filesystem::exists(folder));
+    }
+    SECTION("mismatched face dimensions block the snapshot")
+    {
+      sandbox.write("env/desertdn.png", pngBytes(QColor{31, 93, 177}, 32));
+      sandbox.rescanLibrary();
+      const auto updated = sandbox.libraryAssets();
+      const auto face = std::ranges::find_if(updated, [](const auto& asset) {
+        return asset.virtualPath == "env/desertdn.png";
+      });
+      REQUIRE(face != updated.end());
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, face->id));
+      CHECK(sandbox.session->exportCompileSnapshot(map.id, folder).is_error());
+      CHECK_FALSE(std::filesystem::exists(folder));
+    }
+    SECTION("updates affect only new snapshots and originals survive library loss")
+    {
+      requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
+      const auto before = readProjectFile(folder / "resources/gfx/env/desertbk.tga");
+      const auto decoded = requireProject(img::decodeImage(before.data(), before.size()));
+      CHECK(decoded.width == 16);
+      CHECK(decoded.height == 16);
+      CHECK(decoded.pixels[0] == 255);
+      CHECK(decoded.pixels[1] == 0);
+      CHECK(decoded.pixels[(16 * 16 - 1) * 4 + 1] == 255);
+      const auto metadata = readProjectFile(folder / "snapshot.txt");
+      const auto text = std::string{metadata.begin(), metadata.end()};
+      CHECK(text.find("external gfx/env/") == std::string::npos);
+      CHECK(text.find("hash=" + project::contentHash(before)) != std::string::npos);
+      CHECK(
+        text.find(
+          "sourceHash="
+          + project::contentHash(std::vector<std::uint8_t>{png.begin(), png.end()}))
+        != std::string::npos);
+      sandbox.write("env/desertbk.png", pngBytes(QColor{1, 2, 3}, 16));
+      sandbox.rescanLibrary();
+      const auto updated = sandbox.libraryAssets();
+      const auto face = std::ranges::find_if(updated, [](const auto& asset) {
+        return asset.virtualPath == "env/desertbk.png";
+      });
+      REQUIRE(face != updated.end());
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, face->id));
+      CHECK(readProjectFile(folder / "resources/gfx/env/desertbk.tga") == before);
+      requireProject(sandbox.session->save());
+      sandbox.session.reset();
+      std::filesystem::remove_all(sandbox.libraryFolder);
+      sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+      const auto next = sandbox.root / "sky-next";
+      requireProject(sandbox.session->exportCompileSnapshot(map.id, next));
+      CHECK(readProjectFile(next / "resources/gfx/env/desertbk.tga") != before);
+      for (const auto* suffix : {"bk", "rt", "lf", "ft", "up", "dn"})
+        CHECK(std::filesystem::exists(
+          next / (std::string{"resources/gfx/env/desert"} + suffix + ".tga")));
+    }
+  }
+
   SECTION("exports a fixed compile snapshot that no longer touches the library")
   {
     requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
