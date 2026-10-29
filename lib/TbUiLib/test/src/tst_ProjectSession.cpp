@@ -596,6 +596,49 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(linked->library.libraryRevision == 1);
   }
 
+  SECTION("model previews include companions and change when only a companion changes")
+  {
+    sandbox.write("models/crate.mdl", modelWithGroups(2));
+    sandbox.write("models/crate01.mdl", modelWithGroups(1));
+    sandbox.write("models/crateT.mdl", modelWithGroups(1));
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto assets = sandbox.libraryAssets();
+    const auto model = std::ranges::find_if(
+      assets, [](const auto& a) { return a.virtualPath == "models/crate.mdl"; });
+    REQUIRE(model != assets.end());
+    requireProject(sandbox.session->save());
+    const auto first =
+      requireProject(sandbox.session->libraryAssetFile(libraryId, model->id));
+    CHECK(std::filesystem::exists(first.parent_path() / "crateT.mdl"));
+    CHECK(std::filesystem::exists(first.parent_path() / "crate01.mdl"));
+    auto changed = modelWithGroups(1);
+    changed.push_back(42);
+    sandbox.write("models/crateT.mdl", changed);
+    sandbox.rescanLibrary();
+    const auto second =
+      requireProject(sandbox.session->libraryAssetFile(libraryId, model->id));
+    CHECK(first != second);
+    CHECK(readProjectFile(second.parent_path() / "crateT.mdl") == changed);
+    CHECK(requireProject(sandbox.session->store().assets()).empty());
+    CHECK_FALSE(sandbox.session->modified());
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, model->id));
+    requireProject(sandbox.session->save());
+    const auto snapshot = requireProject(sandbox.session->assetFile(captured));
+    CHECK(readProjectFile(snapshot.parent_path() / "crateT.mdl") == changed);
+    CHECK(std::filesystem::exists(snapshot.parent_path() / "crate01.mdl"));
+    changed.push_back(43);
+    sandbox.write("models/crateT.mdl", changed);
+    sandbox.rescanLibrary();
+    CHECK(requireProject(sandbox.session->assetFile(captured)) == snapshot);
+    CHECK(readProjectFile(snapshot.parent_path() / "crateT.mdl") != changed);
+    const auto latest =
+      requireProject(sandbox.session->libraryAssetFile(libraryId, model->id));
+    CHECK(readProjectFile(latest.parent_path() / "crateT.mdl") == changed);
+    CHECK_FALSE(sandbox.session->modified());
+  }
+
   SECTION("capturing a model embeds its dependency closure in one transaction")
   {
     sandbox.write("models/crate.mdl", modelWithGroups(3));

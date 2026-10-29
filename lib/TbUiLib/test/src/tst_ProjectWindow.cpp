@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QImage>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -20,16 +21,19 @@
 #include <QThread>
 #include <QTimer>
 #include <QToolButton>
+#include <QtTest/QTest>
 
 #include "mdl/GameManager.h"
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Entities.h"
 #include "ui/AppControllerFixture.h"
+#include "ui/InfoPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ModelBrowserView.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
@@ -244,6 +248,44 @@ TEST_CASE("ProjectWindow")
     CHECK(window.statusBar()->currentMessage().contains("library files changed"));
     CHECK_FALSE(session->modified());
     CHECK(require(library->assets()).empty());
+  }
+
+  SECTION(
+    "catalog models render from isolated files and a missing catalog model never uses "
+    "game files")
+  {
+    const auto file = directory.filePath("catalog.obj");
+    auto output = QSaveFile{file};
+    REQUIRE(output.open(QIODevice::WriteOnly));
+    REQUIRE(output.write("v 0 0 0\nv 8 0 0\nv 0 8 0\nf 1 2 3\n") > 0);
+    REQUIRE(output.commit());
+    alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
+    QApplication::processEvents();
+    auto* browser = alphaWindow->findChild<ModelBrowserView*>();
+    REQUIRE(browser != nullptr);
+    browser->setIncludeDefaultRoots(false);
+    auto asset =
+      BrowserAsset{BrowserCellType::Model, "catalog.obj", pathFromQString(file)};
+    asset.source = BrowserSource::Project;
+    asset.projectId = "preview-project";
+    asset.assetId = "preview-model";
+    browser->setAssets({}, {asset});
+    REQUIRE(QTest::qWaitFor([&]() { return browser->isVisible(); }, 3000));
+    QTest::qWait(100);
+    const auto rendered = browser->grabFramebuffer();
+    REQUIRE_FALSE(rendered.isNull());
+    asset.absolutePath = pathFromQString(directory.filePath("missing/catalog.obj"));
+    browser->setAssets({}, {asset});
+    QApplication::processEvents();
+    const auto missing = browser->grabFramebuffer();
+    REQUIRE_FALSE(missing.isNull());
+    CHECK(rendered != missing);
+    // Switch back after a failed load to exercise retiring model renderers.
+    asset.absolutePath = pathFromQString(file);
+    browser->setAssets({}, {asset});
+    QApplication::processEvents();
+    CHECK(
+      QTest::qWaitFor([&]() { return browser->grabFramebuffer() == rendered; }, 3000));
   }
 
   SECTION("host undo follows the active map")

@@ -42,15 +42,18 @@
 #include "gl/FontDescriptor.h"
 #include "gl/FontManager.h"
 #include "gl/GlInterface.h"
+#include "gl/GlManager.h"
 #include "gl/GlUtils.h"
 #include "gl/MaterialIndexRangeRenderer.h"
 #include "gl/MaterialRenderFunc.h"
 #include "gl/PrimType.h"
+#include "gl/ResourceManager.h"
 #include "gl/Shaders.h"
 #include "gl/TextureFont.h"
 #include "gl/VertexArray.h"
 #include "gl/VertexType.h"
 #include "mdl/BasicShapes.h"
+#include "mdl/EntityModelDataResource.h"
 #include "mdl/EntityModelManager.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/GoldSrcMdlScaler.h"
@@ -58,6 +61,7 @@
 #include "prefs/Preferences.h"
 #include "render/Transformation.h"
 #include "ui/AppController.h"
+#include "ui/CatalogModelPreview.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
 #include "ui/ProjectSession.h"
@@ -236,6 +240,22 @@ void ModelBrowserView::setAssets(
   std::filesystem::path rootFolderPath, std::vector<BrowserAsset> assets)
 {
   m_rootFolderPath = std::move(rootFolderPath);
+  for (auto it = m_catalogModels.begin(); it != m_catalogModels.end();)
+  {
+    const auto previous =
+      std::ranges::find_if(m_assets, [&](const auto& a) { return a.path == it->first; });
+    const auto current =
+      std::ranges::find_if(assets, [&](const auto& a) { return a.path == it->first; });
+    if (
+      previous == m_assets.end() || current == assets.end()
+      || !sameBrowserAssetContent(*previous, *current))
+    {
+      m_retiredCatalogModels.push_back(std::move(it->second));
+      it = m_catalogModels.erase(it);
+    }
+    else
+      ++it;
+  }
   // A newer library revision keeps the same catalog path, so its stale preview has to be
   // dropped explicitly instead of waiting for the path to disappear.
   for (const auto& previous : m_assets)
@@ -347,6 +367,7 @@ void ModelBrowserView::doClear() {}
 void ModelBrowserView::doRender(
   gl::Gl& gl, Layout& layout, const float y, const float height)
 {
+  m_retiredCatalogModels.clear();
   deletePendingSpritePreviewTextures(gl);
   loadMissingVisiblePreviews(layout, y, height);
 
@@ -1452,19 +1473,55 @@ void ModelBrowserView::renderModels(
             {
               continue;
             }
-            const auto& modelPath = item.path;
-            const auto spec = mdl::ModelSpecification{modelPath, 0, 0};
-            auto* modelRenderer = entityModelManager.renderer(spec);
+            auto* manager = &entityModelManager;
+            auto spec = mdl::ModelSpecification{item.path, 0, 0};
+            if (const auto* asset = assetAt(item.path);
+                asset && asset->source != BrowserSource::GameFiles)
+            {
+              if (!asset->absolutePath.is_absolute())
+              {
+                m_assetPreviews[item.path] = {
+                  AssetPreviewStatus::Error,
+                  std::nullopt,
+                  {},
+                  "The catalog model preview file is unavailable."};
+                continue;
+              }
+              auto& preview = m_catalogModels[item.path];
+              if (!preview)
+                preview = std::make_unique<CatalogModelPreview>(
+                  asset->absolutePath,
+                  m_document.map().gameInfo(),
+                  [this](auto loader) {
+                    auto resource = gl::createResourceSync(std::move(loader));
+                    m_appController.glManager().resourceManager().addResource(resource);
+                    return resource;
+                  },
+                  m_document.logger(),
+                  asset->path);
+              manager = &preview->models();
+              spec = preview->specification();
+            }
+            manager->prepare(gl, vboManager());
+            auto* modelRenderer = manager->renderer(spec);
             if (!modelRenderer)
             {
+              if (manager != &entityModelManager)
+                m_assetPreviews[item.path] = {
+                  AssetPreviewStatus::Error,
+                  std::nullopt,
+                  {},
+                  "The catalog model could not be decoded."};
               continue;
             }
+            if (manager != &entityModelManager)
+              m_assetPreviews[item.path] = {AssetPreviewStatus::Ready};
             modelRenderer->prepare(gl, vboManager());
 
             shader.set("Orientation", int(mdl::Orientation::Oriented));
 
             auto bounds = vm::bbox3f{8.0f};
-            if (const auto* frame = entityModelManager.frame(spec))
+            if (const auto* frame = manager->frame(spec))
             {
               bounds = frame->bounds();
             }

@@ -33,6 +33,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
@@ -62,6 +63,7 @@ namespace tb::ui
 
 class AppController;
 class MapDocument;
+class CatalogModelPreview;
 
 LayoutBounds soundPreviewButtonBounds(const LayoutBounds& itemBounds);
 bool soundPreviewButtonHitTest(const LayoutBounds& itemBounds, float x, float y);
@@ -88,6 +90,8 @@ private:
   QImage m_folderIconImage;
   GLuint m_folderIconTextureId = 0;
   AssetPreviewMap m_assetPreviews;
+  std::map<std::filesystem::path, std::unique_ptr<CatalogModelPreview>> m_catalogModels;
+  std::vector<std::unique_ptr<CatalogModelPreview>> m_retiredCatalogModels;
   struct SpritePreviewTexture
   {
     GLuint textureId = 0;

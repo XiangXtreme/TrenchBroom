@@ -311,6 +311,61 @@ Result<project::Asset> ProjectSession::moveAsset(
 }
 Result<std::filesystem::path> ProjectSession::assetFile(const project::Asset& asset) const
 {
+  if (asset.type == project::AssetType::Model)
+  {
+    auto closure = std::map<std::string, project::Asset>{{asset.id, asset}};
+    auto pending = std::vector<std::string>{asset.id};
+    while (!pending.empty())
+    {
+      const auto id = pending.back();
+      pending.pop_back();
+      const auto edges = m_store->dependencies(id);
+      if (edges.is_error())
+        return std::get<Error>(edges.error());
+      for (const auto& edge : edges.value())
+      {
+        if (closure.contains(edge.dependencyId))
+          continue;
+        const auto dependency = m_store->findAsset(edge.dependencyId);
+        if (dependency.is_error())
+          return std::get<Error>(dependency.error());
+        if (!dependency.value())
+          return Error{"Project model preview dependency is missing."};
+        closure.emplace(edge.dependencyId, *dependency.value());
+        pending.push_back(edge.dependencyId);
+      }
+    }
+    auto signature = QByteArray{};
+    for (const auto& [id, dependency] : closure)
+      signature += QByteArray::fromStdString(
+        id + ":" + std::to_string(dependency.revision) + ":" + dependency.publishPath
+        + "\n");
+    const auto digest =
+      QCryptographicHash::hash(signature, QCryptographicHash::Sha256).toHex();
+    const auto root = pathFromQString(m_workspace.path()) / "project-model-preview"
+                      / asset.id / digest.toStdString();
+    for (const auto& [id, dependency] : closure)
+    {
+      const auto relative =
+        pathFromQString(QString::fromStdString(dependency.publishPath));
+      if (relative.empty() || relative.has_root_path())
+        return Error{"Invalid model preview path."};
+      for (const auto& part : relative)
+        if (part == "..")
+          return Error{"Invalid model preview path."};
+      const auto destination = root / relative;
+      if (QFile::exists(pathAsQString(destination)))
+        continue;
+      const auto bytes =
+        m_store->readAsset(id, project::ContentKind::Compatible, dependency.revision);
+      if (bytes.is_error())
+        return std::get<Error>(bytes.error());
+      const auto written = writeBytes(destination, bytes.value());
+      if (written.is_error())
+        return std::get<Error>(written.error());
+    }
+    return root / pathFromQString(QString::fromStdString(asset.publishPath));
+  }
   // Per-project session + stable ID + immutable revision isolate preview caches.
   const auto path =
     pathFromQString(m_workspace.path()) / "assets" / asset.id
@@ -1238,6 +1293,58 @@ Result<std::filesystem::path> ProjectSession::libraryAssetFile(
     return Error{"Asset library resource not found."};
 
   const auto& entry = *asset.value();
+  if (entry.type == project::AssetType::Model)
+  {
+    auto closure = std::map<std::string, project::LibraryAsset>{};
+    auto pending = std::vector<std::string>{libraryAssetId};
+    while (!pending.empty())
+    {
+      const auto id = pending.back();
+      pending.pop_back();
+      if (closure.contains(id))
+        continue;
+      const auto current = library.value()->findAsset(id);
+      if (current.is_error())
+        return std::get<Error>(current.error());
+      if (!current.value())
+        return Error{"Model preview dependency is missing."};
+      closure.emplace(id, *current.value());
+      const auto edges = library.value()->dependencies(id);
+      if (edges.is_error())
+        return std::get<Error>(edges.error());
+      for (const auto& edge : edges.value())
+        pending.push_back(edge.dependencyId);
+    }
+    auto signature = QByteArray{};
+    for (const auto& [id, dependency] : closure)
+      signature += QByteArray::fromStdString(
+        id + ":" + std::to_string(dependency.revision) + ":" + dependency.virtualPath
+        + "\n");
+    const auto digest =
+      QCryptographicHash::hash(signature, QCryptographicHash::Sha256).toHex();
+    const auto root = pathFromQString(m_workspace.path()) / "library-model-preview"
+                      / libraryId / libraryAssetId / digest.toStdString();
+    for (const auto& [id, dependency] : closure)
+    {
+      const auto relative =
+        pathFromQString(QString::fromStdString(dependency.virtualPath));
+      if (relative.empty() || relative.has_root_path())
+        return Error{"Invalid model preview path."};
+      for (const auto& part : relative)
+        if (part == "..")
+          return Error{"Invalid model preview path."};
+      const auto destination = root / relative;
+      if (QFile::exists(pathAsQString(destination)))
+        continue;
+      const auto bytes = library.value()->readContent(id, dependency.revision);
+      if (bytes.is_error())
+        return std::get<Error>(bytes.error());
+      const auto written = writeBytes(destination, bytes.value());
+      if (written.is_error())
+        return std::get<Error>(written.error());
+    }
+    return root / pathFromQString(QString::fromStdString(entry.virtualPath));
+  }
   const auto extension =
     entry.type == project::AssetType::Texture
       ? std::string{".wad"}
