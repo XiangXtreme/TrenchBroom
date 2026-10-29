@@ -621,18 +621,75 @@ TEST_CASE("ProjectSession")
       requireProject(
         session->store().readAsset(mapAsset.id, project::ContentKind::Compatible))
       == before);
+  }
 
-    // Textures are referenced by the name inside their WAD, not by a game path.
-    const auto texture = requireProject(session->importAsset(project::AssetImport{
-      project::AssetType::Texture,
-      "textures/WALL01.wad",
-      "WALL01",
-      "",
-      {1},
-      {1},
-      "",
-      {}}));
-    CHECK(session->renamePublishPath(texture.id, "textures/WALL02.wad").is_error());
+  SECTION("renames a texture and rewrites map materials")
+  {
+    const auto converted = requireProject(img::convertGoldSrcTexture(
+      {16, 16, std::vector<unsigned char>(16 * 16 * 4, 255)}, "OLD01"));
+    auto textureInput = project::AssetImport{};
+    textureInput.type = project::AssetType::Texture;
+    textureInput.virtualPath = "textures/OLD01.wad";
+    textureInput.displayName = "OLD01";
+    textureInput.original = {9, 9, 9};
+    textureInput.compatible = converted.wad;
+    const auto texture = requireProject(session->importAsset(textureInput));
+
+    auto mapStream = std::ostringstream{};
+    mdl::writeMapHeader(mapStream, "Half-Life", mdl::MapFormat::Standard, "Test");
+    mapStream << "{\n"
+                 "\"classname\" \"worldspawn\"\n"
+                 "{\n"
+                 "( 0 0 0 ) ( 64 0 0 ) ( 0 64 0 ) OLD01 0 0 0 1 1\n"
+                 "}\n"
+                 "}\n";
+    const auto mapText = mapStream.str();
+    auto mapInput = project::AssetImport{};
+    mapInput.type = project::AssetType::Map;
+    mapInput.virtualPath = "maps/faces.map";
+    mapInput.displayName = "faces";
+    mapInput.original.assign(mapText.begin(), mapText.end());
+    mapInput.compatible = mapInput.original;
+    const auto mapAsset = requireProject(session->importAsset(mapInput));
+
+    const auto renamed =
+      requireProject(session->renamePublishPath(texture.id, "textures/NEW02.wad"));
+    CHECK(renamed.asset.publishPath == "textures/NEW02.wad");
+    CHECK(renamed.mapsChanged == 1);
+    CHECK(renamed.referencesChanged == 1);
+
+    const auto bytes = requireProject(
+      session->store().readAsset(mapAsset.id, project::ContentKind::Compatible));
+    const auto text = std::string(bytes.begin(), bytes.end());
+    CHECK(text.find(" OLD01 ") == std::string::npos);
+    CHECK(text.find(" NEW02 ") != std::string::npos);
+
+    const auto wadBytes = requireProject(
+      session->store().readAsset(texture.id, project::ContentKind::Compatible));
+    const auto archive = requireProject(project::readGoldSrcWad(wadBytes));
+    REQUIRE(archive.textures.size() == 1);
+    CHECK(archive.textures.front().name == "NEW02");
+
+    const auto audit = requireProject(auditGoldSrcProjectResources(*session));
+    const auto use = std::ranges::find_if(
+      audit.uses, [](const auto& candidate) { return candidate.reference == "NEW02"; });
+    REQUIRE(use != audit.uses.end());
+    CHECK(use->status == ProjectResourceStatus::Embedded);
+
+    // A WAD with more than one texture cannot pick which name to rename.
+    const auto other = requireProject(img::convertGoldSrcTexture(
+      {16, 16, std::vector<unsigned char>(16 * 16 * 4, 255)}, "OTHER"));
+    const auto firstArchive = requireProject(project::readGoldSrcWad(converted.wad));
+    const auto otherArchive = requireProject(project::readGoldSrcWad(other.wad));
+    const auto combined = requireProject(project::buildGoldSrcWad(
+      {firstArchive.textures.front().miptex, otherArchive.textures.front().miptex}));
+    auto combinedInput = textureInput;
+    combinedInput.virtualPath = "textures/COMBINED.wad";
+    combinedInput.displayName = "COMBINED";
+    combinedInput.compatible = combined;
+    const auto combinedAsset = requireProject(session->importAsset(combinedInput));
+    CHECK(
+      session->renamePublishPath(combinedAsset.id, "textures/COMBINED2.wad").is_error());
   }
 }
 

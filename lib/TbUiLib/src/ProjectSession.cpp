@@ -1575,6 +1575,85 @@ std::size_t replaceQuotedValue(
   }
   return replaced;
 }
+
+// Replaces the material token of brush faces and Valve patches, which MAP stores
+// unquoted. A face carries exactly three plane points before its material; a patch puts
+// the material on its own line followed by numeric attributes.
+std::size_t replaceFaceMaterial(
+  std::string& text, const std::string& from, const std::string& to)
+{
+  const auto key = normalizedProjectPath(from);
+  const auto material = [&](const std::string& token) {
+    return normalizedProjectPath(token) == key;
+  };
+  const auto numericAttributes = [](const std::string& attributes) {
+    return !attributes.empty()
+           && std::all_of(attributes.begin(), attributes.end(), [](const char c) {
+                return std::isspace(static_cast<unsigned char>(c)) || std::isdigit(c)
+                       || c == '.' || c == '-' || c == '+';
+              });
+  };
+
+  auto replaced = std::size_t{0};
+  auto lineStart = std::size_t{0};
+  while (lineStart < text.size())
+  {
+    auto lineEnd = text.find('\n', lineStart);
+    if (lineEnd == std::string::npos)
+      lineEnd = text.size();
+    auto line = text.substr(lineStart, lineEnd - lineStart);
+    const auto nextLine = lineEnd + 1;
+
+    auto tokenStart = std::string::npos;
+    auto tokenLength = std::size_t{0};
+    auto closings = std::size_t{0};
+    for (auto index = std::size_t{0}; index < line.size(); ++index)
+      if (line[index] == ')' && ++closings == 3)
+      {
+        const auto start = line.find_first_not_of(" \t", index + 1);
+        if (start != std::string::npos)
+        {
+          const auto end = line.find_first_of(" \t", start);
+          const auto length = (end == std::string::npos ? line.size() : end) - start;
+          if (material(line.substr(start, length)))
+          {
+            tokenStart = start;
+            tokenLength = length;
+          }
+        }
+        break;
+      }
+
+    if (tokenStart == std::string::npos)
+    {
+      const auto start = line.find_first_not_of(" \t");
+      if (
+        start != std::string::npos && line[start] != '"' && line[start] != '('
+        && line[start] != '{' && line[start] != '}')
+      {
+        const auto end = line.find_first_of(" \t", start);
+        if (end != std::string::npos)
+        {
+          const auto token = line.substr(start, end - start);
+          if (material(token) && numericAttributes(line.substr(end)))
+          {
+            tokenStart = start;
+            tokenLength = end - start;
+          }
+        }
+      }
+    }
+
+    if (tokenStart != std::string::npos)
+    {
+      line.replace(tokenStart, tokenLength, to);
+      text.replace(lineStart, lineEnd - lineStart, line);
+      ++replaced;
+    }
+    lineStart = nextLine;
+  }
+  return replaced;
+}
 } // namespace
 
 Result<std::vector<CaptureConflict>> ProjectSession::captureConflicts(
@@ -1744,19 +1823,69 @@ Result<ProjectSession::PublishRename> ProjectSession::renamePublishPath(
     return Error{"Project asset not found."};
 
   const auto& current = *asset.value();
+  const auto isTexture = current.type == project::AssetType::Texture;
   if (
-    current.type != project::AssetType::Model
+    !isTexture && current.type != project::AssetType::Model
     && current.type != project::AssetType::Sprite
     && current.type != project::AssetType::Sound)
     return Error{
-      "Only models, sprites and sounds can be renamed by game path. A texture is "
-      "referenced by the name stored inside its WAD."};
+      "Published paths can be renamed for textures, models, sprites and sounds."};
 
   auto normalized = newPath;
   std::ranges::replace(normalized, '\\', '/');
-  const auto root = std::string{publishRoot(current.type)};
-  if (!(normalized == root || normalized.starts_with(root + "/")))
-    return Error{"The new path must stay under '" + root + "/'."};
+
+  // A texture is published as textures/<name>.wad, and the name inside the WAD is what
+  // maps reference, so renaming has to rewrite the miptex too.
+  auto oldTextureName = std::string{};
+  auto newTextureName = std::string{};
+  auto oldTextureWad = std::vector<std::uint8_t>{};
+  auto newTextureWad = std::vector<std::uint8_t>{};
+  auto oldOriginals = std::vector<std::uint8_t>{};
+  if (isTexture)
+  {
+    if (!normalized.starts_with("textures/") || !normalized.ends_with(".wad"))
+      return Error{"A texture publishes as 'textures/<name>.wad'."};
+    auto content = m_store->readAsset(assetId, project::ContentKind::Compatible);
+    if (content.is_error())
+      return std::get<Error>(content.error());
+    oldTextureWad = content.value();
+    const auto archive = project::readGoldSrcWad(oldTextureWad);
+    if (archive.is_error())
+      return std::get<Error>(archive.error());
+    if (archive.value().textures.size() != 1)
+      return Error{
+        "Renaming a texture requires a single-texture WAD. Split '" + current.virtualPath
+        + "' into one texture per asset first."};
+    const auto& entry = archive.value().textures.front();
+    if (!entry.valid || entry.name.empty())
+      return Error{"The texture WAD does not contain a readable miptex name."};
+    oldTextureName = entry.name;
+    if (entry.miptex.size() < 40)
+      return Error{"The texture lump is too small to rename."};
+
+    newTextureName =
+      goldSrcTextureName(stemOf(normalized), oldTextureName.front() == '{');
+    auto miptex = entry.miptex;
+    // The miptex lump starts with its 16-byte name; width follows at offset 16.
+    std::fill(miptex.begin(), miptex.begin() + 16, std::uint8_t{0});
+    std::copy(newTextureName.begin(), newTextureName.end(), miptex.begin());
+    auto wad = project::buildGoldSrcWad({miptex});
+    if (wad.is_error())
+      return std::get<Error>(wad.error());
+    newTextureWad = wad.value();
+
+    const auto original = m_store->readAsset(assetId, project::ContentKind::Original);
+    if (original.is_error())
+      return std::get<Error>(original.error());
+    oldOriginals = original.value();
+  }
+  else
+  {
+    const auto root = std::string{publishRoot(current.type)};
+    if (!(normalized == root || normalized.starts_with(root + "/")))
+      return Error{"The new path must stay under '" + root + "/'."};
+  }
+
   if (normalized == current.publishPath)
   {
     auto unchanged = PublishRename{};
@@ -1780,16 +1909,16 @@ Result<ProjectSession::PublishRename> ProjectSession::renamePublishPath(
       return Error{
         "Close the map '" + other.displayName + "' before renaming a published path."};
 
-  // Sounds are referenced relative to sound/, everything else by its full game path.
+  // Sounds are referenced relative to sound/, everything else by the name maps store.
   const auto mapForm = [&](const std::string& path) {
     return current.type == project::AssetType::Sound && path.starts_with("sound/")
              ? path.substr(std::string{"sound/"}.size())
              : path;
   };
-  const auto from = mapForm(current.publishPath);
+  const auto from = isTexture ? oldTextureName : mapForm(current.publishPath);
+  const auto to = isTexture ? newTextureName : mapForm(normalized);
   if (from.empty())
     return Error{"The asset has no published path yet."};
-  const auto to = mapForm(normalized);
 
   const auto saved = checkpoint(
     "Before publish rename "
@@ -1820,7 +1949,9 @@ Result<ProjectSession::PublishRename> ProjectSession::renamePublishPath(
       return std::get<Error>(content.error());
     const auto originalText = std::string{content.value().begin(), content.value().end()};
     auto text = originalText;
-    const auto replaced = replaceQuotedValue(text, from, to);
+    auto replaced = replaceQuotedValue(text, from, to);
+    if (isTexture)
+      replaced += replaceFaceMaterial(text, from, to);
     if (replaced == 0)
       continue;
     if (const auto written = writeMapText(map, text); written.is_error())
@@ -1830,13 +1961,39 @@ Result<ProjectSession::PublishRename> ProjectSession::renamePublishPath(
     result.referencesChanged += replaced;
   }
 
-  const auto published = m_store->setPublishPath(assetId, normalized);
-  if (published.is_error())
-  {
-    // A rejected path must leave every map as it was.
+  const auto restoreMaps = [&] {
     for (const auto& [mapId, text] : rewritten)
       if (const auto map = m_store->findAsset(mapId); map.is_success() && map.value())
         writeMapText(*map.value(), text);
+  };
+  const auto writeAssetContent = [&](
+                                   const std::vector<std::uint8_t>& original,
+                                   const std::vector<std::uint8_t>& compatible) {
+    auto import = project::AssetImport{};
+    import.type = current.type;
+    import.sourceName = current.sourceName;
+    import.conversionRecipe = current.conversionRecipe;
+    import.library = current.library;
+    import.original = original;
+    import.compatible = compatible;
+    return m_store->updateAssets({project::AssetUpdate{assetId, std::move(import)}});
+  };
+
+  if (isTexture)
+    if (const auto written = writeAssetContent(oldOriginals, newTextureWad);
+        written.is_error())
+    {
+      restoreMaps();
+      return std::get<Error>(written.error());
+    }
+
+  const auto published = m_store->setPublishPath(assetId, normalized);
+  if (published.is_error())
+  {
+    // A rejected path must leave every map and the texture content as they were.
+    restoreMaps();
+    if (isTexture)
+      writeAssetContent(oldOriginals, oldTextureWad);
     return std::get<Error>(published.error());
   }
 

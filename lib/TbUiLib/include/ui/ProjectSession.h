@@ -144,15 +144,17 @@ public:
     std::string checkpointId;
   };
   /**
-   * Renames the engine-facing path of a model, sprite or sound and rewrites the
-   * references in every stored project map.
+   * Renames the engine-facing path of a resource and rewrites the references in every
+   * stored project map.
    *
    * GoldSrc maps reference sounds relative to `sound/` and other resources by their full
    * game path, so the rewrite uses the exact map form and only touches quoted values
-   * equal to the old form; nothing is guessed. A version is written first, so the rename
-   * can be undone like any other project change. Open maps are rejected: rewriting a
-   * live document needs a dedicated native command, and the stored text would otherwise
-   * be overwritten by the open document's next save.
+   * equal to the old form; nothing is guessed. Textures are referenced by the miptex
+   * name inside their WAD, so they are published as `textures/<name>.wad`, the single
+   * texture lump is renamed, and face materials and patches are rewritten. A version is
+   * written first, so the rename can be undone like any other project change. Open maps
+   * are rejected: rewriting a live document needs a dedicated native command, and the
+   * stored text would otherwise be overwritten by the open document's next save.
    */
   Result<PublishRename> renamePublishPath(
     const std::string& assetId, const std::string& newPath);

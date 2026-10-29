@@ -30,7 +30,7 @@
 | 工程级自动恢复（崩溃后） | 已完成 | `ui/ProjectRecovery`、`ProjectWindow` 定时快照、`AppController::openProject` | `ProjectRecovery` 18 断言、`ProjectWindow` 集成用例 |
 | MCP 工作区上下文（活动地图/显式目标/文档代次） | 已完成 | `MapEditingContext`、`McpInspect` 的 workspace 分页 | `McpWorkspaceContext` 79 断言、`McpPythonExecution` 867 断言 |
 | 图片入库时转换（库内保存兼容纹理） | 已完成 | `AssetLibrary::publishCompatibleContent` + 资产库窗口 **Convert Images…**；捕获直接复用已发布的 WAD | `AssetLibrary` / `LibrarySync` / `ProjectSessionAssetLibrary` 定向用例 |
-| 修改发布名而不破坏地图引用 | **部分完成**：模型/Sprite/声音已支持；纹理待补齐 | 工程格式升到 v3，`publishPath` 独立存储；`ProjectSession::renamePublishPath` 先写安全版本，再重写所有已关闭地图中的引用，最后更新发布路径；Asset 菜单 **Rename Published Path…** | `ProjectStore`（`setPublishPath`、v1→v3 迁移）、`ProjectSession`（地图文本改写、审计变 Embedded、路径冲突回滚、纹理拒绝、打开地图拒绝） |
+| 修改发布名而不破坏地图引用 | 已完成 | 工程格式升到 v3，`publishPath` 独立存储；`ProjectSession::renamePublishPath` 先写安全版本，再重写所有已关闭地图中的引用，最后更新发布路径；纹理会把单纹理 WAD 的 miptex 改名并重写面材质/补丁。Asset 菜单 **Rename Published Path…** | `ProjectStore`（`setPublishPath`、v1→v3 迁移）、`ProjectSession`（路径型引用改写、纹理 miptex 改名与面材质改写、审计变 Embedded、冲突回滚、打开地图/多纹理 WAD 拒绝） |
 | 同名资源跨库冲突的图形化处理 | 已完成 | `ProjectSession::captureConflicts/captureLibraryAssetResolving` + 捕获时的替换确认框（拖放与 Add to Project 共用） | `ProjectSessionAssetLibrary`、`CatalogAssetDrop` 定向用例（报告冲突、取消不变、替换沿用原 ID） |
 | 库目录移动后的重新指向 | 已完成 | `ProjectSession::relocateLibrary` + Library 菜单 **Relink Moved Library…**；校验库身份，已捕获快照不受影响 | `ProjectSessionAssetLibrary` 定向用例（校验同一库、拒绝其他库、保存重开） |
 | 地图引用的库内补捕获（Sprite / WAV / 模型） | 已完成 | `ProjectSession::captureMapReferences` + Project 菜单 **Capture Map Resources…**：按引擎纹理名与游戏路径匹配已关联的库，逐项捕获并报告仍缺失的引用 | `ProjectSessionAssetLibrary` 定向用例（先 Missing，捕获后 Embedded，缺失项进 unresolved） |
@@ -92,9 +92,10 @@
 
 ## 5. 已知限制（与设计文档同步）
 
-- 地图仍以纹理名/发布路径引用资源；模型、Sprite、声音的发布路径可用 **Rename Published Path…**
-  重命名并同步改写已关闭地图中的引用（先写安全版本）。纹理的发布名嵌在 WAD 内容里，改名
-  需要重写 miptex 名称，尚未支持；打开中的地图会被拒绝，避免与未保存编辑互相覆盖。
+- 地图仍以纹理名/发布路径引用资源；模型的发布路径、纹理的 miptex 名都可用
+  **Rename Published Path…** 重命名，命令会先写安全版本并同步改写已关闭地图中的引用。
+  纹理必须是单纹理 WAD（多纹理 WAD 会被拒绝并提示拆分）；打开中的地图也会被拒绝，
+  避免与未保存编辑互相覆盖。
 - 未转换的图片仍在捕获进工程时转换；库内转换后的结果是新的库修订，转换参数目前只能通过重新
   转换来修改。
 - 同名资源跨库冲突会在捕获时弹出替换确认（Replace / Cancel）；工程不会同时保存两个发布名
