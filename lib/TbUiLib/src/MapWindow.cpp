@@ -100,6 +100,7 @@
 #include "ui/Inspector.h"
 #include "ui/LaunchGameEngineDialog.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorView.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
@@ -124,6 +125,7 @@
 #include "ui/ViewUtils.h"
 #include "ui/WadUtils.h"
 #include "ui/WidgetState.h"
+#include "ui/WorkbenchSurface.h"
 #include "ui/python/PythonHandleRegistry.h"
 #include "ui/python/PythonPluginManifest.h"
 #include "ui/python/PythonRuntime.h"
@@ -146,6 +148,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <iterator>
 #include <stdexcept>
 #include <string>
@@ -158,36 +161,6 @@ namespace tb::ui
 namespace
 {
 
-class WorkbenchSurface : public QWidget
-{
-public:
-  WorkbenchSurface(const QString& objectName, QWidget* content)
-  {
-    setObjectName(objectName);
-    setAttribute(Qt::WA_StyledBackground);
-
-    auto* layout = new QVBoxLayout{this};
-    layout->setContentsMargins(1, 1, 1, 1);
-    layout->setSpacing(0);
-    layout->addWidget(content);
-  }
-
-protected:
-  void resizeEvent(QResizeEvent* event) override
-  {
-    QWidget::resizeEvent(event);
-
-    if (window()->isFullScreen())
-    {
-      clearMask();
-      return;
-    }
-
-    auto path = QPainterPath{};
-    path.addRoundedRect(QRectF{rect()}, 8.0, 8.0);
-    setMask(QRegion{path.toFillPolygon().toPolygon()});
-  }
-};
 
 void showModelessDialog(QDialog* dialog)
 {
@@ -526,26 +499,22 @@ void MapWindow::createGui()
   setWindowIconTB(this);
   setWindowTitle("TrenchBroom");
 
-  m_hSplitter = new Splitter{Qt::Horizontal, DrawKnob::No};
-  m_hSplitter->setChildrenCollapsible(false);
-  m_hSplitter->setHandleWidth(4);
-  m_hSplitter->setObjectName("MapWindow_HorizontalSplitter");
+  m_editor = new MapEditorView{m_appController, document()};
+  setCentralWidget(m_editor);
 
-  m_vSplitter = new Splitter{Qt::Vertical, DrawKnob::No};
-  m_vSplitter->setChildrenCollapsible(false);
-  m_vSplitter->setHandleWidth(4);
-  m_vSplitter->setObjectName("MapWindow_VerticalSplitterSplitter");
-
-  m_infoPanel = new InfoPanel{m_appController, document()};
-  m_infoPanel->setObjectName("MapWindow_InfoPanel");
-  m_console = m_infoPanel->console();
-  m_pythonConsole = m_infoPanel->pythonConsole();
-
-  m_mapView = new SwitchableMapViewContainer{m_appController, document()};
+  // The view owns the workbench widgets; the window borrows them to route its commands.
+  m_mapView = m_editor->mapView();
   m_currentMapView = m_mapView->firstMapViewBase();
 
   // SwitchableMapViewContainer should have constructed a MapViewBase
   contract_assert(m_currentMapView);
+
+  m_infoPanel = m_editor->infoPanel();
+  m_inspector = m_editor->inspector();
+  m_hSplitter = m_editor->hSplitter();
+  m_vSplitter = m_editor->vSplitter();
+  m_console = m_infoPanel->console();
+  m_pythonConsole = m_infoPanel->pythonConsole();
 
   m_pythonConsole->setCommandExecutor([this](const std::string& source) {
     PythonScripting::instance().runConsoleCommand(*this, source);
@@ -553,63 +522,6 @@ void MapWindow::createGui()
   m_pythonConsole->setCompletionRootProvider([this](const std::string_view name) {
     return PythonScripting::instance().consoleCompletionRoot(*this, name);
   });
-
-  m_inspector = new Inspector{m_appController, document()};
-  m_inspector->setObjectName("Inspector");
-
-  m_mapView->connectTopWidgets(m_inspector);
-
-  m_mapViewSurface =
-    new WorkbenchSurface{QStringLiteral("MapWindow_EditorSurface"), m_mapView};
-  m_infoPanelSurface =
-    new WorkbenchSurface{QStringLiteral("MapWindow_InfoPanelSurface"), m_infoPanel};
-  m_inspectorSurface =
-    new WorkbenchSurface{QStringLiteral("MapWindow_InspectorSurface"), m_inspector};
-
-  // Add widgets to splitters
-  m_vSplitter->addWidget(m_mapViewSurface);
-  m_vSplitter->addWidget(m_infoPanelSurface);
-
-  m_hSplitter->addWidget(m_vSplitter);
-  m_hSplitter->addWidget(m_inspectorSurface);
-
-  // configure minimum sizes
-  m_mapView->setMinimumSize(100, 100);
-  m_infoPanel->setMinimumSize(100, 100);
-
-  m_vSplitter->setMinimumSize(100, 100);
-  m_inspector->setMinimumSize(350, 100);
-
-  // resize only the map view when the window resizes
-  m_vSplitter->setStretchFactor(0, 1);
-  m_vSplitter->setStretchFactor(1, 0);
-  m_hSplitter->setStretchFactor(0, 1);
-  m_hSplitter->setStretchFactor(1, 0);
-
-  // give most of the space to the map view
-  m_hSplitter->setSizes(QList<int>{1'000'000, 1});
-  m_vSplitter->setSizes(QList<int>{1'000'000, 1});
-
-  auto* windowLayout = new QVBoxLayout{};
-  windowLayout->setContentsMargins(6, 4, 6, 4);
-  windowLayout->addWidget(m_hSplitter);
-
-  // NOTE: you can't set the layout of a QMainWindow, so make another widget to wrap this
-  // layout in
-  auto* layoutWrapper = new QWidget{};
-  layoutWrapper->setObjectName("MapWindow_WorkbenchShell");
-  layoutWrapper->setAttribute(Qt::WA_StyledBackground);
-  layoutWrapper->setLayout(windowLayout);
-
-  setCentralWidget(layoutWrapper);
-
-  restoreWidgetState(m_hSplitter);
-  restoreWidgetState(m_vSplitter);
-  restoreWidgetState(m_inspector);
-  restoreWidgetState(m_infoPanel);
-
-  m_inspectorSurface->setHidden(m_inspector->isHidden());
-  m_infoPanelSurface->setHidden(m_infoPanel->isHidden());
 }
 
 void MapWindow::createToolBar()
@@ -2340,16 +2252,12 @@ void MapWindow::showAll()
 
 void MapWindow::switchToInspectorPage(const InspectorPage page)
 {
-  m_inspectorSurface->show();
-  m_inspector->show();
-  m_inspector->switchToPage(page);
+  m_editor->showInspectorPage(page);
 }
 
 void MapWindow::switchToInfoPanelPage(const InfoPanelPage page)
 {
-  m_infoPanelSurface->show();
-  m_infoPanel->show();
-  m_infoPanel->switchToPage(page);
+  m_editor->showInfoPanelPage(page);
 }
 
 void MapWindow::toggleToolbar()
@@ -2364,26 +2272,22 @@ bool MapWindow::toolbarVisible() const
 
 void MapWindow::toggleInfoPanel()
 {
-  const auto hidden = !m_infoPanelSurface->isHidden();
-  m_infoPanel->setHidden(hidden);
-  m_infoPanelSurface->setHidden(hidden);
+  m_editor->toggleInfoPanel();
 }
 
 bool MapWindow::infoPanelVisible() const
 {
-  return m_infoPanelSurface->isVisible();
+  return m_editor->isInfoPanelVisible();
 }
 
 void MapWindow::toggleInspector()
 {
-  const auto hidden = !m_inspectorSurface->isHidden();
-  m_inspector->setHidden(hidden);
-  m_inspectorSurface->setHidden(hidden);
+  m_editor->toggleInspector();
 }
 
 bool MapWindow::inspectorVisible() const
 {
-  return m_inspectorSurface->isVisible();
+  return m_editor->isInspectorVisible();
 }
 
 void MapWindow::toggleMaximizeCurrentView()

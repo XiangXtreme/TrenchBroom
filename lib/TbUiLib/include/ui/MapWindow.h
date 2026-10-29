@@ -73,6 +73,7 @@ namespace ui
 {
 class Action;
 class AppController;
+class MapEditorView;
 class CompilationDialog;
 class Console;
 class InfoPanel;
@@ -105,6 +106,9 @@ private:
 
   QToolBar* m_toolBar = nullptr;
 
+  MapEditorView* m_editor = nullptr;
+
+  // Borrowed from m_editor: the view owns these widgets.
   QSplitter* m_hSplitter = nullptr;
   QSplitter* m_vSplitter = nullptr;
 

@@ -131,6 +131,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewBase.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewContainer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewToolBox.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MapEditorView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapWindowManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MaterialBrowser.cpp
@@ -261,6 +262,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ViewUtils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/WadUtils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/WelcomeWindow.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/WorkbenchSurface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/WidgetState.cpp
 
   PUBLIC FILE_SET headers TYPE HEADERS
@@ -371,6 +373,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LayerEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LayerListBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LimitedKeySequenceEdit.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapEditorView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapDocumentActionCache.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView.h
@@ -515,6 +518,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ViewUtils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/WadUtils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/WelcomeWindow.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/WorkbenchSurface.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/WidgetState.h
 )
 
