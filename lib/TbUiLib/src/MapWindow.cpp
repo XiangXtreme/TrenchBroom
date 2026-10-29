@@ -99,6 +99,7 @@
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/LaunchGameEngineDialog.h"
+#include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapView2D.h"
@@ -376,10 +377,9 @@ QAction* MapWindow::findAction(const std::filesystem::path& path)
   if (const auto iAction = actionsMap.find(path); iAction != std::end(actionsMap))
   {
     const auto& action = iAction->second;
-    if (const auto iQAction = m_actionMap.find(&action);
-        iQAction != std::end(m_actionMap))
+    if (auto* qAction = m_commands->findAction(action))
     {
-      return iQAction->second;
+      return qAction;
     }
   }
   return nullptr;
@@ -404,11 +404,7 @@ void MapWindow::updateTitleDelayed()
 
 void MapWindow::createMenus()
 {
-  auto createMenuResult = populateMenuBar(
-    m_appController.actionManager(), *menuBar(), m_actionMap, [&](const Action& action) {
-      auto context = ActionExecutionContext{m_appController, this, currentMapViewBase()};
-      action.execute(context);
-    });
+  auto createMenuResult = m_commands->populateMenuBar(*menuBar());
 
   m_recentDocumentsMenu = createMenuResult.recentDocumentsMenu;
   m_undoAction = createMenuResult.undoAction;
@@ -420,28 +416,12 @@ void MapWindow::createMenus()
 
 void MapWindow::updateShortcuts()
 {
-  for (auto [tbAction, qtAction] : m_actionMap)
-  {
-    updateActionKeySequence(*qtAction, *tbAction);
-  }
+  m_commands->updateShortcuts();
 }
 
 void MapWindow::updateActionState()
 {
-  auto context = ActionExecutionContext{m_appController, this, currentMapViewBase()};
-  for (auto [tAction, qAction] : m_actionMap)
-  {
-    if (qAction == m_undoAction || qAction == m_redoAction)
-    {
-      // These are handled specially for performance reasons.
-      continue;
-    }
-    qAction->setEnabled(tAction->enabled(context));
-    if (qAction->isCheckable())
-    {
-      qAction->setChecked(tAction->checked(context));
-    }
-  }
+  m_commands->updateActionState();
 }
 
 void MapWindow::updateActionStateDelayed()
@@ -535,6 +515,10 @@ void MapWindow::createGui()
   m_pythonConsole->setCompletionRootProvider([this](const std::string_view name) {
     return PythonScripting::instance().consoleCompletionRoot(*this, name);
   });
+
+  m_commands = std::make_unique<MapCommandSurface>(m_appController, [this]() {
+    return ActionExecutionContext{m_appController, this, currentMapViewBase()};
+  });
 }
 
 void MapWindow::createToolBar()
@@ -546,11 +530,7 @@ void MapWindow::createToolBar()
   // Keep toolbar icons compact and aligned with the shared application style metric.
   m_toolBar->setIconSize(QSize(20, 20));
 
-  populateToolBar(
-    m_appController.actionManager(), *m_toolBar, m_actionMap, [&](const auto& tbAction) {
-      auto context = ActionExecutionContext{m_appController, this, currentMapViewBase()};
-      tbAction.execute(context);
-    });
+  m_commands->populateToolBar(*m_toolBar);
 }
 
 void MapWindow::updateToolBarWidgets()

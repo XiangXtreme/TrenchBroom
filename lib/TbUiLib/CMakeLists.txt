@@ -120,6 +120,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LayerEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LayerListBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LimitedKeySequenceEdit.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MapCommandSurface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapDocumentActionCache.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapView.cpp
@@ -374,6 +375,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LayerListBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LimitedKeySequenceEdit.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapEditorView.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapCommandSurface.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapDocumentActionCache.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView.h

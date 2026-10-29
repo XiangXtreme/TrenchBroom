@@ -73,6 +73,7 @@ namespace ui
 {
 class Action;
 class AppController;
+class MapCommandSurface;
 class MapEditorView;
 class CompilationDialog;
 class Console;
@@ -140,8 +141,7 @@ private:
   PythonPluginManager m_pythonPluginManager;
 
 private: // shortcuts
-  using ActionMap = std::unordered_map<const Action*, QAction*>;
-  ActionMap m_actionMap;
+  std::unique_ptr<MapCommandSurface> m_commands;
 
 private: // special menu entries
   QMenu* m_recentDocumentsMenu = nullptr;
