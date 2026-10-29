@@ -34,6 +34,8 @@ QString stateText(const project::LibraryUpdateState state)
     return QObject::tr("Deleted or inaccessible in library");
   case project::LibraryUpdateState::LibraryUnavailable:
     return QObject::tr("Asset library unavailable");
+  case project::LibraryUpdateState::DependenciesChanged:
+    return QObject::tr("Dependencies changed in library");
   }
   return {};
 }
@@ -151,8 +153,10 @@ void ProjectLibraryDialog::reload()
        usedIn}};
     item->setData(0, Qt::UserRole, QString::fromStdString(update.projectAssetId));
     item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-    const auto updateable = update.state == project::LibraryUpdateState::NewVersion
-                            && !update.ignored && update.available.has_value();
+    const auto updateable =
+      (update.state == project::LibraryUpdateState::NewVersion
+       || update.state == project::LibraryUpdateState::DependenciesChanged)
+      && !update.ignored && update.available.has_value();
     // Ignored revisions stay visible but unchecked, so "ignore" is a decision the user
     // can revisit, not a silent removal.
     item->setCheckState(0, updateable ? Qt::Checked : Qt::Unchecked);
@@ -165,7 +169,9 @@ void ProjectLibraryDialog::reload()
     }
     if (update.needsAttention())
       ++attention;
-    if (update.state == project::LibraryUpdateState::NewVersion)
+    if (
+      update.state == project::LibraryUpdateState::NewVersion
+      || update.state == project::LibraryUpdateState::DependenciesChanged)
       ++outdated;
   }
 

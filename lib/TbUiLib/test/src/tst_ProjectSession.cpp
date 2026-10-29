@@ -658,6 +658,57 @@ TEST_CASE("ProjectSessionAssetLibrary")
       > 0);
   }
 
+  SECTION("a dependency the library added after capture reports an update")
+  {
+    sandbox.write("models/crate.mdl", modelWithGroups(2));
+    sandbox.write("models/crate01.mdl", modelWithGroups(1));
+    sandbox.write("models/crateT.mdl", modelWithGroups(1));
+    sandbox.write("models/crate02.mdl", modelWithGroups(1));
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto assets = sandbox.libraryAssets();
+    const auto model = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.virtualPath == "models/crate.mdl"; });
+    REQUIRE(model != assets.end());
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, model->id));
+    REQUIRE(
+      requireProject(sandbox.session->store().dependencies(captured.id)).size() == 2);
+
+    // The library starts declaring one more file for the same model. The captured content
+    // is unchanged, so only the graph can reveal that the snapshot is now incomplete.
+    const auto extra = std::ranges::find_if(assets, [](const auto& asset) {
+      return asset.virtualPath == "models/crate02.mdl";
+    });
+    REQUIRE(extra != assets.end());
+    {
+      auto library = requireProject(project::AssetLibrary::open(sandbox.libraryFolder));
+      requireProject(library->addDependency(model->id, extra->id, "model-animation"));
+    }
+    requireProject(sandbox.session->save());
+
+    const auto updates = requireProject(sandbox.session->checkLibraryUpdates());
+    const auto update = std::ranges::find_if(updates, [&](const auto& candidate) {
+      return candidate.projectAssetId == captured.id;
+    });
+    REQUIRE(update != updates.end());
+    CHECK(update->state == project::LibraryUpdateState::DependenciesChanged);
+    CHECK(update->needsAttention());
+
+    requireProject(sandbox.session->updateLibraryAssets({captured.id}));
+    // Updating captures the missing dependency and rewrites the graph; the model's own
+    // revision stays because its content did not change.
+    const auto edges = requireProject(sandbox.session->store().dependencies(captured.id));
+    REQUIRE(edges.size() == 3);
+    CHECK(std::ranges::any_of(edges, [&](const auto& edge) {
+      const auto asset =
+        requireProject(sandbox.session->store().findAsset(edge.dependencyId));
+      return asset && asset->library.libraryAssetId == extra->id;
+    }));
+    CHECK(
+      requireProject(sandbox.session->store().findAsset(captured.id))->revision
+      == captured.revision);
+  }
   SECTION("a failed dependency keeps the project untouched")
   {
     // A skybox whose face cannot be decoded: the group itself converts fine, so only the

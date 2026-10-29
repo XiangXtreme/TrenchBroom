@@ -27,6 +27,8 @@ const char* libraryUpdateStateName(const LibraryUpdateState state)
     return "missing";
   case LibraryUpdateState::LibraryUnavailable:
     return "library-unavailable";
+  case LibraryUpdateState::DependenciesChanged:
+    return "dependencies-changed";
   }
   return "unknown";
 }

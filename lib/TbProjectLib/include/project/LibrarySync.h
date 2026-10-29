@@ -34,6 +34,9 @@ enum class LibraryUpdateState
   Missing,
   // The library folder could not be opened at all.
   LibraryUnavailable,
+  // The captured content is current, but the dependency graph is not: the library added
+  // or removed a companion the snapshot must follow.
+  DependenciesChanged,
 };
 
 const char* libraryUpdateStateName(LibraryUpdateState state);
@@ -68,7 +71,7 @@ struct LibraryUpdate
   bool needsAttention() const
   {
     return !ignored
-           && (state == LibraryUpdateState::NewVersion || state == LibraryUpdateState::Missing || state == LibraryUpdateState::LibraryUnavailable);
+           && (state == LibraryUpdateState::NewVersion || state == LibraryUpdateState::DependenciesChanged || state == LibraryUpdateState::Missing || state == LibraryUpdateState::LibraryUnavailable);
   }
 };
 

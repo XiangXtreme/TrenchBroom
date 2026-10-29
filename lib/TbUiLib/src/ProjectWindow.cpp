@@ -368,6 +368,9 @@ void ProjectWindow::refresh()
       case project::LibraryUpdateState::LibraryUnavailable:
         updateStates[update.projectAssetId] = tr("Library not accessible");
         break;
+      case project::LibraryUpdateState::DependenciesChanged:
+        updateStates[update.projectAssetId] = tr("Library dependencies changed");
+        break;
       }
     }
   }

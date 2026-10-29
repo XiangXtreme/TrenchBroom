@@ -1230,39 +1230,6 @@ Result<std::filesystem::path> ProjectSession::libraryAssetFile(
   return writeBytes(path, compatible.value()) | kdl::transform([&]() { return path; });
 }
 
-Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
-  const bool rescan)
-{
-  const auto linked = m_store->libraryLinkedAssets();
-  if (linked.is_error())
-    return std::get<Error>(linked.error());
-  const auto& assets = linked.value();
-
-  auto states = std::vector<project::LibraryState>{};
-  auto visited = std::vector<std::string>{};
-  for (const auto& asset : assets)
-  {
-    if (std::ranges::find(visited, asset.library.libraryId) != visited.end())
-      continue;
-    visited.push_back(asset.library.libraryId);
-    auto state = libraryState(asset.library.libraryId, rescan);
-    if (state.is_error())
-      return std::get<Error>(state.error());
-    states.push_back(std::move(state).value());
-  }
-
-  auto ignores = std::map<std::string, std::vector<std::string>>{};
-  for (const auto& asset : assets)
-  {
-    auto ignored = m_store->ignoredLibraryUpdates(asset.id);
-    if (ignored.is_error())
-      return std::get<Error>(ignored.error());
-    if (!ignored.value().empty())
-      ignores.emplace(asset.id, std::move(ignored).value());
-  }
-  return project::evaluateLibraryUpdates(assets, states, ignores);
-}
-
 namespace
 {
 // A snapshot is stale when the library content moved on, when a dependency it declares is
@@ -1300,6 +1267,66 @@ Result<bool> snapshotNeedsRefresh(
   return expected.size() != edges.value().size();
 }
 } // namespace
+
+Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
+  const bool rescan)
+{
+  const auto linked = m_store->libraryLinkedAssets();
+  if (linked.is_error())
+    return std::get<Error>(linked.error());
+  const auto& assets = linked.value();
+
+  auto states = std::vector<project::LibraryState>{};
+  auto visited = std::vector<std::string>{};
+  for (const auto& asset : assets)
+  {
+    if (std::ranges::find(visited, asset.library.libraryId) != visited.end())
+      continue;
+    visited.push_back(asset.library.libraryId);
+    auto state = libraryState(asset.library.libraryId, rescan);
+    if (state.is_error())
+      return std::get<Error>(state.error());
+    states.push_back(std::move(state).value());
+  }
+
+  auto ignores = std::map<std::string, std::vector<std::string>>{};
+  for (const auto& asset : assets)
+  {
+    auto ignored = m_store->ignoredLibraryUpdates(asset.id);
+    if (ignored.is_error())
+      return std::get<Error>(ignored.error());
+    if (!ignored.value().empty())
+      ignores.emplace(asset.id, std::move(ignored).value());
+  }
+  auto updates = project::evaluateLibraryUpdates(assets, states, ignores);
+  // Content can be current while the dependency graph is not: the library may have added
+  // or removed a companion the snapshot must follow. That is still an update the user has
+  // to see, so it is promoted here instead of hiding behind "up to date".
+  for (auto& update : updates)
+  {
+    if (update.state != project::LibraryUpdateState::UpToDate)
+      continue;
+    const auto asset = m_store->findAsset(update.projectAssetId);
+    if (asset.is_error() || !asset.value())
+      continue;
+    auto library = openLibrary(update.link.libraryId);
+    if (library.is_error())
+      continue;
+    const auto current = library.value()->findAsset(update.link.libraryAssetId);
+    if (current.is_error() || !current.value() || current.value()->missing)
+      continue;
+    const auto needsRefresh = snapshotNeedsRefresh(
+      *m_store,
+      update.link.libraryId,
+      update.link.libraryAssetId,
+      *asset.value(),
+      *library.value(),
+      *current.value());
+    if (needsRefresh.is_success() && needsRefresh.value())
+      update.state = project::LibraryUpdateState::DependenciesChanged;
+  }
+  return updates;
+}
 
 Result<std::vector<project::Asset>> ProjectSession::updateLibraryAssets(
   const std::vector<std::string>& projectAssetIds)
