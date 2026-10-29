@@ -347,6 +347,102 @@ TEST_CASE("ProjectSession")
     session->unregisterDocument(document);
   }
 
+  SECTION("multi map restore prepares every replacement before changing live state")
+  {
+    auto firstFixture = MapDocumentFixture{};
+    auto secondFixture = MapDocumentFixture{};
+    auto& first = firstFixture.create();
+    auto& second = secondFixture.create();
+    const auto firstPath = path.parent_path() / "first.map";
+    const auto secondPath = path.parent_path() / "second.map";
+    requireProject(first.map().saveAs(firstPath));
+    requireProject(second.map().saveAs(secondPath));
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.displayName = "Map";
+    input.virtualPath = "maps/first.map";
+    input.original = input.compatible = readProjectFile(firstPath);
+    const auto firstAsset = requireProject(session->importAsset(input));
+    input.virtualPath = "maps/second.map";
+    const auto secondAsset = requireProject(session->importAsset(input));
+    requireProject(session->registerDocument(first, firstAsset.id));
+    requireProject(session->registerDocument(second, secondAsset.id));
+    const auto sound = requireProject(session->importAsset(testAsset()));
+    auto store = requireProject(project::ProjectStore::open(session->store().path()));
+    requireProject(store->addDependency(sound.id, firstAsset.id, "map"));
+    const auto valid = requireProject(session->checkpoint("Valid"));
+
+    // The later document in session order fails after the first replacement is ready.
+    const auto badId =
+      std::less<MapDocument*>{}(&first, &second) ? secondAsset.id : firstAsset.id;
+    auto target = valid;
+    auto expectSuccess = false;
+    SECTION("invalid map payload")
+    {
+      input.original = input.compatible = {'n', 'o', 't', ' ', 'a', ' ', 'm', 'a', 'p'};
+      requireProject(store->replaceAsset(badId, input));
+      target = requireProject(session->checkpoint("Invalid payload"));
+    }
+    SECTION("cache file cannot be written")
+    {
+      requireProject(store->moveAsset(badId, "maps/" + std::string(300, 'x') + ".map"));
+      target = requireProject(session->checkpoint("Unwritable cache name"));
+    }
+    SECTION("all maps prepare successfully")
+    {
+      expectSuccess = true;
+    }
+    // Return the live catalog to valid content, with a different dependency graph.
+    requireProject(store->restore(valid.id));
+    requireProject(store->removeAsset(sound.id));
+    store.reset();
+    requireProject(session->save());
+    REQUIRE(mdl::setEntityProperty(first.map(), "message", "First live edit"));
+    REQUIRE(mdl::setEntityProperty(second.map(), "message", "Second live edit"));
+    auto* firstMap = &first.map();
+    auto* secondMap = &second.map();
+    const auto firstCache = readProjectFile(firstPath);
+    const auto secondCache = readProjectFile(secondPath);
+    const auto before = requireProject(session->store().assets());
+    const auto historySize = requireProject(session->store().checkpoints()).size();
+    const auto modified = session->modified();
+    auto loads = 0;
+    auto connection = NotifierConnection{};
+    connection += first.documentWasLoadedNotifier.connect([&]() { ++loads; });
+    connection += second.documentWasLoadedNotifier.connect([&]() { ++loads; });
+    const auto restored = session->restore(target.id);
+    if (expectSuccess)
+    {
+      requireProject(restored);
+      CHECK(loads == 2);
+      CHECK_FALSE(first.map().modified());
+      CHECK_FALSE(second.map().modified());
+      CHECK(requireProject(session->store().dependencies(sound.id)).size() == 1);
+      REQUIRE(mdl::setEntityProperty(first.map(), "message", "New edit"));
+      requireProject(first.map().save());
+      CHECK_FALSE(session->modified());
+    }
+    else
+    {
+      CHECK(restored.is_error());
+      CHECK(loads == 0);
+      CHECK(&first.map() == firstMap);
+      CHECK(&second.map() == secondMap);
+      CHECK(first.map().modified());
+      CHECK(second.map().modified());
+      CHECK(first.map().canUndoCommand());
+      CHECK(second.map().canUndoCommand());
+      CHECK(session->modified() == modified);
+      CHECK(requireProject(session->store().assets()) == before);
+      CHECK(requireProject(session->store().checkpoints()).size() == historySize);
+      CHECK(requireProject(session->store().dependencies(sound.id)).empty());
+      CHECK(readProjectFile(firstPath) == firstCache);
+      CHECK(readProjectFile(secondPath) == secondCache);
+    }
+    session->unregisterDocument(first);
+    session->unregisterDocument(second);
+  }
+
   SECTION("runtime generations retain publish paths and remove restored content")
   {
     const auto asset = requireProject(session->importAsset(testAsset()));

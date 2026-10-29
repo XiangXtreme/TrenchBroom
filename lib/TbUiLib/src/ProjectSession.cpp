@@ -974,37 +974,97 @@ Result<void> ProjectSession::restore(const std::string& id)
         + "; close that map before restoring."};
   }
 
-  auto result = stageMaps() | kdl::and_then([&]() { return m_store->restore(id); })
-                | kdl::and_then([&](const auto& safety) {
-                    return reloadOpenMaps() | kdl::transform([&]() { return safety; });
-                  });
-  if (result.is_success())
-  {
-    // Unstaging here would replace the restored heads with the previous revisions.
-    m_stagedMaps.clear();
-    changed();
-    return {};
-  }
-  if (const auto reset = unstageMaps(); reset.is_error())
-    return std::get<Error>(reset.error());
-  return std::get<Error>(result.error());
-}
-
-Result<void> ProjectSession::reloadOpenMaps()
-{
+  // Prepare everything in a disposable generation. No live store, document, or cache
+  // is changed until every fallible storage, write, and parsing step has succeeded.
+  auto generation = QTemporaryDir{m_workspace.path() + "/restore-XXXXXX"};
+  if (!generation.isValid())
+    return Error{"Cannot create restore preparation directory."};
+  const auto root = pathFromQString(generation.path());
+  if (const auto copied = m_store->saveCopy(root / "project.tbproj"); copied.is_error())
+    return std::get<Error>(copied.error());
+  auto opened = project::ProjectStore::open(root / "project.tbproj");
+  if (opened.is_error())
+    return std::get<Error>(opened.error());
+  auto candidate = std::move(opened).value();
   for (const auto& [document, entry] : m_documents)
   {
-    const auto bytes =
-      m_store->readAsset(entry.assetId, project::ContentKind::Compatible);
+    if (!document->map().modified())
+      continue;
+    const auto previous = candidate->findAsset(entry.assetId);
+    if (previous.is_error())
+      return std::get<Error>(previous.error());
+    if (!previous.value())
+      return Error{"Project map asset is missing."};
+    auto bytes = workingMapContents(entry.assetId);
     if (bytes.is_error())
       return std::get<Error>(bytes.error());
-    if (const auto written = writeBytes(document->map().path(), bytes.value());
-        written.is_error())
-      return written;
-    if (const auto reloaded = document->reload(); reloaded.is_error())
-      return std::get<Error>(reloaded.error());
-    bindDocument(*document);
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.sourceName = previous.value()->sourceName;
+    input.conversionRecipe = previous.value()->conversionRecipe;
+    input.original = input.compatible = std::move(bytes).value();
+    if (const auto replaced = candidate->replaceAsset(entry.assetId, input);
+        replaced.is_error())
+      return std::get<Error>(replaced.error());
   }
+  if (const auto restored = candidate->restore(id); restored.is_error())
+    return std::get<Error>(restored.error());
+
+  auto assets = candidate->assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+  auto runtimeAssets = std::move(assets).value();
+  std::erase_if(runtimeAssets, [](const auto& asset) {
+    return asset.type == project::AssetType::Map
+           || asset.type == project::AssetType::Skybox;
+  });
+  auto runtime = std::make_unique<QTemporaryDir>(m_workspace.path() + "/runtime-XXXXXX");
+  if (!runtime->isValid())
+    return Error{"Cannot create project runtime directory."};
+  for (const auto& asset : runtimeAssets)
+  {
+    const auto bytes = candidate->readAsset(asset.id, project::ContentKind::Compatible);
+    if (bytes.is_error())
+      return std::get<Error>(bytes.error());
+    const auto target = pathFromQString(runtime->path())
+                        / pathFromQString(QString::fromStdString(asset.publishPath));
+    if (const auto written = writeBytes(target, bytes.value()); written.is_error())
+      return written;
+  }
+  auto replacements = std::vector<std::pair<MapDocument*, std::unique_ptr<mdl::Map>>>{};
+  for (const auto& [document, entry] : m_documents)
+  {
+    const auto asset = candidate->findAsset(entry.assetId);
+    if (asset.is_error())
+      return std::get<Error>(asset.error());
+    const auto path =
+      root / "maps" / entry.assetId
+      / pathFromQString(QString::fromStdString(asset.value()->virtualPath)).filename();
+    const auto bytes =
+      candidate->readAsset(entry.assetId, project::ContentKind::Compatible);
+    if (bytes.is_error())
+      return std::get<Error>(bytes.error());
+    if (const auto written = writeBytes(path, bytes.value()); written.is_error())
+      return written;
+    auto replacement = document->prepareReload(path);
+    if (replacement.is_error())
+      return std::get<Error>(replacement.error());
+    replacement.value()->gameFileSystem().setProjectDirectory(
+      pathFromQString(runtime->path()));
+    replacements.emplace_back(document, std::move(replacement).value());
+  }
+
+  generation.setAutoRemove(false); // Owned by the containing session workspace.
+  m_store = std::move(candidate);
+  auto previousRuntime =
+    std::move(m_runtime); // Keep old resources alive during view refresh.
+  m_runtime = std::move(runtime);
+  m_runtimeAssets = std::move(runtimeAssets);
+  m_modified = true;
+  for (auto& [document, replacement] : replacements)
+    document->commitReload(std::move(replacement));
+  emit contentsChanged();
+  emit stateChanged();
   return {};
 }
 

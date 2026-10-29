@@ -38,6 +38,7 @@
 #include "mdl/PushSelection.h"
 #include "mdl/Transaction.h"
 #include "mdl/UpdateLinkedGroupsHelper.h"
+#include "mdl/WorldNode.h"
 #include "mdl/WorldReader.h"
 #include "prefs/Preferences.h"
 #include "render/MapRenderer.h"
@@ -166,6 +167,27 @@ Result<void> MapDocument::reload()
            setMap(std::move(map));
            documentWasLoadedNotifier();
          });
+}
+
+Result<std::unique_ptr<mdl::Map>> MapDocument::prepareReload(
+  const std::filesystem::path& path)
+{
+  return mdl::Map::loadMap(
+    m_map->environmentConfig(),
+    m_map->gameInfo(),
+    m_map->gamePath(),
+    m_map->worldNode().mapFormat(),
+    m_map->worldBounds(),
+    path,
+    *m_taskManager,
+    *m_resourceManager,
+    logger());
+}
+
+void MapDocument::commitReload(std::unique_ptr<mdl::Map> map)
+{
+  setMap(std::move(map));
+  documentWasLoadedNotifier();
 }
 
 void MapDocument::triggerAutosave()

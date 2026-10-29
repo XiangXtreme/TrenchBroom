@@ -206,6 +206,11 @@ public:
 
   Result<void> reload();
 
+  /** Loads a replacement without changing the live map or its undo history. */
+  Result<std::unique_ptr<mdl::Map>> prepareReload(const std::filesystem::path& path);
+  /** Installs a successfully prepared replacement and notifies document observers. */
+  void commitReload(std::unique_ptr<mdl::Map> map);
+
   void triggerAutosave();
 
 private:
