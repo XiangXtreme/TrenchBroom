@@ -3,6 +3,7 @@
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
 #include <QApplication>
+#include <QFile>
 #include <QTemporaryDir>
 #include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
@@ -10,6 +11,7 @@
 #include "gl/PerspectiveCamera.h"
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
+#include "mdl/Map_Entities.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "ui/AppControllerFixture.h"
@@ -75,6 +77,12 @@ const auto CompilationProfiles = R"({
                     "tool": "cmd.exe",
                     "parameters": "/c echo snapshot=${MAP_DIR_PATH} map=${MAP_FULL_NAME} base=${MAP_BASE_NAME}",
                     "treatNonZeroResultCodeAsError": true
+                },
+                {
+                    "type": "export",
+                    "target": "exported.map",
+                    "stripTbProperties": true,
+                    "entityToAdd": [ { "key": "classname", "value": "info_player_start" } ]
                 }
             ]
         }
@@ -93,6 +101,12 @@ const auto CompilationProfiles = R"({
                     "tool": "/bin/echo",
                     "parameters": "snapshot=${MAP_DIR_PATH} map=${MAP_FULL_NAME} base=${MAP_BASE_NAME}",
                     "treatNonZeroResultCodeAsError": true
+                },
+                {
+                    "type": "export",
+                    "target": "exported.map",
+                    "stripTbProperties": true,
+                    "entityToAdd": [ { "key": "classname", "value": "info_player_start" } ]
                 }
             ]
         }
@@ -160,11 +174,17 @@ TEST_CASE("ProjectCompilation")
   mdl::selectAllNodes(document->map());
   mdl::removeSelectedNodes(document->map());
 
+  REQUIRE(mdl::setEntityProperty(document->map(), "message", "Frozen content"));
+  REQUIRE(mdl::setEntityProperty(document->map(), "_tb_compile_test", "Strip me"));
+
   auto camera = gl::PerspectiveCamera{};
   auto dialog = CompilationDialog{appController, *document, camera};
 
   auto started = QSignalSpy{&dialog, &CompilationDialog::compilationProfileStarted};
   REQUIRE(dialog.runProfileByName("Probe"));
+  REQUIRE(dialog.isRunning());
+  // The first task is asynchronous; edit while it is running, before Export Map starts.
+  REQUIRE(mdl::setEntityProperty(document->map(), "message", "Later live edit"));
   REQUIRE(QTest::qWaitFor([&]() { return !dialog.isRunning(); }, 15000));
 
   const auto output = dialog.outputText();
@@ -203,5 +223,32 @@ TEST_CASE("ProjectCompilation")
     return output.mid(start, end - start);
   }();
   CHECK(workDir == snapshotFolder);
+
+  auto exported = QFile{snapshotFolder + "/exported.map"};
+  REQUIRE(exported.open(QIODevice::ReadOnly));
+  const auto bytes = exported.readAll();
+  CHECK(bytes.contains("Frozen content"));
+  CHECK_FALSE(bytes.contains("Later live edit"));
+  CHECK_FALSE(bytes.contains("_tb_compile_test"));
+  CHECK(bytes.contains("info_player_start"));
+  CHECK(document->map().modified());
+
+  SECTION("a later run captures the newer edits")
+  {
+    REQUIRE(dialog.runProfileByName("Probe"));
+    REQUIRE(QTest::qWaitFor([&]() { return !dialog.isRunning(); }, 15000));
+    const auto laterOutput = dialog.outputText();
+    const auto start =
+      laterOutput.indexOf("snapshot=") + int(std::string{"snapshot="}.size());
+    const auto end = laterOutput.indexOf(" map=", start);
+    REQUIRE(end > start);
+    const auto laterFolder = laterOutput.mid(start, end - start);
+    CHECK(laterFolder != snapshotFolder);
+    auto later = QFile{laterFolder + "/exported.map"};
+    REQUIRE(later.open(QIODevice::ReadOnly));
+    const auto laterBytes = later.readAll();
+    CHECK(laterBytes.contains("Later live edit"));
+    CHECK_FALSE(laterBytes.contains("Frozen content"));
+  }
 }
 } // namespace tb::ui

@@ -258,8 +258,15 @@ Result<void> CompilationDialog::runProfile(
   {
     return prepareProjectSnapshot(*project)
            | kdl::and_then([&](const auto& mapPath) -> Result<void> {
-               return test ? m_run.testSnapshot(profile, map, mapPath, m_camera, m_output)
-                           : m_run.runSnapshot(profile, map, mapPath, m_camera, m_output);
+               return m_document.prepareReload(mapPath)
+                      | kdl::and_then([&](auto frozenMap) {
+                          auto snapshot =
+                            std::shared_ptr<const mdl::Map>{std::move(frozenMap)};
+                          return test ? m_run.testSnapshot(
+                                          profile, snapshot, m_camera, m_output)
+                                      : m_run.runSnapshot(
+                                          profile, snapshot, m_camera, m_output);
+                        });
              });
   }
   return test ? m_run.test(profile, map, m_camera, m_output)

@@ -24,6 +24,7 @@
 #include "base/Result.h"
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -72,19 +73,16 @@ public:
   /**
    * Runs the profile against a frozen map file.
    *
-   * `mapPath` is the map the tools see; game, mod and tool variables still come from
-   * `map`, so a project compilation can freeze its input without changing the profile.
+   * The context owns the frozen map for the entire run, including Export Map tasks.
    */
   Result<void> runSnapshot(
     const mdl::CompilationProfile& profile,
-    const mdl::Map& map,
-    const std::filesystem::path& mapPath,
+    std::shared_ptr<const mdl::Map> map,
     const gl::PerspectiveCamera& camera,
     QTextEdit* currentOutput);
   Result<void> testSnapshot(
     const mdl::CompilationProfile& profile,
-    const mdl::Map& map,
-    const std::filesystem::path& mapPath,
+    std::shared_ptr<const mdl::Map> map,
     const gl::PerspectiveCamera& camera,
     QTextEdit* currentOutput);
   void terminate();
@@ -97,7 +95,8 @@ private:
     const gl::PerspectiveCamera& camera,
     QTextEdit* currentOutput,
     bool test,
-    const std::optional<std::filesystem::path>& mapPath);
+    const std::optional<std::filesystem::path>& mapPath,
+    std::shared_ptr<const mdl::Map> snapshot = {});
 
 private:
   Result<std::string> buildWorkDir(

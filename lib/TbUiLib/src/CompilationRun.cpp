@@ -67,22 +67,20 @@ Result<void> CompilationRun::test(
 
 Result<void> CompilationRun::runSnapshot(
   const mdl::CompilationProfile& profile,
-  const mdl::Map& map,
-  const std::filesystem::path& mapPath,
+  std::shared_ptr<const mdl::Map> map,
   const gl::PerspectiveCamera& camera,
   QTextEdit* currentOutput)
 {
-  return run(profile, map, camera, currentOutput, false, mapPath);
+  return run(profile, *map, camera, currentOutput, false, map->path(), map);
 }
 
 Result<void> CompilationRun::testSnapshot(
   const mdl::CompilationProfile& profile,
-  const mdl::Map& map,
-  const std::filesystem::path& mapPath,
+  std::shared_ptr<const mdl::Map> map,
   const gl::PerspectiveCamera& camera,
   QTextEdit* currentOutput)
 {
-  return run(profile, map, camera, currentOutput, true, mapPath);
+  return run(profile, *map, camera, currentOutput, true, map->path(), map);
 }
 
 void CompilationRun::terminate()
@@ -104,7 +102,8 @@ Result<void> CompilationRun::run(
   const gl::PerspectiveCamera& camera,
   QTextEdit* currentOutput,
   const bool test,
-  const std::optional<std::filesystem::path>& mapPath)
+  const std::optional<std::filesystem::path>& mapPath,
+  std::shared_ptr<const mdl::Map> snapshot)
 {
   contract_pre(!profile.tasks.empty());
   contract_pre(currentOutput != nullptr);
@@ -116,7 +115,12 @@ Result<void> CompilationRun::run(
            auto variables =
              CompilationVariables{map, workDir, mapPath.value_or(map.path())};
            auto compilationContext = CompilationContext{
-             map, camera, variables, TextOutputAdapter{currentOutput}, test};
+             map,
+             camera,
+             variables,
+             TextOutputAdapter{currentOutput},
+             test,
+             std::move(snapshot)};
            m_currentRun =
              new CompilationRunner{std::move(compilationContext), profile, this};
            connect(

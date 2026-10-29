@@ -31,8 +31,10 @@ CompilationContext::CompilationContext(
   const gl::PerspectiveCamera& camera,
   const el::VariableStore& variables,
   TextOutputAdapter output,
-  bool test)
-  : m_map{map}
+  bool test,
+  std::shared_ptr<const mdl::Map> snapshot)
+  : m_snapshot{std::move(snapshot)}
+  , m_map{m_snapshot ? *m_snapshot : map}
   , m_camera{camera}
   , m_variables{variables.clone()}
   , m_output{std::move(output)}

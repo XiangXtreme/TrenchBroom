@@ -44,6 +44,7 @@ namespace ui
 class CompilationContext
 {
 private:
+  std::shared_ptr<const mdl::Map> m_snapshot;
   const mdl::Map& m_map;
   const gl::PerspectiveCamera& m_camera;
   std::unique_ptr<el::VariableStore> m_variables;
@@ -57,7 +58,8 @@ public:
     const gl::PerspectiveCamera& camera,
     const el::VariableStore& variables,
     TextOutputAdapter output,
-    bool test);
+    bool test,
+    std::shared_ptr<const mdl::Map> snapshot = {});
 
   const mdl::Map& map() const;
   const gl::PerspectiveCamera& camera() const;
