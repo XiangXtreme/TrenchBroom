@@ -292,9 +292,10 @@ CompilationCopyFilesTaskEditor::CompilationCopyFilesTaskEditor(
 
   m_sourceEditor = new MultiCompletionLineEdit{};
   m_sourceEditor->setFont(Fonts::fixedWidthFont());
-  m_sourceEditor->setToolTip(R"(The file(s) to copy.
+  m_sourceEditor->setToolTip(R"(The file(s) or directory to copy.
 
 Use wildcards (*,?) in the filename to specify more than one file.
+A directory copies all its contents, including subdirectories, into the target.
 Variables are allowed.)");
   setupCompleter(m_sourceEditor);
   formLayout->addRow("Source File Path", m_sourceEditor);
@@ -464,6 +465,7 @@ CompilationDeleteFilesTaskEditor::CompilationDeleteFilesTaskEditor(
   m_targetEditor->setToolTip(R"(The file(s) to delete.
 
 Use wildcards (*,?) in the filename to specify more than one file.
+A directory copies all its contents, including subdirectories, into the target.
 Variables are allowed.)");
   setupCompleter(m_targetEditor);
   formLayout->addRow("File Path", m_targetEditor);

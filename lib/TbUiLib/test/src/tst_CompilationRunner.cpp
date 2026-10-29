@@ -551,6 +551,75 @@ TEST_CASE("CompilationCopyFilesTaskRunner")
     CHECK(testEnvironment.loadFile(expectedTargetPath / sourcePath) == "{}");
   }
 
+  SECTION("directory contents retain nested paths and overwrite existing files")
+  {
+    testEnvironment.createDirectory("resources/models/props");
+    testEnvironment.createDirectory("resources/sound/ambience");
+    testEnvironment.createDirectory("resources/gfx/env");
+    testEnvironment.createDirectory("resources/empty");
+    testEnvironment.createFile("resources/models/props/crate.mdl", "model");
+    testEnvironment.createFile("resources/sound/ambience/wind.wav", "sound");
+    testEnvironment.createFile("resources/gfx/env/desertbk.tga", "sky");
+    testEnvironment.createDirectory("published/models/props");
+    testEnvironment.createFile("published/models/props/crate.mdl", "old");
+    auto task = mdl::CompilationCopyFiles{true, "resources", "published"};
+    auto runner = CompilationCopyFilesTaskRunner{context, task};
+    auto execution = ExecuteTask{runner};
+    REQUIRE(execution.executeAndWait(2s));
+    CHECK(execution.ended);
+    CHECK_FALSE(execution.errored);
+    CHECK(testEnvironment.loadFile("published/models/props/crate.mdl") == "model");
+    CHECK(testEnvironment.loadFile("published/sound/ambience/wind.wav") == "sound");
+    CHECK(testEnvironment.loadFile("published/gfx/env/desertbk.tga") == "sky");
+    CHECK(testEnvironment.directoryExists("published/empty"));
+    CHECK_FALSE(testEnvironment.directoryExists("published/resources"));
+  }
+  SECTION("directory copy reports conflicting target file types")
+  {
+    testEnvironment.createDirectory("resources/nested");
+    testEnvironment.createFile("resources/nested/file", "data");
+    testEnvironment.createDirectory("published/nested/file");
+    auto task = mdl::CompilationCopyFiles{true, "resources", "published"};
+    auto runner = CompilationCopyFilesTaskRunner{context, task};
+    auto execution = ExecuteTask{runner};
+    REQUIRE(execution.executeAndWait(2s));
+    CHECK(execution.errored);
+    CHECK_FALSE(execution.ended);
+    CHECK_FALSE(testEnvironment.fileExists("published/nested/file/file"));
+  }
+  SECTION("directory test runs do not create a target")
+  {
+    testEnvironment.createDirectory("resources/nested");
+    testEnvironment.createFile("resources/nested/file", "data");
+    auto dryContext = CompilationContext{map, camera, variables, outputAdapter, true};
+    auto task = mdl::CompilationCopyFiles{true, "resources", "published"};
+    auto runner = CompilationCopyFilesTaskRunner{dryContext, task};
+    auto execution = ExecuteTask{runner};
+    REQUIRE(execution.executeAndWait(2s));
+    CHECK(execution.ended);
+    CHECK_FALSE(execution.errored);
+    CHECK_FALSE(testEnvironment.directoryExists("published"));
+  }
+  SECTION("overlapping directory copies fail before writing")
+  {
+    testEnvironment.createDirectory("resources");
+    testEnvironment.createFile("resources/file", "data");
+#ifdef _WIN32
+    const auto target =
+      GENERATE("resources", "resources/published", "RESOURCES/published", ".");
+#else
+    const auto target = GENERATE("resources", "resources/published", ".");
+#endif
+    auto task = mdl::CompilationCopyFiles{true, "resources", target};
+    auto runner = CompilationCopyFilesTaskRunner{context, task};
+    auto execution = ExecuteTask{runner};
+    REQUIRE(execution.executeAndWait(2s));
+    CHECK(execution.errored);
+    CHECK_FALSE(execution.ended);
+    CHECK_FALSE(testEnvironment.directoryExists("resources/published"));
+    CHECK(testEnvironment.loadFile("resources/file") == "data");
+  }
+
   SECTION("variable interpolation errors")
   {
     const auto sourcePath =

@@ -83,6 +83,75 @@ auto makeAbsolute(const std::filesystem::path& path, const std::filesystem::path
   return path.is_absolute() ? path : workDir / path;
 }
 
+// A directory source publishes its contents, preserving relative paths below the target.
+Result<void> copyDirectory(
+  CompilationContext& context,
+  const std::filesystem::path& source,
+  const std::filesystem::path& target)
+{
+  auto ec = std::error_code{};
+  const auto sourceRoot = std::filesystem::canonical(source, ec);
+  if (ec)
+    return Error{"Cannot resolve copy source: " + ec.message()};
+  const auto targetRoot = std::filesystem::weakly_canonical(target, ec);
+  if (ec)
+    return Error{"Cannot resolve copy target: " + ec.message()};
+  const auto contains = [](const auto& parent, const auto& child) {
+    auto prefix = QDir::fromNativeSeparators(pathAsQString(parent));
+    const auto path = QDir::fromNativeSeparators(pathAsQString(child));
+    const auto sensitivity =
+      fs::Disk::isCaseSensitive() ? Qt::CaseSensitive : Qt::CaseInsensitive;
+    if (prefix.compare(path, sensitivity) == 0)
+      return true;
+    if (!prefix.endsWith('/'))
+      prefix += '/';
+    return path.startsWith(prefix, sensitivity);
+  };
+  if (contains(sourceRoot, targetRoot) || contains(targetRoot, sourceRoot))
+    return Error{"Directory copy source and target must not overlap."};
+
+  auto directories = std::vector<std::filesystem::path>{targetRoot};
+  auto files = std::vector<std::pair<std::filesystem::path, std::filesystem::path>>{};
+  auto it = std::filesystem::recursive_directory_iterator{sourceRoot, ec};
+  const auto end = std::filesystem::recursive_directory_iterator{};
+  if (ec)
+    return Error{"Cannot read copy source: " + ec.message()};
+  while (it != end)
+  {
+    const auto status = it->symlink_status(ec);
+    if (ec)
+      return Error{"Cannot inspect copy source: " + ec.message()};
+    if (std::filesystem::is_symlink(status))
+      return Error{
+        "Directory copy does not support symbolic links: " + it->path().string()};
+    const auto destination = targetRoot / it->path().lexically_relative(sourceRoot);
+    if (std::filesystem::is_directory(status))
+      directories.push_back(destination);
+    else if (std::filesystem::is_regular_file(status))
+      files.emplace_back(it->path(), destination);
+    else
+      return Error{"Unsupported directory copy entry: " + it->path().string()};
+    it.increment(ec);
+    if (ec)
+      return Error{"Cannot read copy source: " + ec.message()};
+  }
+  context << "#### Copying directory '" << pathAsQString(sourceRoot) << "' to '"
+          << pathAsQString(targetRoot) << "' (" << files.size() << " files)\n";
+  if (context.test())
+    return {};
+  for (const auto& directory : directories)
+    if (const auto created = fs::Disk::createDirectory(directory); created.is_error())
+      return std::get<Error>(created.error());
+  for (const auto& [from, to] : files)
+  {
+    if (fs::Disk::pathInfo(to) == fs::PathInfo::Directory)
+      return Error{"Directory copy target file is a directory: " + to.string()};
+    if (const auto copied = fs::Disk::copyFile(from, to); copied.is_error())
+      return copied;
+  }
+  return {};
+}
+
 } // namespace
 
 CompilationTaskRunner::CompilationTaskRunner(CompilationContext& context)
@@ -195,6 +264,9 @@ void CompilationCopyFilesTaskRunner::doExecute()
           makeAbsolute(kdl::parse_path(interpolatedSource), workDir);
         const auto targetPath =
           makeAbsolute(kdl::parse_path(interpolatedTarget), workDir);
+
+        if (fs::Disk::pathInfo(sourcePath) == fs::PathInfo::Directory)
+          return copyDirectory(m_context, sourcePath, targetPath);
 
         const auto sourceDirPath = sourcePath.parent_path();
         const auto sourcePathMatcher = kdl::logical_and(

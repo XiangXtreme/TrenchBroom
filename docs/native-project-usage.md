@@ -144,6 +144,12 @@ hltools 默认把地图用到的纹理嵌入 BSP，未使用的资源不会进�
 TrenchBroom 一样用复制任务把 `.bsp` 拷到游戏或 mod 目录。需要长期保留的输入请用
 **File → Export Compile Snapshot…** 显式导出。
 
+发布依赖资源可在编译配置末尾添加一个 **Copy Files** 任务：Source 填
+`${MAP_DIR_PATH}/resources`，Target 填游戏或 mod 根目录（例如 `cstrike`）。
+目录来源会把内容按原层级复制到目标，包含 `models/`、`sprites/`、`sound/` 和 `gfx/env/`，
+不额外套一层 `resources/`；已有同名文件会覆盖。`.bsp` 仍单独复制到游戏的 `maps/`。
+文件名通配符仍只匹配来源目录的一层文件。试运行只显示计划，不写入目标目录。
+
 ## 保存与版本
 
 - 地图窗口的 **Save / Ctrl+S** 与工程窗口 **Save Project** 都保存整个工程，包含

@@ -7,10 +7,15 @@
 #include <QFile>
 #include <QImage>
 #include <QTemporaryDir>
+#include <QTextEdit>
+#include <QtTest/QSignalSpy>
 
+#include "TestEnvironment.h"
 #include "gl/MaterialManager.h"
+#include "gl/PerspectiveCamera.h"
 #include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
+#include "mdl/CompilationProfile.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
 #include "mdl/MapHeader.h"
@@ -20,6 +25,9 @@
 #include "project/GoldSrcWad.h"
 #include "project/LibrarySync.h"
 #include "ui/CatalogAssetDrop.h"
+#include "ui/CompilationContext.h"
+#include "ui/CompilationRunner.h"
+#include "ui/CompilationVariables.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 #include "ui/ProjectSession.h"
@@ -1008,6 +1016,107 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto edges = requireProject(sandbox.session->store().dependencies(group.id));
     REQUIRE(edges.size() == 6);
 
+    SECTION("one copy task publishes a portable mixed resource snapshot")
+    {
+      const auto modelBytes =
+        readProjectFile(getFixtureRoot() / "test/publish-model.mdl");
+      const auto spriteBytes =
+        readProjectFile(getFixtureRoot() / "test/publish-sprite.spr");
+      auto soundBytes = std::vector<std::uint8_t>{};
+      const auto text = [&](const std::string& value) {
+        soundBytes.insert(soundBytes.end(), value.begin(), value.end());
+      };
+      const auto integer = [&](const std::uint32_t value, const int count) {
+        for (auto byte = 0; byte < count; ++byte)
+          soundBytes.push_back(std::uint8_t((value >> (byte * 8)) & 255));
+      };
+      // Eight samples of mono unsigned 8-bit PCM at 11025 Hz.
+      text("RIFF");
+      integer(44, 4);
+      text("WAVEfmt ");
+      integer(16, 4);
+      integer(1, 2);
+      integer(1, 2);
+      integer(11025, 4);
+      integer(11025, 4);
+      integer(1, 2);
+      integer(8, 2);
+      text("data");
+      integer(8, 4);
+      soundBytes.insert(soundBytes.end(), 8, 128);
+      const auto import = [&](
+                            const auto type, const std::string& path, const auto& bytes) {
+        auto asset = project::AssetImport{};
+        asset.type = type;
+        asset.virtualPath = path;
+        asset.displayName = path;
+        asset.original = asset.compatible = bytes;
+        return requireProject(sandbox.session->importAsset(asset));
+      };
+      import(project::AssetType::Model, "models/props/crate.mdl", modelBytes);
+      import(project::AssetType::Sprite, "sprites/effects/glow.spr", spriteBytes);
+      const auto sound =
+        import(project::AssetType::Sound, "sound/ambience/wind.wav", soundBytes);
+      auto mixedMap = input;
+      const auto entities = mapText + R"({
+"classname" "cycler"
+"model" "models/props/crate.mdl"
+}
+{
+"classname" "env_sprite"
+"model" "sprites/effects/glow.spr"
+}
+{
+"classname" "ambient_generic"
+"message" "ambience/wind.wav"
+}
+)";
+      mixedMap.original = mixedMap.compatible = {entities.begin(), entities.end()};
+      requireProject(sandbox.session->replaceAsset(map.id, mixedMap));
+      requireProject(sandbox.session->save());
+      sandbox.session.reset();
+      std::filesystem::remove_all(sandbox.libraryFolder);
+      sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+      requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
+      // Updating the live project cannot change the already exported publication input.
+      auto changedSound = project::AssetImport{};
+      changedSound.type = project::AssetType::Sound;
+      changedSound.original = changedSound.compatible = soundBytes;
+      changedSound.original.back() = changedSound.compatible.back() = 129;
+      requireProject(sandbox.session->replaceAsset(sound.id, changedSound));
+
+      auto fixture = MapDocumentFixture{};
+      auto& document = fixture.create();
+      auto camera = gl::PerspectiveCamera{};
+      auto output = QTextEdit{};
+      const auto variables = CompilationVariables{document.map(), folder.string()};
+      auto context = CompilationContext{
+        document.map(), camera, variables, TextOutputAdapter{&output}, false};
+      const auto published = sandbox.root / "game with spaces" / "cstrike";
+      const auto profile = mdl::CompilationProfile{
+        "Publish",
+        folder.string(),
+        {mdl::CompilationCopyFiles{true, "resources", published.string()}}};
+      auto runner = CompilationRunner{std::move(context), profile};
+      auto ended = QSignalSpy{&runner, &CompilationRunner::compilationEnded};
+      runner.execute();
+      REQUIRE(ended.count() == 1);
+      INFO(output.toPlainText().toStdString());
+      CHECK_FALSE(output.toPlainText().contains("failed", Qt::CaseInsensitive));
+      CHECK(readProjectFile(published / "models/props/crate.mdl") == modelBytes);
+      CHECK(readProjectFile(published / "sprites/effects/glow.spr") == spriteBytes);
+      CHECK(readProjectFile(published / "sound/ambience/wind.wav") == soundBytes);
+      for (const auto& entry :
+           std::filesystem::recursive_directory_iterator{folder / "resources"})
+        if (entry.is_regular_file())
+          CHECK(
+            readProjectFile(
+              published / entry.path().lexically_relative(folder / "resources"))
+            == readProjectFile(entry.path()));
+      CHECK_FALSE(std::filesystem::exists(published / "resources"));
+      CHECK_FALSE(std::filesystem::exists(published / "snapshot.txt"));
+      CHECK_FALSE(std::filesystem::exists(published / "map.map"));
+    }
     SECTION("missing face blocks the snapshot")
     {
       auto store =
