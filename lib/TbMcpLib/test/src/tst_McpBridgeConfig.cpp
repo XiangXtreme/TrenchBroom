@@ -1,6 +1,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 
 #include "mcp/McpBridgeConfig.h"
@@ -12,6 +13,24 @@ namespace tb::mcp
 
 TEST_CASE("McpBridgeConfig")
 {
+  SECTION("absolute process config override isolates bridge settings")
+  {
+    const auto previous = qgetenv("TB_MCP_CONFIG_PATH");
+    const auto restore = qScopeGuard([&]() {
+      if (previous.isNull())
+        qunsetenv("TB_MCP_CONFIG_PATH");
+      else
+        qputenv("TB_MCP_CONFIG_PATH", previous);
+    });
+    qunsetenv("TB_MCP_CONFIG_PATH");
+    const auto standard = defaultConfigPath();
+    qputenv("TB_MCP_CONFIG_PATH", "relative.json");
+    CHECK(defaultConfigPath() == standard);
+    auto directory = QTemporaryDir{};
+    const auto isolated = directory.filePath("isolated.json");
+    qputenv("TB_MCP_CONFIG_PATH", isolated.toUtf8());
+    CHECK(defaultConfigPath() == isolated);
+  }
   SECTION("defaults to a disabled loopback bridge")
   {
     const auto config = defaultBridgeConfig();

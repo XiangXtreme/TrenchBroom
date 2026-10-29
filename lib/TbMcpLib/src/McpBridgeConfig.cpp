@@ -111,6 +111,12 @@ QString defaultConfigDirectory()
 
 QString defaultConfigPath()
 {
+  // Test harnesses and side-by-side editor instances can point the bridge at their own
+  // config. Only absolute paths are accepted, so a relative value cannot silently depend
+  // on the process working directory.
+  const auto overridePath = qEnvironmentVariable("TB_MCP_CONFIG_PATH");
+  if (!overridePath.isEmpty() && QFileInfo{overridePath}.isAbsolute())
+    return QDir::cleanPath(overridePath);
   return QDir{defaultConfigDirectory()}.filePath("config.json");
 }
 
