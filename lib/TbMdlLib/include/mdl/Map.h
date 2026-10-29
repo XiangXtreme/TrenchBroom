@@ -97,8 +97,12 @@ class Map
 {
 public:
   static const std::string DefaultDocumentName;
+  /** Process-unique lifetime identity; never reused after reload or destruction. */
+  int identity() const { return m_identity; }
 
 private:
+  static int nextIdentity();
+  const int m_identity = nextIdentity();
   const EnvironmentConfig& m_environmentConfig;
   const GameInfo& m_gameInfo;
   std::filesystem::path m_gamePath;

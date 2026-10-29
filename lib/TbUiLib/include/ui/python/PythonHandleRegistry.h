@@ -20,6 +20,7 @@ private:
 public:
   static PythonHandleRegistry& instance();
 
+  void trackDocument(MapDocument& document);
   size_t documentGeneration(MapDocument* document);
   void invalidateDocument(MapDocument* document);
 

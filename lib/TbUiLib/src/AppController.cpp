@@ -19,6 +19,7 @@
 
 #include "ui/AppController.h"
 
+#include <QApplication>
 #include <QDesktopServices>
 #include <QElapsedTimer>
 #include <QFileDialog>
@@ -65,6 +66,7 @@
 #include "ui/WelcomeWindow.h"
 #include "ui/mcp/McpBridgeServer.h"
 #include "ui/mcp/McpHttpServer.h"
+#include "ui/python/PythonHandleRegistry.h"
 #include "update/QtHttpClient.h"
 #include "update/Updater.h"
 
@@ -518,6 +520,48 @@ bool AppController::openProject(const std::filesystem::path& path)
   m_recentDocuments->updatePath(absolute);
   m_welcomeWindow->close();
   return true;
+}
+
+std::vector<std::shared_ptr<ProjectSession>> AppController::projects() const
+{
+  auto result = std::vector<std::shared_ptr<ProjectSession>>{};
+  for (const auto& window : m_projectWindows)
+    if (window)
+      result.push_back(window->session());
+  return result;
+}
+
+std::vector<MapEditingContext> AppController::mapEditingContexts() const
+{
+  auto result = std::vector<MapEditingContext>{};
+  for (auto* window : m_mapWindowManager->mapWindows())
+    result.push_back({window->documentHandle(), window->project(), window});
+  for (const auto& project : projects())
+    for (const auto& document : project->documents())
+      if (std::none_of(result.begin(), result.end(), [&](const auto& context) {
+            return context.document == document;
+          }))
+        result.push_back({document, project, {}});
+  for (const auto& context : result)
+    PythonHandleRegistry::instance().trackDocument(*context.document);
+  return result;
+}
+
+MapEditingContext AppController::activeMapEditingContext() const
+{
+  const auto contexts = mapEditingContexts();
+  if (auto* projectWindow = dynamic_cast<ProjectWindow*>(QApplication::activeWindow()))
+  {
+    const auto* active = projectWindow->activeMapWindow();
+    for (const auto& context : contexts)
+      if (active && context.view == active)
+        return context;
+    return {};
+  }
+  for (const auto& context : contexts)
+    if (context.view)
+      return context;
+  return {};
 }
 
 std::shared_ptr<ProjectSession> AppController::projectFor(

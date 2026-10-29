@@ -16,7 +16,6 @@
 #include "ui/MapViewBase.h"
 #include "ui/MapViewport.h"
 #include "ui/MapWindow.h"
-#include "ui/MapWindowManager.h"
 
 namespace tb::ui
 {
@@ -52,13 +51,17 @@ bool hasVisiblePixels(const QImage& image)
 } // namespace
 
 McpBridgeToolResult viewportCaptureCurrentResult(
-  AppController& appController, const QJsonObject& params)
+  AppController& appController,
+  const QJsonObject& params,
+  const MapEditingContext* target)
 {
-  auto* mapWindow = appController.mapWindowManager().topMapWindow();
-  if (mapWindow == nullptr || mapWindow->currentMapViewBase() == nullptr)
-  {
+  const auto context = target ? *target : appController.activeMapEditingContext();
+  auto* mapWindow = context.view.data();
+  if (!context.document)
     return noActiveDocumentFailure();
-  }
+  if (!mapWindow || !mapWindow->isVisible() || !mapWindow->currentMapViewBase())
+    return invalidParamsFailure(
+      "Target document has no visible viewport; open its map tab before capture.");
 
   const auto path = capturePath(params);
   const auto info = QFileInfo{path};
@@ -93,6 +96,7 @@ McpBridgeToolResult viewportCaptureCurrentResult(
       mcp::McpErrorCode::InternalError, "Saved viewport capture is not readable");
   }
   return McpBridgeToolResult::success(QJsonObject{
+    {"document", editingDocumentJson(context)},
     {"path", info.absoluteFilePath()},
     {"format", "png"},
     {"width", saved.width()},

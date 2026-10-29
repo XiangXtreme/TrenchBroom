@@ -33,6 +33,15 @@ QJsonObject integerProperty(const QString& description)
   return QJsonObject{{"type", "integer"}, {"description", description}};
 }
 
+QJsonObject targetSchema()
+{
+  return objectSchema({
+    {"fingerprint", stringProperty("Loaded document fingerprint.")},
+    {"projectId", stringProperty("Project identity; requires mapId.")},
+    {"mapId", stringProperty("Loaded project map asset identity; requires projectId.")},
+  });
+}
+
 QJsonObject documentSchema()
 {
   return objectSchema(
@@ -55,12 +64,14 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
       McpMode::ReadOnly,
       false,
       objectSchema({
-        {"view", stringProperty("status, document, map, selection, or problems.")},
+        {"target", targetSchema()},
+        {"view",
+         stringProperty("status, document, map, selection, problems, or workspace.")},
         {"detail", stringProperty("problems: summary (default) or paginated issues.")},
         {"limit",
-         integerProperty(
-           "problems issues page size 1..100, default 20; at most 16 KiB.")},
-        {"offset", integerProperty("problems issues offset; continue with nextOffset.")},
+         integerProperty("problems: 1..100 (20). workspace: 1..50 (8). At most 16 KiB.")},
+        {"offset",
+         integerProperty("problems/workspace offset; continue with nextOffset.")},
         {"includeHidden",
          QJsonObject{
            {"type", "boolean"},
@@ -122,8 +133,9 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
            stringProperty(
              "transaction (default) or action for lifecycle/history actions.")},
           {"document", documentSchema()},
+          {"target", targetSchema()},
         },
-        {"executionId", "document"}),
+        {"executionId"}),
       McpToolCostClass::Long,
     },
     {
@@ -132,7 +144,9 @@ const std::vector<McpToolDefinition>& defaultToolCatalog()
       "path.",
       McpMode::ReadOnly,
       false,
-      objectSchema({{"path", stringProperty("Optional absolute PNG output path.")}}),
+      objectSchema(
+        {{"path", stringProperty("Optional absolute PNG output path.")},
+         {"target", targetSchema()}}),
       McpToolCostClass::Normal,
     },
   };

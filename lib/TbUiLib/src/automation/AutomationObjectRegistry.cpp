@@ -21,58 +21,33 @@
 
 #include <QHash>
 
+#include "base/Uuid.h"
 #include "mdl/GameInfo.h"
 #include "mdl/Map.h"
 #include "mdl/Node.h"
 #include "ui/QPathUtils.h"
+#include "ui/python/PythonHandleRegistry.h"
 
 namespace tb::ui::automation
 {
 
 int AutomationObjectRegistry::documentEpoch(mdl::Map& map) const
 {
-  const auto mapAddress = reinterpret_cast<quintptr>(&map);
-  const auto worldAddress = reinterpret_cast<quintptr>(&map.worldNode());
-  if (m_currentMapAddress == 0)
-  {
-    m_currentMapAddress = mapAddress;
-    m_currentWorldAddress = worldAddress;
-  }
-  else if (m_currentMapAddress != mapAddress || m_currentWorldAddress != worldAddress)
-  {
-    ++m_documentEpoch;
-    m_nextSequence = 1;
-    m_nodeIds.clear();
-    m_currentMapAddress = mapAddress;
-    m_currentWorldAddress = worldAddress;
-  }
-  return m_documentEpoch;
+  return map.identity();
 }
 
 QString AutomationObjectRegistry::documentFingerprint(mdl::Map& map) const
 {
-  auto hash = qHash(QString::fromStdString(map.filename()));
-  const auto documentPath = map.path().empty() ? QString{} : pathAsQString(map.path());
-  hash ^= qHash(documentPath) + 0x9e3779b9u + (hash << 6) + (hash >> 2);
-  hash ^= qHash(QString::fromStdString(map.gameInfo().gameConfig.name)) + 0x9e3779b9u
-          + (hash << 6) + (hash >> 2);
-  hash ^= qHash(QString::number(reinterpret_cast<quintptr>(&map), 16)) + 0x9e3779b9u
-          + (hash << 6) + (hash >> 2);
-  return QString{"doc:%1"}.arg(static_cast<quint64>(hash), 16, 16, QLatin1Char{'0'});
+  static const auto processIdentity = QString::fromStdString(generateUuid());
+  return QString{"doc:%1:%2"}.arg(processIdentity).arg(map.identity());
 }
 
 QString AutomationObjectRegistry::registerNode(mdl::Map& map, mdl::Node& node) const
 {
-  const auto epoch = documentEpoch(map);
-  const auto address = reinterpret_cast<quintptr>(&node);
-  if (const auto it = m_nodeIds.find(address); it != m_nodeIds.end())
-  {
-    return it->second;
-  }
-
-  const auto id = QString{"object:%1:%2"}.arg(epoch).arg(m_nextSequence++);
-  m_nodeIds.emplace(address, id);
-  return id;
+  return QString{"object:%1:%2:%3"}
+    .arg(map.identity())
+    .arg(reinterpret_cast<quintptr>(&node), 0, 16)
+    .arg(PythonHandleRegistry::instance().nodeLifetimeGeneration(&node));
 }
 
 } // namespace tb::ui::automation

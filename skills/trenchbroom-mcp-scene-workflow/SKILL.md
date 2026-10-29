@@ -25,7 +25,13 @@ does not extend the MCP catalog.
 
 ## Workflow
 
-1. Call `tb_inspect` with `view:"document"`, then use `view:"map"`,
+1. Call `tb_inspect` with `view:"workspace"` to discover projects and loaded
+   documents (including retained documents without tabs). Follow `nextOffset`
+   with the same `limit` (1–50, default 8); pages stay within 16 KiB.
+   Omit `target` to resolve the active map on each call, or pass
+   `target:{fingerprint:"..."}` or `target:{projectId:"...",mapId:"..."}`
+   to inspect, execute, or capture a specific loaded document. Invalid explicit
+   targets fail without falling back. Then inspect `view:"document"`, `view:"map"`,
    `view:"selection"`, or `view:"problems"` only when needed. Record the
    returned document fingerprint and, for saved maps, its path.
 2. Call `tb_api` before using a Python symbol that is not already known. Use
@@ -42,7 +48,7 @@ does not extend the MCP catalog.
 3. Compose ordinary Python with `import trenchbroom as tb`. Put loops,
    geometry composition, entity policy, validation, and undo/redo calls in the
    script, using only symbols returned by `tb_api`.
-4. Execute with `tb_execute_python`, a fresh `executionId`, `document` guard,
+4. Execute with `tb_execute_python`, a fresh `executionId`, an optional `document` guard,
    and `mode:"transaction"` for normal edits. Use `mode:"action"` only for
    documented lifecycle or native history operations. Read the receipt before
    retrying: timeout or failure after code begins is not automatically safe to
@@ -76,8 +82,15 @@ fixed. Judge acceptance using the task's geometry, material, and engine needs.
   background editor work.
 - Keep source under 256 KiB. The default cooperative budget is 30 seconds and
   the maximum is 90 seconds. A blocking native call cannot be force-cancelled.
-- Use the fingerprint for every execution. Saved documents also require the
-  inspected path. The target does not follow an active-window change.
+- Prefer an explicit target for multi-map work. An optional `document` guard
+  requires the inspected fingerprint and, for saved documents, path. Execution
+  stays bound to its resolved document even if the script activates another tab.
+  Replaying an identical executionId returns its original receipt after focus
+  changes or target unload; changing its request content is rejected.
+- Closing a project tab retains its document and handles. Reload or unload
+  invalidates handles. Document-only edits and history work without a tab;
+  viewport actions and capture require an available view. Capture additionally
+  requires a visible viewport and reports its actual document and camera.
 - Transaction failures roll back the map and selection where native operations
   permit it, but cannot undo external file or process side effects.
 - Report map facts, problem output, capture evidence, save status, and any

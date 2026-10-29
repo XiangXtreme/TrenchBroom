@@ -25,6 +25,7 @@
 #include <QtSystemDetection>
 
 #include "base/Result.h"
+#include "ui/MapEditingContext.h"
 
 #include <filesystem>
 #include <memory>
@@ -164,6 +165,9 @@ public:
   void newProject();
   bool openProject(const std::filesystem::path& path);
   bool hasOpenProjects() const;
+  std::vector<std::shared_ptr<ProjectSession>> projects() const;
+  std::vector<MapEditingContext> mapEditingContexts() const;
+  MapEditingContext activeMapEditingContext() const;
   std::shared_ptr<ProjectSession> projectFor(const MapDocument& document) const;
 
   void showWelcomeWindow();

@@ -10,7 +10,6 @@
 #include "ui/AppController.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
-#include "ui/MapWindowManager.h"
 #include "ui/python/PythonRuntime.h"
 
 namespace tb::ui
@@ -23,7 +22,7 @@ McpPythonExecutor::McpPythonExecutor(
 }
 
 McpBridgeToolResult McpPythonExecutor::execute(
-  const QJsonObject& params, const QJsonObject& active)
+  const QJsonObject& params, const QJsonObject& bridge)
 {
   const auto executionId = params.value("executionId").toString().trimmed();
   if (executionId.isEmpty() || executionId.size() > 256)
@@ -87,9 +86,9 @@ McpBridgeToolResult McpPythonExecutor::execute(
     return invalidParamsFailure("MCP Python timeoutMs must be between 1 and 90000");
   }
   const auto document = params.value("document");
-  if (!document.isObject())
+  if (!document.isUndefined() && !document.isObject())
   {
-    return invalidParamsFailure("MCP Python transaction mode requires document");
+    return invalidParamsFailure("MCP Python document guard must be an object");
   }
   const auto requested = document.toObject();
   const auto sourceHash = QString::fromLatin1(
@@ -99,7 +98,8 @@ McpBridgeToolResult McpPythonExecutor::execute(
                     {"sourceHash", sourceHash},
                     {"filename", filename},
                     {"arguments", params.value("arguments").toObject()},
-                    {"document", requested},
+                    {"document", document},
+                    {"target", params.value("target")},
                     {"mode", mode},
                     {"name", params.value("name").toString("MCP Python")},
                     {"timeoutMs", timeoutMs},
@@ -127,14 +127,23 @@ McpBridgeToolResult McpPythonExecutor::execute(
     }
     return replay;
   }
-  auto* mapWindow = m_appController.mapWindowManager().topMapWindow();
-  if (mapWindow == nullptr)
-  {
+  const auto resolved = resolveMcpTarget(m_appController, params);
+  if (resolved.is_error())
+    return invalidParamsFailure(
+      QString::fromStdString(std::get<Error>(resolved.error()).msg));
+  const auto& editing = resolved.value();
+  if (!editing.document)
     return noActiveDocumentFailure();
-  }
+  auto active = bridge;
+  const auto selected = editingDocumentJson(editing, &m_objectRegistry);
+  for (auto it = selected.begin(); it != selected.end(); ++it)
+    active.insert(it.key(), it.value());
+  active.insert("activeDocument", true);
   const auto expectedFingerprint = requested.value("fingerprint").toString().trimmed();
   const auto actualFingerprint = active.value("documentFingerprint").toString();
-  if (expectedFingerprint.isEmpty() || expectedFingerprint != actualFingerprint)
+  if (
+    document.isObject()
+    && (expectedFingerprint.isEmpty() || expectedFingerprint != actualFingerprint))
   {
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::Forbidden,
@@ -149,7 +158,7 @@ McpBridgeToolResult McpPythonExecutor::execute(
   const auto expectedPath = requested.value("path").toString().trimmed();
   const auto actualPath = active.value("path").toString();
   const auto persistent = active.value("persistent").toBool(false);
-  if (persistent && expectedPath.isEmpty())
+  if (document.isObject() && persistent && expectedPath.isEmpty())
   {
     return McpBridgeToolResult::failure(
       mcp::McpErrorCode::Forbidden,
@@ -174,11 +183,10 @@ McpBridgeToolResult McpPythonExecutor::execute(
       });
   }
   auto context = PythonExecutionContext{};
-  context.mapWindow = mapWindow;
-  context.document = &mapWindow->document();
+  context.document = editing.document.get();
   context.appController = &m_appController;
-  context.currentMapView = mapWindow->currentMapViewBase();
-  context.logger = &mapWindow->pythonLogger();
+  context.currentMapView = editing.view ? editing.view->currentMapViewBase() : nullptr;
+  context.logger = &editing.document->logger();
   context.objectRegistry = &m_objectRegistry;
   context.mcpExecution = true;
   context.allowNonTransactionalActions = mode == "action";

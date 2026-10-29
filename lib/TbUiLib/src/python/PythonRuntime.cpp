@@ -105,6 +105,8 @@ public:
     , m_previous{g_currentExecutionContext}
     , m_previousSession{g_currentPluginSession}
   {
+    if (m_contextPtr->document)
+      PythonHandleRegistry::instance().trackDocument(*m_contextPtr->document);
     g_currentExecutionContext = m_contextPtr;
     g_currentPluginSession = session;
   }
@@ -970,7 +972,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
   const PythonExecutionContext& context, const PythonMcpExecutionRequest& request)
 {
   auto execution = PythonMcpExecutionResult{};
-  if (context.mapWindow == nullptr || context.document == nullptr)
+  if (context.document == nullptr)
   {
     execution.error = "MCP Python execution requires an active map document";
     return execution;
@@ -992,6 +994,7 @@ PythonMcpExecutionResult PythonRuntime::runMcpScript(
     return execution;
   }
 
+  PythonHandleRegistry::instance().trackDocument(*context.document);
   auto& targetMap = context.document->map();
   const auto modificationCountBefore = targetMap.modificationCount();
   auto actionModified = false;
@@ -1403,22 +1406,6 @@ void PythonRuntime::cleanupDocument(MapWindow& mapWindow)
   {
     Py_DECREF(globalsIt->second);
     m_state->consoleGlobals.erase(globalsIt);
-  }
-  auto* module = PyImport_ImportModule("trenchbroom");
-  if (module != nullptr)
-  {
-    auto* capsule = PyCapsule_New(&mapWindow.document(), nullptr, nullptr);
-    if (capsule != nullptr)
-    {
-      auto* methodName = PyUnicode_FromString("_invalidate_document");
-      auto* result = methodName != nullptr
-                       ? PyObject_CallMethodObjArgs(module, methodName, capsule, nullptr)
-                       : nullptr;
-      Py_XDECREF(result);
-      Py_XDECREF(methodName);
-      Py_DECREF(capsule);
-    }
-    Py_DECREF(module);
   }
   PyGILState_Release(gil);
 }

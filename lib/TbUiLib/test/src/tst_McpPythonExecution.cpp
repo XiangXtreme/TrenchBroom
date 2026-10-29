@@ -1,9 +1,13 @@
-#include <QCoreApplication>
+#include <QApplication>
 #include <QEvent>
 #include <QJsonDocument>
+#include <QMessageBox>
 #include <QPointer>
 #include <QSet>
+#include <QTemporaryDir>
+#include <QTimer>
 #include <QUuid>
+#include <QtTest/QTest>
 
 #include "fs/TestEnvironment.h"
 #include "gl/GlManager.h"
@@ -24,6 +28,9 @@
 #include "ui/MapViewport.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ProjectSession.h"
+#include "ui/ProjectWindow.h"
+#include "ui/QPathUtils.h"
 #include "ui/automation/AutomationValidation.h"
 #include "ui/mcp/McpBridgeServer.h"
 #include "ui/python/PythonRuntime.h"
@@ -144,10 +151,8 @@ TEST_CASE("McpPythonExecution", "[.][McpBridgeServer][PythonApi]")
             .contains("texture pixel"));
     CHECK(
       symbol("Face.uv_loops").value("description").toString().contains("not normalized"));
-    CHECK(symbol("brushes.create_boxes")
-            .value("description")
-            .toString()
-            .contains("'min'"));
+    CHECK(
+      symbol("brushes.create_boxes").value("description").toString().contains("'min'"));
     CHECK(symbol("brushes.create_prisms")
             .value("description")
             .toString()
@@ -434,7 +439,8 @@ assert entity.get("message") is None
     context.appController = &app;
     context.logger = &otherWindow.pythonLogger();
     REQUIRE(PythonRuntime::instance().runConsoleCommand(
-      context, "import trenchbroom as tb; tb._foreign_document = tb.documents.current()"));
+      context,
+      "import trenchbroom as tb; tb._foreign_document = tb.documents.current()"));
     const auto otherBefore = otherWindow.document().map().modificationCount();
     const auto response = server.dispatchRequest(request(
       "foreign-handle",
@@ -521,7 +527,8 @@ result = state
     CHECK(map.modificationCount() == after);
   }
 
-  SECTION("unsaved document execution allows omitting path while rejecting mismatched path")
+  SECTION(
+    "unsaved document execution allows omitting path while rejecting mismatched path")
   {
     const auto targetOnlyFingerprint = QJsonObject{
       {"fingerprint", inspected.result.value("fingerprint")},
@@ -791,6 +798,261 @@ tb.documents.current().selection.clear()
     const auto rejected = server.dispatchRequest(conflict);
     REQUIRE(rejected.error);
     CHECK(rejected.error->code == mcp::McpErrorCode::InvalidParams);
+  }
+}
+TEST_CASE("McpWorkspaceContext")
+{
+  auto dialogs = QTimer{};
+  QObject::connect(&dialogs, &QTimer::timeout, [] {
+    for (auto* widget : QApplication::topLevelWidgets())
+      if (auto* message = qobject_cast<QMessageBox*>(widget);
+          message && message->isVisible())
+      {
+        WARN(message->text().toStdString());
+        message->reject();
+      }
+  });
+  dialogs.start(50);
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("workspace.tbproj"));
+  const auto game = std::string{"McpWorkspace"};
+  const auto gameConfig = R"({
+    "version": 9,
+    "name": "McpWorkspace",
+    "icon": "Icon.png",
+    "fileformats": [
+        { "format": "Valve" }
+    ],
+    "filesystem": {
+        "searchpath": "valve",
+        "packageformat": { "extension": "pak", "format": "idpak" }
+    },
+    "materials": {
+        "root": "textures",
+        "extensions": [".D"],
+        "palette": "gfx/palette.lmp",
+        "attribute": "wad"
+    },
+    "entities": {
+        "definitions": [],
+        "defaultcolor": "0.6 0.6 0.6 1.0",
+        "modelformats": [ "mdl" ]
+    },
+    "tags": {
+        "brush": [],
+        "brushface": []
+    }
+})";
+  auto fixture = AppControllerFixture{
+    [&](const auto& write) { write(game, gameConfig, std::nullopt, std::nullopt); },
+    AppControllerOptions{
+      .enableBackgroundServices = false,
+      .showMapWindows = false,
+      .enableGlResourceProcessing = false}};
+  auto& app = fixture.appController();
+  {
+    auto created = ProjectSession::create(path, "MCP workspace", game);
+    REQUIRE(created.is_success());
+  }
+  REQUIRE(app.openProject(path));
+  const auto project = app.projects().front();
+  const auto closeProject = kdl::invoke_later{[&]() {
+    ProjectWindow* host = nullptr;
+    for (auto* widget : QApplication::topLevelWidgets())
+      if (auto* window = dynamic_cast<ProjectWindow*>(widget);
+          window && window->session() == project)
+        host = window;
+    delete host;
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  }};
+  REQUIRE(app.mapWindowManager()
+            .createProjectMap(project, "first", mdl::MapFormat::Valve)
+            .is_success());
+  const auto first = app.mapEditingContexts().front();
+  REQUIRE(app.mapWindowManager()
+            .createProjectMap(project, "second", mdl::MapFormat::Valve)
+            .is_success());
+  const auto second = app.mapEditingContexts().front();
+  const auto targetFor = [&](const auto& editing) {
+    return QJsonObject{
+      {"projectId", QString::fromStdString(project->store().info().id)},
+      {"mapId", QString::fromStdString(*project->assetFor(*editing.document))}};
+  };
+  const auto firstTarget = targetFor(first);
+  const auto secondTarget = targetFor(second);
+  auto server = McpBridgeServer{app};
+  auto config = mcp::McpBridgeConfig{};
+  config.mode = mcp::McpMode::Edit;
+  config.httpEnabled = false;
+  config.pipeName = "mcp-workspace-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+  REQUIRE(server.start(config));
+  const auto inspect = [&](
+                         const QString& view, const QJsonObject& target = QJsonObject{}) {
+    auto params = QJsonObject{{"view", view}};
+    if (!target.isEmpty())
+      params.insert("target", target);
+    return server.dispatchRequest({"inspect", "tb_inspect", params, {}});
+  };
+  const auto execute = [&](
+                         const QString& id,
+                         const QString& code,
+                         const QJsonObject& target = QJsonObject{},
+                         const QString& mode = "transaction") {
+    auto params = QJsonObject{
+      {"executionId", id}, {"code", "import trenchbroom as tb\n" + code}, {"mode", mode}};
+    if (!target.isEmpty())
+      params.insert("target", target);
+    return server.dispatchRequest({id, "tb_execute_python", params, {}});
+  };
+  const auto initial = inspect("document", firstTarget);
+  REQUIRE(initial.ok);
+  const auto firstId = initial.result.value("fingerprint");
+  const auto secondId = inspect("document", secondTarget).result.value("fingerprint");
+  REQUIRE(firstId != secondId);
+
+  SECTION("defaults resolve per call and replay stays bound to the original target")
+  {
+    REQUIRE(app.mapWindowManager().activateMapWindow(*first.view));
+    const auto source = QString{
+      "tb.brushes.create_box((0,0,0), (16,16,16))\nresult=tb.documents.current().id"};
+    const auto original = execute("once", source);
+    REQUIRE(original.ok);
+    CHECK(original.result.value("result") == firstId);
+    const auto firstCount = first.document->map().modificationCount();
+    const auto secondCount = second.document->map().modificationCount();
+    REQUIRE(app.mapWindowManager().activateMapWindow(*second.view));
+    const auto replay = execute("once", source);
+    REQUIRE(replay.ok);
+    CHECK(replay.result.value("historicalReplay").toBool());
+    CHECK(
+      replay.result.value("document").toObject().value("documentFingerprint") == firstId);
+    CHECK(first.document->map().modificationCount() == firstCount);
+    CHECK(second.document->map().modificationCount() == secondCount);
+    const auto next = execute("next", source);
+    REQUIRE(next.ok);
+    CHECK(next.result.value("result") == secondId);
+    const auto explicitFirst = execute("explicit", source, firstTarget);
+    REQUIRE(explicitFirst.ok);
+    CHECK(explicitFirst.result.value("result") == firstId);
+    CHECK_FALSE(execute("explicit", source, secondTarget).ok);
+    const auto frozen = execute(
+      "activate-other",
+      QString{"other=next(d for d in tb.documents.list() if d.id != "
+              "tb.documents.current().id)\n"
+              "tb.documents.activate(other)\nresult=tb.documents.current().id"},
+      firstTarget,
+      "action");
+    INFO(
+      (frozen.error ? QJsonDocument{frozen.error->details}.toJson().toStdString() : ""));
+    REQUIRE(frozen.ok);
+    CHECK(frozen.result.value("result") == firstId);
+    CHECK(inspect("document").result.value("fingerprint") == secondId);
+    CHECK(inspect("document", firstTarget).result.value("fingerprint") == firstId);
+  }
+  SECTION(
+    "retained documents preserve handles without a view and invalidate on reload and "
+    "unload")
+  {
+    const auto saved = execute(
+      "save-handle",
+      "import builtins\nbuiltins._workspace_doc=tb.documents.current()\n"
+      "builtins._workspace_brush=tb.brushes.list()[0]\nresult=tb.documents.current().id",
+      firstTarget);
+    REQUIRE(saved.ok);
+    app.mapWindowManager().closeMapView(*first.view);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    REQUIRE(first.view.isNull());
+    const auto hidden = inspect("document", firstTarget);
+    REQUIRE(hidden.ok);
+    CHECK_FALSE(hidden.result.value("hasView").toBool());
+    CHECK(hidden.result.value("fingerprint") == firstId);
+    const auto read = execute(
+      "retained-handle",
+      "import builtins\nassert "
+      "builtins._workspace_brush.id\nresult=builtins._workspace_doc.id",
+      firstTarget);
+    REQUIRE(read.ok);
+    CHECK(read.result.value("result") == firstId);
+    REQUIRE(
+      execute("hidden-edit", "tb.brushes.create_box((0,0,0),(16,16,16))", firstTarget)
+        .ok);
+    REQUIRE(execute("hidden-undo", "result=tb.history.undo()", firstTarget, "action").ok);
+    REQUIRE(inspect("map", firstTarget).ok);
+    REQUIRE(inspect("problems", firstTarget).ok);
+    const auto capture =
+      server.dispatchRequest({"capture", "tb_capture", {{"target", firstTarget}}, {}});
+    CHECK_FALSE(capture.ok);
+    const auto activate = execute(
+      "show", "tb.documents.activate(tb.documents.current())", firstTarget, "action");
+    INFO(
+      (activate.error ? QJsonDocument{activate.error->details}.toJson().toStdString()
+                      : ""));
+    REQUIRE(activate.ok);
+    REQUIRE(inspect("document", firstTarget).result.value("hasView").toBool());
+    REQUIRE(execute(
+              "reopened-handle",
+              "import builtins\nresult=builtins._workspace_brush.id",
+              firstTarget)
+              .ok);
+    const auto reloaded =
+      execute("reload", "tb.documents.current().reload()", firstTarget, "action");
+    REQUIRE(reloaded.ok);
+    const auto after = inspect("document", firstTarget);
+    REQUIRE(after.ok);
+    CHECK(after.result.value("fingerprint") != firstId);
+    CHECK_FALSE(
+      execute(
+        "stale-handle", "import builtins\nresult=builtins._workspace_doc.id", firstTarget)
+        .ok);
+    CHECK_FALSE(inspect("document", QJsonObject{{"fingerprint", firstId}}).ok);
+    const auto unloaded = execute(
+      "unload",
+      "tb.documents.current().close(discard_changes=True)",
+      firstTarget,
+      "action");
+    REQUIRE(unloaded.ok);
+    CHECK_FALSE(inspect("document", firstTarget).ok);
+    const auto replay = execute(
+      "save-handle",
+      "import builtins\nbuiltins._workspace_doc=tb.documents.current()\n"
+      "builtins._workspace_brush=tb.brushes.list()[0]\nresult=tb.documents.current().id",
+      firstTarget);
+    REQUIRE(replay.ok);
+    CHECK(replay.result.value("historicalReplay").toBool());
+    REQUIRE(execute(
+              "cleanup",
+              "import builtins\ndel builtins._workspace_doc, builtins._workspace_brush",
+              secondTarget)
+              .ok);
+  }
+  SECTION("workspace listing is bounded and explicit invalid targets never fall back")
+  {
+    auto offset = 0;
+    auto count = 0;
+    while (true)
+    {
+      const auto page = server.dispatchRequest(
+        {"workspace",
+         "tb_inspect",
+         {{"view", "workspace"}, {"limit", 1}, {"offset", offset}},
+         {}});
+      REQUIRE(page.ok);
+      CHECK(
+        QJsonDocument{page.result}.toJson(QJsonDocument::Compact).size() <= 16 * 1024);
+      count += int(page.result.value("items").toArray().size());
+      if (!page.result.value("truncated").toBool())
+        break;
+      const auto next = page.result.value("nextOffset").toInt();
+      REQUIRE(next > offset);
+      offset = next;
+    }
+    CHECK(count == 3);
+    auto bad = firstTarget;
+    bad.insert("mapId", "missing");
+    CHECK_FALSE(inspect("document", bad).ok);
+    CHECK_FALSE(execute("missing", "raise RuntimeError('must not execute')", bad).ok);
+    CHECK(inspect("document", secondTarget).ok);
   }
 }
 } // namespace tb::ui

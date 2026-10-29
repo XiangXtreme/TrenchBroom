@@ -2,6 +2,10 @@
 
 ## MCP 设置 {#mcp_settings}
 
+使用 `tb_inspect` 的 `view:"workspace"` 列出工程及已加载文档，包括标签关闭后保留的地图；通过 `nextOffset` 继续分页。检查、执行和截图均接受 `target:{fingerprint:"..."}` 或 `target:{projectId:"...",mapId:"..."}`。省略目标时，每次调用解析当前活动地图；即使脚本激活另一标签，本次执行仍固定于原文档。显式目标无效时返回失败。
+
+每次编辑使用新的 `executionId`。焦点变化或文档卸载后重复相同请求，只返回原始回执。关闭工程地图标签保留文档句柄；重载或卸载使句柄失效。保留文档无需视图即可编辑和撤销。截图要求可见视口，并报告实际文档和相机。可选 `document` 守卫要求检查所得的指纹及已保存文档的路径。
+
 MCP 组配置了 TrenchBroom 面向外部 Agent 的可选本地主机 HTTP 端点。访问权限默认处于 **Off** 状态。**Read-only** 提供 `tb_inspect`、`tb_api` 和 `tb_capture`；**Edit** 还提供受文档保护的 `tb_execute_python`。Python 脚本调用公开的 `trenchbroom` API，而不是一组专用 MCP 编辑工具。
 
 显示的端点形式为 `http://127.0.0.1:<port>/mcp`。使用 **Copy URL** 可用于通用 MCP 客户端，或使用 **Copy Setup Command** 用于 Claude Code。更改访问权限会重写本地 MCP 配置并重启桥接器。

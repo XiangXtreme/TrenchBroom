@@ -150,6 +150,25 @@ commit、输入、回执、地图事实与支持范围；它们不进 Git。只�
 
 ## 最终交付状态
 
+工作区迁移采用 `MapEditingContext` 统一文档和可选视图，保持四入口；显式目标、逐次默认
+活动地图和执行期间目标固定共用同一解析器。文档身份不再由单地图注册表维护，句柄失效
+由原生重载、卸载和销毁驱动。关闭工程标签保留文档；编辑和原生历史不依赖窗口。
+API 发现、双语手册和 scene workflow skill 已同步描述 workspace 分页、target 与重放语义。
+`McpWorkspaceContext` 的 79 条断言覆盖阶段 D 核心闭环，原有 `McpPythonExecution`
+867 条断言通过。控制台清理仅清理 globals，文档代次由文档生命周期拥有。
+最终 `ci-preflight.ps1 -Full -BaseRef 6c9d350a4` 通过：严格编译 16 个改动单元、
+Release TrenchBroom 及全库 CTest（UI 120 项，原生鼠标捕获项按后台策略跳过）。
+控制台、插件和运行时独立回归通过 578 条断言；MapWindow 通过 347 条断言。
+发现载荷实测 4,079 bytes，为历史 Modeling 基线 100,402 bytes 的 4.06%。
+日志为 `build-release-codex/codex-logs/mcp-workspace-final-preflight.log`，
+载荷报告为同目录 `mcp-discovery/report.json`。本轮未重复原迁移的独立应用进程截图验收。
+
+本轮历史基点完整预检在 `git diff --check d98f869...HEAD` 遇到已提交的
+`CounterStrike16_zh.fgd` 尾随空白而停止；保持该资源原样，以本轮起始提交
+`6c9d350a4` 为基点执行完整矩阵。运行时 skill 的默认旧用户路径
+`C:\Users\Trh\.cc-switch\skills` 在当前机器拒绝访问，当前用户的 skill 符号链接也指向
+该路径；仓库源已更新，运行时同步仍需修复该路径后执行仓库同步脚本及 `-Check`。
+
 批次 A 已完成：公开目录固定为四入口，旧 MCP 的 IR、模块状态、selector、操作历史、
 Review 编排和 profile 兼容面不再接入执行链。批次 B 的最终 Release 场景记录在
 `build-release-codex/codex-logs/mcp-thin-final-20260908-1507`；该目录不纳入 Git。

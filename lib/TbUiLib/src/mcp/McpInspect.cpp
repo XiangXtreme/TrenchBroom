@@ -10,7 +10,6 @@
 #include "ui/IssueBrowserView.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
-#include "ui/MapWindowManager.h"
 #include "ui/automation/AutomationValidation.h"
 
 #include <cmath>
@@ -19,14 +18,14 @@
 
 namespace tb::ui
 {
-QJsonObject selectionJson(AppController& appController)
+QJsonObject selectionJson(AppController& appController, const MapEditingContext* target)
 {
-  auto* window = appController.mapWindowManager().topMapWindow();
-  if (window == nullptr)
+  const auto context = target ? *target : appController.activeMapEditingContext();
+  if (!context.document)
   {
     return QJsonObject{{"hasSelection", false}, {"nodeCount", 0}};
   }
-  const auto& selection = window->document().map().selection();
+  const auto& selection = context.document->map().selection();
   return QJsonObject{
     {"hasSelection", selection.hasAny()},
     {"nodeCount", static_cast<int>(selection.nodes.size())},
@@ -37,10 +36,12 @@ QJsonObject selectionJson(AppController& appController)
 }
 
 McpBridgeToolResult problemsCheckResult(
-  AppController& appController, const QJsonObject& params)
+  AppController& appController,
+  const QJsonObject& params,
+  const MapEditingContext* target)
 {
-  auto* window = appController.mapWindowManager().topMapWindow();
-  if (window == nullptr)
+  const auto context = target ? *target : appController.activeMapEditingContext();
+  if (!context.document)
   {
     return noActiveDocumentFailure();
   }
@@ -67,7 +68,7 @@ McpBridgeToolResult problemsCheckResult(
       "and boolean includeHidden");
   }
 
-  auto& map = window->document().map();
+  auto& map = context.document->map();
   auto names = std::map<int, QString>{};
   auto knownNames = QSet<QString>{};
   for (const auto* validator : map.worldNode().registeredValidators())
@@ -100,7 +101,8 @@ McpBridgeToolResult problemsCheckResult(
   }
 
   const auto includeHidden = params.value("includeHidden").toBool(false);
-  const auto* browser = window->findChild<IssueBrowserView*>();
+  const auto* browser =
+    context.view ? context.view->findChild<IssueBrowserView*>() : nullptr;
   const auto hiddenTypes = browser ? browser->hiddenIssueTypes() : 0;
   const auto issues = collectAutomationValidationIssues(map, true);
   auto matched = std::vector<const AutomationValidationIssue*>{};

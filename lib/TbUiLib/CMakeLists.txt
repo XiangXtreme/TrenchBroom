@@ -395,6 +395,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewLayout.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewToolBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapWindow.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapEditingContext.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapWindowManager.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MaterialBrowser.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MaterialBrowserIconSize.h

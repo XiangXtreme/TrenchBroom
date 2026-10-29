@@ -92,6 +92,7 @@ class MapDocument
 public:
   static const vm::bbox3d DefaultWorldBounds;
 
+  Notifier<> documentWillBeDestroyedNotifier;
   Notifier<> documentWasLoadedNotifier;
   Notifier<> documentWasSavedNotifier;
   Notifier<> documentDidChangeNotifier;

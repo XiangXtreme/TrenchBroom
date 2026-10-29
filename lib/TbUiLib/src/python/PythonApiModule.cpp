@@ -69,6 +69,7 @@
 #include "ui/MapViewport.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationActions.h"
 #include "ui/automation/AutomationAssets.h"
@@ -740,6 +741,7 @@ DocumentHandle currentDocument()
   {
     throw std::runtime_error{"No active document"};
   }
+  PythonHandleRegistry::instance().trackDocument(*context.document);
   return DocumentHandle{
     context.document,
     PythonHandleRegistry::instance().documentGeneration(context.document)};
@@ -751,13 +753,9 @@ std::vector<DocumentHandle> openDocuments()
   auto result = std::vector<DocumentHandle>{};
   if (context.appController != nullptr)
   {
-    for (auto* mapWindow : context.appController->mapWindowManager().mapWindows())
+    for (const auto& editing : context.appController->mapEditingContexts())
     {
-      if (mapWindow == nullptr)
-      {
-        continue;
-      }
-      auto& document = mapWindow->document();
+      auto& document = *editing.document;
       result.push_back(DocumentHandle{
         &document, PythonHandleRegistry::instance().documentGeneration(&document)});
     }
@@ -834,15 +832,18 @@ MapWindow& mapWindowForDocument(DocumentHandle& document, const bool requireTarg
   }
 
   auto& targetDocument = document.get(requireTarget);
-  for (auto* mapWindow : context.appController->mapWindowManager().mapWindows())
-  {
-    if (mapWindow != nullptr && &mapWindow->document() == &targetDocument)
-    {
-      return *mapWindow;
-    }
-  }
-  throw std::runtime_error{"Document window is no longer available"};
+  // Console and plugin hosts may supply a standalone view outside the workspace.
+  if (
+    !context.mcpExecution && context.mapWindow
+    && &context.mapWindow->document() == &targetDocument)
+    return *context.mapWindow;
+  for (const auto& editing : context.appController->mapEditingContexts())
+    if (editing.document.get() == &targetDocument && editing.view)
+      return *editing.view;
+  throw std::runtime_error{"Target document has no available view"};
 }
+
+DocumentHandle activateDocument(DocumentHandle& document);
 
 DocumentHandle openDocument(const std::string& path)
 {
@@ -870,25 +871,18 @@ DocumentHandle openDocument(const std::string& path)
       PythonHandleRegistry::instance().documentGeneration(context.document)};
   }
 
-  auto& mapWindowManager = context.appController->mapWindowManager();
-  for (auto* mapWindow : mapWindowManager.mapWindows())
+  for (const auto& editing : context.appController->mapEditingContexts())
   {
     auto pathError = std::error_code{};
-    const auto samePath =
-      mapWindow != nullptr
-      && (mapWindow->document().map().path().lexically_normal() == openPath
-          || std::filesystem::equivalent(
-            mapWindow->document().map().path(), openPath, pathError));
-    if (samePath && !pathError)
+    const auto& currentPath = editing.document->map().path();
+    if (
+      currentPath.lexically_normal() == openPath
+      || std::filesystem::equivalent(currentPath, openPath, pathError))
     {
-      if (!activateAutomationDocument(*context.appController, *mapWindow))
-      {
-        throw std::runtime_error{"Document window is no longer available"};
-      }
-      auto& document = mapWindow->document();
-      recordCompletedPythonAction("activate");
-      return DocumentHandle{
-        &document, PythonHandleRegistry::instance().documentGeneration(&document)};
+      auto handle = DocumentHandle{
+        editing.document.get(),
+        PythonHandleRegistry::instance().documentGeneration(editing.document.get())};
+      return activateDocument(handle);
     }
   }
 
@@ -896,18 +890,19 @@ DocumentHandle openDocument(const std::string& path)
     *context.appController, openPath, &context.document->map().gameInfo()));
   recordCompletedPythonAction("open");
 
-  auto* openedWindow = mapWindowManager.topMapWindow();
-  if (openedWindow == nullptr)
+  const auto opened = context.appController->activeMapEditingContext();
+  if (!opened.document)
   {
     throw std::runtime_error{"Document open completed without an active window"};
   }
-  if (&openedWindow->document() == context.document)
+  if (opened.document.get() == context.document)
   {
     PythonHandleRegistry::instance().invalidateDocument(context.document);
   }
+  PythonHandleRegistry::instance().trackDocument(*opened.document);
   return DocumentHandle{
-    &openedWindow->document(),
-    PythonHandleRegistry::instance().documentGeneration(&openedWindow->document())};
+    opened.document.get(),
+    PythonHandleRegistry::instance().documentGeneration(opened.document.get())};
 }
 
 DocumentHandle openVerifiedDocument(const std::string& path)
@@ -933,14 +928,23 @@ DocumentHandle activateDocument(DocumentHandle& document)
   {
     throw std::runtime_error{"No application controller in Python execution context"};
   }
-  if (&document.get(false) == context.document)
+  auto& target = document.get(false);
+  if (const auto project = context.appController->projectFor(target))
   {
+    const auto assetId = project->assetFor(target);
+    if (!assetId)
+      throw std::runtime_error{"Project map is no longer loaded"};
+    throwIfError(
+      context.appController->mapWindowManager().loadProjectMap(project, *assetId));
+    recordCompletedPythonAction("activate");
     return document;
   }
+  if (&target == context.document)
+    return document;
   auto& window = mapWindowForDocument(document, false);
   if (!activateAutomationDocument(*context.appController, window))
   {
-    throw std::runtime_error{"Document window is no longer available"};
+    throw std::runtime_error{"Target document has no available view"};
   }
   recordCompletedPythonAction("activate");
   return document;
@@ -956,6 +960,25 @@ void closeDocument(DocumentHandle& document, const bool discardChanges)
       "Document has unsaved changes; pass discard_changes=True to close it"};
   }
 
+  auto& context = requireContext();
+  if (context.appController)
+    if (const auto project = context.appController->projectFor(targetDocument))
+    {
+      const auto assetId = project->assetFor(targetDocument);
+      for (const auto& editing : context.appController->mapEditingContexts())
+        if (editing.document.get() == &targetDocument && editing.view)
+        {
+          if (!editing.view->closeCompileDialog())
+            throw std::runtime_error{"Compilation dialog prevented document unload"};
+          context.appController->mapWindowManager().closeMapView(*editing.view);
+        }
+      if (assetId)
+        throwIfError(project->releaseDocument(*assetId));
+      if (project->assetFor(targetDocument))
+        project->unregisterDocument(targetDocument);
+      recordCompletedPythonAction("close");
+      return;
+    }
   auto& window = mapWindowForDocument(document);
   PythonHandleRegistry::instance().invalidateDocument(&targetDocument);
   closeAutomationDocument(window, discardChanges);
@@ -978,12 +1001,12 @@ py::dict historyStatus(DocumentHandle& document)
 bool undoDocument(DocumentHandle& document)
 {
   requirePythonActionMode("history.undo");
-  auto& window = mapWindowForDocument(document);
-  if (!window.canUndo())
+  auto& map = document.get().map();
+  if (!map.canUndoCommand())
   {
     return false;
   }
-  window.undo();
+  map.undoCommand();
   recordCompletedPythonAction("history.undo");
   return true;
 }
@@ -991,12 +1014,12 @@ bool undoDocument(DocumentHandle& document)
 bool redoDocument(DocumentHandle& document)
 {
   requirePythonActionMode("history.redo");
-  auto& window = mapWindowForDocument(document);
-  if (!window.canRedo())
+  auto& map = document.get().map();
+  if (!map.canRedoCommand())
   {
     return false;
   }
-  window.redo();
+  map.redoCommand();
   recordCompletedPythonAction("history.redo");
   return true;
 }
@@ -1911,7 +1934,8 @@ std::vector<mdl::Node*> selectableNodesFromObjects(
   return result;
 }
 
-std::vector<mdl::Node*> objectNodesFromPython(MapDocument& document, const py::object& targets)
+std::vector<mdl::Node*> objectNodesFromPython(
+  MapDocument& document, const py::object& targets)
 {
   if (targets.is_none())
   {
@@ -1938,11 +1962,14 @@ std::vector<mdl::Node*> objectNodesFromPython(MapDocument& document, const py::o
   std::ranges::sort(nodes);
   nodes.erase(std::unique(nodes.begin(), nodes.end()), nodes.end());
   nodes.erase(
-    std::remove_if(nodes.begin(), nodes.end(), [&](const auto* node) {
-      return std::ranges::any_of(nodes, [&](const auto* other) {
-        return node != other && node->isDescendantOf(*other);
-      });
-    }),
+    std::remove_if(
+      nodes.begin(),
+      nodes.end(),
+      [&](const auto* node) {
+        return std::ranges::any_of(nodes, [&](const auto* other) {
+          return node != other && node->isDescendantOf(*other);
+        });
+      }),
     nodes.end());
   return nodes;
 }
@@ -1957,7 +1984,8 @@ vm::vec3d centerForNodes(const std::vector<mdl::Node*>& nodes)
   return bounds.min + bounds.size() / 2.0;
 }
 
-std::vector<py::object> objectHandlesFromNodes(MapDocument& document, const std::vector<mdl::Node*>& nodes)
+std::vector<py::object> objectHandlesFromNodes(
+  MapDocument& document, const std::vector<mdl::Node*>& nodes)
 {
   const auto generation = PythonHandleRegistry::instance().documentGeneration(&document);
   auto result = std::vector<py::object>{};
@@ -2208,9 +2236,10 @@ bool rotateSelectionByAxis(
 bool scaleSelectionByFactors(
   SelectionHandle& selection, const py::object& factors, const py::object& center)
 {
-  const auto value = py::isinstance<py::float_>(factors) || py::isinstance<py::int_>(factors)
-                       ? Vec3{py::cast<double>(factors), py::cast<double>(factors), py::cast<double>(factors)}
-                       : vec3FromObject(factors);
+  const auto value =
+    py::isinstance<py::float_>(factors) || py::isinstance<py::int_>(factors)
+      ? Vec3{py::cast<double>(factors), py::cast<double>(factors), py::cast<double>(factors)}
+      : vec3FromObject(factors);
   if (!std::isfinite(value.x) || !std::isfinite(value.y) || !std::isfinite(value.z))
   {
     throw py::value_error{"scale factors must be finite"};
@@ -2237,7 +2266,9 @@ bool transformObjectNodes(
   auto transaction = ScopedPythonTransaction{document, name};
   try
   {
-    if (!mdl::transformNodes(document.map(), nodes, name, transformation) || !transaction.commit())
+    if (
+      !mdl::transformNodes(document.map(), nodes, name, transformation)
+      || !transaction.commit())
     {
       transaction.cancel();
       throw std::runtime_error{"Native object transformation failed"};
@@ -2257,7 +2288,10 @@ bool translateObjects(const py::object& targets, const py::object& offset)
   const auto nodes = objectNodesFromPython(document, targets);
   const auto value = vec3FromObject(offset);
   return transformObjectNodes(
-    document, nodes, "Python API Translate Objects", vm::translation_matrix(toVmVec3(value)));
+    document,
+    nodes,
+    "Python API Translate Objects",
+    vm::translation_matrix(toVmVec3(value)));
 }
 
 bool rotateObjects(
@@ -2277,12 +2311,15 @@ bool rotateObjects(
   {
     throw py::value_error{"axis must not be zero"};
   }
-  const auto pivot = center.is_none() ? centerForNodes(nodes) : toVmVec3(vec3FromObject(center));
+  const auto pivot =
+    center.is_none() ? centerForNodes(nodes) : toVmVec3(vec3FromObject(center));
   constexpr auto Pi = 3.1415926535897932384626433832795;
-  const auto transformation = vm::translation_matrix(pivot)
-                              * vm::rotation_matrix(toVmVec3(direction), angleDegrees * (Pi / 180.0))
-                              * vm::translation_matrix(-pivot);
-  return transformObjectNodes(document, nodes, "Python API Rotate Objects", transformation);
+  const auto transformation =
+    vm::translation_matrix(pivot)
+    * vm::rotation_matrix(toVmVec3(direction), angleDegrees * (Pi / 180.0))
+    * vm::translation_matrix(-pivot);
+  return transformObjectNodes(
+    document, nodes, "Python API Rotate Objects", transformation);
 }
 
 bool scaleObjects(
@@ -2294,14 +2331,17 @@ bool scaleObjects(
   {
     return false;
   }
-  const auto value = py::isinstance<py::float_>(factors) || py::isinstance<py::int_>(factors)
-                       ? Vec3{py::cast<double>(factors), py::cast<double>(factors), py::cast<double>(factors)}
-                       : vec3FromObject(factors);
-  const auto pivot = center.is_none() ? centerForNodes(nodes) : toVmVec3(vec3FromObject(center));
+  const auto value =
+    py::isinstance<py::float_>(factors) || py::isinstance<py::int_>(factors)
+      ? Vec3{py::cast<double>(factors), py::cast<double>(factors), py::cast<double>(factors)}
+      : vec3FromObject(factors);
+  const auto pivot =
+    center.is_none() ? centerForNodes(nodes) : toVmVec3(vec3FromObject(center));
   const auto transformation = vm::translation_matrix(pivot)
                               * vm::scaling_matrix(toVmVec3(value))
                               * vm::translation_matrix(-pivot);
-  return transformObjectNodes(document, nodes, "Python API Scale Objects", transformation);
+  return transformObjectNodes(
+    document, nodes, "Python API Scale Objects", transformation);
 }
 
 py::list duplicateObjects(const py::object& targets, const bool select)
@@ -3998,13 +4038,15 @@ void executeAction(const std::string& actionPath)
   {
     throw std::runtime_error{"MCP Python actions require mode='action'"};
   }
-  if (context.mapWindow == nullptr || context.appController == nullptr)
+  if (context.appController == nullptr)
   {
     throw std::runtime_error{"No active map window"};
   }
 
+  auto document = currentDocument();
+  auto& view = mapWindowForDocument(document);
   const auto result = automation::executeAutomationAction(
-    *context.appController, context.mapWindow, context.currentMapView, actionPath);
+    *context.appController, &view, view.currentMapViewBase(), actionPath);
   if (result.status == automation::AutomationActionStatus::Unknown)
   {
     throw py::key_error{actionPath};
@@ -4421,14 +4463,16 @@ void defineModule(py::module_& module)
       py::arg("angle_degrees"),
       py::kw_only(),
       py::arg("center") = py::none(),
-      "Rotate the current selection around an axis in degrees. center defaults to selection bounds.")
+      "Rotate the current selection around an axis in degrees. center defaults to "
+      "selection bounds.")
     .def(
       "scale",
       scaleSelectionByFactors,
       py::arg("factors"),
       py::kw_only(),
       py::arg("center") = py::none(),
-      "Scale the current selection by a scalar or map-unit Vec3. center defaults to selection bounds.")
+      "Scale the current selection by a scalar or map-unit Vec3. center defaults to "
+      "selection bounds.")
     .def("chamfer_vertices", chamferSelectionVertices, py::arg("distance"))
     .def(
       "chamfer_edges",
@@ -4487,9 +4531,11 @@ void defineModule(py::module_& module)
     .def_property_readonly(
       "classname", [](EntityHandle& self) { return self.get().entity().classname(); })
     .def_property_readonly(
-      "origin", [](EntityHandle& self) { return vec3ToTuple(self.get().entity().origin()); })
+      "origin",
+      [](EntityHandle& self) { return vec3ToTuple(self.get().entity().origin()); })
     .def_property_readonly(
-      "bounds", [](EntityHandle& self) { return boundsSnapshot(self.get().logicalBounds()); })
+      "bounds",
+      [](EntityHandle& self) { return boundsSnapshot(self.get().logicalBounds()); })
     .def_property_readonly("brushes", entityBrushes)
     .def_property_readonly(
       "properties",
@@ -4620,7 +4666,8 @@ void defineModule(py::module_& module)
       })
     .def_property_readonly("entity", brushEntity)
     .def_property_readonly(
-      "bounds", [](BrushHandle& self) { return boundsSnapshot(self.get().logicalBounds()); })
+      "bounds",
+      [](BrushHandle& self) { return boundsSnapshot(self.get().logicalBounds()); })
     .def(
       "faces",
       [](BrushHandle& self) {
@@ -5594,8 +5641,8 @@ void defineModule(py::module_& module)
     throw py::type_error{"scale() takes 1, 2, 3, or 4 arguments"};
   };
 
-  [[maybe_unused]] auto duplicateHelper = [currentSelection,
-                          selectedBrushes](const py::args& args) -> py::object {
+  [[maybe_unused]] auto duplicateHelper =
+    [currentSelection, selectedBrushes](const py::args& args) -> py::object {
     auto selection = currentSelection();
     if (args.size() == 1)
     {
@@ -5659,15 +5706,27 @@ void defineModule(py::module_& module)
   module.def("set_timeout", setTimeout);
 
   auto documents = module.def_submodule("documents", "Document lifecycle operations.");
-  documents.def("current", currentDocument);
-  documents.def("list", openDocuments);
+  documents.def(
+    "current",
+    currentDocument,
+    "Return the document fixed for this execution, even after another tab is activated.");
+  documents.def(
+    "list",
+    openDocuments,
+    "List loaded workspace documents, including retained project maps without a tab.");
   documents.def("snapshot", []() { return documentSnapshot(currentDocument()); });
   documents.def(
     "open",
     openVerifiedDocument,
     py::arg("path"),
-    "Open an absolute map path and verify that the active document matches it. Action mode.");
-  documents.def("activate", activateDocument, py::arg("document"));
+    "Open an absolute map path and verify that the active document matches it. Action "
+    "mode.");
+  documents.def(
+    "activate",
+    activateDocument,
+    py::arg("document"),
+    "Activate or reopen a document's view. The current execution keeps its original "
+    "target. Action mode.");
   documents.def(
     "close", closeDocument, py::arg("document"), py::arg("discard_changes") = false);
   auto saveCurrentDocument = [](const py::object& path) {
@@ -5704,7 +5763,8 @@ void defineModule(py::module_& module)
     translateObjects,
     py::arg("targets"),
     py::arg("offset"),
-    "Translate explicit Entity or Brush targets by a map-unit Vec3 without changing selection.");
+    "Translate explicit Entity or Brush targets by a map-unit Vec3 without changing "
+    "selection.");
   objects.def(
     "rotate",
     rotateObjects,
@@ -5713,7 +5773,8 @@ void defineModule(py::module_& module)
     py::arg("angle_degrees"),
     py::kw_only(),
     py::arg("center") = py::none(),
-    "Rotate explicit targets around an axis in degrees. center defaults to their bounds center.");
+    "Rotate explicit targets around an axis in degrees. center defaults to their bounds "
+    "center.");
   objects.def(
     "scale",
     scaleObjects,
@@ -5721,7 +5782,8 @@ void defineModule(py::module_& module)
     py::arg("factors"),
     py::kw_only(),
     py::arg("center") = py::none(),
-    "Scale explicit targets by a scalar or Vec3. center defaults to their bounds center.");
+    "Scale explicit targets by a scalar or Vec3. center defaults to their bounds "
+    "center.");
   objects.def(
     "duplicate",
     duplicateObjects,
@@ -5743,7 +5805,8 @@ void defineModule(py::module_& module)
     py::arg("properties") = py::dict{},
     py::arg("origin") = py::none(),
     py::arg("select") = false,
-    "Create a point entity in map units. select defaults to false and preserves selection.");
+    "Create a point entity in map units. select defaults to false and preserves "
+    "selection.");
   entities.def(
     "create_from_schema_batch",
     createCheckedPointEntities,
@@ -6131,10 +6194,6 @@ void defineModule(py::module_& module)
   module.def("_cleanup_plugin_session", [](py::capsule sessionCapsule) {
     cleanupPluginSession(
       *reinterpret_cast<PythonPluginSession*>(sessionCapsule.get_pointer()));
-  });
-  module.def("_invalidate_document", [](py::capsule documentCapsule) {
-    PythonHandleRegistry::instance().invalidateDocument(
-      reinterpret_cast<MapDocument*>(documentCapsule.get_pointer()));
   });
 }
 } // namespace

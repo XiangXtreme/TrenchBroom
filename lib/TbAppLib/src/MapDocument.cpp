@@ -107,6 +107,7 @@ Result<std::unique_ptr<MapDocument>> MapDocument::loadDocument(
 
 MapDocument::~MapDocument()
 {
+  documentWillBeDestroyedNotifier();
   if (isPointFileLoaded())
   {
     unloadPointFile();

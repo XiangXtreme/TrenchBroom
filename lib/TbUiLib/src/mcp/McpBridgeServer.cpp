@@ -34,7 +34,6 @@
 #include "ui/AppController.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
-#include "ui/MapWindowManager.h"
 
 #include <utility>
 
@@ -82,14 +81,22 @@ McpBridgeServer::McpBridgeServer(
       [&appController, this](const auto& toolName, const auto& params) {
         if (toolName == "tb_inspect")
         {
+          const auto resolved = resolveMcpTarget(appController, params);
+          if (resolved.is_error())
+            return invalidParamsFailure(
+              QString::fromStdString(std::get<Error>(resolved.error()).msg));
+          const auto& context = resolved.value();
           const auto view = params.value("view").toString("status").trimmed().toLower();
           if (
             view != "status" && view != "document" && view != "map" && view != "selection"
-            && view != "problems")
+            && view != "problems" && view != "workspace")
           {
             return invalidParamsFailure(
-              "tb_inspect view must be status, document, map, selection, or problems");
+              "tb_inspect view must be status, document, map, selection, problems, or "
+              "workspace");
           }
+          if (view == "workspace")
+            return workspaceInspectResult(appController, params);
           if (view == "status")
           {
             auto status = makeStatus(
@@ -97,7 +104,8 @@ McpBridgeServer::McpBridgeServer(
               m_config,
               m_bridgeInstanceId,
               m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
-              &m_objectRegistry);
+              &m_objectRegistry,
+              &context);
             return McpBridgeToolResult::success(std::move(status));
           }
           if (view == "document")
@@ -107,7 +115,8 @@ McpBridgeServer::McpBridgeServer(
               m_bridgeInstanceId,
               m_bridgeStartedAtUtc.toString(Qt::ISODateWithMs),
               m_config.httpPort,
-              &m_objectRegistry);
+              &m_objectRegistry,
+              &context);
             document.insert("fingerprint", document.value("documentFingerprint"));
             return McpBridgeToolResult::success(std::move(document));
           }
@@ -122,11 +131,11 @@ McpBridgeServer::McpBridgeServer(
           }
           if (view == "selection")
           {
-            return McpBridgeToolResult::success(selectionJson(appController));
+            return McpBridgeToolResult::success(selectionJson(appController, &context));
           }
           if (view == "problems")
           {
-            return problemsCheckResult(appController, params);
+            return problemsCheckResult(appController, params, &context);
           }
           return invalidParamsFailure("Unsupported tb_inspect view");
         }
@@ -147,7 +156,11 @@ McpBridgeServer::McpBridgeServer(
         }
         if (toolName == "tb_capture")
         {
-          return viewportCaptureCurrentResult(appController, params);
+          const auto resolved = resolveMcpTarget(appController, params);
+          if (resolved.is_error())
+            return invalidParamsFailure(
+              QString::fromStdString(std::get<Error>(resolved.error()).msg));
+          return viewportCaptureCurrentResult(appController, params, &resolved.value());
         }
         return McpBridgeToolResult::failure(
           mcp::McpErrorCode::ToolNotFound,
@@ -170,8 +183,8 @@ McpBridgeServer::McpBridgeServer(
     return m_toolRegistry->dispatch(toolName, params);
   };
   m_activeMapProvider = [&appController]() -> mdl::Map* {
-    auto* mapWindow = appController.mapWindowManager().topMapWindow();
-    return mapWindow != nullptr ? &mapWindow->document().map() : nullptr;
+    const auto context = appController.activeMapEditingContext();
+    return context.document ? &context.document->map() : nullptr;
   };
 }
 

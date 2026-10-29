@@ -97,6 +97,7 @@ public:
   const project::ProjectStore& store() const;
   bool modified() const;
   bool hasOpenMaps() const;
+  std::vector<std::shared_ptr<MapDocument>> documents() const;
   MapDocument* documentFor(const std::string& assetId) const;
   std::optional<std::string> assetFor(const MapDocument& document) const;
 

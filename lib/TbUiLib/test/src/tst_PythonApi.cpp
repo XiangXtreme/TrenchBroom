@@ -871,7 +871,7 @@ explode()
     CHECK(manager.plugins()[0].error.find("Python API exploded") != std::string::npos);
   }
 
-  SECTION("invalidates document handles on cleanup")
+  SECTION("console cleanup preserves live document handles")
   {
     auto env = fs::TestEnvironment{};
     env.createFile(
@@ -899,13 +899,11 @@ tb._cached_document = tb.documents.current()
 import trenchbroom as tb
 
 tb._cached_document.entities
+del tb._cached_document
 )");
 
-    CHECK_FALSE(PythonRuntime::instance().runScript(
+    CHECK(PythonRuntime::instance().runScript(
       context, env.dir() / "api_use_cached_document.py"));
-    CHECK(
-      PythonRuntime::instance().lastError().find("Document is no longer valid")
-      != std::string::npos);
   }
 
   SECTION("invalidates entity handles when node lifetimes end")

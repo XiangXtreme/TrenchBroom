@@ -39,13 +39,6 @@ namespace tb::ui::automation
  */
 class AutomationObjectRegistry
 {
-private:
-  mutable int m_documentEpoch = 1;
-  mutable int m_nextSequence = 1;
-  mutable quintptr m_currentMapAddress = 0;
-  mutable quintptr m_currentWorldAddress = 0;
-  mutable std::map<quintptr, QString> m_nodeIds;
-
 public:
   int documentEpoch(mdl::Map& map) const;
   QString documentFingerprint(mdl::Map& map) const;

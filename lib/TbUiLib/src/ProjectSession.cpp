@@ -24,6 +24,7 @@
 #include "ui/ProjectReference.h"
 #include "ui/ProjectResourceAudit.h"
 #include "ui/QPathUtils.h"
+#include "ui/python/PythonHandleRegistry.h"
 
 #include <fmt/ranges.h>
 
@@ -243,6 +244,14 @@ const project::ProjectStore& ProjectSession::store() const
 {
   return *m_store;
 }
+std::vector<std::shared_ptr<MapDocument>> ProjectSession::documents() const
+{
+  auto result = std::vector<std::shared_ptr<MapDocument>>{};
+  for (const auto& [id, document] : m_retainedDocuments)
+    result.push_back(document);
+  return result;
+}
+
 bool ProjectSession::hasOpenMaps() const
 {
   return !m_documents.empty();
@@ -906,6 +915,7 @@ void ProjectSession::unregisterDocument(MapDocument& document)
 {
   if (!m_documents.contains(&document))
     return;
+  PythonHandleRegistry::instance().invalidateDocument(&document);
   document.map().setSaveHandler({});
   m_documents.erase(&document);
   emit stateChanged();

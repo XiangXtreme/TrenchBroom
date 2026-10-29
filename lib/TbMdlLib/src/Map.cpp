@@ -112,6 +112,7 @@
 #include <fmt/std.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <memory>
 #include <ranges>
@@ -508,6 +509,12 @@ private:
 } // namespace
 
 const std::string Map::DefaultDocumentName("unnamed.map");
+
+int Map::nextIdentity()
+{
+  static auto next = std::atomic<int>{1};
+  return next.fetch_add(1);
+}
 
 Map::Map(
   const EnvironmentConfig& environmentConfig,
