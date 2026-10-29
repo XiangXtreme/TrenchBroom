@@ -13,14 +13,43 @@
 #include "project/LibrarySync.h"
 #include "project/ProjectStore.h"
 
+#include <cstddef>
+#include <functional>
 #include <map>
 #include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 
 class QLockFile;
 
 namespace tb::ui
 {
 class MapDocument;
+
+/**
+ * A new capture whose project path is already occupied by another asset.
+ *
+ * Two project resources may not publish the same name: maps and the compiler resolve
+ * names, not library identities. The caller decides whether the existing resource is
+ * replaced or the capture is cancelled.
+ */
+struct CaptureConflict
+{
+  std::size_t planIndex = 0;
+  std::string displayName;
+  std::string path;
+  std::optional<project::Asset> existing;
+};
+
+enum class CaptureConflictChoice
+{
+  Replace,
+  Cancel,
+};
+
+using CaptureConflictResolver =
+  std::function<CaptureConflictChoice(const CaptureConflict&)>;
 
 /** Owns the editable working copy, map registrations and disposable asset files.
  * The user's project is replaced only after an entire save succeeds.
@@ -203,6 +232,28 @@ public:
     const std::string& libraryId,
     const std::vector<std::string>& libraryAssetIds,
     std::vector<std::size_t>& planIndices);
+  /** New plan entries whose path overlaps an existing project asset. */
+  Result<std::vector<CaptureConflict>> captureConflicts(
+    const std::vector<project::AssetCapture>& plan) const;
+  /**
+   * Applies a conflict decision to the plan.
+   *
+   * Replace retargets the entry at the existing asset and keeps its project path, so map
+   * references stay valid and the previous revision remains in the project history.
+   * Cancel changes nothing; the caller aborts the capture.
+   */
+  void resolveCaptureConflict(
+    std::vector<project::AssetCapture>& plan,
+    const CaptureConflict& conflict,
+    CaptureConflictChoice choice);
+  /**
+   * Captures one library resource, asking `resolveConflict` before replacing a project
+   * resource that publishes the same name. Returns nullopt when the capture is cancelled.
+   */
+  Result<std::optional<project::Asset>> captureLibraryAssetResolving(
+    const std::string& libraryId,
+    const std::string& libraryAssetId,
+    const CaptureConflictResolver& resolveConflict);
   Result<void> registerDocument(MapDocument& document, const std::string& id);
   /**
    * Keeps a document alive in the session when no view shows it.

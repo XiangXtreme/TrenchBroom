@@ -79,6 +79,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/PrefabAsset.h"
+#include "ui/ProjectCaptureConflictDialog.h"
 #include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
@@ -1567,8 +1568,13 @@ void ModelBrowser::captureLibraryAsset(
 {
   if (!m_project)
     return;
-  const auto captured =
-    m_project->captureLibraryAsset(libraryId.toStdString(), libraryAssetId.toStdString());
+  const auto captured = m_project->captureLibraryAssetResolving(
+    libraryId.toStdString(),
+    libraryAssetId.toStdString(),
+    [this](const CaptureConflict& conflict) {
+      return confirmCaptureConflict(this, conflict) ? CaptureConflictChoice::Replace
+                                                    : CaptureConflictChoice::Cancel;
+    });
   if (captured.is_error())
   {
     QMessageBox::critical(
@@ -1577,6 +1583,8 @@ void ModelBrowser::captureLibraryAsset(
       QString::fromStdString(std::get<Error>(captured.error()).msg));
     return;
   }
+  if (!captured.value())
+    return; // Replacing the existing resource was declined.
   markAssetsDirty();
   scheduleAssetRefresh();
 }

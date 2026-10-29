@@ -181,6 +181,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupButton.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabAsset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectCaptureConflictDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectLibraryDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectRecovery.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectSession.cpp
@@ -444,6 +445,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupButton.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabAsset.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectCaptureConflictDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectLibraryDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectRecovery.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectReference.h

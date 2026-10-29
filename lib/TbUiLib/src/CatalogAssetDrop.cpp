@@ -148,6 +148,12 @@ Result<std::unique_ptr<PreparedAssetDrop>> PreparedAssetDrop::prepare(
     if (plan.is_error())
       return std::get<Error>(plan.error());
     result->m_plan = std::move(plan).value();
+    {
+      auto conflicts = result->m_session->captureConflicts(result->m_plan);
+      if (conflicts.is_error())
+        return std::get<Error>(conflicts.error());
+      result->m_conflicts = std::move(conflicts).value();
+    }
     const auto& root = result->m_plan.at(indices.front());
     if (root.import.library.libraryRevision != revision)
       return Error{"The library revision changed while preparing the drop."};
@@ -209,10 +215,24 @@ bool PreparedAssetDrop::matches(const QString& text) const
 {
   return m_original == text;
 }
+const std::vector<CaptureConflict>& PreparedAssetDrop::conflicts() const
+{
+  return m_conflicts;
+}
+void PreparedAssetDrop::resolveConflicts(const CaptureConflictChoice choice)
+{
+  for (const auto& conflict : m_conflicts)
+    m_session->resolveCaptureConflict(m_plan, conflict, choice);
+  m_conflicts.clear();
+}
 Result<void> PreparedAssetDrop::commit()
 {
   if (m_committed)
     return Error{"The resource drop was already committed."};
+  if (!m_conflicts.empty())
+    return Error{
+      "The resource would replace a project resource with the same name. Confirm the "
+      "replacement before dropping it."};
   for (const auto& expected : m_expected)
   {
     const auto current = m_session->store().findAsset(expected.id);

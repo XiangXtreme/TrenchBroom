@@ -56,8 +56,7 @@ QByteArray textureWad(const std::string& name)
 std::vector<std::uint8_t> textureLump(const std::string& name)
 {
   const auto wad = textureWad(name);
-  const auto archive =
-    project::readGoldSrcWad({wad.begin(), wad.end()});
+  const auto archive = project::readGoldSrcWad({wad.begin(), wad.end()});
   if (archive.is_error())
     FAIL(std::get<Error>(archive.error()).msg);
   REQUIRE(archive.value().textures.size() == 1);
@@ -156,6 +155,35 @@ TEST_CASE("CatalogAssetDrop")
     CHECK(assets.front() == existing);
     CHECK_FALSE(session->modified());
   }
+  SECTION("a drop that would replace a project resource asks before committing")
+  {
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Sound;
+    input.virtualPath = "sound/clip.wav";
+    input.displayName = "Existing";
+    input.original = {'x'};
+    input.compatible = {'x'};
+    const auto existing = require(session->importAsset(input));
+    require(session->save());
+
+    auto pending = require(PreparedAssetDrop::prepare(session, text));
+    REQUIRE(pending->conflicts().size() == 1);
+    CHECK(pending->conflicts().front().existing->id == existing.id);
+    CHECK(pending->commit().is_error());
+
+    pending->resolveConflicts(CaptureConflictChoice::Replace);
+    CHECK(pending->conflicts().empty());
+    require(pending->commit());
+
+    const auto assets = require(session->store().assets());
+    REQUIRE(assets.size() == 1);
+    CHECK(assets.front().id == existing.id);
+    CHECK(assets.front().library.libraryAssetId == entry.id);
+    const auto bytes =
+      require(session->store().readAsset(existing.id, project::ContentKind::Compatible));
+    CHECK(std::string(bytes.begin(), bytes.end()) == "RIFF original");
+  }
+
   SECTION("project resource drags reject changes made while dragging")
   {
     const auto captured =
@@ -240,8 +268,7 @@ TEST_CASE("CatalogAssetDrop")
     mixedDrag.assetId = mixedAsset.id;
     mixedDrag.revision = mixedAsset.revision;
     const auto mixedPending = PreparedAssetDrop::prepare(
-      textureSession,
-      catalogAssetDragData(mixedDrag, textureSession->store().info().id));
+      textureSession, catalogAssetDragData(mixedDrag, textureSession->store().info().id));
     CHECK(mixedPending.is_error());
   }
   SECTION("skybox drops name the group and capture every face")
@@ -250,8 +277,7 @@ TEST_CASE("CatalogAssetDrop")
     REQUIRE(QDir{}.mkdir(skyboxFolder));
     REQUIRE(QDir{}.mkdir(skyboxFolder + "/env"));
     for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
-      write(
-        skyboxFolder + "/env/desert" + face + ".png", pngBytes(QColor{80, 120, 160}));
+      write(skyboxFolder + "/env/desert" + face + ".png", pngBytes(QColor{80, 120, 160}));
     auto skyboxLibrary =
       require(project::AssetLibrary::create(pathFromQString(skyboxFolder), "Skyboxes"));
     require(skyboxLibrary->scan());

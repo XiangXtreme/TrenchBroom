@@ -721,6 +721,63 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(reopened.front().available);
   }
 
+  SECTION("reports same-named captures as conflicts and replaces on demand")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto first =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+
+    // A second library publishes the same texture name with different content.
+    const auto otherFolder = sandbox.root / "other-library";
+    std::filesystem::create_directories(otherFolder);
+    writeFile(
+      otherFolder / "custom.wad",
+      requireProject(project::buildGoldSrcWad({miptexFor("WALL01", 16, 64)})));
+    auto other = requireProject(project::AssetLibrary::create(otherFolder, "Other"));
+    requireProject(other->scan());
+    const auto otherLibraryId = other->info().id;
+    const auto otherWall = [&]() {
+      const auto assets = requireProject(other->assets());
+      const auto it = std::ranges::find_if(
+        assets, [](const auto& asset) { return asset.displayName == "WALL01"; });
+      REQUIRE(it != assets.end());
+      return *it;
+    }();
+    requireProject(sandbox.session->attachLibrary(otherFolder));
+
+    // The plain capture refuses instead of letting the store fail with a generic error.
+    const auto refused =
+      sandbox.session->captureLibraryAsset(otherLibraryId, otherWall.id);
+    REQUIRE(refused.is_error());
+    CHECK(
+      std::get<Error>(refused.error()).msg.find("already publishes")
+      != std::string::npos);
+
+    // Cancelling leaves the existing snapshot untouched.
+    const auto before = requireProject(sandbox.session->store().findAsset(first.id));
+    const auto cancelled = requireProject(sandbox.session->captureLibraryAssetResolving(
+      otherLibraryId, otherWall.id, [](const CaptureConflict&) {
+        return CaptureConflictChoice::Cancel;
+      }));
+    CHECK_FALSE(cancelled.has_value());
+    CHECK(requireProject(sandbox.session->store().findAsset(first.id)) == before);
+
+    auto asked = 0;
+    const auto replaced = requireProject(sandbox.session->captureLibraryAssetResolving(
+      otherLibraryId, otherWall.id, [&](const CaptureConflict& conflict) {
+        ++asked;
+        REQUIRE(conflict.existing.has_value());
+        CHECK(conflict.existing->id == first.id);
+        CHECK(conflict.path == first.virtualPath);
+        return CaptureConflictChoice::Replace;
+      }));
+    REQUIRE(replaced.has_value());
+    CHECK(asked == 1);
+    CHECK(replaced->id == first.id);
+    CHECK(replaced->virtualPath == first.virtualPath);
+    CHECK(replaced->library.libraryId == otherLibraryId);
+  }
+
   SECTION("keeps the old snapshot while the library moves ahead")
   {
     requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));

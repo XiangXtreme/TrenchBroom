@@ -94,6 +94,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/PieMenu.h"
+#include "ui/ProjectCaptureConflictDialog.h"
 #include "ui/ProjectSession.h"
 #include "ui/QKeySequenceUtils.h"
 #include "ui/QStringUtils.h"
@@ -1732,7 +1733,8 @@ void MapViewBase::dragEnterEvent(QDragEnterEvent* event)
   // under the cursor decides whether the drop has a target at all.
   if (
     m_assetDrop && isAppliedDrop(payload)
-    && hasDropTarget(payload, dropTargetFaces(pickResult(), m_document.map().selection())))
+    && hasDropTarget(
+      payload, dropTargetFaces(pickResult(), m_document.map().selection())))
   {
     event->acceptProposedAction();
     return;
@@ -1745,6 +1747,22 @@ void MapViewBase::dragLeaveEvent(QDragLeaveEvent*)
 {
   dragLeave();
   m_assetDrop.reset();
+}
+
+bool MapViewBase::resolveAssetDropConflicts()
+{
+  if (!m_assetDrop || m_assetDrop->conflicts().empty())
+    return true;
+  // Only an active window represents a real user drop. A background window must not take
+  // focus for a modal question, and headless runs must fail the drop instead of blocking.
+  const auto* top = window();
+  if (!top || !top->isActiveWindow())
+    return false;
+  for (const auto& conflict : m_assetDrop->conflicts())
+    if (!confirmCaptureConflict(this, conflict))
+      return false;
+  m_assetDrop->resolveConflicts(CaptureConflictChoice::Replace);
+  return true;
 }
 
 void MapViewBase::dragMoveEvent(QDragMoveEvent* event)
@@ -1765,7 +1783,8 @@ void MapViewBase::dragMoveEvent(QDragMoveEvent* event)
   }
   if (
     m_assetDrop && isAppliedDrop(payload)
-    && hasDropTarget(payload, dropTargetFaces(pickResult(), m_document.map().selection())))
+    && hasDropTarget(
+      payload, dropTargetFaces(pickResult(), m_document.map().selection())))
   {
     event->acceptProposedAction();
     return;
@@ -1797,6 +1816,12 @@ void MapViewBase::dropEvent(QDropEvent* event)
         event->ignore();
         return;
       }
+      if (!resolveAssetDropConflicts())
+      {
+        m_assetDrop.reset();
+        event->ignore();
+        return;
+      }
       const auto committed = m_assetDrop->commit();
       m_assetDrop.reset();
       if (committed.is_error())
@@ -1812,9 +1837,8 @@ void MapViewBase::dropEvent(QDropEvent* event)
         event->acceptProposedAction();
         return;
       }
-      if (
-        mdl::setBrushFaceAttributes(
-          m_document.map(), faces, {.materialName = dropNameOf(payload)}))
+      if (mdl::setBrushFaceAttributes(
+            m_document.map(), faces, {.materialName = dropNameOf(payload)}))
       {
         event->acceptProposedAction();
       }
@@ -1825,6 +1849,13 @@ void MapViewBase::dropEvent(QDropEvent* event)
       return;
     }
     if (!hasDropTracker())
+    {
+      dragLeave();
+      m_assetDrop.reset();
+      event->ignore();
+      return;
+    }
+    if (!resolveAssetDropConflicts())
     {
       dragLeave();
       m_assetDrop.reset();

@@ -29,6 +29,7 @@
 #include <fmt/ranges.h>
 
 #include <algorithm>
+#include <cctype>
 #include <functional>
 #include <set>
 
@@ -1516,6 +1517,100 @@ Result<std::vector<project::AssetCapture>> ProjectSession::buildCapturePlan(
   return plan;
 }
 
+namespace
+{
+std::string normalizedProjectPath(std::string path)
+{
+  std::ranges::transform(
+    path, path.begin(), [](const unsigned char c) { return char(std::tolower(c)); });
+  return path;
+}
+
+// The store rejects overlapping project paths; the session uses the same rule so a
+// conflict is reported before anything is written.
+bool projectPathsOverlap(const std::string& left, const std::string& right)
+{
+  const auto a = normalizedProjectPath(left);
+  const auto b = normalizedProjectPath(right);
+  return a == b || a.starts_with(b + '/') || b.starts_with(a + '/');
+}
+} // namespace
+
+Result<std::vector<CaptureConflict>> ProjectSession::captureConflicts(
+  const std::vector<project::AssetCapture>& plan) const
+{
+  const auto assets = m_store->assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+
+  auto conflicts = std::vector<CaptureConflict>{};
+  for (auto index = std::size_t{0}; index < plan.size(); ++index)
+  {
+    const auto& entry = plan[index];
+    // Refreshing an existing asset cannot conflict with itself.
+    if (entry.assetId)
+      continue;
+    const auto& path = entry.import.virtualPath;
+    for (const auto& asset : assets.value())
+      if (
+        projectPathsOverlap(path, asset.virtualPath)
+        || projectPathsOverlap(path, asset.publishPath))
+      {
+        conflicts.push_back(
+          CaptureConflict{index, entry.import.displayName, path, asset});
+        break;
+      }
+  }
+  return conflicts;
+}
+
+void ProjectSession::resolveCaptureConflict(
+  std::vector<project::AssetCapture>& plan,
+  const CaptureConflict& conflict,
+  const CaptureConflictChoice choice)
+{
+  if (
+    choice != CaptureConflictChoice::Replace || !conflict.existing
+    || conflict.planIndex >= plan.size())
+    return;
+
+  auto& entry = plan[conflict.planIndex];
+  entry.assetId = conflict.existing->id;
+  // Keep the project folder and engine-facing name: maps and the compiler already
+  // reference them. Only the snapshot revision is replaced.
+  entry.import.virtualPath = conflict.existing->virtualPath;
+  entry.import.displayName = conflict.existing->displayName;
+}
+
+Result<std::optional<project::Asset>> ProjectSession::captureLibraryAssetResolving(
+  const std::string& libraryId,
+  const std::string& libraryAssetId,
+  const CaptureConflictResolver& resolveConflict)
+{
+  auto indices = std::vector<std::size_t>{};
+  auto plan = buildCapturePlan(libraryId, {libraryAssetId}, indices);
+  if (plan.is_error())
+    return std::get<Error>(plan.error());
+  auto captures = std::move(plan).value();
+
+  auto conflicts = captureConflicts(captures);
+  if (conflicts.is_error())
+    return std::get<Error>(conflicts.error());
+  for (const auto& conflict : conflicts.value())
+  {
+    if (resolveConflict(conflict) == CaptureConflictChoice::Cancel)
+      return std::optional<project::Asset>{};
+    resolveCaptureConflict(captures, conflict, CaptureConflictChoice::Replace);
+  }
+
+  // The whole closure is committed once, so a conversion failure cannot leave a model in
+  // the project without the resources it needs.
+  auto captured = applyAssetCapturePlan(captures);
+  if (captured.is_error())
+    return std::get<Error>(captured.error());
+  return std::optional<project::Asset>{captured.value().at(indices.front())};
+}
+
 Result<project::Asset> ProjectSession::captureLibraryAsset(
   const std::string& libraryId, const std::string& libraryAssetId)
 {
@@ -1523,6 +1618,15 @@ Result<project::Asset> ProjectSession::captureLibraryAsset(
   auto plan = buildCapturePlan(libraryId, {libraryAssetId}, indices);
   if (plan.is_error())
     return std::get<Error>(plan.error());
+
+  if (const auto conflicts = captureConflicts(plan.value());
+      conflicts.is_success() && !conflicts.value().empty())
+  {
+    return Error{
+      "The project already publishes the name '" + conflicts.value().front().path
+      + "'. Use the capture conflict prompt to replace it, or rename the library "
+        "resource."};
+  }
 
   // The whole closure is committed once, so a conversion failure cannot leave a model in
   // the project without the resources it needs.

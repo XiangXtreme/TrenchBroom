@@ -412,6 +412,8 @@ private:
   void positionSmartFaceSelectionPanel();
   void confirmSmartFaceSelection();
   void cancelSmartFaceSelection();
+  // Asks about captures that would replace a project resource before the drop commits.
+  bool resolveAssetDropConflicts();
   void closeSmartFaceSelection();
 
   QMenu* makeEntityGroupsMenu(mdl::EntityDefinitionType type);
