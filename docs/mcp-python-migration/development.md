@@ -165,9 +165,11 @@ Release TrenchBroom 及全库 CTest（UI 120 项，原生鼠标捕获项按后�
 
 本轮历史基点完整预检在 `git diff --check d98f869...HEAD` 遇到已提交的
 `CounterStrike16_zh.fgd` 尾随空白而停止；保持该资源原样，以本轮起始提交
-`6c9d350a4` 为基点执行完整矩阵。运行时 skill 的默认旧用户路径
-`C:\Users\Trh\.cc-switch\skills` 在当前机器拒绝访问，当前用户的 skill 符号链接也指向
-该路径；仓库源已更新，运行时同步仍需修复该路径后执行仓库同步脚本及 `-Check`。
+`6c9d350a4` 为基点执行完整矩阵。运行时 skill 已同步到当前用户的
+`%USERPROFILE%\.cc-switch\skills\trenchbroom-mcp-scene-workflow`，
+`scripts\sync-trenchbroom-mcp-skill.ps1 -Destination <该路径> -Check` 通过；脚本默认
+目标保留历史路径 `C:\Users\Trh\.cc-switch\skills`，在其他用户名下用 `-Destination`
+指向当前用户目录。
 
 批次 A 已完成：公开目录固定为四入口，旧 MCP 的 IR、模块状态、selector、操作历史、
 Review 编排和 profile 兼容面不再接入执行链。批次 B 的最终 Release 场景记录在
