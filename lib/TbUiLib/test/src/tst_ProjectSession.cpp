@@ -231,6 +231,42 @@ TEST_CASE("ProjectSession")
     CHECK(requireProject(session->store().findAsset(asset.id)) == asset);
   }
 
+  SECTION("cleans unused revisions only when asked and saves the smaller project")
+  {
+    const auto asset = requireProject(session->importAsset(testAsset()));
+    auto replacement = testAsset();
+    replacement.original = {1, 2, 3, 4};
+    replacement.compatible = replacement.original;
+    requireProject(session->replaceAsset(asset.id, replacement));
+    requireProject(session->save());
+    CHECK_FALSE(session->modified());
+
+    const auto plan = requireProject(session->unreferencedRevisions());
+    REQUIRE(plan.revisions.size() == 1u);
+    CHECK(plan.revisions.front().revision == 1u);
+    CHECK(plan.contentBytes > 0);
+    // Reporting the plan never modifies the project.
+    CHECK_FALSE(session->modified());
+
+    const auto pruned = requireProject(session->pruneUnreferencedRevisions());
+    CHECK(pruned.revisions.size() == 1u);
+    CHECK(pruned.contentBytes > 0);
+    CHECK(session->modified());
+    CHECK(requireProject(session->unreferencedRevisions()).empty());
+
+    requireProject(session->save());
+    CHECK_FALSE(session->modified());
+    session.reset();
+    session = requireProject(ProjectSession::open(path));
+    CHECK(
+      requireProject(
+        session->store().readAsset(asset.id, project::ContentKind::Compatible))
+      == replacement.compatible);
+    CHECK(session->store()
+            .readAsset(asset.id, project::ContentKind::Compatible, 1)
+            .is_error());
+  }
+
   SECTION("refuses to overwrite an externally changed source")
   {
     const auto asset = requireProject(session->importAsset(testAsset()));

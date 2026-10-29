@@ -551,6 +551,53 @@ TEST_CASE("ProjectStore")
     CHECK(require(store->assets()).empty());
   }
 
+  SECTION("cleanup removes revisions that no head or checkpoint keeps")
+  {
+    auto store =
+      require(ProjectStore::create(workspace.path, "Cleanup", "Counter-Strike"));
+    const auto asset = require(store->importAsset(texture()));
+    auto replacement = texture();
+    replacement.original = {7, 7, 7};
+    replacement.compatible = {1, 3, 3, 7};
+    const auto head = require(store->replaceAsset(asset.id, replacement));
+    REQUIRE(head.revision == 2);
+
+    const auto plan = require(store->unreferencedRevisions());
+    REQUIRE(plan.revisions.size() == 1u);
+    CHECK(plan.revisions.front().assetId == asset.id);
+    CHECK(plan.revisions.front().revision == 1u);
+    CHECK(plan.revisions.front().virtualPath == asset.virtualPath);
+    CHECK(plan.contentBytes > 0);
+
+    const auto pruned = require(store->pruneUnreferencedRevisions());
+    CHECK(pruned.revisions.size() == 1u);
+    CHECK(pruned.contentBytes > 0);
+    CHECK(require(store->unreferencedRevisions()).empty());
+    CHECK(
+      require(store->readAsset(asset.id, ContentKind::Compatible))
+      == replacement.compatible);
+    CHECK(store->readAsset(asset.id, ContentKind::Compatible, 1).is_error());
+  }
+
+  SECTION("cleanup keeps revisions captured by a version checkpoint")
+  {
+    auto store =
+      require(ProjectStore::create(workspace.path, "Cleanup", "Counter-Strike"));
+    const auto asset = require(store->importAsset(texture()));
+    require(store->checkpoint("before reimport"));
+    auto replacement = texture();
+    replacement.original = {2, 4};
+    replacement.compatible = {6, 8};
+    require(store->replaceAsset(asset.id, replacement));
+
+    const auto plan = require(store->unreferencedRevisions());
+    CHECK(plan.empty());
+    CHECK(require(store->pruneUnreferencedRevisions()).empty());
+    CHECK(
+      require(store->readAsset(asset.id, ContentKind::Compatible, 1))
+      == texture().compatible);
+  }
+
   SECTION("migrates format 1 projects and backfills content hashes")
   {
     {

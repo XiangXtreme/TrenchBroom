@@ -212,6 +212,14 @@ public:
     const std::vector<project::AssetCapture>& plan);
   Result<void> save();
   Result<void> saveCopy(const std::filesystem::path& path);
+  /**
+   * Storage maintenance: revisions that neither the current assets nor a version use.
+   *
+   * Removing them frees the content only those revisions referenced. Only explicit
+   * cleanup does this; scanning a project or a library never deletes stored revisions.
+   */
+  Result<project::RevisionCleanup> unreferencedRevisions() const;
+  Result<project::RevisionCleanup> pruneUnreferencedRevisions();
 
 signals:
   void runtimeError(const QString& message);

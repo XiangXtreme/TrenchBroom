@@ -15,6 +15,7 @@
 #include <QJsonObject>
 #include <QKeySequence>
 #include <QLineEdit>
+#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -162,6 +163,8 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   });
   file->addAction(tr("Import Files…"), this, &ProjectWindow::importFiles);
   file->addAction(tr("Check Resources…"), this, [this]() { checkResources(); });
+  file->addAction(
+    tr("Clean Unused Revisions…"), this, &ProjectWindow::cleanUnusedRevisions);
   file->addAction(
     tr("Export Compile Snapshot…"), this, &ProjectWindow::exportCompileSnapshot);
   file->addAction(tr("Close Project"), this, &QWidget::close);
@@ -1089,6 +1092,60 @@ void ProjectWindow::restoreCheckpoint()
          "Open maps will reload with the restored content."))
     == QMessageBox::Yes)
     report(m_session->restore(id));
+}
+
+void ProjectWindow::cleanUnusedRevisions()
+{
+  const auto plan = m_session->unreferencedRevisions();
+  if (plan.is_error())
+  {
+    QMessageBox::critical(
+      this,
+      tr("Clean Unused Revisions"),
+      QString::fromStdString(std::get<Error>(plan.error()).msg));
+    return;
+  }
+
+  const auto& cleanup = plan.value();
+  if (cleanup.empty())
+  {
+    QMessageBox::information(
+      this,
+      tr("Clean Unused Revisions"),
+      tr("Every stored revision is still part of the current assets or a version."));
+    return;
+  }
+
+  const auto answer = QMessageBox::question(
+    this,
+    tr("Clean Unused Revisions"),
+    tr("The project still stores %1 unused revision(s) and %2 unreferenced content "
+       "file(s).\n\nRemoving them frees about %3. Current assets and versions are kept.")
+      .arg(qulonglong(cleanup.revisions.size()))
+      .arg(qulonglong(cleanup.contentRows))
+      .arg(QLocale{}.formattedDataSize(qlonglong(cleanup.contentBytes))));
+  if (answer != QMessageBox::Yes)
+  {
+    return;
+  }
+
+  const auto removed = m_session->pruneUnreferencedRevisions();
+  if (removed.is_error())
+  {
+    QMessageBox::critical(
+      this,
+      tr("Clean Unused Revisions"),
+      QString::fromStdString(std::get<Error>(removed.error()).msg));
+    return;
+  }
+
+  refresh();
+  statusBar()->showMessage(
+    tr(
+      "Removed %1 unused revision(s) and freed %2. Save the project to keep the cleanup.")
+      .arg(qulonglong(removed.value().revisions.size()))
+      .arg(QLocale{}.formattedDataSize(qlonglong(removed.value().contentBytes))),
+    8000);
 }
 
 void ProjectWindow::closeEvent(QCloseEvent* event)

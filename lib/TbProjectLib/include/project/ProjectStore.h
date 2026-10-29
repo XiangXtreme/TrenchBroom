@@ -8,6 +8,7 @@
 
 #include "project/ProjectAsset.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -16,6 +17,29 @@
 
 namespace tb::project
 {
+
+/** A stored revision that neither a head nor a checkpoint references anymore. */
+struct UnreferencedRevision
+{
+  std::string assetId;
+  std::uint64_t revision = 0;
+  std::string virtualPath;
+};
+
+/**
+ * Result of a storage cleanup.
+ *
+ * Content is shared between revisions, so the reported content bytes are the blobs that
+ * no remaining revision references, not the sum of the revision payloads.
+ */
+struct RevisionCleanup
+{
+  std::vector<UnreferencedRevision> revisions;
+  std::uint64_t contentRows = 0;
+  std::uint64_t contentBytes = 0;
+
+  bool empty() const { return revisions.empty() && contentRows == 0; }
+};
 
 /**
  * Single-file project catalog. Each mutation commits atomically; callers must serialize
@@ -107,6 +131,16 @@ public:
   Result<Checkpoint> restore(const std::string& checkpointId);
   // Consistent standalone copy. Never overwrites an existing destination.
   Result<void> saveCopy(const std::filesystem::path& destination) const;
+
+  /**
+   * Storage maintenance: reports revisions that no head and no checkpoint references.
+   *
+   * A version checkpoint keeps every revision it captured, so only revisions that became
+   * unreachable are reported. Nothing is deleted; the result is a cleanup plan.
+   */
+  Result<RevisionCleanup> unreferencedRevisions() const;
+  /** Deletes exactly what unreferencedRevisions() reports, in one transaction. */
+  Result<RevisionCleanup> pruneUnreferencedRevisions();
 };
 
 } // namespace tb::project

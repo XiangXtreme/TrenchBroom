@@ -14,6 +14,7 @@
 #include <cctype>
 #include <limits>
 #include <map>
+#include <set>
 #include <string_view>
 #include <utility>
 
@@ -117,6 +118,73 @@ Asset requireAsset(sqlite3* db, const std::string& id)
   if (!query.next())
     throw StoreError{"Project asset not found."};
   return readAssetRow(query);
+}
+
+std::vector<UnreferencedRevision> queryUnreferencedRevisions(sqlite3* db)
+{
+  // A revision is unreachable when neither the current heads nor any checkpoint captures
+  // it; checkpoints are what keep an old version restorable.
+  auto query = Statement{
+    db,
+    "SELECT r.asset_id,r.revision,r.virtual_path FROM revisions r "
+    "LEFT JOIN heads h ON h.asset_id=r.asset_id AND h.revision=r.revision "
+    "LEFT JOIN checkpoint_assets ca ON ca.asset_id=r.asset_id AND "
+    "ca.revision=r.revision "
+    "WHERE h.asset_id IS NULL AND ca.asset_id IS NULL "
+    "ORDER BY r.asset_id,r.revision"};
+  auto result = std::vector<UnreferencedRevision>{};
+  while (query.next())
+  {
+    result.push_back({query.text(0), query.integer(1), query.text(2)});
+  }
+  return result;
+}
+
+struct ContentFootprint
+{
+  std::uint64_t rows = 0;
+  std::uint64_t bytes = 0;
+};
+
+ContentFootprint orphanedContent(
+  sqlite3* db, const std::vector<UnreferencedRevision>& removals)
+{
+  // Content is content addressed and shared between revisions, so a blob counts once and
+  // only when no revision outside the cleanup plan still references it.
+  auto removed = std::set<std::pair<std::string, std::uint64_t>>{};
+  for (const auto& revision : removals)
+  {
+    removed.emplace(revision.assetId, revision.revision);
+  }
+
+  auto keptContent = std::set<std::string>{};
+  {
+    auto query =
+      Statement{db, "SELECT asset_id,revision,original,compatible FROM revisions"};
+    while (query.next())
+    {
+      const auto key =
+        std::pair<std::string, std::uint64_t>{query.text(0), query.integer(1)};
+      if (removed.contains(key))
+      {
+        continue;
+      }
+      keptContent.insert(query.text(2));
+      keptContent.insert(query.text(3));
+    }
+  }
+
+  auto footprint = ContentFootprint{};
+  auto query = Statement{db, "SELECT id,length(data) FROM content"};
+  while (query.next())
+  {
+    if (!keptContent.contains(query.text(0)))
+    {
+      ++footprint.rows;
+      footprint.bytes += query.integer(1);
+    }
+  }
+  return footprint;
 }
 
 std::vector<AssetDependency> queryDependencies(
@@ -1090,6 +1158,58 @@ Result<void> ProjectStore::saveCopy(const std::filesystem::path& destination) co
       check(target.get(), step);
     check(target.get(), finish);
     reservation.keep();
+  });
+}
+
+Result<RevisionCleanup> ProjectStore::unreferencedRevisions() const
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto cleanup = RevisionCleanup{};
+    cleanup.revisions = queryUnreferencedRevisions(db);
+    const auto orphaned = orphanedContent(db, cleanup.revisions);
+    cleanup.contentRows = orphaned.rows;
+    cleanup.contentBytes = orphaned.bytes;
+    return cleanup;
+  });
+}
+
+Result<RevisionCleanup> ProjectStore::pruneUnreferencedRevisions()
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    auto cleanup = RevisionCleanup{};
+    cleanup.revisions = queryUnreferencedRevisions(db);
+
+    auto drop = Statement{db, "DELETE FROM revisions WHERE asset_id=? AND revision=?"};
+    for (const auto& revision : cleanup.revisions)
+    {
+      drop.bind(1, revision.assetId);
+      drop.bind(2, revision.revision);
+      drop.run();
+      drop.reset();
+    }
+
+    // Content is shared between revisions, so it is removed only after every revision
+    // that could still reference it is gone.
+    auto orphaned = Statement{
+      db,
+      "SELECT count(*),coalesce(sum(length(data)),0) FROM content WHERE id NOT IN "
+      "(SELECT original FROM revisions UNION SELECT compatible FROM revisions)"};
+    if (orphaned.next())
+    {
+      cleanup.contentRows = orphaned.integer(0);
+      cleanup.contentBytes = orphaned.integer(1);
+    }
+    auto dropContent = Statement{
+      db,
+      "DELETE FROM content WHERE id NOT IN (SELECT original FROM revisions UNION "
+      "SELECT compatible FROM revisions)"};
+    dropContent.run();
+
+    transaction.commit();
+    return cleanup;
   });
 }
 

@@ -1045,6 +1045,21 @@ Result<void> ProjectSession::saveCopy(const std::filesystem::path& path)
   const auto reset = unstageMaps();
   return reset.is_error() ? reset : result;
 }
+Result<project::RevisionCleanup> ProjectSession::unreferencedRevisions() const
+{
+  return m_store->unreferencedRevisions();
+}
+Result<project::RevisionCleanup> ProjectSession::pruneUnreferencedRevisions()
+{
+  auto result = m_store->pruneUnreferencedRevisions();
+  if (result.is_success() && !result.value().empty())
+  {
+    // The project file only shrinks when the working copy is saved, so the cleanup joins
+    // the dirty state instead of silently rewriting the file behind the user.
+    changed();
+  }
+  return result;
+}
 Result<project::Checkpoint> ProjectSession::checkpoint(const std::string& name)
 {
   auto result = stageMaps() | kdl::and_then([&]() { return m_store->checkpoint(name); });

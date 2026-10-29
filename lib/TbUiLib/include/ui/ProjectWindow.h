@@ -93,6 +93,7 @@ private:
   void createCheckpoint();
   void compareCheckpoint();
   void restoreCheckpoint();
+  void cleanUnusedRevisions();
   bool save();
   std::optional<std::string> selectedAsset() const;
   bool report(const Result<void>& result);
