@@ -129,6 +129,15 @@ public:
    */
   Result<LibraryAttachSummary> attachLibrary(
     const std::filesystem::path& folder, bool createIfMissing = false);
+  /**
+   * Points an attached library at its new folder after the folder was moved.
+   *
+   * The selected folder must contain the same library identity; a different library is
+   * rejected so a wrong selection cannot silently replace the project's provenance.
+   * Captured snapshots are unaffected because they no longer depend on the library.
+   */
+  Result<void> relocateLibrary(
+    const std::string& libraryId, const std::filesystem::path& folder);
   Result<std::vector<LibraryConnection>> libraries() const;
   /** Reads one library's current catalog; `rescan` also picks up external file changes.
    */

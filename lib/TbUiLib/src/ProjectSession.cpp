@@ -1261,6 +1261,32 @@ Result<ProjectSession::LibraryAttachSummary> ProjectSession::attachLibrary(
   return summary;
 }
 
+Result<void> ProjectSession::relocateLibrary(
+  const std::string& libraryId, const std::filesystem::path& folder)
+{
+  auto error = std::error_code{};
+  if (!std::filesystem::is_directory(folder, error))
+    return Error{"Asset library folder does not exist: " + folder.generic_string()};
+
+  auto opened = project::AssetLibrary::open(folder);
+  if (opened.is_error())
+    return std::get<Error>(opened.error());
+
+  // The identity comes from the catalog, so relinking cannot accrete a second library
+  // under the same project link.
+  const auto& info = opened.value()->info();
+  if (info.id != libraryId)
+    return Error{
+      "The selected folder belongs to a different asset library (" + info.name + ")."};
+
+  auto attached = m_store->attachLibrary(libraryId, info.name, storedPath(folder));
+  if (attached.is_error())
+    return std::get<Error>(attached.error());
+  changed();
+  emit libraryLinksChanged();
+  return {};
+}
+
 Result<std::vector<ProjectSession::LibraryConnection>> ProjectSession::libraries() const
 {
   const auto infos = m_store->libraries();

@@ -677,6 +677,50 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(secondSnapshot != firstSnapshot);
   }
 
+  SECTION("relinks a moved library and keeps captured snapshots independent")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    const auto snapshot = requireProject(
+      sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible));
+
+    const auto moved = sandbox.root / "moved-library";
+    std::filesystem::rename(sandbox.libraryFolder, moved);
+    const auto unavailable = requireProject(sandbox.session->libraries());
+    REQUIRE(unavailable.size() == 1);
+    CHECK_FALSE(unavailable.front().available);
+    CHECK(
+      requireProject(sandbox.session->checkLibraryUpdates()).front().state
+      == project::LibraryUpdateState::LibraryUnavailable);
+
+    // Only the same library identity may take over the existing project link.
+    const auto otherFolder = sandbox.root / "other-library";
+    std::filesystem::create_directories(otherFolder);
+    requireProject(project::AssetLibrary::create(otherFolder, "Other"));
+    CHECK(sandbox.session->relocateLibrary(libraryId, otherFolder).is_error());
+
+    requireProject(sandbox.session->relocateLibrary(libraryId, moved));
+    const auto relinked = requireProject(sandbox.session->libraries());
+    REQUIRE(relinked.size() == 1);
+    CHECK(relinked.front().available);
+    CHECK(
+      requireProject(sandbox.session->checkLibraryUpdates()).front().state
+      == project::LibraryUpdateState::UpToDate);
+    CHECK(
+      requireProject(
+        sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible))
+      == snapshot);
+
+    // The new location is part of the saved project.
+    requireProject(sandbox.session->save());
+    sandbox.session.reset();
+    sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+    const auto reopened = requireProject(sandbox.session->libraries());
+    REQUIRE(reopened.size() == 1);
+    CHECK(reopened.front().available);
+  }
+
   SECTION("keeps the old snapshot while the library moves ahead")
   {
     requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));

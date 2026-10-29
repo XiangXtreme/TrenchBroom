@@ -173,6 +173,8 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   library->addAction(
     tr("Attach Asset Library…"), this, &ProjectWindow::attachAssetLibrary);
   library->addAction(
+    tr("Relink Moved Library…"), this, &ProjectWindow::relinkAssetLibrary);
+  library->addAction(
     tr("Check for Asset Updates…"), this, [this]() { checkLibraryUpdates(false); });
   library->addAction(tr("Rescan Library and Check for Updates…"), this, [this]() {
     checkLibraryUpdates(true);
@@ -486,6 +488,67 @@ void ProjectWindow::attachAssetLibrary()
       this,
       tr("Asset Library"),
       QString::fromStdString(fmt::format("{}", fmt::join(summary.warnings, "\n"))));
+  refresh();
+}
+
+void ProjectWindow::relinkAssetLibrary()
+{
+  const auto libraries = m_session->libraries();
+  if (libraries.is_error())
+  {
+    report(Error{std::get<Error>(libraries.error()).msg});
+    return;
+  }
+
+  auto missing = std::vector<project::LibraryInfo>{};
+  for (const auto& connection : libraries.value())
+    if (!connection.available)
+      missing.push_back(connection.info);
+  if (missing.empty())
+  {
+    QMessageBox::information(
+      this, tr("Relink Asset Library"), tr("Every attached asset library is reachable."));
+    return;
+  }
+
+  auto selected = missing.front();
+  if (missing.size() > 1)
+  {
+    auto names = QStringList{};
+    for (const auto& info : missing)
+      names << QString::fromStdString(info.name);
+    auto accepted = false;
+    const auto name = QInputDialog::getItem(
+      this,
+      tr("Relink Asset Library"),
+      tr("Asset library to relink:"),
+      names,
+      0,
+      false,
+      &accepted);
+    if (!accepted)
+      return;
+    selected = missing.at(static_cast<std::size_t>(names.indexOf(name)));
+  }
+
+  const auto folder = QFileDialog::getExistingDirectory(
+    this,
+    tr("Relink \"%1\"").arg(QString::fromStdString(selected.name)),
+    {},
+    QFileDialog::ShowDirsOnly);
+  if (folder.isEmpty())
+    return;
+
+  if (const auto relocated =
+        m_session->relocateLibrary(selected.id, pathFromQString(folder));
+      relocated.is_error())
+  {
+    report(Error{std::get<Error>(relocated.error()).msg});
+    return;
+  }
+
+  statusBar()->showMessage(
+    tr("Relinked asset library %1.").arg(QString::fromStdString(selected.name)));
   refresh();
 }
 
