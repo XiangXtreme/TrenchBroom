@@ -5,11 +5,16 @@
 当前进度（2026-10-29）：
 
 - 已完成：阶段 A 的地图标签切片。`ProjectWindow` 顶部有地图标签栏（脏标记、关闭按钮、
-  可重排）和“Reopen Map”入口；关闭标签只隐藏视图，`MapDocument` 与其修改仍由
-  `ProjectSession` 持有并参与保存；重新打开还原同一文档实例。关闭工程时会统一关闭
-  这些隐藏视图，逐个地图询问各自未保存的修改。
-- 尚未开始：把 `MapWindow` 的工作台抽成可嵌入的 `MapEditorView`（标签目前切换的是
-  独立顶层窗口，而不是内嵌视图）；阶段 B、C、D 全部内容。
+  可重排）和“Reopen Map”入口；关闭标签会**销毁视图**并保留文档。
+- 已完成：编辑工作台抽取。`MapEditorView` 拥有地图视图、信息面板、检查器和分隔器布局
+  及其面板行为；`WorkbenchSurface` 独立成单元；`MapWindow` 保留文档、菜单、工具栏、
+  状态栏与对话框，借用视图的控件路由命令。
+- 已完成：文档归属。`ProjectSession::retainDocument` 让工程持有文档；`MapWindow` 持有
+  `shared_ptr<MapDocument>`，工程保留时不再注销；`MapWindowManager::closeMapView`
+  销毁视图而不关闭文档；重新打开用同一文档新建视图，不重新读盘。
+- 尚未完成：标签目前仍切换独立顶层窗口，而不是把 `MapEditorView` 放进主窗口的
+  `QStackedWidget`——需要先把地图命令面（菜单/工具栏）从 `MapWindow` 移到工程窗口；
+  阶段 B、C、D 全部内容。
 
 目标是把 TrenchBroom 从“一个地图对应一个编辑窗口”演进为“一个工程对应一个工作区”。
 工程工作区负责地图、资源、编译配置和历史；地图标签负责单张地图的编辑视图。共享资产库
