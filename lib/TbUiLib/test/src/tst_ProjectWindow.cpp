@@ -425,7 +425,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(browser != nullptr);
     auto* source = betaWindow->findChild<QComboBox*>("ModelBrowser_Source");
     REQUIRE(source != nullptr);
-    source->setCurrentIndex(source->findData(int(BrowserSource::Project)));
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
 
     closeTab(*tabs, 0);
     REQUIRE(tabs->count() == 1);
@@ -604,7 +604,8 @@ TEST_CASE("ProjectWindow")
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
     auto* source = alphaWindow->findChild<QComboBox*>("ModelBrowser_Source");
     REQUIRE(source != nullptr);
-    source->setCurrentIndex(source->findData(int(BrowserSource::AssetLibrary)));
+    source->setCurrentIndex(
+      source->findData(int(BrowserSourceFilter::AssetLibrary)));
     QApplication::processEvents();
     QTest::qWait(100);
     auto* browser = alphaWindow->findChild<ModelBrowserView*>();

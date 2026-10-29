@@ -78,7 +78,7 @@ private:
   QFileSystemWatcher* m_fileSystemWatcher = nullptr;
   QTimer* m_rescanTimer = nullptr;
 
-  BrowserSource m_source = BrowserSource::GameFiles;
+  BrowserSourceFilter m_sourceFilter = BrowserSourceFilter::GameFiles;
   std::string m_libraryId;
   std::vector<project::LibraryUpdate> m_libraryUpdates;
   QString m_libraryError;
@@ -131,9 +131,10 @@ private:
   void scheduleAssetRefresh();
   void scheduleDeferredAssetRefreshAfterDocumentLoad();
   std::optional<std::vector<BrowserAsset>> scanAssets();
+  std::optional<std::vector<BrowserAsset>> scanGameAssets();
   std::optional<std::vector<BrowserAsset>> scanProjectAssets() const;
   std::optional<std::vector<BrowserAsset>> scanLibraryAssets() const;
-  void setAssetSource(BrowserSource source);
+  void setAssetSource(BrowserSourceFilter source);
   void updateSourceControls();
   void refreshLibraryChoices();
   void chooseLibrary();

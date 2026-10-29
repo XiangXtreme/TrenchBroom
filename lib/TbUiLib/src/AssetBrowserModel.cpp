@@ -97,8 +97,8 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.lastModified == rhs.lastModified && lhs.projectId == rhs.projectId
          && lhs.assetId == rhs.assetId && lhs.revision == rhs.revision
          && lhs.catalogPath == rhs.catalogPath && lhs.source == rhs.source
-         && lhs.skybox == rhs.skybox
-         && lhs.libraryId == rhs.libraryId && lhs.libraryAssetId == rhs.libraryAssetId
+         && lhs.skybox == rhs.skybox && lhs.libraryId == rhs.libraryId
+         && lhs.libraryAssetId == rhs.libraryAssetId
          && lhs.libraryRevision == rhs.libraryRevision
          && lhs.libraryContentHash == rhs.libraryContentHash
          && lhs.projectAssetId == rhs.projectAssetId
@@ -120,6 +120,23 @@ const char* browserSourceName(const BrowserSource source)
     return "Asset library";
   }
   return "Unknown";
+}
+
+bool browserFilterIncludesSource(
+  const BrowserSourceFilter filter, const BrowserSource source)
+{
+  switch (filter)
+  {
+  case BrowserSourceFilter::All:
+    return true;
+  case BrowserSourceFilter::GameFiles:
+    return source == BrowserSource::GameFiles;
+  case BrowserSourceFilter::Project:
+    return source == BrowserSource::Project;
+  case BrowserSourceFilter::AssetLibrary:
+    return source == BrowserSource::AssetLibrary;
+  }
+  return false;
 }
 
 bool isLibraryAsset(const BrowserAsset& asset)
@@ -237,6 +254,96 @@ std::vector<std::filesystem::path> entityModelAssetPaths(
         asset.projectPublishPath.empty() ? asset.path : asset.projectPublishPath);
     }
   }
+  return result;
+}
+
+std::vector<BrowserAsset> mergeBrowserAssets(
+  std::vector<BrowserAsset> projectAssets,
+  std::vector<BrowserAsset> libraryAssets,
+  std::vector<BrowserAsset> gameAssets)
+{
+  const auto libraryIdentity = [](const BrowserAsset& asset) {
+    return std::pair{asset.libraryId, asset.libraryAssetId};
+  };
+  const auto isSnapshotOf =
+    [&](const BrowserAsset& projectAsset, const BrowserAsset& libraryAsset) {
+      return !projectAsset.libraryAssetId.empty()
+             && libraryIdentity(projectAsset) == libraryIdentity(libraryAsset);
+    };
+
+  // The project snapshot is the authoritative copy of a captured library resource, so the
+  // library's current state is reported on the snapshot instead of listing the resource
+  // twice.
+  for (const auto& libraryAsset : libraryAssets)
+  {
+    if (libraryAsset.libraryAssetId.empty())
+    {
+      continue;
+    }
+
+    const auto snapshot = std::ranges::find_if(
+      projectAssets,
+      [&](const auto& projectAsset) { return isSnapshotOf(projectAsset, libraryAsset); });
+    if (snapshot != projectAssets.end())
+    {
+      snapshot->projectUpdateAvailable =
+        snapshot->projectUpdateAvailable || libraryAsset.projectUpdateAvailable;
+      snapshot->missing = snapshot->missing || libraryAsset.missing;
+    }
+  }
+
+  const auto enginePathKey = [](const BrowserAsset& asset) {
+    return kdl::path_to_lower(asset.path.lexically_normal().generic_string());
+  };
+
+  auto result = std::vector<BrowserAsset>{};
+  result.reserve(projectAssets.size() + libraryAssets.size() + gameAssets.size());
+  const auto append = [&](const BrowserAsset& asset) {
+    if (asset.path.empty())
+    {
+      return;
+    }
+
+    const auto key = enginePathKey(asset);
+    const auto duplicate = std::ranges::any_of(result, [&](const auto& existing) {
+      return existing.type == asset.type && enginePathKey(existing) == key;
+    });
+    if (!duplicate)
+    {
+      result.push_back(asset);
+    }
+  };
+
+  for (const auto& asset : projectAssets)
+  {
+    append(asset);
+  }
+  for (const auto& asset : libraryAssets)
+  {
+    const auto captured = std::ranges::any_of(
+      projectAssets,
+      [&](const auto& projectAsset) { return isSnapshotOf(projectAsset, asset); });
+    if (!captured)
+    {
+      append(asset);
+    }
+  }
+  for (const auto& asset : gameAssets)
+  {
+    append(asset);
+  }
+
+  std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {
+    if (lhs.path != rhs.path)
+    {
+      return lhs.path.generic_string() < rhs.path.generic_string();
+    }
+    if (lhs.type != rhs.type)
+    {
+      return lhs.type < rhs.type;
+    }
+    return lhs.source < rhs.source;
+  });
   return result;
 }
 
@@ -408,7 +515,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const std::vector<BrowserAsset>& assets,
   const std::filesystem::path& currentFolderPath,
   const QString& searchText,
-  const bool includeDefaultRoots)
+  const bool includeDefaultRoots,
+  const bool showSourceMarkers)
 {
   const auto trimmedSearchText = searchText.trimmed();
   const auto hasSearch = !trimmedSearchText.isEmpty();
@@ -463,7 +571,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
 
     const auto assetNameMatches =
       matches(assetPath.filename())
-      || (!asset.projectId.empty() && QString::fromStdString(asset.displayName).contains(trimmedSearchText, Qt::CaseInsensitive));
+      || (!asset.projectId.empty() && QString::fromStdString(asset.displayName).contains(trimmedSearchText, Qt::CaseInsensitive))
+      || (showSourceMarkers && QString::fromLatin1(browserSourceName(asset.source)).contains(trimmedSearchText, Qt::CaseInsensitive));
 
     if (relFromCurrent.empty() || relFromCurrent == std::filesystem::path{"."})
     {
@@ -539,9 +648,14 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
         ? (currentFolderAbs.empty() ? assetPath
                                     : assetPath.lexically_relative(currentFolderAbs))
         : assetPath.filename();
-    entries.push_back(
-      {BrowserCellData{asset.type, assetPath},
-       asset.projectId.empty() ? titlePath.generic_string() : asset.displayName});
+    auto title = asset.projectId.empty() ? titlePath.generic_string() : asset.displayName;
+    if (showSourceMarkers)
+    {
+      // The unified listing can hold the same name from more than one source, so the
+      // marker is part of the title instead of a hover-only hint.
+      title += std::string{" ["} + browserSourceName(asset.source) + "]";
+    }
+    entries.push_back({BrowserCellData{asset.type, assetPath}, std::move(title)});
   }
 
   return entries;

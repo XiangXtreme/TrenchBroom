@@ -61,6 +61,21 @@ enum class BrowserSource
   AssetLibrary,
 };
 
+/**
+ * Which sources the browser lists.
+ *
+ * The filter is a view setting, not a property of a resource: every listing entry still
+ * carries its real BrowserSource, so the unified listing can mark where each resource
+ * comes from without pretending it has one origin.
+ */
+enum class BrowserSourceFilter
+{
+  All,
+  GameFiles,
+  Project,
+  AssetLibrary,
+};
+
 struct BrowserCellData
 {
   BrowserCellType type;
@@ -131,6 +146,8 @@ BrowserCellType assetTypeForExtension(const std::filesystem::path& path);
 
 const char* browserSourceName(BrowserSource source);
 
+bool browserFilterIncludesSource(BrowserSourceFilter filter, BrowserSource source);
+
 bool isEntityModelAsset(const BrowserAsset& asset);
 
 bool sameBrowserAssetContent(const BrowserAsset& lhs, const BrowserAsset& rhs);
@@ -146,6 +163,22 @@ bool hasProjectSnapshot(const BrowserAsset& asset);
 
 std::vector<std::filesystem::path> entityModelAssetPaths(
   const std::vector<BrowserAsset>& assets);
+
+/**
+ * Combines the project, library and game-file listings into the unified listing.
+ *
+ * The three sources overlap, so the order of preference is:
+ *  - a project snapshot replaces the library entry it was captured from, keeping the
+ *    library's "missing" and "update available" state visible on the snapshot;
+ *  - the remaining entries are deduplicated by type and engine path, with a library entry
+ *    replacing a game-file entry that has the same path.
+ *
+ * The result is ordered by engine path so the listing is stable across scans.
+ */
+std::vector<BrowserAsset> mergeBrowserAssets(
+  std::vector<BrowserAsset> projectAssets,
+  std::vector<BrowserAsset> libraryAssets,
+  std::vector<BrowserAsset> gameAssets);
 
 std::optional<std::vector<BrowserAsset>> collectBrowserAssets(
   const std::filesystem::path& folderPath,
@@ -172,6 +205,9 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const QString& searchText,
   // Game files are browsed through fixed roots; project and library listings only show
   // the folders their own entries imply.
-  bool includeDefaultRoots = true);
+  bool includeDefaultRoots = true,
+  // The unified listing marks each entry's source, because the same engine path can be
+  // listed from more than one place.
+  bool showSourceMarkers = false);
 
 } // namespace tb::ui

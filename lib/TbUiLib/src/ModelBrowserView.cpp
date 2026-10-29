@@ -293,6 +293,15 @@ void ModelBrowserView::setIncludeDefaultRoots(const bool includeDefaultRoots)
   update();
 }
 
+void ModelBrowserView::setShowSourceMarkers(const bool showSourceMarkers)
+{
+  if (m_showSourceMarkers == showSourceMarkers)
+    return;
+  m_showSourceMarkers = showSourceMarkers;
+  invalidate();
+  update();
+}
+
 void ModelBrowserView::setPreviewPathResolver(AssetPreviewPathResolver resolver)
 {
   m_previewPathResolver = std::move(resolver);
@@ -361,7 +370,8 @@ void ModelBrowserView::doReloadLayout(Layout& layout)
          m_assets,
          m_currentFolderPath,
          m_searchText,
-         m_includeDefaultRoots))
+         m_includeDefaultRoots,
+         m_showSourceMarkers))
   {
     if (m_previewOnly && entry.cellData.type == BrowserCellType::Folder)
       continue;

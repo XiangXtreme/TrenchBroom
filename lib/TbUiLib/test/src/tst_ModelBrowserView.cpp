@@ -225,6 +225,32 @@ TEST_CASE("ModelBrowserView")
       Equals(std::vector<std::string>{"", "prefabs/crate.tbprefab"}));
   }
 
+  SECTION("marks the source of unified listing entries")
+  {
+    auto projectAsset = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};
+    projectAsset.source = BrowserSource::Project;
+    projectAsset.projectId = "project";
+    projectAsset.displayName = "Box";
+    auto libraryAsset = BrowserAsset{BrowserCellType::Model, "models/crate.mdl"};
+    libraryAsset.source = BrowserSource::AssetLibrary;
+    libraryAsset.projectId = "library";
+    libraryAsset.libraryId = "library";
+    libraryAsset.libraryAssetId = "lib-crate";
+    libraryAsset.displayName = "Crate";
+
+    const auto entries =
+      modelBrowserEntries({}, {projectAsset, libraryAsset}, "models", {}, false, true);
+    CHECK_THAT(
+      entryTitles(entries),
+      Equals(std::vector<std::string>{"..", "Box [Project]", "Crate [Asset library]"}));
+
+    // Searching the marker name finds an entry whose display name has no match.
+    const auto found =
+      modelBrowserEntries({}, {projectAsset, libraryAsset}, {}, "library", false, true);
+    REQUIRE(found.size() == 2u);
+    CHECK(found[1].title == "Crate [Asset library]");
+  }
+
   SECTION("sound preview button bounds stay inside item")
   {
     const auto itemBounds = LayoutBounds{10.0f, 20.0f, 93.0f, 93.0f};

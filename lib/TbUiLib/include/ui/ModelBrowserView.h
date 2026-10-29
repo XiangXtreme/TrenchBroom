@@ -109,6 +109,9 @@ private:
   // Game files are browsed through fixed roots; catalog listings only show the folders
   // their own entries imply.
   bool m_includeDefaultRoots = true;
+  // The unified listing holds entries from several sources at once, so each title carries
+  // its source marker.
+  bool m_showSourceMarkers = false;
   bool m_previewOnly = false;
   AssetPreviewPathResolver m_previewPathResolver;
 
@@ -121,6 +124,7 @@ public:
   void setCurrentFolderPath(std::filesystem::path currentFolderPath);
   void setSearchText(QString searchText);
   void setIncludeDefaultRoots(bool includeDefaultRoots);
+  void setShowSourceMarkers(bool showSourceMarkers);
   void setPreviewOnly(bool previewOnly);
   /**
    * Resolves a previewable file for entries that have no file of their own.

@@ -175,6 +175,76 @@ TEST_CASE("AssetBrowserModel")
     CHECK(changedAssetPaths({}, {}, {}, {uncaptured}).empty());
   }
 
+  SECTION("unifies project library and game sources")
+  {
+    // The project snapshot of a captured library resource is authoritative, and the
+    // library's update state is reported on it instead of listing the resource twice.
+    auto snapshot = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};
+    snapshot.source = BrowserSource::Project;
+    snapshot.projectId = "project";
+    snapshot.assetId = "asset-box";
+    snapshot.revision = 4;
+    snapshot.libraryId = "library";
+    snapshot.libraryAssetId = "lib-box";
+    snapshot.libraryRevision = 3;
+    snapshot.projectAssetId = "asset-box";
+    snapshot.projectRevision = 4;
+    snapshot.projectPublishPath = "models/box.mdl";
+
+    auto library = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};
+    library.source = BrowserSource::AssetLibrary;
+    library.projectId = "library";
+    library.libraryId = "library";
+    library.libraryAssetId = "lib-box";
+    library.libraryRevision = 5;
+    library.projectAssetId = "asset-box";
+    library.projectRevision = 4;
+    library.projectPublishPath = "models/box.mdl";
+    library.projectUpdateAvailable = true;
+
+    auto game = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};
+    auto unclaimedGame = BrowserAsset{BrowserCellType::Model, "models/tree.mdl"};
+
+    const auto merged = mergeBrowserAssets({snapshot}, {library}, {game, unclaimedGame});
+    REQUIRE(merged.size() == 2u);
+    CHECK(merged[0].path == std::filesystem::path{"models/box.mdl"});
+    CHECK(merged[0].source == BrowserSource::Project);
+    CHECK(merged[0].projectUpdateAvailable);
+    CHECK(merged[1].path == std::filesystem::path{"models/tree.mdl"});
+    CHECK(merged[1].source == BrowserSource::GameFiles);
+  }
+
+  SECTION("keeps an uncaptured library copy instead of the game file at the same path")
+  {
+    auto library = BrowserAsset{BrowserCellType::Texture, "textures/brick.wad"};
+    library.source = BrowserSource::AssetLibrary;
+    library.libraryId = "library";
+    library.libraryAssetId = "lib-brick";
+    library.libraryRevision = 1;
+    auto game = BrowserAsset{BrowserCellType::Texture, "textures/brick.wad"};
+
+    const auto merged = mergeBrowserAssets({}, {library}, {game});
+    REQUIRE(merged.size() == 1u);
+    CHECK(merged[0].source == BrowserSource::AssetLibrary);
+    CHECK(merged[0].libraryAssetId == "lib-brick");
+  }
+
+  SECTION("filters sources for the layered listings")
+  {
+    CHECK(
+      browserFilterIncludesSource(BrowserSourceFilter::All, BrowserSource::GameFiles));
+    CHECK(
+      browserFilterIncludesSource(BrowserSourceFilter::All, BrowserSource::AssetLibrary));
+    CHECK(
+      browserFilterIncludesSource(BrowserSourceFilter::Project, BrowserSource::Project));
+    CHECK_FALSE(browserFilterIncludesSource(
+      BrowserSourceFilter::Project, BrowserSource::AssetLibrary));
+    CHECK_FALSE(browserFilterIncludesSource(
+      BrowserSourceFilter::AssetLibrary, BrowserSource::GameFiles));
+    CHECK_FALSE(browserFilterIncludesSource(
+      BrowserSourceFilter::GameFiles, BrowserSource::Project));
+  }
+
   SECTION("classifies supported asset extensions")
   {
     CHECK(assetTypeForExtension("models/foo.mdl") == BrowserCellType::Model);

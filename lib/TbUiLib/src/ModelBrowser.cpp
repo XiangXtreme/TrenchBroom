@@ -238,10 +238,20 @@ ModelBrowser::ModelBrowser(
   , m_document{document}
   , m_project{appController.projectFor(document)}
 {
+  if (m_project)
+  {
+    // A project owns all three layers, so the browser starts with the unified listing
+    // instead of hiding project content behind a selector.
+    m_sourceFilter = BrowserSourceFilter::All;
+  }
   createGui(appController);
   bindEvents(appController);
   connectObservers();
   updateFolderEdit();
+  if (m_project)
+  {
+    refreshLibraryChoices();
+  }
   updateSourceControls();
   if (m_project)
   {
@@ -313,17 +323,22 @@ void ModelBrowser::createGui(AppController& appController)
   m_iconSizeCombo->addItem("300%", 3.0f);
   updateIconSizeCombo();
 
-  // The source selector makes the two layers explicit: game files are neither project
-  // content nor library content, and a library entry never looks like a map dependency.
+  // The source filter chooses which layers the browser lists. The unified listing keeps
+  // each entry's real source marker, so project content, library content and game files
+  // never look alike.
   m_sourceCombo = new QComboBox{};
   m_sourceCombo->setObjectName("ModelBrowser_Source");
   m_sourceCombo->setMinimumWidth(96);
-  m_sourceCombo->setToolTip(tr("Asset source"));
-  m_sourceCombo->addItem(tr("Game Files"), int(BrowserSource::GameFiles));
+  m_sourceCombo->setToolTip(tr("Asset source filter"));
   if (m_project)
   {
-    m_sourceCombo->addItem(tr("Project"), int(BrowserSource::Project));
-    m_sourceCombo->addItem(tr("Asset Library"), int(BrowserSource::AssetLibrary));
+    m_sourceCombo->addItem(tr("All Sources"), int(BrowserSourceFilter::All));
+  }
+  m_sourceCombo->addItem(tr("Game Files"), int(BrowserSourceFilter::GameFiles));
+  if (m_project)
+  {
+    m_sourceCombo->addItem(tr("Project"), int(BrowserSourceFilter::Project));
+    m_sourceCombo->addItem(tr("Asset Library"), int(BrowserSourceFilter::AssetLibrary));
   }
 
   m_libraryCombo = new QComboBox{};
@@ -545,7 +560,7 @@ void ModelBrowser::bindEvents(AppController& appController)
   connect(m_reloadButton, &QToolButton::clicked, this, [&]() {
     m_lastWriteTimes.clear();
     m_assetRefreshPending = false;
-    if (m_source != BrowserSource::GameFiles)
+    if (m_sourceFilter != BrowserSourceFilter::GameFiles)
       refreshLibraryChoices();
     rescanWatchedDirectory();
   });
@@ -555,7 +570,7 @@ void ModelBrowser::bindEvents(AppController& appController)
     QOverload<int>::of(&QComboBox::currentIndexChanged),
     this,
     [&](const int index) {
-      setAssetSource(BrowserSource(m_sourceCombo->itemData(index).toInt()));
+      setAssetSource(BrowserSourceFilter(m_sourceCombo->itemData(index).toInt()));
     });
 
   connect(
@@ -644,7 +659,11 @@ void ModelBrowser::documentWasLoaded()
 
 void ModelBrowser::modsDidChange()
 {
-  if (m_source != BrowserSource::GameFiles)
+  // Project and library layers do not depend on the enabled game mods; only the game-file
+  // layer does, and the unified listing includes it.
+  if (
+    m_sourceFilter == BrowserSourceFilter::Project
+    || m_sourceFilter == BrowserSourceFilter::AssetLibrary)
   {
     return;
   }
@@ -1252,16 +1271,36 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
 
 std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets()
 {
-  switch (m_source)
+  switch (m_sourceFilter)
   {
-  case BrowserSource::Project:
+  case BrowserSourceFilter::Project:
     return scanProjectAssets();
-  case BrowserSource::AssetLibrary:
+  case BrowserSourceFilter::AssetLibrary:
     return scanLibraryAssets();
-  case BrowserSource::GameFiles:
+  case BrowserSourceFilter::GameFiles:
+    return scanGameAssets();
+  case BrowserSourceFilter::All:
     break;
   }
 
+  // The unified listing tolerates a missing layer: a project without an attached library,
+  // or a document without enabled game mods, still lists the remaining sources.
+  auto gameAssets = scanGameAssets();
+  auto projectAssets = scanProjectAssets();
+  auto libraryAssets = scanLibraryAssets();
+  if (!gameAssets && !projectAssets && !libraryAssets)
+  {
+    return std::nullopt;
+  }
+
+  return mergeBrowserAssets(
+    projectAssets ? std::move(*projectAssets) : std::vector<BrowserAsset>{},
+    libraryAssets ? std::move(*libraryAssets) : std::vector<BrowserAsset>{},
+    gameAssets ? std::move(*gameAssets) : std::vector<BrowserAsset>{});
+}
+
+std::optional<std::vector<BrowserAsset>> ModelBrowser::scanGameAssets()
+{
   if (m_folderPath.is_absolute())
   {
     return collectBrowserAssets(
@@ -1326,13 +1365,13 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets()
     assetBrowserRoots());
 }
 
-void ModelBrowser::setAssetSource(const BrowserSource source)
+void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
 {
-  if (m_source == source)
+  if (m_sourceFilter == source)
   {
     return;
   }
-  m_source = source;
+  m_sourceFilter = source;
   m_folderPath.clear();
   m_currentFolderPath.clear();
   updateFolderEdit();
@@ -1344,23 +1383,29 @@ void ModelBrowser::setAssetSource(const BrowserSource source)
 
 void ModelBrowser::updateSourceControls()
 {
+  const auto includesLibrary = browserFilterIncludesSource(
+    m_sourceFilter, BrowserSource::AssetLibrary);
   if (m_libraryCombo)
-    m_libraryCombo->setVisible(m_source == BrowserSource::AssetLibrary);
+    m_libraryCombo->setVisible(includesLibrary);
   if (m_sourceCombo)
   {
     const QSignalBlocker blocker{m_sourceCombo};
     for (auto index = 0; index < m_sourceCombo->count(); ++index)
     {
-      if (BrowserSource(m_sourceCombo->itemData(index).toInt()) == m_source)
+      if (BrowserSourceFilter(m_sourceCombo->itemData(index).toInt()) == m_sourceFilter)
       {
         m_sourceCombo->setCurrentIndex(index);
         break;
       }
     }
   }
-  // Saving a selection as a prefab is a game-file action.
+  // Saving a selection as a prefab is a game-file action, and the unified listing
+  // includes the game files it works with.
   if (m_savePrefabButton)
-    m_savePrefabButton->setVisible(m_source == BrowserSource::GameFiles);
+  {
+    m_savePrefabButton->setVisible(
+      browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles));
+  }
 }
 
 void ModelBrowser::refreshLibraryChoices()
@@ -1555,7 +1600,9 @@ void ModelBrowser::reloadModels()
   m_lastWriteTimes = assetLastWriteTimes(m_assets);
 
   rebuildFolderTree();
-  m_view->setIncludeDefaultRoots(m_source == BrowserSource::GameFiles);
+  m_view->setIncludeDefaultRoots(
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles));
+  m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
   m_view->setAssets(m_folderPath, m_assets);
   m_view->setCurrentFolderPath(m_currentFolderPath);
 }
@@ -1676,8 +1723,11 @@ void ModelBrowser::setWatchedDirectory()
   }
 
   // Project and library entries live in the project file or in a library catalog, so
-  // there is no directory to watch; both notify through ProjectSession instead.
-  if (m_source != BrowserSource::GameFiles)
+  // there is no directory to watch; both notify through ProjectSession instead. The
+  // unified listing still contains game files, so it keeps watching their roots.
+  if (
+    m_sourceFilter == BrowserSourceFilter::Project
+    || m_sourceFilter == BrowserSourceFilter::AssetLibrary)
   {
     return;
   }
@@ -1766,7 +1816,9 @@ void ModelBrowser::rescanWatchedDirectory()
   m_assets = std::move(*nextAssets);
   m_lastWriteTimes = std::move(newLastWriteTimes);
   rebuildFolderTree();
-  m_view->setIncludeDefaultRoots(m_source == BrowserSource::GameFiles);
+  m_view->setIncludeDefaultRoots(
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles));
+  m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
   m_view->setAssets(m_folderPath, m_assets);
   m_view->setCurrentFolderPath(m_currentFolderPath);
 }
