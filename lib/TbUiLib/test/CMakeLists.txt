@@ -40,6 +40,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PieMenuSettingsDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PopupButton.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ProjectSession.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ProjectWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ProjectResourceAudit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PreferenceDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PrefabAsset.cpp

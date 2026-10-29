@@ -18,19 +18,25 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSaveFile>
+#include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QTabBar>
 #include <QTimer>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
 #include "mdl/GameConfig.h"
 #include "mdl/GameInfo.h"
 #include "mdl/GameManager.h"
+#include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/MapHeader.h"
 #include "project/AssetLibrary.h"
 #include "ui/AppController.h"
+#include "ui/MapDocument.h"
+#include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectLibraryDialog.h"
 #include "ui/ProjectResourceDialog.h"
@@ -152,6 +158,27 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
 
   auto* body = new QWidget{this};
   auto* layout = new QVBoxLayout{body};
+
+  // Workspace row: one tab per live map view, plus the entry point back to closed views.
+  auto* workspace = new QWidget{body};
+  auto* workspaceRow = new QHBoxLayout{workspace};
+  workspaceRow->setContentsMargins(0, 0, 0, 0);
+  m_mapTabs = new QTabBar{workspace};
+  m_mapTabs->setObjectName("ProjectMapTabs");
+  m_mapTabs->setDocumentMode(true);
+  m_mapTabs->setExpanding(false);
+  m_mapTabs->setTabsClosable(true);
+  m_mapTabs->setMovable(true);
+  m_reopenMaps = new QToolButton{workspace};
+  m_reopenMaps->setObjectName("ProjectReopenMaps");
+  m_reopenMaps->setText(tr("Reopen Map"));
+  m_reopenMaps->setPopupMode(QToolButton::InstantPopup);
+  m_reopenMapsMenu = new QMenu{m_reopenMaps};
+  m_reopenMaps->setMenu(m_reopenMapsMenu);
+  workspaceRow->addWidget(m_mapTabs, 1);
+  workspaceRow->addWidget(m_reopenMaps, 0);
+  layout->addWidget(workspace);
+
   m_search = new QLineEdit{body};
   m_search->setPlaceholderText(tr("Search project content"));
   layout->addWidget(m_search);
@@ -178,11 +205,46 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   layout->addWidget(splitter);
   setCentralWidget(body);
   connect(m_search, &QLineEdit::textChanged, this, [this]() { refresh(); });
+  connect(m_mapTabs, &QTabBar::currentChanged, this, [this](const int index) {
+    if (index < 0)
+      return;
+    const auto assetId = m_mapTabs->tabData(index).toString().toStdString();
+    if (assetId.empty())
+      return;
+    const auto* document = m_session->documentFor(assetId);
+    if (!document)
+      return;
+    if (auto* window = mapWindowFor(*document))
+    {
+      window->show();
+      m_appController.mapWindowManager().activateMapWindow(*window);
+    }
+  });
+  connect(m_mapTabs, &QTabBar::tabCloseRequested, this, [this](const int index) {
+    const auto assetId = m_mapTabs->tabData(index).toString().toStdString();
+    // Closing the tab closes the view only: the document and its modifications stay in
+    // the session, so saving the project still writes them and reopening restores the
+    // state.
+    if (const auto* document = m_session->documentFor(assetId))
+    {
+      if (auto* window = mapWindowFor(*document))
+        window->hide();
+    }
+    refreshMapTabs();
+    refreshTitle();
+  });
   connect(m_assets, &QTreeWidget::itemDoubleClicked, this, [this]() { openSelected(); });
   connect(
     m_session.get(), &ProjectSession::contentsChanged, this, &ProjectWindow::refresh);
   connect(
     m_session.get(), &ProjectSession::stateChanged, this, &ProjectWindow::refreshTitle);
+  // Document registration and per-map modification state both surface as stateChanged, so
+  // the tab strip follows edits without polling.
+  connect(
+    m_session.get(),
+    &ProjectSession::stateChanged,
+    this,
+    &ProjectWindow::scheduleMapTabsRefresh);
   connect(
     m_session.get(), &ProjectSession::runtimeError, this, [this](const QString& message) {
       QMessageBox::critical(this, tr("Project Asset Cache"), message);
@@ -319,6 +381,117 @@ bool ProjectWindow::report(const Result<void>& result)
   return false;
 }
 
+MapWindow* ProjectWindow::mapWindowFor(const MapDocument& document) const
+{
+  for (auto* window : m_appController.mapWindowManager().mapWindows())
+    if (&window->document() == &document)
+      return window;
+  return nullptr;
+}
+
+void ProjectWindow::scheduleMapTabsRefresh()
+{
+  if (m_mapTabsRefreshScheduled)
+    return;
+  m_mapTabsRefreshScheduled = true;
+  QTimer::singleShot(0, this, [this]() {
+    m_mapTabsRefreshScheduled = false;
+    refreshMapTabs();
+  });
+}
+
+void ProjectWindow::refreshMapTabs()
+{
+  if (!m_mapTabs)
+    return;
+  const auto assets = m_session->store().assets();
+  if (assets.is_error())
+    return;
+
+  const auto previous = m_mapTabs->currentIndex() >= 0
+                          ? m_mapTabs->tabData(m_mapTabs->currentIndex()).toString()
+                          : QString{};
+  // Rebuilding the strip must not look like the user switching maps.
+  const auto blocker = QSignalBlocker{m_mapTabs};
+  while (m_mapTabs->count() > 0)
+    m_mapTabs->removeTab(0);
+
+  auto closed = std::vector<std::pair<std::string, QString>>{};
+  auto openTabs = 0;
+  for (const auto& asset : assets.value())
+  {
+    if (asset.type != project::AssetType::Map)
+      continue;
+    const auto name = QString::fromStdString(asset.displayName);
+    const auto* document = m_session->documentFor(asset.id);
+    auto* window = document ? mapWindowFor(*document) : nullptr;
+    // A map without a visible view is either closed (document kept) or not open at all.
+    if (!document || !window || !window->isVisible())
+    {
+      closed.emplace_back(asset.id, name);
+      continue;
+    }
+    const auto index =
+      m_mapTabs->addTab(document->map().modified() ? name + tr(" *") : name);
+    m_mapTabs->setTabData(index, QString::fromStdString(asset.id));
+    ++openTabs;
+    m_mapTabs->setTabToolTip(
+      index, tr("%1 — %2").arg(name, QString::fromStdString(asset.publishPath)));
+    if (m_mapTabs->tabData(index).toString() == previous)
+      m_mapTabs->setCurrentIndex(index);
+  }
+  if (m_mapTabs->count() == 0)
+  {
+    const auto index = m_mapTabs->addTab(tr("No open map"));
+    m_mapTabs->setTabData(index, QString{});
+    m_mapTabs->setTabEnabled(index, false);
+  }
+  m_mapTabs->setTabsClosable(openTabs > 0);
+
+  // The menu is rebuilt from inside a triggered action, so the old actions are removed
+  // and scheduled for deletion instead of being destroyed while their signal is still on
+  // the stack.
+  for (auto* action : m_reopenMapsMenu->actions())
+  {
+    m_reopenMapsMenu->removeAction(action);
+    action->deleteLater();
+  }
+  for (const auto& [assetId, name] : closed)
+  {
+    auto* action = m_reopenMapsMenu->addAction(name);
+    connect(
+      action, &QAction::triggered, this, [this, assetId]() { openMapTab(assetId); });
+  }
+  m_reopenMaps->setEnabled(!closed.empty());
+  if (closed.empty())
+    m_reopenMaps->setToolTip(tr("Every project map is already open"));
+  else
+    m_reopenMaps->setToolTip(tr("Reopen a map whose tab was closed"));
+}
+
+void ProjectWindow::openMapTab(const std::string& assetId)
+{
+  // A closed tab keeps its document, so reopening only has to show the same view again.
+  if (const auto* document = m_session->documentFor(assetId))
+  {
+    if (auto* window = mapWindowFor(*document))
+    {
+      window->show();
+      m_appController.mapWindowManager().activateMapWindow(*window);
+      refreshMapTabs();
+      return;
+    }
+  }
+  if (!report(m_appController.mapWindowManager().loadProjectMap(m_session, assetId)))
+    return;
+  if (const auto* document = m_session->documentFor(assetId))
+  {
+    if (auto* window = mapWindowFor(*document))
+      window->show();
+  }
+  refreshMapTabs();
+}
+
 void ProjectWindow::refreshTitle()
 {
   setWindowModified(m_session->modified());
@@ -432,6 +605,7 @@ void ProjectWindow::refresh()
       m_history->setCurrentItem(item);
   }
   refreshTitle();
+  refreshMapTabs();
 }
 
 bool ProjectWindow::save()
@@ -752,10 +926,22 @@ void ProjectWindow::closeEvent(QCloseEvent* event)
 {
   if (m_session->hasOpenMaps())
   {
-    QMessageBox::information(
-      this, tr("Close Project"), tr("Close the project map windows first."));
-    event->ignore();
-    return;
+    // A document whose tab was closed has no visible view to close, so the project closes
+    // its own map views. Each map still asks about its own unsaved changes, and
+    // cancelling there cancels closing the project.
+    for (auto* window : m_appController.mapWindowManager().mapWindows())
+    {
+      if (!m_session->assetFor(window->document()))
+        continue;
+      // Showing a kept document makes the save prompt understandable if it has edits.
+      if (!window->isVisible())
+        window->show();
+      if (!window->close())
+      {
+        event->ignore();
+        return;
+      }
+    }
   }
   if (m_session->modified())
   {

@@ -16,10 +16,15 @@
 class QTreeWidget;
 class QLineEdit;
 class QCloseEvent;
+class QMenu;
+class QTabBar;
+class QToolButton;
 
 namespace tb::ui
 {
 class AppController;
+class MapDocument;
+class MapWindow;
 class ProjectSession;
 
 class ProjectWindow : public QMainWindow
@@ -29,6 +34,10 @@ class ProjectWindow : public QMainWindow
   QTreeWidget* m_assets = nullptr;
   QTreeWidget* m_history = nullptr;
   QLineEdit* m_search = nullptr;
+  QTabBar* m_mapTabs = nullptr;
+  QToolButton* m_reopenMaps = nullptr;
+  QMenu* m_reopenMapsMenu = nullptr;
+  bool m_mapTabsRefreshScheduled = false;
 
 public:
   ProjectWindow(AppController& appController, std::shared_ptr<ProjectSession> session);
@@ -40,6 +49,16 @@ protected:
 private:
   void refresh();
   void refreshTitle();
+  /*
+   * The map tab strip is the project workspace: a tab is a live editing view, not the
+   * document. Closing a tab hides the view and keeps the document and its modifications
+   * in the session, so saving the project still writes them and "Reopen map" restores the
+   * same editing state.
+   */
+  void refreshMapTabs();
+  void scheduleMapTabsRefresh();
+  void openMapTab(const std::string& assetId);
+  MapWindow* mapWindowFor(const MapDocument& document) const;
   void importFiles();
   Result<bool> prepareImport(
     project::AssetImport& asset,
