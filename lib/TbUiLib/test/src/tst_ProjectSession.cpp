@@ -869,6 +869,27 @@ TEST_CASE("ProjectSessionAssetLibrary")
       == readProjectFile(folder / "textures.wad"));
     CHECK(
       readProjectFile(secondFolder / "map.map") == readProjectFile(folder / "map.map"));
+
+    // A compilation exports the map under its own name so profiles that derive their
+    // outputs from ${MAP_BASE_NAME} keep the artifact names, and a later project change
+    // can never rewrite an input another run is compiling.
+    const auto namedFolder = sandbox.root / "snapshot-named";
+    requireProject(
+      sandbox.session->exportCompileSnapshot(map.id, namedFolder, "compile.map"));
+    CHECK(readProjectFile(namedFolder / "compile.map") == mapImport.compatible);
+    CHECK_FALSE(std::filesystem::exists(namedFolder / "map.map"));
+    const auto namedMetadata = readProjectFile(namedFolder / "snapshot.txt");
+    CHECK(
+      std::string(namedMetadata.begin(), namedMetadata.end()).find("mapFile=compile.map")
+      != std::string::npos);
+    CHECK(sandbox.session
+            ->exportCompileSnapshot(map.id, sandbox.root / "rejected", "sub/escape.map")
+            .is_error());
+
+    auto changedMap = mapImport;
+    changedMap.original = changedMap.compatible = {'{', '}'};
+    requireProject(sandbox.session->replaceAsset(map.id, changedMap));
+    CHECK(readProjectFile(namedFolder / "compile.map") == mapImport.compatible);
   }
 
   SECTION("exports only the referenced texture and its dependency closure")

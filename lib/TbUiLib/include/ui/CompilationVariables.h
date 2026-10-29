@@ -21,6 +21,7 @@
 
 #include "el/VariableStore.h"
 
+#include <filesystem>
 #include <string>
 
 namespace tb
@@ -49,12 +50,15 @@ class CommonVariables : public el::VariableTable
 {
 protected:
   explicit CommonVariables(const mdl::Map& map);
+  /** Game, tool and mod variables from the map, with names taken from `mapPath`. */
+  CommonVariables(const mdl::Map& map, const std::filesystem::path& mapPath);
 };
 
 class CommonCompilationVariables : public CommonVariables
 {
 protected:
   explicit CommonCompilationVariables(const mdl::Map& map);
+  CommonCompilationVariables(const mdl::Map& map, const std::filesystem::path& mapPath);
 };
 
 class CompilationWorkDirVariables : public CommonCompilationVariables
@@ -67,6 +71,17 @@ class CompilationVariables : public CommonCompilationVariables
 {
 public:
   CompilationVariables(const mdl::Map& map, const std::string& workDir);
+  /**
+   * Compilation variables for a frozen input.
+   *
+   * The tools see the map at `mapPath`, so `${MAP_DIR_PATH}`, `${MAP_FULL_NAME}` and
+   * `${MAP_BASE_NAME}` describe the frozen copy rather than the live document. Tools,
+   * game path and mods still come from the map.
+   */
+  CompilationVariables(
+    const mdl::Map& map,
+    const std::string& workDir,
+    const std::filesystem::path& mapPath);
 };
 
 class LaunchGameEngineVariables : public CommonVariables

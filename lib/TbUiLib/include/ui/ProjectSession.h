@@ -158,9 +158,15 @@ public:
    * references, a WAD list for the compiler and the non-texture resources the map uses.
    * It is a snapshot: the project and its libraries may change afterwards without
    * affecting a compile started from it, and nothing in it points at a library.
+   *
+   * `mapFileName` names the exported map inside the folder. The default keeps the
+   * documented `map.map` contract for a hand exported snapshot; a compilation names it
+   * after the map so profiles that derive outputs from `${MAP_BASE_NAME}` keep working.
    */
   Result<void> exportCompileSnapshot(
-    const std::string& mapAssetId, const std::filesystem::path& folder);
+    const std::string& mapAssetId,
+    const std::filesystem::path& folder,
+    const std::string& mapFileName = "map.map");
 
   // Reads live edits without selecting revisions, saving the project or clearing dirty
   // state.

@@ -27,6 +27,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QTemporaryDir>
 #include <QTextEdit>
 
 #include "base/Logger.h"
@@ -42,6 +43,8 @@
 #include "ui/LaunchGameEngineDialog.h"
 #include "ui/MapDocument.h" // IWYU pragma: keep
 #include "ui/MapWindow.h"
+#include "ui/ProjectSession.h"
+#include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
 #include "ui/Splitter.h"
 #include "ui/TitledPanel.h"
@@ -251,8 +254,47 @@ Result<void> CompilationDialog::runProfile(
   const mdl::CompilationProfile& profile, const bool test)
 {
   const auto& map = m_document.map();
+  if (auto project = m_appController.projectFor(m_document))
+  {
+    return prepareProjectSnapshot(*project)
+           | kdl::and_then([&](const auto& mapPath) -> Result<void> {
+               return test ? m_run.testSnapshot(profile, map, mapPath, m_camera, m_output)
+                           : m_run.runSnapshot(profile, map, mapPath, m_camera, m_output);
+             });
+  }
   return test ? m_run.test(profile, map, m_camera, m_output)
               : m_run.run(profile, map, m_camera, m_output);
+}
+
+Result<std::filesystem::path> CompilationDialog::prepareProjectSnapshot(
+  ProjectSession& project)
+{
+  const auto assetId = project.assetFor(m_document);
+  if (!assetId)
+    return Error{"This document is not a project map."};
+  const auto asset = project.store().findAsset(*assetId);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (!asset.value())
+    return Error{"The project map no longer exists."};
+
+  auto folder = std::make_unique<QTemporaryDir>();
+  if (!folder->isValid())
+    return Error{"Could not create a folder for the compile snapshot."};
+  const auto folderPath = pathFromQString(folder->path());
+  // The exported file keeps the map's own name, so profiles that derive their outputs
+  // from
+  // ${MAP_BASE_NAME} produce the same artifact names as a direct compile.
+  const auto fileName =
+    pathFromQString(QString::fromStdString(asset.value()->publishPath)).filename();
+  if (const auto exported =
+        project.exportCompileSnapshot(*assetId, folderPath, fileName.string());
+      exported.is_error())
+    return std::get<Error>(exported.error());
+
+  const auto mapPath = folderPath / fileName;
+  m_snapshots.push_back(std::move(folder));
+  return mapPath;
 }
 
 void CompilationDialog::stopCompilation()

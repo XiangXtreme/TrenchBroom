@@ -127,6 +127,15 @@ hltools compile -wadcfgfile wads.cfg map.map
 hltools 默认把地图用到的纹理嵌入 BSP，未使用的资源不会进入 BSP；`bsp info`
 会显示嵌入纹理数。vis 阶段需要 `.prt`，与快照无关。
 
+**从工程窗口编译**时不需要手工导出：每次运行编译配置都会先导出一份新的快照到独立
+目录，并把 `${MAP_DIR_PATH}`、`${MAP_FULL_NAME}`、`${MAP_BASE_NAME}` 指向这份快照。
+地图文件沿用工程里的名字（例如 `alpha.map`，而不是 `map.map`），所以按 `${MAP_BASE_NAME}`
+派生输出名的现有配置不用改。快照在这一轮运行期间不会再被编辑、切换标签或库更新改写。
+
+快照目录是一次性的：编译产物写在里面，对话框关闭后随之删除，因此发布流程仍应像普通
+TrenchBroom 一样用复制任务把 `.bsp` 拷到游戏或 mod 目录。需要长期保留的输入请用
+**File → Export Compile Snapshot…** 显式导出。
+
 ## 保存与版本
 
 - 地图窗口的 **Save / Ctrl+S** 与工程窗口 **Save Project** 都保存整个工程，包含

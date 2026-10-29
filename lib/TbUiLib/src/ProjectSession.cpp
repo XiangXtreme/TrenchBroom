@@ -386,8 +386,15 @@ Result<void> ProjectSession::removeAsset(const std::string& id)
   return m_store->removeAsset(id) | kdl::transform([&]() { changed(); });
 }
 Result<void> ProjectSession::exportCompileSnapshot(
-  const std::string& mapAssetId, const std::filesystem::path& folder)
+  const std::string& mapAssetId,
+  const std::filesystem::path& folder,
+  const std::string& mapFileName)
 {
+  if (
+    mapFileName.empty()
+    || std::filesystem::path{mapFileName}.filename()
+         != std::filesystem::path{mapFileName})
+    return Error{"The snapshot map file name must be a plain file name."};
   const auto map = m_store->findAsset(mapAssetId);
   if (map.is_error())
     return std::get<Error>(map.error());
@@ -521,6 +528,7 @@ Result<void> ProjectSession::exportCompileSnapshot(
     "# TB compile snapshot",
     "project=" + m_store->info().id,
     "map=" + mapAssetId,
+    "mapFile=" + mapFileName,
     "mapRevision=" + std::to_string(map.value()->revision)};
   for (const auto& reference : externals)
     metadata.push_back("external " + reference);
@@ -607,7 +615,8 @@ Result<void> ProjectSession::exportCompileSnapshot(
     return std::vector<std::uint8_t>{value.begin(), value.end()};
   };
 
-  if (const auto result = write(folder / "map.map", contents.value()); result.is_error())
+  if (const auto result = write(folder / mapFileName, contents.value());
+      result.is_error())
     return result;
   if (const auto result = write(folder / "textures.wad", wad.value()); result.is_error())
     return result;

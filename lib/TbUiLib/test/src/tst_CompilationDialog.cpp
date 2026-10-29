@@ -29,6 +29,7 @@ along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
 #include "ui/CatchConfig.h"
 #include "ui/CompilationDialog.h"
 #include "ui/CompilationProfileManager.h"
+#include "ui/CompilationVariables.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 
@@ -55,6 +56,25 @@ TEST_CASE("CompilationDialog")
   auto appControllerFixture = AppControllerFixture{};
   auto& appController = appControllerFixture.appController();
 
+
+  SECTION("frozen input variables point at the exported map")
+  {
+    auto documentFixture = MapDocumentFixture{};
+    auto& document = documentFixture.create();
+    const auto snapshot = std::filesystem::path{"snapshot"} / "alpha.map";
+
+    auto variables = CompilationVariables{document.map(), "work", snapshot};
+
+    using namespace CompilationVariableNames;
+    CHECK(variables.value(MAP_DIR_PATH).stringValue() == "snapshot");
+    CHECK(variables.value(MAP_FULL_NAME).stringValue() == "alpha.map");
+    CHECK(variables.value(MAP_BASE_NAME).stringValue() == "alpha");
+    CHECK(variables.value(WORK_DIR_PATH).stringValue() == "work");
+    // The live document path must never leak into the frozen input.
+    CHECK(
+      variables.value(MAP_DIR_PATH).stringValue()
+      != document.map().path().parent_path().string());
+  }
 
   SECTION("selectProfile")
   {

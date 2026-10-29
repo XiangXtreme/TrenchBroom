@@ -38,8 +38,14 @@ namespace tb::ui
 {
 
 CommonVariables::CommonVariables(const mdl::Map& map)
+  : CommonVariables{map, map.path()}
 {
-  const auto filename = map.path().filename();
+}
+
+CommonVariables::CommonVariables(
+  const mdl::Map& map, const std::filesystem::path& mapPath)
+{
+  const auto filename = mapPath.filename();
   const auto gamePath = pref(map.gameInfo().gamePathPreference);
 
   auto mods = std::vector<std::string>{};
@@ -66,10 +72,16 @@ CommonVariables::CommonVariables(const mdl::Map& map)
 }
 
 CommonCompilationVariables::CommonCompilationVariables(const mdl::Map& map)
-  : CommonVariables{map}
+  : CommonCompilationVariables{map, map.path()}
 {
-  const auto filename = map.path().filename();
-  const auto filePath = map.path().parent_path();
+}
+
+CommonCompilationVariables::CommonCompilationVariables(
+  const mdl::Map& map, const std::filesystem::path& mapPath)
+  : CommonVariables{map, mapPath}
+{
+  const auto filename = mapPath.filename();
+  const auto filePath = mapPath.parent_path();
   const auto appPath = SystemPaths::appDirectory();
 
   using namespace CompilationVariableNames;
@@ -85,7 +97,15 @@ CompilationWorkDirVariables::CompilationWorkDirVariables(const mdl::Map& map)
 
 CompilationVariables::CompilationVariables(
   const mdl::Map& map, const std::string& workDir)
-  : CommonCompilationVariables{map}
+  : CompilationVariables{map, workDir, map.path()}
+{
+}
+
+CompilationVariables::CompilationVariables(
+  const mdl::Map& map,
+  const std::string& workDir,
+  const std::filesystem::path& mapPath)
+  : CommonCompilationVariables{map, mapPath}
 {
   const auto cpuCount = size_t(std::max(std::thread::hardware_concurrency(), 1u));
 

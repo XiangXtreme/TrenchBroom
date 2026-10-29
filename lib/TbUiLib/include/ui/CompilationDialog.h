@@ -23,9 +23,14 @@
 
 #include "ui/CompilationRun.h"
 
+#include <filesystem>
+#include <memory>
+#include <vector>
+
 class QLabel;
 class QPushButton;
 class QTextEdit;
+class QTemporaryDir;
 
 namespace tb
 {
@@ -44,6 +49,7 @@ namespace ui
 class AppController;
 class CompilationProfileManager;
 class MapDocument;
+class ProjectSession;
 
 class CompilationDialog : public QDialog
 {
@@ -62,6 +68,9 @@ private:
   QLabel* m_currentRunLabel = nullptr;
   QTextEdit* m_output = nullptr;
   CompilationRun m_run;
+  // One frozen input folder per run; kept alive until the dialog closes so a finished
+  // run's output directory can still be inspected.
+  std::vector<std::unique_ptr<QTemporaryDir>> m_snapshots;
 
 public:
   explicit CompilationDialog(
@@ -89,6 +98,13 @@ private:
   void updateCompileButtons();
   void startCompilation(bool test);
   Result<void> runProfile(const mdl::CompilationProfile& profile, bool test);
+  /**
+   * Exports the current project map into a fresh folder and returns the frozen map file.
+   *
+   * Each run gets its own folder, so an input can never be rewritten by a later edit or
+   * by a second run while the first one is still compiling.
+   */
+  Result<std::filesystem::path> prepareProjectSnapshot(ProjectSession& project);
   void stopCompilation();
   void closeEvent(QCloseEvent* event) override;
 private slots:

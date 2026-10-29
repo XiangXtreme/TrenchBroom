@@ -23,6 +23,8 @@
 
 #include "base/Result.h"
 
+#include <filesystem>
+#include <optional>
 #include <string>
 
 class QTextEdit;
@@ -67,6 +69,24 @@ public:
     const mdl::Map& map,
     const gl::PerspectiveCamera& camera,
     QTextEdit* currentOutput);
+  /**
+   * Runs the profile against a frozen map file.
+   *
+   * `mapPath` is the map the tools see; game, mod and tool variables still come from
+   * `map`, so a project compilation can freeze its input without changing the profile.
+   */
+  Result<void> runSnapshot(
+    const mdl::CompilationProfile& profile,
+    const mdl::Map& map,
+    const std::filesystem::path& mapPath,
+    const gl::PerspectiveCamera& camera,
+    QTextEdit* currentOutput);
+  Result<void> testSnapshot(
+    const mdl::CompilationProfile& profile,
+    const mdl::Map& map,
+    const std::filesystem::path& mapPath,
+    const gl::PerspectiveCamera& camera,
+    QTextEdit* currentOutput);
   void terminate();
 
 private:
@@ -76,7 +96,8 @@ private:
     const mdl::Map& map,
     const gl::PerspectiveCamera& camera,
     QTextEdit* currentOutput,
-    bool test);
+    bool test,
+    const std::optional<std::filesystem::path>& mapPath);
 
 private:
   Result<std::string> buildWorkDir(

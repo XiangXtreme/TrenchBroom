@@ -21,6 +21,7 @@
 
 #include "el/Interpolate.h"
 #include "mdl/CompilationProfile.h"
+#include "mdl/Map.h"
 #include "ui/CompilationContext.h"
 #include "ui/CompilationRunner.h"
 #include "ui/CompilationVariables.h"
@@ -52,7 +53,7 @@ Result<void> CompilationRun::run(
   const gl::PerspectiveCamera& camera,
   QTextEdit* currentOutput)
 {
-  return run(profile, map, camera, currentOutput, false);
+  return run(profile, map, camera, currentOutput, false, std::nullopt);
 }
 
 Result<void> CompilationRun::test(
@@ -61,7 +62,27 @@ Result<void> CompilationRun::test(
   const gl::PerspectiveCamera& camera,
   QTextEdit* currentOutput)
 {
-  return run(profile, map, camera, currentOutput, true);
+  return run(profile, map, camera, currentOutput, true, std::nullopt);
+}
+
+Result<void> CompilationRun::runSnapshot(
+  const mdl::CompilationProfile& profile,
+  const mdl::Map& map,
+  const std::filesystem::path& mapPath,
+  const gl::PerspectiveCamera& camera,
+  QTextEdit* currentOutput)
+{
+  return run(profile, map, camera, currentOutput, false, mapPath);
+}
+
+Result<void> CompilationRun::testSnapshot(
+  const mdl::CompilationProfile& profile,
+  const mdl::Map& map,
+  const std::filesystem::path& mapPath,
+  const gl::PerspectiveCamera& camera,
+  QTextEdit* currentOutput)
+{
+  return run(profile, map, camera, currentOutput, true, mapPath);
 }
 
 void CompilationRun::terminate()
@@ -82,7 +103,8 @@ Result<void> CompilationRun::run(
   const mdl::Map& map,
   const gl::PerspectiveCamera& camera,
   QTextEdit* currentOutput,
-  const bool test)
+  const bool test,
+  const std::optional<std::filesystem::path>& mapPath)
 {
   contract_pre(!profile.tasks.empty());
   contract_pre(currentOutput != nullptr);
@@ -91,7 +113,8 @@ Result<void> CompilationRun::run(
   cleanup();
 
   return buildWorkDir(profile, map) | kdl::transform([&](const auto& workDir) {
-           auto variables = CompilationVariables{map, workDir};
+           auto variables =
+             CompilationVariables{map, workDir, mapPath.value_or(map.path())};
            auto compilationContext = CompilationContext{
              map, camera, variables, TextOutputAdapter{currentOutput}, test};
            m_currentRun =
