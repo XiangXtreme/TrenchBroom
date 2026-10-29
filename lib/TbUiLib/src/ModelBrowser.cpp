@@ -368,8 +368,7 @@ void ModelBrowser::createGui(AppController& appController)
     // Library textures get a thumbnail from their compatible content; the file is written
     // on demand for visible cells so browsing never copies the whole library.
     m_view->setPreviewPathResolver([project = m_project](const BrowserAsset& asset) {
-      const auto file = project->libraryAssetFile(asset.libraryId, asset.libraryAssetId);
-      return file.is_success() ? file.value() : std::filesystem::path{};
+      return project->libraryAssetFile(asset.libraryId, asset.libraryAssetId);
     });
   }
 
@@ -1185,8 +1184,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
       entry.projectRevision = projectAsset.revision;
       entry.projectPublishPath =
         pathFromQString(QString::fromStdString(projectAsset.publishPath));
-      if (const auto file = m_project->assetFile(projectAsset); file.is_success())
-        entry.absolutePath = file.value();
+
       const auto update = std::ranges::find_if(updates, [&](const auto& candidate) {
         return candidate.projectAssetId == projectAsset.id;
       });
@@ -1194,7 +1192,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
         update != updates.end()
         && (update->state == project::LibraryUpdateState::NewVersion || update->state == project::LibraryUpdateState::DependenciesChanged);
     }
-    else if (type != BrowserCellType::Texture)
+    if (type != BrowserCellType::Texture)
     {
       // Non-texture resources have a real file in the library. Textures stay unresolved
       // here and get their compatible WAD only when a cell becomes visible, so browsing

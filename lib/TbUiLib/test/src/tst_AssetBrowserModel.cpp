@@ -160,6 +160,9 @@ TEST_CASE("AssetBrowserModel")
     previous.libraryRevision = 1;
     previous.projectPublishPath = "models/box.mdl";
     auto current = previous;
+    auto otherSource = previous;
+    otherSource.source = BrowserSource::Project;
+    CHECK_FALSE(sameBrowserAssetContent(previous, otherSource));
     current.libraryRevision = 2;
     CHECK_FALSE(sameBrowserAssetContent(previous, current));
     CHECK(

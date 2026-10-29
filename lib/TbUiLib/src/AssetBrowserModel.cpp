@@ -210,9 +210,9 @@ bool isEntityModelAsset(const BrowserAsset& asset)
 
 bool sameBrowserAssetContent(const BrowserAsset& lhs, const BrowserAsset& rhs)
 {
-  return sameAssetIdentity(lhs, rhs) && lhs.type == rhs.type && lhs.path == rhs.path
-         && lhs.absolutePath == rhs.absolutePath && lhs.revision == rhs.revision
-         && lhs.libraryRevision == rhs.libraryRevision
+  return lhs.source == rhs.source && sameAssetIdentity(lhs, rhs) && lhs.type == rhs.type
+         && lhs.path == rhs.path && lhs.absolutePath == rhs.absolutePath
+         && lhs.revision == rhs.revision && lhs.libraryRevision == rhs.libraryRevision
          && lhs.projectUpdateAvailable == rhs.projectUpdateAvailable
          && lhs.missing == rhs.missing && lhs.lastModified == rhs.lastModified;
 }

@@ -209,6 +209,75 @@ TEST_CASE("AssetPreviewProvider")
     CHECK_FALSE(previews.contains("sprites/missing.spr"));
   }
 
+  SECTION(
+    "library preview resolution preserves errors without falling back to game files")
+  {
+    auto asset = BrowserAsset{BrowserCellType::Sound, "sound/ambience/hum.wav"};
+    asset.source = BrowserSource::AssetLibrary;
+    asset.libraryId = "library";
+    asset.libraryAssetId = "sound";
+    auto calls = 0;
+    const auto failed = loadAssetPreviews(
+      provider,
+      {asset},
+      {asset.path},
+      [&](const BrowserAsset&) -> Result<std::filesystem::path> {
+        ++calls;
+        return Error{"Image conversion failed: invalid palette"};
+      });
+    REQUIRE(failed.contains(asset.path));
+    CHECK(calls == 1);
+    CHECK(failed.at(asset.path).status == AssetPreviewStatus::Error);
+    CHECK(failed.at(asset.path).error == "Image conversion failed: invalid palette");
+    CHECK(failed.at(asset.path).soundPath.empty());
+    const auto empty = loadAssetPreviews(
+      provider,
+      {asset},
+      {asset.path},
+      [](const BrowserAsset&) -> Result<std::filesystem::path> {
+        return std::filesystem::path{};
+      });
+    CHECK(empty.at(asset.path).status == AssetPreviewStatus::Error);
+    CHECK_FALSE(empty.at(asset.path).error.empty());
+    const auto relative = loadAssetPreviews(
+      provider,
+      {asset},
+      {asset.path},
+      [](const BrowserAsset& requested) -> Result<std::filesystem::path> {
+        return requested.path;
+      });
+    CHECK(relative.at(asset.path).status == AssetPreviewStatus::Error);
+    const auto unresolved = loadAssetPreviews(provider, {asset}, {asset.path});
+    CHECK(unresolved.at(asset.path).status == AssetPreviewStatus::Error);
+  }
+
+  SECTION("library resolution is limited to requested cells and successful files")
+  {
+    const auto path = env.dir() / "resolved.wav";
+    writeBytes(path, {'R', 'I', 'F', 'F'});
+    auto asset = BrowserAsset{BrowserCellType::Sound, "sound/resolved.wav"};
+    asset.source = BrowserSource::AssetLibrary;
+    asset.libraryId = "library";
+    asset.libraryAssetId = "sound";
+    auto hidden = asset;
+    hidden.path = "sound/hidden.wav";
+    auto calls = 0;
+    const auto previews = loadAssetPreviews(
+      provider,
+      {asset, hidden},
+      {asset.path},
+      [&](const BrowserAsset& requested) -> Result<std::filesystem::path> {
+        ++calls;
+        CHECK(requested.path == asset.path);
+        return path;
+      });
+    CHECK(calls == 1);
+    CHECK(previews.size() == 1);
+    CHECK(previews.at(asset.path).status == AssetPreviewStatus::Ready);
+    CHECK(previews.at(asset.path).soundPath == path);
+    CHECK(previews.at(asset.path).error.empty());
+  }
+
   SECTION("missing WAV returns missing")
   {
     const auto preview = provider.preview(BrowserAsset{

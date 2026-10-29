@@ -204,7 +204,8 @@ AssetPreviewState AssetPreviewProvider::prefabPreview(const BrowserAsset& asset)
 AssetPreviewMap loadAssetPreviews(
   const AssetPreviewProvider& provider,
   const std::vector<BrowserAsset>& assets,
-  const std::set<std::filesystem::path>& paths)
+  const std::set<std::filesystem::path>& paths,
+  const AssetPreviewPathResolver& resolver)
 {
   auto previews = AssetPreviewMap{};
   for (const auto& asset : assets)
@@ -214,7 +215,33 @@ AssetPreviewMap loadAssetPreviews(
       continue;
     }
 
-    const auto preview = provider.preview(asset);
+    if (
+      asset.type == BrowserCellType::Folder || asset.type == BrowserCellType::Model
+      || asset.type == BrowserCellType::Map)
+      continue;
+
+    auto resolved = asset;
+    if (isLibraryAsset(asset) && asset.absolutePath.empty())
+    {
+      auto file = resolver ? resolver(asset)
+                           : Result<std::filesystem::path>{
+                               Error{"No library preview resolver is available."}};
+      if (file.is_error() || !file.value().is_absolute())
+      {
+        previews.emplace(
+          asset.path,
+          AssetPreviewState{
+            AssetPreviewStatus::Error,
+            std::nullopt,
+            {},
+            file.is_error()
+              ? std::get<Error>(file.error()).msg
+              : "The library returned no absolute compatible preview file."});
+        continue;
+      }
+      resolved.absolutePath = std::move(file).value();
+    }
+    const auto preview = provider.preview(resolved);
     if (preview.status != AssetPreviewStatus::Unsupported)
     {
       previews.emplace(asset.path, preview);

@@ -23,9 +23,11 @@
 #include "ui/GoldSrcSpritePreview.h"
 
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace tb::mdl
@@ -49,6 +51,7 @@ struct AssetPreviewState
   AssetPreviewStatus status = AssetPreviewStatus::Unsupported;
   std::optional<GoldSrcSpritePreview> sprite = std::nullopt;
   std::filesystem::path soundPath{};
+  std::string error{};
 
   friend bool operator==(const AssetPreviewState&, const AssetPreviewState&) = default;
 };
@@ -70,6 +73,9 @@ private:
   AssetPreviewState texturePreview(const BrowserAsset& asset) const;
 };
 
+using AssetPreviewPathResolver =
+  std::function<Result<std::filesystem::path>(const BrowserAsset&)>;
+
 using AssetPreviewMap = std::map<std::filesystem::path, AssetPreviewState>;
 
 AssetPreviewMap loadAssetPreviews(
@@ -77,6 +83,7 @@ AssetPreviewMap loadAssetPreviews(
 AssetPreviewMap loadAssetPreviews(
   const AssetPreviewProvider& provider,
   const std::vector<BrowserAsset>& assets,
-  const std::set<std::filesystem::path>& paths);
+  const std::set<std::filesystem::path>& paths,
+  const AssetPreviewPathResolver& resolver = {});
 
 } // namespace tb::ui

@@ -240,12 +240,9 @@ void ModelBrowserView::setAssets(
   // dropped explicitly instead of waiting for the path to disappear.
   for (const auto& previous : m_assets)
   {
-    const auto it = std::ranges::find_if(assets, [&](const auto& asset) {
-      return asset.source == previous.source && asset.path == previous.path;
-    });
-    if (
-      it != assets.end()
-      && (it->libraryRevision != previous.libraryRevision || it->absolutePath != previous.absolutePath))
+    const auto it = std::ranges::find_if(
+      assets, [&](const auto& asset) { return asset.path == previous.path; });
+    if (it != assets.end() && !sameBrowserAssetContent(*it, previous))
     {
       m_assetPreviews.erase(previous.path);
     }
@@ -268,8 +265,7 @@ void ModelBrowserView::setIncludeDefaultRoots(const bool includeDefaultRoots)
   update();
 }
 
-void ModelBrowserView::setPreviewPathResolver(
-  std::function<std::filesystem::path(const BrowserAsset&)> resolver)
+void ModelBrowserView::setPreviewPathResolver(AssetPreviewPathResolver resolver)
 {
   m_previewPathResolver = std::move(resolver);
 }
@@ -501,22 +497,11 @@ void ModelBrowserView::loadMissingVisiblePreviews(
     return;
   }
 
-  // Library entries have no file until their compatible content is materialized, so only
-  // the cells that are about to be drawn are resolved.
-  auto previewAssets = m_assets;
-  if (m_previewPathResolver)
-  {
-    for (auto& asset : previewAssets)
-    {
-      if (
-        paths.contains(asset.path) && asset.absolutePath.empty()
-        && !asset.libraryAssetId.empty())
-        asset.absolutePath = m_previewPathResolver(asset);
-    }
-  }
-
   auto previews = loadAssetPreviews(
-    AssetPreviewProvider{m_document.map().gameFileSystem()}, previewAssets, paths);
+    AssetPreviewProvider{m_document.map().gameFileSystem()},
+    m_assets,
+    paths,
+    m_previewPathResolver);
   m_assetPreviews.merge(previews);
 }
 
@@ -1596,7 +1581,16 @@ QString ModelBrowserView::tooltip(const Cell& cell)
   }
   if (const auto* asset = assetAt(item.path))
   {
-    const auto status = browserAssetStatus(*asset);
+    auto status = browserAssetStatus(*asset);
+    if (const auto* preview = assetPreview(item.path); preview)
+    {
+      if (!preview->error.empty())
+        status = tr("Preview failed: %1").arg(QString::fromStdString(preview->error));
+      else if (preview->status == AssetPreviewStatus::Error)
+        status = tr("Preview failed: the resource could not be decoded.");
+      else if (preview->status == AssetPreviewStatus::Missing)
+        status = tr("Preview file is missing.");
+    }
     if (!status.isEmpty())
     {
       return QString{"%1\n%2 — %3"}
