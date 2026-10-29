@@ -88,6 +88,9 @@ public:
   Result<std::vector<Asset>> captureAssets(const std::vector<AssetCapture>& captures);
   Result<Asset> renameAsset(const std::string& id, const std::string& displayName);
   Result<Asset> moveAsset(const std::string& id, const std::string& virtualPath);
+  // Changes the engine-facing path without touching the asset's content. The new path is
+  // validated with the same overlap rule as every other write.
+  Result<Asset> setPublishPath(const std::string& id, const std::string& publishPath);
   Result<void> removeAsset(const std::string& id);
   // Atomically select existing immutable revisions, used to roll back temporary
   // document staging without discarding checkpoints that reference those revisions.

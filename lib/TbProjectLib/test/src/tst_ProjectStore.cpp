@@ -353,6 +353,23 @@ TEST_CASE("ProjectStore")
     CHECK(require(store->findAsset(asset.id)) == moved);
   }
 
+  SECTION("renaming the published path validates overlap and keeps identity")
+  {
+    auto store =
+      require(ProjectStore::create(workspace.path, "Publish", "Counter-Strike"));
+    const auto asset = require(store->importAsset(texture("sound/step.wav")));
+    const auto renamed = require(store->setPublishPath(asset.id, "sound/footstep.wav"));
+    CHECK(renamed.id == asset.id);
+    CHECK(renamed.publishPath == "sound/footstep.wav");
+    CHECK(renamed.virtualPath == asset.virtualPath);
+    CHECK(renamed.revision > asset.revision);
+
+    const auto other = require(store->importAsset(texture("sound/other.wav")));
+    CHECK(store->setPublishPath(other.id, "sound/footstep.wav").is_error());
+    CHECK(store->setPublishPath(other.id, "../escape.wav").is_error());
+    CHECK(require(store->findAsset(other.id)) == other);
+  }
+
   SECTION("removed content remains recoverable and referenced assets cannot be removed")
   {
     auto store =
@@ -648,7 +665,7 @@ TEST_CASE("ProjectStore")
     CHECK(asset->contentHash == contentHash(std::string_view{"legacybytes"}));
     CHECK(asset->library.empty());
     CHECK(require(store->libraryLinkedAssets()).empty());
-    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 2);
+    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 3);
     // The migrated project must stay writable.
     const auto renamed = require(store->renameAsset(asset->id, "renamed"));
     CHECK(renamed.revision == 2);

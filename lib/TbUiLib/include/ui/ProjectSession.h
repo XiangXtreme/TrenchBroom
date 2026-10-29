@@ -135,6 +135,27 @@ public:
     const std::string& id, const project::AssetImport& asset);
   Result<project::Asset> renameAsset(const std::string& id, const std::string& name);
   Result<project::Asset> moveAsset(const std::string& id, const std::string& path);
+  /** Outcome of renaming an asset's engine-facing path. */
+  struct PublishRename
+  {
+    project::Asset asset;
+    std::size_t mapsChanged = 0;
+    std::size_t referencesChanged = 0;
+    std::string checkpointId;
+  };
+  /**
+   * Renames the engine-facing path of a model, sprite or sound and rewrites the
+   * references in every stored project map.
+   *
+   * GoldSrc maps reference sounds relative to `sound/` and other resources by their full
+   * game path, so the rewrite uses the exact map form and only touches quoted values
+   * equal to the old form; nothing is guessed. A version is written first, so the rename
+   * can be undone like any other project change. Open maps are rejected: rewriting a
+   * live document needs a dedicated native command, and the stored text would otherwise
+   * be overwritten by the open document's next save.
+   */
+  Result<PublishRename> renamePublishPath(
+    const std::string& assetId, const std::string& newPath);
   Result<void> removeAsset(const std::string& id);
   Result<project::Checkpoint> checkpoint(const std::string& name);
   Result<project::ProjectChanges> compare(const std::string& id);

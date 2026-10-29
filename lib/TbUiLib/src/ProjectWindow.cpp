@@ -187,6 +187,8 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   asset->addAction(tr("Reimport…"), this, &ProjectWindow::reimportSelected);
   asset->addAction(tr("Rename…"), this, &ProjectWindow::renameSelected);
   asset->addAction(tr("Move…"), this, &ProjectWindow::moveSelected);
+  asset->addAction(
+    tr("Rename Published Path…"), this, &ProjectWindow::renamePublishedPath);
   asset->addAction(tr("Export Copy…"), this, &ProjectWindow::exportSelected);
   asset->addAction(tr("Find Uses…"), this, [this]() {
     if (const auto id = selectedAsset())
@@ -1083,6 +1085,43 @@ void ProjectWindow::renameSelected()
     &ok);
   if (ok)
     report(m_session->renameAsset(*id, name.toStdString()) | kdl::transform([](auto) {}));
+}
+
+void ProjectWindow::renamePublishedPath()
+{
+  const auto id = selectedAsset();
+  if (!id)
+    return;
+  const auto asset = m_session->store().findAsset(*id);
+  if (asset.is_error() || !asset.value())
+    return;
+
+  auto accepted = false;
+  const auto path = QInputDialog::getText(
+    this,
+    tr("Rename Published Path"),
+    tr("Game path the engine will use (project maps are updated to match):"),
+    QLineEdit::Normal,
+    QString::fromStdString(asset.value()->publishPath),
+    &accepted);
+  if (!accepted || path.isEmpty())
+    return;
+
+  const auto renamed = m_session->renamePublishPath(*id, path.toStdString());
+  if (renamed.is_error())
+  {
+    report(Error{std::get<Error>(renamed.error()).msg});
+    return;
+  }
+
+  const auto& summary = renamed.value();
+  statusBar()->showMessage(
+    tr("Published path is now %1; updated %2 reference(s) in %3 map(s).")
+      .arg(QString::fromStdString(summary.asset.publishPath))
+      .arg(summary.referencesChanged)
+      .arg(summary.mapsChanged),
+    8000);
+  refresh();
 }
 
 void ProjectWindow::moveSelected()

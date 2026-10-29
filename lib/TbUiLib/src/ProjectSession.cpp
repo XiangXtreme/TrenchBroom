@@ -5,6 +5,7 @@
 #include "ui/ProjectSession.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -1544,6 +1545,36 @@ bool projectPathsOverlap(const std::string& left, const std::string& right)
   const auto b = normalizedProjectPath(right);
   return a == b || a.starts_with(b + '/') || b.starts_with(a + '/');
 }
+
+// Replaces every quoted MAP value equal to `from`, case insensitively. Only quoted
+// values are considered, so brush face texture tokens and comments are never touched.
+std::size_t replaceQuotedValue(
+  std::string& text, const std::string& from, const std::string& to)
+{
+  if (from.empty())
+    return 0;
+  auto replaced = std::size_t{0};
+  auto index = std::size_t{0};
+  while (index < text.size())
+  {
+    const auto open = text.find('"', index);
+    if (open == std::string::npos)
+      break;
+    const auto close = text.find('"', open + 1);
+    if (close == std::string::npos)
+      break;
+    const auto value = text.substr(open + 1, close - open - 1);
+    if (normalizedProjectPath(value) == normalizedProjectPath(from))
+    {
+      text.replace(open + 1, close - open - 1, to);
+      index = open + 1 + to.size() + 1;
+      ++replaced;
+    }
+    else
+      index = close + 1;
+  }
+  return replaced;
+}
 } // namespace
 
 Result<std::vector<CaptureConflict>> ProjectSession::captureConflicts(
@@ -1700,6 +1731,119 @@ Result<ProjectSession::MapReferenceCapture> ProjectSession::captureMapReferences
 
   for (const auto& [key, reference] : pending)
     result.unresolved.push_back(reference);
+  return result;
+}
+
+Result<ProjectSession::PublishRename> ProjectSession::renamePublishPath(
+  const std::string& assetId, const std::string& newPath)
+{
+  const auto asset = m_store->findAsset(assetId);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (!asset.value())
+    return Error{"Project asset not found."};
+
+  const auto& current = *asset.value();
+  if (
+    current.type != project::AssetType::Model
+    && current.type != project::AssetType::Sprite
+    && current.type != project::AssetType::Sound)
+    return Error{
+      "Only models, sprites and sounds can be renamed by game path. A texture is "
+      "referenced by the name stored inside its WAD."};
+
+  auto normalized = newPath;
+  std::ranges::replace(normalized, '\\', '/');
+  const auto root = std::string{publishRoot(current.type)};
+  if (!(normalized == root || normalized.starts_with(root + "/")))
+    return Error{"The new path must stay under '" + root + "/'."};
+  if (normalized == current.publishPath)
+  {
+    auto unchanged = PublishRename{};
+    unchanged.asset = current;
+    return unchanged;
+  }
+
+  const auto assets = m_store->assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+
+  // Validate everything before writing: a rejected path must not leave half a rename.
+  for (const auto& other : assets.value())
+    if (
+      other.id != assetId
+      && (projectPathsOverlap(normalized, other.virtualPath)
+          || projectPathsOverlap(normalized, other.publishPath)))
+      return Error{"The new path conflicts with an existing asset: " + other.virtualPath};
+  for (const auto& other : assets.value())
+    if (other.type == project::AssetType::Map && documentFor(other.id))
+      return Error{
+        "Close the map '" + other.displayName + "' before renaming a published path."};
+
+  // Sounds are referenced relative to sound/, everything else by its full game path.
+  const auto mapForm = [&](const std::string& path) {
+    return current.type == project::AssetType::Sound && path.starts_with("sound/")
+             ? path.substr(std::string{"sound/"}.size())
+             : path;
+  };
+  const auto from = mapForm(current.publishPath);
+  if (from.empty())
+    return Error{"The asset has no published path yet."};
+  const auto to = mapForm(normalized);
+
+  const auto saved = checkpoint(
+    "Before publish rename "
+    + QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss").toStdString());
+  if (saved.is_error())
+    return std::get<Error>(saved.error());
+
+  const auto writeMapText = [&](const project::Asset& map, const std::string& text) {
+    auto import = project::AssetImport{};
+    import.type = project::AssetType::Map;
+    import.sourceName = map.sourceName;
+    import.conversionRecipe = map.conversionRecipe;
+    import.library = map.library;
+    import.original.assign(text.begin(), text.end());
+    import.compatible = import.original;
+    return m_store->updateAssets({project::AssetUpdate{map.id, std::move(import)}});
+  };
+
+  auto rewritten = std::vector<std::pair<std::string, std::string>>{};
+  auto result = PublishRename{};
+  result.checkpointId = saved.value().id;
+  for (const auto& map : assets.value())
+  {
+    if (map.type != project::AssetType::Map)
+      continue;
+    auto content = m_store->readAsset(map.id, project::ContentKind::Compatible);
+    if (content.is_error())
+      return std::get<Error>(content.error());
+    const auto originalText = std::string{content.value().begin(), content.value().end()};
+    auto text = originalText;
+    const auto replaced = replaceQuotedValue(text, from, to);
+    if (replaced == 0)
+      continue;
+    if (const auto written = writeMapText(map, text); written.is_error())
+      return std::get<Error>(written.error());
+    rewritten.emplace_back(map.id, originalText);
+    ++result.mapsChanged;
+    result.referencesChanged += replaced;
+  }
+
+  const auto published = m_store->setPublishPath(assetId, normalized);
+  if (published.is_error())
+  {
+    // A rejected path must leave every map as it was.
+    for (const auto& [mapId, text] : rewritten)
+      if (const auto map = m_store->findAsset(mapId); map.is_success() && map.value())
+        writeMapText(*map.value(), text);
+    return std::get<Error>(published.error());
+  }
+
+  result.asset = published.value();
+  changed();
+  emit contentsChanged();
+  emit stateChanged();
   return result;
 }
 

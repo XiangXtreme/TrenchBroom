@@ -84,6 +84,7 @@ private:
   void openSelected();
   void renameSelected();
   void moveSelected();
+  void renamePublishedPath();
   void reimportSelected();
   void exportSelected();
   void checkResources(std::optional<std::string> assetId = std::nullopt);

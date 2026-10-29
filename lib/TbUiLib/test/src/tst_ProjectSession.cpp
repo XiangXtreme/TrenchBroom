@@ -570,6 +570,70 @@ TEST_CASE("ProjectSession")
     CHECK(first.map().materialManager().material("portable") != nullptr);
     session->unregisterDocument(first);
   }
+
+  SECTION("renames a published sound path and rewrites stored maps")
+  {
+    const auto sound = requireProject(session->importAsset(testAsset()));
+    CHECK(sound.publishPath == "sound/test.wav");
+
+    auto mapStream = std::ostringstream{};
+    mdl::writeMapHeader(mapStream, "Half-Life", mdl::MapFormat::Standard, "Test");
+    mapStream << R"({"classname" "worldspawn"}
+      {"classname" "ambient_generic" "message" "test.wav"}
+      {"classname" "env_sprite" "model" "sprites/keep.spr"})";
+    const auto mapText = mapStream.str();
+    auto mapInput = project::AssetImport{};
+    mapInput.type = project::AssetType::Map;
+    mapInput.virtualPath = "maps/test.map";
+    mapInput.displayName = "test";
+    mapInput.original.assign(mapText.begin(), mapText.end());
+    mapInput.compatible = mapInput.original;
+    const auto mapAsset = requireProject(session->importAsset(mapInput));
+
+    const auto renamed =
+      requireProject(session->renamePublishPath(sound.id, "sound/footstep.wav"));
+    CHECK(renamed.asset.publishPath == "sound/footstep.wav");
+    CHECK(renamed.mapsChanged == 1);
+    CHECK(renamed.referencesChanged == 1);
+    CHECK_FALSE(renamed.checkpointId.empty());
+
+    const auto bytes = requireProject(
+      session->store().readAsset(mapAsset.id, project::ContentKind::Compatible));
+    const auto text = std::string(bytes.begin(), bytes.end());
+    CHECK(text.find("\"footstep.wav\"") != std::string::npos);
+    CHECK(text.find("\"test.wav\"") == std::string::npos);
+    CHECK(text.find("sprites/keep.spr") != std::string::npos);
+
+    const auto audit = requireProject(auditGoldSrcProjectResources(*session));
+    const auto use = std::ranges::find_if(audit.uses, [](const auto& candidate) {
+      return candidate.reference == "sound/footstep.wav";
+    });
+    REQUIRE(use != audit.uses.end());
+    CHECK(use->status == ProjectResourceStatus::Embedded);
+
+    // A path another asset already publishes is rejected before any map changes.
+    const auto other = requireProject(session->importAsset(project::AssetImport{
+      project::AssetType::Sound, "sound/other.wav", "Other", "", {1}, {1}, "", {}}));
+    const auto before = requireProject(
+      session->store().readAsset(mapAsset.id, project::ContentKind::Compatible));
+    CHECK(session->renamePublishPath(sound.id, other.publishPath).is_error());
+    CHECK(
+      requireProject(
+        session->store().readAsset(mapAsset.id, project::ContentKind::Compatible))
+      == before);
+
+    // Textures are referenced by the name inside their WAD, not by a game path.
+    const auto texture = requireProject(session->importAsset(project::AssetImport{
+      project::AssetType::Texture,
+      "textures/WALL01.wad",
+      "WALL01",
+      "",
+      {1},
+      {1},
+      "",
+      {}}));
+    CHECK(session->renamePublishPath(texture.id, "textures/WALL02.wad").is_error());
+  }
 }
 
 TEST_CASE("ProjectSessionAssetLibrary")

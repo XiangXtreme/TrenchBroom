@@ -84,8 +84,7 @@ Asset readAssetRow(const Statement& query)
 constexpr auto AssetColumns =
   "r.asset_id,r.type,r.virtual_path,r.display_name,"
   "r.source_name,r.revision,r.recipe,"
-  "(SELECT first.virtual_path FROM revisions first WHERE first.asset_id=r.asset_id ORDER "
-  "BY first.revision LIMIT 1),"
+  "r.publish_path,"
   "r.content_hash,r.library_asset_id,r.library_id,r.library_revision,r.source_container,"
   "r.library_hash,r.source_member";
 
@@ -237,9 +236,8 @@ void writeRevision(
   validatePath(publishPath);
   auto conflicts = Statement{
     db,
-    "SELECT h.virtual_path,(SELECT first.virtual_path FROM revisions first WHERE "
-    "first.asset_id=h.asset_id ORDER BY first.revision LIMIT 1) "
-    "FROM heads h WHERE h.asset_id<>?"};
+    "SELECT h.virtual_path,r.publish_path FROM heads h JOIN revisions r ON "
+    "r.asset_id=h.asset_id AND r.revision=h.revision WHERE h.asset_id<>?"};
   conflicts.bind(1, asset.id);
   const auto normalized = [](std::string path) {
     std::ranges::transform(
@@ -277,26 +275,28 @@ void writeRevision(
   auto insert = Statement{
     db,
     "INSERT INTO "
-    "revisions(asset_id,type,virtual_path,display_name,source_name,revision,recipe,"
+    "revisions(asset_id,type,virtual_path,publish_path,display_name,source_name,revision,"
+    "recipe,"
     "original,compatible,content_hash,library_id,library_asset_id,library_revision,"
     "library_hash,source_container,source_member) "
-    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"};
+    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"};
   insert.bind(1, asset.id);
   insert.bind(2, assetTypeName(asset.type));
   insert.bind(3, asset.virtualPath);
-  insert.bind(4, asset.displayName);
-  insert.bind(5, asset.sourceName);
-  insert.bind(6, asset.revision);
-  insert.bind(7, asset.conversionRecipe);
-  insert.bind(8, original);
-  insert.bind(9, compatible);
-  insert.bind(10, asset.contentHash);
-  insert.bind(11, library.libraryId);
-  insert.bind(12, library.libraryAssetId);
-  insert.bind(13, library.libraryRevision);
-  insert.bind(14, library.libraryContentHash);
-  insert.bind(15, library.sourceContainer);
-  insert.bind(16, library.sourceMember);
+  insert.bind(4, asset.publishPath);
+  insert.bind(5, asset.displayName);
+  insert.bind(6, asset.sourceName);
+  insert.bind(7, asset.revision);
+  insert.bind(8, asset.conversionRecipe);
+  insert.bind(9, original);
+  insert.bind(10, compatible);
+  insert.bind(11, asset.contentHash);
+  insert.bind(12, library.libraryId);
+  insert.bind(13, library.libraryAssetId);
+  insert.bind(14, library.libraryRevision);
+  insert.bind(15, library.libraryContentHash);
+  insert.bind(16, library.sourceContainer);
+  insert.bind(17, library.sourceMember);
   insert.run();
   auto head = Statement{
     db,
@@ -358,12 +358,14 @@ Checkpoint makeCheckpoint(
 }
 
 constexpr auto Schema =
-  "PRAGMA application_id=0x5442504a; PRAGMA user_version=2;"
+  "PRAGMA application_id=0x5442504a; PRAGMA user_version=3;"
   "CREATE TABLE project(id TEXT PRIMARY KEY,name TEXT NOT NULL,game_id TEXT NOT NULL);"
   "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
   "CREATE INDEX content_hash ON content(hash);"
   "CREATE TABLE revisions("
-  "asset_id TEXT NOT NULL,type TEXT NOT NULL,virtual_path TEXT NOT NULL,display_name "
+  "asset_id TEXT NOT NULL,type TEXT NOT NULL,virtual_path TEXT NOT NULL,publish_path "
+  "TEXT "
+  "NOT NULL,display_name "
   "TEXT NOT NULL,"
   "source_name TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),recipe TEXT NOT "
   "NULL,"
@@ -446,6 +448,19 @@ void migrateFromVersion1(sqlite3* db)
     update.run();
   }
   execute(db, "PRAGMA user_version=2;");
+}
+
+// Format 2 derived the engine-facing path from the first revision's virtual path, which
+// made a published name impossible to change. Store it explicitly so a rename becomes a
+// normal revision; existing projects keep their original engine-facing name.
+void migrateFromVersion2(sqlite3* db)
+{
+  execute(
+    db,
+    "ALTER TABLE revisions ADD COLUMN publish_path TEXT NOT NULL DEFAULT '';"
+    "UPDATE revisions SET publish_path=(SELECT first.virtual_path FROM revisions first "
+    "WHERE first.asset_id=revisions.asset_id ORDER BY first.revision LIMIT 1);"
+    "PRAGMA user_version=3;");
 }
 
 void configure(sqlite3* db)
@@ -576,8 +591,15 @@ Result<std::unique_ptr<ProjectStore>> ProjectStore::open(
       transaction.commit();
       version = 2;
     }
-    if (version != 2)
-      throw StoreError{"Not a supported TB project (format version 2 required)."};
+    if (version == 2)
+    {
+      auto transaction = Transaction{db};
+      migrateFromVersion2(db);
+      transaction.commit();
+      version = 3;
+    }
+    if (version != 3)
+      throw StoreError{"Not a supported TB project (format version 3 required)."};
     auto info = Statement{db, "SELECT id,name,game_id FROM project"};
     if (!info.next())
       throw StoreError{"Project metadata is missing."};
@@ -787,6 +809,20 @@ Result<Asset> ProjectStore::moveAsset(
     auto transaction = Transaction{db};
     auto asset = requireAsset(db, id);
     asset.virtualPath = virtualPath;
+    writeMetadataRevision(db, asset);
+    transaction.commit();
+    return asset;
+  });
+}
+
+Result<Asset> ProjectStore::setPublishPath(
+  const std::string& id, const std::string& publishPath)
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    auto asset = requireAsset(db, id);
+    asset.publishPath = publishPath;
     writeMetadataRevision(db, asset);
     transaction.commit();
     return asset;
