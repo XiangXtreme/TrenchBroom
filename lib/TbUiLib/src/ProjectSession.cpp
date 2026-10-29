@@ -27,11 +27,21 @@
 
 #include <algorithm>
 #include <functional>
+#include <set>
 
 namespace tb::ui
 {
 namespace
 {
+// GoldSrc texture references and miptex names are case insensitive. The audit indexes
+// resources by this normalized form, so snapshot export must compare the same way.
+std::string normalizedTextureName(std::string name)
+{
+  std::ranges::transform(
+    name, name.begin(), [](const unsigned char c) { return char(std::tolower(c)); });
+  return name;
+}
+
 Result<QByteArray> fileDigest(const std::filesystem::path& path)
 {
   auto file = QFile{pathAsQString(path)};
@@ -332,21 +342,123 @@ Result<void> ProjectSession::exportCompileSnapshot(
   if (contents.is_error())
     return std::get<Error>(contents.error());
 
-  // Only the references this map actually makes are collected, so the snapshot can never
-  // carry the whole project or library into a compile.
   const auto audit = auditGoldSrcProjectResources(*this);
   if (audit.is_error())
     return std::get<Error>(audit.error());
-  auto used = std::vector<std::string>{};
+
+  // A snapshot exists to be compiled without asking questions later, so anything the
+  // audit could not resolve is reported now instead of producing a broken BSP.
+  auto problems = std::vector<std::string>{};
+  auto externals = std::vector<std::string>{};
+  auto directAssets = std::vector<std::string>{};
+  auto directTextures = std::map<std::string, std::vector<std::string>>{};
+  // The compiler recognizes these by name and never embeds them, so a missing entry says
+  // nothing about the completeness of the project.
+  const auto isToolTexture = [](const std::string& name) {
+    static const auto names = std::set<std::string>{
+      "aaatrigger",
+      "bevel",
+      "clip",
+      "hint",
+      "hintskip",
+      "light",
+      "null",
+      "origin",
+      "skip",
+      "split",
+      "trigger",
+      "waterskip"};
+    return names.contains(normalizedTextureName(name));
+  };
+  // Skybox faces are loaded from the game's gfx/env folder, never from a WAD, so a
+  // snapshot can list them but cannot embed them.
+  const auto isEngineExternal = [](const std::string& reference) {
+    return normalizedTextureName(reference).starts_with("gfx/env/");
+  };
   for (const auto& use : audit.value().uses)
   {
     if (use.mapId != mapAssetId)
       continue;
-    for (const auto& id : use.assetIds)
-      if (std::ranges::find(used, id) == used.end())
-        used.push_back(id);
+    const auto where = fmt::format("{} ({}:{})", use.reference, use.mapPath, use.line);
+    switch (use.status)
+    {
+    case ProjectResourceStatus::Embedded:
+      for (const auto& id : use.assetIds)
+      {
+        if (std::ranges::find(directAssets, id) == directAssets.end())
+          directAssets.push_back(id);
+        directTextures[id].push_back(use.reference);
+      }
+      break;
+    case ProjectResourceStatus::Unsupported:
+      // Sentence and decal lookups are not project resources; the engine resolves them.
+      break;
+    case ProjectResourceStatus::Missing:
+      if (isToolTexture(use.reference) || isEngineExternal(use.reference))
+        externals.push_back(use.reference);
+      else
+        problems.push_back(where + " is not embedded in the project");
+      break;
+    case ProjectResourceStatus::Ambiguous:
+      problems.push_back(where + " matches more than one project asset");
+      break;
+    case ProjectResourceStatus::InvalidPath:
+      problems.push_back(where + " is not a usable game path");
+      break;
+    case ProjectResourceStatus::ScanError:
+      problems.push_back(where + " could not be scanned");
+      break;
+    }
   }
-  std::ranges::sort(used);
+  if (!problems.empty())
+  {
+    constexpr auto MaxProblems = std::size_t{12};
+    auto text = std::string{};
+    const auto count = std::min(problems.size(), MaxProblems);
+    for (auto index = std::size_t{0}; index < count; ++index)
+      text += "\n  " + problems[index];
+    if (problems.size() > count)
+      text += fmt::format("\n  ... and {} more", problems.size() - count);
+    return Error{
+      "The compile snapshot would be incomplete or ambiguous:" + text
+      + "\nCapture the missing resources into the project first."};
+  }
+
+  // The dependency closure is part of the fixed input: a model without its separate
+  // texture file or animation groups compiles, but ships broken.
+  auto assets = std::vector<project::Asset>{};
+  auto visited = std::set<std::string>{};
+  std::function<Result<void>(const std::string&)> collect =
+    [&](const std::string& id) -> Result<void> {
+    if (!visited.insert(id).second)
+      return {};
+    auto asset = m_store->findAsset(id);
+    if (asset.is_error())
+      return std::get<Error>(asset.error());
+    if (!asset.value())
+      return Error{"Project asset not found: " + id};
+    auto dependencies = m_store->dependencies(id);
+    if (dependencies.is_error())
+      return std::get<Error>(dependencies.error());
+    for (const auto& dependency : dependencies.value())
+    {
+      auto collected = collect(dependency.dependencyId);
+      if (collected.is_error())
+        return std::get<Error>(collected.error());
+    }
+    assets.push_back(*asset.value());
+    return {};
+  };
+  for (const auto& id : directAssets)
+  {
+    auto collected = collect(id);
+    if (collected.is_error())
+      return std::get<Error>(collected.error());
+  }
+
+  const auto isDirect = [&](const std::string& id) {
+    return std::ranges::find(directAssets, id) != directAssets.end();
+  };
 
   auto miptexByName = std::map<std::string, std::vector<std::uint8_t>>{};
   auto resources = std::vector<std::pair<std::string, std::vector<std::uint8_t>>>{};
@@ -355,35 +467,58 @@ Result<void> ProjectSession::exportCompileSnapshot(
     "project=" + m_store->info().id,
     "map=" + mapAssetId,
     "mapRevision=" + std::to_string(map.value()->revision)};
-  for (const auto& id : used)
+  for (const auto& reference : externals)
+    metadata.push_back("external " + reference);
+  for (const auto& entry : assets)
   {
-    const auto asset = m_store->findAsset(id);
-    if (asset.is_error())
-      return std::get<Error>(asset.error());
-    if (!asset.value())
-      continue;
-    const auto& entry = *asset.value();
-    const auto compatible = m_store->readAsset(id, project::ContentKind::Compatible);
+    const auto compatible =
+      m_store->readAsset(entry.id, project::ContentKind::Compatible);
     if (compatible.is_error())
       return std::get<Error>(compatible.error());
     metadata.push_back(fmt::format(
-      "asset path={} type={} id={} revision={} hash={}",
+      "asset path={} type={} id={} revision={} hash={}{}",
       entry.publishPath,
       project::assetTypeName(entry.type),
       entry.id,
       entry.revision,
-      entry.contentHash));
+      entry.contentHash,
+      isDirect(entry.id) ? " direct" : " dependency"));
     if (entry.type != project::AssetType::Texture)
     {
       resources.emplace_back(entry.publishPath, compatible.value());
       continue;
     }
+
     const auto wad = project::readGoldSrcWad(compatible.value());
     if (wad.is_error())
       return Error{"Project texture '" + entry.displayName + "' is not a GoldSrc WAD."};
+    // An imported WAD may hold more textures than the map uses. Only the referenced names
+    // are exported, so "the snapshot is exactly what the map needs" stays true.
+    const auto& names = directTextures[entry.id];
     for (const auto& texture : wad.value().textures)
-      if (texture.valid)
+    {
+      if (!texture.valid)
+        continue;
+      const auto wanted =
+        names.empty() || std::ranges::any_of(names, [&](const auto& name) {
+          return normalizedTextureName(name) == normalizedTextureName(texture.name);
+        });
+      if (wanted)
         miptexByName.emplace(texture.name, texture.miptex);
+    }
+    if (!names.empty())
+    {
+      for (const auto& name : names)
+      {
+        const auto found = std::ranges::any_of(miptexByName, [&](const auto& item) {
+          return normalizedTextureName(item.first) == normalizedTextureName(name);
+        });
+        if (!found)
+          return Error{
+            "Project texture asset '" + entry.displayName + "' does not contain '" + name
+            + "'."};
+      }
+    }
   }
 
   auto entries = std::vector<std::vector<std::uint8_t>>{};
@@ -432,7 +567,10 @@ Result<void> ProjectSession::exportCompileSnapshot(
     return result;
   for (const auto& [path, bytes] : resources)
   {
-    const auto target = folder / pathFromQString(QString::fromStdString(path));
+    // Resources keep their publish path below `resources/` so the snapshot root stays the
+    // compiler's input directory.
+    const auto target =
+      folder / "resources" / pathFromQString(QString::fromStdString(path));
     std::filesystem::create_directories(target.parent_path(), error);
     if (error)
       return Error{"Cannot create compile snapshot folder: " + error.message()};
@@ -441,7 +579,6 @@ Result<void> ProjectSession::exportCompileSnapshot(
   }
   return {};
 }
-
 Result<std::filesystem::path> ProjectSession::prepareMap(const std::string& id)
 {
   return m_store->findAsset(id)

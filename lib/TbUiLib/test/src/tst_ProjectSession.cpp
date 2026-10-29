@@ -716,6 +716,128 @@ TEST_CASE("ProjectSessionAssetLibrary")
       readProjectFile(secondFolder / "map.map") == readProjectFile(folder / "map.map"));
   }
 
+  SECTION("exports only the referenced texture and its dependency closure")
+  {
+    // One project asset can be a WAD with many textures; only the one a face uses may be
+    // exported.
+    const auto wallMiptex = miptexFor("WALL01", 16, 255);
+    const auto floorMiptex = miptexFor("FLOOR01", 32, 128);
+    auto packImport = project::AssetImport{};
+    packImport.type = project::AssetType::Texture;
+    packImport.virtualPath = "textures/pack.wad";
+    packImport.displayName = "Pack";
+    packImport.original =
+      requireProject(project::buildGoldSrcWad({wallMiptex, floorMiptex}));
+    packImport.compatible = packImport.original;
+    requireProject(sandbox.session->importAsset(packImport));
+
+    auto stream = std::ostringstream{};
+    mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Valve, "Snapshot");
+    stream << R"({
+"classname" "worldspawn"
+"mapversion" "220"
+"skyname" "desert"
+{
+( 0 0 0 ) ( 128 0 0 ) ( 0 128 0 ) WALL01 [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 0 0 128 ) ( 0 128 128 ) ( 128 0 128 ) clip [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+}
+}
+)";
+    const auto mapText = stream.str();
+    auto mapImport = project::AssetImport{};
+    mapImport.type = project::AssetType::Map;
+    mapImport.virtualPath = "maps/partial.map";
+    mapImport.displayName = "Partial";
+    mapImport.original = {mapText.begin(), mapText.end()};
+    mapImport.compatible = mapImport.original;
+    const auto map = requireProject(sandbox.session->importAsset(mapImport));
+
+    const auto folder = sandbox.root / "partial-snapshot";
+    requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
+    const auto wad = project::readGoldSrcWad(readProjectFile(folder / "textures.wad"));
+    REQUIRE(wad.is_success());
+    REQUIRE(wad.value().textures.size() == 1);
+    CHECK(wad.value().textures.front().name == "WALL01");
+    // Tool textures and skybox faces are supplied by the compiler and the game, so they
+    // are recorded as external instead of silently dropped.
+    const auto metadata = readProjectFile(folder / "snapshot.txt");
+    const auto text = std::string(metadata.begin(), metadata.end());
+    INFO(text);
+    CHECK(text.find("external gfx/env/desertbk.tga") != std::string::npos);
+
+    // A genuinely absent texture blocks the export instead of producing a broken BSP.
+    auto brokenStream = std::ostringstream{};
+    mdl::writeMapHeader(brokenStream, "Half-Life", mdl::MapFormat::Valve, "Snapshot");
+    brokenStream << R"({
+"classname" "worldspawn"
+"mapversion" "220"
+{
+( 0 0 0 ) ( 1 0 0 ) ( 0 1 0 ) ABSENT [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+}
+}
+)";
+    const auto brokenText = brokenStream.str();
+    auto brokenImport = project::AssetImport{};
+    brokenImport.type = project::AssetType::Map;
+    brokenImport.virtualPath = "maps/broken.map";
+    brokenImport.displayName = "Broken";
+    brokenImport.original = {brokenText.begin(), brokenText.end()};
+    brokenImport.compatible = brokenImport.original;
+    const auto broken = requireProject(sandbox.session->importAsset(brokenImport));
+    const auto rejected =
+      sandbox.session->exportCompileSnapshot(broken.id, sandbox.root / "broken-snapshot");
+    REQUIRE(rejected.is_error());
+    CHECK(std::get<Error>(rejected.error()).msg.find("ABSENT") != std::string::npos);
+    CHECK_FALSE(
+      std::filesystem::exists(sandbox.root / "broken-snapshot" / "textures.wad"));
+  }
+
+  SECTION("exports the captured dependency closure with the map resources")
+  {
+    sandbox.write("models/crate.mdl", modelWithGroups(2));
+    sandbox.write("models/crate01.mdl", modelWithGroups(1));
+    sandbox.write("models/crateT.mdl", modelWithGroups(1));
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto assets = sandbox.libraryAssets();
+    const auto model = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.virtualPath == "models/crate.mdl"; });
+    REQUIRE(model != assets.end());
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, model->id));
+
+    auto stream = std::ostringstream{};
+    mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Valve, "Snapshot");
+    stream << R"({
+"classname" "worldspawn"
+"mapversion" "220"
+}
+{
+"classname" "cycler"
+"model" "models/crate.mdl"
+"origin" "0 0 0"
+}
+)";
+    const auto mapText = stream.str();
+    auto mapImport = project::AssetImport{};
+    mapImport.type = project::AssetType::Map;
+    mapImport.virtualPath = "maps/model.map";
+    mapImport.displayName = "Model";
+    mapImport.original = {mapText.begin(), mapText.end()};
+    mapImport.compatible = mapImport.original;
+    const auto map = requireProject(sandbox.session->importAsset(mapImport));
+
+    const auto folder = sandbox.root / "model-snapshot";
+    requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
+    // The model and everything it depends on ship with the snapshot.
+    CHECK(std::filesystem::exists(folder / "resources" / "models" / "crate.mdl"));
+    CHECK(std::filesystem::exists(folder / "resources" / "models" / "crate01.mdl"));
+    CHECK(std::filesystem::exists(folder / "resources" / "models" / "crateT.mdl"));
+    const auto metadata = readProjectFile(folder / "snapshot.txt");
+    const auto text = std::string(metadata.begin(), metadata.end());
+    CHECK(text.find("id=" + captured.id) != std::string::npos);
+    CHECK(text.find(" dependency") != std::string::npos);
+  }
   SECTION("a newer library revision reaches every open map at once")
   {
     auto config = mdl::QuakeFixtureConfig;
