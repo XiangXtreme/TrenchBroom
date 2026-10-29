@@ -285,6 +285,68 @@ TEST_CASE("ProjectSession")
       == input.compatible);
   }
 
+  SECTION("restores open maps and preserves live edits in a safety version")
+  {
+    auto fixture = MapDocumentFixture{};
+    auto& document = fixture.create();
+    const auto source = path.parent_path() / "live.map";
+    requireProject(document.map().saveAs(source));
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.virtualPath = "maps/live.map";
+    input.displayName = "Live";
+    input.original = input.compatible = readProjectFile(source);
+    const auto empty = requireProject(session->checkpoint("Without map"));
+    const auto asset = requireProject(session->importAsset(input));
+    requireProject(session->registerDocument(document, asset.id));
+    requireProject(session->save());
+
+    REQUIRE(mdl::setEntityProperty(document.map(), "message", "Version one"));
+    const auto v1 = requireProject(session->checkpoint("v1"));
+    requireProject(document.map().saveTo(source));
+    const auto v1Bytes = readProjectFile(source);
+    REQUIRE(mdl::setEntityProperty(document.map(), "message", "Live edits"));
+    requireProject(document.map().saveTo(source));
+    const auto liveBytes = readProjectFile(source);
+
+    SECTION("missing map is rejected without changing state")
+    {
+      const auto before = requireProject(session->store().assets());
+      const auto history = requireProject(session->store().checkpoints());
+      CHECK(session->restore(empty.id).is_error());
+      CHECK(requireProject(session->store().assets()) == before);
+      CHECK(requireProject(session->store().checkpoints()).size() == history.size());
+      CHECK(document.map().modified());
+      requireProject(document.map().saveTo(source));
+      CHECK(readProjectFile(source) == liveBytes);
+    }
+    SECTION("restored documents are clean and remain bound to project saving")
+    {
+      requireProject(session->restore(v1.id));
+      CHECK_FALSE(document.map().modified());
+      CHECK(session->hasOpenMaps());
+      CHECK(session->modified());
+      requireProject(document.map().saveTo(source));
+      CHECK(readProjectFile(source) == v1Bytes);
+      CHECK(
+        requireProject(
+          session->store().readAsset(asset.id, project::ContentKind::Compatible))
+        == v1Bytes);
+      const auto history = requireProject(session->store().checkpoints());
+      const auto safety = std::ranges::find_if(
+        history, [](const auto& entry) { return entry.name == "Before restore"; });
+      REQUIRE(safety != history.end());
+      requireProject(session->restore(safety->id));
+      requireProject(document.map().saveTo(source));
+      CHECK(readProjectFile(source) == liveBytes);
+      CHECK_FALSE(document.map().modified());
+      REQUIRE(mdl::setEntityProperty(document.map(), "message", "After restore"));
+      requireProject(document.map().save());
+      CHECK_FALSE(session->modified());
+    }
+    session->unregisterDocument(document);
+  }
+
   SECTION("runtime generations retain publish paths and remove restored content")
   {
     const auto asset = requireProject(session->importAsset(testAsset()));

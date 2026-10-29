@@ -1085,8 +1085,8 @@ void ProjectWindow::restoreCheckpoint()
     QMessageBox::question(
       this,
       tr("Restore Version"),
-      tr("Restore this version? Current project state will be preserved in a safety "
-         "version."))
+      tr("Restore this version? Current edits will be preserved in a safety version. "
+         "Open maps will reload with the restored content."))
     == QMessageBox::Yes)
     report(m_session->restore(id));
 }

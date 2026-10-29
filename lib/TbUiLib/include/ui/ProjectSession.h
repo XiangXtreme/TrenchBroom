@@ -55,6 +55,8 @@ class ProjectSession : public QObject, public std::enable_shared_from_this<Proje
   Result<void> initialize(bool create, const std::string& name, const std::string& game);
   Result<void> stageMaps();
   Result<void> unstageMaps();
+  /** Loads every open map from the project snapshot again, discarding live edits. */
+  Result<void> reloadOpenMaps();
   Result<void> refreshRuntime();
   Result<void> writeProject(const std::filesystem::path& path, bool overwrite);
   void bindDocument(MapDocument& document);
@@ -108,6 +110,14 @@ public:
   Result<void> removeAsset(const std::string& id);
   Result<project::Checkpoint> checkpoint(const std::string& name);
   Result<project::ProjectChanges> compare(const std::string& id);
+  /**
+   * Restores a version into the project.
+   *
+   * Live edits of open maps are preserved by the safety version the store writes first,
+   * then every open map is reloaded from the restored snapshot so the editor shows what
+   * was restored. A version that does not contain an open map is rejected: the map would
+   * have no content to show and no dirty state would make that visible.
+   */
   Result<void> restore(const std::string& id);
 
   // Asset library integration.

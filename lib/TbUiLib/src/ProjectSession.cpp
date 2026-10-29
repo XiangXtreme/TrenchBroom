@@ -960,9 +960,52 @@ Result<project::ProjectChanges> ProjectSession::compare(const std::string& id)
 
 Result<void> ProjectSession::restore(const std::string& id)
 {
-  if (hasOpenMaps())
-    return Error{"Close project maps before restoring a version."};
-  return m_store->restore(id) | kdl::transform([&](auto) { changed(); });
+  const auto changes = m_store->compare(id);
+  if (changes.is_error())
+    return std::get<Error>(changes.error());
+  for (const auto& [document, entry] : m_documents)
+  {
+    const auto& assets = changes.value().assets;
+    const auto it = std::ranges::find_if(
+      assets, [&](const auto& change) { return change.assetId == entry.assetId; });
+    if (it != assets.end() && !it->before)
+      return Error{
+        "This version does not contain " + it->after->virtualPath
+        + "; close that map before restoring."};
+  }
+
+  auto result = stageMaps() | kdl::and_then([&]() { return m_store->restore(id); })
+                | kdl::and_then([&](const auto& safety) {
+                    return reloadOpenMaps() | kdl::transform([&]() { return safety; });
+                  });
+  if (result.is_success())
+  {
+    // Unstaging here would replace the restored heads with the previous revisions.
+    m_stagedMaps.clear();
+    changed();
+    return {};
+  }
+  if (const auto reset = unstageMaps(); reset.is_error())
+    return std::get<Error>(reset.error());
+  return std::get<Error>(result.error());
+}
+
+Result<void> ProjectSession::reloadOpenMaps()
+{
+  for (const auto& [document, entry] : m_documents)
+  {
+    const auto bytes =
+      m_store->readAsset(entry.assetId, project::ContentKind::Compatible);
+    if (bytes.is_error())
+      return std::get<Error>(bytes.error());
+    if (const auto written = writeBytes(document->map().path(), bytes.value());
+        written.is_error())
+      return written;
+    if (const auto reloaded = document->reload(); reloaded.is_error())
+      return std::get<Error>(reloaded.error());
+    bindDocument(*document);
+  }
+  return {};
 }
 
 Result<std::unique_ptr<project::AssetLibrary>> ProjectSession::openLibrary(
