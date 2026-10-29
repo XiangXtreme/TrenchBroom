@@ -7,13 +7,17 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QSaveFile>
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QTabBar>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QTimer>
 #include <QToolButton>
 
@@ -215,6 +219,31 @@ TEST_CASE("ProjectWindow")
     CHECK(window.activeMapWindow()->window() == &window);
     CHECK(tabs->tabText(tabs->currentIndex()) == "gamma");
     CHECK(manager.topMapWindow() == window.activeMapWindow());
+  }
+
+  SECTION("library disk changes prompt without scanning or dirtying the project")
+  {
+    const auto folder = directory.filePath("library");
+    REQUIRE(QDir{}.mkdir(folder));
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(session->attachLibrary(pathFromQString(folder)));
+    require(session->save());
+    REQUIRE_FALSE(session->modified());
+    auto source = QSaveFile{folder + "/new.wav"};
+    REQUIRE(source.open(QIODevice::WriteOnly));
+    REQUIRE(source.write("new source") == 10);
+    REQUIRE(source.commit());
+    auto elapsed = QElapsedTimer{};
+    elapsed.start();
+    while (window.statusBar()->currentMessage().isEmpty() && elapsed.elapsed() < 3000)
+    {
+      QApplication::processEvents();
+      QThread::msleep(10);
+    }
+    CHECK(window.statusBar()->currentMessage().contains("library files changed"));
+    CHECK_FALSE(session->modified());
+    CHECK(require(library->assets()).empty());
   }
 
   SECTION("host undo follows the active map")

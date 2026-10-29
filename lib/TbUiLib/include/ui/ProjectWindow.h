@@ -26,6 +26,7 @@ class QToolButton;
 namespace tb::ui
 {
 class AppController;
+class AssetLibraryWatcher;
 class MapDocument;
 class MapCommandSurface;
 class MapWindow;
@@ -43,6 +44,7 @@ class ProjectWindow : public QMainWindow
   QMenu* m_reopenMapsMenu = nullptr;
   bool m_mapTabsRefreshScheduled = false;
   bool m_closing = false;
+  AssetLibraryWatcher* m_libraryWatcher = nullptr;
   QStackedWidget* m_maps = nullptr;
   std::unique_ptr<MapCommandSurface> m_commands;
   QAction* m_saveProject = nullptr;

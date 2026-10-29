@@ -1192,7 +1192,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
       });
       entry.projectUpdateAvailable =
         update != updates.end()
-        && update->state == project::LibraryUpdateState::NewVersion;
+        && (update->state == project::LibraryUpdateState::NewVersion || update->state == project::LibraryUpdateState::DependenciesChanged);
     }
     else if (type != BrowserCellType::Texture)
     {

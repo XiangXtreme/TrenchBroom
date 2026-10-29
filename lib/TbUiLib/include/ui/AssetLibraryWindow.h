@@ -24,10 +24,13 @@ namespace tb::ui
  * inspect and rescan one without opening a project. The window owns nothing but the
  * catalog handle: it never touches project state.
  */
+class AssetLibraryWatcher;
+
 class AssetLibraryWindow : public QDialog
 {
   Q_OBJECT
   QLineEdit* m_path = nullptr;
+  AssetLibraryWatcher* m_watcher = nullptr;
   QLabel* m_summary = nullptr;
   QTreeWidget* m_assets = nullptr;
   std::unique_ptr<project::AssetLibrary> m_library;

@@ -39,6 +39,7 @@
 #include "project/AssetLibrary.h"
 #include "ui/ActionManager.h"
 #include "ui/AppController.h"
+#include "ui/AssetLibraryWatcher.h"
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
@@ -124,6 +125,12 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   setAttribute(Qt::WA_DeleteOnClose);
   setObjectName("ProjectWindow");
   resize(1000, 680);
+  m_libraryWatcher = new AssetLibraryWatcher{this};
+  connect(m_libraryWatcher, &AssetLibraryWatcher::foldersChanged, this, [this]() {
+    statusBar()->showMessage(
+      tr("Asset library files changed. Use Library > Rescan Library and Check for "
+         "Updates to review them."));
+  });
   m_commands = std::make_unique<MapCommandSurface>(m_appController, [this]() {
     auto* window = activeMapWindow();
     return ActionExecutionContext{
@@ -475,6 +482,11 @@ void ProjectWindow::checkLibraryUpdates(const bool rescan)
   auto dialog = ProjectLibraryDialog{*m_session, rescan, this};
   dialog.exec();
   refresh();
+  if (rescan)
+  {
+    m_libraryWatcher->acknowledgeChanges();
+    statusBar()->clearMessage();
+  }
 }
 
 void ProjectWindow::maybePromptForLibraryUpdates()
@@ -659,6 +671,13 @@ std::optional<std::string> ProjectWindow::selectedAsset() const
 
 void ProjectWindow::refresh()
 {
+  if (const auto libraries = m_session->store().libraries(); libraries.is_success())
+  {
+    auto folders = QStringList{};
+    for (const auto& library : libraries.value())
+      folders.push_back(QString::fromStdString(library.path));
+    m_libraryWatcher->setFolders(std::move(folders));
+  }
   const auto selected = selectedAsset();
   const auto historyId = m_history->currentItem()
                            ? m_history->currentItem()->data(0, Qt::UserRole).toString()

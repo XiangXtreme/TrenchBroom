@@ -17,6 +17,7 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include "ui/AssetLibraryWatcher.h"
 #include "ui/QPathUtils.h"
 
 #include <fmt/format.h>
@@ -59,6 +60,11 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   m_summary = new QLabel{this};
   m_summary->setWordWrap(true);
   layout->addWidget(m_summary);
+  m_watcher = new AssetLibraryWatcher{this};
+  connect(m_watcher, &AssetLibraryWatcher::foldersChanged, this, [this]() {
+    m_summary->setText(
+      tr("Library files changed. Click Rescan to review the current files."));
+  });
 
   m_assets = new QTreeWidget{this};
   m_assets->setRootIsDecorated(false);
@@ -174,6 +180,9 @@ void AssetLibraryWindow::rescan()
 void AssetLibraryWindow::reload()
 {
   m_assets->clear();
+  m_watcher->setFolders(
+    m_library ? QStringList{pathAsQString(m_library->folder())} : QStringList{});
+  m_watcher->acknowledgeChanges();
   if (!m_library)
   {
     m_path->clear();
