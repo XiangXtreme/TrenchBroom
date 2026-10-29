@@ -26,6 +26,7 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QLabel>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPainterPath>
@@ -192,10 +193,12 @@ using namespace std::chrono_literals;
 MapWindow::MapWindow(
   AppController& appController,
   std::shared_ptr<MapDocument> document,
-  std::shared_ptr<ProjectSession> project)
+  std::shared_ptr<ProjectSession> project,
+  const bool embedded)
   : m_appController{appController}
   , m_document{std::move(document)}
   , m_project{std::move(project)}
+  , m_embedded{embedded}
   , m_lastInputTime{std::chrono::system_clock::now()}
   , m_autosaveTimer{new QTimer{this}}
   , m_updateTitleSignalDelayer{new SignalDelayer{500ms, this}}
@@ -204,7 +207,7 @@ MapWindow::MapWindow(
 {
   contract_pre(m_document != nullptr);
 
-  setAttribute(Qt::WA_DeleteOnClose);
+  setAttribute(Qt::WA_DeleteOnClose, !embedded);
   setObjectName("MapWindow");
 
   installEventFilter(this);
@@ -213,6 +216,12 @@ MapWindow::MapWindow(
   createMenus();
   createToolBar();
   createStatusBar();
+  if (embedded)
+  {
+    menuBar()->hide();
+    m_toolBar->hide();
+    m_commands->setShortcutsEnabled(false);
+  }
 
   updateShortcuts();
   updateActionState();
@@ -233,8 +242,11 @@ MapWindow::MapWindow(
       this,
       &MapWindow::updateTitleDelayed);
 
-  restoreWidgetGeometry(this);
-  restoreWidgetState(this);
+  if (!m_embedded)
+  {
+    restoreWidgetGeometry(this);
+    restoreWidgetState(this);
+  }
 
   setAcceptDrops(true);
 
@@ -321,12 +333,15 @@ bool MapWindow::documentRetainedByProject() const
 
 void MapWindow::positionOnScreen(QWidget* reference)
 {
-  restoreWidgetGeometry(this);
-  restoreWidgetState(this);
+  if (!m_embedded)
+  {
+    restoreWidgetGeometry(this);
+    restoreWidgetState(this);
+  }
   if (reference)
   {
     const auto offset = QApplication::style()->pixelMetric(QStyle::PM_TitleBarHeight);
-    move(reference->pos() + QPoint(offset, offset));
+    move(reference->window()->pos() + QPoint(offset, offset));
   }
 }
 
@@ -417,16 +432,41 @@ void MapWindow::createMenus()
 void MapWindow::updateShortcuts()
 {
   m_commands->updateShortcuts();
+  emit commandStateChanged();
 }
 
 void MapWindow::updateActionState()
 {
   m_commands->updateActionState();
+  emit commandStateChanged();
 }
 
 void MapWindow::updateActionStateDelayed()
 {
   m_updateActionStateSignalDelayer->queueSignal();
+}
+
+void MapWindow::setCommandToolBar(QToolBar& toolbar)
+{
+  m_toolBar = &toolbar;
+  connect(
+    m_toolBar, &QToolBar::visibilityChanged, this, [this]() { updateActionState(); });
+}
+
+void MapWindow::refreshCommandSurface(MapCommandSurface& commands)
+{
+  commands.updateActionState();
+  for (const auto pair :
+       {std::pair{m_undoAction, commands.undoAction()},
+        std::pair{m_redoAction, commands.redoAction()},
+        std::pair{m_rerunAction, commands.rerunAction()}})
+  {
+    if (pair.first && pair.second)
+    {
+      pair.second->setText(pair.first->text());
+      pair.second->setEnabled(pair.first->isEnabled());
+    }
+  }
 }
 
 void MapWindow::updateUndoRedoActions()
@@ -460,6 +500,7 @@ void MapWindow::updateUndoRedoActions()
       m_redoAction->setEnabled(false);
     }
   }
+  emit commandStateChanged();
 }
 
 void MapWindow::addRecentDocumentsMenu()
@@ -1445,6 +1486,13 @@ void MapWindow::switchMapViewLayout(const MapViewLayout layout)
 
 void MapWindow::closeDocument(const bool discardChanges)
 {
+  if (m_project && documentRetainedByProject())
+  {
+    if (!closeCompileDialog())
+      return;
+    m_appController.mapWindowManager().closeMapView(*this);
+    return;
+  }
   m_discardChangesOnClose = discardChanges;
   close();
 }
@@ -2694,7 +2742,8 @@ void MapWindow::debugShowPalette()
 
 void MapWindow::focusChange(QWidget* /* oldFocus */, QWidget* newFocus)
 {
-  if (auto* newMapView = dynamic_cast<MapViewBase*>(newFocus))
+  if (auto* newMapView = dynamic_cast<MapViewBase*>(newFocus);
+      newMapView && isAncestorOf(newMapView))
   {
     m_currentMapView = newMapView;
   }
@@ -2827,8 +2876,11 @@ void MapWindow::closeEvent(QCloseEvent* event)
 
   disconnect(qApp, &QApplication::focusChanged, this, &MapWindow::focusChange);
 
-  saveWidgetGeometry(this);
-  saveWidgetState(this);
+  if (!m_embedded)
+  {
+    saveWidgetGeometry(this);
+    saveWidgetState(this);
+  }
   saveWidgetState(m_hSplitter);
   saveWidgetState(m_vSplitter);
   saveWidgetState(m_inspector);
@@ -2838,6 +2890,8 @@ void MapWindow::closeEvent(QCloseEvent* event)
     m_project->unregisterDocument(*m_document);
   m_appController.mapWindowManager().removeMapWindow(this);
   event->accept();
+  if (m_embedded)
+    deleteLater();
   m_discardChangesOnClose = false;
   // Don't call superclass implementation
 }

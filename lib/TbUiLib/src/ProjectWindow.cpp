@@ -5,6 +5,7 @@
 #include "ui/ProjectWindow.h"
 
 #include <QCloseEvent>
+#include <QDockWidget>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -20,9 +21,11 @@
 #include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -34,7 +37,9 @@
 #include "mdl/MapFormat.h"
 #include "mdl/MapHeader.h"
 #include "project/AssetLibrary.h"
+#include "ui/ActionManager.h"
 #include "ui/AppController.h"
+#include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
@@ -43,6 +48,7 @@
 #include "ui/ProjectSession.h"
 #include "ui/ProjectTextureImport.h"
 #include "ui/QPathUtils.h"
+#include "ui/RecentDocuments.h"
 
 #include <fmt/ranges.h>
 
@@ -118,9 +124,29 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   setAttribute(Qt::WA_DeleteOnClose);
   setObjectName("ProjectWindow");
   resize(1000, 680);
+  m_commands = std::make_unique<MapCommandSurface>(m_appController, [this]() {
+    auto* window = activeMapWindow();
+    return ActionExecutionContext{
+      m_appController, window, window ? window->currentMapViewBase() : nullptr};
+  });
+  m_commands->populateMenuBar(*menuBar());
+  m_appController.recentDocuments().addMenu(*m_commands->recentDocumentsMenu());
+  auto* toolbar = addToolBar(tr("Map"));
+  m_mapToolbar = toolbar;
+  toolbar->setObjectName("ProjectMapToolBar");
+  toolbar->setFloatable(false);
+  toolbar->setMovable(false);
+  toolbar->setIconSize(QSize{20, 20});
+  m_commands->populateToolBar(*toolbar);
+  m_commands->updateShortcuts();
   auto* file = menuBar()->addMenu(tr("Project"));
   file->addAction(tr("New Map…"), this, &ProjectWindow::newMap);
-  file->addAction(tr("Save Project"), QKeySequence::Save, this, [this]() { save(); });
+  m_saveProject =
+    file->addAction(tr("Save Project"), QKeySequence::Save, this, [this]() { save(); });
+  // The workspace owns Save even when every map tab has been closed.
+  auto* mapSave = m_commands->findAction(
+    m_appController.actionManager().actionsMap().at("Menu/File/Save"));
+  mapSave->setShortcut({});
   file->addAction(tr("Save Project Copy…"), this, [this]() {
     const auto path = QFileDialog::getSaveFileName(
       this, tr("Save Project Copy"), {}, "TB projects (*.tbproj)");
@@ -179,10 +205,16 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   workspaceRow->addWidget(m_reopenMaps, 0);
   layout->addWidget(workspace);
 
-  m_search = new QLineEdit{body};
+  m_maps = new QStackedWidget{body};
+  m_maps->setObjectName("ProjectMapStack");
+  layout->addWidget(m_maps, 4);
+
+  auto* content = new QWidget{this};
+  auto* contentLayout = new QVBoxLayout{content};
+  m_search = new QLineEdit{content};
   m_search->setPlaceholderText(tr("Search project content"));
-  layout->addWidget(m_search);
-  auto* splitter = new QSplitter{Qt::Vertical, body};
+  contentLayout->addWidget(m_search);
+  auto* splitter = new QSplitter{Qt::Vertical, content};
   m_assets = new QTreeWidget{splitter};
   m_assets->setObjectName("ProjectAssets");
   m_assets->setHeaderLabels(
@@ -202,7 +234,14 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   m_history->setRootIsDecorated(false);
   splitter->setStretchFactor(0, 4);
   splitter->setStretchFactor(1, 1);
-  layout->addWidget(splitter);
+  contentLayout->addWidget(splitter);
+  auto* contentDock = new QDockWidget{tr("Project Content"), this};
+  contentDock->setObjectName("ProjectContentDock");
+  contentDock->setWidget(content);
+  addDockWidget(Qt::BottomDockWidgetArea, contentDock);
+  resizeDocks({contentDock}, {200}, Qt::Vertical);
+  splitter->setSizes({130, 50});
+  file->addAction(contentDock->toggleViewAction());
   setCentralWidget(body);
   connect(m_search, &QLineEdit::textChanged, this, [this]() { refresh(); });
   connect(m_mapTabs, &QTabBar::currentChanged, this, [this](const int index) {
@@ -216,7 +255,6 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
       return;
     if (auto* window = mapWindowFor(*document))
     {
-      window->show();
       m_appController.mapWindowManager().activateMapWindow(*window);
     }
   });
@@ -231,11 +269,16 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
       // Retaining first also means a later view destruction cannot unload it by accident.
       if (auto* window = mapWindowFor(*document))
       {
-        report(m_session->retainDocument(window->documentHandle(), assetId));
+        if (
+          !window->closeCompileDialog()
+          || !report(m_session->retainDocument(window->documentHandle(), assetId)))
+          return;
         m_appController.mapWindowManager().closeMapView(*window);
       }
     }
     refreshMapTabs();
+    if (auto* active = activeMapWindow())
+      m_appController.mapWindowManager().activateMapWindow(*active);
     refreshTitle();
   });
   connect(m_assets, &QTreeWidget::itemDoubleClicked, this, [this]() { openSelected(); });
@@ -256,8 +299,79 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
     });
   connect(
     m_session.get(), &ProjectSession::libraryLinksChanged, this, &ProjectWindow::refresh);
+  connect(
+    &m_appController.mapWindowManager(),
+    &MapWindowManager::mapWindowsChanged,
+    this,
+    &ProjectWindow::scheduleMapTabsRefresh);
+  connect(
+    &m_appController.mapWindowManager(),
+    &MapWindowManager::mapWindowActivated,
+    this,
+    &ProjectWindow::activateMapTab);
+  for (auto* menu : menuBar()->findChildren<QMenu*>())
+    connect(menu, &QMenu::aboutToShow, this, &ProjectWindow::refreshCommands);
   refresh();
+  if (auto* window = activeMapWindow())
+    m_appController.mapWindowManager().activateMapWindow(*window);
+  refreshCommands();
   QTimer::singleShot(0, this, [this]() { maybePromptForLibraryUpdates(); });
+}
+
+ProjectWindow::~ProjectWindow()
+{
+  m_closing = true;
+  disconnect(&m_appController.mapWindowManager(), nullptr, this, nullptr);
+  // Destroy map widgets while the session and host command surface still exist.
+  for (auto* window : m_appController.mapWindowManager().mapWindows())
+  {
+    if (window->project() != m_session)
+      continue;
+    disconnect(window, nullptr, this, nullptr);
+    m_appController.mapWindowManager().closeMapView(*window);
+    delete window;
+  }
+  for (auto* window :
+       m_maps->findChildren<MapWindow*>(QString{}, Qt::FindDirectChildrenOnly))
+    delete window;
+  m_appController.recentDocuments().removeMenu(*m_commands->recentDocumentsMenu());
+}
+
+MapWindow* ProjectWindow::activeMapWindow() const
+{
+  return m_maps ? dynamic_cast<MapWindow*>(m_maps->currentWidget()) : nullptr;
+}
+
+void ProjectWindow::activateMapTab(MapWindow* window)
+{
+  if (m_closing || !window || window->project() != m_session)
+    return;
+  refreshMapTabs();
+  m_maps->setCurrentWidget(window);
+  const auto id = m_session->assetFor(window->document());
+  const auto blocker = QSignalBlocker{m_mapTabs};
+  for (int i = 0; id && i < m_mapTabs->count(); ++i)
+    if (m_mapTabs->tabData(i).toString().toStdString() == *id)
+      m_mapTabs->setCurrentIndex(i);
+  refreshCommands();
+}
+
+void ProjectWindow::refreshCommands()
+{
+  if (m_closing)
+    return;
+  m_commands->updateShortcuts();
+  auto* mapSave = m_commands->findAction(
+    m_appController.actionManager().actionsMap().at("Menu/File/Save"));
+  mapSave->setShortcut({});
+  if (auto* window = activeMapWindow())
+    window->refreshCommandSurface(*m_commands);
+  else
+  {
+    m_commands->updateActionState();
+    m_commands->undoAction()->setEnabled(false);
+    m_commands->redoAction()->setEnabled(false);
+  }
 }
 
 const std::shared_ptr<ProjectSession>& ProjectWindow::session() const
@@ -396,7 +510,7 @@ MapWindow* ProjectWindow::mapWindowFor(const MapDocument& document) const
 
 void ProjectWindow::scheduleMapTabsRefresh()
 {
-  if (m_mapTabsRefreshScheduled)
+  if (m_closing || m_mapTabsRefreshScheduled)
     return;
   m_mapTabsRefreshScheduled = true;
   QTimer::singleShot(0, this, [this]() {
@@ -407,7 +521,7 @@ void ProjectWindow::scheduleMapTabsRefresh()
 
 void ProjectWindow::refreshMapTabs()
 {
-  if (!m_mapTabs)
+  if (m_closing || !m_mapTabs)
     return;
   const auto assets = m_session->store().assets();
   if (assets.is_error())
@@ -416,6 +530,23 @@ void ProjectWindow::refreshMapTabs()
   const auto previous = m_mapTabs->currentIndex() >= 0
                           ? m_mapTabs->tabData(m_mapTabs->currentIndex()).toString()
                           : QString{};
+  auto order = std::vector<QString>{};
+  for (int i = 0; i < m_mapTabs->count(); ++i)
+    order.push_back(m_mapTabs->tabData(i).toString());
+  auto sortedAssets = assets.value();
+  std::stable_sort(
+    sortedAssets.begin(), sortedAssets.end(), [&](const auto& a, const auto& b) {
+      return std::ranges::find(order, QString::fromStdString(a.id))
+             < std::ranges::find(order, QString::fromStdString(b.id));
+    });
+  // Remove views that have left the manager, including deferred deletions.
+  for (int i = m_maps->count() - 1; i >= 0; --i)
+  {
+    auto* window = dynamic_cast<MapWindow*>(m_maps->widget(i));
+    const auto windows = m_appController.mapWindowManager().mapWindows();
+    if (std::ranges::find(windows, window) == windows.end())
+      m_maps->removeWidget(window);
+  }
   // Rebuilding the strip must not look like the user switching maps.
   const auto blocker = QSignalBlocker{m_mapTabs};
   while (m_mapTabs->count() > 0)
@@ -423,18 +554,27 @@ void ProjectWindow::refreshMapTabs()
 
   auto closed = std::vector<std::pair<std::string, QString>>{};
   auto openTabs = 0;
-  for (const auto& asset : assets.value())
+  for (const auto& asset : sortedAssets)
   {
     if (asset.type != project::AssetType::Map)
       continue;
     const auto name = QString::fromStdString(asset.displayName);
     const auto* document = m_session->documentFor(asset.id);
     auto* window = document ? mapWindowFor(*document) : nullptr;
-    // A map without a visible view is either closed (document kept) or not open at all.
-    if (!document || !window || !window->isVisible())
+    // Stack pages are hidden when inactive; manager membership determines open tabs.
+    if (!document || !window)
     {
       closed.emplace_back(asset.id, name);
       continue;
+    }
+    if (m_maps->indexOf(window) < 0)
+    {
+      if (!report(m_session->retainDocument(window->documentHandle(), asset.id)))
+        continue;
+      window->setCommandToolBar(*m_mapToolbar);
+      m_maps->addWidget(window);
+      connect(
+        window, &MapWindow::commandStateChanged, this, &ProjectWindow::refreshCommands);
     }
     const auto index =
       m_mapTabs->addTab(document->map().modified() ? name + tr(" *") : name);
@@ -452,6 +592,12 @@ void ProjectWindow::refreshMapTabs()
     m_mapTabs->setTabEnabled(index, false);
   }
   m_mapTabs->setTabsClosable(openTabs > 0);
+  if (
+    const auto* document = m_session->documentFor(
+      m_mapTabs->tabData(m_mapTabs->currentIndex()).toString().toStdString()))
+    if (auto* window = mapWindowFor(*document))
+      m_maps->setCurrentWidget(window);
+  refreshCommands();
 
   // The menu is rebuilt from inside a triggered action, so the old actions are removed
   // and scheduled for deletion instead of being destroyed while their signal is still on
@@ -481,7 +627,6 @@ void ProjectWindow::openMapTab(const std::string& assetId)
   {
     if (auto* window = mapWindowFor(*document))
     {
-      window->show();
       m_appController.mapWindowManager().activateMapWindow(*window);
       refreshMapTabs();
       return;
@@ -492,7 +637,7 @@ void ProjectWindow::openMapTab(const std::string& assetId)
   if (const auto* document = m_session->documentFor(assetId))
   {
     if (auto* window = mapWindowFor(*document))
-      window->show();
+      m_appController.mapWindowManager().activateMapWindow(*window);
   }
   refreshMapTabs();
 }
@@ -929,25 +1074,12 @@ void ProjectWindow::restoreCheckpoint()
 
 void ProjectWindow::closeEvent(QCloseEvent* event)
 {
-  if (m_session->hasOpenMaps())
-  {
-    // A document whose tab was closed has no visible view to close, so the project closes
-    // its own map views. Each map still asks about its own unsaved changes, and
-    // cancelling there cancels closing the project.
-    for (auto* window : m_appController.mapWindowManager().mapWindows())
+  for (auto* window : m_appController.mapWindowManager().mapWindows())
+    if (window->project() == m_session && !window->closeCompileDialog())
     {
-      if (!m_session->assetFor(window->document()))
-        continue;
-      // Showing a kept document makes the save prompt understandable if it has edits.
-      if (!window->isVisible())
-        window->show();
-      if (!window->close())
-      {
-        event->ignore();
-        return;
-      }
+      event->ignore();
+      return;
     }
-  }
   if (m_session->modified())
   {
     const auto answer = QMessageBox::question(
@@ -961,6 +1093,10 @@ void ProjectWindow::closeEvent(QCloseEvent* event)
       return;
     }
   }
+  m_closing = true;
+  for (auto* window : m_appController.mapWindowManager().mapWindows())
+    if (window->project() == m_session)
+      m_appController.mapWindowManager().closeMapView(*window);
   event->accept();
 }
 } // namespace tb::ui

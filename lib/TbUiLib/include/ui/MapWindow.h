@@ -101,6 +101,7 @@ private:
   AppController& m_appController;
   std::shared_ptr<MapDocument> m_document;
   std::shared_ptr<ProjectSession> m_project;
+  bool m_embedded = false;
 
   std::chrono::time_point<std::chrono::system_clock> m_lastInputTime;
   QTimer* m_autosaveTimer = nullptr;
@@ -159,12 +160,19 @@ public:
   MapWindow(
     AppController& appController,
     std::shared_ptr<MapDocument> document,
-    std::shared_ptr<ProjectSession> project = {});
+    std::shared_ptr<ProjectSession> project = {},
+    bool embedded = false);
   const std::shared_ptr<ProjectSession>& project() const;
   ~MapWindow() override;
 
   void positionOnScreen(QWidget* reference);
+  void refreshCommandSurface(MapCommandSurface& commands);
+  void setCommandToolBar(QToolBar& toolbar);
 
+signals:
+  void commandStateChanged();
+
+public:
   /**
    * True when the project keeps the document alive on its own. Destroying the view
    * then

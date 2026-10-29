@@ -4,10 +4,17 @@
   This file is part of TrenchBroom.
 */
 
+#include <QAbstractButton>
 #include <QApplication>
+#include <QDir>
+#include <QFile>
 #include <QMenu>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QStackedWidget>
 #include <QTabBar>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QToolButton>
 
 #include "mdl/GameManager.h"
@@ -16,6 +23,7 @@
 #include "mdl/Map_Entities.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/MapDocument.h"
+#include "ui/MapViewBase.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectSession.h"
@@ -111,13 +119,12 @@ TEST_CASE("ProjectWindow")
   require(manager.createProjectMap(session, "beta", mdl::MapFormat::Valve));
 
   auto window = ProjectWindow{appController, session};
+  window.setAttribute(Qt::WA_DeleteOnClose, false);
   window.resize(1000, 700);
   window.show();
   QApplication::processEvents();
 
-  // Tear down in a defined order: the project window first, then the map windows. Letting
-  // the fixture destroy them would delete the views after the window that routes their
-  // focus changes.
+  // Close clean views while their workspace and focus routing still exist.
   const auto teardown = [&]() {
     window.hide();
     for (auto* mapWindow : manager.mapWindows())
@@ -153,18 +160,137 @@ TEST_CASE("ProjectWindow")
   REQUIRE(alphaWindow != nullptr);
   CHECK(alphaWindow->isVisible());
 
+  auto* stack = window.findChild<QStackedWidget*>("ProjectMapStack");
+  REQUIRE(stack != nullptr);
+  REQUIRE(stack->count() == 2);
+  CHECK_FALSE(alphaWindow->isWindow());
+  CHECK(alphaWindow->menuBar()->isHidden());
+  CHECK(alphaWindow->findAction("Menu/Edit/Undo")->shortcut().isEmpty());
+
+  SECTION("tabs switch embedded pages and preserve reordered tabs after edits")
+  {
+    tabs->setCurrentIndex(1);
+    auto* betaWindow = window.activeMapWindow();
+    REQUIRE(betaWindow != nullptr);
+    CHECK(betaWindow != alphaWindow);
+    CHECK(manager.topMapWindow() == betaWindow);
+    CHECK_FALSE(alphaWindow->isVisible());
+    tabs->moveTab(1, 0);
+    REQUIRE(mdl::setEntityProperty(betaWindow->document().map(), "message", "beta edit"));
+    QApplication::processEvents();
+    CHECK(tabs->tabText(0) == "beta *");
+    CHECK(stack->count() == 2);
+    CHECK(window.activeMapWindow() == betaWindow);
+    tabs->setCurrentIndex(1);
+    CHECK(window.activeMapWindow() == alphaWindow);
+    CHECK(manager.topMapWindow() == alphaWindow);
+    CHECK_FALSE(betaWindow->isVisible());
+    require(session->save());
+  }
+
+  SECTION("focus keeps each map's current viewport and project controls select their map")
+  {
+    auto* alphaView = alphaWindow->currentMapViewBase();
+    tabs->setCurrentIndex(1);
+    auto* betaWindow = window.activeMapWindow();
+    REQUIRE(betaWindow != nullptr);
+    auto* betaView = betaWindow->currentMapViewBase();
+    QMetaObject::invokeMethod(
+      qApp, "focusChanged", Q_ARG(QWidget*, nullptr), Q_ARG(QWidget*, betaView));
+    CHECK(alphaWindow->currentMapViewBase() == alphaView);
+    CHECK(betaWindow->currentMapViewBase() == betaView);
+    tabs->setCurrentIndex(0);
+    auto child = QWidget{&window};
+    QMetaObject::invokeMethod(
+      qApp, "focusChanged", Q_ARG(QWidget*, nullptr), Q_ARG(QWidget*, &child));
+    CHECK(manager.topMapWindow() == alphaWindow);
+  }
+
+  SECTION("maps created after the host opens become embedded active tabs")
+  {
+    require(manager.createProjectMap(session, "gamma", mdl::MapFormat::Valve));
+    QApplication::processEvents();
+    REQUIRE(stack->count() == 3);
+    REQUIRE(window.activeMapWindow() != nullptr);
+    CHECK(window.activeMapWindow()->window() == &window);
+    CHECK(tabs->tabText(tabs->currentIndex()) == "gamma");
+    CHECK(manager.topMapWindow() == window.activeMapWindow());
+  }
+
+  SECTION("host undo follows the active map")
+  {
+    auto* editMenu = window.menuBar()->actions().at(1)->menu();
+    REQUIRE(editMenu != nullptr);
+    auto* undo = editMenu->actions().front();
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "message", "alpha edit"));
+    QApplication::processEvents();
+    CHECK(undo->isEnabled());
+    tabs->setCurrentIndex(1);
+    CHECK_FALSE(undo->isEnabled());
+    tabs->setCurrentIndex(0);
+    CHECK(undo->isEnabled());
+    undo->trigger();
+    CHECK_FALSE(alphaWindow->canUndo());
+    require(session->save());
+  }
+
+  SECTION("failed project save on close preserves views and dirty documents")
+  {
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "message", "unsaved"));
+    const auto path = directory.filePath("workspace.tbproj");
+    const auto backup = directory.filePath("backup.tbproj");
+    REQUIRE(QFile::rename(path, backup));
+    REQUIRE(QDir{}.mkdir(path));
+    auto timer = QTimer{};
+    QObject::connect(&timer, &QTimer::timeout, [&]() {
+      for (auto* widget : QApplication::topLevelWidgets())
+        if (auto* message = dynamic_cast<QMessageBox*>(widget);
+            message && message->isVisible())
+          message
+            ->button(
+              message->standardButtons().testFlag(QMessageBox::Save) ? QMessageBox::Save
+                                                                     : QMessageBox::Ok)
+            ->click();
+    });
+    timer.start(10);
+    CHECK_FALSE(window.close());
+    timer.stop();
+    CHECK(window.isVisible());
+    CHECK(window.activeMapWindow() == alphaWindow);
+    CHECK(stack->count() == 2);
+    CHECK(session->modified());
+    CHECK(alphaDocument->map().modified());
+    REQUIRE(QDir{}.rmdir(path));
+    REQUIRE(QFile::rename(backup, path));
+    require(session->save());
+  }
+
+  SECTION("all tabs can close while project save remains available")
+  {
+    closeTab(*tabs, 1);
+    closeTab(*tabs, 0);
+    CHECK(stack->count() == 0);
+    CHECK(window.activeMapWindow() == nullptr);
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "message", "closed edit"));
+    QMenu* projectMenu = nullptr;
+    for (auto* action : window.menuBar()->actions())
+      if (action->text() == "Project")
+        projectMenu = action->menu();
+    REQUIRE(projectMenu != nullptr);
+    auto* save = projectMenu->actions().at(1);
+    CHECK(save->shortcut() == QKeySequence{QKeySequence::Save});
+    save->trigger();
+    CHECK_FALSE(session->modified());
+    CHECK_FALSE(alphaDocument->map().modified());
+  }
+
   SECTION("focus inside an embedded map activates that map")
   {
-    auto host = QWidget{};
-    alphaWindow->setParent(&host);
+    CHECK(alphaWindow->window() == &window);
     auto child = QWidget{alphaWindow};
     QMetaObject::invokeMethod(
-      qApp,
-      "focusChanged",
-      Q_ARG(QWidget*, nullptr),
-      Q_ARG(QWidget*, &child));
+      qApp, "focusChanged", Q_ARG(QWidget*, nullptr), Q_ARG(QWidget*, &child));
     CHECK(manager.topMapWindow() == alphaWindow);
-    alphaWindow->setParent(nullptr);
   }
 
   SECTION("closing a tab keeps the document and its modifications")

@@ -33,6 +33,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
 #include "ui/ProjectSession.h"
+#include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
 
 #include "kd/contracts.h"
@@ -85,6 +86,7 @@ bool MapWindowManager::activateMapWindow(MapWindow& mapWindow)
   {
     std::rotate(m_mapWindows.begin(), it, std::next(it));
   }
+  emit mapWindowActivated(&mapWindow);
   mapWindow.raise();
   mapWindow.activateWindow();
   return true;
@@ -202,14 +204,10 @@ Result<void> MapWindowManager::loadProjectMap(
     // to give the same editing state a new view.
     if (auto retained = project->retainedDocument(assetId))
     {
-      auto* window = new MapWindow{m_appController, std::move(retained), project};
-      window->positionOnScreen(topMapWindow());
+      auto* window = new MapWindow{m_appController, std::move(retained), project, true};
       m_mapWindows.insert(m_mapWindows.begin(), window);
-      if (m_showMapWindows)
-      {
-        window->show();
-        window->activateWindow();
-      }
+      emit mapWindowsChanged();
+      emit mapWindowActivated(window);
       return {};
     }
     return {};
@@ -247,14 +245,11 @@ Result<void> MapWindowManager::loadProjectMap(
              auto* window = new MapWindow{
                m_appController,
                std::shared_ptr<MapDocument>{std::move(document)},
-               project};
-             window->positionOnScreen(topMapWindow());
+               project,
+               true};
              m_mapWindows.insert(m_mapWindows.begin(), window);
-             if (m_showMapWindows)
-             {
-               window->show();
-               window->activateWindow();
-             }
+             emit mapWindowsChanged();
+             emit mapWindowActivated(window);
              return {};
            });
 }
@@ -268,7 +263,10 @@ void MapWindowManager::onFocusChange(QWidget* /* old */, QWidget* now)
 {
   for (auto* widget = now; widget; widget = widget->parentWidget())
   {
-    if (auto* mapWindow = dynamic_cast<MapWindow*>(widget))
+    auto* mapWindow = dynamic_cast<MapWindow*>(widget);
+    if (auto* projectWindow = dynamic_cast<ProjectWindow*>(widget))
+      mapWindow = projectWindow->activeMapWindow();
+    if (mapWindow)
     {
       if (auto it = std::ranges::find(m_mapWindows, mapWindow);
           it != m_mapWindows.end() && it != m_mapWindows.begin())
@@ -308,6 +306,7 @@ void MapWindowManager::removeMapWindow(MapWindow* mapWindow)
   if (auto it = std::ranges::find(m_mapWindows, mapWindow); it != m_mapWindows.end())
   {
     m_mapWindows.erase(it);
+    emit mapWindowsChanged();
     // MapWindow uses Qt::WA_DeleteOnClose so we don't need to delete it here
   }
 }

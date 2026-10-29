@@ -48,8 +48,17 @@ void MapCommandSurface::updateShortcuts()
 {
   for (auto [tbAction, qtAction] : m_actionMap)
   {
-    updateActionKeySequence(*qtAction, *tbAction);
+    if (m_shortcutsEnabled)
+      updateActionKeySequence(*qtAction, *tbAction);
+    else
+      qtAction->setShortcut({});
   }
+}
+
+void MapCommandSurface::setShortcutsEnabled(const bool enabled)
+{
+  m_shortcutsEnabled = enabled;
+  updateShortcuts();
 }
 
 void MapCommandSurface::updateActionState()

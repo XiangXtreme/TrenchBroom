@@ -18,12 +18,16 @@ class QLineEdit;
 class QCloseEvent;
 class QMenu;
 class QTabBar;
+class QStackedWidget;
+class QAction;
+class QToolBar;
 class QToolButton;
 
 namespace tb::ui
 {
 class AppController;
 class MapDocument;
+class MapCommandSurface;
 class MapWindow;
 class ProjectSession;
 
@@ -38,22 +42,31 @@ class ProjectWindow : public QMainWindow
   QToolButton* m_reopenMaps = nullptr;
   QMenu* m_reopenMapsMenu = nullptr;
   bool m_mapTabsRefreshScheduled = false;
+  bool m_closing = false;
+  QStackedWidget* m_maps = nullptr;
+  std::unique_ptr<MapCommandSurface> m_commands;
+  QAction* m_saveProject = nullptr;
+  QToolBar* m_mapToolbar = nullptr;
 
 public:
   ProjectWindow(AppController& appController, std::shared_ptr<ProjectSession> session);
+  ~ProjectWindow() override;
   const std::shared_ptr<ProjectSession>& session() const;
+  MapWindow* activeMapWindow() const;
 
 protected:
   void closeEvent(QCloseEvent* event) override;
 
 private:
+  void activateMapTab(MapWindow* window);
+  void refreshCommands();
   void refresh();
   void refreshTitle();
   /*
    * The map tab strip is the project workspace: a tab is a live editing view, not the
-   * document. Closing a tab hides the view and keeps the document and its modifications
-   * in the session, so saving the project still writes them and "Reopen map" restores the
-   * same editing state.
+   * document. Closing a tab destroys the view and keeps the document and its
+   * modifications in the session, so saving the project still writes them and "Reopen
+   * map" restores the same editing state.
    */
   void refreshMapTabs();
   void scheduleMapTabsRefresh();

@@ -38,6 +38,7 @@ private:
 
   std::unordered_map<const Action*, QAction*> m_actionMap;
   PopulateMenuResult m_menuActions;
+  bool m_shortcutsEnabled = true;
 
 public:
   MapCommandSurface(
@@ -47,6 +48,8 @@ public:
   void populateToolBar(QToolBar& toolBar);
 
   void updateShortcuts();
+  void setShortcutsEnabled(bool enabled);
+
   void updateActionState();
 
   QAction* findAction(const Action& action) const;

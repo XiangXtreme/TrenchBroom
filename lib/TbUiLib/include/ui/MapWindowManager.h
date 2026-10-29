@@ -99,6 +99,10 @@ public:
   void closeMapView(MapWindow& mapWindow);
   bool allMapWindowsClosed() const;
 
+signals:
+  void mapWindowsChanged();
+  void mapWindowActivated(MapWindow* window);
+
 private:
   void onFocusChange(QWidget* old, QWidget* now);
 
