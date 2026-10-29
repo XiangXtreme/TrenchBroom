@@ -147,6 +147,18 @@ public:
   // state.
   Result<std::vector<std::uint8_t>> workingMapContents(const std::string& id) const;
   Result<std::filesystem::path> assetFile(const project::Asset& asset) const;
+  /**
+   * Builds the capture plan for the given library resources.
+   *
+   * Every requested resource is refreshed; resources it depends on are added only when
+   * they are missing from the project, and are otherwise linked by their existing ID, so
+   * a closure can never silently rewrite an unrelated snapshot. `planIndices` receives
+   * the plan position of each request, in request order.
+   */
+  Result<std::vector<project::AssetCapture>> buildCapturePlan(
+    const std::string& libraryId,
+    const std::vector<std::string>& libraryAssetIds,
+    std::vector<std::size_t>& planIndices);
   Result<void> registerDocument(MapDocument& document, const std::string& id);
   void unregisterDocument(MapDocument& document);
   Result<void> save();

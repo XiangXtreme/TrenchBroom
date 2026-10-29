@@ -54,6 +54,14 @@ public:
   // assets, revisions and references exactly as they were, which is what makes a
   // multi-asset library update safe to cancel or retry.
   Result<std::vector<Asset>> updateAssets(const std::vector<AssetUpdate>& updates);
+  /**
+   * Creates or refreshes every entry of a capture plan and rewrites its dependency edges
+   * in one transaction.
+   *
+   * The returned assets are in plan order, so an entry can link to another entry by its
+   * index without knowing generated IDs in advance.
+   */
+  Result<std::vector<Asset>> captureAssets(const std::vector<AssetCapture>& captures);
   Result<Asset> renameAsset(const std::string& id, const std::string& displayName);
   Result<Asset> moveAsset(const std::string& id, const std::string& virtualPath);
   Result<void> removeAsset(const std::string& id);

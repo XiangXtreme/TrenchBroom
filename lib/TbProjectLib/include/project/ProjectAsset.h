@@ -8,6 +8,7 @@
 
 #include "base/Result.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -137,6 +138,34 @@ struct AssetUpdate
 {
   std::string assetId;
   AssetImport import;
+};
+
+/** One edge of a capture plan, pointing at another entry of the same plan or at an
+ * already captured dependency. */
+struct AssetCaptureLink
+{
+  // Plan position, used when `assetId` is empty.
+  std::size_t target = 0;
+  // Existing project asset outside the plan; never refreshed by this capture.
+  std::string assetId;
+  std::string kind;
+};
+
+/**
+ * One project asset to create or refresh, together with the resources it depends on.
+ *
+ * A capture is applied as a single transaction with its whole dependency closure, so a
+ * model can never end up in the project without the companions it needs, and a failed
+ * conversion leaves no partial content behind. Applying a plan also replaces the
+ * existing dependency edges of every captured asset, so a newer library revision that
+ * dropped a companion cannot leave a stale edge behind.
+ */
+struct AssetCapture
+{
+  // Refreshes this asset's revision when set, otherwise a new asset is created.
+  std::optional<std::string> assetId;
+  AssetImport import;
+  std::vector<AssetCaptureLink> dependencies;
 };
 
 struct Asset

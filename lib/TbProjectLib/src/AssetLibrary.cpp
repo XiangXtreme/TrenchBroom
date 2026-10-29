@@ -353,13 +353,13 @@ void discoverFile(
   asset.contentHash = contentHash(asset.content);
   if (format == SourceFormat::Model)
   {
-    // Model dependencies are declared inside the model, so they are captured at scan time
-    // and resolved against the library once every asset is known.
+    // A GoldSrc model embeds its textures; what lives beside it are the separate texture
+    // file and the external animation groups. Names are derived the way the engine
+    // derives them and only become edges when the file exists in the library.
     if (const auto model = readGoldSrcModelDependencies(bytes); model.is_success())
-    {
-      for (const auto& skin : model.value().skins)
-        asset.hints.push_back("model-skin:" + modelDependencyKey(skin));
-    }
+      for (const auto& group :
+           modelAnimationGroupNames(relativePath, model.value().sequenceGroups))
+        asset.hints.push_back("model-animation:" + modelDependencyKey(group));
     if (const auto companion = modelCompanionName(file.filename().string());
         !companion.empty())
       asset.hints.push_back("model-companion:" + modelDependencyKey(companion));
@@ -785,7 +785,7 @@ void resolveDependencies(sqlite3* db)
   detail::execute(
     db,
     "DELETE FROM dependencies WHERE kind IN "
-    "('model-skin','model-companion','skybox-face')");
+    "('model-skin','model-companion','model-animation','skybox-face')");
 
   auto hints = detail::Statement{
     db, "SELECT id,dependency_hints FROM assets WHERE dependency_hints<>''"};

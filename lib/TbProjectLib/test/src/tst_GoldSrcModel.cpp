@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
 
 namespace tb::project
 {
@@ -26,34 +27,44 @@ T require(Result<T> result)
 }
 
 } // namespace
+using namespace Catch::Matchers;
 
 TEST_CASE("GoldSrcModel")
 {
-  SECTION("reads skin dependencies from a studio model")
+  SECTION("reads the external animation group count")
   {
-    const auto model = require(readGoldSrcModelDependencies(
-      test::makeModel({"crate.bmp", "models/props/metal.bmp"})));
-    REQUIRE(model.skins.size() == 2);
-    CHECK(model.skins[0] == "crate.bmp");
-    CHECK(model.skins[1] == "models/props/metal.bmp");
+    CHECK(require(readGoldSrcModelDependencies(test::makeModel(1))).sequenceGroups == 1);
+    CHECK(require(readGoldSrcModelDependencies(test::makeModel(4))).sequenceGroups == 4);
+    // A degenerate count still means "only the base model".
+    CHECK(require(readGoldSrcModelDependencies(test::makeModel(0))).sequenceGroups == 1);
   }
 
-  SECTION("models without skins declare no dependencies")
+  SECTION("derives animation group names the way the engine does")
   {
-    const auto model = require(readGoldSrcModelDependencies(test::makeModel({})));
-    CHECK(model.skins.empty());
+    CHECK(
+      modelAnimationGroupNames("models/player/gign.mdl", 1)
+      == std::vector<std::string>{});
+    CHECK_THAT(
+      modelAnimationGroupNames("models/player/gign.mdl", 3),
+      Equals(std::vector<std::string>{
+        "models/player/gign01.mdl", "models/player/gign02.mdl"}));
+    // Backslash paths from a map or entity value are normalized.
+    CHECK_THAT(
+      modelAnimationGroupNames("models\\props\\crate.mdl", 2),
+      Equals(std::vector<std::string>{"models/props/crate01.mdl"}));
+    CHECK(modelAnimationGroupNames("", 3).empty());
   }
 
   SECTION("rejects payloads that are not studio models")
   {
     CHECK(readGoldSrcModelDependencies({}).is_error());
     CHECK(readGoldSrcModelDependencies(std::vector<std::uint8_t>(244, 0)).is_error());
-    auto otherVersion = test::makeModel({"crate.bmp"});
+    auto otherVersion = test::makeModel(2);
     test::writeU32(otherVersion, 4, 9);
     CHECK(readGoldSrcModelDependencies(otherVersion).is_error());
-    auto truncatedTable = test::makeModel({"crate.bmp"});
-    truncatedTable.resize(244 + 10);
-    CHECK(readGoldSrcModelDependencies(truncatedTable).is_error());
+    auto implausible = test::makeModel(1);
+    test::writeU32(implausible, 172, 100000);
+    CHECK(readGoldSrcModelDependencies(implausible).is_error());
   }
 
   SECTION("normalizes dependency names to comparable stems")
@@ -65,11 +76,13 @@ TEST_CASE("GoldSrcModel")
     CHECK(modelDependencyKey("noextension") == "noextension");
   }
 
-  SECTION("suggests a multiplayer companion name")
+  SECTION("suggests a separate texture file name")
   {
     CHECK(modelCompanionName("player.mdl") == "playerT.mdl");
-    CHECK(modelCompanionName("models/player/gignT.mdl") == "models/player/gign.mdl");
     CHECK(modelCompanionName("crate.mdl") == "crateT.mdl");
+    // The relation is one-directional: a separate texture file never points back at its
+    // base model, otherwise every capture would form a dependency cycle.
+    CHECK(modelCompanionName("models/player/gignT.mdl").empty());
     CHECK(modelCompanionName("").empty());
   }
 }

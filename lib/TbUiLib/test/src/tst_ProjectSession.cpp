@@ -97,11 +97,12 @@ std::vector<std::uint8_t> pngBytes(const QColor color, const int size = 8)
   return {bytes.begin(), bytes.end()};
 }
 
-// Structurally valid version 10 studio model declaring the given skin texture names.
-std::vector<std::uint8_t> modelWithSkins(const std::vector<std::string>& skins)
+// Structurally valid version 10 studio model declaring the given sequence group count.
+// GoldSrc models embed their textures, so the only external resources are the separate
+// texture file and the animation groups.
+std::vector<std::uint8_t> modelWithGroups(const std::uint32_t sequenceGroups)
 {
   constexpr auto headerSize = std::size_t{244};
-  constexpr auto textureEntrySize = std::size_t{80};
   auto model = std::vector<std::uint8_t>(headerSize, 0);
   const auto writeU32 = [&](const std::size_t offset, const std::uint32_t value) {
     for (std::size_t i = 0; i < 4; ++i)
@@ -109,15 +110,7 @@ std::vector<std::uint8_t> modelWithSkins(const std::vector<std::string>& skins)
   };
   writeU32(0, 0x54534449); // "IDST"
   writeU32(4, 10);
-  writeU32(180, std::uint32_t(skins.size()));
-  writeU32(184, std::uint32_t(headerSize));
-  for (const auto& skin : skins)
-  {
-    auto entry = std::vector<std::uint8_t>(textureEntrySize, 0);
-    for (std::size_t i = 0; i < skin.size() && i < 64; ++i)
-      entry[i] = std::uint8_t(skin[i]);
-    model.insert(model.end(), entry.begin(), entry.end());
-  }
+  writeU32(172, sequenceGroups);
   return model;
 }
 
@@ -573,54 +566,92 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(linked->library.libraryRevision == 1);
   }
 
-  SECTION("capturing a model embeds its dependency closure")
+  SECTION("capturing a model embeds its dependency closure in one transaction")
   {
-    sandbox.write("models/crate.mdl", modelWithSkins({"crate_skin.bmp"}));
-    sandbox.write("textures/crate_skin.png", pngBytes(QColor{200, 120, 40}));
+    sandbox.write("models/crate.mdl", modelWithGroups(3));
+    sandbox.write("models/crate01.mdl", modelWithGroups(1));
+    sandbox.write("models/crate02.mdl", modelWithGroups(1));
+    sandbox.write("models/crateT.mdl", modelWithGroups(1));
+    // A texture that shares the model's name is not a model dependency: GoldSrc models
+    // embed their textures.
+    sandbox.write("models/crate.png", pngBytes(QColor{200, 120, 40}));
     sandbox.rescanLibrary();
     requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
 
     const auto assets = sandbox.libraryAssets();
     const auto model = std::ranges::find_if(
-      assets, [](const auto& asset) { return asset.type == project::AssetType::Model; });
+      assets, [](const auto& asset) { return asset.virtualPath == "models/crate.mdl"; });
     REQUIRE(model != assets.end());
-    const auto skin = std::ranges::find_if(assets, [](const auto& asset) {
-      return asset.virtualPath == "textures/crate_skin.png";
-    });
-    REQUIRE(skin != assets.end());
 
     const auto captured =
       requireProject(sandbox.session->captureLibraryAsset(libraryId, model->id));
     CHECK(captured.type == project::AssetType::Model);
     CHECK(captured.publishPath == "models/crate.mdl");
 
-    // The model is unusable without its skin, so the capture pulls the closure in.
+    // The model is unusable without its separate texture file and animation groups, so
+    // the capture commits the whole closure with it.
     const auto projectAssets = requireProject(sandbox.session->store().assets());
-    REQUIRE(projectAssets.size() == 2);
+    REQUIRE(projectAssets.size() == 4);
     const auto dependencies =
       requireProject(sandbox.session->store().dependencies(captured.id));
-    REQUIRE(dependencies.size() == 1);
-    CHECK(dependencies.front().kind == "model-skin");
-    const auto skinAsset = requireProject(
-      sandbox.session->store().findAsset(dependencies.front().dependencyId));
-    REQUIRE(skinAsset);
-    CHECK(skinAsset->type == project::AssetType::Texture);
-    CHECK(skinAsset->library.libraryAssetId == skin->id);
-    CHECK(requireProject(sandbox.session->store().dependents(skinAsset->id)).size() == 1);
+    REQUIRE(dependencies.size() == 3);
+    auto kinds = std::vector<std::string>{};
+    for (const auto& dependency : dependencies)
+    {
+      kinds.push_back(dependency.kind);
+      const auto asset =
+        requireProject(sandbox.session->store().findAsset(dependency.dependencyId));
+      REQUIRE(asset);
+      CHECK(asset->type == project::AssetType::Model);
+      CHECK(requireProject(sandbox.session->store().dependents(asset->id)).size() == 1);
+    }
+    std::ranges::sort(kinds);
+    CHECK(
+      kinds
+      == std::vector<std::string>{
+        "model-animation", "model-animation", "model-companion"});
+    CHECK_FALSE(std::ranges::any_of(projectAssets, [](const auto& asset) {
+      return asset.type == project::AssetType::Texture;
+    }));
 
-    // The closure is snapshotted, so losing the library keeps both resources usable.
+    // The closure is snapshotted, so losing the library keeps every resource usable.
     std::filesystem::remove_all(sandbox.libraryFolder);
     requireProject(sandbox.session->save());
     sandbox.session.reset();
     sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
     CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
     CHECK(
-      requireProject(sandbox.session->store().readAsset(
-                       skinAsset->id, project::ContentKind::Compatible))
+      requireProject(
+        sandbox.session->store().readAsset(
+          dependencies.front().dependencyId, project::ContentKind::Compatible))
         .size()
       > 0);
   }
 
+  SECTION("a failed dependency keeps the project untouched")
+  {
+    // A skybox whose face cannot be decoded: the group itself converts fine, so only the
+    // dependency fails. The capture must not leave the group behind.
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+      sandbox.write(
+        std::string{"env/desert"} + face + ".png",
+        std::string{face} == "dn" ? std::vector<std::uint8_t>{1, 2, 3}
+                                  : pngBytes(QColor{90, 140, 200}));
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    requireProject(sandbox.session->save());
+    CHECK_FALSE(sandbox.session->modified());
+    const auto assets = sandbox.libraryAssets();
+    const auto skybox = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.type == project::AssetType::Skybox; });
+    REQUIRE(skybox != assets.end());
+
+    const auto captured = sandbox.session->captureLibraryAsset(libraryId, skybox->id);
+    REQUIRE(captured.is_error());
+    // Nothing was committed, and the project is not left marked as modified by a failure.
+    CHECK(requireProject(sandbox.session->store().assets()).empty());
+    CHECK_FALSE(sandbox.session->modified());
+  }
   SECTION("exports a fixed compile snapshot that no longer touches the library")
   {
     requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));

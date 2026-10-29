@@ -310,11 +310,16 @@ TEST_CASE("AssetLibrary")
     CHECK(assets[0].contentHash == assets[1].contentHash);
   }
 
-  SECTION("links model skins and companions discovered in the library")
+  SECTION("links the separate texture file and animation groups of a model")
   {
-    workspace.write("models/props/crate.mdl", test::makeModel({"crate_skin.bmp"}));
-    workspace.write("textures/crate_skin.png", {'P', 'N', 'G', 1});
-    workspace.write("models/props/crateT.mdl", test::makeModel({}));
+    // A GoldSrc model embeds its own textures; only the separate texture file and the
+    // external animation groups are separate resources.
+    workspace.write("models/props/crate.mdl", test::makeModel(3));
+    workspace.write("models/props/crate01.mdl", test::makeModel());
+    workspace.write("models/props/crate02.mdl", test::makeModel());
+    workspace.write("models/props/crateT.mdl", test::makeModel());
+    // A same-stem texture must never be pulled in by name matching.
+    workspace.write("models/props/crate.png", {'P', 'N', 'G', 1});
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
     require(library->scan());
 
@@ -325,23 +330,53 @@ TEST_CASE("AssetLibrary")
     REQUIRE(model != assets.end());
     CHECK(model->type == AssetType::Model);
     const auto dependencies = require(library->dependencies(model->id));
-    REQUIRE(dependencies.size() == 2);
+    REQUIRE(dependencies.size() == 3);
     auto kinds = std::vector<std::string>{};
+    auto targets = std::vector<std::string>{};
     for (const auto& dependency : dependencies)
     {
       kinds.push_back(dependency.kind);
-      // Both dependencies resolve to real assets, and never to the model itself.
+      // Every dependency resolves to a real asset, never to the model itself nor to the
+      // unrelated texture that happens to share the model's name.
       CHECK(dependency.dependencyId != model->id);
-      CHECK(require(library->findAsset(dependency.dependencyId)).has_value());
+      const auto target = require(library->findAsset(dependency.dependencyId));
+      REQUIRE(target.has_value());
+      CHECK(target->type == AssetType::Model);
+      targets.push_back(target->virtualPath);
     }
     std::ranges::sort(kinds);
-    CHECK(kinds == std::vector<std::string>{"model-companion", "model-skin"});
+    CHECK(
+      kinds
+      == std::vector<std::string>{
+        "model-animation", "model-animation", "model-companion"});
+    std::ranges::sort(targets);
+    CHECK(
+      targets
+      == std::vector<std::string>{
+        "models/props/crate01.mdl",
+        "models/props/crate02.mdl",
+        "models/props/crateT.mdl"});
 
     // Re-scanning keeps the edges without duplicating them.
     require(library->scan());
-    CHECK(require(library->dependencies(model->id)).size() == 2);
-  }
+    CHECK(require(library->dependencies(model->id)).size() == 3);
 
+    // A group that disappears keeps its edge but is reported missing, so a project can
+    // tell "the model needs this" apart from "the library lost it".
+    workspace.remove("models/props/crate02.mdl");
+    require(library->scan());
+    const auto afterRemoval = require(library->dependencies(model->id));
+    REQUIRE(afterRemoval.size() == 3);
+    auto missingPath = std::string{};
+    for (const auto& dependency : afterRemoval)
+    {
+      const auto target = require(library->findAsset(dependency.dependencyId));
+      REQUIRE(target.has_value());
+      if (target->missing)
+        missingPath = target->virtualPath;
+    }
+    CHECK(missingPath == "models/props/crate02.mdl");
+  }
   SECTION("groups the six faces of a skybox into one asset")
   {
     for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})

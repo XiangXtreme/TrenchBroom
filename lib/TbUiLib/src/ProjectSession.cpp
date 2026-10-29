@@ -18,6 +18,7 @@
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
 #include "project/GoldSrcWad.h"
+#include "project/ProjectStore.h"
 #include "ui/MapDocument.h"
 #include "ui/ProjectResourceAudit.h"
 #include "ui/QPathUtils.h"
@@ -885,92 +886,128 @@ Result<project::AssetImport> ProjectSession::captureImport(
   return import;
 }
 
-Result<project::Asset> ProjectSession::captureLibraryAsset(
-  const std::string& libraryId, const std::string& libraryAssetId)
+Result<std::vector<project::AssetCapture>> ProjectSession::buildCapturePlan(
+  const std::string& libraryId,
+  const std::vector<std::string>& libraryAssetIds,
+  std::vector<std::size_t>& planIndices)
 {
   auto library = openLibrary(libraryId);
   if (library.is_error())
     return std::get<Error>(library.error());
   auto& source = *library.value();
 
-  auto captured = std::map<std::string, std::string>{};
-  // Captures one library resource and its declared dependencies. Dependencies are only
-  // ever created when missing: a library change must never silently rewrite an existing
-  // project snapshot, so only the explicitly requested resource is refreshed.
-  std::function<Result<std::string>(const std::string&, bool)> capture =
-    [&](const std::string& id, const bool refresh) -> Result<std::string> {
-    if (const auto it = captured.find(id); it != captured.end())
-      return it->second;
+  struct Resolved
+  {
+    bool inPlan = false;
+    std::size_t index = 0;
+    std::string assetId;
+  };
+  auto plan = std::vector<project::AssetCapture>{};
+  auto resolved = std::map<std::string, Resolved>{};
+  auto resolve = std::function<Result<Resolved>(const std::string&, bool)>{};
 
-    auto existing = m_store->findAssetByLibraryAsset(libraryId, id);
-    if (existing.is_error())
-      return std::get<Error>(existing.error());
-    auto asset = source.findAsset(id);
-    if (asset.is_error())
-      return std::get<Error>(asset.error());
-    if (!asset.value() || asset.value()->missing)
-      return Error{"Asset library resource is missing or inaccessible."};
-
-    auto projectAsset = std::optional<project::Asset>{};
-    if (existing.value())
-    {
-      projectAsset = *existing.value();
-      if (refresh)
-      {
-        auto import = captureImport(source, *asset.value(), existing.value());
-        if (import.is_error())
-          return std::get<Error>(import.error());
-        auto replaced = m_store->replaceAsset(projectAsset->id, import.value());
-        if (replaced.is_error())
-          return std::get<Error>(replaced.error());
-        projectAsset = std::move(replaced).value();
-      }
-    }
-    else
-    {
-      auto import = captureImport(source, *asset.value(), std::nullopt);
-      if (import.is_error())
-        return std::get<Error>(import.error());
-      auto created = m_store->importAsset(import.value());
-      if (created.is_error())
-        return std::get<Error>(created.error());
-      projectAsset = std::move(created).value();
-    }
-    captured[id] = projectAsset->id;
-
-    // A model or skybox is only usable with its closure, so the edges are re-established
-    // even for an already captured resource.
+  // Adds a plan entry for one library resource. The slot is reserved before its
+  // dependencies are walked so a chain always terminates, and every edge is recorded so
+  // the store can rewrite the whole graph in one transaction.
+  const auto addEntry = [&](
+                          const std::string& id,
+                          const std::optional<project::Asset>& existing,
+                          const project::LibraryAsset& asset) -> Result<Resolved> {
+    auto import = captureImport(source, asset, existing);
+    if (import.is_error())
+      return std::get<Error>(import.error());
+    const auto index = plan.size();
+    plan.push_back({});
+    auto entry = Resolved{true, index, existing ? existing->id : std::string{}};
+    resolved[id] = entry;
+    auto capture = project::AssetCapture{};
+    if (existing)
+      capture.assetId = existing->id;
+    capture.import = std::move(import).value();
     auto dependencies = source.dependencies(id);
     if (dependencies.is_error())
       return std::get<Error>(dependencies.error());
     for (const auto& dependency : dependencies.value())
     {
-      auto dependencyId = capture(dependency.dependencyId, false);
-      if (dependencyId.is_error())
+      auto target = resolve(dependency.dependencyId, false);
+      if (target.is_error())
         return Error{
-          "Cannot capture " + projectAsset->displayName + ": "
-          + std::get<Error>(dependencyId.error()).msg};
-      auto added =
-        m_store->addDependency(projectAsset->id, dependencyId.value(), dependency.kind);
-      if (added.is_error())
-        return std::get<Error>(added.error());
+          "Cannot capture " + capture.import.displayName + ": "
+          + std::get<Error>(target.error()).msg};
+      capture.dependencies.push_back(project::AssetCaptureLink{
+        target.value().index, target.value().assetId, dependency.kind});
     }
-    return projectAsset->id;
+    plan[index] = std::move(capture);
+    return entry;
   };
 
-  auto projectAssetId = capture(libraryAssetId, true);
-  if (projectAssetId.is_error())
-    return std::get<Error>(projectAssetId.error());
-  changed();
-  emit libraryLinksChanged();
-  auto result = m_store->findAsset(projectAssetId.value());
-  if (result.is_error())
-    return std::get<Error>(result.error());
-  if (!result.value())
-    return Error{"Project asset not found."};
-  return *result.value();
+  resolve = [&](const std::string& id, const bool refresh) -> Result<Resolved> {
+    if (const auto it = resolved.find(id); it != resolved.end())
+    {
+      if (it->second.inPlan || !refresh)
+        return it->second;
+      // Seen first as a dependency and now requested explicitly: promote it in place so
+      // its edges are rebuilt without creating a second asset.
+      auto asset = source.findAsset(id);
+      if (asset.is_error())
+        return std::get<Error>(asset.error());
+      if (!asset.value() || asset.value()->missing)
+        return Error{"Asset library resource is missing or inaccessible."};
+      auto existing = m_store->findAsset(it->second.assetId);
+      if (existing.is_error())
+        return std::get<Error>(existing.error());
+      return addEntry(id, existing.value(), *asset.value());
+    }
+
+    auto existing = m_store->findAssetByLibraryAsset(libraryId, id);
+    if (existing.is_error())
+      return std::get<Error>(existing.error());
+    // A dependency that is already snapshotted is linked by its ID: a closure must never
+    // rewrite a snapshot the user did not select.
+    if (existing.value() && !refresh)
+    {
+      auto linked = Resolved{false, 0, existing.value()->id};
+      resolved[id] = linked;
+      return linked;
+    }
+
+    auto asset = source.findAsset(id);
+    if (asset.is_error())
+      return std::get<Error>(asset.error());
+    if (!asset.value() || asset.value()->missing)
+      return Error{"Asset library resource is missing or inaccessible."};
+    return addEntry(id, existing.value(), *asset.value());
+  };
+
+  planIndices.clear();
+  planIndices.reserve(libraryAssetIds.size());
+  for (const auto& id : libraryAssetIds)
+  {
+    auto entry = resolve(id, true);
+    if (entry.is_error())
+      return std::get<Error>(entry.error());
+    planIndices.push_back(entry.value().index);
+  }
+  return plan;
 }
 
+Result<project::Asset> ProjectSession::captureLibraryAsset(
+  const std::string& libraryId, const std::string& libraryAssetId)
+{
+  auto indices = std::vector<std::size_t>{};
+  auto plan = buildCapturePlan(libraryId, {libraryAssetId}, indices);
+  if (plan.is_error())
+    return std::get<Error>(plan.error());
+
+  // The whole closure is committed once, so a conversion failure cannot leave a model in
+  // the project without the resources it needs.
+  auto captured = m_store->captureAssets(plan.value());
+  if (captured.is_error())
+    return std::get<Error>(captured.error());
+  changed();
+  emit libraryLinksChanged();
+  return captured.value().at(indices.front());
+}
 Result<std::optional<project::Asset>> ProjectSession::projectAssetForLibraryAsset(
   const std::string& libraryId, const std::string& libraryAssetId) const
 {
@@ -1044,13 +1081,51 @@ Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
   return project::evaluateLibraryUpdates(assets, states, ignores);
 }
 
+namespace
+{
+// A snapshot is stale when the library content moved on, when a dependency it declares is
+// not captured yet, or when an edge it no longer declares survived an earlier build.
+Result<bool> snapshotNeedsRefresh(
+  project::ProjectStore& store,
+  const std::string& libraryId,
+  const std::string& libraryAssetId,
+  const project::Asset& projectAsset,
+  project::AssetLibrary& library,
+  const project::LibraryAsset& libraryAsset)
+{
+  if (libraryAsset.contentHash != projectAsset.library.libraryContentHash)
+    return true;
+  auto expected = std::map<std::string, std::string>{};
+  const auto dependencies = library.dependencies(libraryAssetId);
+  if (dependencies.is_error())
+    return std::get<Error>(dependencies.error());
+  for (const auto& dependency : dependencies.value())
+  {
+    const auto captured =
+      store.findAssetByLibraryAsset(libraryId, dependency.dependencyId);
+    if (captured.is_error())
+      return std::get<Error>(captured.error());
+    if (!captured.value())
+      return true;
+    expected[captured.value()->id] = dependency.kind;
+  }
+  const auto edges = store.dependencies(projectAsset.id);
+  if (edges.is_error())
+    return std::get<Error>(edges.error());
+  for (const auto& edge : edges.value())
+    if (!expected.contains(edge.dependencyId))
+      return true;
+  return expected.size() != edges.value().size();
+}
+} // namespace
+
 Result<std::vector<project::Asset>> ProjectSession::updateLibraryAssets(
   const std::vector<std::string>& projectAssetIds)
 {
-  // Everything is read and converted before the first write, so a missing library or a
-  // failed conversion cannot leave half of the selection updated.
-  auto requests = std::vector<project::AssetUpdate>{};
-  requests.reserve(projectAssetIds.size());
+  // Requests are grouped per library so each plan can be built against one catalog, then
+  // merged into a single transaction: one stale resource must not leave the others
+  // updated.
+  auto requests = std::map<std::string, std::vector<std::string>>{};
   for (const auto& id : projectAssetIds)
   {
     auto asset = m_store->findAsset(id);
@@ -1060,34 +1135,70 @@ Result<std::vector<project::Asset>> ProjectSession::updateLibraryAssets(
       return Error{"Project asset not found."};
     if (asset.value()->library.empty())
       return Error{"Asset was not captured from an asset library."};
-    auto library = openLibrary(asset.value()->library.libraryId);
+
+    const auto& link = asset.value()->library;
+    auto library = openLibrary(link.libraryId);
     if (library.is_error())
       return std::get<Error>(library.error());
-    auto current = library.value()->findAsset(asset.value()->library.libraryAssetId);
+    auto current = library.value()->findAsset(link.libraryAssetId);
     if (current.is_error())
       return std::get<Error>(current.error());
     if (!current.value() || current.value()->missing)
       return Error{
         "Asset library resource '" + asset.value()->displayName
         + "' is missing or inaccessible; the project keeps its current snapshot."};
-    if (current.value()->contentHash == asset.value()->library.libraryContentHash)
+    auto needsRefresh = snapshotNeedsRefresh(
+      *m_store,
+      link.libraryId,
+      link.libraryAssetId,
+      *asset.value(),
+      *library.value(),
+      *current.value());
+    if (needsRefresh.is_error())
+      return std::get<Error>(needsRefresh.error());
+    if (!needsRefresh.value())
       continue;
-    auto import = captureImport(*library.value(), *current.value(), asset.value());
-    if (import.is_error())
-      return std::get<Error>(import.error());
-    requests.push_back({id, std::move(import).value()});
+    requests[link.libraryId].push_back(link.libraryAssetId);
   }
-  if (requests.empty())
+
+  auto plan = std::vector<project::AssetCapture>{};
+  auto roots = std::vector<std::size_t>{};
+  for (const auto& [libraryId, libraryAssetIds] : requests)
+  {
+    auto indices = std::vector<std::size_t>{};
+    auto libraryPlan = buildCapturePlan(libraryId, libraryAssetIds, indices);
+    if (libraryPlan.is_error())
+      return std::get<Error>(libraryPlan.error());
+    const auto base = plan.size();
+    auto entries = libraryPlan.value();
+    for (auto& capture : entries)
+    {
+      for (auto& link : capture.dependencies)
+      {
+        // Links inside one library plan are index based; links to an already snapshotted
+        // dependency carry an explicit asset ID and stay untouched.
+        if (link.assetId.empty())
+          link.target += base;
+      }
+      plan.push_back(std::move(capture));
+    }
+    for (const auto index : indices)
+      roots.push_back(base + index);
+  }
+  if (plan.empty())
     return std::vector<project::Asset>{};
 
-  auto result = m_store->updateAssets(requests);
-  if (result.is_error())
-    return std::get<Error>(result.error());
+  auto captured = m_store->captureAssets(plan);
+  if (captured.is_error())
+    return std::get<Error>(captured.error());
   changed();
   emit libraryLinksChanged();
+  auto result = std::vector<project::Asset>{};
+  result.reserve(roots.size());
+  for (const auto root : roots)
+    result.push_back(captured.value().at(root));
   return result;
 }
-
 Result<void> ProjectSession::ignoreLibraryUpdate(
   const std::string& projectAssetId, const std::string& libraryHash)
 {

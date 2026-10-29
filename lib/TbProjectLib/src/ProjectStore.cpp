@@ -137,6 +137,29 @@ std::vector<AssetDependency> queryDependencies(
 }
 
 void writeRevision(
+  sqlite3* db, Asset& asset, const std::string& original, const std::string& compatible);
+
+Asset createAsset(sqlite3* db, const AssetImport& import)
+{
+  if (parseAssetType(assetTypeName(import.type)).is_error())
+    throw StoreError{"Invalid asset type."};
+  auto asset = Asset{
+    generateUuid(),
+    import.type,
+    import.virtualPath,
+    import.displayName,
+    import.sourceName,
+    0,
+    import.conversionRecipe,
+    {},
+    contentHash(import.compatible),
+    import.library};
+  writeRevision(
+    db, asset, storeContent(db, import.original), storeContent(db, import.compatible));
+  return asset;
+}
+
+void writeRevision(
   sqlite3* db, Asset& asset, const std::string& original, const std::string& compatible)
 {
   validateText(asset.displayName, "display name");
@@ -525,23 +548,9 @@ const ProjectInfo& ProjectStore::info() const
 Result<Asset> ProjectStore::importAsset(const AssetImport& import)
 {
   return attempt([&] {
-    if (parseAssetType(assetTypeName(import.type)).is_error())
-      throw StoreError{"Invalid asset type."};
     auto* db = m_impl->database.get();
     auto transaction = Transaction{db};
-    auto asset = Asset{
-      generateUuid(),
-      import.type,
-      import.virtualPath,
-      import.displayName,
-      import.sourceName,
-      0,
-      import.conversionRecipe,
-      {},
-      contentHash(import.compatible),
-      import.library};
-    writeRevision(
-      db, asset, storeContent(db, import.original), storeContent(db, import.compatible));
+    auto asset = createAsset(db, import);
     transaction.commit();
     return asset;
   });
@@ -623,6 +632,66 @@ Result<std::vector<Asset>> ProjectStore::updateAssets(
     result.reserve(updates.size());
     for (const auto& update : updates)
       result.push_back(applyImport(db, update.assetId, update.import));
+    transaction.commit();
+    return result;
+  });
+}
+
+Result<std::vector<Asset>> ProjectStore::captureAssets(
+  const std::vector<AssetCapture>& captures)
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    auto result = std::vector<Asset>{};
+    result.reserve(captures.size());
+    for (const auto& capture : captures)
+      result.push_back(
+        capture.assetId ? applyImport(db, *capture.assetId, capture.import)
+                        : createAsset(db, capture.import));
+
+    // Dependency edges are rewritten for every captured asset, in the same transaction,
+    // so content and graph can never disagree about what the asset needs.
+    for (auto index = std::size_t{0}; index < captures.size(); ++index)
+    {
+      const auto& assetId = result[index].id;
+      auto clear = Statement{db, "DELETE FROM dependencies WHERE asset_id=?"};
+      clear.bind(1, assetId);
+      clear.run();
+      for (const auto& link : captures[index].dependencies)
+      {
+        const auto dependencyId = link.assetId.empty() ? [&]() {
+          if (link.target >= result.size())
+            throw StoreError{"Capture dependency does not point at a captured asset."};
+          return result[link.target].id;
+        }()
+                                                       : link.assetId;
+        if (dependencyId == assetId)
+          throw StoreError{"Project asset dependency would create a cycle."};
+        validateText(link.kind, "dependency kind");
+        // The plan is a DAG by construction, but the graph invariant is enforced for
+        // every edge so a malformed plan fails before it is committed.
+        auto cycle = Statement{
+          db,
+          "WITH RECURSIVE reachable(id) AS (SELECT ? UNION SELECT dependency_id FROM "
+          "dependencies JOIN reachable ON asset_id=reachable.id) SELECT id FROM "
+          "reachable "
+          "WHERE id=?"};
+        cycle.bind(1, dependencyId);
+        cycle.bind(2, assetId);
+        if (cycle.next())
+          throw StoreError{"Project asset dependency would create a cycle."};
+        auto insert = Statement{
+          db,
+          "INSERT INTO dependencies(asset_id,dependency_id,kind) VALUES(?,?,?) ON "
+          "CONFLICT "
+          "DO NOTHING"};
+        insert.bind(1, assetId);
+        insert.bind(2, dependencyId);
+        insert.bind(3, link.kind);
+        insert.run();
+      }
+    }
     transaction.commit();
     return result;
   });
