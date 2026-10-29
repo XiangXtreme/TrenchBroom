@@ -18,6 +18,7 @@
 #include <QVBoxLayout>
 
 #include "ui/AssetLibraryWatcher.h"
+#include "ui/ProjectTextureImport.h"
 #include "ui/QPathUtils.h"
 
 #include <fmt/format.h>
@@ -51,10 +52,12 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   m_path->setPlaceholderText(tr("No asset library open"));
   auto* browse = new QPushButton{tr("Open Folder…"), this};
   auto* rescanButton = new QPushButton{tr("Rescan"), this};
+  auto* convertButton = new QPushButton{tr("Convert Images…"), this};
   auto* row = new QHBoxLayout{};
   row->addWidget(m_path, 1);
   row->addWidget(browse);
   row->addWidget(rescanButton);
+  row->addWidget(convertButton);
   layout->addLayout(row);
 
   m_summary = new QLabel{this};
@@ -78,6 +81,7 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
 
   connect(browse, &QPushButton::clicked, this, [this]() { chooseFolder(); });
   connect(rescanButton, &QPushButton::clicked, this, [this]() { rescan(); });
+  connect(convertButton, &QPushButton::clicked, this, [this]() { convertImages(); });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   // Reopening the window continues with the library used last; the path is only a
@@ -177,6 +181,96 @@ void AssetLibraryWindow::rescan()
   reload();
 }
 
+void AssetLibraryWindow::convertImages()
+{
+  if (!m_library)
+  {
+    QMessageBox::information(
+      this, tr("Convert Images"), tr("Open an asset library first."));
+    return;
+  }
+
+  const auto assets = m_library->assets(project::AssetType::Texture);
+  if (assets.is_error())
+  {
+    QMessageBox::critical(
+      this,
+      tr("Convert Images"),
+      QString::fromStdString(std::get<Error>(assets.error()).msg));
+    return;
+  }
+
+  auto images = std::vector<project::LibraryAsset>{};
+  for (const auto& asset : assets.value())
+    if (asset.nativeFormat == "image")
+      images.push_back(asset);
+  if (images.empty())
+  {
+    QMessageBox::information(
+      this,
+      tr("Convert Images"),
+      tr("Every image in this library is already converted."));
+    return;
+  }
+
+  if (
+    QMessageBox::question(
+      this,
+      tr("Convert Images"),
+      tr("Convert %1 image(s) to GoldSrc textures?\n\nThe original images stay in the "
+         "library and each converted texture is stored as a new revision.")
+        .arg(images.size()))
+    != QMessageBox::Yes)
+    return;
+
+  auto converted = 0;
+  auto failed = 0;
+  auto cancelled = false;
+  for (const auto& image : images)
+  {
+    auto original = m_library->readOriginal(image.id);
+    if (original.is_error())
+    {
+      ++failed;
+      continue;
+    }
+
+    auto import = project::AssetImport{};
+    import.type = project::AssetType::Texture;
+    import.displayName = image.displayName;
+    import.virtualPath = image.virtualPath;
+    import.sourceName = image.virtualPath;
+    import.original = std::move(original).value();
+
+    const auto prepared = prepareProjectTexture(this, import, std::nullopt, true);
+    if (prepared.is_error())
+    {
+      ++failed;
+      continue;
+    }
+    if (!prepared.value())
+    {
+      cancelled = true;
+      break;
+    }
+
+    if (m_library
+          ->publishCompatibleContent(image.id, import.compatible, import.conversionRecipe)
+          .is_error())
+      ++failed;
+    else
+      ++converted;
+  }
+
+  reload();
+  auto message = tr("Converted %1 image(s).").arg(converted);
+  if (failed > 0)
+    message += " " + tr("%1 image(s) failed.").arg(failed);
+  if (cancelled)
+    message += " " + tr("Conversion cancelled.");
+  m_summary->setText(message);
+}
+
 void AssetLibraryWindow::reload()
 {
   m_assets->clear();
@@ -213,7 +307,9 @@ void AssetLibraryWindow::reload()
        QString::fromStdString(asset.virtualPath),
        QString::number(asset.revision),
        sizeText(asset.size),
-       asset.missing ? tr("Missing") : QString{}}};
+       asset.missing
+         ? tr("Missing")
+         : (asset.nativeFormat == "goldsrc-wad" ? tr("Converted") : QString{})}};
     item->setToolTip(0, QString::fromStdString(asset.id));
     if (asset.missing)
       ++missing;

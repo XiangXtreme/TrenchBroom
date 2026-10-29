@@ -42,6 +42,7 @@ private:
   void chooseFolder();
   void openFolder(const std::filesystem::path& folder, bool createIfMissing);
   void rescan();
+  void convertImages();
   void reload();
 };
 } // namespace tb::ui

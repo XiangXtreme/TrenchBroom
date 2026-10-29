@@ -458,6 +458,56 @@ TEST_CASE("AssetLibrary")
     CHECK(require(reopened->sources()).front().assetCount == 1);
   }
 
+  SECTION("publishes converted image content without changing its source")
+  {
+    const auto imageBytes = std::vector<std::uint8_t>{'P', 'N', 'G', 1, 2, 3};
+    workspace.write("textures/wall.png", imageBytes);
+    workspace.write("wads/custom.wad", require(buildGoldSrcWad({wall})));
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+
+    const auto assets = require(library->assets());
+    const auto image = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.virtualPath == "textures/wall.png"; });
+    REQUIRE(image != assets.end());
+    CHECK(image->nativeFormat == "image");
+
+    const auto convertedBytes = std::vector<std::uint8_t>{'W', 'A', 'D', '3', 9, 9};
+    const auto recipe =
+      std::string{R"({"importer":"goldsrc-texture","version":1,"name":"wall"})"};
+    const auto converted =
+      require(library->publishCompatibleContent(image->id, convertedBytes, recipe));
+    CHECK(converted.nativeFormat == "goldsrc-wad");
+    CHECK(converted.revision == image->revision + 1);
+    CHECK(converted.contentHash == image->contentHash);
+    CHECK(converted.size == convertedBytes.size());
+    CHECK(converted.recipe == recipe);
+    CHECK(require(library->readContent(image->id)) == convertedBytes);
+    CHECK(require(library->readOriginal(image->id)) == imageBytes);
+
+    // The source hash identifies the file, so the conversion is an extra revision
+    // rather than a replacement of the original.
+    const auto revisions = require(library->revisions(image->id));
+    REQUIRE(revisions.size() == 2);
+    CHECK(revisions.back().nativeFormat == "goldsrc-wad");
+    CHECK(revisions.back().contentHash == image->contentHash);
+
+    // A rescan must recognize the unchanged source and keep the conversion.
+    require(library->scan());
+    const auto rescanned = require(library->findAsset(image->id));
+    REQUIRE(rescanned.has_value());
+    CHECK(rescanned->revision == converted.revision);
+    CHECK(rescanned->nativeFormat == "goldsrc-wad");
+    CHECK(require(library->readContent(image->id)) == convertedBytes);
+
+    // Only images can be published; a WAD member keeps its own binary source.
+    const auto wadAsset = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.nativeFormat == "goldsrc-miptex"; });
+    REQUIRE(wadAsset != assets.end());
+    CHECK(
+      library->publishCompatibleContent(wadAsset->id, convertedBytes, recipe).is_error());
+  }
+
   SECTION("records dependencies between library assets")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));

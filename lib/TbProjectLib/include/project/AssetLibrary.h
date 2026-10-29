@@ -76,6 +76,17 @@ public:
   Result<std::vector<std::uint8_t>> readOriginal(
     const std::string& id, std::optional<std::uint64_t> revision = std::nullopt) const;
 
+  // Publishes a converted GoldSrc result for an image asset.
+  //
+  // The source bytes and their hash stay untouched, so a rescan still recognizes the
+  // file as unchanged; the revision advances so projects see a new library version, and
+  // the native format becomes `goldsrc-wad` so captures copy the converted bytes
+  // verbatim instead of converting the image again.
+  Result<LibraryAsset> publishCompatibleContent(
+    const std::string& assetId,
+    std::vector<std::uint8_t> compatible,
+    const std::string& recipe);
+
   Result<void> addDependency(
     const std::string& assetId, const std::string& dependencyId, const std::string& kind);
   Result<std::vector<AssetDependency>> dependencies(const std::string& assetId) const;

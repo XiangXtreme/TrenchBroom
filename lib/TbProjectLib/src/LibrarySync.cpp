@@ -77,6 +77,7 @@ std::vector<LibraryUpdate> evaluateLibraryUpdates(
         update.state = LibraryUpdateState::Missing;
       else
         update.state = current->contentHash == asset.library.libraryContentHash
+                           && current->revision == asset.library.libraryRevision
                          ? LibraryUpdateState::UpToDate
                          : LibraryUpdateState::NewVersion;
     }
@@ -111,6 +112,8 @@ Result<std::vector<std::uint8_t>> compatibleLibraryContent(
   {
     return buildGoldSrcWad({nativeContent});
   }
+  // `goldsrc-wad` content is a complete single-texture WAD published at library
+  // conversion time; images stay raw until the capture converts them.
   return nativeContent;
 }
 

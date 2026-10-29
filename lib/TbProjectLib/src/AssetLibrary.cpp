@@ -1227,6 +1227,85 @@ Result<std::vector<std::uint8_t>> AssetLibrary::readOriginal(
   return readContentColumn(m_impl->database.get(), id, revision, "original");
 }
 
+Result<LibraryAsset> AssetLibrary::publishCompatibleContent(
+  const std::string& assetId,
+  std::vector<std::uint8_t> compatible,
+  const std::string& recipe)
+{
+  return detail::attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    auto current = detail::Statement{
+      db,
+      "SELECT type,native_format,display_name,virtual_path,content_hash,revision,"
+      "original,group_path,source_rel_path,source_member FROM assets WHERE id=?"};
+    current.bind(1, assetId);
+    if (!current.next())
+      throw detail::StoreError{"Library asset not found."};
+
+    const auto type = parseAssetType(current.text(0));
+    if (type.is_error())
+      throw detail::StoreError{std::get<Error>(type.error()).msg};
+    if (type.value() != AssetType::Texture)
+      throw detail::StoreError{"Only texture images can be published as GoldSrc."};
+
+    const auto nativeFormat = current.text(1);
+    // Re-publishing a converted result is allowed so a failed conversion can be fixed
+    // without deleting the asset; a native WAD or model must keep its own source.
+    if (nativeFormat != "image" && nativeFormat != "goldsrc-wad")
+      throw detail::StoreError{"This asset already has a binary GoldSrc source."};
+
+    auto asset = LibraryAsset{
+      assetId,
+      type.value(),
+      current.text(2),
+      current.text(3),
+      current.text(7),
+      current.text(8),
+      current.text(9),
+      "goldsrc-wad",
+      recipe,
+      static_cast<std::uint64_t>(current.integer(5) + 1),
+      current.text(4),
+      static_cast<std::uint64_t>(compatible.size()),
+      false};
+
+    const auto originalRow = current.text(6);
+    const auto contentRow = detail::storeContent(db, compatible);
+
+    auto update = detail::Statement{
+      db,
+      "UPDATE assets SET native_format=?,recipe=?,revision=?,content=?,size=?,missing=0 "
+      "WHERE id=?"};
+    update.bind(1, asset.nativeFormat);
+    update.bind(2, asset.recipe);
+    update.bind(3, static_cast<std::int64_t>(asset.revision));
+    update.bind(4, contentRow);
+    update.bind(5, static_cast<std::int64_t>(asset.size));
+    update.bind(6, assetId);
+    update.run();
+
+    auto insert = detail::Statement{
+      db,
+      "INSERT INTO asset_revisions(asset_id,revision,display_name,virtual_path,recipe,"
+      "content_hash,content,original,size,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)"};
+    insert.bind(1, assetId);
+    insert.bind(2, static_cast<std::int64_t>(asset.revision));
+    insert.bind(3, asset.displayName);
+    insert.bind(4, asset.virtualPath);
+    insert.bind(5, asset.recipe);
+    insert.bind(6, asset.contentHash);
+    insert.bind(7, contentRow);
+    insert.bind(8, originalRow);
+    insert.bind(9, static_cast<std::int64_t>(asset.size));
+    insert.bind(10, nowText(db));
+    insert.run();
+
+    transaction.commit();
+    return asset;
+  });
+}
+
 Result<void> AssetLibrary::addDependency(
   const std::string& assetId, const std::string& dependencyId, const std::string& kind)
 {

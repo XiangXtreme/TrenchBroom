@@ -205,6 +205,31 @@ TEST_CASE("LibrarySync")
     const auto passthrough = compatibleLibraryContent(image, miptex);
     REQUIRE(passthrough.is_success());
     CHECK(passthrough.value() == miptex);
+
+    auto converted =
+      libraryAsset(LibraryAssetId, "WALL01", contentHash(miptex), 2, "goldsrc-wad");
+    CHECK_FALSE(libraryAssetNeedsConversion(converted));
+    const auto published = compatibleLibraryContent(converted, miptex);
+    REQUIRE(published.is_success());
+    CHECK(published.value() == miptex);
+  }
+
+  SECTION("treats a converted revision as a new library version")
+  {
+    const auto hash = std::string(64, 'a');
+    auto captured = linkFor(LibraryId, LibraryAssetId, hash);
+    captured.libraryRevision = 3;
+    const auto assets =
+      std::vector<Asset>{projectAsset(ProjectAssetId, captured, "WALL01")};
+    auto state = LibraryState{LibraryId, "Library", "/library", true, {}, {}};
+    // The source hash is unchanged; only the conversion advanced the revision.
+    state.assets.push_back(
+      libraryAsset(LibraryAssetId, "WALL01", hash, 4, "goldsrc-wad"));
+
+    const auto updates = evaluateLibraryUpdates(assets, {state});
+    REQUIRE(updates.size() == 1);
+    CHECK(updates.front().state == LibraryUpdateState::NewVersion);
+    CHECK(updates.front().available->revision == 4);
   }
 
   SECTION("records capture provenance in the conversion recipe")

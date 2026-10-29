@@ -615,6 +615,68 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(updates.front().state == project::LibraryUpdateState::LibraryUnavailable);
   }
 
+  SECTION("publishes a converted image and captures it without reconverting")
+  {
+    const auto encode = [](QImage picture) {
+      auto buffer = QBuffer{};
+      REQUIRE(buffer.open(QIODevice::WriteOnly));
+      REQUIRE(picture.save(&buffer, "PNG"));
+      return std::vector<std::uint8_t>{buffer.data().begin(), buffer.data().end()};
+    };
+
+    auto image = QImage{4, 4, QImage::Format_RGB32};
+    image.fill(QColor{200, 10, 10});
+    sandbox.write("textures/wall.png", encode(image));
+    sandbox.rescanLibrary();
+
+    const auto imageAsset = [&]() {
+      for (const auto& asset : sandbox.libraryAssets())
+        if (asset.virtualPath == "textures/wall.png")
+          return asset;
+      FAIL("library image missing");
+      return project::LibraryAsset{};
+    }();
+
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto first =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, imageAsset.id));
+    const auto firstSnapshot = requireProject(
+      sandbox.session->store().readAsset(first.id, project::ContentKind::Compatible));
+    CHECK(first.library.libraryRevision == imageAsset.revision);
+    CHECK(first.publishPath == "textures/wall.wad");
+    CHECK(first.conversionRecipe.find("goldsrc-texture") != std::string::npos);
+    CHECK_FALSE(firstSnapshot.empty());
+
+    // Publish a distinctly different conversion. The source file and its hash stay
+    // untouched, so only the library revision moves.
+    auto replacement = QImage{8, 8, QImage::Format_RGB32};
+    replacement.fill(QColor{10, 200, 10});
+    const auto replacementBytes = encode(replacement);
+    const auto published = requireProject(img::convertGoldSrcTexture(
+      requireProject(img::decodeImage(replacementBytes.data(), replacementBytes.size())),
+      "BLUEWALL"));
+    {
+      auto library = requireProject(project::AssetLibrary::open(sandbox.libraryFolder));
+      requireProject(library->publishCompatibleContent(
+        imageAsset.id,
+        published.wad,
+        R"({"importer":"goldsrc-texture","version":1,"name":"BLUEWALL"})"));
+    }
+
+    const auto updates = requireProject(sandbox.session->checkLibraryUpdates());
+    const auto& update = updateFor(updates, first.id);
+    CHECK(update.state == project::LibraryUpdateState::NewVersion);
+    CHECK(update.available->revision == imageAsset.revision + 1);
+
+    const auto second =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, imageAsset.id));
+    const auto secondSnapshot = requireProject(
+      sandbox.session->store().readAsset(second.id, project::ContentKind::Compatible));
+    CHECK(second.library.libraryRevision == imageAsset.revision + 1);
+    CHECK(secondSnapshot == published.wad);
+    CHECK(secondSnapshot != firstSnapshot);
+  }
+
   SECTION("keeps the old snapshot while the library moves ahead")
   {
     requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));

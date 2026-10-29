@@ -29,7 +29,7 @@
 | 未使用修订的显式清理 | 已完成 | `ProjectStore::unreferencedRevisions/pruneUnreferencedRevisions` | `ProjectStore` 210 断言 |
 | 工程级自动恢复（崩溃后） | 已完成 | `ui/ProjectRecovery`、`ProjectWindow` 定时快照、`AppController::openProject` | `ProjectRecovery` 18 断言、`ProjectWindow` 集成用例 |
 | MCP 工作区上下文（活动地图/显式目标/文档代次） | 已完成 | `MapEditingContext`、`McpInspect` 的 workspace 分页 | `McpWorkspaceContext` 79 断言、`McpPythonExecution` 867 断言 |
-| 图片入库时转换（库内保存兼容纹理） | **未实现** | 目前仅捕获进工程时转换；库保存原图 | — |
+| 图片入库时转换（库内保存兼容纹理） | 已完成 | `AssetLibrary::publishCompatibleContent` + 资产库窗口 **Convert Images…**；捕获直接复用已发布的 WAD | `AssetLibrary` / `LibrarySync` / `ProjectSessionAssetLibrary` 定向用例 |
 | 修改发布名而不破坏地图引用 | **未实现** | 依赖稳定的 `publishPath`；没有“改发布名”命令 | — |
 | 同名资源跨库冲突的图形化处理 | **未实现** | 当前直接报冲突 | — |
 | 库目录移动后的重新指向 | **未实现** | 需要重新 Attach；已捕获快照不受影响 | — |
@@ -93,7 +93,8 @@
 ## 5. 已知限制（与设计文档同步）
 
 - 地图仍以纹理名/发布路径引用资源；重命名/移动不改 `publishPath`，但“改发布名”没有命令支持。
-- 图片在捕获进工程时才转换，库中保存原图；库侧转换未实现。
+- 未转换的图片仍在捕获进工程时转换；库内转换后的结果是新的库修订，转换参数目前只能通过重新
+  转换来修改。
 - 同名资源跨库内容不同时直接报冲突，没有图形化合并。
 - 库目录移动后需要重新指向；自动快照仍有效。
 - Sprite 帧、WAV 引用等未纳入依赖捕获。

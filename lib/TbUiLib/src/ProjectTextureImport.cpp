@@ -24,7 +24,8 @@ namespace tb::ui
 Result<bool> prepareProjectTexture(
   QWidget* parent,
   project::AssetImport& asset,
-  const std::optional<project::Asset>& previous)
+  const std::optional<project::Asset>& previous,
+  const bool libraryAsset)
 {
   if (
     asset.type != project::AssetType::Texture
@@ -52,7 +53,7 @@ Result<bool> prepareProjectTexture(
     bool accepted = false;
     name = QInputDialog::getText(
       parent,
-      QObject::tr("Import Texture"),
+      libraryAsset ? QObject::tr("Convert Texture") : QObject::tr("Import Texture"),
       QObject::tr(
         "GoldSrc texture name (1–15 ASCII characters; { prefix for transparency):"),
       QLineEdit::Normal,
@@ -75,15 +76,17 @@ Result<bool> prepareProjectTexture(
   dialog.setWindowTitle(QObject::tr("Confirm Texture Conversion"));
   auto* layout = new QVBoxLayout{&dialog};
   auto* description = new QLabel{
-    QObject::tr("%1 × %2 → %3 × %4\n256-color GoldSrc texture, four mip levels.\n%5\nThe "
-                "original image is retained in the project.")
+    QObject::tr("%1 × %2 → %3 × %4\n256-color GoldSrc texture, four mip levels.\n%5\n%6")
       .arg(image.width)
       .arg(image.height)
       .arg(result.preview.width)
       .arg(result.preview.height)
       .arg(
         result.masked ? QObject::tr("Transparency uses a binary mask at alpha 128.")
-                      : QObject::tr("Opaque texture; alpha is discarded.")),
+                      : QObject::tr("Opaque texture; alpha is discarded."))
+      .arg(
+        libraryAsset ? QObject::tr("The original image is retained in the library.")
+                     : QObject::tr("The original image is retained in the project.")),
     &dialog};
   layout->addWidget(description);
   auto* preview = new QLabel{&dialog};
@@ -104,7 +107,8 @@ Result<bool> prepareProjectTexture(
   layout->addWidget(buttons);
   if (dialog.exec() != QDialog::Accepted)
     return false;
-  asset.virtualPath = "textures/" + result.name + ".wad";
+  if (!libraryAsset)
+    asset.virtualPath = "textures/" + result.name + ".wad";
   asset.compatible = result.wad;
   asset.conversionRecipe = QJsonDocument{QJsonObject{
                                            {"importer", "goldsrc-texture"},

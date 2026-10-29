@@ -1619,7 +1619,11 @@ Result<bool> snapshotNeedsRefresh(
   project::AssetLibrary& library,
   const project::LibraryAsset& libraryAsset)
 {
-  if (libraryAsset.contentHash != projectAsset.library.libraryContentHash)
+  // A conversion publishes a new library revision without changing the source hash, so
+  // the revision is part of the refresh decision.
+  if (
+    libraryAsset.contentHash != projectAsset.library.libraryContentHash
+    || libraryAsset.revision != projectAsset.library.libraryRevision)
     return true;
   auto expected = std::map<std::string, std::string>{};
   const auto dependencies = library.dependencies(libraryAssetId);
