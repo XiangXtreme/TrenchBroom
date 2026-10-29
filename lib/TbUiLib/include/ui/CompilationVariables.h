@@ -65,6 +65,8 @@ class CompilationWorkDirVariables : public CommonCompilationVariables
 {
 public:
   explicit CompilationWorkDirVariables(const mdl::Map& map);
+  /** Work directory variables for a frozen input map file. */
+  CompilationWorkDirVariables(const mdl::Map& map, const std::filesystem::path& mapPath);
 };
 
 class CompilationVariables : public CommonCompilationVariables

@@ -101,7 +101,9 @@ private:
 
 private:
   Result<std::string> buildWorkDir(
-    const mdl::CompilationProfile& profile, const mdl::Map& map);
+    const mdl::CompilationProfile& profile,
+    const mdl::Map& map,
+    const std::optional<std::filesystem::path>& mapPath);
   void cleanup();
 signals:
   void compilationStarted();

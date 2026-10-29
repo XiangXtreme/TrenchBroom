@@ -95,6 +95,12 @@ CompilationWorkDirVariables::CompilationWorkDirVariables(const mdl::Map& map)
 {
 }
 
+CompilationWorkDirVariables::CompilationWorkDirVariables(
+  const mdl::Map& map, const std::filesystem::path& mapPath)
+  : CommonCompilationVariables{map, mapPath}
+{
+}
+
 CompilationVariables::CompilationVariables(
   const mdl::Map& map, const std::string& workDir)
   : CompilationVariables{map, workDir, map.path()}
@@ -102,9 +108,7 @@ CompilationVariables::CompilationVariables(
 }
 
 CompilationVariables::CompilationVariables(
-  const mdl::Map& map,
-  const std::string& workDir,
-  const std::filesystem::path& mapPath)
+  const mdl::Map& map, const std::string& workDir, const std::filesystem::path& mapPath)
   : CommonCompilationVariables{map, mapPath}
 {
   const auto cpuCount = size_t(std::max(std::thread::hardware_concurrency(), 1u));

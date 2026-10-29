@@ -112,7 +112,7 @@ Result<void> CompilationRun::run(
 
   cleanup();
 
-  return buildWorkDir(profile, map) | kdl::transform([&](const auto& workDir) {
+  return buildWorkDir(profile, map, mapPath) | kdl::transform([&](const auto& workDir) {
            auto variables =
              CompilationVariables{map, workDir, mapPath.value_or(map.path())};
            auto compilationContext = CompilationContext{
@@ -133,9 +133,12 @@ Result<void> CompilationRun::run(
 }
 
 Result<std::string> CompilationRun::buildWorkDir(
-  const mdl::CompilationProfile& profile, const mdl::Map& map)
+  const mdl::CompilationProfile& profile,
+  const mdl::Map& map,
+  const std::optional<std::filesystem::path>& mapPath)
 {
-  return el::interpolate(CompilationWorkDirVariables{map}, profile.workDirSpec);
+  return el::interpolate(
+    CompilationWorkDirVariables{map, mapPath.value_or(map.path())}, profile.workDirSpec);
 }
 
 void CompilationRun::cleanup()
