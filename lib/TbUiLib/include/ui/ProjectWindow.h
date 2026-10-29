@@ -20,6 +20,7 @@ class QMenu;
 class QTabBar;
 class QStackedWidget;
 class QAction;
+class QTimer;
 class QToolBar;
 class QToolButton;
 
@@ -49,6 +50,7 @@ class ProjectWindow : public QMainWindow
   std::unique_ptr<MapCommandSurface> m_commands;
   QAction* m_saveProject = nullptr;
   QToolBar* m_mapToolbar = nullptr;
+  QTimer* m_autosaveTimer = nullptr;
 
 public:
   ProjectWindow(AppController& appController, std::shared_ptr<ProjectSession> session);
@@ -94,6 +96,7 @@ private:
   void compareCheckpoint();
   void restoreCheckpoint();
   void cleanUnusedRevisions();
+  void autosaveProject();
   bool save();
   std::optional<std::string> selectedAsset() const;
   bool report(const Result<void>& result);

@@ -46,6 +46,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectLibraryDialog.h"
+#include "ui/ProjectRecovery.h"
 #include "ui/ProjectResourceDialog.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectTextureImport.h"
@@ -326,6 +327,14 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
     m_appController.mapWindowManager().activateMapWindow(*window);
   refreshCommands();
   QTimer::singleShot(0, this, [this]() { maybePromptForLibraryUpdates(); });
+
+  // A full project snapshot is only written while there is unsaved work, and only every
+  // few minutes: recovery must not compete with editing for disk bandwidth.
+  m_autosaveTimer = new QTimer{this};
+  m_autosaveTimer->setObjectName("ProjectAutosaveTimer");
+  m_autosaveTimer->setInterval(10 * 60 * 1000);
+  connect(m_autosaveTimer, &QTimer::timeout, this, [this]() { autosaveProject(); });
+  m_autosaveTimer->start();
 }
 
 ProjectWindow::~ProjectWindow()
@@ -782,7 +791,29 @@ void ProjectWindow::refresh()
 
 bool ProjectWindow::save()
 {
-  return report(m_session->save());
+  const auto saved = report(m_session->save());
+  if (saved)
+  {
+    discardProjectRecovery(m_session->path());
+  }
+  return saved;
+}
+
+void ProjectWindow::autosaveProject()
+{
+  if (!m_session->modified() || m_session->path().empty())
+  {
+    return;
+  }
+
+  if (const auto result = writeProjectRecovery(*m_session, m_session->path());
+      result.is_error())
+  {
+    statusBar()->showMessage(
+      tr("Auto-save failed: %1")
+        .arg(QString::fromStdString(std::get<Error>(result.error()).msg)),
+      8000);
+  }
 }
 
 Result<bool> ProjectWindow::prepareImport(
@@ -1169,6 +1200,15 @@ void ProjectWindow::closeEvent(QCloseEvent* event)
       return;
     }
   }
+
+  // Closing is a decision about the working copy: a saved or explicitly discarded state
+  // must not be offered as a recovery snapshot on the next start.
+  if (m_autosaveTimer)
+  {
+    m_autosaveTimer->stop();
+  }
+  discardProjectRecovery(m_session->path());
+
   m_closing = true;
   for (auto* window : m_appController.mapWindowManager().mapWindows())
     if (window->project() == m_session)

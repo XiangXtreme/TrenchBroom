@@ -5,6 +5,7 @@
 */
 
 #include <QAbstractButton>
+#include <QAction>
 #include <QApplication>
 #include <QBuffer>
 #include <QColor>
@@ -54,6 +55,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ModelBrowserView.h"
+#include "ui/ProjectRecovery.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
@@ -431,7 +433,8 @@ TEST_CASE("ProjectWindow")
     REQUIRE(tabs->count() == 1);
     REQUIRE(session->documentFor(alphaId) == document);
 
-    // The browser asks the map window manager for the map the same way a double click does.
+    // The browser asks the map window manager for the map the same way a double click
+    // does.
     emit browser->mapActivated(pathAsGenericQString(mapAsset->publishPath));
     QApplication::processEvents();
     REQUIRE(tabs->count() == 2);
@@ -441,6 +444,38 @@ TEST_CASE("ProjectWindow")
     CHECK(std::ranges::find(names, QString{"alpha"}) != names.end());
     CHECK(tabs->tabText(tabs->currentIndex()) == "alpha");
     CHECK(session->documentFor(alphaId) == document);
+  }
+
+  SECTION("auto-saves a recovery snapshot for unsaved project work")
+  {
+    CHECK_FALSE(hasRecoverableProjectSnapshot(session->path()));
+    auto* timer = window.findChild<QTimer*>("ProjectAutosaveTimer");
+    REQUIRE(timer != nullptr);
+
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Sound;
+    input.virtualPath = "sound/recovery.wav";
+    input.displayName = "Recovery";
+    input.original = {9};
+    input.compatible = {9};
+    (void)require(session->importAsset(input));
+    REQUIRE(session->modified());
+
+    QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+    CHECK(std::filesystem::exists(projectRecoveryPath(session->path())));
+    CHECK(hasRecoverableProjectSnapshot(session->path()));
+
+    QAction* saveAction = nullptr;
+    for (auto* menuAction : window.menuBar()->actions())
+      if (auto* menu = menuAction->menu())
+        for (auto* action : menu->actions())
+          if (action->text() == "Save Project")
+            saveAction = action;
+    REQUIRE(saveAction != nullptr);
+    saveAction->trigger();
+
+    CHECK_FALSE(session->modified());
+    CHECK_FALSE(std::filesystem::exists(projectRecoveryPath(session->path())));
   }
 
   SECTION("catalog skybox drops capture the group and set the world sky")
@@ -499,9 +534,9 @@ TEST_CASE("ProjectWindow")
     CHECK(map.modified());
     const auto assets = require(session->store().assets());
     CHECK(
-      std::ranges::count_if(assets, [](const auto& asset) {
-        return asset.type == project::AssetType::Skybox;
-      })
+      std::ranges::count_if(
+        assets,
+        [](const auto& asset) { return asset.type == project::AssetType::Skybox; })
       == 1);
 
     REQUIRE(map.canUndoCommand());
@@ -604,8 +639,7 @@ TEST_CASE("ProjectWindow")
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
     auto* source = alphaWindow->findChild<QComboBox*>("ModelBrowser_Source");
     REQUIRE(source != nullptr);
-    source->setCurrentIndex(
-      source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
     QApplication::processEvents();
     QTest::qWait(100);
     auto* browser = alphaWindow->findChild<ModelBrowserView*>();

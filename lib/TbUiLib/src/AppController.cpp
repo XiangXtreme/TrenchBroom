@@ -56,6 +56,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/PieMenuSettingsDialog.h"
 #include "ui/PreferenceDialog.h"
+#include "ui/ProjectRecovery.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectWindow.h"
 #include "ui/PythonPluginManagerDialog.h"
@@ -492,6 +493,30 @@ bool AppController::openProject(const std::filesystem::path& path)
         window->activateWindow();
       }
       return true;
+    }
+  }
+  if (hasRecoverableProjectSnapshot(absolute))
+  {
+    const auto answer = QMessageBox::question(
+      nullptr,
+      tr("Recover Project"),
+      tr("TrenchBroom found unsaved changes from an earlier session of this project.\n\n"
+         "Recover them? The current project file is kept as a backup in the autosave "
+         "folder."));
+    if (answer == QMessageBox::Yes)
+    {
+      if (const auto restored = restoreProjectRecovery(absolute); restored.is_error())
+      {
+        QMessageBox::critical(
+          nullptr,
+          tr("Recover Project"),
+          QString::fromStdString(std::get<Error>(restored.error()).msg));
+        return false;
+      }
+    }
+    else
+    {
+      discardProjectRecovery(absolute);
     }
   }
   auto result = ProjectSession::open(absolute);
