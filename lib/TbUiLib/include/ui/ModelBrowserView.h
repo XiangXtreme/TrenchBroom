@@ -64,6 +64,7 @@ namespace tb::ui
 class AppController;
 class MapDocument;
 class CatalogModelPreview;
+class ProjectSession;
 
 LayoutBounds soundPreviewButtonBounds(const LayoutBounds& itemBounds);
 bool soundPreviewButtonHitTest(const LayoutBounds& itemBounds, float x, float y);
@@ -78,7 +79,8 @@ private:
 
 private:
   AppController& m_appController;
-  MapDocument& m_document;
+  MapDocument* m_document;
+  std::shared_ptr<ProjectSession> m_project;
   vm::quatf m_rotation;
   QScrollBar* m_scrollBar = nullptr;
   std::filesystem::path m_rootFolderPath;
@@ -120,6 +122,8 @@ public:
     AppController& appController, QScrollBar* scrollBar, MapDocument& document);
   ~ModelBrowserView() override;
 
+  void setDocument(MapDocument& document);
+  void setProject(std::shared_ptr<ProjectSession> project);
   void setAssets(std::filesystem::path rootFolderPath, std::vector<BrowserAsset> assets);
   void setCurrentFolderPath(std::filesystem::path currentFolderPath);
   void setSearchText(QString searchText);
@@ -194,6 +198,8 @@ private:
   const BrowserAsset* assetAt(const std::filesystem::path& path) const;
 
 signals:
+  void assetSelected(const BrowserAsset& asset);
+  void selectionCleared();
   void projectAssetSelected(const QString& assetId);
   void assetPreviewRequested(const QString& path);
   void folderActivated(const QString& folderPath);

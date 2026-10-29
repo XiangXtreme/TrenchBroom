@@ -588,7 +588,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
     const auto assetNameMatches =
       matches(assetPath.filename())
       || (!asset.projectId.empty() && QString::fromStdString(asset.displayName).contains(trimmedSearchText, Qt::CaseInsensitive))
-      || (showSourceMarkers && QString::fromLatin1(browserSourceName(asset.source)).contains(trimmedSearchText, Qt::CaseInsensitive));
+      || (showSourceMarkers && QObject::tr(browserSourceName(asset.source)).contains(trimmedSearchText, Qt::CaseInsensitive));
 
     if (relFromCurrent.empty() || relFromCurrent == std::filesystem::path{"."})
     {
@@ -669,7 +669,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
     {
       // The unified listing can hold the same name from more than one source, so the
       // marker is part of the title instead of a hover-only hint.
-      title += std::string{" ["} + browserSourceName(asset.source) + "]";
+      title += std::string{" ["}
+               + QObject::tr(browserSourceName(asset.source)).toStdString() + "]";
     }
     entries.push_back({BrowserCellData{asset.type, assetPath}, std::move(title)});
   }

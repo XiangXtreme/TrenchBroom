@@ -4,6 +4,7 @@
  */
 #include "ui/AssetLibraryWindow.h"
 
+#include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -301,7 +302,7 @@ void AssetLibraryWindow::reload()
     auto* item = new QTreeWidgetItem{
       m_assets,
       {QString::fromStdString(asset.displayName),
-       QString::fromLatin1(project::assetTypeName(asset.type)),
+       QCoreApplication::translate("QObject", project::assetTypeName(asset.type)),
        QString::fromStdString(asset.virtualPath),
        QString::number(asset.revision),
        sizeText(asset.size),

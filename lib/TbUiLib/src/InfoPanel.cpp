@@ -29,6 +29,7 @@
 #include "ui/IssueBrowser.h"
 #include "ui/MapDocument.h"
 #include "ui/ModelInspector.h"
+#include "ui/ProjectSession.h"
 #include "ui/PythonConsole.h"
 #include "ui/TabBar.h"
 #include "ui/TabBook.h"
@@ -51,13 +52,18 @@ InfoPanel::InfoPanel(AppController& appController, MapDocument& document, QWidge
   m_pythonConsole->setObjectName("InfoPanel_PythonConsole");
   m_issueBrowser = new IssueBrowser{document};
   m_issueBrowser->setObjectName("InfoPanel_Issues");
-  m_modelInspector = new ModelInspector{appController, document};
-  m_modelInspector->setObjectName("InfoPanel_Assets");
+  m_project = appController.projectFor(document).get();
+  if (!m_project)
+  {
+    m_modelInspector = new ModelInspector{appController, document};
+    m_modelInspector->setObjectName("InfoPanel_Assets");
+  }
 
   m_tabBook->addPage(m_console, tr("Console").toUpper());
   m_tabBook->addPage(m_pythonConsole, tr("Python Console").toUpper());
   m_tabBook->addPage(m_issueBrowser, tr("Issues").toUpper());
-  m_tabBook->addPage(m_modelInspector, tr("Assets").toUpper());
+  if (m_modelInspector)
+    m_tabBook->addPage(m_modelInspector, tr("Assets").toUpper());
 
   auto* sizer = new QVBoxLayout{};
   sizer->setContentsMargins(0, 0, 0, 0);
@@ -84,7 +90,10 @@ PythonConsole* InfoPanel::pythonConsole() const
 
 void InfoPanel::switchToPage(const InfoPanelPage page)
 {
-  m_tabBook->switchToPage(static_cast<int>(page));
+  if (page == InfoPanelPage::Assets && m_project)
+    emit m_project->browserFocusRequested();
+  else
+    m_tabBook->switchToPage(static_cast<int>(page));
 }
 
 InfoPanelPage InfoPanel::currentPage() const

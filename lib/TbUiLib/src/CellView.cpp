@@ -20,7 +20,9 @@
 #include "ui/CellView.h"
 
 #include <QDrag>
+#include <QFontMetrics>
 #include <QMimeData>
+#include <QPainter>
 #include <QPropertyAnimation>
 #include <QScrollBar>
 #include <QToolTip>
@@ -58,6 +60,56 @@
 
 namespace tb::ui
 {
+namespace
+{
+bool needsUnicodeFont(const std::string& text)
+{
+  return std::ranges::any_of(text, [](const unsigned char c) { return c >= 128; });
+}
+} // namespace
+
+void CellView::paintGL()
+{
+  RenderView::paintGL();
+  // The legacy GL font atlas addresses single bytes. Qt provides Unicode shaping and
+  // platform font fallback, after native GL drawing has finished (QOpenGLWidget
+  // contract). Construct a painter only when there is a visible title that needs it.
+  auto titles = std::vector<std::pair<QRectF, QString>>{};
+  const auto y = float(visibleRect().y());
+  const auto height = float(visibleRect().height());
+  for (const auto& group : m_layout.groups())
+  {
+    if (!group.intersectsY(y, height))
+      continue;
+    for (const auto& row : group.rows())
+    {
+      if (!row.intersectsY(y, height))
+        continue;
+      for (const auto& cell : row.cells())
+      {
+        if (!needsUnicodeFont(cell.title()))
+          continue;
+        const auto bounds = cell.titleBounds();
+        titles.emplace_back(
+          QRectF{bounds.left(), bounds.top() - y, bounds.width, bounds.height},
+          QString::fromStdString(cell.title()));
+      }
+    }
+  }
+  if (titles.empty())
+    return;
+  auto painter = QPainter{this};
+  auto titleFont = font();
+  titleFont.setPixelSize(pref(Preferences::BrowserFontSize));
+  painter.setFont(titleFont);
+  painter.setPen(palette().color(QPalette::Text));
+  const auto metrics = QFontMetrics{titleFont};
+  for (const auto& [bounds, title] : titles)
+    painter.drawText(
+      bounds,
+      Qt::AlignCenter,
+      metrics.elidedText(title, Qt::ElideRight, qRound(bounds.width())));
+}
 
 void CellView::updateScrollBar()
 {
@@ -909,6 +961,8 @@ auto collectStringVertices(
           for (const auto& cell : row.cells())
           {
             const auto& title = cell.title();
+            if (needsUnicodeFont(title))
+              continue;
             const auto bounds = cell.titleBounds();
             const auto fontDescriptor =
               fontManager.selectFontSize(defaultFont, title, bounds.width, 6);

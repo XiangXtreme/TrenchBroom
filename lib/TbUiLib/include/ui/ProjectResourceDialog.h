@@ -23,6 +23,7 @@ class ProjectSession;
 
 class ProjectResourceDialog : public QDialog
 {
+  Q_OBJECT
   const ProjectSession& m_session;
   std::optional<std::string> m_assetId;
   std::function<void(const std::string&)> m_openMap;

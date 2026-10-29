@@ -40,6 +40,7 @@ class CellView : public RenderView
 {
   Q_OBJECT
 protected:
+  void paintGL() override;
   using Layout = CellLayout;
   using Group = LayoutGroup;
   using Row = LayoutRow;

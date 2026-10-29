@@ -1231,7 +1231,201 @@
             <source>Place Without Importing</source>
             <translation>仅放置不导入</translation>
             </message>
-        </context>
+            <message>
+            <source>Up to date</source>
+            <translation>已是最新</translation>
+        </message>
+        <message>
+            <source>New library version</source>
+            <translation>资产库有新版本</translation>
+        </message>
+        <message>
+            <source>Deleted or inaccessible in library</source>
+            <translation>资产库中已删除或无法访问</translation>
+        </message>
+        <message>
+            <source>Asset library unavailable</source>
+            <translation>资产库不可用</translation>
+        </message>
+        <message>
+            <source>Dependencies changed in library</source>
+            <translation>资产库中的依赖已更改</translation>
+        </message>
+        <message>
+            <source>Convert Texture</source>
+            <translation>转换纹理</translation>
+        </message>
+        <message>
+            <source>Import Texture</source>
+            <translation>导入纹理</translation>
+        </message>
+        <message>
+            <source>GoldSrc texture name (1–15 ASCII characters; { prefix for transparency):</source>
+            <translation>GoldSrc 纹理名称（1–15 个 ASCII 字符；以 { 开头表示透明）：</translation>
+        </message>
+        <message>
+            <source>Confirm Texture Conversion</source>
+            <translation>确认纹理转换</translation>
+        </message>
+        <message>
+            <source>%1 × %2 → %3 × %4
+256-color GoldSrc texture, four mip levels.
+%5
+%6</source>
+            <translation>%1 × %2 → %3 × %4
+256 色 GoldSrc 纹理，四级 mipmap。
+%5
+%6</translation>
+        </message>
+        <message>
+            <source>Transparency uses a binary mask at alpha 128.</source>
+            <translation>透明度以 alpha 128 为阈值转换为二值遮罩。</translation>
+        </message>
+        <message>
+            <source>Opaque texture; alpha is discarded.</source>
+            <translation>不透明纹理；alpha 通道将被丢弃。</translation>
+        </message>
+        <message>
+            <source>The original image is retained in the library.</source>
+            <translation>原始图像将保留在资产库中。</translation>
+        </message>
+        <message>
+            <source>The original image is retained in the project.</source>
+            <translation>原始图像将保留在工程中。</translation>
+        </message>
+        <message>
+            <source>Replace Project Resource</source>
+            <translation>替换工程资源</translation>
+        </message>
+        <message>
+            <source>The project already contains a resource at "%1".</source>
+            <translation>工程已包含发布路径为“%1”的资源。</translation>
+        </message>
+        <message>
+            <source>Incoming: %1</source>
+            <translation>新资源：%1</translation>
+        </message>
+        <message>
+            <source>Existing: %1 (revision %2)</source>
+            <translation>现有资源：%1（修订 %2）</translation>
+        </message>
+        <message>
+            <source>Captured from an asset library.</source>
+            <translation>捕获自资产库。</translation>
+        </message>
+        <message>
+            <source>Two project resources cannot publish the same name. Replacing keeps the project path, so maps keep resolving it; the previous revision stays in the project history.</source>
+            <translation>两个工程资源不能使用同一发布名称。替换将保留工程路径，使地图继续正确引用资源；旧修订保留在工程历史中。</translation>
+        </message>
+        <message>
+            <source>Replace</source>
+            <translation>替换</translation>
+        </message>
+        <message>
+            <source>map</source>
+            <translation>地图</translation>
+        </message>
+        <message>
+            <source>texture</source>
+            <translation>纹理</translation>
+        </message>
+        <message>
+            <source>material</source>
+            <translation>材质</translation>
+        </message>
+        <message>
+            <source>model</source>
+            <translation>模型</translation>
+        </message>
+        <message>
+            <source>sprite</source>
+            <translation>精灵</translation>
+        </message>
+        <message>
+            <source>sound</source>
+            <translation>声音</translation>
+        </message>
+        <message>
+            <source>skybox</source>
+            <translation>天空盒</translation>
+        </message>
+        <message>
+            <source>prefab</source>
+            <translation>预制件</translation>
+        </message>
+        <message>
+            <source>Unsupported project asset type.</source>
+            <translation>不支持此工程资源类型。</translation>
+        </message>
+        <message>
+            <source>Resource checking currently requires a GoldSrc game configuration.</source>
+            <translation>资源检查目前需要 GoldSrc 游戏配置。</translation>
+        </message>
+        <message>
+            <source>Project game configuration is unavailable.</source>
+            <translation>工程的游戏配置不可用。</translation>
+        </message>
+        <message>
+            <source>Project image/WAD import currently requires a GoldSrc game configuration.</source>
+            <translation>工程图像/WAD 导入目前需要 GoldSrc 游戏配置。</translation>
+        </message>
+        <message>
+            <source>Map game does not match the project's game.</source>
+            <translation>地图的游戏配置与工程不一致。</translation>
+        </message>
+        <message>
+            <source>Game has no supported map formats.</source>
+            <translation>游戏配置中没有支持的地图格式。</translation>
+        </message>
+        <message>
+            <source>Map format is not supported by the project's game.</source>
+            <translation>工程的游戏配置不支持此地图格式。</translation>
+        </message>
+        <message>
+            <source>Reimport asset type does not match.</source>
+            <translation>重新导入的资源类型不一致。</translation>
+        </message>
+        <message>
+            <source>Reimport this converted texture from an image to preserve its texture name.</source>
+            <translation>请从图像重新导入此已转换纹理，以保留纹理名称。</translation>
+        </message>
+        <message>
+            <source>An image cannot replace a WAD collection. Reimport the collection as a WAD, or import the image as a new texture.</source>
+            <translation>图像无法替换 WAD 集合。请使用 WAD 重新导入集合，或将图像导入为新纹理。</translation>
+        </message>
+        <message>
+            <source>Skybox (6 faces)</source>
+            <translation>天空盒（6 面）</translation>
+        </message>
+        <message>
+            <source>Missing in library</source>
+            <translation>资产库中缺失</translation>
+        </message>
+        <message>
+            <source>Library update available</source>
+            <translation>资产库有更新</translation>
+        </message>
+        <message>
+            <source>In project (rev %1)</source>
+            <translation>已在工程中（修订 %1）</translation>
+        </message>
+        <message>
+            <source>Project rev %1</source>
+            <translation>工程修订 %1</translation>
+        </message>
+        <message>
+            <source>Game files</source>
+            <translation>游戏文件</translation>
+        </message>
+        <message>
+            <source>Asset library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>Project</source>
+            <translation>工程</translation>
+        </message>
+    </context>
     <context>
         <name>tb::AppPreferenceManager</name>
         <message>
@@ -1582,7 +1776,39 @@ Font Awesome 5 Free (Icons)&lt;br /&gt;</translation>
             <source>Open Map</source>
             <translation>打开地图</translation>
             </message>
-        </context>
+            <message>
+            <source>Create Project</source>
+            <translation>创建工程</translation>
+        </message>
+        <message>
+            <source>TB projects (*.tbproj)</source>
+            <translation>TB 工程 (*.tbproj)</translation>
+        </message>
+        <message>
+            <source>Create Map</source>
+            <translation>创建地图</translation>
+        </message>
+        <message>
+            <source>Recover Project</source>
+            <translation>恢复工程</translation>
+        </message>
+        <message>
+            <source>TrenchBroom found unsaved changes from an earlier session of this project.
+
+Recover them? The current project file is kept as a backup in the autosave folder.</source>
+            <translation>TrenchBroom 找到了此工程上次会话中未保存的修改。
+
+是否恢复？当前工程文件将备份到自动保存文件夹。</translation>
+        </message>
+        <message>
+            <source>Open Project</source>
+            <translation>打开工程</translation>
+        </message>
+        <message>
+            <source>The game's configuration is not installed: %1</source>
+            <translation>尚未安装游戏配置：%1</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::AppInfoPanel</name>
         <message>
@@ -3436,7 +3662,103 @@ Please choose a different file name to export to.</source>
             <source>Delete prefab "%1"?</source>
             <translation>确定要删除 Prefab "%1" 吗？</translation>
             </message>
-        </context>
+            <message>
+            <source>Asset source filter</source>
+            <translation>资源来源筛选</translation>
+        </message>
+        <message>
+            <source>All Sources</source>
+            <translation>全部来源</translation>
+        </message>
+        <message>
+            <source>Game Files</source>
+            <translation>游戏文件</translation>
+        </message>
+        <message>
+            <source>Project</source>
+            <translation>工程</translation>
+        </message>
+        <message>
+            <source>Asset Library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>Asset library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>Asset type filter</source>
+            <translation>资源类型筛选</translation>
+        </message>
+        <message>
+            <source>All Types</source>
+            <translation>全部类型</translation>
+        </message>
+        <message>
+            <source>Maps</source>
+            <translation>地图</translation>
+        </message>
+        <message>
+            <source>Textures</source>
+            <translation>纹理</translation>
+        </message>
+        <message>
+            <source>Models</source>
+            <translation>模型</translation>
+        </message>
+        <message>
+            <source>Sprites</source>
+            <translation>精灵</translation>
+        </message>
+        <message>
+            <source>Sounds</source>
+            <translation>声音</translation>
+        </message>
+        <message>
+            <source>Prefabs</source>
+            <translation>预制件</translation>
+        </message>
+        <message>
+            <source>Open Map</source>
+            <translation>打开地图</translation>
+        </message>
+        <message>
+            <source>%1 (unavailable)</source>
+            <translation>%1（不可用）</translation>
+        </message>
+        <message>
+            <source>Choose Asset Library…</source>
+            <translation>选择资产库…</translation>
+        </message>
+        <message>
+            <source>Attach Asset Library</source>
+            <translation>关联资产库</translation>
+        </message>
+        <message>
+            <source>Create Asset Library</source>
+            <translation>创建资产库</translation>
+        </message>
+        <message>
+            <source>'%1' is not an asset library yet.
+
+Create one and import the resources it contains?</source>
+            <translation>“%1”还不是资产库。
+
+是否创建资产库并导入其中的资源？</translation>
+        </message>
+        <message>
+            <source>Find Uses</source>
+            <translation>查找引用</translation>
+        </message>
+        <message>
+            <source>%1 — %2 (%3)</source>
+            <translation>%1 — %2（%3）</translation>
+        </message>
+        <message>
+            <source>%1 uses in project maps</source>
+            <translation>工程地图中有 %1 处引用</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::ModelBrowserView</name>
         <message>
@@ -3475,7 +3797,43 @@ Please choose a different file name to export to.</source>
             <source>Delete</source>
             <translation>删除</translation>
             </message>
-        </context>
+            <message>
+            <source>Add to Project</source>
+            <translation>添加到工程</translation>
+        </message>
+        <message>
+            <source>Use Current Library Version</source>
+            <translation>使用资产库当前版本</translation>
+        </message>
+        <message>
+            <source>Update Project Resource</source>
+            <translation>更新工程资源</translation>
+        </message>
+        <message>
+            <source>Find Uses in Project</source>
+            <translation>在工程中查找引用</translation>
+        </message>
+        <message>
+            <source>Cannot prepare the project model for scaling.</source>
+            <translation>无法准备要缩放的工程模型。</translation>
+        </message>
+        <message>
+            <source>Cannot copy the model for scaling.</source>
+            <translation>无法复制要缩放的模型。</translation>
+        </message>
+        <message>
+            <source>Preview failed: %1</source>
+            <translation>预览失败：%1</translation>
+        </message>
+        <message>
+            <source>Preview failed: the resource could not be decoded.</source>
+            <translation>预览失败：无法解码此资源。</translation>
+        </message>
+        <message>
+            <source>Preview file is missing.</source>
+            <translation>预览文件缺失。</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::MousePreferencePane</name>
         <message>
@@ -4717,7 +5075,19 @@ By %2</source>
             <source>Open Map</source>
             <translation>打开地图</translation>
             </message>
-        </context>
+            <message>
+            <source>New project...</source>
+            <translation>新建工程…</translation>
+        </message>
+        <message>
+            <source>Asset library...</source>
+            <translation>资产库…</translation>
+        </message>
+        <message>
+            <source>Create, inspect or rescan an asset library without opening a project</source>
+            <translation>无需打开工程即可创建、查看或重新扫描资产库</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::KreedzBroomPreferencePane</name>
         <message>
@@ -5563,4 +5933,974 @@ By %2</source>
             <translation>更新程序需要提权以安装更新。在系统提示时请授予管理员权限以继续安装。</translation>
             </message>
         </context>
-    </TS>
+        <context>
+        <name>tb::ui::AssetLibraryWindow</name>
+        <message>
+            <source>Asset Library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>No asset library open</source>
+            <translation>尚未打开资产库</translation>
+        </message>
+        <message>
+            <source>Open Folder…</source>
+            <translation>打开文件夹…</translation>
+        </message>
+        <message>
+            <source>Rescan</source>
+            <translation>重新扫描</translation>
+        </message>
+        <message>
+            <source>Convert Images…</source>
+            <translation>转换图像…</translation>
+        </message>
+        <message>
+            <source>Library files changed. Click Rescan to review the current files.</source>
+            <translation>资产库文件已更改，请点击“重新扫描”检查当前文件。</translation>
+        </message>
+        <message>
+            <source>Name</source>
+            <translation>名称</translation>
+        </message>
+        <message>
+            <source>Type</source>
+            <translation>类型</translation>
+        </message>
+        <message>
+            <source>Path</source>
+            <translation>路径</translation>
+        </message>
+        <message>
+            <source>Revision</source>
+            <translation>修订</translation>
+        </message>
+        <message>
+            <source>Size</source>
+            <translation>大小</translation>
+        </message>
+        <message>
+            <source>State</source>
+            <translation>状态</translation>
+        </message>
+        <message>
+            <source>Create Asset Library</source>
+            <translation>创建资产库</translation>
+        </message>
+        <message>
+            <source>'%1' is not an asset library yet.
+
+Create a catalog inside it and import the resources it contains?</source>
+            <translation>“%1”还不是资产库。
+
+是否在此文件夹创建目录索引并导入其中的资源？</translation>
+        </message>
+        <message>
+            <source>Convert Images</source>
+            <translation>转换图像</translation>
+        </message>
+        <message>
+            <source>Open an asset library first.</source>
+            <translation>请先打开资产库。</translation>
+        </message>
+        <message>
+            <source>This library contains no convertible images.</source>
+            <translation>此资产库中没有可转换的图像。</translation>
+        </message>
+        <message>
+            <source>Convert %1 image(s) to GoldSrc textures?
+
+The original images stay in the library and each converted texture is stored as a new revision.</source>
+            <translation>将 %1 张图像转换为 GoldSrc 纹理？
+
+原始图像保留在资产库中，每项转换结果将存储为新修订。</translation>
+        </message>
+        <message>
+            <source>Converted %1 image(s).</source>
+            <translation>已转换 %1 张图像。</translation>
+        </message>
+        <message>
+            <source>%1 image(s) failed.</source>
+            <translation>%1 张图像转换失败。</translation>
+        </message>
+        <message>
+            <source>Conversion cancelled.</source>
+            <translation>已取消转换。</translation>
+        </message>
+        <message>
+            <source>Open a folder to create or inspect an asset library. A library is a plain folder with its own catalog, independent of any project.</source>
+            <translation>打开文件夹以创建或查看资产库。资产库是带有独立目录索引的普通文件夹，可独立于工程使用。</translation>
+        </message>
+        <message>
+            <source>Missing</source>
+            <translation>缺失</translation>
+        </message>
+        <message>
+            <source>Converted</source>
+            <translation>已转换</translation>
+        </message>
+        <message>
+            <source>%1 resources in %2 groups%3.</source>
+            <translation>%2 个分组中共 %1 项资源%3。</translation>
+        </message>
+        <message>
+            <source>, %1 missing</source>
+            <translation>，%1 项缺失</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::ProjectAssetPanel</name>
+        <message>
+            <source>The project game configuration is unavailable.</source>
+            <translation>工程的游戏配置不可用。</translation>
+        </message>
+        <message>
+            <source>Cannot initialize the asset browser: %1</source>
+            <translation>无法初始化资源浏览器：%1</translation>
+        </message>
+        <message>
+            <source>Asset Details</source>
+            <translation>资源详情</translation>
+        </message>
+        <message>
+            <source>Value</source>
+            <translation>值</translation>
+        </message>
+        <message>
+            <source>Selection</source>
+            <translation>选择</translation>
+        </message>
+        <message>
+            <source>Select an asset to inspect its details.</source>
+            <translation>选择资源以查看详情。</translation>
+        </message>
+        <message>
+            <source>Source</source>
+            <translation>来源</translation>
+        </message>
+        <message>
+            <source>Project</source>
+            <translation>工程</translation>
+        </message>
+        <message>
+            <source>Asset Library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>Game Files</source>
+            <translation>游戏文件</translation>
+        </message>
+        <message>
+            <source>Name</source>
+            <translation>名称</translation>
+        </message>
+        <message>
+            <source>Catalog Path</source>
+            <translation>目录路径</translation>
+        </message>
+        <message>
+            <source>File</source>
+            <translation>文件</translation>
+        </message>
+        <message>
+            <source>Library ID</source>
+            <translation>资产库 ID</translation>
+        </message>
+        <message>
+            <source>Library Asset ID</source>
+            <translation>资产库资源 ID</translation>
+        </message>
+        <message>
+            <source>Library Revision</source>
+            <translation>资产库修订</translation>
+        </message>
+        <message>
+            <source>Library Content Hash</source>
+            <translation>资产库内容哈希</translation>
+        </message>
+        <message>
+            <source>Availability</source>
+            <translation>可用性</translation>
+        </message>
+        <message>
+            <source>Source missing</source>
+            <translation>源文件缺失</translation>
+        </message>
+        <message>
+            <source>Available</source>
+            <translation>可用</translation>
+        </message>
+        <message>
+            <source>Project Snapshot</source>
+            <translation>工程快照</translation>
+        </message>
+        <message>
+            <source>Not captured</source>
+            <translation>尚未捕获</translation>
+        </message>
+        <message>
+            <source>Error</source>
+            <translation>错误</translation>
+        </message>
+        <message>
+            <source>Asset no longer exists</source>
+            <translation>资源已不存在</translation>
+        </message>
+        <message>
+            <source>Asset ID</source>
+            <translation>资源 ID</translation>
+        </message>
+        <message>
+            <source>Virtual Path</source>
+            <translation>虚拟路径</translation>
+        </message>
+        <message>
+            <source>Published Path</source>
+            <translation>发布路径</translation>
+        </message>
+        <message>
+            <source>Revision</source>
+            <translation>修订</translation>
+        </message>
+        <message>
+            <source>Original Source</source>
+            <translation>原始来源</translation>
+        </message>
+        <message>
+            <source>Content Hash</source>
+            <translation>内容哈希</translation>
+        </message>
+        <message>
+            <source>Captured Library</source>
+            <translation>捕获来源库</translation>
+        </message>
+        <message>
+            <source>Captured Revision</source>
+            <translation>捕获修订</translation>
+        </message>
+        <message>
+            <source>Source Container</source>
+            <translation>源容器</translation>
+        </message>
+        <message>
+            <source>Source Member</source>
+            <translation>源成员</translation>
+        </message>
+        <message>
+            <source>Dependencies</source>
+            <translation>依赖</translation>
+        </message>
+        <message>
+            <source>No recorded dependencies</source>
+            <translation>没有已记录的依赖</translation>
+        </message>
+        <message>
+            <source>Depends On</source>
+            <translation>依赖资源</translation>
+        </message>
+        <message>
+            <source>Used By</source>
+            <translation>引用方</translation>
+        </message>
+        <message>
+            <source>No recorded uses; use Asset &gt; Find Uses for live map references.</source>
+            <translation>没有已记录的引用；使用“资源 &gt; 查找引用”扫描当前地图引用。</translation>
+        </message>
+        <message>
+            <source>Library unavailable</source>
+            <translation>资产库不可用</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::ProjectLibraryDialog</name>
+        <message>
+            <source>Project Asset Library</source>
+            <translation>工程资产库</translation>
+        </message>
+        <message>
+            <source>Asset</source>
+            <translation>资源</translation>
+        </message>
+        <message>
+            <source>Type</source>
+            <translation>类型</translation>
+        </message>
+        <message>
+            <source>Project</source>
+            <translation>工程</translation>
+        </message>
+        <message>
+            <source>Library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>Status</source>
+            <translation>状态</translation>
+        </message>
+        <message>
+            <source>Used in</source>
+            <translation>使用位置</translation>
+        </message>
+        <message>
+            <source>Rescan Library</source>
+            <translation>重新扫描资产库</translation>
+        </message>
+        <message>
+            <source>Update Selected</source>
+            <translation>更新选中资源</translation>
+        </message>
+        <message>
+            <source>Ignore This Version</source>
+            <translation>忽略此版本</translation>
+        </message>
+        <message>
+            <source>Remind Me Later</source>
+            <translation>稍后提醒</translation>
+        </message>
+        <message>
+            <source>Asset Library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source> (ignored)</source>
+            <translation>（已忽略）</translation>
+        </message>
+        <message>
+            <source>Every project resource matches its asset library.</source>
+            <translation>所有工程资源均与资产库一致。</translation>
+        </message>
+        <message>
+            <source>%1 project resource(s) need attention; %2 have a newer library version. Projects keep their own snapshots until you update them.</source>
+            <translation>%1 项工程资源需要检查，其中 %2 项在资产库中有新版本。工程将在您执行更新前保留当前快照。</translation>
+        </message>
+        <message>
+            <source>Update Project Resources</source>
+            <translation>更新工程资源</translation>
+        </message>
+        <message>
+            <source>Updated %1 project resource(s).</source>
+            <translation>已更新 %1 项工程资源。</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::ProjectResourceDialog</name>
+        <message>
+            <source>Find Asset Uses</source>
+            <translation>查找资源引用</translation>
+        </message>
+        <message>
+            <source>Check Project Resources</source>
+            <translation>检查工程资源</translation>
+        </message>
+        <message>
+            <source>Checks explicit GoldSrc MAP references, including unsaved edits. Embedded means present in the project. Game defaults, scripts, model companion files and animated texture sequences need additional checks. Lines refer to the scanned MAP snapshot.</source>
+            <translation>检查 GoldSrc MAP 中的显式引用，包括未保存的修改。“已嵌入”表示资源已存入工程。游戏默认资源、脚本、模型配套文件和动画纹理序列需另行检查。行号对应本次扫描的 MAP 快照。</translation>
+        </message>
+        <message>
+            <source>Asset: %1  •  Publish path: %2</source>
+            <translation>资源：%1  •  发布路径：%2</translation>
+        </message>
+        <message>
+            <source>Filter references, maps and locations</source>
+            <translation>筛选引用、地图和位置</translation>
+        </message>
+        <message>
+            <source>Show only issues</source>
+            <translation>仅显示问题</translation>
+        </message>
+        <message>
+            <source>Status</source>
+            <translation>状态</translation>
+        </message>
+        <message>
+            <source>Map</source>
+            <translation>地图</translation>
+        </message>
+        <message>
+            <source>Line</source>
+            <translation>行号</translation>
+        </message>
+        <message>
+            <source>Location</source>
+            <translation>位置</translation>
+        </message>
+        <message>
+            <source>Reference</source>
+            <translation>引用</translation>
+        </message>
+        <message>
+            <source>Embedded Asset</source>
+            <translation>嵌入资源</translation>
+        </message>
+        <message>
+            <source>Details</source>
+            <translation>详情</translation>
+        </message>
+        <message>
+            <source>Check Again</source>
+            <translation>重新检查</translation>
+        </message>
+        <message>
+            <source>Open Map</source>
+            <translation>打开地图</translation>
+        </message>
+        <message>
+            <source>Check failed: %1</source>
+            <translation>检查失败：%1</translation>
+        </message>
+        <message>
+            <source>Embedded</source>
+            <translation>已嵌入</translation>
+        </message>
+        <message>
+            <source>Not embedded</source>
+            <translation>未嵌入</translation>
+        </message>
+        <message>
+            <source>Ambiguous</source>
+            <translation>存在歧义</translation>
+        </message>
+        <message>
+            <source>Invalid path</source>
+            <translation>路径无效</translation>
+        </message>
+        <message>
+            <source>Needs lookup</source>
+            <translation>需要查找</translation>
+        </message>
+        <message>
+            <source>Scan failed</source>
+            <translation>扫描失败</translation>
+        </message>
+        <message>
+            <source>%1 maps scanned • %2 references • %3 issues • %4 failed scans</source>
+            <translation>已扫描 %1 张地图 • %2 处引用 • %3 个问题 • %4 项扫描失败</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::ProjectWindow</name>
+        <message>
+            <source>Asset library files changed. Use Library &gt; Rescan Library and Check for Updates to review them.</source>
+            <translation>资产库文件已更改。请使用“资产库 &gt; 重新扫描并检查更新”查看。</translation>
+        </message>
+        <message>
+            <source>Map</source>
+            <translation>地图</translation>
+        </message>
+        <message>
+            <source>Project</source>
+            <translation>工程</translation>
+        </message>
+        <message>
+            <source>New Map…</source>
+            <translation>新建地图…</translation>
+        </message>
+        <message>
+            <source>Save Project</source>
+            <translation>保存工程</translation>
+        </message>
+        <message>
+            <source>Save Project Copy…</source>
+            <translation>另存工程副本…</translation>
+        </message>
+        <message>
+            <source>Save Project Copy</source>
+            <translation>另存工程副本</translation>
+        </message>
+        <message>
+            <source>Import Files…</source>
+            <translation>导入文件…</translation>
+        </message>
+        <message>
+            <source>Check Resources…</source>
+            <translation>检查资源…</translation>
+        </message>
+        <message>
+            <source>Clean Unused Revisions…</source>
+            <translation>清理未使用的修订…</translation>
+        </message>
+        <message>
+            <source>Capture Map Resources…</source>
+            <translation>捕获地图资源…</translation>
+        </message>
+        <message>
+            <source>Export Compile Snapshot…</source>
+            <translation>导出编译快照…</translation>
+        </message>
+        <message>
+            <source>Close Project</source>
+            <translation>关闭工程</translation>
+        </message>
+        <message>
+            <source>Library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>Attach Asset Library…</source>
+            <translation>关联资产库…</translation>
+        </message>
+        <message>
+            <source>Relink Moved Library…</source>
+            <translation>重新关联已移动的资产库…</translation>
+        </message>
+        <message>
+            <source>Check for Asset Updates…</source>
+            <translation>检查资源更新…</translation>
+        </message>
+        <message>
+            <source>Rescan Library and Check for Updates…</source>
+            <translation>重新扫描并检查更新…</translation>
+        </message>
+        <message>
+            <source>Asset</source>
+            <translation>资源</translation>
+        </message>
+        <message>
+            <source>Open Map</source>
+            <translation>打开地图</translation>
+        </message>
+        <message>
+            <source>Reimport…</source>
+            <translation>重新导入…</translation>
+        </message>
+        <message>
+            <source>Rename…</source>
+            <translation>重命名…</translation>
+        </message>
+        <message>
+            <source>Move…</source>
+            <translation>移动…</translation>
+        </message>
+        <message>
+            <source>Rename Published Path…</source>
+            <translation>重命名发布路径…</translation>
+        </message>
+        <message>
+            <source>Export Copy…</source>
+            <translation>导出副本…</translation>
+        </message>
+        <message>
+            <source>Find Uses…</source>
+            <translation>查找引用…</translation>
+        </message>
+        <message>
+            <source>History</source>
+            <translation>历史</translation>
+        </message>
+        <message>
+            <source>Create Version…</source>
+            <translation>创建版本…</translation>
+        </message>
+        <message>
+            <source>Compare with Working State</source>
+            <translation>与当前工作状态比较</translation>
+        </message>
+        <message>
+            <source>Restore Version</source>
+            <translation>恢复版本</translation>
+        </message>
+        <message>
+            <source>Reopen Map</source>
+            <translation>重新打开地图</translation>
+        </message>
+        <message>
+            <source>Open a map from Project Content or create a new map.</source>
+            <translation>从“工程内容”打开地图，或新建地图。</translation>
+        </message>
+        <message>
+            <source>Browse</source>
+            <translation>浏览</translation>
+        </message>
+        <message>
+            <source>Search project content</source>
+            <translation>搜索工程内容</translation>
+        </message>
+        <message>
+            <source>Type</source>
+            <translation>类型</translation>
+        </message>
+        <message>
+            <source>Virtual Path</source>
+            <translation>虚拟路径</translation>
+        </message>
+        <message>
+            <source>Revision</source>
+            <translation>修订</translation>
+        </message>
+        <message>
+            <source>Origin</source>
+            <translation>来源</translation>
+        </message>
+        <message>
+            <source>Import Status</source>
+            <translation>导入状态</translation>
+        </message>
+        <message>
+            <source>Library Status</source>
+            <translation>资产库状态</translation>
+        </message>
+        <message>
+            <source>Asset List</source>
+            <translation>资源列表</translation>
+        </message>
+        <message>
+            <source>Version</source>
+            <translation>版本</translation>
+        </message>
+        <message>
+            <source>Created</source>
+            <translation>创建时间</translation>
+        </message>
+        <message>
+            <source>Description</source>
+            <translation>描述</translation>
+        </message>
+        <message>
+            <source>Project Content</source>
+            <translation>工程内容</translation>
+        </message>
+        <message>
+            <source>Project Asset Cache</source>
+            <translation>工程资源缓存</translation>
+        </message>
+        <message>
+            <source>Export Compile Snapshot</source>
+            <translation>导出编译快照</translation>
+        </message>
+        <message>
+            <source>Select a map in the project first.</source>
+            <translation>请先选择工程中的地图。</translation>
+        </message>
+        <message>
+            <source>Capture Map Resources</source>
+            <translation>捕获地图资源</translation>
+        </message>
+        <message>
+            <source>Open a map in this project first.</source>
+            <translation>请先打开此工程中的地图。</translation>
+        </message>
+        <message>
+            <source>The active map is not part of this project.</source>
+            <translation>当前地图不属于此工程。</translation>
+        </message>
+        <message>
+            <source>Captured %1 resource(s) referenced by the map.</source>
+            <translation>已捕获地图引用的 %1 项资源。</translation>
+        </message>
+        <message>
+            <source>%1 reference(s) are not available in the attached libraries.</source>
+            <translation>关联的资产库中找不到 %1 处引用。</translation>
+        </message>
+        <message>
+            <source>Attach Asset Library</source>
+            <translation>关联资产库</translation>
+        </message>
+        <message>
+            <source>Create Asset Library</source>
+            <translation>创建资产库</translation>
+        </message>
+        <message>
+            <source>'%1' is not an asset library yet.
+
+Create a catalog inside it and import the resources it contains?</source>
+            <translation>“%1”还不是资产库。
+
+是否在此文件夹创建目录索引并导入其中的资源？</translation>
+        </message>
+        <message>
+            <source>Created asset library with %1 resource(s) in %2 group(s).</source>
+            <translation>已创建资产库，包含 %2 个分组、%1 项资源。</translation>
+        </message>
+        <message>
+            <source>Attached asset library with %1 resource(s).</source>
+            <translation>已关联资产库，包含 %1 项资源。</translation>
+        </message>
+        <message>
+            <source>Asset Library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>Relink Asset Library</source>
+            <translation>重新关联资产库</translation>
+        </message>
+        <message>
+            <source>Every attached asset library is reachable.</source>
+            <translation>所有关联的资产库均可访问。</translation>
+        </message>
+        <message>
+            <source>Asset library to relink:</source>
+            <translation>要重新关联的资产库：</translation>
+        </message>
+        <message>
+            <source>Relink "%1"</source>
+            <translation>重新关联“%1”</translation>
+        </message>
+        <message>
+            <source>Relinked asset library %1.</source>
+            <translation>已重新关联资产库 %1。</translation>
+        </message>
+        <message>
+            <source> *</source>
+            <translation> *</translation>
+        </message>
+        <message>
+            <source>%1 — %2</source>
+            <translation>%1 — %2</translation>
+        </message>
+        <message>
+            <source>No open map</source>
+            <translation>没有打开的地图</translation>
+        </message>
+        <message>
+            <source>Every project map is already open</source>
+            <translation>所有工程地图均已打开</translation>
+        </message>
+        <message>
+            <source>Reopen a map whose tab was closed</source>
+            <translation>重新打开已关闭标签的地图</translation>
+        </message>
+        <message>
+            <source>Library update ignored</source>
+            <translation>已忽略资产库更新</translation>
+        </message>
+        <message>
+            <source>New library version available</source>
+            <translation>资产库有新版本</translation>
+        </message>
+        <message>
+            <source>No longer readable in library</source>
+            <translation>资产库中的资源已无法读取</translation>
+        </message>
+        <message>
+            <source>Library not accessible</source>
+            <translation>无法访问资产库</translation>
+        </message>
+        <message>
+            <source>Library dependencies changed</source>
+            <translation>资产库依赖已更改</translation>
+        </message>
+        <message>
+            <source>Imported</source>
+            <translation>直接导入</translation>
+        </message>
+        <message>
+            <source>Library rev %1</source>
+            <translation>资产库修订 %1</translation>
+        </message>
+        <message>
+            <source>MAP document</source>
+            <translation>MAP 文档</translation>
+        </message>
+        <message>
+            <source>Converted; format checked</source>
+            <translation>已转换；格式已检查</translation>
+        </message>
+        <message>
+            <source>Stored; engine validation pending</source>
+            <translation>已存储；待引擎验证</translation>
+        </message>
+        <message>
+            <source>Captured from library asset %1 (%2)</source>
+            <translation>捕获自资产库资源 %1（%2）</translation>
+        </message>
+        <message>
+            <source>Auto-save failed: %1</source>
+            <translation>自动保存失败：%1</translation>
+        </message>
+        <message>
+            <source>Import Map</source>
+            <translation>导入地图</translation>
+        </message>
+        <message>
+            <source>This MAP has no format header. Select its format:</source>
+            <translation>此 MAP 没有格式头，请选择格式：</translation>
+        </message>
+        <message>
+            <source>Import Project Assets</source>
+            <translation>导入工程资源</translation>
+        </message>
+        <message>
+            <source>New Map</source>
+            <translation>新建地图</translation>
+        </message>
+        <message>
+            <source>Map name:</source>
+            <translation>地图名称：</translation>
+        </message>
+        <message>
+            <source>Map format:</source>
+            <translation>地图格式：</translation>
+        </message>
+        <message>
+            <source>Rename Asset</source>
+            <translation>重命名资源</translation>
+        </message>
+        <message>
+            <source>Display name:</source>
+            <translation>显示名称：</translation>
+        </message>
+        <message>
+            <source>Rename Published Path</source>
+            <translation>重命名发布路径</translation>
+        </message>
+        <message>
+            <source>Game path the engine will use (project maps are updated to match):</source>
+            <translation>引擎使用的游戏路径（工程地图将同步更新）：</translation>
+        </message>
+        <message>
+            <source>Published path is now %1; updated %2 reference(s) in %3 map(s).</source>
+            <translation>发布路径已改为 %1；已更新 %3 张地图中的 %2 处引用。</translation>
+        </message>
+        <message>
+            <source>Move Asset</source>
+            <translation>移动资源</translation>
+        </message>
+        <message>
+            <source>Virtual path including filename:</source>
+            <translation>虚拟路径（含文件名）：</translation>
+        </message>
+        <message>
+            <source>Reimport Asset</source>
+            <translation>重新导入资源</translation>
+        </message>
+        <message>
+            <source>Export Asset Copy</source>
+            <translation>导出资源副本</translation>
+        </message>
+        <message>
+            <source>Create Version</source>
+            <translation>创建版本</translation>
+        </message>
+        <message>
+            <source>Version name:</source>
+            <translation>版本名称：</translation>
+        </message>
+        <message>
+            <source>Dependencies added: %1; removed: %2</source>
+            <translation>新增依赖：%1；移除依赖：%2</translation>
+        </message>
+        <message>
+            <source>Version Comparison</source>
+            <translation>版本比较</translation>
+        </message>
+        <message>
+            <source>%1 assets changed</source>
+            <translation>%1 项资源已更改</translation>
+        </message>
+        <message>
+            <source>Restore this version? Current edits will be preserved in a safety version. Open maps will reload with the restored content.</source>
+            <translation>恢复此版本？当前修改将保存在安全版本中。已打开的地图将重新加载恢复后的内容。</translation>
+        </message>
+        <message>
+            <source>Clean Unused Revisions</source>
+            <translation>清理未使用的修订</translation>
+        </message>
+        <message>
+            <source>Every stored revision is still part of the current assets or a version.</source>
+            <translation>所有已存储修订仍被当前资源或历史版本使用。</translation>
+        </message>
+        <message>
+            <source>The project still stores %1 unused revision(s) and %2 unreferenced content file(s).
+
+Removing them frees about %3. Current assets and versions are kept.</source>
+            <translation>工程中仍存储着 %1 个未使用的修订和 %2 个未被引用的内容文件。
+
+清理可释放约 %3 空间。当前资源和历史版本将保留。</translation>
+        </message>
+        <message>
+            <source>Removed %1 unused revision(s) and freed %2. Save the project to keep the cleanup.</source>
+            <translation>已移除 %1 个未使用的修订，释放 %2 空间。请保存工程以保留清理结果。</translation>
+        </message>
+        <message>
+            <source>Save project changes?</source>
+            <translation>保存工程修改？</translation>
+        </message>
+        <message>
+            <source>TB projects (*.tbproj)</source>
+            <translation>TB 工程 (*.tbproj)</translation>
+        </message>
+        <message>
+            <source>[*] — TrenchBroom Project</source>
+            <translation>[*] — TrenchBroom 工程</translation>
+        </message>
+        <message>
+            <source>Project assets (*.map *.mdl *.spr *.wav *.tbprefab *.wad *.png *.bmp *.tga *.jpg)</source>
+            <translation>工程资源 (*.map *.mdl *.spr *.wav *.tbprefab *.wad *.png *.bmp *.tga *.jpg)</translation>
+        </message>
+    </context>
+    <context>
+        <name>QPlatformTheme</name>
+        <message>
+            <source>OK</source>
+            <translation>确定</translation>
+        </message>
+        <message>
+            <source>&amp;No</source>
+            <translation>否(&amp;N)</translation>
+        </message>
+        <message>
+            <source>&amp;Yes</source>
+            <translation>是(&amp;Y)</translation>
+        </message>
+        <message>
+            <source>Help</source>
+            <translation>帮助</translation>
+        </message>
+        <message>
+            <source>Open</source>
+            <translation>打开</translation>
+        </message>
+        <message>
+            <source>Save</source>
+            <translation>保存</translation>
+        </message>
+        <message>
+            <source>Abort</source>
+            <translation>中止</translation>
+        </message>
+        <message>
+            <source>Apply</source>
+            <translation>应用</translation>
+        </message>
+        <message>
+            <source>Close</source>
+            <translation>关闭</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>重置</translation>
+        </message>
+        <message>
+            <source>Retry</source>
+            <translation>重试</translation>
+        </message>
+        <message>
+            <source>Restore Defaults</source>
+            <translation>恢复默认值</translation>
+        </message>
+        <message>
+            <source>Cancel</source>
+            <translation>取消</translation>
+        </message>
+        <message>
+            <source>Ignore</source>
+            <translation>忽略</translation>
+        </message>
+        <message>
+            <source>N&amp;o to All</source>
+            <translation>全否(&amp;O)</translation>
+        </message>
+        <message>
+            <source>Save All</source>
+            <translation>全部保存</translation>
+        </message>
+        <message>
+            <source>Discard</source>
+            <translation>放弃</translation>
+        </message>
+        <message>
+            <source>Yes to &amp;All</source>
+            <translation>全是(&amp;A)</translation>
+        </message>
+    </context>
+</TS>

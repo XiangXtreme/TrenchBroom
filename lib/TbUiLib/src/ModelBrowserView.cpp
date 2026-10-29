@@ -208,7 +208,7 @@ ModelBrowserView::ModelBrowserView(
   AppController& appController, QScrollBar* scrollBar, MapDocument& document)
   : CellView{appController, scrollBar}
   , m_appController{appController}
-  , m_document{document}
+  , m_document{&document}
   , m_scrollBar{scrollBar}
 {
   setMouseTracking(true);
@@ -235,6 +235,27 @@ ModelBrowserView::~ModelBrowserView()
   stopSoundPreview();
   destroyFolderIconTexture();
   clear();
+}
+
+void ModelBrowserView::setDocument(MapDocument& document)
+{
+  if (m_document == &document)
+    return;
+  stopSoundPreview();
+  m_document = &document;
+  // Preview state belongs to a game filesystem and model manager.
+  for (auto& [path, model] : m_catalogModels)
+    m_retiredCatalogModels.push_back(std::move(model));
+  m_catalogModels.clear();
+  m_assetPreviews.clear();
+  invalidateSpritePreviewTextures();
+  invalidate();
+  update();
+}
+
+void ModelBrowserView::setProject(std::shared_ptr<ProjectSession> project)
+{
+  m_project = std::move(project);
 }
 
 void ModelBrowserView::setAssets(
@@ -270,8 +291,12 @@ void ModelBrowserView::setAssets(
   }
   removeStalePreviews(assets);
   m_assets = std::move(assets);
-  m_currentFolderPath.clear();
-  m_hasSelection = false;
+  if (m_hasSelection && !assetAt(m_selectedPath))
+  {
+    m_hasSelection = false;
+    emit selectionCleared();
+    emit projectAssetSelected({});
+  }
   stopSoundPreview();
   invalidate();
   update();
@@ -319,6 +344,8 @@ void ModelBrowserView::setCurrentFolderPath(std::filesystem::path currentFolderP
   {
     m_currentFolderPath = std::move(currentFolderPath);
     m_hasSelection = false;
+    emit selectionCleared();
+    emit projectAssetSelected({});
     stopSoundPreview();
     invalidate();
     update();
@@ -545,7 +572,7 @@ void ModelBrowserView::loadMissingVisiblePreviews(
   }
 
   auto previews = loadAssetPreviews(
-    AssetPreviewProvider{m_document.map().gameFileSystem()},
+    AssetPreviewProvider{m_document->map().gameFileSystem()},
     m_assets,
     paths,
     m_previewPathResolver);
@@ -668,6 +695,10 @@ void ModelBrowserView::doLeftClick(Layout& layout, const float x, const float y)
     }
 
     const auto* asset = assetAt(item.path);
+    if (asset)
+      emit assetSelected(*asset);
+    else
+      emit selectionCleared();
     emit projectAssetSelected(
       asset ? QString::fromStdString(asset->projectAssetId) : QString{});
     m_selectedType = item.type;
@@ -789,7 +820,7 @@ void ModelBrowserView::doContextMenu(
     else
     {
       const auto absPathResult =
-        m_document.map().gameFileSystem().makeAbsolute(modelPath);
+        m_document->map().gameFileSystem().makeAbsolute(modelPath);
       if (!absPathResult.is_error())
       {
         absPath = absPathResult.value();
@@ -803,7 +834,8 @@ void ModelBrowserView::doContextMenu(
       return;
     }
 
-    const auto project = m_appController.projectFor(m_document);
+    const auto project =
+      (m_project ? m_project : m_appController.projectFor(*m_document));
     auto temporary = QTemporaryDir{};
     auto scaledPath = absPath;
     auto projectAsset = std::optional<project::Asset>{};
@@ -876,7 +908,7 @@ void ModelBrowserView::doContextMenu(
       return;
     }
 
-    m_document.map().reloadEntityModels(modelPath);
+    m_document->map().reloadEntityModels(modelPath);
     invalidate();
     update();
   });
@@ -910,7 +942,7 @@ void ModelBrowserView::ensureSoundPlayer()
     &QMediaPlayer::errorOccurred,
     this,
     [this](auto, const QString& error) {
-      m_document.logger().error()
+      m_document->logger().error()
         << "Could not preview sound "
         << m_soundPlayer->source().toDisplayString().toStdString() << ": "
         << error.toStdString();
@@ -951,7 +983,7 @@ void ModelBrowserView::toggleSoundPreview(const std::filesystem::path& path)
   ensureSoundPlayer();
   if (!m_soundPlayer->isAvailable())
   {
-    m_document.logger().error()
+    m_document->logger().error()
       << "Could not preview sound: no Qt multimedia backend is available. "
          "Check that the multimedia plugins and their dependencies are installed.";
     update();
@@ -1476,7 +1508,7 @@ void ModelBrowserView::renderModels(
 {
   gl.frontFace(GL_CW);
 
-  auto& entityModelManager = m_document.map().entityModelManager();
+  auto& entityModelManager = m_document->map().entityModelManager();
   entityModelManager.prepare(gl, vboManager());
 
   auto shader = gl::ActiveShader{gl, shaderManager(), gl::Shaders::EntityModelShader};
@@ -1523,13 +1555,13 @@ void ModelBrowserView::renderModels(
               if (!preview)
                 preview = std::make_unique<CatalogModelPreview>(
                   asset->absolutePath,
-                  m_document.map().gameInfo(),
+                  m_document->map().gameInfo(),
                   [this](auto loader) {
                     auto resource = gl::createResourceSync(std::move(loader));
                     m_appController.glManager().resourceManager().addResource(resource);
                     return resource;
                   },
-                  m_document.logger(),
+                  m_document->logger(),
                   asset->path);
               manager = &preview->models();
               spec = preview->specification();
@@ -1622,7 +1654,8 @@ QString ModelBrowserView::dndData(const Cell& cell)
       item.type == BrowserCellType::Model || item.type == BrowserCellType::Sprite
       || item.type == BrowserCellType::Sound || item.type == BrowserCellType::Texture)
     {
-      const auto session = m_appController.projectFor(m_document);
+      const auto session =
+        (m_project ? m_project : m_appController.projectFor(*m_document));
       return session ? catalogAssetDragData(*asset, session->store().info().id)
                      : QString{};
     }
@@ -1674,7 +1707,7 @@ QString ModelBrowserView::tooltip(const Cell& cell)
     {
       return QString{"%1\n%2 — %3"}
         .arg(QString::fromStdString(item.path.generic_string()))
-        .arg(QString::fromLatin1(browserSourceName(asset->source)))
+        .arg(QObject::tr(browserSourceName(asset->source)))
         .arg(status);
     }
   }

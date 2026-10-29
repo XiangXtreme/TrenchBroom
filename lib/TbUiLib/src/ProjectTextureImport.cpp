@@ -66,8 +66,10 @@ Result<bool> prepareProjectTexture(
     previous
     && !QString::fromStdString(previous->conversionRecipe).contains("goldsrc-texture"))
     return Error{
-      "An image cannot replace a WAD collection. Reimport the collection as a WAD, or "
-      "import the image as a new texture."};
+      QObject::tr(
+        "An image cannot replace a WAD collection. Reimport the collection as a WAD, or "
+        "import the image as a new texture.")
+        .toStdString()};
   auto converted = img::convertGoldSrcTexture(image, name.toStdString());
   if (converted.is_error())
     return std::get<Error>(converted.error());

@@ -446,7 +446,7 @@ void AppController::newProject()
   if (!game)
     return;
   const auto filename = QFileDialog::getSaveFileName(
-    nullptr, tr("Create Project"), {}, "TB projects (*.tbproj)");
+    nullptr, tr("Create Project"), {}, tr("TB projects (*.tbproj)"));
   if (filename.isEmpty())
     return;
   const auto path = pathFromQString(filename);

@@ -325,6 +325,8 @@ public:
 signals:
   void runtimeError(const QString& message);
   void contentsChanged();
+  void browserFocusRequested();
+  void browserFindUsesRequested(const QString& assetId);
   void browserAssetSelected(const QString& assetId);
   void stateChanged();
   /** A capture changed which library revisions the project depends on. */

@@ -19,6 +19,7 @@
 #include <QFile>
 #include <QImage>
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -56,7 +57,9 @@
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ModelBrowser.h"
 #include "ui/ModelBrowserView.h"
+#include "ui/ProjectAssetPanel.h"
 #include "ui/ProjectRecovery.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectWindow.h"
@@ -211,6 +214,67 @@ TEST_CASE("ProjectWindow")
   CHECK(alphaWindow->menuBar()->isHidden());
   CHECK(alphaWindow->findAction("Menu/Edit/Undo")->shortcut().isEmpty());
 
+  SECTION("one project browser survives map switches and closing all map tabs")
+  {
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser != nullptr);
+    CHECK(window.findChildren<ModelBrowser*>().size() == 1);
+    CHECK(alphaWindow->findChildren<ModelBrowser*>().empty());
+    auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
+    REQUIRE(search != nullptr);
+    search->setText("alpha");
+    tabs->setCurrentIndex(1);
+    QApplication::processEvents();
+    CHECK(window.findChild<ModelBrowser*>() == browser);
+    CHECK(search->text() == "alpha");
+    closeTab(*tabs, 1);
+    closeTab(*tabs, 0);
+    CHECK(window.activeMapWindow() == nullptr);
+    CHECK(window.findChild<ModelBrowser*>() == browser);
+    CHECK(browser->isVisible());
+    CHECK(search->text() == "alpha");
+    emit browser->findChild<ModelBrowserView*>()->mapActivated("maps/alpha.map");
+    QApplication::processEvents();
+    CHECK(window.activeMapWindow() != nullptr);
+    CHECK(window.findChild<ModelBrowser*>() == browser);
+  }
+
+  SECTION("resource details track metadata dependencies and revisions")
+  {
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Sound;
+    input.virtualPath = "sound/details.wav";
+    input.displayName = "Details";
+    input.sourceName = "original.wav";
+    input.original = input.compatible = {1, 2, 3};
+    const auto asset = require(session->importAsset(input));
+    auto* panel = window.findChild<ProjectAssetPanel*>();
+    REQUIRE(panel != nullptr);
+    panel->showProjectAsset(QString::fromStdString(asset.id));
+    auto* details = panel->findChild<QTreeWidget*>("ProjectAssetDetails");
+    REQUIRE(details != nullptr);
+    const auto valueFor = [details](const QString& key) {
+      const auto items = details->findItems(key, Qt::MatchExactly, 0);
+      return items.empty() ? QString{} : items.front()->text(1);
+    };
+    CHECK(valueFor("Original Source") == "original.wav");
+    CHECK(valueFor("Published Path") == "sound/details.wav");
+    CHECK(valueFor("Revision") == "1");
+    require(session->renameAsset(asset.id, "Renamed"));
+    CHECK(valueFor("Name") == "Renamed");
+    const auto updated = require(session->replaceAsset(asset.id, input));
+    CHECK(valueFor("Revision") == QString::number(updated.revision));
+    auto dependent = input;
+    dependent.virtualPath = "sound/dependent.wav";
+    dependent.displayName = "Dependent";
+    const auto captured = require(session->applyAssetCapturePlan(
+      {{std::nullopt, dependent, {{0, asset.id, "companion"}}}}));
+    CHECK(valueFor("Used By") == "sound/dependent.wav");
+    panel->showProjectAsset(QString::fromStdString(captured.front().id));
+    CHECK(valueFor("Depends On") == "sound/details.wav");
+    require(session->save());
+  }
+
   SECTION("published rename works after saved map tabs close")
   {
     auto input = project::AssetImport{};
@@ -343,7 +407,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(output.commit());
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
     QApplication::processEvents();
-    auto* browser = alphaWindow->findChild<ModelBrowserView*>();
+    auto* browser = window.findChild<ModelBrowserView*>();
     REQUIRE(browser != nullptr);
     browser->setIncludeDefaultRoots(false);
     auto asset =
@@ -368,6 +432,28 @@ TEST_CASE("ProjectWindow")
     QApplication::processEvents();
     CHECK(
       QTest::qWaitFor([&]() { return browser->grabFramebuffer() == rendered; }, 3000));
+  }
+
+  SECTION("catalog titles render distinct Chinese glyphs")
+  {
+    auto* browser = window.findChild<ModelBrowserView*>();
+    REQUIRE(browser != nullptr);
+    browser->setIncludeDefaultRoots(false);
+    auto asset = BrowserAsset{BrowserCellType::Map, "unicode.map"};
+    asset.source = BrowserSource::Project;
+    asset.projectId = "unicode";
+    asset.assetId = "map";
+    asset.displayName = "测试";
+    browser->setAssets({}, {asset});
+    QApplication::processEvents();
+    const auto first = browser->grabFramebuffer();
+    REQUIRE_FALSE(first.isNull());
+    asset.displayName = "资源";
+    browser->setAssets({}, {asset});
+    QApplication::processEvents();
+    const auto second = browser->grabFramebuffer();
+    REQUIRE_FALSE(second.isNull());
+    CHECK(first != second);
   }
 
   SECTION("catalog resource drag captures only when the native drop commits")
@@ -471,9 +557,9 @@ TEST_CASE("ProjectWindow")
     auto* betaWindow = window.activeMapWindow();
     REQUIRE(betaWindow != nullptr);
     betaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
-    auto* browser = betaWindow->findChild<ModelBrowserView*>();
+    auto* browser = window.findChild<ModelBrowserView*>();
     REQUIRE(browser != nullptr);
-    auto* source = betaWindow->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = window.findChild<QComboBox*>("ModelBrowser_Source");
     REQUIRE(source != nullptr);
     source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
 
@@ -685,12 +771,12 @@ TEST_CASE("ProjectWindow")
     require(session->attachLibrary(pathFromQString(folder)));
     require(session->save());
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
-    auto* source = alphaWindow->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = window.findChild<QComboBox*>("ModelBrowser_Source");
     REQUIRE(source != nullptr);
     source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
     QApplication::processEvents();
     QTest::qWait(100);
-    auto* browser = alphaWindow->findChild<ModelBrowserView*>();
+    auto* browser = window.findChild<ModelBrowserView*>();
     REQUIRE(browser != nullptr);
     auto sawPreview = false;
     auto close = QTimer{};

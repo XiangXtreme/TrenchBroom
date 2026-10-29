@@ -33,6 +33,7 @@ class IssueBrowser;
 class MapDocument;
 class ModelInspector;
 class PythonConsole;
+class ProjectSession;
 class TabBook;
 
 enum class InfoPanelPage
@@ -47,6 +48,7 @@ class InfoPanel : public QWidget
 {
   Q_OBJECT
 private:
+  ProjectSession* m_project = nullptr;
   TabBook* m_tabBook = nullptr;
   Console* m_console = nullptr;
   PythonConsole* m_pythonConsole = nullptr;
@@ -54,7 +56,8 @@ private:
   ModelInspector* m_modelInspector = nullptr;
 
 public:
-  InfoPanel(AppController& appController, MapDocument& document, QWidget* parent = nullptr);
+  InfoPanel(
+    AppController& appController, MapDocument& document, QWidget* parent = nullptr);
   ~InfoPanel() override;
 
   Console* console() const;

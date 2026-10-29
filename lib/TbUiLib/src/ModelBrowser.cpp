@@ -80,7 +80,6 @@
 #include "ui/ModelBrowserView.h"
 #include "ui/PrefabAsset.h"
 #include "ui/ProjectCaptureConflictDialog.h"
-#include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/QWidgetUtils.h"
@@ -234,10 +233,13 @@ std::vector<std::string> currentPrefabWadPaths(const mdl::Map& map)
 } // namespace
 
 ModelBrowser::ModelBrowser(
-  AppController& appController, MapDocument& document, QWidget* parent)
+  AppController& appController,
+  MapDocument& document,
+  QWidget* parent,
+  std::shared_ptr<ProjectSession> project)
   : QWidget{parent}
-  , m_document{document}
-  , m_project{appController.projectFor(document)}
+  , m_document{&document}
+  , m_project{project ? std::move(project) : appController.projectFor(document)}
 {
   if (m_project)
   {
@@ -274,6 +276,19 @@ ModelBrowser::~ModelBrowser()
   {
     delete std::exchange(m_fileSystemWatcher, nullptr);
   }
+}
+
+void ModelBrowser::setDocument(MapDocument& document)
+{
+  if (m_document == &document)
+    return;
+  m_mapNotifierConnection.disconnect();
+  m_notifierConnection.disconnect();
+  m_document = &document;
+  m_view->setDocument(document);
+  connectObservers();
+  markAssetsDirty();
+  scheduleAssetRefresh();
 }
 
 void ModelBrowser::createGui(AppController& appController)
@@ -394,7 +409,8 @@ void ModelBrowser::createGui(AppController& appController)
   m_folderTree->setIconSize(QSize{16, 16});
 
   m_scrollBar = new QScrollBar{Qt::Vertical};
-  m_view = new ModelBrowserView{appController, m_scrollBar, m_document};
+  m_view = new ModelBrowserView{appController, m_scrollBar, *m_document};
+  m_view->setProject(m_project);
   m_view->setSearchText(m_searchBox->text());
   if (m_project)
   {
@@ -460,7 +476,7 @@ void ModelBrowser::previewAsset(AppController& appController, const QString& pat
   auto* layout = new QVBoxLayout{&dialog};
   auto* row = new QHBoxLayout{};
   auto* scroll = new QScrollBar{Qt::Vertical, &dialog};
-  auto* view = new ModelBrowserView{appController, scroll, m_document};
+  auto* view = new ModelBrowserView{appController, scroll, *m_document};
   view->setPreviewOnly(true);
   view->setIncludeDefaultRoots(false);
   if (m_project)
@@ -657,7 +673,7 @@ void ModelBrowser::bindEvents(AppController& appController)
 void ModelBrowser::connectObservers()
 {
   m_notifierConnection +=
-    m_document.documentWasLoadedNotifier.connect(this, &ModelBrowser::documentWasLoaded);
+    m_document->documentWasLoadedNotifier.connect(this, &ModelBrowser::documentWasLoaded);
   m_notifierConnection +=
     PreferenceManager::instance().preferenceDidChangeNotifier.connect(
       [this](const auto& path) {
@@ -675,8 +691,8 @@ void ModelBrowser::connectMapObservers()
 {
   m_mapNotifierConnection.disconnect();
   m_mapNotifierConnection +=
-    m_document.map().modsDidChangeNotifier.connect(this, &ModelBrowser::modsDidChange);
-  m_mapNotifierConnection += m_document.selectionDidChangeNotifier.connect(
+    m_document->map().modsDidChangeNotifier.connect(this, &ModelBrowser::modsDidChange);
+  m_mapNotifierConnection += m_document->selectionDidChangeNotifier.connect(
     [this](const auto&) { updateSavePrefabButton(); });
   updateSavePrefabButton();
 }
@@ -858,13 +874,13 @@ void ModelBrowser::updateSavePrefabButton()
 {
   if (m_savePrefabButton)
   {
-    m_savePrefabButton->setEnabled(m_document.map().selection().hasNodes());
+    m_savePrefabButton->setEnabled(m_document->map().selection().hasNodes());
   }
 }
 
 void ModelBrowser::saveSelectionAsPrefab()
 {
-  auto& map = m_document.map();
+  auto& map = m_document->map();
   if (!map.selection().hasNodes())
   {
     return;
@@ -1216,15 +1232,15 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
     entry.revision = asset.revision;
     entry.displayName = asset.displayName;
     entry.catalogPath = pathFromQString(QString::fromStdString(asset.virtualPath));
+    entry.projectAssetId = asset.id;
+    entry.projectRevision = asset.revision;
+    entry.projectPublishPath = path;
     if (!asset.library.empty())
     {
       entry.libraryId = asset.library.libraryId;
       entry.libraryAssetId = asset.library.libraryAssetId;
       entry.libraryRevision = asset.library.libraryRevision;
       entry.libraryContentHash = asset.library.libraryContentHash;
-      entry.projectAssetId = asset.id;
-      entry.projectRevision = asset.revision;
-      entry.projectPublishPath = path;
     }
     assets.push_back(std::move(entry));
   }
@@ -1350,7 +1366,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanGameAssets()
       assetBrowserRoots());
   }
 
-  const auto& map = m_document.map();
+  const auto& map = m_document->map();
   const auto& fs = map.gameFileSystem();
   const auto enabledMods = mdl::enabledMods(map);
   if (enabledMods.empty())
@@ -1617,36 +1633,8 @@ void ModelBrowser::updateProjectAsset(const QString& projectAssetId)
 
 void ModelBrowser::findProjectAssetUses(const QString& projectAssetId)
 {
-  if (!m_project)
-    return;
-  const auto audit = auditGoldSrcProjectResources(*m_project);
-  if (audit.is_error())
-  {
-    QMessageBox::critical(
-      this, tr("Find Uses"), QString::fromStdString(std::get<Error>(audit.error()).msg));
-    return;
-  }
-
-  const auto id = projectAssetId.toStdString();
-  auto lines = QStringList{};
-  for (const auto& use : audit.value().uses)
-  {
-    if (std::ranges::find(use.assetIds, id) == use.assetIds.end())
-      continue;
-    lines << tr("%1 — %2 (%3)")
-               .arg(QString::fromStdString(use.mapPath))
-               .arg(QString::fromStdString(use.location))
-               .arg(QString::fromStdString(use.reference));
-  }
-  auto message = QMessageBox{
-    QMessageBox::Information,
-    tr("Find Uses"),
-    tr("%1 uses in project maps").arg(lines.size()),
-    QMessageBox::Ok,
-    this};
-  if (!lines.isEmpty())
-    message.setDetailedText(lines.join('\n'));
-  message.exec();
+  if (m_project)
+    emit m_project->browserFindUsesRequested(projectAssetId);
 }
 
 void ModelBrowser::reloadModels()
@@ -1811,7 +1799,7 @@ void ModelBrowser::setWatchedDirectory()
     return;
   }
 
-  const auto& map = m_document.map();
+  const auto& map = m_document->map();
   const auto& fs = map.gameFileSystem();
   if (mdl::enabledMods(map).empty())
   {
@@ -1861,7 +1849,7 @@ void ModelBrowser::rescanWatchedDirectory()
   {
     for (const auto& p : entityModelAssetPaths(m_assets))
     {
-      m_document.map().entityModelManager().invalidateModel(p);
+      m_document->map().entityModelManager().invalidateModel(p);
     }
     m_assets.clear();
     m_lastWriteTimes.clear();
@@ -1881,7 +1869,7 @@ void ModelBrowser::rescanWatchedDirectory()
     return;
   }
 
-  m_document.map().reloadEntityModels(changedPaths);
+  m_document->map().reloadEntityModels(changedPaths);
 
   m_assets = std::move(*nextAssets);
   m_lastWriteTimes = std::move(newLastWriteTimes);

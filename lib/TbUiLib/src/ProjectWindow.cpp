@@ -5,6 +5,7 @@
 #include "ui/ProjectWindow.h"
 
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDockWidget>
 #include <QFile>
 #include <QFileDialog>
@@ -14,17 +15,20 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeySequence>
+#include <QLabel>
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabBar>
+#include <QTabWidget>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
@@ -45,6 +49,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ProjectAssetPanel.h"
 #include "ui/ProjectCaptureConflictDialog.h"
 #include "ui/ProjectLibraryDialog.h"
 #include "ui/ProjectRecovery.h"
@@ -59,6 +64,7 @@
 #include <algorithm>
 #include <map>
 #include <sstream>
+#include <utility>
 
 namespace tb::ui
 {
@@ -108,7 +114,7 @@ Result<project::AssetImport> readImport(const QString& filename)
     folder = "textures/";
   }
   else
-    return Error{"Unsupported project asset type."};
+    return Error{QObject::tr("Unsupported project asset type.").toStdString()};
   asset.sourceName = pathAsQString(path.filename()).toStdString();
   asset.virtualPath = folder + asset.sourceName;
   asset.displayName = pathAsQString(path.stem()).toStdString();
@@ -159,7 +165,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   mapSave->setShortcut({});
   file->addAction(tr("Save Project Copy…"), this, [this]() {
     const auto path = QFileDialog::getSaveFileName(
-      this, tr("Save Project Copy"), {}, "TB projects (*.tbproj)");
+      this, tr("Save Project Copy"), {}, tr("TB projects (*.tbproj)"));
     if (!path.isEmpty())
       report(m_session->saveCopy(pathFromQString(path)));
   });
@@ -227,13 +233,28 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   m_maps->setObjectName("ProjectMapStack");
   layout->addWidget(m_maps, 4);
 
+  m_emptyWorkspace = new QWidget{body};
+  auto* emptyLayout = new QVBoxLayout{m_emptyWorkspace};
+  emptyLayout->addStretch();
+  auto* emptyText = new QLabel{
+    tr("Open a map from Project Content or create a new map."), m_emptyWorkspace};
+  emptyText->setAlignment(Qt::AlignCenter);
+  emptyLayout->addWidget(emptyText);
+  auto* createMap = new QPushButton{tr("New Map…"), m_emptyWorkspace};
+  emptyLayout->addWidget(createMap, 0, Qt::AlignHCenter);
+  emptyLayout->addStretch();
+  connect(createMap, &QPushButton::clicked, this, &ProjectWindow::newMap);
+  layout->addWidget(m_emptyWorkspace, 4);
+  auto* contentTabs = new QTabWidget{this};
+  contentTabs->setObjectName("ProjectContentTabs");
+  m_browser = new ProjectAssetPanel{m_appController, m_session, contentTabs};
+  contentTabs->addTab(m_browser, tr("Browse"));
   auto* content = new QWidget{this};
   auto* contentLayout = new QVBoxLayout{content};
   m_search = new QLineEdit{content};
   m_search->setPlaceholderText(tr("Search project content"));
   contentLayout->addWidget(m_search);
-  auto* splitter = new QSplitter{Qt::Vertical, content};
-  m_assets = new QTreeWidget{splitter};
+  m_assets = new QTreeWidget{content};
   m_assets->setObjectName("ProjectAssets");
   m_assets->setHeaderLabels(
     {tr("Asset"),
@@ -246,25 +267,28 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   m_assets->setRootIsDecorated(false);
   m_assets->setSortingEnabled(true);
   m_assets->header()->setSectionResizeMode(2, QHeaderView::Stretch);
-  m_history = new QTreeWidget{splitter};
+  contentLayout->addWidget(m_assets);
+  contentTabs->addTab(content, tr("Asset List"));
+  m_history = new QTreeWidget{contentTabs};
   m_history->setObjectName("ProjectHistory");
   m_history->setHeaderLabels({tr("Version"), tr("Created"), tr("Description")});
   m_history->setRootIsDecorated(false);
-  splitter->setStretchFactor(0, 4);
-  splitter->setStretchFactor(1, 1);
-  contentLayout->addWidget(splitter);
+  contentTabs->addTab(m_history, tr("History"));
   auto* contentDock = new QDockWidget{tr("Project Content"), this};
   contentDock->setObjectName("ProjectContentDock");
-  contentDock->setWidget(content);
+  contentDock->setWidget(contentTabs);
   addDockWidget(Qt::BottomDockWidgetArea, contentDock);
-  resizeDocks({contentDock}, {150}, Qt::Vertical);
-  splitter->setSizes({90, 40});
+  resizeDocks({contentDock}, {320}, Qt::Vertical);
   file->addAction(contentDock->toggleViewAction());
   connect(
     m_session.get(),
     &ProjectSession::browserAssetSelected,
     this,
     [this](const QString& id) {
+      // Catalog selection must not depend on the optional list search.
+      if (!id.isEmpty() && !m_search->text().isEmpty())
+        m_search->clear();
+      const auto blocker = QSignalBlocker{m_assets};
       m_assets->setCurrentItem(nullptr);
       for (int i = 0; i < m_assets->topLevelItemCount(); ++i)
       {
@@ -276,6 +300,26 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
         }
       }
     });
+  connect(m_assets, &QTreeWidget::itemSelectionChanged, this, [this]() {
+    m_browser->showProjectAsset(
+      m_assets->currentItem() ? m_assets->currentItem()->data(0, Qt::UserRole).toString()
+                              : QString{});
+  });
+  connect(
+    m_session.get(),
+    &ProjectSession::browserFocusRequested,
+    this,
+    [this, contentDock, contentTabs]() {
+      contentDock->show();
+      contentDock->raise();
+      contentTabs->setCurrentWidget(m_browser);
+      m_browser->setFocus();
+    });
+  connect(
+    m_session.get(),
+    &ProjectSession::browserFindUsesRequested,
+    this,
+    [this](const QString& id) { checkResources(id.toStdString()); });
   setCentralWidget(body);
   connect(m_search, &QLineEdit::textChanged, this, [this]() { refresh(); });
   connect(m_mapTabs, &QTabBar::currentChanged, this, [this](const int index) {
@@ -364,6 +408,7 @@ ProjectWindow::~ProjectWindow()
 {
   m_closing = true;
   disconnect(&m_appController.mapWindowManager(), nullptr, this, nullptr);
+  delete std::exchange(m_browser, nullptr);
   // Destroy map widgets while the session and host command surface still exist.
   for (auto* window : m_appController.mapWindowManager().mapWindows())
   {
@@ -390,6 +435,7 @@ void ProjectWindow::activateMapTab(MapWindow* window)
     return;
   refreshMapTabs();
   m_maps->setCurrentWidget(window);
+  m_browser->setDocument(&window->document());
   const auto id = m_session->assetFor(window->document());
   const auto blocker = QSignalBlocker{m_mapTabs};
   for (int i = 0; id && i < m_mapTabs->count(); ++i)
@@ -432,7 +478,9 @@ void ProjectWindow::checkResources(std::optional<std::string> assetId)
         return pathAsQString(ext).compare(".c", Qt::CaseInsensitive) == 0;
       }))
   {
-    report(Error{"Resource checking currently requires a GoldSrc game configuration."});
+    report(Error{
+      QObject::tr("Resource checking currently requires a GoldSrc game configuration.")
+        .toStdString()});
     return;
   }
   auto dialog = ProjectResourceDialog{
@@ -742,12 +790,17 @@ void ProjectWindow::refreshMapTabs()
     m_mapTabs->setTabEnabled(index, false);
   }
   m_mapTabs->setTabsClosable(openTabs > 0);
+  m_emptyWorkspace->setVisible(openTabs == 0);
+  m_maps->setVisible(openTabs > 0);
   if (
     const auto* document = m_session->documentFor(
       m_mapTabs->tabData(m_mapTabs->currentIndex()).toString().toStdString()))
     if (auto* window = mapWindowFor(*document))
       m_maps->setCurrentWidget(window);
   refreshCommands();
+
+  if (m_browser)
+    m_browser->setDocument(activeMapWindow() ? &activeMapWindow()->document() : nullptr);
 
   // The menu is rebuilt from inside a triggered action, so the old actions are removed
   // and scheduled for deletion instead of being destroyed while their signal is still on
@@ -796,7 +849,8 @@ void ProjectWindow::refreshTitle()
 {
   setWindowModified(m_session->modified());
   setWindowTitle(
-    QString::fromStdString(m_session->store().info().name) + "[*] — TrenchBroom Project");
+    QString::fromStdString(m_session->store().info().name)
+    + tr("[*] — TrenchBroom Project"));
   setWindowFilePath(pathAsQString(m_session->path()));
 }
 
@@ -854,6 +908,7 @@ void ProjectWindow::refresh()
       }
     }
   }
+  const auto selectionBlocker = QSignalBlocker{m_assets};
   m_assets->clear();
   for (const auto& asset : assets.value())
   {
@@ -867,7 +922,7 @@ void ProjectWindow::refresh()
     auto* item = new QTreeWidgetItem{
       m_assets,
       {name,
-       QString::fromLatin1(project::assetTypeName(asset.type)),
+       QCoreApplication::translate("QObject", project::assetTypeName(asset.type)),
        path,
        QString::number(asset.revision),
        asset.library.empty()
@@ -948,7 +1003,7 @@ Result<bool> ProjectWindow::prepareImport(
   const auto* game =
     m_appController.gameManager().gameInfo(m_session->store().info().gameId);
   if (!game)
-    return Error{"Project game configuration is unavailable."};
+    return Error{QObject::tr("Project game configuration is unavailable.").toStdString()};
   if (asset.type == project::AssetType::Texture)
   {
     const auto& extensions = game->gameConfig.materialConfig.extensions;
@@ -957,7 +1012,9 @@ Result<bool> ProjectWindow::prepareImport(
     });
     if (!goldsrc)
       return Error{
-        "Project image/WAD import currently requires a GoldSrc game configuration."};
+        QObject::tr(
+          "Project image/WAD import currently requires a GoldSrc game configuration.")
+          .toStdString()};
     return prepareProjectTexture(this, asset, previous);
   }
   if (asset.type != project::AssetType::Map)
@@ -969,7 +1026,8 @@ Result<bool> ProjectWindow::prepareImport(
     return std::get<Error>(header.error());
   const auto& [gameName, existingFormat] = header.value();
   if (gameName && *gameName != game->gameConfig.name)
-    return Error{"Map game does not match the project's game."};
+    return Error{
+      QObject::tr("Map game does not match the project's game.").toStdString()};
   auto format = existingFormat;
   if (format == mdl::MapFormat::Unknown)
   {
@@ -977,7 +1035,7 @@ Result<bool> ProjectWindow::prepareImport(
     for (const auto& candidate : game->gameConfig.fileFormats)
       formats.push_back(QString::fromStdString(candidate.format));
     if (formats.empty())
-      return Error{"Game has no supported map formats."};
+      return Error{QObject::tr("Game has no supported map formats.").toStdString()};
     bool accepted = false;
     const auto choice = QInputDialog::getItem(
       this,
@@ -994,7 +1052,8 @@ Result<bool> ProjectWindow::prepareImport(
   if (!std::ranges::any_of(game->gameConfig.fileFormats, [&](const auto& candidate) {
         return mdl::formatFromName(candidate.format) == format;
       }))
-    return Error{"Map format is not supported by the project's game."};
+    return Error{
+      QObject::tr("Map format is not supported by the project's game.").toStdString()};
   auto output = std::ostringstream{};
   mdl::writeMapHeader(output, game->gameConfig.name, format, "TrenchBroom Project");
   const auto prefix = output.str();
@@ -1011,7 +1070,8 @@ void ProjectWindow::importFiles()
     this,
     tr("Import Project Assets"),
     {},
-    "Project assets (*.map *.mdl *.spr *.wav *.tbprefab *.wad *.png *.bmp *.tga *.jpg)");
+    tr("Project assets (*.map *.mdl *.spr *.wav *.tbprefab *.wad *.png *.bmp *.tga "
+       "*.jpg)"));
   for (const auto& file : files)
   {
     auto imported = readImport(file);
@@ -1070,7 +1130,7 @@ void ProjectWindow::newMap()
     formats.push_back(QString::fromStdString(format.format));
   if (formats.empty())
   {
-    report(Error{"Game has no supported map formats."});
+    report(Error{QObject::tr("Game has no supported map formats.").toStdString()});
     return;
   }
   const auto format =
@@ -1196,7 +1256,7 @@ void ProjectWindow::reimportSelected()
     return;
   if (imported.value().type != previous.value()->type)
   {
-    report(Error{"Reimport asset type does not match."});
+    report(Error{QObject::tr("Reimport asset type does not match.").toStdString()});
     return;
   }
   if (
@@ -1205,7 +1265,9 @@ void ProjectWindow::reimportSelected()
          .endsWith(".wad", Qt::CaseInsensitive))
   {
     report(Error{
-      "Reimport this converted texture from an image to preserve its texture name."});
+      QObject::tr(
+        "Reimport this converted texture from an image to preserve its texture name.")
+        .toStdString()});
     return;
   }
   auto input = std::move(imported).value();

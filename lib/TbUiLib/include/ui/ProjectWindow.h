@@ -32,11 +32,15 @@ class MapDocument;
 class MapCommandSurface;
 class MapWindow;
 class ProjectSession;
+class ProjectAssetPanel;
 
 class ProjectWindow : public QMainWindow
 {
+  Q_OBJECT
   AppController& m_appController;
   std::shared_ptr<ProjectSession> m_session;
+  ProjectAssetPanel* m_browser = nullptr;
+  QWidget* m_emptyWorkspace = nullptr;
   QTreeWidget* m_assets = nullptr;
   QTreeWidget* m_history = nullptr;
   QLineEdit* m_search = nullptr;

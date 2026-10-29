@@ -58,7 +58,7 @@ class ModelBrowser : public QWidget
 {
   Q_OBJECT
 private:
-  MapDocument& m_document;
+  MapDocument* m_document;
   std::shared_ptr<ProjectSession> m_project;
 
   QStackedWidget* m_pathStack = nullptr;
@@ -104,7 +104,11 @@ private:
 
 public:
   ModelBrowser(
-    AppController& appController, MapDocument& document, QWidget* parent = nullptr);
+    AppController& appController,
+    MapDocument& document,
+    QWidget* parent = nullptr,
+    std::shared_ptr<ProjectSession> project = nullptr);
+  void setDocument(MapDocument& document);
   ~ModelBrowser() override;
 
 protected:

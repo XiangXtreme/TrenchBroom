@@ -42,7 +42,7 @@ QString stateText(const project::LibraryUpdateState state)
 
 QString typeText(const project::AssetType type)
 {
-  return QString::fromLatin1(project::assetTypeName(type));
+  return QObject::tr(project::assetTypeName(type));
 }
 } // namespace
 
