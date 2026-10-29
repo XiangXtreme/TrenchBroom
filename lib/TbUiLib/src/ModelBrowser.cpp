@@ -21,6 +21,7 @@
 
 #include <QComboBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QImage>
@@ -65,6 +66,7 @@
 #include "mdl/WadPropertyUtils.h"
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
+#include "project/AssetLibrary.h"
 #include "ui/AppController.h"
 #include "ui/AssetBrowserModel.h"
 #include "ui/BitmapButton.h"
@@ -1384,7 +1386,18 @@ void ModelBrowser::chooseLibrary()
     return;
   }
   const auto path = pathFromQString(folder);
-  const auto attached = m_project->attachLibrary(path);
+  // The browser can also start a library, but only after the user confirms that a catalog
+  // should be created inside the selected folder.
+  const auto create =
+    !project::AssetLibrary::isLibraryFolder(path)
+    && QMessageBox::question(
+         this,
+         tr("Create Asset Library"),
+         tr("'%1' is not an asset library yet.\n\nCreate one and import "
+            "the resources it contains?")
+           .arg(QFileInfo{folder}.fileName()))
+         == QMessageBox::Yes;
+  const auto attached = m_project->attachLibrary(path, create);
   if (attached.is_error())
   {
     QMessageBox::critical(

@@ -886,17 +886,62 @@ Result<std::unique_ptr<project::AssetLibrary>> ProjectSession::openLibrary(
   return project::AssetLibrary::open(pathFromStoredPath(it->path));
 }
 
-Result<void> ProjectSession::attachLibrary(const std::filesystem::path& folder)
+Result<ProjectSession::LibraryAttachSummary> ProjectSession::attachLibrary(
+  const std::filesystem::path& folder, const bool createIfMissing)
 {
-  auto library = project::AssetLibrary::open(folder);
-  if (library.is_error())
-    return std::get<Error>(library.error());
-  const auto& info = library.value()->info();
-  return m_store->attachLibrary(info.id, info.name, storedPath(folder))
-         | kdl::transform([&]() {
-             changed();
-             emit libraryLinksChanged();
-           });
+  auto error = std::error_code{};
+  if (!std::filesystem::is_directory(folder, error))
+    return Error{"Asset library folder does not exist: " + folder.generic_string()};
+
+  auto summary = LibraryAttachSummary{};
+  auto library = std::unique_ptr<project::AssetLibrary>{};
+  if (project::AssetLibrary::isLibraryFolder(folder))
+  {
+    auto opened = project::AssetLibrary::open(folder);
+    if (opened.is_error())
+      return std::get<Error>(opened.error());
+    library = std::move(opened).value();
+  }
+  else
+  {
+    // Turning an arbitrary folder into a library writes a catalog file into it, so it
+    // only happens when the caller asked for it after confirming the selection.
+    if (!createIfMissing)
+      return Error{
+        "'" + folder.filename().string()
+        + "' is not an asset library folder yet. Create the library first."};
+    auto name = folder.filename().string();
+    auto created = project::AssetLibrary::create(
+      folder, name.empty() ? std::string{"Asset Library"} : name);
+    if (created.is_error())
+      return std::get<Error>(created.error());
+    library = std::move(created).value();
+    summary.created = true;
+    auto scan = library->scan();
+    if (scan.is_error())
+      return std::get<Error>(scan.error());
+    summary.invalid = scan.value().invalidEntries;
+    if (!scan.value().warning.empty())
+      summary.warnings.push_back(scan.value().warning);
+  }
+
+  const auto assets = library->assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+  summary.assets = assets.value().size();
+  const auto groups = library->groups();
+  if (groups.is_error())
+    return std::get<Error>(groups.error());
+  summary.groups = groups.value().size();
+
+  const auto& info = library->info();
+  summary.libraryId = info.id;
+  auto attached = m_store->attachLibrary(info.id, info.name, storedPath(folder));
+  if (attached.is_error())
+    return std::get<Error>(attached.error());
+  changed();
+  emit libraryLinksChanged();
+  return summary;
 }
 
 Result<std::vector<ProjectSession::LibraryConnection>> ProjectSession::libraries() const

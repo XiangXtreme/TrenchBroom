@@ -7,6 +7,7 @@
 #include <QCloseEvent>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QJsonDocument>
@@ -18,6 +19,7 @@
 #include <QMessageBox>
 #include <QSaveFile>
 #include <QSplitter>
+#include <QStatusBar>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -27,6 +29,7 @@
 #include "mdl/GameManager.h"
 #include "mdl/MapFormat.h"
 #include "mdl/MapHeader.h"
+#include "project/AssetLibrary.h"
 #include "ui/AppController.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectLibraryDialog.h"
@@ -34,6 +37,8 @@
 #include "ui/ProjectSession.h"
 #include "ui/ProjectTextureImport.h"
 #include "ui/QPathUtils.h"
+
+#include <fmt/ranges.h>
 
 #include <algorithm>
 #include <map>
@@ -251,8 +256,37 @@ void ProjectWindow::attachAssetLibrary()
     this, tr("Attach Asset Library"), {}, QFileDialog::ShowDirsOnly);
   if (folder.isEmpty())
     return;
-  if (report(m_session->attachLibrary(pathFromQString(folder))))
-    refresh();
+  const auto path = pathFromQString(folder);
+  // Attaching a plain folder is the normal way to start a library, but writing a catalog
+  // into an arbitrary folder must be an explicit decision.
+  const auto create = !project::AssetLibrary::isLibraryFolder(path)
+                      && QMessageBox::question(
+                           this,
+                           tr("Create Asset Library"),
+                           tr("'%1' is not an asset library yet.\n\n"
+                              "Create a catalog inside it and import the resources it "
+                              "contains?")
+                             .arg(QFileInfo{folder}.fileName()))
+                           == QMessageBox::Yes;
+  const auto attached = m_session->attachLibrary(path, create);
+  if (attached.is_error())
+  {
+    report(Error{std::get<Error>(attached.error()).msg});
+    return;
+  }
+  const auto& summary = attached.value();
+  statusBar()->showMessage(
+    summary.created
+      ? tr("Created asset library with %1 resource(s) in %2 group(s).")
+          .arg(summary.assets)
+          .arg(summary.groups)
+      : tr("Attached asset library with %1 resource(s).").arg(summary.assets));
+  if (!summary.warnings.empty())
+    QMessageBox::warning(
+      this,
+      tr("Asset Library"),
+      QString::fromStdString(fmt::format("{}", fmt::join(summary.warnings, "\n"))));
+  refresh();
 }
 
 void ProjectWindow::checkLibraryUpdates(const bool rescan)

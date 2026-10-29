@@ -26,6 +26,7 @@
 
 #include "ui/AppController.h"
 #include "ui/AppInfoPanel.h"
+#include "ui/AssetLibraryWindow.h"
 #include "ui/BorderLine.h"
 #include "ui/FileDialogDefaultDir.h"
 #include "ui/QPathUtils.h"
@@ -114,6 +115,16 @@ QWidget* WelcomeWindow::createAppPanel()
   connect(
     newProject, &QPushButton::clicked, this, [this]() { m_appController.newProject(); });
   buttonLayout->addWidget(newProject);
+  // Asset libraries belong to the application, not to a project, so they are reachable
+  // before any project exists.
+  auto* assetLibrary = new QPushButton{tr("Asset library...")};
+  assetLibrary->setToolTip(
+    tr("Create, inspect or rescan an asset library without opening a project"));
+  connect(assetLibrary, &QPushButton::clicked, this, [this]() {
+    auto window = AssetLibraryWindow{this};
+    window.exec();
+  });
+  buttonLayout->addWidget(assetLibrary);
   buttonLayout->addWidget(m_openOtherDocumentButton);
   buttonLayout->addStretch();
 

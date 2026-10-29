@@ -76,6 +76,17 @@ public:
     std::string error;
   };
 
+  /** Outcome of attaching a folder, including what had to be created to do it. */
+  struct LibraryAttachSummary
+  {
+    std::string libraryId;
+    bool created = false;
+    std::size_t assets = 0;
+    std::size_t groups = 0;
+    std::size_t invalid = 0;
+    std::vector<std::string> warnings;
+  };
+
   ~ProjectSession() override;
   static Result<std::shared_ptr<ProjectSession>> create(
     const std::filesystem::path& path, const std::string& name, const std::string& game);
@@ -99,7 +110,14 @@ public:
   Result<void> restore(const std::string& id);
 
   // Asset library integration.
-  Result<void> attachLibrary(const std::filesystem::path& folder);
+  /**
+   * Attaches a library folder to the project.
+   *
+   * A folder that is not a library yet is turned into one when `createIfMissing` is set;
+   * otherwise the folder is rejected so a wrong selection cannot leave a catalog behind.
+   */
+  Result<LibraryAttachSummary> attachLibrary(
+    const std::filesystem::path& folder, bool createIfMissing = false);
   Result<std::vector<LibraryConnection>> libraries() const;
   /** Reads one library's current catalog; `rescan` also picks up external file changes.
    */

@@ -538,6 +538,36 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(sandbox.session->libraryUpdatesDeferred());
   }
 
+  SECTION("attaches a plain folder by creating the library catalog")
+  {
+    const auto plain = sandbox.root / "plain-library";
+    writeFile(
+      plain / "custom.wad",
+      requireProject(project::buildGoldSrcWad({miptexFor("WALL01", 16, 255)})));
+
+    // Without permission nothing is written: attaching must not turn an arbitrary folder
+    // into a library by accident.
+    const auto refused = sandbox.session->attachLibrary(plain);
+    REQUIRE(refused.is_error());
+    CHECK_FALSE(project::AssetLibrary::isLibraryFolder(plain));
+
+    const auto attached = requireProject(sandbox.session->attachLibrary(plain, true));
+    CHECK(attached.created);
+    CHECK(attached.assets == 1);
+    CHECK(attached.groups == 1);
+    CHECK(project::AssetLibrary::isLibraryFolder(plain));
+    const auto libraries = requireProject(sandbox.session->libraries());
+    REQUIRE(libraries.size() == 1);
+    CHECK(libraries.front().available);
+    CHECK(libraries.front().info.id == attached.libraryId);
+
+    // Attaching again opens the same library instead of creating a second one.
+    const auto reopened = requireProject(sandbox.session->attachLibrary(plain));
+    CHECK_FALSE(reopened.created);
+    CHECK(reopened.libraryId == attached.libraryId);
+    CHECK(requireProject(sandbox.session->libraries()).size() == 1);
+    CHECK(reopened.assets == 1);
+  }
   SECTION("browses library resources without adding them to the project")
   {
     requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
