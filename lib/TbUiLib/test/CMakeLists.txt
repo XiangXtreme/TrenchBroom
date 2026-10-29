@@ -12,6 +12,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AssetBrowserModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AssetPreviewProvider.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_CatalogModelPreview.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_CatalogAssetDrop.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_CompilationDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_CompilationProfileManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_CompilationRunner.cpp

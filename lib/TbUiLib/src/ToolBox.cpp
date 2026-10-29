@@ -73,6 +73,11 @@ void ToolBox::pick(
   chain.pick(inputState, pickResult);
 }
 
+bool ToolBox::hasDropTracker() const
+{
+  return m_enabled && m_dropTracker != nullptr;
+}
+
 bool ToolBox::dragEnter(
   ToolChain& chain, const InputState& inputState, const std::string& text)
 {

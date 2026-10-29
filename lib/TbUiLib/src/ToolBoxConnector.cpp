@@ -96,6 +96,11 @@ void ToolBoxConnector::addToolController(std::unique_ptr<ToolController> toolCon
   m_toolChain->append(std::move(toolController));
 }
 
+bool ToolBoxConnector::hasDropTracker() const
+{
+  return m_toolBox && m_toolBox->hasDropTracker();
+}
+
 bool ToolBoxConnector::dragEnter(const float x, const float y, const std::string& text)
 {
   contract_pre(m_toolBox != nullptr);

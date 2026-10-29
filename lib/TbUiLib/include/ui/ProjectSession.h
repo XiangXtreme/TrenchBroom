@@ -192,6 +192,8 @@ public:
   /** Drops a retained document and ends its editing session. */
   Result<void> releaseDocument(const std::string& id);
   void unregisterDocument(MapDocument& document);
+  Result<std::vector<project::Asset>> applyAssetCapturePlan(
+    const std::vector<project::AssetCapture>& plan);
   Result<void> save();
   Result<void> saveCopy(const std::filesystem::path& path);
 

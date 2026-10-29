@@ -20,6 +20,8 @@
 #include "ui/ModelBrowser.h"
 
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
@@ -402,8 +404,48 @@ void ModelBrowser::createGui(AppController& appController)
   m_rescanTimer->setSingleShot(true);
 }
 
+void ModelBrowser::previewAsset(AppController& appController, const QString& path)
+{
+  const auto found = std::ranges::find_if(m_assets, [&](const auto& asset) {
+    return pathAsGenericQString(asset.path) == path;
+  });
+  if (found == m_assets.end())
+    return;
+  const auto asset = *found;
+  auto dialog = QDialog{this};
+  dialog.setObjectName("AssetPreviewDialog");
+  dialog.setWindowTitle(
+    asset.displayName.empty() ? path : QString::fromStdString(asset.displayName));
+  dialog.resize(420, 300);
+  auto* layout = new QVBoxLayout{&dialog};
+  auto* row = new QHBoxLayout{};
+  auto* scroll = new QScrollBar{Qt::Vertical, &dialog};
+  auto* view = new ModelBrowserView{appController, scroll, m_document};
+  view->setPreviewOnly(true);
+  view->setIncludeDefaultRoots(false);
+  if (m_project)
+    view->setPreviewPathResolver([session = m_project](const BrowserAsset& entry) {
+      return session->libraryAssetFile(entry.libraryId, entry.libraryAssetId);
+    });
+  view->setAssets(m_folderPath, {asset});
+  view->setCurrentFolderPath(
+    (asset.catalogPath.empty() ? asset.path : asset.catalogPath).parent_path());
+  row->addWidget(view, 1);
+  row->addWidget(scroll);
+  layout->addLayout(row, 1);
+  auto* close = new QDialogButtonBox{QDialogButtonBox::Close, &dialog};
+  connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(close);
+  dialog.exec();
+}
+
 void ModelBrowser::bindEvents(AppController& appController)
 {
+  connect(
+    m_view,
+    &ModelBrowserView::assetPreviewRequested,
+    this,
+    [this, &appController](const QString& path) { previewAsset(appController, path); });
   connect(m_searchBox, &QLineEdit::textChanged, this, [&](const QString& text) {
     if (m_view)
     {
@@ -1146,7 +1188,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
 
   // Update state is project state, so it is queried once per scan instead of per entry.
   auto updates = std::vector<project::LibraryUpdate>{};
-  if (const auto result = m_project->checkLibraryUpdates(); result.is_success())
+  if (auto result = m_project->checkLibraryUpdates(); result.is_success())
     updates = std::move(result).value();
 
   auto assets = std::vector<BrowserAsset>{};
@@ -1173,7 +1215,6 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
     entry.displayName = asset.displayName;
     entry.catalogPath = entry.path;
     entry.missing = asset.missing;
-
     if (const auto captured =
           m_project->projectAssetForLibraryAsset(m_libraryId, asset.id);
         captured.is_success() && captured.value())

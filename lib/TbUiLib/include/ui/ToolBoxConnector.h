@@ -82,6 +82,7 @@ protected:
   void addToolController(std::unique_ptr<ToolController> toolController);
 
 public: // drag and drop
+  bool hasDropTracker() const;
   bool dragEnter(float x, float y, const std::string& text);
   bool dragMove(float x, float y, const std::string& text);
   void dragLeave();

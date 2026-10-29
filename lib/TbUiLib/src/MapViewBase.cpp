@@ -85,6 +85,7 @@
 #include "ui/AnimationManager.h"
 #include "ui/AppController.h"
 #include "ui/CameraAnimation.h"
+#include "ui/CatalogAssetDrop.h"
 #include "ui/EnableDisableTagCallback.h"
 #include "ui/FlashSelectionAnimation.h"
 #include "ui/MapDocument.h"
@@ -93,6 +94,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/PieMenu.h"
+#include "ui/ProjectSession.h"
 #include "ui/QKeySequenceUtils.h"
 #include "ui/QStringUtils.h"
 #include "ui/SelectionTool.h"
@@ -1661,38 +1663,92 @@ void MapViewBase::resizeEvent(QResizeEvent* event)
 /**
  * Forward drag and drop events from QWidget to ToolBoxConnector
  */
-void MapViewBase::dragEnterEvent(QDragEnterEvent* dragEnterEvent)
+void MapViewBase::dragEnterEvent(QDragEnterEvent* event)
 {
-  if (dragEnter(
-        static_cast<float>(dragEnterEvent->position().x()),
-        static_cast<float>(dragEnterEvent->position().y()),
-        dragEnterEvent->mimeData()->text().toStdString()))
+  m_assetDrop.reset();
+  const auto text = event->mimeData()->text();
+  if (isCatalogAssetDrag(text))
   {
-    dragEnterEvent->acceptProposedAction();
+    auto prepared =
+      PreparedAssetDrop::prepare(m_appController.projectFor(m_document), text);
+    if (prepared.is_error())
+    {
+      m_document.logger().error() << std::get<Error>(prepared.error()).msg;
+      event->ignore();
+      return;
+    }
+    m_assetDrop = std::move(prepared).value();
+  }
+  const auto payload = m_assetDrop ? m_assetDrop->nativePayload() : text.toStdString();
+  if (dragEnter(float(event->position().x()), float(event->position().y()), payload))
+    event->acceptProposedAction();
+  else
+  {
+    m_assetDrop.reset();
+    event->ignore();
   }
 }
 
 void MapViewBase::dragLeaveEvent(QDragLeaveEvent*)
 {
   dragLeave();
+  m_assetDrop.reset();
 }
 
-void MapViewBase::dragMoveEvent(QDragMoveEvent* dragMoveEvent)
+void MapViewBase::dragMoveEvent(QDragMoveEvent* event)
 {
-  dragMove(
-    static_cast<float>(dragMoveEvent->position().x()),
-    static_cast<float>(dragMoveEvent->position().y()),
-    dragMoveEvent->mimeData()->text().toStdString());
-  dragMoveEvent->acceptProposedAction();
+  const auto text = event->mimeData()->text();
+  if (m_assetDrop && !m_assetDrop->matches(text))
+  {
+    dragLeave();
+    m_assetDrop.reset();
+    event->ignore();
+    return;
+  }
+  const auto payload = m_assetDrop ? m_assetDrop->nativePayload() : text.toStdString();
+  if (dragMove(float(event->position().x()), float(event->position().y()), payload))
+    event->acceptProposedAction();
+  else
+    event->ignore();
 }
 
-void MapViewBase::dropEvent(QDropEvent* dropEvent)
+void MapViewBase::dropEvent(QDropEvent* event)
 {
-  dragDrop(
-    static_cast<float>(dropEvent->position().x()),
-    static_cast<float>(dropEvent->position().y()),
-    dropEvent->mimeData()->text().toStdString());
-  dropEvent->acceptProposedAction();
+  const auto text = event->mimeData()->text();
+  if (isCatalogAssetDrag(text))
+  {
+    if (!m_assetDrop || !m_assetDrop->matches(text) || !hasDropTracker())
+    {
+      dragLeave();
+      m_assetDrop.reset();
+      event->ignore();
+      return;
+    }
+    const auto committed = m_assetDrop->commit();
+    if (committed.is_error())
+    {
+      m_document.logger().error() << std::get<Error>(committed.error()).msg;
+      dragLeave();
+      m_assetDrop.reset();
+      event->ignore();
+      return;
+    }
+  }
+  else if (m_assetDrop)
+  {
+    dragLeave();
+    m_assetDrop.reset();
+    event->ignore();
+    return;
+  }
+  const auto payload = m_assetDrop ? m_assetDrop->nativePayload() : text.toStdString();
+  const auto accepted =
+    dragDrop(float(event->position().x()), float(event->position().y()), payload);
+  m_assetDrop.reset();
+  if (accepted)
+    event->acceptProposedAction();
+  else
+    event->ignore();
 }
 
 SmartFaceSelectionPanel* MapViewBase::smartFaceSelectionPanel() const

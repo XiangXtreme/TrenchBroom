@@ -78,6 +78,7 @@ class Action;
 class AnimationManager;
 class AppController;
 class MapDocument;
+class PreparedAssetDrop;
 class MapViewToolBox;
 class SignalDelayer;
 class SmartFaceSelectionPanel;
@@ -93,6 +94,7 @@ public:
   static const int DefaultCameraAnimationDuration;
 
 protected:
+  std::unique_ptr<PreparedAssetDrop> m_assetDrop;
   AppController& m_appController;
   MapDocument& m_document;
   MapViewToolBox& m_toolBox;

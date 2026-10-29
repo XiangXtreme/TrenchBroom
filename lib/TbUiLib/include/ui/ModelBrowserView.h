@@ -109,6 +109,7 @@ private:
   // Game files are browsed through fixed roots; catalog listings only show the folders
   // their own entries imply.
   bool m_includeDefaultRoots = true;
+  bool m_previewOnly = false;
   AssetPreviewPathResolver m_previewPathResolver;
 
 public:
@@ -120,6 +121,7 @@ public:
   void setCurrentFolderPath(std::filesystem::path currentFolderPath);
   void setSearchText(QString searchText);
   void setIncludeDefaultRoots(bool includeDefaultRoots);
+  void setPreviewOnly(bool previewOnly);
   /**
    * Resolves a previewable file for entries that have no file of their own.
    *
@@ -188,6 +190,7 @@ private:
   const BrowserAsset* assetAt(const std::filesystem::path& path) const;
 
 signals:
+  void assetPreviewRequested(const QString& path);
   void folderActivated(const QString& folderPath);
   void mapActivated(const QString& mapPath);
   void renamePrefabRequested(const QString& prefabPath);

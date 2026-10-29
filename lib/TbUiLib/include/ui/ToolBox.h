@@ -90,6 +90,7 @@ public: // picking
   void pick(ToolChain& chain, const InputState& inputState, mdl::PickResult& pickResult);
 
 public: // event handling
+  bool hasDropTracker() const;
   void clearTransientState(const InputState& inputState);
   void disconnectObservers();
   bool dragEnter(ToolChain& chain, const InputState& inputState, const std::string& text);
@@ -98,7 +99,8 @@ public: // event handling
   bool dragDrop(ToolChain& chain, const InputState& inputState, const std::string& text);
 
   void modifierKeyChange(ToolChain& chain, const InputState& inputState);
-  bool keyPress(ToolChain& chain, const InputState& inputState, const KeyEvent& event) const;
+  bool keyPress(
+    ToolChain& chain, const InputState& inputState, const KeyEvent& event) const;
   void mouseDown(ToolChain& chain, const InputState& inputState) const;
   void mouseUp(ToolChain& chain, const InputState& inputState) const;
   bool mouseClick(ToolChain& chain, const InputState& inputState) const;

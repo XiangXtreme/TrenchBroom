@@ -1267,12 +1267,20 @@ Result<project::Asset> ProjectSession::captureLibraryAsset(
 
   // The whole closure is committed once, so a conversion failure cannot leave a model in
   // the project without the resources it needs.
-  auto captured = m_store->captureAssets(plan.value());
+  auto captured = applyAssetCapturePlan(plan.value());
+  if (captured.is_error())
+    return std::get<Error>(captured.error());
+  return captured.value().at(indices.front());
+}
+Result<std::vector<project::Asset>> ProjectSession::applyAssetCapturePlan(
+  const std::vector<project::AssetCapture>& plan)
+{
+  auto captured = m_store->captureAssets(plan);
   if (captured.is_error())
     return std::get<Error>(captured.error());
   changed();
   emit libraryLinksChanged();
-  return captured.value().at(indices.front());
+  return captured;
 }
 Result<std::optional<project::Asset>> ProjectSession::projectAssetForLibraryAsset(
   const std::string& libraryId, const std::string& libraryAssetId) const

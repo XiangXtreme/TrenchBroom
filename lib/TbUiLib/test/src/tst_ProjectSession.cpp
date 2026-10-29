@@ -17,6 +17,7 @@
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
 #include "project/LibrarySync.h"
+#include "ui/CatalogAssetDrop.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 #include "ui/ProjectSession.h"
@@ -636,6 +637,36 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto latest =
       requireProject(sandbox.session->libraryAssetFile(libraryId, model->id));
     CHECK(readProjectFile(latest.parent_path() / "crateT.mdl") == changed);
+    CHECK_FALSE(sandbox.session->modified());
+  }
+
+  SECTION("prepared model drags guard existing dependency snapshots")
+  {
+    sandbox.write("models/crate.mdl", modelWithGroups(1));
+    sandbox.write("models/crateT.mdl", modelWithGroups(1));
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto assets = sandbox.libraryAssets();
+    const auto root = std::ranges::find_if(
+      assets, [](const auto& a) { return a.virtualPath == "models/crate.mdl"; });
+    const auto companion = std::ranges::find_if(
+      assets, [](const auto& a) { return a.virtualPath == "models/crateT.mdl"; });
+    REQUIRE(root != assets.end());
+    REQUIRE(companion != assets.end());
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, companion->id));
+    requireProject(sandbox.session->save());
+    auto asset = BrowserAsset{BrowserCellType::Model, "models/crate.mdl"};
+    asset.source = BrowserSource::AssetLibrary;
+    asset.libraryId = libraryId;
+    asset.libraryAssetId = root->id;
+    asset.libraryRevision = root->revision;
+    const auto payload = catalogAssetDragData(asset, sandbox.session->store().info().id);
+    auto pending = requireProject(PreparedAssetDrop::prepare(sandbox.session, payload));
+    requireProject(sandbox.session->renameAsset(captured.id, "Changed while dragging"));
+    requireProject(sandbox.session->save());
+    CHECK(pending->commit().is_error());
+    CHECK(requireProject(sandbox.session->store().assets()).size() == 1);
     CHECK_FALSE(sandbox.session->modified());
   }
 

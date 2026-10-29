@@ -32,6 +32,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetPreviewProvider.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CatalogModelPreview.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/CatalogAssetDrop.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AutoSizeTableRows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/BitmapButton.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/BorderLine.cpp
@@ -288,6 +289,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetPreviewProvider.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CatalogModelPreview.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CatalogAssetDrop.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AutoSizeTableRows.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/BitmapButton.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/BorderLine.h

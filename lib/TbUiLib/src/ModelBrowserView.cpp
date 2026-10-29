@@ -61,6 +61,7 @@
 #include "prefs/Preferences.h"
 #include "render/Transformation.h"
 #include "ui/AppController.h"
+#include "ui/CatalogAssetDrop.h"
 #include "ui/CatalogModelPreview.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
@@ -276,6 +277,13 @@ void ModelBrowserView::setAssets(
   update();
 }
 
+void ModelBrowserView::setPreviewOnly(const bool previewOnly)
+{
+  m_previewOnly = previewOnly;
+  invalidate();
+  update();
+}
+
 void ModelBrowserView::setIncludeDefaultRoots(const bool includeDefaultRoots)
 {
   if (m_includeDefaultRoots == includeDefaultRoots)
@@ -355,6 +363,8 @@ void ModelBrowserView::doReloadLayout(Layout& layout)
          m_searchText,
          m_includeDefaultRoots))
   {
+    if (m_previewOnly && entry.cellData.type == BrowserCellType::Folder)
+      continue;
     const auto titleHeight = fontManager().font(font).measure(entry.title).y();
 
     layout.addItem(
@@ -650,6 +660,8 @@ void ModelBrowserView::doLeftClick(Layout& layout, const float x, const float y)
 
 void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float y)
 {
+  if (m_previewOnly)
+    return;
   if (const auto* cell = layout.cellAt(x, y))
   {
     const auto& item = cellData(*cell);
@@ -661,14 +673,9 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
     {
       emit mapActivated(pathAsGenericQString(item.path));
     }
-    else if (const auto* asset = assetAt(item.path); asset && isLibraryAsset(*asset))
+    else
     {
-      // Double-clicking a library entry is the explicit "use this resource" action: it
-      // copies the current revision into the project instead of creating a path
-      // dependency.
-      emit libraryAssetCaptureRequested(
-        QString::fromStdString(asset->libraryId),
-        QString::fromStdString(asset->libraryAssetId));
+      emit assetPreviewRequested(pathAsGenericQString(item.path));
     }
   }
 }
@@ -676,6 +683,8 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
 void ModelBrowserView::doContextMenu(
   Layout& layout, const float x, const float y, QContextMenuEvent* event)
 {
+  if (m_previewOnly)
+    return;
   const auto* cell = layout.cellAt(x, y);
   if (!cell)
   {
@@ -1577,35 +1586,25 @@ vm::mat4x4f ModelBrowserView::itemTransformation(
 
 bool ModelBrowserView::dndEnabled()
 {
-  return true;
+  return !m_previewOnly;
 }
 
 QString ModelBrowserView::dndData(const Cell& cell)
 {
   const auto& item = cellData(cell);
-  if (const auto* asset = assetAt(item.path); asset && isLibraryAsset(*asset))
+  if (const auto* asset = assetAt(item.path);
+      asset && asset->source != BrowserSource::GameFiles)
   {
-    // Only a captured resource has an engine path. An uncaptured library entry must not
-    // become a map dependency behind the user's back.
-    if (asset->projectPublishPath.empty())
+    if (
+      item.type == BrowserCellType::Model || item.type == BrowserCellType::Sprite
+      || item.type == BrowserCellType::Sound)
     {
-      return "";
+      const auto session = m_appController.projectFor(m_document);
+      return session ? catalogAssetDragData(*asset, session->store().info().id)
+                     : QString{};
     }
-    switch (item.type)
-    {
-    case BrowserCellType::Model:
-      return QString{"model:"} + pathAsGenericQString(asset->projectPublishPath);
-    case BrowserCellType::Sprite:
-      return QString{"sprite:"} + pathAsGenericQString(asset->projectPublishPath);
-    case BrowserCellType::Sound:
-      return QString{"sound:"} + pathAsGenericQString(asset->projectPublishPath);
-    case BrowserCellType::Folder:
-    case BrowserCellType::Map:
-    case BrowserCellType::Texture:
-    case BrowserCellType::Prefab:
-      return "";
-    }
-    return "";
+    if (isLibraryAsset(*asset))
+      return {};
   }
 
   switch (item.type)

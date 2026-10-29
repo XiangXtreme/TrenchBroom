@@ -6,13 +6,19 @@
 
 #include <QAbstractButton>
 #include <QApplication>
+#include <QComboBox>
+#include <QDialog>
 #include <QDir>
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDropEvent>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QImage>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QSaveFile>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -23,14 +29,20 @@
 #include <QToolButton>
 #include <QtTest/QTest>
 
+#include "mdl/EntityDefinition.h"
+#include "mdl/EntityDefinitionManager.h"
 #include "mdl/GameManager.h"
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Entities.h"
+#include "mdl/PropertyDefinition.h"
 #include "ui/AppControllerFixture.h"
+#include "ui/CatalogAssetDrop.h"
+#include "ui/CreateEntityTool.h"
 #include "ui/InfoPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapViewBase.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ModelBrowserView.h"
@@ -119,14 +131,23 @@ TEST_CASE("ProjectWindow")
 
   auto directory = QTemporaryDir{};
   REQUIRE(directory.isValid());
-  auto session = require(ProjectSession::create(
-    pathFromQString(directory.filePath("workspace.tbproj")), "Workspace", GameName));
-
+  const auto projectPath = pathFromQString(directory.filePath("workspace.tbproj"));
+  {
+    auto created = require(ProjectSession::create(projectPath, "Workspace", GameName));
+  }
+  REQUIRE(appController.openProject(projectPath));
+  ProjectWindow* host = nullptr;
+  for (auto* widget : QApplication::topLevelWidgets())
+    if (auto* candidate = dynamic_cast<ProjectWindow*>(widget);
+        candidate
+        && candidate->session()->path() == std::filesystem::weakly_canonical(projectPath))
+      host = candidate;
+  REQUIRE(host != nullptr);
+  auto& window = *host;
+  auto session = window.session();
   auto& manager = appController.mapWindowManager();
   require(manager.createProjectMap(session, "alpha", mdl::MapFormat::Valve));
   require(manager.createProjectMap(session, "beta", mdl::MapFormat::Valve));
-
-  auto window = ProjectWindow{appController, session};
   window.setAttribute(Qt::WA_DeleteOnClose, false);
   window.resize(1000, 700);
   window.show();
@@ -143,6 +164,7 @@ TEST_CASE("ProjectWindow")
     }
     QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QApplication::processEvents();
+    delete host;
   };
   struct TeardownGuard
   {
@@ -158,6 +180,7 @@ TEST_CASE("ProjectWindow")
   auto* tabs = window.findChild<QTabBar*>("ProjectMapTabs");
   REQUIRE(tabs != nullptr);
   REQUIRE(tabs->count() == 2);
+  tabs->setCurrentIndex(0);
   CHECK(tabs->tabText(0) == "alpha");
   CHECK(tabs->tabText(1) == "beta");
 
@@ -286,6 +309,135 @@ TEST_CASE("ProjectWindow")
     QApplication::processEvents();
     CHECK(
       QTest::qWaitFor([&]() { return browser->grabFramebuffer() == rendered; }, 3000));
+  }
+
+  SECTION("catalog resource drag captures only when the native drop commits")
+  {
+    const auto folder = directory.filePath("drop-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    auto output = QFile{folder + "/clip.wav"};
+    REQUIRE(output.open(QIODevice::WriteOnly));
+    REQUIRE(output.write("RIFF data") == 9);
+    output.close();
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->scan());
+    const auto resources = require(library->assets());
+    REQUIRE(resources.size() == 1);
+    require(session->attachLibrary(pathFromQString(folder)));
+    require(session->save());
+    auto& map = alphaDocument->map();
+    map.entityDefinitionManager().setDefinitions(
+      {{"ambient_generic",
+        Color{},
+        "sound",
+        {{"message", mdl::PropertyValueTypes::String{}, "", "", false}},
+        mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}}}});
+    auto asset = BrowserAsset{BrowserCellType::Sound, "clip.wav"};
+    asset.source = BrowserSource::AssetLibrary;
+    asset.libraryId = library->info().id;
+    asset.libraryAssetId = resources.front().id;
+    asset.libraryRevision = resources.front().revision;
+    const auto payload = catalogAssetDragData(asset, session->store().info().id);
+    auto mime = QMimeData{};
+    mime.setText(payload);
+    auto* view = alphaWindow->currentMapViewBase();
+    REQUIRE(view != nullptr);
+    REQUIRE(
+      alphaWindow->toolBox().createEntityTool().canCreateSoundEntity("sound/clip.wav"));
+    auto prepared = require(PreparedAssetDrop::prepare(session, payload));
+    CHECK(prepared->nativePayload() == "sound:sound/clip.wav");
+    REQUIRE(view->dragEnter(40.0f, 40.0f, prepared->nativePayload()));
+    view->dragLeave();
+    const auto position = view->rect().center();
+    const auto before = require(session->store().assets()).size();
+    auto enter =
+      QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(view, &enter);
+    REQUIRE(enter.isAccepted());
+    CHECK(require(session->store().assets()).size() == before);
+    auto leave = QDragLeaveEvent{};
+    QApplication::sendEvent(view, &leave);
+    CHECK(require(session->store().assets()).size() == before);
+    CHECK_FALSE(session->modified());
+
+    SECTION("successful drop")
+    {
+      auto again =
+        QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+      QApplication::sendEvent(view, &again);
+      REQUIRE(again.isAccepted());
+      auto drop = QDropEvent{
+        QPointF{position}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+      QApplication::sendEvent(view, &drop);
+      CHECK(drop.isAccepted());
+      CHECK(require(session->store().assets()).size() == before + 1);
+      CHECK(map.modified());
+      CHECK(session->modified());
+      require(session->save());
+    }
+    SECTION("a conflicting capture rolls back the provisional entity")
+    {
+      auto input = project::AssetImport{};
+      input.type = project::AssetType::Sound;
+      input.virtualPath = "sound/clip.wav";
+      input.displayName = "Existing";
+      input.original = {'x'};
+      input.compatible = {'x'};
+      require(session->importAsset(input));
+      require(session->save());
+      auto again =
+        QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+      QApplication::sendEvent(view, &again);
+      REQUIRE(again.isAccepted());
+      auto drop = QDropEvent{
+        QPointF{position}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+      QApplication::sendEvent(view, &drop);
+      CHECK_FALSE(drop.isAccepted());
+      CHECK(require(session->store().assets()).size() == before + 1);
+      CHECK_FALSE(map.modified());
+      CHECK_FALSE(session->modified());
+    }
+  }
+
+  SECTION("double-clicking a library resource opens a read-only preview without capture")
+  {
+    const auto folder = directory.filePath("preview-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    auto file = QFile{folder + "/clip.wav"};
+    REQUIRE(file.open(QIODevice::WriteOnly));
+    REQUIRE(file.write("RIFF preview") > 0);
+    file.close();
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->scan());
+    require(session->attachLibrary(pathFromQString(folder)));
+    require(session->save());
+    alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
+    auto* source = alphaWindow->findChild<QComboBox*>("ModelBrowser_Source");
+    REQUIRE(source != nullptr);
+    source->setCurrentIndex(source->findData(int(BrowserSource::AssetLibrary)));
+    QApplication::processEvents();
+    QTest::qWait(100);
+    auto* browser = alphaWindow->findChild<ModelBrowserView*>();
+    REQUIRE(browser != nullptr);
+    auto sawPreview = false;
+    auto close = QTimer{};
+    QObject::connect(&close, &QTimer::timeout, [&]() {
+      for (auto* widget : QApplication::topLevelWidgets())
+        if (auto* dialog = dynamic_cast<QDialog*>(widget); dialog && dialog->isVisible())
+        {
+          sawPreview = dialog->objectName() == "AssetPreviewDialog";
+          dialog->reject();
+        }
+    });
+    const auto before = require(session->store().assets()).size();
+    close.start(10);
+    QTest::mouseDClick(browser, Qt::LeftButton, Qt::NoModifier, QPoint{40, 40});
+    close.stop();
+    CHECK(sawPreview);
+    CHECK(require(session->store().assets()).size() == before);
+    CHECK_FALSE(session->modified());
   }
 
   SECTION("host undo follows the active map")
