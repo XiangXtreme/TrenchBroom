@@ -172,6 +172,16 @@ std::string publishPathFor(
   return root + "/" + fileNameOf(asset.virtualPath);
 }
 
+// The game path a library resource would publish when captured, without reading or
+// converting its content.
+std::string libraryPublishPath(const project::LibraryAsset& asset)
+{
+  const auto root = std::string{publishRoot(asset.type)};
+  if (asset.virtualPath == root || asset.virtualPath.starts_with(root + "/"))
+    return asset.virtualPath;
+  return root + "/" + fileNameOf(asset.virtualPath);
+}
+
 std::string captureRecipeFor(
   const img::GoldSrcTexture& texture, const std::uint32_t alpha)
 {
@@ -1609,6 +1619,88 @@ Result<std::optional<project::Asset>> ProjectSession::captureLibraryAssetResolvi
   if (captured.is_error())
     return std::get<Error>(captured.error());
   return std::optional<project::Asset>{captured.value().at(indices.front())};
+}
+
+Result<ProjectSession::MapReferenceCapture> ProjectSession::captureMapReferences(
+  const std::string& mapAssetId, const CaptureConflictResolver& resolveConflict)
+{
+  const auto audit = auditGoldSrcProjectResources(*this);
+  if (audit.is_error())
+    return std::get<Error>(audit.error());
+
+  const auto lowered = [](std::string value) {
+    std::ranges::transform(
+      value, value.begin(), [](const unsigned char c) { return char(std::tolower(c)); });
+    return value;
+  };
+
+  // Keyed by engine-facing name so matching ignores case but reports the original
+  // spelling from the map.
+  auto pending = std::map<std::string, std::string>{};
+  for (const auto& use : audit.value().uses)
+    if (
+      use.mapId == mapAssetId && use.status == ProjectResourceStatus::Missing
+      && !use.reference.empty())
+      pending.emplace(lowered(use.reference), use.reference);
+
+  auto result = MapReferenceCapture{};
+  if (pending.empty())
+    return result;
+
+  const auto connections = libraries();
+  if (connections.is_error())
+    return std::get<Error>(connections.error());
+
+  for (const auto& connection : connections.value())
+  {
+    if (!connection.available || pending.empty())
+      continue;
+    const auto library = openLibrary(connection.info.id);
+    if (library.is_error())
+      continue;
+    const auto assets = library.value()->assets();
+    if (assets.is_error())
+      continue;
+
+    for (const auto& asset : assets.value())
+    {
+      if (pending.empty())
+        break;
+      if (asset.missing)
+        continue;
+
+      // Face materials are engine texture names; everything else is referenced by the
+      // game path the resource would publish.
+      auto key = std::string{};
+      if (asset.type == project::AssetType::Texture)
+        key = lowered(asset.displayName);
+      else if (
+        asset.type == project::AssetType::Model
+        || asset.type == project::AssetType::Sprite
+        || asset.type == project::AssetType::Sound)
+        key = lowered(libraryPublishPath(asset));
+      else
+        continue;
+
+      const auto it = pending.find(key);
+      if (it == pending.end())
+        continue;
+
+      const auto captured =
+        captureLibraryAssetResolving(connection.info.id, asset.id, resolveConflict);
+      if (captured.is_error())
+        return std::get<Error>(captured.error());
+      if (captured.value())
+        result.captured.push_back(*captured.value());
+      else
+        result.unresolved.push_back(it->second);
+      pending.erase(it);
+    }
+  }
+
+  for (const auto& [key, reference] : pending)
+    result.unresolved.push_back(reference);
+  return result;
 }
 
 Result<project::Asset> ProjectSession::captureLibraryAsset(

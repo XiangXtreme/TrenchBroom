@@ -30,6 +30,7 @@
 #include "ui/CompilationVariables.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
@@ -776,6 +777,48 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(replaced->id == first.id);
     CHECK(replaced->virtualPath == first.virtualPath);
     CHECK(replaced->library.libraryId == otherLibraryId);
+  }
+
+  SECTION("captures map references from the attached library")
+  {
+    // The map uses a sound and a sprite that the project does not embed yet.
+    auto mapStream = std::ostringstream{};
+    mdl::writeMapHeader(mapStream, "Half-Life", mdl::MapFormat::Standard, "Test");
+    mapStream << R"({"classname" "worldspawn"}
+      {"classname" "ambient_generic" "message" "step.wav"}
+      {"classname" "env_sprite" "model" "sprites/flare.spr"})";
+    const auto mapText = mapStream.str();
+    auto mapInput = project::AssetImport{};
+    mapInput.type = project::AssetType::Map;
+    mapInput.virtualPath = "maps/test.map";
+    mapInput.displayName = "test";
+    mapInput.original.assign(mapText.begin(), mapText.end());
+    mapInput.compatible = mapInput.original;
+    const auto mapAsset = requireProject(sandbox.session->importAsset(mapInput));
+
+    // The library provides the sound but not the sprite.
+    sandbox.write("sound/step.wav", {'R', 'I', 'F', 'F'});
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+
+    const auto captured = requireProject(sandbox.session->captureMapReferences(
+      mapAsset.id,
+      [](const CaptureConflict&) { return CaptureConflictChoice::Replace; }));
+    REQUIRE(captured.captured.size() == 1);
+    CHECK(captured.captured.front().publishPath == "sound/step.wav");
+    REQUIRE(captured.unresolved.size() == 1);
+    CHECK(captured.unresolved.front() == "sprites/flare.spr");
+
+    const auto audit = requireProject(auditGoldSrcProjectResources(*sandbox.session));
+    for (const auto& use : audit.uses)
+      if (use.reference == "sound/step.wav")
+        CHECK(use.status == ProjectResourceStatus::Embedded);
+
+    // The second run has nothing left to capture.
+    const auto again = requireProject(sandbox.session->captureMapReferences(
+      mapAsset.id,
+      [](const CaptureConflict&) { return CaptureConflictChoice::Replace; }));
+    CHECK(again.captured.empty());
   }
 
   SECTION("keeps the old snapshot while the library moves ahead")

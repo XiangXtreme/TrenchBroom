@@ -45,6 +45,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ProjectCaptureConflictDialog.h"
 #include "ui/ProjectLibraryDialog.h"
 #include "ui/ProjectRecovery.h"
 #include "ui/ProjectResourceDialog.h"
@@ -166,6 +167,8 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   file->addAction(tr("Check Resources…"), this, [this]() { checkResources(); });
   file->addAction(
     tr("Clean Unused Revisions…"), this, &ProjectWindow::cleanUnusedRevisions);
+  file->addAction(
+    tr("Capture Map Resources…"), this, &ProjectWindow::captureMapResources);
   file->addAction(
     tr("Export Compile Snapshot…"), this, &ProjectWindow::exportCompileSnapshot);
   file->addAction(tr("Close Project"), this, &QWidget::close);
@@ -450,6 +453,48 @@ void ProjectWindow::exportCompileSnapshot()
   if (folder.isEmpty())
     return;
   report(m_session->exportCompileSnapshot(*id, pathFromQString(folder)));
+}
+
+void ProjectWindow::captureMapResources()
+{
+  auto* window = activeMapWindow();
+  if (!window)
+  {
+    QMessageBox::information(
+      this, tr("Capture Map Resources"), tr("Open a map in this project first."));
+    return;
+  }
+
+  const auto assetId = m_session->assetFor(window->document());
+  if (!assetId)
+  {
+    QMessageBox::information(
+      this,
+      tr("Capture Map Resources"),
+      tr("The active map is not part of this project."));
+    return;
+  }
+
+  const auto captured =
+    m_session->captureMapReferences(*assetId, [this](const CaptureConflict& conflict) {
+      return confirmCaptureConflict(this, conflict) ? CaptureConflictChoice::Replace
+                                                    : CaptureConflictChoice::Cancel;
+    });
+  if (captured.is_error())
+  {
+    report(Error{std::get<Error>(captured.error()).msg});
+    return;
+  }
+
+  const auto& summary = captured.value();
+  auto message =
+    tr("Captured %1 resource(s) referenced by the map.").arg(summary.captured.size());
+  if (!summary.unresolved.empty())
+    message += " "
+               + tr("%1 reference(s) are not available in the attached libraries.")
+                   .arg(summary.unresolved.size());
+  statusBar()->showMessage(message, 8000);
+  refresh();
 }
 
 void ProjectWindow::attachAssetLibrary()

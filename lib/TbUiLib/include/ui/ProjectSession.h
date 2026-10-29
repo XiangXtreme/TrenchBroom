@@ -254,6 +254,24 @@ public:
     const std::string& libraryId,
     const std::string& libraryAssetId,
     const CaptureConflictResolver& resolveConflict);
+  /** Outcome of pulling a map's missing references from the attached libraries. */
+  struct MapReferenceCapture
+  {
+    std::vector<project::Asset> captured;
+    // References no attached library could satisfy, or the user declined to replace.
+    std::vector<std::string> unresolved;
+  };
+  /**
+   * Captures library resources that a map references but the project does not embed.
+   *
+   * Only explicit GoldSrc MAP references are considered: face materials and the entity
+   * keys the resource audit understands (model, shootmodel, gibmodel, message, skybox
+   * faces). Textures match by engine name, other resources by the game path they would
+   * publish. Embedded, ambiguous and unsupported references are left alone, and a
+   * reference the user declines to replace is reported as unresolved.
+   */
+  Result<MapReferenceCapture> captureMapReferences(
+    const std::string& mapAssetId, const CaptureConflictResolver& resolveConflict);
   Result<void> registerDocument(MapDocument& document, const std::string& id);
   /**
    * Keeps a document alive in the session when no view shows it.

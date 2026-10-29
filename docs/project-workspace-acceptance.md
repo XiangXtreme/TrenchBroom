@@ -33,7 +33,7 @@
 | 修改发布名而不破坏地图引用 | **未实现** | 依赖稳定的 `publishPath`；没有“改发布名”命令 | — |
 | 同名资源跨库冲突的图形化处理 | 已完成 | `ProjectSession::captureConflicts/captureLibraryAssetResolving` + 捕获时的替换确认框（拖放与 Add to Project 共用） | `ProjectSessionAssetLibrary`、`CatalogAssetDrop` 定向用例（报告冲突、取消不变、替换沿用原 ID） |
 | 库目录移动后的重新指向 | 已完成 | `ProjectSession::relocateLibrary` + Library 菜单 **Relink Moved Library…**；校验库身份，已捕获快照不受影响 | `ProjectSessionAssetLibrary` 定向用例（校验同一库、拒绝其他库、保存重开） |
-| Sprite 帧 / WAV 引用的依赖捕获 | **部分** | 依赖边覆盖 MDL 配套与天空盒，Sprite/WAV 仍按单文件 | — |
+| 地图引用的库内补捕获（Sprite / WAV / 模型） | 已完成 | `ProjectSession::captureMapReferences` + Project 菜单 **Capture Map Resources…**：按引擎纹理名与游戏路径匹配已关联的库，逐项捕获并报告仍缺失的引用 | `ProjectSessionAssetLibrary` 定向用例（先 Missing，捕获后 Embedded，缺失项进 unresolved） |
 | 游戏内画面验收（天空盒、发布产物） | **未完成（人工）** | 编译快照已生成 `gfx/env` 六面 TGA | 见第 4 节 |
 
 ## 3. 自动化验证现状
@@ -98,7 +98,9 @@
 - 同名资源跨库冲突会在捕获时弹出替换确认（Replace / Cancel）；工程不会同时保存两个发布名
   相同的资源，替换沿用原资源 ID 并把旧修订留在历史里。
 - 库目录移动后可用 Library 菜单的 **Relink Moved Library…** 指向新位置（只接受同一库身份）。
-- Sprite 帧、WAV 引用等未纳入依赖捕获。
+- SPR/WAV 本身是单文件格式，没有可枚举的外部依赖；地图实体引用（model、message 等）可用
+  **Capture Map Resources…** 从已关联的库补捕获。纹理按引擎名匹配，库内的多纹理 WAD 会逐张
+  成为独立工程 WAD。
 - 未实现增量保存、只读工程模式和面向 CS 1.6 的完整发布闭环验收。
 
 ## 6. 建议验收顺序
