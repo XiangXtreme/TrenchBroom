@@ -66,7 +66,7 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_hSplitter->addWidget(m_inspectorSurface);
 
   m_mapView->setMinimumSize(100, 100);
-  m_infoPanel->setMinimumSize(100, 100);
+  m_infoPanel->setMinimumSize(100, 240);
 
   m_vSplitter->setMinimumSize(100, 100);
   m_inspector->setMinimumSize(350, 100);

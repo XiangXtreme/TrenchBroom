@@ -202,14 +202,12 @@ void AssetLibraryWindow::convertImages()
 
   auto images = std::vector<project::LibraryAsset>{};
   for (const auto& asset : assets.value())
-    if (asset.nativeFormat == "image")
+    if (asset.nativeFormat == "image" || asset.nativeFormat == "goldsrc-wad")
       images.push_back(asset);
   if (images.empty())
   {
     QMessageBox::information(
-      this,
-      tr("Convert Images"),
-      tr("Every image in this library is already converted."));
+      this, tr("Convert Images"), tr("This library contains no convertible images."));
     return;
   }
 

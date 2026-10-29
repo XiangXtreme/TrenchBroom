@@ -127,7 +127,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
 {
   setAttribute(Qt::WA_DeleteOnClose);
   setObjectName("ProjectWindow");
-  resize(1000, 680);
+  resize(1280, 900);
   m_libraryWatcher = new AssetLibraryWatcher{this};
   connect(m_libraryWatcher, &AssetLibraryWatcher::foldersChanged, this, [this]() {
     statusBar()->showMessage(
@@ -257,9 +257,25 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   contentDock->setObjectName("ProjectContentDock");
   contentDock->setWidget(content);
   addDockWidget(Qt::BottomDockWidgetArea, contentDock);
-  resizeDocks({contentDock}, {200}, Qt::Vertical);
-  splitter->setSizes({130, 50});
+  resizeDocks({contentDock}, {150}, Qt::Vertical);
+  splitter->setSizes({90, 40});
   file->addAction(contentDock->toggleViewAction());
+  connect(
+    m_session.get(),
+    &ProjectSession::browserAssetSelected,
+    this,
+    [this](const QString& id) {
+      m_assets->setCurrentItem(nullptr);
+      for (int i = 0; i < m_assets->topLevelItemCount(); ++i)
+      {
+        auto* item = m_assets->topLevelItem(i);
+        if (!id.isEmpty() && item->data(0, Qt::UserRole).toString() == id)
+        {
+          m_assets->setCurrentItem(item);
+          break;
+        }
+      }
+    });
   setCentralWidget(body);
   connect(m_search, &QLineEdit::textChanged, this, [this]() { refresh(); });
   connect(m_mapTabs, &QTabBar::currentChanged, this, [this](const int index) {
@@ -1106,6 +1122,18 @@ void ProjectWindow::renamePublishedPath()
     &accepted);
   if (!accepted || path.isEmpty())
     return;
+
+  // Closed tabs retain their document for reopening. A saved, viewless document
+  // can be unloaded here so the session can rewrite its stored references safely.
+  const auto assets = m_session->store().assets();
+  if (assets.is_success())
+    for (const auto& entry : assets.value())
+      if (auto document = m_session->retainedDocument(entry.id);
+          document && !mapWindowFor(*document) && !document->map().modified())
+      {
+        if (!report(m_session->releaseDocument(entry.id)))
+          return;
+      }
 
   const auto renamed = m_session->renamePublishPath(*id, path.toStdString());
   if (renamed.is_error())

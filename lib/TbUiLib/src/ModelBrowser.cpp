@@ -398,6 +398,14 @@ void ModelBrowser::createGui(AppController& appController)
   m_view->setSearchText(m_searchBox->text());
   if (m_project)
   {
+    connect(
+      m_view,
+      &ModelBrowserView::projectAssetSelected,
+      m_project.get(),
+      &ProjectSession::browserAssetSelected);
+  }
+  if (m_project)
+  {
     // Library textures get a thumbnail from their compatible content; the file is written
     // on demand for visible cells so browsing never copies the whole library.
     m_view->setPreviewPathResolver([project = m_project](const BrowserAsset& asset) {
@@ -412,6 +420,7 @@ void ModelBrowser::createGui(AppController& appController)
   browserLayout->addWidget(m_scrollBar, 0);
 
   auto* browser = new QWidget{};
+  browser->setMinimumHeight(180);
   browser->setObjectName("ModelBrowser_AssetView");
   browser->setLayout(browserLayout);
 

@@ -18,6 +18,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QImage>
+#include <QInputDialog>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -30,6 +31,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QToolButton>
+#include <QTreeWidget>
 #include <QtTest/QTest>
 
 #include "img/GoldSrcTexture.h"
@@ -208,6 +210,52 @@ TEST_CASE("ProjectWindow")
   CHECK_FALSE(alphaWindow->isWindow());
   CHECK(alphaWindow->menuBar()->isHidden());
   CHECK(alphaWindow->findAction("Menu/Edit/Undo")->shortcut().isEmpty());
+
+  SECTION("published rename works after saved map tabs close")
+  {
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Sound;
+    input.virtualPath = "sound/test.wav";
+    input.displayName = "Test";
+    input.original = input.compatible = {1, 2, 3};
+    const auto sound = require(session->importAsset(input));
+    require(session->save());
+    closeTab(*tabs, 1);
+    closeTab(*tabs, 0);
+    REQUIRE(session->retainedDocument(alphaId) != nullptr);
+    emit session->browserAssetSelected(QString::fromStdString(sound.id));
+    QAction* rename = nullptr;
+    for (auto* action : window.findChildren<QAction*>())
+      if (action->text() == "Rename Published Path…")
+        rename = action;
+    REQUIRE(rename != nullptr);
+    QTimer::singleShot(0, [] {
+      if (auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget()))
+      {
+        dialog->setTextValue("sound/renamed.wav");
+        dialog->accept();
+      }
+    });
+    rename->trigger();
+    const auto updated = require(session->store().findAsset(sound.id));
+    REQUIRE(updated.has_value());
+    CHECK(updated->publishPath == "sound/renamed.wav");
+    CHECK(session->retainedDocument(alphaId) == nullptr);
+  }
+
+  SECTION("browser selection drives the project asset command target")
+  {
+    auto* assets = window.findChild<QTreeWidget*>("ProjectAssets");
+    REQUIRE(assets != nullptr);
+    emit session->browserAssetSelected(QString::fromStdString(alphaId));
+    REQUIRE(assets->currentItem() != nullptr);
+    CHECK(
+      assets->currentItem()->data(0, Qt::UserRole).toString().toStdString() == alphaId);
+    emit session->browserAssetSelected(QString{});
+    CHECK(assets->currentItem() == nullptr);
+    emit session->browserAssetSelected("missing-resource");
+    CHECK(assets->currentItem() == nullptr);
+  }
 
   SECTION("tabs switch embedded pages and preserve reordered tabs after edits")
   {

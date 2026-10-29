@@ -667,6 +667,9 @@ void ModelBrowserView::doLeftClick(Layout& layout, const float x, const float y)
       stopSoundPreview();
     }
 
+    const auto* asset = assetAt(item.path);
+    emit projectAssetSelected(
+      asset ? QString::fromStdString(asset->projectAssetId) : QString{});
     m_selectedType = item.type;
     m_selectedPath = item.path;
     m_hasSelection = true;

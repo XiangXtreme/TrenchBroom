@@ -194,6 +194,7 @@ private:
   const BrowserAsset* assetAt(const std::filesystem::path& path) const;
 
 signals:
+  void projectAssetSelected(const QString& assetId);
   void assetPreviewRequested(const QString& path);
   void folderActivated(const QString& folderPath);
   void mapActivated(const QString& mapPath);
