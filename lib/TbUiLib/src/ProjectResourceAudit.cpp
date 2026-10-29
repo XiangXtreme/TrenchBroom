@@ -7,22 +7,13 @@
 #include "base/FileLocation.h"
 #include "base/Logger.h"
 #include "base/SimpleParserStatus.h"
-#include "fs/DiskIO.h"
-#include "fs/File.h"
-#include "fs/TraversalMode.h"
-#include "fs/WadFileSystem.h"
 #include "mdl/EntityProperties.h"
-#include "mdl/LoadMipTexture.h"
 #include "mdl/MapHeader.h"
 #include "mdl/StandardMapParser.h"
+#include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
 
-#include "kd/string_utils.h"
-
-#include <algorithm>
-#include <map>
 #include <optional>
-#include <set>
 #include <sstream>
 
 namespace tb::ui
@@ -42,28 +33,6 @@ struct Reference
   std::string value;
   ReferenceKind kind;
 };
-
-// Do not canonicalize away traversal or accept platform-specific absolute paths.
-std::optional<std::string> resourcePath(std::string path)
-{
-  std::replace(path.begin(), path.end(), '\\', '/');
-  if (path.empty() || path.front() == '/' || path.find(':') != std::string::npos)
-    return std::nullopt;
-  if (std::ranges::any_of(path, [](const unsigned char c) { return c < 32 || c == 127; }))
-    return std::nullopt;
-  auto start = size_t{0};
-  while (start <= path.size())
-  {
-    const auto end = path.find('/', start);
-    const auto part = path.substr(start, end - start);
-    if (part.empty() || part == "." || part == "..")
-      return std::nullopt;
-    if (end == std::string::npos)
-      break;
-    start = end + 1;
-  }
-  return kdl::str_to_lower(path);
-}
 
 class ReferenceParser : public mdl::StandardMapParser
 {
@@ -209,130 +178,93 @@ Result<std::vector<Reference>> scan(const std::vector<std::uint8_t>& bytes)
            });
 }
 
-using Index = std::map<std::string, std::set<std::string>>;
-Result<void> indexWad(
-  const ProjectSession& session, const project::Asset& asset, Index& index)
-{
-  return session.assetFile(asset) | kdl::and_then([&](const auto& path) {
-           return fs::Disk::openFile(path)
-                  | kdl::and_then([&](const auto& file) -> Result<void> {
-                      auto wad = fs::WadFileSystem{file};
-                      return wad.reload() | kdl::and_then([&]() {
-                               return wad.find({}, fs::TraversalMode::Flat)
-                                      | kdl::transform([&](const auto& entries) {
-                                          for (const auto& entry : entries)
-                                            if (mdl::isHlMipTexture(entry))
-                                              index[kdl::str_to_lower(
-                                                      entry.stem().string())]
-                                                .insert(asset.id);
-                                        });
-                             });
-                    });
-         });
-}
 } // namespace
 
 Result<ProjectResourceAudit> auditGoldSrcProjectResources(const ProjectSession& session)
 {
-  return session.store().assets()
-         | kdl::and_then([&](const auto& assets) -> Result<ProjectResourceAudit> {
-             auto result = ProjectResourceAudit{};
-             auto files = Index{};
-             auto textures = Index{};
-             for (const auto& asset : assets)
-             {
-               if (
-                 asset.type == project::AssetType::Map
-                 || asset.type == project::AssetType::Prefab)
-                 continue;
-               if (const auto path = resourcePath(asset.publishPath))
-                 files[*path].insert(asset.id);
-               if (
-                 kdl::str_to_lower(
-                   std::filesystem::path{asset.publishPath}.extension().string())
-                 != ".wad")
-                 continue;
-               const auto indexed = indexWad(session, asset, textures);
-               if (indexed.is_error())
-                 result.uses.push_back(
-                   {{},
-                    {},
-                    0,
-                    "WAD directory",
-                    asset.virtualPath,
-                    ProjectResourceStatus::ScanError,
-                    {asset.id},
-                    std::get<Error>(indexed.error()).msg});
-             }
-             for (const auto& map : assets)
-             {
-               if (map.type != project::AssetType::Map)
-                 continue;
-               const auto references =
-                 session.workingMapContents(map.id) | kdl::and_then(scan);
-               if (references.is_error())
-               {
-                 result.uses.push_back(
-                   {map.id,
-                    map.virtualPath,
-                    0,
-                    "MAP",
-                    {},
-                    ProjectResourceStatus::ScanError,
-                    {},
-                    std::get<Error>(references.error()).msg});
-                 continue;
-               }
-               ++result.mapsScanned;
-               for (const auto& reference : references.value())
-               {
-                 auto use = ProjectResourceUse{
-                   map.id,
-                   map.virtualPath,
-                   reference.line,
-                   reference.location,
-                   reference.value,
-                   ProjectResourceStatus::Missing,
-                   {},
-                   {}};
-                 if (reference.kind == ReferenceKind::Unsupported)
-                 {
-                   use.status = ProjectResourceStatus::Unsupported;
-                   use.detail =
-                     "Sentence/decal lookup requires a separate resource catalog.";
-                 }
-                 else if (const auto key = resourcePath(reference.value))
-                 {
-                   const auto& index =
-                     reference.kind == ReferenceKind::Texture ? textures : files;
-                   const auto found = index.find(*key);
-                   if (found != index.end())
-                   {
-                     use.assetIds.assign(found->second.begin(), found->second.end());
-                     use.status = use.assetIds.size() == 1
-                                    ? ProjectResourceStatus::Embedded
-                                    : ProjectResourceStatus::Ambiguous;
-                   }
-                   if (use.status == ProjectResourceStatus::Missing)
-                     use.detail =
-                       "Not embedded in this project; may be supplied by the installed "
-                       "game.";
-                   else if (use.status == ProjectResourceStatus::Ambiguous)
-                     use.detail =
-                       "Multiple embedded assets match; resolve the conflict before "
-                       "publishing.";
-                 }
-                 else
-                 {
-                   use.status = ProjectResourceStatus::InvalidPath;
-                   use.detail =
-                     "Expected a safe relative game path without empty, . or .. "
-                     "components.";
-                 }
-                 result.uses.push_back(std::move(use));
-               }
-             }
-             return result;
-           });
+  const auto index = ProjectReferenceIndex::build(session);
+  if (index.is_error())
+    return std::get<Error>(index.error());
+  const auto assets = session.store().assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+
+  auto result = ProjectResourceAudit{};
+  for (const auto& problem : index.value().unreadableWads())
+    result.uses.push_back(
+      {{},
+       {},
+       0,
+       "WAD directory",
+       problem.virtualPath,
+       ProjectResourceStatus::ScanError,
+       {problem.assetId},
+       problem.message});
+
+  for (const auto& map : assets.value())
+  {
+    if (map.type != project::AssetType::Map)
+      continue;
+    const auto references = session.workingMapContents(map.id) | kdl::and_then(scan);
+    if (references.is_error())
+    {
+      result.uses.push_back(
+        {map.id,
+         map.virtualPath,
+         0,
+         "MAP",
+         {},
+         ProjectResourceStatus::ScanError,
+         {},
+         std::get<Error>(references.error()).msg});
+      continue;
+    }
+    ++result.mapsScanned;
+    for (const auto& reference : references.value())
+    {
+      auto use = ProjectResourceUse{
+        map.id,
+        map.virtualPath,
+        reference.line,
+        reference.location,
+        reference.value,
+        ProjectResourceStatus::Missing,
+        {},
+        {}};
+      if (reference.kind == ReferenceKind::Unsupported)
+      {
+        use.status = ProjectResourceStatus::Unsupported;
+        use.detail = "Sentence/decal lookup requires a separate resource catalog.";
+      }
+      else if (normalizeGamePath(reference.value))
+      {
+        const auto match = reference.kind == ReferenceKind::Texture
+                             ? index.value().resolveTexture(reference.value)
+                             : index.value().resolvePath(reference.value);
+        use.assetIds.reserve(match.assets.size());
+        for (const auto& asset : match.assets)
+          use.assetIds.push_back(asset.id);
+        use.status = match.status == ReferenceStatus::Resolved
+                       ? ProjectResourceStatus::Embedded
+                     : match.status == ReferenceStatus::Ambiguous
+                       ? ProjectResourceStatus::Ambiguous
+                       : ProjectResourceStatus::Missing;
+        if (use.status == ProjectResourceStatus::Missing)
+          use.detail =
+            "Not embedded in this project; may be supplied by the installed game.";
+        else if (use.status == ProjectResourceStatus::Ambiguous)
+          use.detail =
+            "Multiple embedded assets match; resolve the conflict before publishing.";
+      }
+      else
+      {
+        use.status = ProjectResourceStatus::InvalidPath;
+        use.detail =
+          "Expected a safe relative game path without empty, . or .. components.";
+      }
+      result.uses.push_back(std::move(use));
+    }
+  }
+  return result;
 }
 } // namespace tb::ui

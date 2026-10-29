@@ -183,6 +183,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabAsset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectLibraryDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectSession.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectReference.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectResourceAudit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectResourceDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectTextureImport.cpp
@@ -442,6 +443,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabAsset.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectLibraryDialog.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectReference.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectResourceAudit.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectResourceDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectSession.h

@@ -29,12 +29,17 @@
 #include <QToolButton>
 #include <QtTest/QTest>
 
+#include "img/GoldSrcTexture.h"
+#include "mdl/BrushFace.h"
+#include "mdl/BrushNode.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityDefinitionManager.h"
 #include "mdl/GameManager.h"
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
+#include "mdl/Map_Brushes.h"
 #include "mdl/Map_Entities.h"
+#include "mdl/Map_Selection.h"
 #include "mdl/PropertyDefinition.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/CatalogAssetDrop.h"
@@ -50,6 +55,7 @@
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
 
+#include <algorithm>
 #include <functional>
 
 #include <catch2/catch_test_macros.hpp>
@@ -398,6 +404,85 @@ TEST_CASE("ProjectWindow")
       CHECK_FALSE(map.modified());
       CHECK_FALSE(session->modified());
     }
+  }
+
+  SECTION("catalog texture drops capture the dropped revision and set the face material")
+  {
+    auto& map = alphaDocument->map();
+    const auto points = std::vector<vm::vec3d>{
+      {-64, -64, -64},
+      {-64, -64, +64},
+      {-64, +64, -64},
+      {-64, +64, +64},
+      {+64, -64, -64},
+      {+64, -64, +64},
+      {+64, +64, -64},
+      {+64, +64, +64},
+    };
+    REQUIRE(mdl::createBrush(map, points));
+    REQUIRE(map.selection().brushes.size() == 1);
+    auto* brushNode = map.selection().brushes.front();
+    const auto face = mdl::BrushFaceHandle{*brushNode, 0};
+    mdl::selectBrushFaces(map, {face});
+    REQUIRE(map.selection().brushFaces.size() == 1);
+    const auto previous = face.face().materialName();
+
+    const auto folder = directory.filePath("texture-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    const auto converted = require(img::convertGoldSrcTexture(
+      {16, 16, std::vector<unsigned char>(16 * 16 * 4, 255)}, "WALL01"));
+    auto wadFile = QFile{folder + "/custom.wad"};
+    REQUIRE(wadFile.open(QIODevice::WriteOnly));
+    REQUIRE(
+      wadFile.write(
+        reinterpret_cast<const char*>(converted.wad.data()), qint64(converted.wad.size()))
+      == qint64(converted.wad.size()));
+    wadFile.close();
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Textures"));
+    require(library->scan());
+    const auto entries = require(library->assets());
+    REQUIRE(entries.size() == 1);
+    require(session->attachLibrary(pathFromQString(folder)));
+    require(session->save());
+
+    auto texture = BrowserAsset{BrowserCellType::Texture, {}};
+    texture.source = BrowserSource::AssetLibrary;
+    texture.libraryId = library->info().id;
+    texture.libraryAssetId = entries.front().id;
+    texture.libraryRevision = entries.front().revision;
+    const auto payload = catalogAssetDragData(texture, session->store().info().id);
+    REQUIRE(isCatalogAssetDrag(payload));
+
+    auto* view = alphaWindow->currentMapViewBase();
+    REQUIRE(view != nullptr);
+    auto mime = QMimeData{};
+    mime.setText(payload);
+    // The corner is over the void, so the drop falls back to the face selection.
+    const auto position = QPoint{1, 1};
+    auto enter =
+      QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(view, &enter);
+    REQUIRE(enter.isAccepted());
+    REQUIRE(view->pickResult().empty());
+    auto drop = QDropEvent{
+      QPointF{position}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(view, &drop);
+    CHECK(drop.isAccepted());
+    CHECK(map.modified());
+    CHECK(face.face().materialName() == "WALL01");
+    const auto assets = require(session->store().assets());
+    const auto textureAsset = std::ranges::find_if(assets, [](const auto& asset) {
+      return asset.type == project::AssetType::Texture;
+    });
+    REQUIRE(textureAsset != assets.end());
+    CHECK(textureAsset->publishPath == "textures/WALL01.wad");
+    CHECK(textureAsset->library.libraryAssetId == entries.front().id);
+
+    // Applying a material is one native undo step, so the drop stays reversible.
+    REQUIRE(map.canUndoCommand());
+    map.undoCommand();
+    CHECK(face.face().materialName() == previous);
   }
 
   SECTION("double-clicking a library resource opens a read-only preview without capture")

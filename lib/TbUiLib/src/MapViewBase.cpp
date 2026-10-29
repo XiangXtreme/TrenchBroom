@@ -1660,6 +1660,35 @@ void MapViewBase::resizeEvent(QResizeEvent* event)
   positionSmartFaceSelectionPanel();
 }
 
+namespace
+{
+constexpr auto MaterialDropPrefix = "texture:";
+
+/**
+ * A catalog texture drop names a material instead of a node, so it is applied to a face
+ * rather than forwarded to the tool chain.
+ */
+bool isMaterialDrop(const std::string& payload)
+{
+  return payload.starts_with(MaterialDropPrefix);
+}
+
+std::string materialNameOf(const std::string& payload)
+{
+  return payload.substr(std::string{MaterialDropPrefix}.size());
+}
+
+/** The face under the cursor, or the selected faces when the cursor is over the void. */
+std::vector<mdl::BrushFaceHandle> dropTargetFaces(
+  const mdl::PickResult& pickResult, const mdl::Selection& selection)
+{
+  const auto& hit = pickResult.first(mdl::HitFilters::type(mdl::BrushNode::BrushHitType));
+  if (const auto face = mdl::hitToFaceHandle(hit))
+    return {*face};
+  return selection.allBrushFaces();
+}
+} // namespace
+
 /**
  * Forward drag and drop events from QWidget to ToolBoxConnector
  */
@@ -1681,12 +1710,21 @@ void MapViewBase::dragEnterEvent(QDragEnterEvent* event)
   }
   const auto payload = m_assetDrop ? m_assetDrop->nativePayload() : text.toStdString();
   if (dragEnter(float(event->position().x()), float(event->position().y()), payload))
-    event->acceptProposedAction();
-  else
   {
-    m_assetDrop.reset();
-    event->ignore();
+    event->acceptProposedAction();
+    return;
   }
+  // The tool chain refuses material drops, but the pick result is now current, so the
+  // face under the cursor decides whether the drop has a target at all.
+  if (
+    m_assetDrop && isMaterialDrop(payload)
+    && !dropTargetFaces(pickResult(), m_document.map().selection()).empty())
+  {
+    event->acceptProposedAction();
+    return;
+  }
+  m_assetDrop.reset();
+  event->ignore();
 }
 
 void MapViewBase::dragLeaveEvent(QDragLeaveEvent*)
@@ -1707,9 +1745,18 @@ void MapViewBase::dragMoveEvent(QDragMoveEvent* event)
   }
   const auto payload = m_assetDrop ? m_assetDrop->nativePayload() : text.toStdString();
   if (dragMove(float(event->position().x()), float(event->position().y()), payload))
+  {
     event->acceptProposedAction();
-  else
-    event->ignore();
+    return;
+  }
+  if (
+    m_assetDrop && isMaterialDrop(payload)
+    && !dropTargetFaces(pickResult(), m_document.map().selection()).empty())
+  {
+    event->acceptProposedAction();
+    return;
+  }
+  event->ignore();
 }
 
 void MapViewBase::dropEvent(QDropEvent* event)
@@ -1717,7 +1764,46 @@ void MapViewBase::dropEvent(QDropEvent* event)
   const auto text = event->mimeData()->text();
   if (isCatalogAssetDrag(text))
   {
-    if (!m_assetDrop || !m_assetDrop->matches(text) || !hasDropTracker())
+    if (!m_assetDrop || !m_assetDrop->matches(text))
+    {
+      dragLeave();
+      m_assetDrop.reset();
+      event->ignore();
+      return;
+    }
+    const auto payload = m_assetDrop->nativePayload();
+    if (isMaterialDrop(payload))
+    {
+      const auto faces = dropTargetFaces(pickResult(), m_document.map().selection());
+      if (faces.empty())
+      {
+        m_document.logger().error()
+          << "A material drop needs a face under the cursor or a face selection.";
+        m_assetDrop.reset();
+        event->ignore();
+        return;
+      }
+      const auto committed = m_assetDrop->commit();
+      m_assetDrop.reset();
+      if (committed.is_error())
+      {
+        m_document.logger().error() << std::get<Error>(committed.error()).msg;
+        event->ignore();
+        return;
+      }
+      if (
+        mdl::setBrushFaceAttributes(
+          m_document.map(), faces, {.materialName = materialNameOf(payload)}))
+      {
+        event->acceptProposedAction();
+      }
+      else
+      {
+        event->ignore();
+      }
+      return;
+    }
+    if (!hasDropTracker())
     {
       dragLeave();
       m_assetDrop.reset();

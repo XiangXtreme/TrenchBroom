@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
 
 #include <algorithm>
@@ -25,6 +26,8 @@ std::string kind(const project::AssetType type)
     return "sprite";
   case project::AssetType::Sound:
     return "sound";
+  case project::AssetType::Texture:
+    return "texture";
   default:
     return {};
   }
@@ -49,6 +52,9 @@ QString catalogAssetDragData(const BrowserAsset& asset, const std::string& proje
     break;
   case BrowserCellType::Sound:
     type = "sound";
+    break;
+  case BrowserCellType::Texture:
+    type = "texture";
     break;
   default:
     return {};
@@ -102,9 +108,18 @@ Result<std::unique_ptr<PreparedAssetDrop>> PreparedAssetDrop::prepare(
       return std::get<Error>(asset.error());
     if (!asset.value() || asset.value()->revision != revision)
       return Error{"The project resource revision changed. Drag it again."};
-    result->m_expected.push_back(*asset.value());
-    type = kind(asset.value()->type);
-    path = asset.value()->publishPath;
+    const auto& projectAsset = *asset.value();
+    result->m_expected.push_back(projectAsset);
+    type = kind(projectAsset.type);
+    if (projectAsset.type == project::AssetType::Texture)
+    {
+      const auto name = gameName(*result->m_session, projectAsset);
+      if (name.is_error())
+        return std::get<Error>(name.error());
+      path = name.value();
+    }
+    else
+      path = projectAsset.publishPath;
   }
   else if (source == "library")
   {
@@ -159,6 +174,15 @@ Result<std::unique_ptr<PreparedAssetDrop>> PreparedAssetDrop::prepare(
           return Error{"A project dependency disappeared."};
         result->m_expected.push_back(*existing.value());
       }
+    if (type == "texture")
+    {
+      // A texture capture publishes a single miptex, so the name is fixed before the
+      // project is written; that keeps a drop preview honest.
+      const auto name = capturedGameName(root.import);
+      if (name.is_error())
+        return std::get<Error>(name.error());
+      path = name.value();
+    }
   }
   else
     return Error{"Invalid catalog source."};

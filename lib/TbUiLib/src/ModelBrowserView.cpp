@@ -1597,7 +1597,7 @@ QString ModelBrowserView::dndData(const Cell& cell)
   {
     if (
       item.type == BrowserCellType::Model || item.type == BrowserCellType::Sprite
-      || item.type == BrowserCellType::Sound)
+      || item.type == BrowserCellType::Sound || item.type == BrowserCellType::Texture)
     {
       const auto session = m_appController.projectFor(m_document);
       return session ? catalogAssetDragData(*asset, session->store().info().id)

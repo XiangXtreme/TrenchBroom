@@ -8,7 +8,10 @@
 #include <QJsonObject>
 #include <QTemporaryDir>
 
+#include "img/GoldSrcTexture.h"
+#include "project/GoldSrcWad.h"
 #include "ui/CatalogAssetDrop.h"
+#include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
@@ -36,6 +39,25 @@ void write(const QString& file, const QByteArray& bytes)
   auto output = QFile{file};
   REQUIRE(output.open(QIODevice::WriteOnly));
   REQUIRE(output.write(bytes) == bytes.size());
+}
+QByteArray textureWad(const std::string& name)
+{
+  auto converted = img::convertGoldSrcTexture(
+    {16, 16, std::vector<unsigned char>(16 * 16 * 4, 255)}, name);
+  if (converted.is_error())
+    FAIL(std::get<Error>(converted.error()).msg);
+  const auto& wad = std::move(converted).value().wad;
+  return QByteArray{reinterpret_cast<const char*>(wad.data()), int(wad.size())};
+}
+std::vector<std::uint8_t> textureLump(const std::string& name)
+{
+  const auto wad = textureWad(name);
+  const auto archive =
+    project::readGoldSrcWad({wad.begin(), wad.end()});
+  if (archive.is_error())
+    FAIL(std::get<Error>(archive.error()).msg);
+  REQUIRE(archive.value().textures.size() == 1);
+  return archive.value().textures.front().miptex;
 }
 } // namespace
 TEST_CASE("CatalogAssetDrop")
@@ -147,6 +169,65 @@ TEST_CASE("CatalogAssetDrop")
       QJsonDocument::fromJson(large.mid(QString{"tb-asset:"}.size()).toUtf8()).object();
     CHECK(object.value("revision").toString() == "18446744073709551615");
     CHECK(PreparedAssetDrop::prepare(session, large).is_error());
+  }
+  SECTION("texture drops carry the miptex name the map will use")
+  {
+    const auto textureFolder = temporary.filePath("texture-library");
+    REQUIRE(QDir{}.mkdir(textureFolder));
+    write(textureFolder + "/custom.wad", textureWad("WALL01"));
+    auto textureLibrary =
+      require(project::AssetLibrary::create(pathFromQString(textureFolder), "Textures"));
+    require(textureLibrary->scan());
+    const auto textureEntries = require(textureLibrary->assets());
+    REQUIRE(textureEntries.size() == 1);
+    auto textureSession = require(ProjectSession::create(
+      pathFromQString(temporary.filePath("texture.tbproj")), "Textures", "Half-Life"));
+    require(textureSession->attachLibrary(pathFromQString(textureFolder)));
+    require(textureSession->save());
+
+    auto libraryTexture = BrowserAsset{BrowserCellType::Texture, {}};
+    libraryTexture.source = BrowserSource::AssetLibrary;
+    libraryTexture.libraryId = textureLibrary->info().id;
+    libraryTexture.libraryAssetId = textureEntries.front().id;
+    libraryTexture.libraryRevision = textureEntries.front().revision;
+    const auto libraryPayload =
+      catalogAssetDragData(libraryTexture, textureSession->store().info().id);
+    REQUIRE(isCatalogAssetDrag(libraryPayload));
+    auto pending = require(PreparedAssetDrop::prepare(textureSession, libraryPayload));
+    CHECK(pending->nativePayload() == "texture:WALL01");
+    CHECK(require(textureSession->store().assets()).empty());
+    require(pending->commit());
+
+    const auto captured = require(textureSession->store().assets());
+    REQUIRE(captured.size() == 1);
+    CHECK(captured.front().publishPath == "textures/WALL01.wad");
+    CHECK(require(gameName(*textureSession, captured.front())) == "WALL01");
+
+    auto projectTexture = BrowserAsset{BrowserCellType::Texture, {}};
+    projectTexture.source = BrowserSource::Project;
+    projectTexture.assetId = captured.front().id;
+    projectTexture.revision = captured.front().revision;
+    auto projectPending = require(PreparedAssetDrop::prepare(
+      textureSession,
+      catalogAssetDragData(projectTexture, textureSession->store().info().id)));
+    CHECK(projectPending->nativePayload() == "texture:WALL01");
+
+    auto mixed = project::AssetImport{};
+    mixed.type = project::AssetType::Texture;
+    mixed.virtualPath = "textures/mixed.wad";
+    mixed.displayName = "Mixed";
+    mixed.original = mixed.compatible =
+      require(project::buildGoldSrcWad({textureLump("first"), textureLump("second")}));
+    const auto mixedAsset = require(textureSession->importAsset(mixed));
+    require(textureSession->save());
+    auto mixedDrag = BrowserAsset{BrowserCellType::Texture, {}};
+    mixedDrag.source = BrowserSource::Project;
+    mixedDrag.assetId = mixedAsset.id;
+    mixedDrag.revision = mixedAsset.revision;
+    const auto mixedPending = PreparedAssetDrop::prepare(
+      textureSession,
+      catalogAssetDragData(mixedDrag, textureSession->store().info().id));
+    CHECK(mixedPending.is_error());
   }
 }
 } // namespace tb::ui
