@@ -12,8 +12,12 @@
 - 已完成：文档归属。`ProjectSession::retainDocument` 让工程持有文档；`MapWindow` 持有
   `shared_ptr<MapDocument>`，工程保留时不再注销；`MapWindowManager::closeMapView`
   销毁视图而不关闭文档；重新打开用同一文档新建视图，不重新读盘。
+- 已完成：地图命令面抽取。`MapCommandSurface` 为每个宿主集中创建菜单、工具栏和动作，
+  通过上下文工厂路由到目标地图；`MapWindow` 委托动作状态、快捷键和动作查找。
+- 已完成：内嵌视图焦点路由准备。`MapWindowManager` 沿父控件链查找受管理的地图窗口，
+  工程子控件中的地图也能成为活动地图，并有对应回归测试。
 - 尚未完成：标签目前仍切换独立顶层窗口，而不是把 `MapEditorView` 放进主窗口的
-  `QStackedWidget`——需要先把地图命令面（菜单/工具栏）从 `MapWindow` 移到工程窗口；
+  `QStackedWidget`——下一步接入内嵌地图宿主、工程级命令面及活动标签状态刷新；
   阶段 B、C、D 全部内容。
 
 目标是把 TrenchBroom 从“一个地图对应一个编辑窗口”演进为“一个工程对应一个工作区”。
