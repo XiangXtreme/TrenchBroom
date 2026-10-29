@@ -266,17 +266,16 @@ bool MapWindowManager::allMapWindowsClosed() const
 
 void MapWindowManager::onFocusChange(QWidget* /* old */, QWidget* now)
 {
-  if (now)
+  for (auto* widget = now; widget; widget = widget->parentWidget())
   {
-    // The QApplication::focusChanged signal also notifies us of focus changes between
-    // child widgets, so get the top-level widget with QWidget::window()
-    if (auto* mapWindow = dynamic_cast<MapWindow*>(now->window()))
+    if (auto* mapWindow = dynamic_cast<MapWindow*>(widget))
     {
       if (auto it = std::ranges::find(m_mapWindows, mapWindow);
           it != m_mapWindows.end() && it != m_mapWindows.begin())
       {
         std::rotate(m_mapWindows.begin(), it, std::next(it));
       }
+      return;
     }
   }
 }

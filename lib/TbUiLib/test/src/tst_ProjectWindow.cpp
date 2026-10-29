@@ -153,6 +153,20 @@ TEST_CASE("ProjectWindow")
   REQUIRE(alphaWindow != nullptr);
   CHECK(alphaWindow->isVisible());
 
+  SECTION("focus inside an embedded map activates that map")
+  {
+    auto host = QWidget{};
+    alphaWindow->setParent(&host);
+    auto child = QWidget{alphaWindow};
+    QMetaObject::invokeMethod(
+      qApp,
+      "focusChanged",
+      Q_ARG(QWidget*, nullptr),
+      Q_ARG(QWidget*, &child));
+    CHECK(manager.topMapWindow() == alphaWindow);
+    alphaWindow->setParent(nullptr);
+  }
+
   SECTION("closing a tab keeps the document and its modifications")
   {
     closeTab(*tabs, 0);
