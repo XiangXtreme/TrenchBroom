@@ -86,6 +86,14 @@ public:
   bool toggleInfoPanel();
   bool isInfoPanelVisible() const;
 
+  void undo();
+  void redo();
+  bool canUndo() const;
+  bool canRedo() const;
+  void repeatLastCommands();
+  void clearRepeatableCommands();
+  bool hasRepeatableCommands() const;
+
   /** Returns true when the view consumed the drag, matching the window's Escape handling.
    */
   bool cancelDrag();

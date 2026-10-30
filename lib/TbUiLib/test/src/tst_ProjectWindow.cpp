@@ -386,6 +386,19 @@ TEST_CASE("ProjectWindow")
     CHECK(&context.map() == &alphaWindow->document().map());
     CHECK(&context.editorView() == alphaEditor);
     CHECK(&context.editorView() != betaEditor);
+    const auto& undo = appController.actionManager().actionsMap().at("Menu/Edit/Undo");
+    const auto& redo = appController.actionManager().actionsMap().at("Menu/Edit/Redo");
+    const auto& repeat =
+      appController.actionManager().actionsMap().at("Menu/Edit/Repeat");
+    const auto& clearRepeat = appController.actionManager().actionsMap().at(
+      "Menu/Edit/Clear Repeatable Commands");
+    CHECK(undo.enabled(context) == alphaEditor->canUndo());
+    CHECK(redo.enabled(context) == alphaEditor->canRedo());
+    CHECK(repeat.enabled(context));
+    CHECK(clearRepeat.enabled(context) == alphaEditor->hasRepeatableCommands());
+    undo.execute(context);
+    redo.execute(context);
+    clearRepeat.execute(context);
     context.editorView().showInfoPanelPage(InfoPanelPage::PythonConsole);
     const auto& toggle =
       appController.actionManager().actionsMap().at("Menu/View/Toggle Info Panel");

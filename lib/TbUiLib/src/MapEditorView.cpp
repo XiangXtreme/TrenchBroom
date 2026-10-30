@@ -8,6 +8,7 @@
 
 #include <QVBoxLayout>
 
+#include "mdl/Map.h"
 #include "ui/AppController.h"
 #include "ui/Console.h"
 #include "ui/InfoPanel.h"
@@ -220,6 +221,44 @@ bool MapEditorView::isInfoPanelVisible() const
 {
   return m_externalInfoPanel ? m_externalInfoPanelExpanded
                              : m_infoPanelSurface->isVisible();
+}
+
+void MapEditorView::undo()
+{
+  if (canUndo() && !cancelDrag())
+    m_document.map().undoCommand();
+}
+
+void MapEditorView::redo()
+{
+  if (canRedo())
+    m_document.map().redoCommand();
+}
+
+bool MapEditorView::canUndo() const
+{
+  return m_document.map().canUndoCommand();
+}
+
+bool MapEditorView::canRedo() const
+{
+  return m_document.map().canRedoCommand();
+}
+
+void MapEditorView::repeatLastCommands()
+{
+  m_document.map().repeatCommands();
+}
+
+void MapEditorView::clearRepeatableCommands()
+{
+  if (hasRepeatableCommands())
+    m_document.map().clearRepeatableCommands();
+}
+
+bool MapEditorView::hasRepeatableCommands() const
+{
+  return m_document.map().canRepeatCommands();
 }
 
 bool MapEditorView::cancelDrag()

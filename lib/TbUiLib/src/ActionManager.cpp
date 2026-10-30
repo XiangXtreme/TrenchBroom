@@ -1063,9 +1063,9 @@ void ActionManager::createEditMenu()
       "Undo",
       ActionContext::Any,
       standardShortcut(StandardShortcut::Undo),
-      [](auto& context) { context.mapWindow().undo(); },
+      [](auto& context) { context.editorView().undo(); },
       [](const auto& context) {
-        return context.hasDocument() && context.mapWindow().canUndo();
+        return context.hasDocument() && context.editorView().canUndo();
       },
     }),
     MenuEntryType::Undo);
@@ -1075,9 +1075,9 @@ void ActionManager::createEditMenu()
       "Redo",
       ActionContext::Any,
       standardShortcut(StandardShortcut::Redo),
-      [](auto& context) { context.mapWindow().redo(); },
+      [](auto& context) { context.editorView().redo(); },
       [](const auto& context) {
-        return context.hasDocument() && context.mapWindow().canRedo();
+        return context.hasDocument() && context.editorView().canRedo();
       },
     }),
     MenuEntryType::Redo);
@@ -1087,7 +1087,7 @@ void ActionManager::createEditMenu()
     "Repeat Last Commands",
     ActionContext::Any,
     KeySequence{"Ctrl+R"},
-    [](auto& context) { context.mapWindow().repeatLastCommands(); },
+    [](auto& context) { context.editorView().repeatLastCommands(); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   editMenu.addItem(addAction(Action{
@@ -1095,9 +1095,9 @@ void ActionManager::createEditMenu()
     "Clear Repeatable Commands",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+R"},
-    [](auto& context) { context.mapWindow().clearRepeatableCommands(); },
+    [](auto& context) { context.editorView().clearRepeatableCommands(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().hasRepeatableCommands();
+      return context.hasDocument() && context.editorView().hasRepeatableCommands();
     },
   }));
   editMenu.addSeparator();
