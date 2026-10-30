@@ -379,28 +379,22 @@ void ModelBrowser::createGui(AppController& appController)
 
   m_searchBox = createSearchBox();
   m_searchBox->setObjectName("ModelBrowser_Search");
+  m_searchBox->setPlaceholderText(tr("Search assets…"));
+  m_searchBox->setProperty("tbControlRole", "prominent");
 
   auto* pathRowLayout = new QHBoxLayout{};
-  pathRowLayout->setContentsMargins(0, 0, 0, 0);
-  pathRowLayout->setSpacing(0);
+  pathRowLayout->setContentsMargins(8, 5, 8, 5);
+  pathRowLayout->setSpacing(6);
+  pathRowLayout->addWidget(m_savePrefabButton);
+  pathRowLayout->addWidget(m_reloadButton);
   pathRowLayout->addWidget(m_pathStack, 1);
-  pathRowLayout->addWidget(m_sourceCombo, 0);
-  pathRowLayout->addWidget(m_typeCombo, 0);
-  pathRowLayout->addWidget(m_libraryCombo, 0);
-  pathRowLayout->addWidget(m_savePrefabButton, 0);
-  pathRowLayout->addWidget(m_iconSizeCombo, 0);
-  pathRowLayout->addWidget(m_reloadButton, 0);
-
-  auto* controlsLayout = new QVBoxLayout{};
-  controlsLayout->setContentsMargins(0, 0, 0, 0);
-  controlsLayout->setSpacing(0);
-  controlsLayout->addLayout(pathRowLayout, 0);
-  controlsLayout->addWidget(m_searchBox, 0);
+  pathRowLayout->addWidget(m_libraryCombo);
+  m_libraryCombo->setMaximumWidth(200);
 
   auto* controls = new QWidget{};
   controls->setObjectName("ModelBrowser_Controls");
   controls->setAttribute(Qt::WA_StyledBackground);
-  controls->setLayout(controlsLayout);
+  controls->setLayout(pathRowLayout);
 
   m_folderTree = new QTreeWidget{};
   m_folderTree->setObjectName("ModelBrowser_FolderTree");
@@ -440,13 +434,53 @@ void ModelBrowser::createGui(AppController& appController)
   browser->setObjectName("ModelBrowser_AssetView");
   browser->setLayout(browserLayout);
 
+  auto* sources = new QWidget{};
+  sources->setObjectName("ModelBrowser_Sources");
+  sources->setAttribute(Qt::WA_StyledBackground);
+  auto* sourcesLayout = new QVBoxLayout{sources};
+  sourcesLayout->setContentsMargins(0, 0, 0, 0);
+  sourcesLayout->setSpacing(0);
+  auto* sourcesTitle = new QLabel{tr("Sources")};
+  sourcesTitle->setProperty("regionAnchor", true);
+  sourcesLayout->addWidget(sourcesTitle);
+  sourcesLayout->addWidget(m_folderTree, 1);
+
+  auto* filterRow = new QWidget{};
+  filterRow->setObjectName("ModelBrowser_FilterRow");
+  filterRow->setAttribute(Qt::WA_StyledBackground);
+  auto* filterLayout = new QHBoxLayout{filterRow};
+  filterLayout->setContentsMargins(8, 6, 8, 6);
+  filterLayout->setSpacing(6);
+  filterLayout->addWidget(m_searchBox, 1);
+  filterLayout->addWidget(m_sourceCombo);
+  filterLayout->addWidget(m_typeCombo);
+
+  auto* footer = new QWidget{};
+  footer->setObjectName("ModelBrowser_ViewOptions");
+  footer->setAttribute(Qt::WA_StyledBackground);
+  auto* footerLayout = new QHBoxLayout{footer};
+  footerLayout->setContentsMargins(8, 3, 8, 3);
+  footerLayout->setSpacing(6);
+  footerLayout->addStretch();
+  footerLayout->addWidget(new QLabel{tr("Thumbnail size")});
+  footerLayout->addWidget(m_iconSizeCombo);
+
+  auto* assets = new QWidget{};
+  auto* assetsLayout = new QVBoxLayout{assets};
+  assetsLayout->setContentsMargins(0, 0, 0, 0);
+  assetsLayout->setSpacing(0);
+  assetsLayout->addWidget(filterRow);
+  assetsLayout->addWidget(browser, 1);
+  assetsLayout->addWidget(footer);
+
   auto* splitter = new QSplitter{Qt::Horizontal};
   splitter->setObjectName("ModelBrowser_Splitter");
   splitter->setChildrenCollapsible(false);
-  splitter->addWidget(m_folderTree);
-  splitter->addWidget(browser);
+  splitter->addWidget(sources);
+  splitter->addWidget(assets);
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
+  splitter->setSizes({200, 700});
 
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(0, 0, 0, 0);
@@ -1677,7 +1711,7 @@ void ModelBrowser::rebuildFolderTree()
   m_folderTree->clear();
   m_folderTreeItems.clear();
 
-  const auto folderIcon = loadSVGIcon(std::filesystem::path{"Map_folder.svg"});
+  const auto folderIcon = loadSVGIcon(std::filesystem::path{"BrowserFolder.svg"});
 
   auto rootTitle = m_folderPath.filename().empty() ? std::filesystem::path{"assets"}
                                                    : m_folderPath.filename();

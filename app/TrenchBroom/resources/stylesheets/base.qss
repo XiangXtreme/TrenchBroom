@@ -891,7 +891,6 @@ QTableView#IssueBrowser_Table {
 QWidget#ModelBrowser_Controls {
   background: @tb-panel-background;
   border-bottom: 1px solid @tb-border;
-  padding: 4px;
 }
 
 QWidget#EntityBrowser_Controls,
@@ -933,9 +932,8 @@ QToolButton[browserFilterToggle="true"]:checked {
 }
 
 QWidget#ModelBrowser_BreadcrumbBar {
-  background: @tb-input-background;
-  border: 1px solid @tb-border;
-  border-radius: 5px;
+  background: transparent;
+  border: none;
 }
 
 QTreeWidget#ModelBrowser_FolderTree {
@@ -1461,4 +1459,37 @@ QFrame#smartFaceSelectionPanel QLabel {
 QFrame#smartFaceSelectionPanel QToolButton {
   min-height: 24px;
   min-width: 24px;
+}
+
+/* Asset browser compound surfaces use the shared controls and theme palette. */
+QWidget#ModelBrowser_Sources,
+QWidget#ProjectAssetDetailsSurface {
+  background: @tb-sidebar-background;
+}
+
+QWidget#ModelBrowser_Sources > QLabel[regionAnchor="true"],
+QWidget#ProjectAssetDetailsSurface > QLabel[regionAnchor="true"] {
+  min-height: 30px;
+  padding: 0 10px;
+  background: @tb-panel-background;
+  border-bottom: 1px solid @tb-border;
+}
+
+QWidget#ModelBrowser_FilterRow {
+  background: @tb-panel-background;
+  border-bottom: 1px solid @tb-border;
+}
+
+QWidget#ModelBrowser_ViewOptions {
+  background: @tb-sidebar-background;
+  border-top: 1px solid @tb-border;
+}
+
+QWidget#ModelBrowser_ViewOptions QLabel {
+  color: @tb-secondary-text;
+}
+
+QTreeWidget#ProjectAssetDetails {
+  background: @tb-sidebar-background;
+  border: none;
 }

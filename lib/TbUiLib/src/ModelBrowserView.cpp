@@ -223,7 +223,7 @@ ModelBrowserView::ModelBrowserView(
       scrollBar, &QAbstractSlider::valueChanged, this, [this](const int) { update(); });
   }
 
-  const auto pixmap = loadSVGPixmap(std::filesystem::path{"Map_folder.svg"});
+  const auto pixmap = loadSVGPixmap(std::filesystem::path{"BrowserFolder.svg"});
   if (!pixmap.isNull())
   {
     m_folderIconImage = pixmap.toImage().convertToFormat(QImage::Format_RGBA8888);
@@ -375,11 +375,11 @@ void ModelBrowserView::resourcesWereProcessed(const std::vector<mdl::ResourceId>
 void ModelBrowserView::doInitLayout(Layout& layout)
 {
   const auto cellSize = assetCellSize();
-  layout.setOuterMargin(5.0f);
+  layout.setOuterMargin(10.0f);
   layout.setGroupMargin(0.0f);
-  layout.setRowMargin(5.0f);
-  layout.setCellMargin(5.0f);
-  layout.setTitleMargin(2.0f);
+  layout.setRowMargin(10.0f);
+  layout.setCellMargin(10.0f);
+  layout.setTitleMargin(6.0f);
   layout.setCellWidth(cellSize, cellSize);
   layout.setCellHeight(cellSize, cellSize);
   layout.setMaxUpScale(1.5f);
@@ -405,7 +405,7 @@ void ModelBrowserView::doReloadLayout(Layout& layout)
     const auto titleHeight = fontManager().font(font).measure(entry.title).y();
 
     layout.addItem(
-      entry.cellData, entry.title, cellSize, cellSize, maxCellWidth, titleHeight + 4.0f);
+      entry.cellData, entry.title, cellSize, cellSize, maxCellWidth, titleHeight + 10.0f);
   }
 }
 
@@ -428,6 +428,7 @@ void ModelBrowserView::doRender(
     vm::ortho_matrix(-1.0f, 1.0f, viewLeft, viewTop, viewRight, viewBottom),
     vm::view_matrix(vm::vec3f{0, 0, -1}, vm::vec3f{0, 1, 0})
       * vm::translation_matrix(vm::vec3f{0.0f, 0.0f, 0.1f})};
+  renderAssetCards(gl, layout, y, height);
   renderFolders(gl, layout, y, height);
   renderAssetPlaceholders(gl, layout, y, height);
   renderSoundPreviewButtons(gl, layout, y, height);
@@ -1423,6 +1424,60 @@ void ModelBrowserView::renderSpritePreviews(
       }
     }
   }
+}
+
+void ModelBrowserView::renderAssetCards(
+  gl::Gl& gl, Layout& layout, const float y, const float height)
+{
+  auto vertices = std::vector<gl::VertexTypes::P2C4::Vertex>{};
+  const auto surface = browserGroupBackgroundColor(palette()).to<RgbaF>().toVec();
+  for (const auto& group : layout.groups())
+  {
+    for (const auto& row : group.rows())
+    {
+      if (!row.intersectsY(y, height))
+        continue;
+      for (const auto& cell : row.cells())
+      {
+        const auto& bounds = cell.itemBounds();
+        appendRoundedRectVertices(
+          vertices,
+          bounds.left() + 3.0f,
+          bounds.top() + 3.0f,
+          bounds.right() - 3.0f,
+          bounds.bottom() - 3.0f,
+          y,
+          height,
+          surface);
+        const auto type = cellData(cell).type;
+        const auto marker = assetPlaceholderColor(type, palette());
+        if (marker)
+          appendRoundedRectVertices(
+            vertices,
+            bounds.left() + 3.0f,
+            bounds.bottom() - 3.0f,
+            bounds.right() - 3.0f,
+            bounds.bottom(),
+            y,
+            height,
+            marker->toVec(),
+            0.0f);
+      }
+    }
+  }
+  if (vertices.empty())
+    return;
+  auto shader =
+    gl::ActiveShader{gl, shaderManager(), gl::Shaders::MaterialBrowserBorderShader};
+  auto vertexArray = gl::VertexArray::move(std::move(vertices));
+  vertexArray.prepare(gl, vboManager());
+  gl.disable(GL_CULL_FACE);
+  if (vertexArray.setup(gl, shader.program()))
+  {
+    vertexArray.render(gl, gl::PrimType::Triangles);
+    vertexArray.cleanup(gl, shader.program());
+  }
+  gl.enable(GL_CULL_FACE);
 }
 
 void ModelBrowserView::renderFolders(

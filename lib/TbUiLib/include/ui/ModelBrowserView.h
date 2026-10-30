@@ -174,6 +174,7 @@ private:
   const SpritePreviewTexture* ensureSpritePreviewTexture(
     gl::Gl& gl, const std::filesystem::path& path, const GoldSrcSpritePreview& preview);
 
+  void renderAssetCards(gl::Gl& gl, Layout& layout, float y, float height);
   void renderFolders(gl::Gl& gl, Layout& layout, float y, float height);
   void renderModels(
     gl::Gl& gl,
