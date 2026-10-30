@@ -93,6 +93,7 @@
 #include "ui/SpinControl.h"
 #include "ui/SwitchableMapViewContainer.h"
 #include "ui/TransformCard.h"
+#include "ui/WorkspaceLayout.h"
 #include "ui/WorkspaceToolPanel.h"
 #include "ui/python/PythonScripting.h"
 
@@ -1338,6 +1339,63 @@ panel.add_label("Loaded from preferences")
     menu->setParent(nullptr);
     menu->deleteLater();
     QApplication::sendPostedEvents(menu, QEvent::DeferredDelete);
+  }
+}
+
+TEST_CASE("MapWindow restored expanded tools")
+{
+  const auto applicationName = QApplication::applicationName();
+  QApplication::setApplicationName(
+    QString{"TrenchBroom-RestoredToolsTest-%1"}.arg(QCoreApplication::applicationPid()));
+  QSettings{}.clear();
+  const auto restoreSettings = qScopeGuard([&]() {
+    QSettings{}.clear();
+    QApplication::setApplicationName(applicationName);
+  });
+  setPref(Preferences::DefaultPluginPaths, "");
+  setPref(Preferences::PythonPluginDirectories, "");
+  auto fixture = AppControllerFixture{};
+  auto& app = fixture.appController();
+  auto document = std::shared_ptr<MapDocument>{
+    MapDocument::createDocument(
+      app.environmentConfig(),
+      mdl::QuakeGameInfo,
+      mdl::MapFormat::Valve,
+      vm::bbox3d{8192.0},
+      app.taskManager(),
+      app.glManager().resourceManager())
+    | kdl::value()};
+  for (const auto pinned : {false, true})
+  {
+    for (const auto& [name, id] :
+         {std::pair{"content-browser", WorkspaceToolId::ContentBrowser},
+          std::pair{"output-log", WorkspaceToolId::OutputLog},
+          std::pair{"python-console", WorkspaceToolId::PythonConsole},
+          std::pair{"issues", WorkspaceToolId::Issues}})
+    {
+      INFO("pinned=" << pinned << ", tool=" << name);
+      auto layout = ToolLayout{};
+      layout.expanded = true;
+      layout.pinned = pinned;
+      layout.tool = QString::fromLatin1(name);
+      auto settings = QSettings{};
+      saveToolLayout(settings, WorkspaceKind::Map, layout);
+      auto window = MapWindow{app, document};
+      auto* tools = window.findChild<WorkspaceToolPanel*>();
+      auto* action = window.findAction("Menu/View/Toggle Info Panel");
+      REQUIRE(tools);
+      REQUIRE(action);
+      CHECK(tools->isExpanded());
+      CHECK(tools->currentTool() == id);
+      CHECK(action->isChecked());
+      CHECK(
+        tools->findChild<QComboBox*>("ProjectToolsMode")->currentIndex()
+        == (pinned ? 1 : 0));
+      tools->toggle();
+      CHECK_FALSE(action->isChecked());
+      tools->toggle();
+      CHECK(action->isChecked());
+    }
   }
 }
 

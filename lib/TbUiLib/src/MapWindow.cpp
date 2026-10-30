@@ -496,11 +496,6 @@ void MapWindow::createGui()
   setWindowTitle("TrenchBroom");
 
   m_editor = new MapEditorView{m_appController, document()};
-  connect(
-    m_editor,
-    &MapEditorView::infoPanelVisibilityChanged,
-    this,
-    &MapWindow::updateActionState);
   setCentralWidget(m_editor);
 
   // The view owns the workbench widgets; the window borrows them to route its commands.
@@ -792,6 +787,13 @@ void MapWindow::portalFileDidChange()
 
 void MapWindow::bindEvents()
 {
+  // Restoring the workspace can change panel visibility during createGui(),
+  // before the command surface exists. Bind after construction's initial refresh.
+  connect(
+    m_editor,
+    &MapEditorView::infoPanelVisibilityChanged,
+    this,
+    &MapWindow::updateActionState);
   connect(m_autosaveTimer, &QTimer::timeout, this, &MapWindow::triggerAutosave);
   connect(qApp, &QApplication::focusChanged, this, &MapWindow::focusChange);
   connect(QApplication::clipboard(), &QClipboard::dataChanged, this, [this]() {
