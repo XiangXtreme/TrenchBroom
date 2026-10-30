@@ -94,6 +94,14 @@ public:
   void clearRepeatableCommands();
   bool hasRepeatableCommands() const;
 
+  void moveCameraToNextTracePoint();
+  void moveCameraToPreviousTracePoint();
+  bool canMoveCameraToNextTracePoint() const;
+  bool canMoveCameraToPreviousTracePoint() const;
+  void reset2dCameras();
+  void focusCameraOnSelection();
+  bool canFocusCamera() const;
+
   /** Returns true when the view consumed the drag, matching the window's Escape handling.
    */
   bool cancelDrag();

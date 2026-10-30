@@ -1909,9 +1909,10 @@ void ActionManager::createViewMenu()
     "Move Camera to Next Point",
     ActionContext::Any,
     KeySequence{"."},
-    [](auto& context) { context.mapWindow().moveCameraToNextPoint(); },
+    [](auto& context) { context.editorView().moveCameraToNextTracePoint(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canMoveCameraToNextPoint();
+      return context.hasDocument()
+             && context.editorView().canMoveCameraToNextTracePoint();
     },
   }));
   cameraMenu.addItem(addAction(Action{
@@ -1919,9 +1920,10 @@ void ActionManager::createViewMenu()
     "Move Camera to Previous Point",
     ActionContext::Any,
     KeySequence{","},
-    [](auto& context) { context.mapWindow().moveCameraToPreviousPoint(); },
+    [](auto& context) { context.editorView().moveCameraToPreviousTracePoint(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canMoveCameraToPreviousPoint();
+      return context.hasDocument()
+             && context.editorView().canMoveCameraToPreviousTracePoint();
     },
   }));
   cameraMenu.addItem(addAction(Action{
@@ -1929,7 +1931,7 @@ void ActionManager::createViewMenu()
     "Reset 2D Cameras",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+U"},
-    [](auto& context) { context.mapWindow().reset2dCameras(); },
+    [](auto& context) { context.editorView().reset2dCameras(); },
     [](const auto& context) {
       return context.hasDocument() && !pref(Preferences::Link2DCameras);
     },
@@ -1939,9 +1941,9 @@ void ActionManager::createViewMenu()
     "Focus Camera on Selection",
     ActionContext::Any,
     KeySequence{"Ctrl+U"},
-    [](auto& context) { context.mapWindow().focusCameraOnSelection(); },
+    [](auto& context) { context.editorView().focusCameraOnSelection(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canFocusCamera();
+      return context.hasDocument() && context.editorView().canFocusCamera();
     },
   }));
   cameraMenu.addItem(addAction(Action{

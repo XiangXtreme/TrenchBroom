@@ -14,6 +14,7 @@
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
+#include "ui/MapView2D.h"
 #include "ui/PythonConsole.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableMapViewContainer.h"
@@ -259,6 +260,45 @@ void MapEditorView::clearRepeatableCommands()
 bool MapEditorView::hasRepeatableCommands() const
 {
   return m_document.map().canRepeatCommands();
+}
+
+void MapEditorView::moveCameraToNextTracePoint()
+{
+  if (canMoveCameraToNextTracePoint())
+    m_mapView->moveCameraToNextTracePoint();
+}
+
+void MapEditorView::moveCameraToPreviousTracePoint()
+{
+  if (canMoveCameraToPreviousTracePoint())
+    m_mapView->moveCameraToPreviousTracePoint();
+}
+
+bool MapEditorView::canMoveCameraToNextTracePoint() const
+{
+  return m_mapView->canMoveCameraToNextTracePoint();
+}
+
+bool MapEditorView::canMoveCameraToPreviousTracePoint() const
+{
+  return m_mapView->canMoveCameraToPreviousTracePoint();
+}
+
+void MapEditorView::reset2dCameras()
+{
+  if (auto* mapView2d = dynamic_cast<MapView2D*>(currentMapViewBase()))
+    m_mapView->reset2dCameras(mapView2d->camera(), true);
+}
+
+void MapEditorView::focusCameraOnSelection()
+{
+  if (canFocusCamera())
+    m_mapView->focusCameraOnSelection(true);
+}
+
+bool MapEditorView::canFocusCamera() const
+{
+  return m_document.map().selection().hasNodes();
 }
 
 bool MapEditorView::cancelDrag()

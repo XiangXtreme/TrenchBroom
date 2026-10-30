@@ -392,13 +392,26 @@ TEST_CASE("ProjectWindow")
       appController.actionManager().actionsMap().at("Menu/Edit/Repeat");
     const auto& clearRepeat = appController.actionManager().actionsMap().at(
       "Menu/Edit/Clear Repeatable Commands");
+    const auto& nextTrace = appController.actionManager().actionsMap().at(
+      "Menu/View/Camera/Move to Next Point");
+    const auto& previousTrace = appController.actionManager().actionsMap().at(
+      "Menu/View/Camera/Move to Previous Point");
+    const auto& focusSelection = appController.actionManager().actionsMap().at(
+      "Menu/View/Camera/Focus on Selection");
     CHECK(undo.enabled(context) == alphaEditor->canUndo());
     CHECK(redo.enabled(context) == alphaEditor->canRedo());
     CHECK(repeat.enabled(context));
     CHECK(clearRepeat.enabled(context) == alphaEditor->hasRepeatableCommands());
+    CHECK(nextTrace.enabled(context) == alphaEditor->canMoveCameraToNextTracePoint());
+    CHECK(
+      previousTrace.enabled(context) == alphaEditor->canMoveCameraToPreviousTracePoint());
+    CHECK(focusSelection.enabled(context) == alphaEditor->canFocusCamera());
     undo.execute(context);
     redo.execute(context);
     clearRepeat.execute(context);
+    nextTrace.execute(context);
+    previousTrace.execute(context);
+    focusSelection.execute(context);
     context.editorView().showInfoPanelPage(InfoPanelPage::PythonConsole);
     const auto& toggle =
       appController.actionManager().actionsMap().at("Menu/View/Toggle Info Panel");
