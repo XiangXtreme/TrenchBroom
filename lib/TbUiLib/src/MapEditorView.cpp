@@ -301,6 +301,16 @@ bool MapEditorView::canFocusCamera() const
   return m_document.map().selection().hasNodes();
 }
 
+void MapEditorView::toggleMaximizeCurrentView()
+{
+  m_mapView->toggleMaximizeCurrentView();
+}
+
+bool MapEditorView::currentViewMaximized() const
+{
+  return m_mapView->currentViewMaximized();
+}
+
 bool MapEditorView::cancelDrag()
 {
   return m_mapView->cancelMouseDrag() || m_inspector->cancelMouseDrag();

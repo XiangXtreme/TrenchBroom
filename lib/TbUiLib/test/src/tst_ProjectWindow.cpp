@@ -398,6 +398,8 @@ TEST_CASE("ProjectWindow")
       "Menu/View/Camera/Move to Previous Point");
     const auto& focusSelection = appController.actionManager().actionsMap().at(
       "Menu/View/Camera/Focus on Selection");
+    const auto& maximize =
+      appController.actionManager().actionsMap().at("Menu/View/Maximize Current View");
     CHECK(undo.enabled(context) == alphaEditor->canUndo());
     CHECK(redo.enabled(context) == alphaEditor->canRedo());
     CHECK(repeat.enabled(context));
@@ -406,12 +408,15 @@ TEST_CASE("ProjectWindow")
     CHECK(
       previousTrace.enabled(context) == alphaEditor->canMoveCameraToPreviousTracePoint());
     CHECK(focusSelection.enabled(context) == alphaEditor->canFocusCamera());
+    CHECK(maximize.checked(context) == alphaEditor->currentViewMaximized());
     undo.execute(context);
     redo.execute(context);
     clearRepeat.execute(context);
     nextTrace.execute(context);
     previousTrace.execute(context);
     focusSelection.execute(context);
+    maximize.execute(context);
+    CHECK(maximize.checked(context) == alphaEditor->currentViewMaximized());
     context.editorView().showInfoPanelPage(InfoPanelPage::PythonConsole);
     const auto& toggle =
       appController.actionManager().actionsMap().at("Menu/View/Toggle Info Panel");

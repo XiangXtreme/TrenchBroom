@@ -2071,10 +2071,10 @@ void ActionManager::createViewMenu()
 #else
     KeySequence{"Ctrl+Space"},
 #endif
-    [](auto& context) { context.mapWindow().toggleMaximizeCurrentView(); },
+    [](auto& context) { context.editorView().toggleMaximizeCurrentView(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().currentViewMaximized();
+      return context.hasDocument() && context.editorView().currentViewMaximized();
     },
   }));
   viewMenu.addItem(addAction(Action{

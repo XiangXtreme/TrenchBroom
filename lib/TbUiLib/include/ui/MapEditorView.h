@@ -101,6 +101,8 @@ public:
   void reset2dCameras();
   void focusCameraOnSelection();
   bool canFocusCamera() const;
+  void toggleMaximizeCurrentView();
+  bool currentViewMaximized() const;
 
   /** Returns true when the view consumed the drag, matching the window's Escape handling.
    */
