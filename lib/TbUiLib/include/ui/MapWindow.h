@@ -113,11 +113,6 @@ private:
   WorkspaceToolPanel* m_tools = nullptr;
 
   SwitchableMapViewContainer* m_mapView = nullptr;
-  /**
-   * Last focused MapViewBase. It's a QPointer to handle changing from e.g. a 2-pane map
-   * view to 1-pane.
-   */
-  QPointer<MapViewBase> m_currentMapView;
   InfoPanel* m_infoPanel = nullptr;
   Console* m_console = nullptr;
   PythonConsole* m_pythonConsole = nullptr;

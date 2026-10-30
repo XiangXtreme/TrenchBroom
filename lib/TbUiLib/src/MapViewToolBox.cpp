@@ -27,6 +27,7 @@
 #include "mdl/Map.h"
 #include "mdl/Selection.h"
 #include "prefs/Preferences.h"
+#include "ui/ActionExecutionContext.h"
 #include "ui/AssembleBrushTool.h"
 #include "ui/ChamferTool.h"
 #include "ui/ChamferToolPage.h"
@@ -74,6 +75,19 @@ MapViewToolBox::~MapViewToolBox()
   disconnectObservers();
   clearTransientState(InputState{0.0f, 0.0f});
   m_prefabTool->clearPreview();
+}
+
+void MapViewToolBox::setActionContextFactory(
+  std::function<ActionExecutionContext(MapViewBase*)> factory)
+{
+  m_actionContextFactory = std::move(factory);
+}
+
+ActionExecutionContext MapViewToolBox::actionContext(
+  AppController& app, MapViewBase* view) const
+{
+  return m_actionContextFactory ? m_actionContextFactory(view)
+                                : ActionExecutionContext{app, nullptr, nullptr};
 }
 
 bool MapViewToolBox::selectMode() const

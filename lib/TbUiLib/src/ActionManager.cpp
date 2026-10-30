@@ -183,7 +183,7 @@ void ActionManager::createViewActions()
     [](auto& context) { context.mapView().assembleBrush(); },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().assembleBrushToolActive();
+             && context.editorView().toolBox().assembleBrushToolActive();
     },
   });
   addAction(Action{
@@ -233,7 +233,7 @@ void ActionManager::createViewActions()
     KeySequence{"Ctrl+Return"},
     [](auto& context) { context.mapView().toggleClipSide(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().clipToolActive();
+      return context.hasDocument() && context.editorView().toolBox().clipToolActive();
     },
   });
   addAction(Action{
@@ -243,7 +243,7 @@ void ActionManager::createViewActions()
     KeySequence{"Return"},
     [](auto& context) { context.mapView().performClip(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().clipToolActive();
+      return context.hasDocument() && context.editorView().toolBox().clipToolActive();
     },
   });
   addAction(Action{
@@ -253,8 +253,8 @@ void ActionManager::createViewActions()
     KeySequence{"Return"},
     [](auto& context) { context.mapView().performSweep(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().sweepToolActive()
-             && context.mapWindow().toolBox().sweepTool().canCommitSweep();
+      return context.hasDocument() && context.editorView().toolBox().sweepToolActive()
+             && context.editorView().toolBox().sweepTool().canCommitSweep();
     },
   });
   addAction(Action{
@@ -1523,14 +1523,14 @@ void ActionManager::createToolsMenu()
     ActionContext::Any,
     KeySequence{"Shift+S"},
     [](auto& context) {
-      auto& toolBox = context.mapWindow().toolBox();
+      auto& toolBox = context.editorView().toolBox();
       toolBox.setSelectMode(!toolBox.selectModeActive());
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().enabled();
+      return context.hasDocument() && context.editorView().toolBox().enabled();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().selectModeActive();
+      return context.hasDocument() && context.editorView().toolBox().selectModeActive();
     },
     std::filesystem::path{"SelectMode.svg"},
   }));
@@ -1539,13 +1539,13 @@ void ActionManager::createToolsMenu()
     "Create Brush Mode",
     ActionContext::Any,
     KeySequence{"Shift+B"},
-    [](auto& context) { context.mapWindow().toolBox().setSelectMode(false); },
+    [](auto& context) { context.editorView().toolBox().setSelectMode(false); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().enabled();
+      return context.hasDocument() && context.editorView().toolBox().enabled();
     },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().brushCreationModeActive();
+             && context.editorView().toolBox().brushCreationModeActive();
     },
     std::filesystem::path{"CreateBrushMode.svg"},
   }));
@@ -1555,14 +1555,14 @@ void ActionManager::createToolsMenu()
     "Brush Tool",
     ActionContext::Any,
     KeySequence{"B"},
-    [](auto& context) { context.mapWindow().toolBox().toggleAssembleBrushTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleAssembleBrushTool(); },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().canToggleAssembleBrushTool();
+             && context.editorView().toolBox().canToggleAssembleBrushTool();
     },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().assembleBrushToolActive();
+             && context.editorView().toolBox().assembleBrushToolActive();
     },
     std::filesystem::path{"BrushTool.svg"},
   }));
@@ -1571,12 +1571,12 @@ void ActionManager::createToolsMenu()
     "Clip Tool",
     ActionContext::Any,
     KeySequence{"C"},
-    [](auto& context) { context.mapWindow().toolBox().toggleClipTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleClipTool(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().canToggleClipTool();
+      return context.hasDocument() && context.editorView().toolBox().canToggleClipTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().clipToolActive();
+      return context.hasDocument() && context.editorView().toolBox().clipToolActive();
     },
     std::filesystem::path{"ClipTool.svg"},
   }));
@@ -1585,12 +1585,13 @@ void ActionManager::createToolsMenu()
     "Rotate Tool",
     ActionContext::Any,
     KeySequence{"R"},
-    [](auto& context) { context.mapWindow().toolBox().toggleRotateTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleRotateTool(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().canToggleRotateTool();
+      return context.hasDocument()
+             && context.editorView().toolBox().canToggleRotateTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().rotateToolActive();
+      return context.hasDocument() && context.editorView().toolBox().rotateToolActive();
     },
     std::filesystem::path{"RotateTool.svg"},
   }));
@@ -1599,12 +1600,12 @@ void ActionManager::createToolsMenu()
     "Sweep Tool",
     ActionContext::Any,
     KeySequence{"Y"},
-    [](auto& context) { context.mapWindow().toolBox().toggleSweepTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleSweepTool(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().canToggleSweepTool();
+      return context.hasDocument() && context.editorView().toolBox().canToggleSweepTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().sweepToolActive();
+      return context.hasDocument() && context.editorView().toolBox().sweepToolActive();
     },
     std::filesystem::path{"SweepTool.svg"},
   }));
@@ -1613,12 +1614,12 @@ void ActionManager::createToolsMenu()
     "Scale Tool",
     ActionContext::Any,
     KeySequence{"T"},
-    [](auto& context) { context.mapWindow().toolBox().toggleScaleTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleScaleTool(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().canToggleScaleTool();
+      return context.hasDocument() && context.editorView().toolBox().canToggleScaleTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().scaleToolActive();
+      return context.hasDocument() && context.editorView().toolBox().scaleToolActive();
     },
     std::filesystem::path{"ScaleTool.svg"},
   }));
@@ -1627,12 +1628,12 @@ void ActionManager::createToolsMenu()
     "Shear Tool",
     ActionContext::Any,
     KeySequence{"G"},
-    [](auto& context) { context.mapWindow().toolBox().toggleShearTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleShearTool(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().canToggleShearTool();
+      return context.hasDocument() && context.editorView().toolBox().canToggleShearTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().shearToolActive();
+      return context.hasDocument() && context.editorView().toolBox().shearToolActive();
     },
     std::filesystem::path{"ShearTool.svg"},
   }));
@@ -1641,13 +1642,13 @@ void ActionManager::createToolsMenu()
     "Vertex Tool",
     ActionContext::Any,
     KeySequence{"V"},
-    [](auto& context) { context.mapWindow().toolBox().toggleVertexTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleVertexTool(); },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().canToggleAnyVertexTool();
+             && context.editorView().toolBox().canToggleAnyVertexTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().vertexToolActive();
+      return context.hasDocument() && context.editorView().toolBox().vertexToolActive();
     },
     std::filesystem::path{"VertexTool.svg"},
   }));
@@ -1656,13 +1657,13 @@ void ActionManager::createToolsMenu()
     "Edge Tool",
     ActionContext::Any,
     KeySequence{"E"},
-    [](auto& context) { context.mapWindow().toolBox().toggleEdgeTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleEdgeTool(); },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().canToggleAnyVertexTool();
+             && context.editorView().toolBox().canToggleAnyVertexTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().edgeToolActive();
+      return context.hasDocument() && context.editorView().toolBox().edgeToolActive();
     },
     std::filesystem::path{"EdgeTool.svg"},
   }));
@@ -1671,13 +1672,13 @@ void ActionManager::createToolsMenu()
     "Chamfer Tool",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) { context.mapWindow().toolBox().toggleChamferTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleChamferTool(); },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().canToggleChamferTool();
+             && context.editorView().toolBox().canToggleChamferTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().chamferToolActive();
+      return context.hasDocument() && context.editorView().toolBox().chamferToolActive();
     },
     std::filesystem::path{"ChamferTool.svg"},
   }));
@@ -1686,13 +1687,13 @@ void ActionManager::createToolsMenu()
     "Face Tool",
     ActionContext::Any,
     KeySequence{"F"},
-    [](auto& context) { context.mapWindow().toolBox().toggleFaceTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleFaceTool(); },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().canToggleAnyVertexTool();
+             && context.editorView().toolBox().canToggleAnyVertexTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().toolBox().faceToolActive();
+      return context.hasDocument() && context.editorView().toolBox().faceToolActive();
     },
     std::filesystem::path{"FaceTool.svg"},
   }));
@@ -1716,14 +1717,14 @@ void ActionManager::createToolsMenu()
     "Control Point Tool",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) { context.mapWindow().toolBox().toggleControlPointTool(); },
+    [](auto& context) { context.editorView().toolBox().toggleControlPointTool(); },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().canToggleControlPointTool();
+             && context.editorView().toolBox().canToggleControlPointTool();
     },
     [](const auto& context) {
       return context.hasDocument()
-             && context.mapWindow().toolBox().controlPointToolActive();
+             && context.editorView().toolBox().controlPointToolActive();
     },
     std::filesystem::path{"ControlPointTool.svg"},
   }));
@@ -1735,7 +1736,8 @@ void ActionManager::createToolsMenu()
     [](auto& context) { context.mapView().deactivateCurrentTool(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
-      return context.hasDocument() && !context.mapWindow().toolBox().anyModalToolActive();
+      return context.hasDocument()
+             && !context.editorView().toolBox().anyModalToolActive();
     },
     std::filesystem::path{"NoTool.svg"},
   }));

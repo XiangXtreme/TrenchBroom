@@ -273,7 +273,7 @@ TEST_CASE("MapWindow")
     REQUIRE(view);
     view->setFocus();
     // Record the view explicitly as background windows do not get native activation.
-    window.focusChange(nullptr, view);
+    Q_EMIT qApp->focusChanged(nullptr, view);
     auto* card = window.findChild<TransformCard*>();
     REQUIRE(card);
     auto* x = card->findChild<SpinControl*>("TransformCard_PosX");

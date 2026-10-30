@@ -128,14 +128,6 @@ void MapViewBase::stopCameraAnimation()
 namespace
 {
 
-MapWindow* owningMapWindow(QWidget* widget)
-{
-  for (auto* parent = widget; parent; parent = parent->parentWidget())
-    if (auto* mapWindow = dynamic_cast<MapWindow*>(parent))
-      return mapWindow;
-  return nullptr;
-}
-
 constexpr auto SmartFaceSelectionAddColor = RgbaF{0.16f, 0.85f, 0.48f, 0.32f};
 constexpr auto SmartFaceSelectionRemoveColor = RgbaF{0.95f, 0.28f, 0.24f, 0.32f};
 
@@ -204,9 +196,8 @@ void MapViewBase::setRenderingThumbnail(const bool renderingThumbnail)
 
 void MapViewBase::showPieMenu()
 {
-  auto* mapWindow = owningMapWindow(this);
   auto* menu = new PieMenu{this};
-  auto context = ActionExecutionContext{m_appController, mapWindow, this};
+  auto context = m_toolBox.actionContext(m_appController, this);
 
   const auto items = buildPieMenuItems(
     pref(Preferences::PieMenuAction),
@@ -432,8 +423,7 @@ void MapViewBase::updateActionBindings()
 
 void MapViewBase::updateActionStates()
 {
-  auto* mapWindow = owningMapWindow(this);
-  auto context = ActionExecutionContext{m_appController, mapWindow, this};
+  auto context = m_toolBox.actionContext(m_appController, this);
   for (auto& [shortcut, action] : m_shortcuts)
   {
     shortcut->setEnabled(hasFocus() && action->enabled(context));
@@ -447,8 +437,7 @@ void MapViewBase::updateActionStatesDelayed()
 
 void MapViewBase::triggerAction(const Action& action)
 {
-  auto* mapWindow = owningMapWindow(this);
-  auto context = ActionExecutionContext{m_appController, mapWindow, this};
+  auto context = m_toolBox.actionContext(m_appController, this);
   action.execute(context);
 }
 
@@ -1412,9 +1401,10 @@ void MapViewBase::doShowPopupMenu()
 
 void MapViewBase::showPopupMenuLater()
 {
-  auto* mapWindow = owningMapWindow(this);
-  if (!mapWindow)
+  auto context = m_toolBox.actionContext(m_appController, this);
+  if (!context.hasDocument())
     return;
+  auto* mapWindow = &context.mapWindow();
   beforePopupMenu();
 
   auto& map = m_document.map();

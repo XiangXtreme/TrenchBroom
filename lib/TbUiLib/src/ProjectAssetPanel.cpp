@@ -145,14 +145,21 @@ void ProjectAssetPanel::refreshDetails()
     add(tr("Selection"), tr("The selected asset belongs to another project."));
     return;
   }
+  auto libraryMetadataAvailable = false;
+  auto libraryAvailability = QString{};
+  auto snapshotLookupFailed = false;
   if (selected.source == BrowserSource::AssetLibrary)
   {
+    selected.projectAssetId.clear();
     const auto captured =
       m_session->projectAssetForLibraryAsset(selected.libraryId, selected.libraryAssetId);
     if (captured.is_success())
       selected.projectAssetId = captured.value() ? captured.value()->id : std::string{};
     else
+    {
+      snapshotLookupFailed = true;
       add(tr("Error"), text(std::get<Error>(captured.error()).msg));
+    }
     const auto state = m_session->libraryState(selected.libraryId, false);
     if (state.is_success() && state.value().available)
     {
@@ -160,6 +167,7 @@ void ProjectAssetPanel::refreshDetails()
         state.value().assets, selected.libraryAssetId, &project::LibraryAsset::id);
       if (found != state.value().assets.end())
       {
+        libraryMetadataAvailable = true;
         selected.displayName = found->displayName;
         selected.catalogPath = pathFromQString(text(found->virtualPath));
         selected.libraryRevision = found->revision;
@@ -169,12 +177,15 @@ void ProjectAssetPanel::refreshDetails()
         add(tr("Source Member"), text(found->sourceMember));
       }
       else
+      {
         selected.missing = true;
+        libraryAvailability = tr("Asset no longer exists in library");
+      }
     }
     else
     {
       selected.missing = true;
-      add(tr("Availability"), tr("Library unavailable"));
+      libraryAvailability = tr("Library unavailable");
     }
   }
   add(
@@ -194,15 +205,25 @@ void ProjectAssetPanel::refreshDetails()
     {
       add(tr("Library ID"), text(selected.libraryId));
       add(tr("Library Asset ID"), text(selected.libraryAssetId));
-      add(tr("Library Revision"), QString::number(selected.libraryRevision));
-      add(tr("Library Content Hash"), text(selected.libraryContentHash));
-      add(tr("Availability"), selected.missing ? tr("Source missing") : tr("Available"));
+      if (libraryMetadataAvailable)
+      {
+        add(tr("Library Revision"), QString::number(selected.libraryRevision));
+        add(tr("Library Content Hash"), text(selected.libraryContentHash));
+      }
+      add(
+        tr("Availability"),
+        !libraryAvailability.isEmpty() ? libraryAvailability
+        : selected.missing             ? tr("Source missing")
+                                       : tr("Available"));
     }
   }
   if (selected.projectAssetId.empty())
   {
     if (selected.source == BrowserSource::AssetLibrary)
-      add(tr("Project Snapshot"), tr("Not captured"));
+      add(
+        tr("Project Snapshot"),
+        snapshotLookupFailed ? tr("Cannot determine captured snapshot")
+                             : tr("Not captured"));
     return;
   }
   const auto result = m_session->store().findAsset(selected.projectAssetId);

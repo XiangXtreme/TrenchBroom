@@ -24,6 +24,7 @@
 
 #include "vm/vec.h"
 
+#include <functional>
 #include <memory>
 
 class QStackedLayout;
@@ -38,6 +39,9 @@ struct SelectionChange;
 
 namespace ui
 {
+class ActionExecutionContext;
+class AppController;
+class MapViewBase;
 class ClipTool;
 class ChamferTool;
 class AssembleBrushTool;
@@ -61,6 +65,7 @@ class MapViewToolBox : public ToolBox
 {
 private:
   MapDocument& m_document;
+  std::function<ActionExecutionContext(MapViewBase*)> m_actionContextFactory;
   bool m_selectMode;
   QStackedLayout* m_bookCtrl = nullptr;
 
@@ -97,6 +102,10 @@ public:
 
   MapViewToolBox(MapDocument& map, QStackedLayout* bookCtrl);
   ~MapViewToolBox() override;
+
+  void setActionContextFactory(
+    std::function<ActionExecutionContext(MapViewBase*)> factory);
+  ActionExecutionContext actionContext(AppController& app, MapViewBase* view) const;
 
 public: // tools
   bool selectMode() const;

@@ -6,17 +6,20 @@
 
 #include "ui/MapEditorView.h"
 
+#include <QApplication>
 #include <QSettings>
 #include <QVBoxLayout>
 
 #include "mdl/Map.h"
 #include "ui/AppController.h"
 #include "ui/Console.h"
+#include "ui/CyclingMapView.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorController.h"
 #include "ui/MapView2D.h"
+#include "ui/MapView3D.h"
 #include "ui/PythonConsole.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableMapViewContainer.h"
@@ -24,6 +27,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <stdexcept>
 #include <utility>
 
 namespace tb::ui
@@ -90,6 +94,10 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   layout->addWidget(m_hSplitter);
   m_controller = std::make_unique<MapEditorController>(appController, document, *this);
   restoreLayoutState();
+  connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
+    if (auto* view = qobject_cast<MapViewBase*>(focus); view && isAncestorOf(view))
+      m_currentMapView = view;
+  });
 }
 
 namespace
@@ -191,7 +199,36 @@ SwitchableMapViewContainer* MapEditorView::mapView() const
 
 MapViewBase* MapEditorView::currentMapViewBase() const
 {
-  return m_mapView->firstMapViewBase();
+  return m_currentMapView ? m_currentMapView.data() : m_mapView->firstMapViewBase();
+}
+
+MapView3D* MapEditorView::currentOrFirstVisible3DMapView() const
+{
+  if (auto* view = qobject_cast<MapView3D*>(currentMapViewBase());
+      view && view->isVisible())
+    return view;
+  const auto views = m_mapView->findChildren<MapView3D*>();
+  const auto it =
+    std::ranges::find_if(views, [](auto* view) { return view->isVisible(); });
+  return it != views.end() ? *it : nullptr;
+}
+
+MapView3D& MapEditorView::activate3DMapView()
+{
+  const auto views = m_mapView->findChildren<MapView3D*>();
+  if (views.empty())
+    throw std::runtime_error{"No 3D viewport is available"};
+  auto* view = views.front();
+  if (auto* cycling = qobject_cast<CyclingMapView*>(view->parentWidget()))
+    cycling->switchToMapView(view);
+  m_currentMapView = view;
+  view->setFocus();
+  return *view;
+}
+
+MapViewToolBox& MapEditorView::toolBox() const
+{
+  return m_mapView->toolBox();
 }
 
 InfoPanel* MapEditorView::infoPanel() const

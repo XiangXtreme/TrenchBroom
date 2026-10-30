@@ -63,7 +63,9 @@
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapStatus.h"
+#include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
+#include "ui/MapViewLayout.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
@@ -461,6 +463,46 @@ TEST_CASE("ProjectWindow")
     require(session->save());
   }
 
+  SECTION("viewport bindings and tool commands survive layout and host changes")
+  {
+    auto& editor = alphaWindow->editorView();
+    auto* view = &editor.activate3DMapView();
+    CHECK(editor.currentMapViewBase() == view);
+    CHECK(alphaWindow->currentMapViewBase() == view);
+    auto context = editor.toolBox().actionContext(appController, view);
+    REQUIRE(context.hasDocument());
+    CHECK(&context.editorView() == &editor);
+
+    // Reparenting the editor must not change the target of viewport commands.
+    auto* parent = editor.parentWidget();
+    editor.setParent(&window);
+    auto rebound = editor.toolBox().actionContext(appController, view);
+    CHECK(rebound.hasDocument());
+    CHECK(&rebound.map() == &alphaDocument->map());
+    editor.setParent(parent);
+    editor.show();
+
+    tabs->setCurrentIndex(1);
+    auto& betaTools = window.activeMapWindow()->editorView().toolBox();
+    const auto betaSelect = betaTools.selectMode();
+    const auto originalSelect = editor.toolBox().selectMode();
+    const auto& select =
+      appController.actionManager().actionsMap().at("Menu/Edit/Tools/Select Mode");
+    REQUIRE(select.enabled(context));
+    select.execute(context);
+    CHECK(editor.toolBox().selectMode() != originalSelect);
+    CHECK(betaTools.selectMode() == betaSelect);
+
+    auto* tools = &editor.toolBox();
+    alphaWindow->switchMapViewLayout(MapViewLayout::FourPanes);
+    CHECK(&editor.toolBox() == tools);
+    auto rebuilt = tools->actionContext(appController, editor.currentMapViewBase());
+    REQUIRE(rebuilt.hasDocument());
+    CHECK(&rebuilt.map() == &alphaDocument->map());
+    CHECK_FALSE(context.hasDocument());
+    CHECK_FALSE(select.enabled(context));
+  }
+
   SECTION("captured commands expire when their map view closes")
   {
     auto context = ActionExecutionContext{
@@ -760,6 +802,70 @@ TEST_CASE("ProjectWindow")
     CHECK(valueFor("Depends On").isEmpty());
     require(session->save());
     CHECK(alphaDocument->map().modificationCount() == mapChanges);
+  }
+
+  SECTION("library details distinguish unavailable sources from captured snapshots")
+  {
+    const auto folder = directory.filePath("details-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    auto file = QFile{folder + "/clip.wav"};
+    REQUIRE(file.open(QIODevice::WriteOnly));
+    REQUIRE(file.write("RIFF preview") > 0);
+    file.close();
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->scan());
+    const auto resources = require(library->assets());
+    REQUIRE(resources.size() == 1);
+    const auto resource = resources.front();
+    const auto libraryId = library->info().id;
+    require(session->attachLibrary(pathFromQString(folder)));
+    const auto snapshot = require(session->captureLibraryAsset(libraryId, resource.id));
+    require(session->save());
+    auto* panel = window.findChild<ProjectAssetPanel*>();
+    REQUIRE(panel != nullptr);
+    auto* browser = panel->findChild<ModelBrowserView*>();
+    auto* details = panel->findChild<QTreeWidget*>("ProjectAssetDetails");
+    REQUIRE(browser != nullptr);
+    REQUIRE(details != nullptr);
+    const auto valueFor = [details](const QString& key) {
+      const auto items = details->findItems(key, Qt::MatchExactly, 0);
+      return items.empty() ? QString{} : items.front()->text(1);
+    };
+    auto selected = BrowserAsset{BrowserCellType::Sound, "clip.wav"};
+    selected.source = BrowserSource::AssetLibrary;
+    selected.libraryId = libraryId;
+    selected.libraryAssetId = resource.id;
+    selected.libraryRevision = 987;
+    selected.libraryContentHash = "stale-hash";
+    emit browser->assetSelected(selected);
+    CHECK(valueFor("Library Revision") == QString::number(resource.revision));
+    CHECK(
+      valueFor("Library Content Hash") == QString::fromStdString(resource.contentHash));
+    CHECK(valueFor("Asset ID") == QString::fromStdString(snapshot.id));
+    CHECK(valueFor("Availability") == "Available");
+
+    library.reset();
+    REQUIRE(QDir{}.rename(folder, folder + "-moved"));
+    emit session->libraryLinksChanged();
+    CHECK(valueFor("Availability") == "Library unavailable");
+    CHECK(details->findItems("Availability", Qt::MatchExactly, 0).size() == 1);
+    CHECK(valueFor("Library Revision").isEmpty());
+    CHECK(valueFor("Library Content Hash").isEmpty());
+    CHECK(valueFor("Asset ID") == QString::fromStdString(snapshot.id));
+    CHECK(valueFor("Captured Revision") == QString::number(resource.revision));
+    CHECK(valueFor("Content Hash") == QString::fromStdString(snapshot.contentHash));
+
+    REQUIRE(QDir{}.rename(folder + "-moved", folder));
+    selected.libraryAssetId = "removed-entry";
+    selected.projectAssetId = snapshot.id;
+    emit browser->assetSelected(selected);
+    CHECK(valueFor("Availability") == "Asset no longer exists in library");
+    CHECK(valueFor("Library Revision").isEmpty());
+    CHECK(valueFor("Library Content Hash").isEmpty());
+    CHECK(valueFor("Asset ID").isEmpty());
+    CHECK(valueFor("Project Snapshot") == "Not captured");
+    CHECK_FALSE(session->modified());
   }
 
   SECTION("published rename works after saved map tabs close")

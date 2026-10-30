@@ -27,6 +27,8 @@ class InfoPanel;
 class MapDocument;
 class MapEditorController;
 class MapViewBase;
+class MapView3D;
+class MapViewToolBox;
 class PythonConsole;
 class Splitter;
 class SwitchableMapViewContainer;
@@ -56,6 +58,8 @@ private:
   WorkbenchSurface* m_inspectorSurface = nullptr;
 
   SwitchableMapViewContainer* m_mapView = nullptr;
+  // Layout changes destroy viewports; a cleared pointer falls back to the new layout.
+  QPointer<MapViewBase> m_currentMapView;
   QPointer<InfoPanel> m_infoPanel;
   Inspector* m_inspector = nullptr;
   EditorLayout m_layout;
@@ -70,6 +74,9 @@ public:
   MapEditorController& controller() const;
   SwitchableMapViewContainer* mapView() const;
   MapViewBase* currentMapViewBase() const;
+  MapView3D* currentOrFirstVisible3DMapView() const;
+  MapView3D& activate3DMapView();
+  MapViewToolBox& toolBox() const;
 
   InfoPanel* infoPanel() const;
   /** The host takes QWidget ownership and must destroy the panel before the document. */

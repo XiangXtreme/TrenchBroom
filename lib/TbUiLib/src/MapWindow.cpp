@@ -82,7 +82,6 @@
 #include "ui/CompilationDialog.h"
 #include "ui/Console.h"
 #include "ui/CrashReporter.h"
-#include "ui/CyclingMapView.h"
 #include "ui/FaceInspector.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
@@ -506,10 +505,12 @@ void MapWindow::createGui()
 
   // The view owns the workbench widgets; the window borrows them to route its commands.
   m_mapView = m_editor->mapView();
-  m_currentMapView = m_mapView->firstMapViewBase();
+  m_editor->toolBox().setActionContextFactory([this](MapViewBase* view) {
+    return ActionExecutionContext{m_appController, this, view};
+  });
 
   // SwitchableMapViewContainer should have constructed a MapViewBase
-  contract_assert(m_currentMapView);
+  contract_assert(m_editor->currentMapViewBase());
 
   m_infoPanel = m_editor->infoPanel();
   m_inspector = m_editor->inspector();
@@ -1163,7 +1164,6 @@ MapViewLayout MapWindow::currentMapViewLayout() const
 void MapWindow::switchMapViewLayout(const MapViewLayout layout)
 {
   m_mapView->switchToMapView(layout);
-  m_currentMapView = m_mapView->firstMapViewBase();
   refreshMapViews();
 }
 
@@ -2071,64 +2071,25 @@ void MapWindow::debugShowPalette()
   showModelessDialog(window);
 }
 
-void MapWindow::focusChange(QWidget* /* oldFocus */, QWidget* newFocus)
+void MapWindow::focusChange(QWidget* /* oldFocus */, QWidget* /* newFocus */)
 {
-  if (auto* newMapView = dynamic_cast<MapViewBase*>(newFocus);
-      newMapView && isAncestorOf(newMapView))
-  {
-    m_currentMapView = newMapView;
-  }
-
   updateActionState();
   updateUndoRedoActions();
 }
 
 MapView3D* MapWindow::currentOrFirstVisible3DMapView()
 {
-  if (auto* current3D = dynamic_cast<MapView3D*>(currentMapViewBase());
-      current3D && current3D->isVisible())
-  {
-    return current3D;
-  }
-
-  const auto views = findChildren<MapView3D*>();
-  if (auto it = std::ranges::find_if(views, [](auto* view) { return view->isVisible(); });
-      it != std::end(views))
-  {
-    return *it;
-  }
-
-  return nullptr;
+  return m_editor->currentOrFirstVisible3DMapView();
 }
 
 MapView3D& MapWindow::activate3DMapView()
 {
-  const auto views = m_mapView->findChildren<MapView3D*>();
-  if (views.empty())
-  {
-    throw std::runtime_error{"No 3D viewport is available"};
-  }
-  auto* view = views.front();
-  if (auto* cycling = qobject_cast<CyclingMapView*>(view->parentWidget()))
-  {
-    cycling->switchToMapView(view);
-  }
-  m_currentMapView = view;
-  view->setFocus();
-  return *view;
+  return m_editor->activate3DMapView();
 }
 
 MapViewBase* MapWindow::currentMapViewBase()
 {
-  if (!m_currentMapView)
-  {
-    // This happens when the current map view is deleted (e.g. 4-pane to 1-pane layout)
-    m_currentMapView = m_mapView->firstMapViewBase();
-
-    // SwitchableMapViewContainer should have constructed a MapViewBase
-    contract_assert(m_currentMapView != nullptr);
-  }
-  return m_currentMapView;
+  return m_editor->currentMapViewBase();
 }
 
 bool MapWindow::canCompile() const
