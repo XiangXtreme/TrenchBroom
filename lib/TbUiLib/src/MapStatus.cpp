@@ -7,7 +7,6 @@
 
 #include <QComboBox>
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QTimer>
 #include <QToolButton>
 
@@ -25,6 +24,7 @@
 #include "mdl/ModelUtils.h"
 #include "mdl/PatchNode.h"
 #include "mdl/WorldNode.h"
+#include "ui/ElidedLabel.h"
 #include "ui/MapDocument.h"
 
 #include "kd/overload.h"
@@ -266,7 +266,7 @@ MapStatus::MapStatus(QWidget* parent)
   setObjectName("MapStatus");
   auto* layout = new QHBoxLayout{this};
   layout->setContentsMargins(0, 0, 0, 0);
-  m_label = new QLabel{this};
+  m_label = new ElidedLabel{Qt::ElideRight, this};
   m_label->setObjectName("MapWindow_StatusLabel");
   m_label->setMinimumWidth(0);
   m_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -283,8 +283,9 @@ MapStatus::MapStatus(QWidget* parent)
   m_snap->setToolTip(tr("Snap to grid"));
   m_snap->setCheckable(true);
   layout->addWidget(m_label, 1);
-  layout->addWidget(m_snap);
+  layout->setSpacing(6);
   layout->addWidget(m_grid);
+  layout->addWidget(m_snap);
   m_refreshTimer = new QTimer{this};
   m_refreshTimer->setSingleShot(true);
   m_refreshTimer->setInterval(100);

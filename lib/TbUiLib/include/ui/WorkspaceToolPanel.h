@@ -13,7 +13,7 @@
 #include <map>
 
 class QFrame;
-class QLabel;
+class QComboBox;
 class QSplitter;
 class QStackedWidget;
 class QToolButton;
@@ -36,6 +36,8 @@ class WorkspaceToolPanel : public QWidget
   Q_OBJECT
   QWidget* m_surface = nullptr;
   QWidget* m_bar = nullptr;
+  QWidget* m_footer = nullptr;
+  QWidget* m_status = nullptr;
   QSplitter* m_splitter = nullptr;
   QFrame* m_panel = nullptr;
   QStackedWidget* m_pages = nullptr;
@@ -45,8 +47,8 @@ class WorkspaceToolPanel : public QWidget
   std::map<MapEditorView*, InfoPanel*> m_mapPanels;
   QPointer<QWidget> m_restoreFocus;
   QWidget* m_workspace = nullptr;
-  QLabel* m_title = nullptr;
-  QToolButton* m_pin = nullptr;
+  QComboBox* m_mode = nullptr;
+  QToolButton* m_fold = nullptr;
   std::map<WorkspaceToolId, QToolButton*> m_buttons;
   WorkspaceToolId m_tool = WorkspaceToolId::ContentBrowser;
   bool m_expanded = false;

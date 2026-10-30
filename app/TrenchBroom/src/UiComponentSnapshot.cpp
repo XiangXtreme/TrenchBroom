@@ -258,6 +258,24 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
     QStringLiteral("Navigation"),
     makeControlRow({navigation, activeNavigation, disabledNavigation}));
 
+  auto* drawerTab = new QToolButton{};
+  auto* activeDrawerTab = new QToolButton{};
+  auto* disabledDrawerTab = new QToolButton{};
+  for (auto* tab : {drawerTab, activeDrawerTab, disabledDrawerTab})
+  {
+    tab->setProperty("tbControlRole", "navigation");
+    tab->setCheckable(true);
+  }
+  drawerTab->setText(QStringLiteral("Assets"));
+  activeDrawerTab->setText(QStringLiteral("Console"));
+  activeDrawerTab->setChecked(true);
+  disabledDrawerTab->setText(QStringLiteral("Unavailable"));
+  disabledDrawerTab->setEnabled(false);
+  auto* drawerTabs = makeControlRow({drawerTab, activeDrawerTab, disabledDrawerTab});
+  drawerTabs->setObjectName("ProjectToolBar");
+  drawerTabs->setAttribute(Qt::WA_StyledBackground);
+  actionLayout->addRow(QStringLiteral("Drawer tabs"), drawerTabs);
+
   auto* collectionSection = makeSection(QStringLiteral("Collections and navigation"));
   auto* collectionLayout = sectionLayout(*collectionSection);
 

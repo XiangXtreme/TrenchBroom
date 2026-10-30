@@ -216,21 +216,43 @@ QWidget#ProjectToolBar {
 }
 
 QWidget#ProjectToolBar {
+  background: @tb-elevated-background;
   border-top: 1px solid @tb-border;
-  border-bottom: none;
+  border-bottom: 1px solid @tb-border;
+}
+
+/* Horizontal drawer navigation is one compound tab strip. */
+QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"] {
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+
+QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"]:checked {
+  border-color: transparent;
+  border-bottom-color: @tb-accent;
+  color: @tb-text;
+}
+
+QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"]:focus {
+  border-left-color: @tb-focus-border;
+  border-right-color: @tb-focus-border;
+  border-top-color: @tb-focus-border;
+}
+
+QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"]:disabled {
+  color: @tb-disabled-text;
+  border-color: transparent;
+}
+
+QWidget#WorkspaceStatusBar {
+  background: @tb-sidebar-background;
+  border-top: 1px solid @tb-border;
 }
 
 QFrame#ProjectToolDrawer {
   background: @tb-panel-background;
   border: 1px solid @tb-border;
   border-radius: 6px;
-}
-
-QWidget#WorkspaceToolHeader {
-  background: @tb-elevated-background;
-  border-bottom: 1px solid @tb-border;
-  border-top-left-radius: 5px;
-  border-top-right-radius: 5px;
 }
 
 QPushButton {

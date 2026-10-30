@@ -270,12 +270,12 @@ TEST_CASE("ProjectWindow")
   {
     auto* tools = window.findChild<WorkspaceToolPanel*>();
     auto* drawer = window.findChild<QWidget*>("ProjectToolDrawer");
-    auto* pin = window.findChild<QToolButton*>("ProjectToolsPin");
+    auto* mode = window.findChild<QComboBox*>("ProjectToolsMode");
     auto* close = window.findChild<QToolButton*>("ProjectToolsClose");
     auto* editor = alphaWindow->findChild<MapEditorView*>();
     REQUIRE(tools != nullptr);
     REQUIRE(drawer != nullptr);
-    REQUIRE(pin != nullptr);
+    REQUIRE(mode != nullptr);
     REQUIRE(close != nullptr);
     REQUIRE(editor != nullptr);
     auto settings = QSettings{};
@@ -286,13 +286,22 @@ TEST_CASE("ProjectWindow")
       else
         settings.remove("ProjectTools/Pinned");
     });
-    pin->setChecked(false);
-    close->click();
+    mode->setCurrentIndex(0);
+    if (tools->isExpanded())
+      close->click();
     REQUIRE_FALSE(drawer->isVisible());
+    auto* bar = tools->findChild<QWidget*>("ProjectToolBar");
+    auto* status = tools->findChild<QWidget*>("WorkspaceStatusBar");
+    REQUIRE(bar);
+    REQUIRE(status);
+    CHECK_FALSE(drawer->isAncestorOf(bar));
+    CHECK_FALSE(drawer->isAncestorOf(status));
     const auto workspaceHeight = stack->height();
     tools->showContent();
     QApplication::processEvents();
     CHECK(drawer->isVisible());
+    CHECK(drawer->isAncestorOf(bar));
+    CHECK_FALSE(drawer->isAncestorOf(status));
     CHECK(stack->height() == workspaceHeight);
     CHECK(window.findChild<ProjectAssetPanel*>()->isVisible());
     CHECK_FALSE(editor->infoPanel()->isVisible());
@@ -300,6 +309,12 @@ TEST_CASE("ProjectWindow")
     CHECK(alphaWindow->infoPanelVisible());
     CHECK(tools->isToolVisible(WorkspaceToolId::ContentBrowser));
     CHECK_FALSE(tools->isToolVisible(WorkspaceToolId::OutputLog));
+    close->click();
+    CHECK_FALSE(tools->isExpanded());
+    CHECK_FALSE(drawer->isAncestorOf(bar));
+    close->click();
+    CHECK(tools->isExpanded());
+    CHECK(drawer->isAncestorOf(bar));
     CHECK_FALSE(editor->findChild<QWidget*>("MapWindow_InfoPanelSurface")->isVisible());
 
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::PythonConsole);
@@ -318,7 +333,7 @@ TEST_CASE("ProjectWindow")
     auto* input = betaEditor->infoPanel()->findChild<QWidget*>("PythonConsole_Input");
     REQUIRE(input != nullptr);
     input->setFocus();
-    pin->setChecked(true);
+    mode->setCurrentIndex(1);
     QApplication::processEvents();
     CHECK(stack->height() < workspaceHeight);
     QMetaObject::invokeMethod(
@@ -327,7 +342,7 @@ TEST_CASE("ProjectWindow")
       Q_ARG(QWidget*, betaEditor->infoPanel()),
       Q_ARG(QWidget*, window.activeMapWindow()->currentMapViewBase()));
     CHECK(tools->isExpanded());
-    pin->setChecked(false);
+    mode->setCurrentIndex(0);
     QApplication::processEvents();
     CHECK(tools->isExpanded());
     tools->showContent();
@@ -704,13 +719,13 @@ TEST_CASE("ProjectWindow")
   SECTION("tool layout retains pinned height and uses stable tool ids")
   {
     auto* tools = window.findChild<WorkspaceToolPanel*>();
-    auto* pin = window.findChild<QToolButton*>("ProjectToolsPin");
+    auto* mode = window.findChild<QComboBox*>("ProjectToolsMode");
     auto* splitter = window.findChild<QSplitter*>("ProjectToolsSplitter");
     REQUIRE(tools);
-    REQUIRE(pin);
+    REQUIRE(mode);
     REQUIRE(splitter);
     tools->showInfoPage(InfoPanelPage::PythonConsole);
-    pin->setChecked(true);
+    mode->setCurrentIndex(1);
     QApplication::processEvents();
     splitter->setSizes({350, 200});
     QMetaObject::invokeMethod(splitter, "splitterMoved", Q_ARG(int, 350), Q_ARG(int, 1));
@@ -723,8 +738,8 @@ TEST_CASE("ProjectWindow")
     CHECK(
       std::abs(saved.heightRatio - static_cast<double>(sizes[1]) / (sizes[0] + sizes[1]))
       < 0.01);
-    pin->setChecked(false);
-    pin->setChecked(true);
+    mode->setCurrentIndex(0);
+    mode->setCurrentIndex(1);
     QApplication::processEvents();
     const auto restored = splitter->sizes();
     CHECK(
@@ -734,7 +749,7 @@ TEST_CASE("ProjectWindow")
       < 0.02);
     const auto modified = session->modified();
     tools->resetLayout();
-    CHECK_FALSE(pin->isChecked());
+    CHECK(mode->currentIndex() == 0);
     CHECK_FALSE(tools->isExpanded());
     CHECK(tools->currentTool() == WorkspaceToolId::ContentBrowser);
     CHECK(session->modified() == modified);

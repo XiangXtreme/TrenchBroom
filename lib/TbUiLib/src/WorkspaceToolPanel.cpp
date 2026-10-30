@@ -5,10 +5,10 @@
 #include "ui/WorkspaceToolPanel.h"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QScopedValueRollback>
 #include <QSettings>
 #include <QShortcut>
@@ -18,6 +18,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include "ui/ImageUtils.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapViewBase.h"
 
@@ -66,29 +67,6 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   auto* panelLayout = new QVBoxLayout{m_panel};
   panelLayout->setContentsMargins(0, 0, 0, 0);
   panelLayout->setSpacing(0);
-  auto* headerSurface = new QWidget{m_panel};
-  headerSurface->setObjectName("WorkspaceToolHeader");
-  headerSurface->setAttribute(Qt::WA_StyledBackground);
-  auto* header = new QHBoxLayout{headerSurface};
-  header->setContentsMargins(10, 4, 6, 4);
-  header->setSpacing(6);
-  m_title = new QLabel{headerSurface};
-  m_title->setProperty("regionAnchor", true);
-  header->addWidget(m_title, 1);
-  m_pin = new QToolButton{m_panel};
-  m_pin->setObjectName("ProjectToolsPin");
-  m_pin->setProperty("tbControlRole", "compact");
-  m_pin->setText(tr("Pin"));
-  m_pin->setToolTip(tr("Keep the tool panel open while editing the map"));
-  m_pin->setCheckable(true);
-  m_pin->setChecked(m_layout.pinned);
-  header->addWidget(m_pin);
-  auto* close = new QToolButton{m_panel};
-  close->setObjectName("ProjectToolsClose");
-  close->setProperty("tbControlRole", "compact");
-  close->setText(tr("Close"));
-  header->addWidget(close);
-  panelLayout->addWidget(headerSurface);
   m_pages = new QStackedWidget{m_panel};
   m_pages->addWidget(content);
   panelLayout->addWidget(m_pages, 1);
@@ -98,7 +76,7 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   m_bar->setAttribute(Qt::WA_StyledBackground);
   auto* barLayout = new QHBoxLayout{m_bar};
   barLayout->setContentsMargins(6, 3, 6, 3);
-  barLayout->setSpacing(4);
+  barLayout->setSpacing(2);
   const auto tools = std::map<WorkspaceToolId, QString>{
     {WorkspaceToolId::ContentBrowser, tr("Content Browser")},
     {WorkspaceToolId::OutputLog, tr("Output Log")},
@@ -109,6 +87,13 @@ WorkspaceToolPanel::WorkspaceToolPanel(
     auto* button = new QToolButton{m_bar};
     button->setObjectName(QString{"ProjectTool%1"}.arg(static_cast<int>(id)));
     button->setProperty("tbControlRole", "navigation");
+    const auto icon = id == WorkspaceToolId::ContentBrowser  ? "BrowserFolderSmall.svg"
+                      : id == WorkspaceToolId::Issues        ? "IssueBrowser.svg"
+                      : id == WorkspaceToolId::PythonConsole ? "PythonConsole.svg"
+                                                             : "OutputLog.svg";
+    button->setIcon(loadSVGIcon(std::filesystem::path{icon}));
+    button->setIconSize(QSize{16, 16});
+    button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setText(title);
     button->setCheckable(true);
     connect(button, &QToolButton::clicked, this, [this, id]() { selectTool(id); });
@@ -121,21 +106,53 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   extensions->setObjectName("ProjectToolsExtensions");
   extensions->setProperty("tbControlRole", "navigation");
   extensions->setText(tr("Extensions"));
+  extensions->setIcon(loadSVGIcon(std::filesystem::path{"InspectorPlugin.svg"}));
+  extensions->setIconSize(QSize{16, 16});
+  extensions->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
   connect(extensions, &QToolButton::clicked, this, [this]() {
-    if (!m_pin->isChecked())
+    if (m_mode->currentIndex() != 1)
       setExpanded(false);
     emit extensionsRequested();
   });
   barLayout->addWidget(extensions);
   barLayout->addStretch();
+  m_mode = new QComboBox{m_bar};
+  m_mode->setObjectName("ProjectToolsMode");
+  m_mode->setProperty("tbControlRole", "compact");
+  m_mode->setAccessibleName(tr("Tool panel mode"));
+  m_mode->setToolTip(
+    tr("Overlay closes when returning to the map; Push keeps the panel open"));
+  m_mode->addItems({tr("Overlay"), tr("Push")});
+  m_mode->setCurrentIndex(m_layout.pinned ? 1 : 0);
+  barLayout->addWidget(m_mode);
+  m_fold = new QToolButton{m_bar};
+  m_fold->setObjectName("ProjectToolsClose");
+  m_fold->setProperty("tbControlRole", "compact");
+  m_fold->setIconSize(QSize{16, 16});
+  barLayout->addWidget(m_fold);
+
+  m_footer = new QWidget{this};
+  auto* footerLayout = new QVBoxLayout{m_footer};
+  footerLayout->setContentsMargins(0, 0, 0, 0);
+  footerLayout->setSpacing(0);
+  footerLayout->addWidget(m_bar);
+  m_status = new QWidget{m_footer};
+  m_status->setObjectName("WorkspaceStatusBar");
+  m_status->setAttribute(Qt::WA_StyledBackground);
+  auto* statusLayout = new QHBoxLayout{m_status};
+  statusLayout->setContentsMargins(10, 2, 8, 2);
+  statusLayout->setSpacing(6);
+  footerLayout->addWidget(m_status);
+  m_status->hide();
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
   layout->addWidget(m_surface, 1);
-  layout->addWidget(m_bar);
+  layout->addWidget(m_footer);
 
-  connect(close, &QToolButton::clicked, this, [this]() { setExpanded(false); });
-  connect(m_pin, &QToolButton::toggled, this, [this](const bool pinned) {
+  connect(m_fold, &QToolButton::clicked, this, &WorkspaceToolPanel::toggle);
+  connect(m_mode, &QComboBox::currentIndexChanged, this, [this](const int index) {
+    const auto pinned = index == 1;
     if (!pinned)
       captureHeight();
     // Reparenting produces intermediate focus changes outside the drawer.
@@ -162,7 +179,7 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   connect(escape, &QShortcut::activated, this, [this]() { setExpanded(false); });
   connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
     if (
-      !m_expanded || m_changingMode || m_pin->isChecked() || !focus
+      !m_expanded || m_changingMode || (m_mode->currentIndex() == 1) || !focus
       || QApplication::activePopupWidget() || QApplication::activeModalWidget())
       return;
     if (
@@ -180,9 +197,8 @@ WorkspaceToolPanel::WorkspaceToolPanel(
 
 void WorkspaceToolPanel::addStatusWidget(QWidget* status)
 {
-  auto* layout = static_cast<QHBoxLayout*>(m_bar->layout());
-  delete layout->takeAt(layout->count() - 1);
-  layout->addWidget(status, 1);
+  static_cast<QHBoxLayout*>(m_status->layout())->addWidget(status, 1);
+  m_status->show();
 }
 
 WorkspaceToolPanel::~WorkspaceToolPanel()
@@ -198,7 +214,7 @@ void WorkspaceToolPanel::showEvent(QShowEvent* event)
     QTimer::singleShot(0, this, [this]() {
       if (!m_layoutPending || !isVisible())
         return;
-      if (m_pin->isChecked())
+      if (m_mode->currentIndex() == 1)
       {
         const auto height = m_splitter->height();
         const auto panelHeight = static_cast<int>(height * m_layout.heightRatio);
@@ -226,7 +242,7 @@ void WorkspaceToolPanel::saveLayout()
     return;
   m_layout.tool = ToolNames.at(m_tool);
   m_layout.expanded = m_expanded;
-  m_layout.pinned = m_pin->isChecked();
+  m_layout.pinned = (m_mode->currentIndex() == 1);
   auto settings = QSettings{};
   saveToolLayout(settings, m_kind, m_layout);
 }
@@ -235,7 +251,7 @@ void WorkspaceToolPanel::resetLayout()
 {
   m_tool = WorkspaceToolId::ContentBrowser;
   m_pendingTool.clear();
-  m_pin->setChecked(false);
+  m_mode->setCurrentIndex(0);
   m_layout = ToolLayout{};
   setExpanded(false);
   saveLayout();
@@ -338,6 +354,7 @@ bool WorkspaceToolPanel::isExpanded() const
 
 void WorkspaceToolPanel::setExpanded(const bool expanded, const bool restoreFocus)
 {
+  const auto changingMode = QScopedValueRollback{m_changingMode, true};
   const auto wasExpanded = m_expanded;
   if (!expanded)
     captureHeight();
@@ -407,14 +424,28 @@ void WorkspaceToolPanel::updatePage()
   }
   for (const auto& [id, button] : m_buttons)
     button->setChecked(isToolVisible(id));
-  m_title->setText(m_buttons.at(m_tool)->text());
+  m_fold->setIcon(loadSVGIcon(std::filesystem::path{m_expanded ? "Down.svg" : "Up.svg"}));
+  m_fold->setToolTip(m_expanded ? tr("Collapse tool panel") : tr("Expand tool panel"));
+  m_fold->setAccessibleName(m_fold->toolTip());
   if (m_activeEditor)
     m_activeEditor->setExternalInfoPanelExpanded(m_expanded);
 }
 
 void WorkspaceToolPanel::updateGeometryForMode()
 {
-  const auto pinned = m_pin->isChecked();
+  // Move the same navigation controls, retaining their state and connections.
+  // The footer stays outside both the splitter and the overlay.
+  auto* barParent = m_expanded ? static_cast<QWidget*>(m_panel) : m_footer;
+  if (m_bar->parentWidget() != barParent)
+  {
+    static_cast<QVBoxLayout*>(barParent->layout())->insertWidget(0, m_bar);
+    m_bar->show();
+  }
+  const auto pinned = m_mode->currentIndex() == 1;
+  // In overlay mode the raised tab strip must not resize the map viewport.
+  // Reserve its former footer height underneath the overlay instead.
+  m_surface->layout()->setContentsMargins(
+    0, 0, 0, m_expanded && !pinned ? m_bar->sizeHint().height() : 0);
   if (pinned && m_panel->parentWidget() != m_splitter)
   {
     m_splitter->addWidget(m_panel);

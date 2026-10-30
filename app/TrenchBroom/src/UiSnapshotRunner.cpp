@@ -441,8 +441,8 @@ void configureSupportingSnapshot(QWidget& targetWidget)
   }
 
   mapWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
-  if (auto* pin = mapWindow->findChild<QToolButton*>("ProjectToolsPin"))
-    pin->setChecked(true);
+  if (auto* mode = mapWindow->findChild<QComboBox*>("ProjectToolsMode"))
+    mode->setCurrentIndex(1);
   if (
     auto* splitter =
       mapWindow->findChild<QSplitter*>(QStringLiteral("ProjectToolsSplitter")))
@@ -527,8 +527,8 @@ void configurePythonConsoleSnapshot(QWidget& targetWidget)
   }
 
   mapWindow->switchToInfoPanelPage(InfoPanelPage::PythonConsole);
-  if (auto* pin = mapWindow->findChild<QToolButton*>("ProjectToolsPin"))
-    pin->setChecked(true);
+  if (auto* mode = mapWindow->findChild<QComboBox*>("ProjectToolsMode"))
+    mode->setCurrentIndex(1);
   if (
     auto* splitter =
       mapWindow->findChild<QSplitter*>(QStringLiteral("ProjectToolsSplitter")))

@@ -715,9 +715,9 @@ TEST_CASE("MapWindow")
     window.resize(1200, 900);
     window.show();
     window.switchToInfoPanelPage(InfoPanelPage::PythonConsole);
-    auto* pin = tools->findChild<QToolButton*>("ProjectToolsPin");
-    REQUIRE(pin);
-    pin->setChecked(true);
+    auto* mode = tools->findChild<QComboBox*>("ProjectToolsMode");
+    REQUIRE(mode);
+    mode->setCurrentIndex(1);
     QApplication::processEvents();
     CHECK(tools->isToolVisible(WorkspaceToolId::PythonConsole));
     auto settings = QSettings{};
@@ -728,7 +728,7 @@ TEST_CASE("MapWindow")
     const auto canUndo = window.document().map().canUndoCommand();
     tools->resetLayout();
     CHECK_FALSE(tools->isExpanded());
-    CHECK_FALSE(pin->isChecked());
+    CHECK(mode->currentIndex() == 0);
     CHECK(window.document().map().modified() == modified);
     CHECK(window.document().map().canUndoCommand() == canUndo);
   }
@@ -1379,10 +1379,13 @@ TEST_CASE("PlayModeFullScreen")
       QApplication::processEvents();
       auto* parentBefore = view.parentWidget();
       const auto menuHiddenBefore = window.menuBar()->isHidden();
-      auto* status = window.findChild<QWidget*>("ProjectToolBar");
+      auto* status = window.findChild<QWidget*>("WorkspaceStatusBar");
+      auto* navigation = window.findChild<QWidget*>("ProjectToolBar");
       REQUIRE(status);
+      REQUIRE(navigation);
       CHECK(window.findChildren<QStatusBar*>().isEmpty());
       const auto statusHiddenBefore = status->isHidden();
+      const auto navigationHiddenBefore = navigation->isHidden();
       auto* inspector = window.findChild<QWidget*>("MapWindow_InspectorSurface");
       REQUIRE(inspector);
       inspector->hide();
@@ -1413,7 +1416,8 @@ TEST_CASE("PlayModeFullScreen")
       CHECK(view.isVisible());
       CHECK(view.parentWidget() == parentBefore);
       CHECK(window.menuBar()->isHidden());
-      CHECK(status->isHidden());
+      CHECK_FALSE(status->isVisible());
+      CHECK_FALSE(navigation->isVisible());
       CHECK(view.size() == window.size());
 
       presentation.leave();
@@ -1423,6 +1427,7 @@ TEST_CASE("PlayModeFullScreen")
       QTRY_COMPARE(window.geometry(), geometryBefore);
       CHECK(window.menuBar()->isHidden() == menuHiddenBefore);
       CHECK(status->isHidden() == statusHiddenBefore);
+      CHECK(navigation->isHidden() == navigationHiddenBefore);
       CHECK(inspector->isHidden());
       for (auto i = qsizetype{0}; i < splitters.size(); ++i)
       {

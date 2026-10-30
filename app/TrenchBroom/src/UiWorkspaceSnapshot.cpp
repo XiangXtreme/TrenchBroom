@@ -96,8 +96,9 @@ void configureWorkspaceSnapshot(QWidget& widget, const QString& target)
   if (!window)
     return;
   auto* tools = window->findChild<WorkspaceToolPanel*>();
-  auto* pin = tools->findChild<QToolButton*>("ProjectToolsPin");
-  pin->setChecked(target == "project-pinned" || target == "project-map-switch");
+  auto* mode = tools->findChild<QComboBox*>("ProjectToolsMode");
+  mode->setCurrentIndex(
+    target == "project-pinned" || target == "project-map-switch" ? 1 : 0);
   if (target == "project-map-switch")
   {
     auto* tabs = window->findChild<QTabBar*>("ProjectMapTabs");
@@ -115,7 +116,7 @@ void configureWorkspaceSnapshot(QWidget& widget, const QString& target)
   }
   else
     tools->showContent();
-  if (pin->isChecked())
+  if (mode->currentIndex() == 1)
     tools->findChild<QSplitter*>("ProjectToolsSplitter")->setSizes({560, 300});
 }
 
@@ -134,8 +135,8 @@ QString workspaceSnapshotPendingReason(QWidget& widget, const QString& target)
   if (!tools->isToolVisible(tool))
     return "Workspace tool is not visible";
   const auto pinned = target == "project-pinned" || target == "project-map-switch";
-  if (tools->findChild<QToolButton*>("ProjectToolsPin")->isChecked() != pinned)
-    return "Workspace pin mode is incorrect";
+  if ((tools->findChild<QComboBox*>("ProjectToolsMode")->currentIndex() == 1) != pinned)
+    return "Workspace mode mode is incorrect";
   auto* grid = statuses.front()->findChild<QComboBox*>("MapWindow_GridChoice");
   const auto empty = target == "project-empty" || target == "project-all-closed";
   if (empty)
