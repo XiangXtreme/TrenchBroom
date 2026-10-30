@@ -19,6 +19,7 @@
 #include <QFile>
 #include <QImage>
 #include <QInputDialog>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
@@ -31,6 +32,7 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabBar>
+#include <QTabWidget>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
@@ -264,6 +266,62 @@ TEST_CASE("ProjectWindow")
     QApplication::processEvents();
     CHECK(window.activeMapWindow() != nullptr);
     CHECK(window.findChild<ModelBrowser*>() == browser);
+  }
+
+  SECTION("save status follows the active map and ignores inactive edits")
+  {
+    auto* state = window.findChild<QLabel*>("MapWindow_SaveState");
+    REQUIRE(state);
+    tabs->setCurrentIndex(1);
+    auto& betaMap = window.activeMapWindow()->document().map();
+    REQUIRE(mdl::setEntityProperty(betaMap, "message", "status edit"));
+    QTRY_VERIFY_WITH_TIMEOUT(state->property("tbStatus").toString() == "modified", 1000);
+    tabs->setCurrentIndex(0);
+    const auto alphaState = alphaDocument->map().modified() ? "modified" : "saved";
+    CHECK(state->property("tbStatus").toString() == alphaState);
+    REQUIRE(mdl::setEntityProperty(betaMap, "message", "inactive edit"));
+    QTest::qWait(150);
+    CHECK(state->property("tbStatus").toString() == alphaState);
+    tabs->setCurrentIndex(1);
+    CHECK(state->property("tbStatus").toString() == "modified");
+  }
+
+  SECTION("compact content views preserve navigation and optional details")
+  {
+    auto* tools = window.findChild<WorkspaceToolPanel*>();
+    auto* views = window.findChild<QComboBox*>("ProjectContentView");
+    auto* pages = window.findChild<QTabWidget*>("ProjectContentTabs");
+    auto* details = window.findChild<QWidget*>("ProjectAssetDetailsSurface");
+    auto* toggle = window.findChild<QToolButton*>("ProjectAssetDetailsToggle");
+    REQUIRE(views);
+    REQUIRE(pages);
+    REQUIRE(details);
+    REQUIRE(toggle);
+    tools->showContent();
+    QTRY_VERIFY_WITH_TIMEOUT(!tools->isAnimating(), 1000);
+    CHECK(views->isVisible());
+    CHECK_FALSE(pages->tabBar()->isVisible());
+    CHECK_FALSE(details->isVisible());
+    toggle->click();
+    CHECK(details->isVisible());
+    toggle->click();
+    CHECK_FALSE(details->isVisible());
+    for (int i = 0; i < views->count(); ++i)
+    {
+      views->setCurrentIndex(i);
+      CHECK(pages->currentIndex() == i);
+      CHECK(pages->currentWidget()->isVisible());
+      CHECK(views->isVisible());
+    }
+    pages->setCurrentIndex(0);
+    CHECK(views->currentIndex() == 0);
+    auto* browser = window.findChild<ModelBrowser*>();
+    auto* path = browser->findChild<QWidget*>("ModelBrowser_PathStack");
+    auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
+    REQUIRE(path);
+    REQUIRE(search);
+    CHECK(path->parentWidget() == search->parentWidget());
+    CHECK(search->width() >= 140);
   }
 
   SECTION("one bottom surface hosts content and the active map tools")

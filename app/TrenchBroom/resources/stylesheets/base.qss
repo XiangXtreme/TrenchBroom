@@ -223,12 +223,13 @@ QWidget#ProjectToolBar {
 
 /* Horizontal drawer navigation is one compound tab strip. */
 QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"] {
-  border-radius: 0;
+  border-radius: 4px;
   border-bottom: 2px solid transparent;
 }
 
 QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"]:checked {
-  border-color: transparent;
+  background: @tb-button-background;
+  border-color: @tb-strong-border;
   border-bottom-color: @tb-accent;
   color: @tb-text;
 }
@@ -249,10 +250,31 @@ QWidget#WorkspaceStatusBar {
   border-top: 1px solid @tb-border;
 }
 
+QWidget#WorkspaceStatusBar QLabel[tbStatus="saved"] {
+  color: @tb-success;
+}
+
+QWidget#WorkspaceStatusBar QLabel[tbStatus="modified"] {
+  color: @tb-warning;
+}
+
 QFrame#ProjectToolDrawer {
   background: @tb-panel-background;
   border: 1px solid @tb-border;
   border-radius: 6px;
+}
+
+QWidget#WorkspaceDrawerResize {
+  background: transparent;
+}
+
+QWidget#WorkspaceDrawerGrip {
+  background: @tb-strong-border;
+  border-radius: 1px;
+}
+
+QWidget#WorkspaceDrawerResize:hover QWidget#WorkspaceDrawerGrip {
+  background: @tb-accent;
 }
 
 QPushButton {
@@ -1498,11 +1520,6 @@ QWidget#ModelBrowser_Sources > QLabel[regionAnchor="true"],
 QWidget#ProjectAssetDetailsSurface > QLabel[regionAnchor="true"] {
   min-height: 30px;
   padding: 0 10px;
-  background: @tb-panel-background;
-  border-bottom: 1px solid @tb-border;
-}
-
-QWidget#ModelBrowser_FilterRow {
   background: @tb-panel-background;
   border-bottom: 1px solid @tb-border;
 }

@@ -109,6 +109,7 @@ public:
     QWidget* parent = nullptr,
     std::shared_ptr<ProjectSession> project = nullptr);
   void setDocument(MapDocument& document);
+  void addViewOption(QWidget* control);
   ~ModelBrowser() override;
 
 protected:

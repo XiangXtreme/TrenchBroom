@@ -66,6 +66,7 @@
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
 #include "ui/ProjectSession.h"
+#include "ui/QColorUtils.h"
 #include "ui/QPathUtils.h"
 #include "ui/Theme.h"
 
@@ -379,7 +380,7 @@ void ModelBrowserView::doInitLayout(Layout& layout)
   layout.setGroupMargin(0.0f);
   layout.setRowMargin(10.0f);
   layout.setCellMargin(10.0f);
-  layout.setTitleMargin(6.0f);
+  layout.setTitleMargin(4.0f);
   layout.setCellWidth(cellSize, cellSize);
   layout.setCellHeight(cellSize, cellSize);
   layout.setMaxUpScale(1.5f);
@@ -1431,6 +1432,7 @@ void ModelBrowserView::renderAssetCards(
 {
   auto vertices = std::vector<gl::VertexTypes::P2C4::Vertex>{};
   const auto surface = browserGroupBackgroundColor(palette()).to<RgbaF>().toVec();
+  const auto border = fromQColor(palette().color(QPalette::Mid)).to<RgbaF>().toVec();
   for (const auto& group : layout.groups())
   {
     for (const auto& row : group.rows())
@@ -1440,6 +1442,15 @@ void ModelBrowserView::renderAssetCards(
       for (const auto& cell : row.cells())
       {
         const auto& bounds = cell.itemBounds();
+        appendRoundedRectVertices(
+          vertices,
+          bounds.left() + 2.0f,
+          bounds.top() + 2.0f,
+          bounds.right() - 2.0f,
+          bounds.bottom() - 2.0f,
+          y,
+          height,
+          border);
         appendRoundedRectVertices(
           vertices,
           bounds.left() + 3.0f,
@@ -1509,7 +1520,7 @@ void ModelBrowserView::renderFolders(
             }
 
             const auto& bounds = cell.itemBounds();
-            const auto iconSize = std::min(bounds.width, bounds.height) * 0.6f;
+            const auto iconSize = std::min(bounds.width, bounds.height) * 0.46f;
             const auto left = bounds.left() + (bounds.width - iconSize) / 2.0f;
             const auto top = bounds.top() + (bounds.height - iconSize) / 2.0f;
             const auto right = left + iconSize;

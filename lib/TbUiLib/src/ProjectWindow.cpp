@@ -5,6 +5,7 @@
 #include "ui/ProjectWindow.h"
 
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileDialog>
@@ -254,6 +255,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   layout->addWidget(m_emptyWorkspace, 4);
   auto* contentTabs = new QTabWidget{this};
   contentTabs->setObjectName("ProjectContentTabs");
+  contentTabs->tabBar()->hide();
   m_browser = new ProjectAssetPanel{m_appController, m_session, contentTabs};
   contentTabs->addTab(m_browser, tr("Browse"));
   auto* content = new QWidget{this};
@@ -281,7 +283,27 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   m_history->setHeaderLabels({tr("Version"), tr("Created"), tr("Description")});
   m_history->setRootIsDecorated(false);
   contentTabs->addTab(m_history, tr("History"));
+  // QTabWidget normally focuses its tab bar. The workspace owns navigation now,
+  // so transfer focus to the visible page instead of a hidden legacy tab.
+  contentTabs->setFocusProxy(m_browser);
+  connect(contentTabs, &QTabWidget::currentChanged, contentTabs, [contentTabs]() {
+    contentTabs->setFocusProxy(contentTabs->currentWidget());
+  });
   m_tools = new WorkspaceToolPanel{WorkspaceKind::Project, body, contentTabs, this};
+  auto* contentView = new QComboBox{};
+  contentView->setObjectName("ProjectContentView");
+  contentView->setProperty("tbControlRole", "compact");
+  contentView->setAccessibleName(tr("Content browser view"));
+  contentView->setToolTip(tr("Content browser view"));
+  contentView->addItems({tr("Browse"), tr("Asset List"), tr("History")});
+  connect(
+    contentView,
+    &QComboBox::currentIndexChanged,
+    contentTabs,
+    &QTabWidget::setCurrentIndex);
+  connect(
+    contentTabs, &QTabWidget::currentChanged, contentView, &QComboBox::setCurrentIndex);
+  m_tools->addContentControl(contentView);
   m_status = new MapStatus{m_tools};
   m_notifications = new QStatusBar{m_tools};
   m_notifications->setObjectName("WorkspaceNotifications");

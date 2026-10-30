@@ -42,6 +42,10 @@ class WorkspaceToolPanel : public QWidget
   QSplitter* m_splitter = nullptr;
   QFrame* m_panel = nullptr;
   QWidget* m_body = nullptr;
+  QWidget* m_resizeHandle = nullptr;
+  bool m_resizing = false;
+  int m_resizeStartY = 0;
+  int m_resizeStartHeight = 0;
   QVariantAnimation* m_animation = nullptr;
   QStackedWidget* m_pages = nullptr;
   QPointer<QWidget> m_content;
@@ -51,6 +55,7 @@ class WorkspaceToolPanel : public QWidget
   QPointer<QWidget> m_restoreFocus;
   QWidget* m_workspace = nullptr;
   QComboBox* m_mode = nullptr;
+  QWidget* m_contentControls = nullptr;
   QToolButton* m_fold = nullptr;
   std::map<WorkspaceToolId, QToolButton*> m_buttons;
   WorkspaceToolId m_tool = WorkspaceToolId::ContentBrowser;
@@ -69,6 +74,7 @@ public:
   ~WorkspaceToolPanel() override;
   void resetLayout();
   void addStatusWidget(QWidget* status);
+  void addContentControl(QWidget* control);
   /** Transfers panel ownership to this host, until unregisterMapEditor. */
   void registerMapEditor(MapEditorView& editor);
   /** Called before the editor's document and rendering context are released. */

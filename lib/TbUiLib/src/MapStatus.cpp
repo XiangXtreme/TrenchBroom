@@ -7,6 +7,8 @@
 
 #include <QComboBox>
 #include <QHBoxLayout>
+#include <QLabel>
+#include <QStyle>
 #include <QTimer>
 #include <QToolButton>
 
@@ -284,6 +286,10 @@ MapStatus::MapStatus(QWidget* parent)
   m_snap->setCheckable(true);
   layout->addWidget(m_label, 1);
   layout->setSpacing(6);
+  m_saveState = new QLabel{this};
+  m_saveState->setObjectName("MapWindow_SaveState");
+  layout->addWidget(m_saveState);
+  layout->addSpacing(8);
   layout->addWidget(m_grid);
   layout->addWidget(m_snap);
   m_refreshTimer = new QTimer{this};
@@ -313,6 +319,7 @@ void MapStatus::setDocument(const std::shared_ptr<MapDocument>& document)
     const auto delayed = [this](const auto&...) { refreshDelayed(); };
     m_connections += document->documentWasLoadedNotifier.connect([this]() { refresh(); });
     m_connections += document->documentWasSavedNotifier.connect(delayed);
+    m_connections += document->modificationStateDidChangeNotifier.connect(delayed);
     m_connections += document->selectionDidChangeNotifier.connect(delayed);
     m_connections += document->currentLayerDidChangeNotifier.connect(delayed);
     m_connections += document->groupWasOpenedNotifier.connect(delayed);
@@ -333,6 +340,7 @@ void MapStatus::refreshDelayed()
 void MapStatus::refresh()
 {
   const auto document = m_document.lock();
+  m_saveState->setVisible(document != nullptr);
   m_grid->setEnabled(document != nullptr);
   m_snap->setEnabled(document != nullptr);
   if (!document)
@@ -344,6 +352,15 @@ void MapStatus::refresh()
     return;
   }
   const auto& map = document->map();
+  const auto state =
+    map.modified() ? QStringLiteral("modified") : QStringLiteral("saved");
+  if (m_saveState->property("tbStatus").toString() != state)
+  {
+    m_saveState->setProperty("tbStatus", state);
+    m_saveState->style()->unpolish(m_saveState);
+    m_saveState->style()->polish(m_saveState);
+  }
+  m_saveState->setText(map.modified() ? tr("● Unsaved edits") : tr("✓ No pending edits"));
   m_label->setText(describeSelection(map));
   m_label->setToolTip(m_label->text());
   m_grid->setCurrentIndex(map.grid().size() - mdl::Grid::MinSize);

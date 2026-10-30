@@ -4,6 +4,7 @@
  */
 #include <QApplication>
 #include <QComboBox>
+#include <QMouseEvent>
 #include <QProxyStyle>
 #include <QScopeGuard>
 #include <QSettings>
@@ -101,6 +102,52 @@ TEST_CASE("WorkspaceToolPanel")
       CHECK(workspace->size() == workspaceSize);
       CHECK(drawer->geometry().bottom() == drawer->parentWidget()->height() - 1);
     }
+  }
+
+  SECTION("drawer height handle resizes overlay without moving the map")
+  {
+    tools.showContent();
+    animation->setCurrentTime(animation->duration());
+    auto* handle = tools.findChild<QWidget*>("WorkspaceDrawerResize");
+    REQUIRE(handle);
+    REQUIRE(handle->isVisible());
+    const auto workspaceSize = workspace->size();
+    const auto before = drawer->height();
+    const auto local = QPointF{handle->rect().center()};
+    const auto global = QPointF{handle->mapToGlobal(local.toPoint())};
+    auto press = QMouseEvent{
+      QEvent::MouseButtonPress,
+      local,
+      global,
+      Qt::LeftButton,
+      Qt::LeftButton,
+      Qt::NoModifier};
+    QApplication::sendEvent(handle, &press);
+    auto move = QMouseEvent{
+      QEvent::MouseMove,
+      local - QPointF{0, 70},
+      global - QPointF{0, 70},
+      Qt::NoButton,
+      Qt::LeftButton,
+      Qt::NoModifier};
+    QApplication::sendEvent(handle, &move);
+    CHECK(drawer->height() > before + 60);
+    CHECK(workspace->size() == workspaceSize);
+    auto release = QMouseEvent{
+      QEvent::MouseButtonRelease,
+      local,
+      global - QPointF{0, 70},
+      Qt::LeftButton,
+      Qt::NoButton,
+      Qt::NoModifier};
+    QApplication::sendEvent(handle, &release);
+    CHECK(QWidget::mouseGrabber() != handle);
+    CHECK(
+      loadToolLayout(settings, WorkspaceKind::Map).heightRatio
+      > ToolLayout{}.heightRatio);
+    tools.toggle();
+    animation->setCurrentTime(animation->duration());
+    CHECK_FALSE(handle->isVisible());
   }
 
   SECTION("disabled animations settle immediately")

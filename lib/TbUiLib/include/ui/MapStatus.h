@@ -11,6 +11,7 @@
 #include <memory>
 
 class QComboBox;
+class QLabel;
 class QToolButton;
 class QTimer;
 
@@ -27,6 +28,7 @@ class MapStatus : public QWidget
   NotifierConnection m_connections;
   ElidedLabel* m_label = nullptr;
   QComboBox* m_grid = nullptr;
+  QLabel* m_saveState = nullptr;
   QToolButton* m_snap = nullptr;
   QTimer* m_refreshTimer = nullptr;
 

@@ -9,6 +9,7 @@
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QMouseEvent>
 #include <QScopedValueRollback>
 #include <QSettings>
 #include <QShortcut>
@@ -69,6 +70,20 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   // The frame clips a stable body while its visible height slides open or closed.
   m_body = new QWidget{m_panel};
   m_panel->installEventFilter(this);
+  m_resizeHandle = new QWidget{m_panel};
+  m_resizeHandle->setObjectName("WorkspaceDrawerResize");
+  m_resizeHandle->setAttribute(Qt::WA_StyledBackground);
+  m_resizeHandle->setCursor(Qt::SizeVerCursor);
+  m_resizeHandle->setToolTip(tr("Drag to resize the tool panel"));
+  m_resizeHandle->installEventFilter(this);
+  auto* grip = new QWidget{m_resizeHandle};
+  grip->setObjectName("WorkspaceDrawerGrip");
+  grip->setAttribute(Qt::WA_StyledBackground);
+  grip->setAttribute(Qt::WA_TransparentForMouseEvents);
+  grip->setFixedSize(38, 2);
+  auto* gripLayout = new QHBoxLayout{m_resizeHandle};
+  gripLayout->setContentsMargins(0, 2, 0, 2);
+  gripLayout->addWidget(grip, 0, Qt::AlignCenter);
   auto* panelLayout = new QVBoxLayout{m_body};
   panelLayout->setContentsMargins(0, 0, 0, 0);
   panelLayout->setSpacing(0);
@@ -80,7 +95,7 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   m_bar->setObjectName("ProjectToolBar");
   m_bar->setAttribute(Qt::WA_StyledBackground);
   auto* barLayout = new QHBoxLayout{m_bar};
-  barLayout->setContentsMargins(6, 3, 6, 3);
+  barLayout->setContentsMargins(6, 1, 6, 1);
   barLayout->setSpacing(2);
   const auto tools = std::map<WorkspaceToolId, QString>{
     {WorkspaceToolId::ContentBrowser, tr("Content Browser")},
@@ -120,6 +135,11 @@ WorkspaceToolPanel::WorkspaceToolPanel(
     emit extensionsRequested();
   });
   barLayout->addWidget(extensions);
+  m_contentControls = new QWidget{m_bar};
+  auto* contentLayout = new QHBoxLayout{m_contentControls};
+  contentLayout->setContentsMargins(8, 0, 0, 0);
+  contentLayout->setSpacing(4);
+  barLayout->addWidget(m_contentControls);
   barLayout->addStretch();
   m_mode = new QComboBox{m_bar};
   m_mode->setObjectName("ProjectToolsMode");
@@ -210,6 +230,11 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   setMapEditor(nullptr);
   setExpanded(m_layout.expanded);
   m_restoringLayout = false;
+}
+
+void WorkspaceToolPanel::addContentControl(QWidget* control)
+{
+  m_contentControls->layout()->addWidget(control);
 }
 
 void WorkspaceToolPanel::addStatusWidget(QWidget* status)
@@ -401,7 +426,7 @@ void WorkspaceToolPanel::setExpanded(const bool expanded, const bool restoreFocu
     const auto startHeight = m_panel->height();
     m_animation->stop();
     m_pages->show();
-    m_animation->setDuration(std::clamp(duration, 120, 240));
+    m_animation->setDuration(360);
     m_animation->setStartValue(startHeight);
     m_animation->setEndValue(expanded ? expandedHeight() : collapsedHeight());
     m_animation->start();
@@ -463,6 +488,7 @@ void WorkspaceToolPanel::updatePage()
   }
   for (const auto& [id, button] : m_buttons)
     button->setChecked(isToolVisible(id));
+  m_contentControls->setVisible(m_expanded && m_tool == WorkspaceToolId::ContentBrowser);
   m_fold->setIcon(loadSVGIcon(std::filesystem::path{m_expanded ? "Down.svg" : "Up.svg"}));
   m_fold->setToolTip(m_expanded ? tr("Collapse tool panel") : tr("Expand tool panel"));
   m_fold->setAccessibleName(m_fold->toolTip());
@@ -507,7 +533,9 @@ int WorkspaceToolPanel::expandedHeight() const
 {
   return std::clamp(
     static_cast<int>(m_surface->height() * m_layout.heightRatio),
-    collapsedHeight(),
+    std::min(
+      m_surface->height(),
+      collapsedHeight() + m_pages->currentWidget()->minimumSizeHint().height()),
     std::max(collapsedHeight(), m_surface->height()));
 }
 
@@ -527,12 +555,52 @@ void WorkspaceToolPanel::applyDrawerHeight(const int height)
   m_body->setGeometry(
     1, 1, std::max(0, m_panel->width() - 2), std::max(0, bodyHeight - 2));
   m_body->layout()->activate();
+  m_resizeHandle->setGeometry(1, 0, std::max(0, m_panel->width() - 2), 6);
+  m_resizeHandle->setVisible(m_expanded);
+  m_resizeHandle->raise();
 }
 
 bool WorkspaceToolPanel::eventFilter(QObject* watched, QEvent* event)
 {
   if (!m_animation)
     return QWidget::eventFilter(watched, event);
+  if (watched == m_resizeHandle)
+  {
+    if (event->type() == QEvent::MouseButtonPress)
+    {
+      auto* mouse = static_cast<QMouseEvent*>(event);
+      if (mouse->button() == Qt::LeftButton && m_expanded)
+      {
+        m_animation->stop();
+        m_resizing = true;
+        m_resizeStartY = mouse->globalPosition().toPoint().y();
+        m_resizeStartHeight = m_panel->height();
+        m_resizeHandle->grabMouse();
+        return true;
+      }
+    }
+    else if (event->type() == QEvent::MouseMove && m_resizing)
+    {
+      const auto* mouse = static_cast<QMouseEvent*>(event);
+      const auto height =
+        m_resizeStartHeight + m_resizeStartY - mouse->globalPosition().toPoint().y();
+      m_layout.heightRatio = std::clamp(
+        static_cast<double>(height) / std::max(1, m_surface->height()), 0.15, 0.8);
+      applyDrawerHeight(expandedHeight());
+      return true;
+    }
+    else if (event->type() == QEvent::MouseButtonRelease && m_resizing)
+    {
+      m_resizing = false;
+      m_resizeHandle->releaseMouse();
+      saveLayout();
+      return true;
+    }
+    else if (event->type() == QEvent::UngrabMouse)
+    {
+      m_resizing = false;
+    }
+  }
   if (watched == m_surface && event->type() == QEvent::Resize && !m_panel->isHidden())
     updateGeometryForMode();
   if (watched == m_panel && event->type() == QEvent::Resize && !m_updatingGeometry)
@@ -544,6 +612,7 @@ bool WorkspaceToolPanel::eventFilter(QObject* watched, QEvent* event)
         : collapsedHeight();
     m_body->setGeometry(
       1, 1, std::max(0, m_panel->width() - 2), std::max(0, bodyHeight - 2));
+    m_resizeHandle->setGeometry(1, 0, std::max(0, m_panel->width() - 2), 6);
   }
   return QWidget::eventFilter(watched, event);
 }

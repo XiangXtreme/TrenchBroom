@@ -7,6 +7,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QSplitter>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -84,7 +85,16 @@ ProjectAssetPanel::ProjectAssetPanel(
   splitter->setHandleWidth(1);
   splitter->setStretchFactor(0, 3);
   splitter->setStretchFactor(1, 1);
-  splitter->setSizes({850, 300});
+  splitter->setSizes({950, 240});
+  auto* detailsToggle = new QToolButton{};
+  detailsToggle->setObjectName("ProjectAssetDetailsToggle");
+  detailsToggle->setProperty("tbControlRole", "compact");
+  detailsToggle->setText(tr("Details"));
+  detailsToggle->setToolTip(tr("Show asset details"));
+  detailsToggle->setCheckable(true);
+  connect(detailsToggle, &QToolButton::toggled, detailsSurface, &QWidget::setVisible);
+  m_browser->addViewOption(detailsToggle);
+  detailsSurface->hide();
   layout->addWidget(splitter);
   auto* view = m_browser->findChild<ModelBrowserView*>();
   connect(view, &ModelBrowserView::assetSelected, this, &ProjectAssetPanel::showAsset);

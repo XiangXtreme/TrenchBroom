@@ -380,14 +380,21 @@ void ModelBrowser::createGui(AppController& appController)
   m_searchBox = createSearchBox();
   m_searchBox->setObjectName("ModelBrowser_Search");
   m_searchBox->setPlaceholderText(tr("Search assets…"));
-  m_searchBox->setProperty("tbControlRole", "prominent");
+  m_searchBox->setProperty("tbControlRole", "compact");
+  m_searchBox->setMinimumWidth(140);
+  m_searchBox->setMaximumWidth(320);
+  for (auto* combo : {m_sourceCombo, m_typeCombo, m_libraryCombo, m_iconSizeCombo})
+    combo->setProperty("tbControlRole", "compact");
 
   auto* pathRowLayout = new QHBoxLayout{};
-  pathRowLayout->setContentsMargins(8, 5, 8, 5);
+  pathRowLayout->setContentsMargins(8, 3, 8, 3);
   pathRowLayout->setSpacing(6);
   pathRowLayout->addWidget(m_savePrefabButton);
   pathRowLayout->addWidget(m_reloadButton);
   pathRowLayout->addWidget(m_pathStack, 1);
+  pathRowLayout->addWidget(m_searchBox, 1);
+  pathRowLayout->addWidget(m_sourceCombo);
+  pathRowLayout->addWidget(m_typeCombo);
   pathRowLayout->addWidget(m_libraryCombo);
   m_libraryCombo->setMaximumWidth(200);
 
@@ -447,16 +454,6 @@ void ModelBrowser::createGui(AppController& appController)
   sourcesLayout->addWidget(sourcesTitle);
   sourcesLayout->addWidget(m_folderTree, 1);
 
-  auto* filterRow = new QWidget{};
-  filterRow->setObjectName("ModelBrowser_FilterRow");
-  filterRow->setAttribute(Qt::WA_StyledBackground);
-  auto* filterLayout = new QHBoxLayout{filterRow};
-  filterLayout->setContentsMargins(8, 6, 8, 6);
-  filterLayout->setSpacing(6);
-  filterLayout->addWidget(m_searchBox, 1);
-  filterLayout->addWidget(m_sourceCombo);
-  filterLayout->addWidget(m_typeCombo);
-
   auto* footer = new QWidget{};
   footer->setObjectName("ModelBrowser_ViewOptions");
   footer->setAttribute(Qt::WA_StyledBackground);
@@ -471,7 +468,7 @@ void ModelBrowser::createGui(AppController& appController)
   auto* assetsLayout = new QVBoxLayout{assets};
   assetsLayout->setContentsMargins(0, 0, 0, 0);
   assetsLayout->setSpacing(0);
-  assetsLayout->addWidget(filterRow);
+  assetsLayout->addWidget(controls);
   assetsLayout->addWidget(browser, 1);
   assetsLayout->addWidget(footer);
 
@@ -487,13 +484,19 @@ void ModelBrowser::createGui(AppController& appController)
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
-  layout->addWidget(controls, 0);
   layout->addWidget(splitter, 1);
   setLayout(layout);
 
   m_fileSystemWatcher = new QFileSystemWatcher{this};
   m_rescanTimer = new QTimer{this};
   m_rescanTimer->setSingleShot(true);
+}
+
+void ModelBrowser::addViewOption(QWidget* control)
+{
+  auto* footer = findChild<QWidget*>("ModelBrowser_ViewOptions");
+  auto* layout = qobject_cast<QHBoxLayout*>(footer->layout());
+  layout->insertWidget(0, control);
 }
 
 void ModelBrowser::previewAsset(AppController& appController, const QString& path)
