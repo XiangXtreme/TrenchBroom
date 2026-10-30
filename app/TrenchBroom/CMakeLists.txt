@@ -11,6 +11,8 @@ set(APP_SOURCE
     "${APP_SOURCE_DIR}/UiComponentSnapshot.h"
     "${APP_SOURCE_DIR}/UiSnapshotRunner.cpp"
     "${APP_SOURCE_DIR}/UiSnapshotRunner.h"
+    "${APP_SOURCE_DIR}/UiWorkspaceSnapshot.cpp"
+    "${APP_SOURCE_DIR}/UiWorkspaceSnapshot.h"
     "${TB_RESOURCE_DIR}/qrc/resources.qrc")
 
 # OS X app bundle configuration, must happen before the executable is added

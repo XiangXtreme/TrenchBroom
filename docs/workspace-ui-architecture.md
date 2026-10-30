@@ -222,7 +222,14 @@ flowchart TD
 1 项原生鼠标捕获测试按后台策略跳过。`workbench`、`supporting`、`python-console`
 三主题、三缩放共 27 张自动快照通过，并检查了汇总图的布局、底栏与工具区域。
 本地预检通过；官方 Qt 包元数据网络检查重试仍未完成（Linux 地址请求失败），
-此次仅跳过该网络检查，未修改 Qt 或 CI 配置。工程专用快照仍待接入。
+此次仅跳过该网络检查，未修改 Qt 或 CI 配置。
+
+工程专用快照验收（2026-10-30）：独立 `UiWorkspaceSnapshot` 模块使用临时真实
+`.tbproj`，通过正常工程入口创建地图、切换标签和关闭视图，并在捕获前校验绑定状态。
+`project-empty`、`project-drawer`、`project-pinned`、`project-map-switch`、
+`project-all-closed` 三主题、三缩放共 45 张快照通过，汇总图已检查。
+覆盖无地图禁用态、抽屉与固定区、活动地图网格及全部标签关闭后的重开入口；
+2 个变更编译单元严格编译和 Release 主程序构建通过。
 
 
 把独立 MAP 与工程的区域布局接入共同宿主，统一底栏和状态展示；

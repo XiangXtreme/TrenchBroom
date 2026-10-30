@@ -47,6 +47,7 @@
 #include <QTreeWidget>
 
 #include "UiComponentSnapshot.h"
+#include "UiWorkspaceSnapshot.h"
 #include "base/PreferenceManager.h"
 #include "fs/DiskIO.h"
 #include "gl/Camera.h"
@@ -121,6 +122,11 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("python-console"),
     QStringLiteral("command-palette"),
     QStringLiteral("components"),
+    QStringLiteral("project-empty"),
+    QStringLiteral("project-drawer"),
+    QStringLiteral("project-pinned"),
+    QStringLiteral("project-map-switch"),
+    QStringLiteral("project-all-closed"),
     QStringLiteral("preferences"),
     QStringLiteral("preferences-colors"),
     QStringLiteral("preferences-mouse"),
@@ -755,6 +761,14 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
 
 UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& targetName)
 {
+  if (targetName.startsWith(QStringLiteral("project-")))
+  {
+    const auto reason = workspaceSnapshotPendingReason(targetWidget, targetName);
+    return {
+      reason.isEmpty() ? UiSnapshotReadinessState::Ready
+                       : UiSnapshotReadinessState::Pending,
+      reason};
+  }
   if (targetName == QStringLiteral("goldsrc-entity-links"))
   {
     return goldSrcEntitySnapshotReadiness(targetWidget);
@@ -984,7 +998,11 @@ void configurePreferencesSnapshot(
 
 void configureSnapshot(QWidget& targetWidget, const QString& targetName)
 {
-  if (targetName == QStringLiteral("goldsrc-entity-links"))
+  if (targetName.startsWith(QStringLiteral("project-")))
+  {
+    configureWorkspaceSnapshot(targetWidget, targetName);
+  }
+  else if (targetName == QStringLiteral("goldsrc-entity-links"))
   {
     configureGoldSrcEntitySnapshot(targetWidget);
   }
@@ -1178,6 +1196,7 @@ int runUiSnapshot(
   auto componentSnapshot = std::unique_ptr<QWidget>{};
   auto preferencesDialog = std::unique_ptr<PreferenceDialog>{};
   auto commandPaletteDialog = std::unique_ptr<CommandPaletteDialog>{};
+  auto workspaceSnapshot = std::unique_ptr<UiWorkspaceSnapshot>{};
 
   if (options.page == QStringLiteral("components"))
   {
@@ -1214,7 +1233,20 @@ int runUiSnapshot(
       auto* mapWindow = appController.mapWindowManager().topMapWindow();
       if (mapWindow != nullptr)
       {
-        if (options.page == QStringLiteral("command-palette"))
+        if (options.page.startsWith(QStringLiteral("project-")))
+        {
+          workspaceSnapshot = std::make_unique<UiWorkspaceSnapshot>();
+          const auto result = workspaceSnapshot->initialize(
+            appController, pathFromQString(fileNames.front()), options.page);
+          if (result.is_error())
+          {
+            qCritical().noquote()
+              << QString::fromStdString(std::get<Error>(result.error()).msg);
+            return 3;
+          }
+          targetWidget = workspaceSnapshot->widget();
+        }
+        else if (options.page == QStringLiteral("command-palette"))
         {
           auto context = ActionExecutionContext{
             appController, mapWindow, mapWindow->currentMapViewBase()};
