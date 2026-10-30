@@ -50,6 +50,9 @@
 #include "mdl/Map_Selection.h"
 #include "mdl/PropertyDefinition.h"
 #include "mdl/WorldNode.h"
+#include "ui/Action.h"
+#include "ui/ActionExecutionContext.h"
+#include "ui/ActionManager.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/CreateEntityTool.h"
@@ -371,6 +374,31 @@ TEST_CASE("ProjectWindow")
     CHECK(manager.mapWindows().empty());
     CHECK(session->retainedDocument(alphaId) == alphaHandle);
     CHECK(session->assetFor(*betaHandle).has_value());
+  }
+
+  SECTION("captured panel command context keeps its original map after a tab switch")
+  {
+    auto context = ActionExecutionContext{
+      appController, alphaWindow, alphaWindow->currentMapViewBase()};
+    auto* alphaEditor = alphaWindow->findChild<MapEditorView*>();
+    tabs->setCurrentIndex(1);
+    auto* betaEditor = window.activeMapWindow()->findChild<MapEditorView*>();
+    CHECK(&context.map() == &alphaWindow->document().map());
+    CHECK(&context.editorView() == alphaEditor);
+    CHECK(&context.editorView() != betaEditor);
+    context.editorView().showInfoPanelPage(InfoPanelPage::PythonConsole);
+    const auto& toggle =
+      appController.actionManager().actionsMap().at("Menu/View/Toggle Info Panel");
+    REQUIRE(toggle.checked(context));
+    toggle.execute(context);
+    CHECK_FALSE(toggle.checked(context));
+    toggle.execute(context);
+    CHECK(toggle.checked(context));
+    CHECK(window.activeMapWindow() == alphaWindow);
+    CHECK(alphaEditor->infoPanel()->currentPage() == InfoPanelPage::PythonConsole);
+    CHECK_FALSE(betaEditor->infoPanel()->isVisible());
+    auto empty = ActionExecutionContext{appController, nullptr, nullptr};
+    CHECK_FALSE(empty.hasDocument());
   }
 
   SECTION("closing an embedded map preserves standalone info panel visibility")

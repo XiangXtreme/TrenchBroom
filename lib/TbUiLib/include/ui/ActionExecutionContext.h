@@ -32,6 +32,7 @@ namespace ui
 {
 class AppController;
 class MapDocument;
+class MapEditorView;
 class MapWindow;
 class MapViewBase;
 
@@ -42,6 +43,8 @@ private:
 
   AppController& m_appController;
   MapWindow* m_mapWindow;
+  MapDocument* m_document;
+  MapEditorView* m_editorView;
   MapViewBase* m_mapView;
 
 public:
@@ -56,6 +59,9 @@ public:
 
   const MapWindow& mapWindow() const;
   MapWindow& mapWindow();
+
+  const MapEditorView& editorView() const;
+  MapEditorView& editorView();
 
   const MapViewBase& mapView() const;
   MapViewBase& mapView();

@@ -34,6 +34,8 @@ ActionExecutionContext::ActionExecutionContext(
   : m_actionContext(mapView != nullptr ? mapView->actionContext() : ActionContext::Any)
   , m_appController{appController}
   , m_mapWindow{mapWindow}
+  , m_document{mapWindow ? &mapWindow->document() : nullptr}
+  , m_editorView{mapWindow ? &mapWindow->editorView() : nullptr}
   , m_mapView{mapView}
 {
   contract_pre(m_mapWindow == nullptr || m_mapView != nullptr);
@@ -41,7 +43,7 @@ ActionExecutionContext::ActionExecutionContext(
 
 bool ActionExecutionContext::hasDocument() const
 {
-  return m_mapWindow != nullptr;
+  return m_document != nullptr;
 }
 
 bool ActionExecutionContext::hasActionContext(
@@ -81,6 +83,17 @@ MapWindow& ActionExecutionContext::mapWindow()
   return KDL_CONST_OVERLOAD(mapWindow());
 }
 
+const MapEditorView& ActionExecutionContext::editorView() const
+{
+  contract_pre(m_editorView != nullptr);
+  return *m_editorView;
+}
+
+MapEditorView& ActionExecutionContext::editorView()
+{
+  return KDL_CONST_OVERLOAD(editorView());
+}
+
 const MapViewBase& ActionExecutionContext::mapView() const
 {
   contract_pre(hasDocument());
@@ -96,7 +109,8 @@ MapViewBase& ActionExecutionContext::mapView()
 
 const mdl::Map& ActionExecutionContext::map() const
 {
-  return mapWindow().document().map();
+  contract_pre(hasDocument());
+  return m_document->map();
 }
 
 mdl::Map& ActionExecutionContext::map()

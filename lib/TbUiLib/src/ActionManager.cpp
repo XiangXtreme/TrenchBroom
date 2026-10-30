@@ -34,6 +34,7 @@
 #include "ui/ActionExecutionContext.h"
 #include "ui/AppController.h" // IWYU pragma: keep
 #include "ui/Inspector.h"
+#include "ui/MapEditorView.h"
 #include "ui/MapView.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapViewToolBox.h" // IWYU pragma: keep
@@ -1987,7 +1988,7 @@ void ActionManager::createViewMenu()
     "Show Map Inspector",
     ActionContext::Any,
     KeySequence{"Ctrl+1"},
-    [](auto& context) { context.mapWindow().switchToInspectorPage(InspectorPage::Map); },
+    [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Map); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   viewMenu.addItem(addAction(Action{
@@ -1995,9 +1996,7 @@ void ActionManager::createViewMenu()
     "Show Entity Inspector",
     ActionContext::Any,
     KeySequence{"Ctrl+2"},
-    [](auto& context) {
-      context.mapWindow().switchToInspectorPage(InspectorPage::Entity);
-    },
+    [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Entity); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   viewMenu.addItem(addAction(Action{
@@ -2005,7 +2004,7 @@ void ActionManager::createViewMenu()
     "Show Face Inspector",
     ActionContext::Any,
     KeySequence{"Ctrl+3"},
-    [](auto& context) { context.mapWindow().switchToInspectorPage(InspectorPage::Face); },
+    [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Face); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   viewMenu.addItem(addAction(Action{
@@ -2014,7 +2013,7 @@ void ActionManager::createViewMenu()
     ActionContext::Any,
     KeySequence{},
     [](auto& context) {
-      context.mapWindow().switchToInspectorPage(InspectorPage::Outliner);
+      context.editorView().showInspectorPage(InspectorPage::Outliner);
     },
     [](const auto& context) { return context.hasDocument(); },
   }));
@@ -2023,9 +2022,7 @@ void ActionManager::createViewMenu()
     "Show Plugin Inspector",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) {
-      context.mapWindow().switchToInspectorPage(InspectorPage::Plugin);
-    },
+    [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Plugin); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   viewMenu.addSeparator();
@@ -2045,10 +2042,10 @@ void ActionManager::createViewMenu()
     "Toggle Info Panel",
     ActionContext::Any,
     KeySequence{"Ctrl+4"},
-    [](auto& context) { context.mapWindow().toggleInfoPanel(); },
+    [](auto& context) { context.editorView().toggleInfoPanel(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().infoPanelVisible();
+      return context.hasDocument() && context.editorView().isInfoPanelVisible();
     },
   }));
   viewMenu.addItem(addAction(Action{
@@ -2056,10 +2053,10 @@ void ActionManager::createViewMenu()
     "Toggle Inspector",
     ActionContext::Any,
     KeySequence{"Ctrl+5"},
-    [](auto& context) { context.mapWindow().toggleInspector(); },
+    [](auto& context) { context.editorView().toggleInspector(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().inspectorVisible();
+      return context.hasDocument() && context.editorView().isInspectorVisible();
     },
   }));
   viewMenu.addItem(addAction(Action{

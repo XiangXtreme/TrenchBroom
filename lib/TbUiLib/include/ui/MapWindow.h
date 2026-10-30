@@ -165,6 +165,7 @@ public:
   const std::shared_ptr<ProjectSession>& project() const;
   ~MapWindow() override;
 
+  MapEditorView& editorView() const;
   void positionOnScreen(QWidget* reference);
   void refreshCommandSurface(MapCommandSurface& commands);
   void setCommandToolBar(QToolBar& toolbar);

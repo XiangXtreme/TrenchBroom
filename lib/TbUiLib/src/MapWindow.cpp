@@ -332,6 +332,11 @@ bool MapWindow::documentRetainedByProject() const
   return assetId && m_project->retainedDocument(*assetId) != nullptr;
 }
 
+MapEditorView& MapWindow::editorView() const
+{
+  return *m_editor;
+}
+
 void MapWindow::positionOnScreen(QWidget* reference)
 {
   if (!m_embedded)
