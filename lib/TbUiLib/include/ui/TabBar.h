@@ -65,6 +65,7 @@ private:
   QStackedLayout* m_barBook = nullptr;
   QHBoxLayout* m_controlLayout = nullptr;
   std::vector<TabBarButton*> m_buttons;
+  bool m_navigationVisible = true;
 
 public:
   explicit TabBar(TabBook* tabBook);
@@ -78,6 +79,7 @@ private:
 
   void buttonClicked();
   void tabBookPageChanged(int newIndex);
+  void updateVisibility();
 };
 
 } // namespace tb::ui

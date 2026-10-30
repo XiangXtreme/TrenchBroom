@@ -132,15 +132,27 @@ void TabBar::addTab(TabBookPage* bookPage, const QString& title)
 
   const auto sizerIndex = int(m_buttons.size());
   m_controlLayout->insertWidget(sizerIndex, button);
+  button->setVisible(m_navigationVisible);
 
   auto* barPage = bookPage->createTabBarPage();
   m_barBook->addWidget(barPage);
+  updateVisibility();
 }
 
 void TabBar::setNavigationVisible(const bool visible)
 {
+  m_navigationVisible = visible;
   for (auto* button : m_buttons)
     button->setVisible(visible);
+  updateVisibility();
+}
+
+void TabBar::updateVisibility()
+{
+  const auto* actions = m_barBook->currentWidget();
+  const auto hasActions =
+    actions && !actions->findChildren<QWidget*>(Qt::FindDirectChildrenOnly).isEmpty();
+  setVisible(m_navigationVisible || hasActions);
 }
 
 size_t TabBar::findButtonIndex(QWidget* button) const
@@ -178,6 +190,7 @@ void TabBar::tabBookPageChanged(const int newIndex)
 
   setButtonActive(newIndex);
   m_barBook->setCurrentIndex(newIndex);
+  updateVisibility();
 }
 
 } // namespace tb::ui

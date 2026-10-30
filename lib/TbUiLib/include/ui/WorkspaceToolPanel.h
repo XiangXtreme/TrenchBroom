@@ -17,6 +17,7 @@ class QComboBox;
 class QSplitter;
 class QStackedWidget;
 class QToolButton;
+class QVariantAnimation;
 
 namespace tb::ui
 {
@@ -40,6 +41,8 @@ class WorkspaceToolPanel : public QWidget
   QWidget* m_status = nullptr;
   QSplitter* m_splitter = nullptr;
   QFrame* m_panel = nullptr;
+  QWidget* m_body = nullptr;
+  QVariantAnimation* m_animation = nullptr;
   QStackedWidget* m_pages = nullptr;
   QPointer<QWidget> m_content;
   QPointer<InfoPanel> m_mapPanel;
@@ -55,6 +58,7 @@ class WorkspaceToolPanel : public QWidget
   bool m_changingMode = false;
   bool m_restoringLayout = true;
   bool m_layoutPending = true;
+  bool m_updatingGeometry = false;
   WorkspaceKind m_kind;
   ToolLayout m_layout;
   QString m_pendingTool;
@@ -74,6 +78,7 @@ public:
   void showInfoPage(InfoPanelPage page);
   void toggle();
   bool isExpanded() const;
+  bool isAnimating() const;
   WorkspaceToolId currentTool() const;
   bool isToolVisible(WorkspaceToolId tool) const;
 
@@ -89,6 +94,9 @@ private:
   void setExpanded(bool expanded, bool restoreFocus = true);
   void updatePage();
   void updateGeometryForMode();
+  int collapsedHeight() const;
+  int expandedHeight() const;
+  void applyDrawerHeight(int height);
   void saveLayout();
   void captureHeight();
 };

@@ -14,9 +14,11 @@
 #include <QShortcut>
 #include <QSplitter>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QVariantAnimation>
 
 #include "ui/ImageUtils.h"
 #include "ui/MapEditorView.h"
@@ -64,14 +66,17 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   m_panel->setObjectName("ProjectToolDrawer");
   m_panel->setFrameShape(QFrame::StyledPanel);
   m_panel->setAutoFillBackground(true);
-  auto* panelLayout = new QVBoxLayout{m_panel};
+  // The frame clips a stable body while its visible height slides open or closed.
+  m_body = new QWidget{m_panel};
+  m_panel->installEventFilter(this);
+  auto* panelLayout = new QVBoxLayout{m_body};
   panelLayout->setContentsMargins(0, 0, 0, 0);
   panelLayout->setSpacing(0);
-  m_pages = new QStackedWidget{m_panel};
+  m_pages = new QStackedWidget{m_body};
   m_pages->addWidget(content);
   panelLayout->addWidget(m_pages, 1);
 
-  m_bar = new QWidget{this};
+  m_bar = new QWidget{m_body};
   m_bar->setObjectName("ProjectToolBar");
   m_bar->setAttribute(Qt::WA_StyledBackground);
   auto* barLayout = new QHBoxLayout{m_bar};
@@ -135,7 +140,7 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   auto* footerLayout = new QVBoxLayout{m_footer};
   footerLayout->setContentsMargins(0, 0, 0, 0);
   footerLayout->setSpacing(0);
-  footerLayout->addWidget(m_bar);
+  panelLayout->insertWidget(0, m_bar);
   m_status = new QWidget{m_footer};
   m_status->setObjectName("WorkspaceStatusBar");
   m_status->setAttribute(Qt::WA_StyledBackground);
@@ -149,6 +154,18 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   layout->setSpacing(0);
   layout->addWidget(m_surface, 1);
   layout->addWidget(m_footer);
+
+  m_animation = new QVariantAnimation{this};
+  m_animation->setObjectName("WorkspaceDrawerAnimation");
+  m_animation->setEasingCurve(QEasingCurve::OutCubic);
+  connect(
+    m_animation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+      applyDrawerHeight(value.toInt());
+    });
+  connect(m_animation, &QVariantAnimation::finished, this, [this]() {
+    m_pages->setVisible(m_expanded);
+    applyDrawerHeight(m_expanded ? expandedHeight() : collapsedHeight());
+  });
 
   connect(m_fold, &QToolButton::clicked, this, &WorkspaceToolPanel::toggle);
   connect(m_mode, &QComboBox::currentIndexChanged, this, [this](const int index) {
@@ -228,7 +245,9 @@ void WorkspaceToolPanel::showEvent(QShowEvent* event)
 
 void WorkspaceToolPanel::captureHeight()
 {
-  if (m_layoutPending || m_panel->parentWidget() != m_splitter || !m_expanded)
+  if (
+    m_layoutPending || isAnimating() || m_panel->parentWidget() != m_splitter
+    || !m_expanded)
     return;
   const auto sizes = m_splitter->sizes();
   const auto total = sizes[0] + sizes[1];
@@ -352,6 +371,11 @@ bool WorkspaceToolPanel::isExpanded() const
   return m_expanded;
 }
 
+bool WorkspaceToolPanel::isAnimating() const
+{
+  return m_animation->state() == QAbstractAnimation::Running;
+}
+
 void WorkspaceToolPanel::setExpanded(const bool expanded, const bool restoreFocus)
 {
   const auto changingMode = QScopedValueRollback{m_changingMode, true};
@@ -368,7 +392,22 @@ void WorkspaceToolPanel::setExpanded(const bool expanded, const bool restoreFocu
   }
   m_expanded = expanded;
   updatePage();
-  updateGeometryForMode();
+  const auto duration =
+    style()->styleHint(QStyle::SH_Widget_Animation_Duration, nullptr, this);
+  if (
+    expanded != wasExpanded && isVisible() && !m_restoringLayout && !m_layoutPending
+    && duration > 0)
+  {
+    const auto startHeight = m_panel->height();
+    m_animation->stop();
+    m_pages->show();
+    m_animation->setDuration(std::clamp(duration, 120, 240));
+    m_animation->setStartValue(startHeight);
+    m_animation->setEndValue(expanded ? expandedHeight() : collapsedHeight());
+    m_animation->start();
+  }
+  else if (!isAnimating())
+    updateGeometryForMode();
   if (expanded)
     m_pages->currentWidget()->setFocus(Qt::ShortcutFocusReason);
   else if (wasExpanded && restoreFocus)
@@ -433,44 +472,79 @@ void WorkspaceToolPanel::updatePage()
 
 void WorkspaceToolPanel::updateGeometryForMode()
 {
-  // Move the same navigation controls, retaining their state and connections.
-  // The footer stays outside both the splitter and the overlay.
-  auto* barParent = m_expanded ? static_cast<QWidget*>(m_panel) : m_footer;
-  if (m_bar->parentWidget() != barParent)
-  {
-    static_cast<QVBoxLayout*>(barParent->layout())->insertWidget(0, m_bar);
-    m_bar->show();
-  }
+  if (m_updatingGeometry)
+    return;
+  const auto updating = QScopedValueRollback{m_updatingGeometry, true};
+  m_animation->stop();
   const auto pinned = m_mode->currentIndex() == 1;
-  // In overlay mode the raised tab strip must not resize the map viewport.
-  // Reserve its former footer height underneath the overlay instead.
-  m_surface->layout()->setContentsMargins(
-    0, 0, 0, m_expanded && !pinned ? m_bar->sizeHint().height() : 0);
+  // The collapsed strip is always covered by the drawer, including during motion.
+  // Keeping this allocation constant prevents overlay mode from resizing the map.
+  m_surface->layout()->setContentsMargins(0, 0, 0, !pinned ? collapsedHeight() : 0);
+  m_panel->setMinimumHeight(collapsedHeight());
   if (pinned && m_panel->parentWidget() != m_splitter)
   {
     m_splitter->addWidget(m_panel);
     m_splitter->setStretchFactor(0, 1);
     m_splitter->setStretchFactor(1, 0);
-    const auto panelHeight = static_cast<int>(m_surface->height() * m_layout.heightRatio);
-    m_splitter->setSizes({std::max(100, m_surface->height() - panelHeight), panelHeight});
   }
   else if (!pinned)
   {
     if (m_panel->parentWidget() != m_surface)
       m_panel->setParent(m_surface);
-    const auto height = std::min(
-      std::max(100, static_cast<int>(m_surface->height() * m_layout.heightRatio)),
-      m_surface->height());
-    m_panel->setGeometry(0, m_surface->height() - height, m_surface->width(), height);
     m_panel->raise();
   }
-  m_panel->setVisible(m_expanded);
+  m_panel->show();
+  m_pages->setVisible(m_expanded);
+  applyDrawerHeight(m_expanded ? expandedHeight() : collapsedHeight());
+}
+
+int WorkspaceToolPanel::collapsedHeight() const
+{
+  return m_bar->sizeHint().height() + 2;
+}
+
+int WorkspaceToolPanel::expandedHeight() const
+{
+  return std::clamp(
+    static_cast<int>(m_surface->height() * m_layout.heightRatio),
+    collapsedHeight(),
+    std::max(collapsedHeight(), m_surface->height()));
+}
+
+void WorkspaceToolPanel::applyDrawerHeight(const int height)
+{
+  const auto changingMode = QScopedValueRollback{m_changingMode, true};
+  if (m_panel->parentWidget() == m_splitter)
+    m_splitter->setSizes(
+      {std::max(0, m_splitter->height() - m_splitter->handleWidth() - height), height});
+  else
+    m_panel->setGeometry(0, m_surface->height() - height, m_surface->width(), height);
+  const auto bodyHeight =
+    !m_pages->isHidden()
+      ? (isAnimating() || !m_expanded ? std::max(expandedHeight(), m_panel->height())
+                                      : m_panel->height())
+      : collapsedHeight();
+  m_body->setGeometry(
+    1, 1, std::max(0, m_panel->width() - 2), std::max(0, bodyHeight - 2));
+  m_body->layout()->activate();
 }
 
 bool WorkspaceToolPanel::eventFilter(QObject* watched, QEvent* event)
 {
-  if (watched == m_surface && event->type() == QEvent::Resize)
+  if (!m_animation)
+    return QWidget::eventFilter(watched, event);
+  if (watched == m_surface && event->type() == QEvent::Resize && !m_panel->isHidden())
     updateGeometryForMode();
+  if (watched == m_panel && event->type() == QEvent::Resize && !m_updatingGeometry)
+  {
+    const auto bodyHeight =
+      !m_pages->isHidden()
+        ? (isAnimating() || !m_expanded ? std::max(expandedHeight(), m_panel->height())
+                                        : m_panel->height())
+        : collapsedHeight();
+    m_body->setGeometry(
+      1, 1, std::max(0, m_panel->width() - 2), std::max(0, bodyHeight - 2));
+  }
   return QWidget::eventFilter(watched, event);
 }
 } // namespace tb::ui

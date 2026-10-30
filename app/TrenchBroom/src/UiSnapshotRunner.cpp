@@ -89,6 +89,7 @@
 #include "ui/ThemeRegistry.h"
 #include "ui/UiSnapshot.h"
 #include "ui/WelcomeWindow.h"
+#include "ui/WorkspaceToolPanel.h"
 
 #include "kd/filesystem_utils.h"
 
@@ -119,6 +120,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("material-browser-empty"),
     QStringLiteral("plugin-inspector"),
     QStringLiteral("supporting"),
+    QStringLiteral("output-log"),
     QStringLiteral("path-tool-preview"),
     QStringLiteral("python-console"),
     QStringLiteral("command-palette"),
@@ -762,6 +764,27 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
 
 UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& targetName)
 {
+  if (auto* tools = targetWidget.findChild<WorkspaceToolPanel*>();
+      tools && tools->isAnimating())
+    return {
+      UiSnapshotReadinessState::Pending, "Workspace drawer animation is still running"};
+  if (targetName == QStringLiteral("output-log"))
+  {
+    auto* bar = targetWidget.findChild<QWidget*>("InfoPanel_TabBar");
+    auto* output = targetWidget.findChild<QTextEdit*>("Console_TextView");
+    auto* navigation = targetWidget.findChild<QWidget*>("ProjectToolBar");
+    if (!bar || !output || !navigation || bar->isVisible() || !output->isVisible())
+      return {
+        UiSnapshotReadinessState::Failed,
+        "Output log must not retain an empty action row"};
+    const auto gap =
+      output->mapTo(&targetWidget, QPoint{}).y()
+      - navigation->mapTo(&targetWidget, QPoint{0, navigation->height()}).y();
+    return {
+      gap >= 0 && gap <= 2 ? UiSnapshotReadinessState::Ready
+                           : UiSnapshotReadinessState::Failed,
+      "Output log must meet the drawer tab strip without a blank spacer"};
+  }
   if (targetName.startsWith(QStringLiteral("project-")))
   {
     const auto reason = workspaceSnapshotPendingReason(targetWidget, targetName);
@@ -1014,6 +1037,15 @@ void configureSnapshot(QWidget& targetWidget, const QString& targetName)
   else if (targetName == QStringLiteral("supporting"))
   {
     configureSupportingSnapshot(targetWidget);
+  }
+  else if (targetName == QStringLiteral("output-log"))
+  {
+    if (auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget))
+    {
+      mapWindow->switchToInfoPanelPage(InfoPanelPage::Console);
+      mapWindow->findChild<QComboBox*>("ProjectToolsMode")->setCurrentIndex(1);
+      mapWindow->findChild<QSplitter*>("ProjectToolsSplitter")->setSizes({560, 340});
+    }
   }
   else if (targetName == QStringLiteral("path-tool-preview"))
   {

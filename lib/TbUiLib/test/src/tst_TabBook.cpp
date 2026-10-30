@@ -18,6 +18,8 @@
  */
 
 #include <QApplication>
+#include <QHBoxLayout>
+#include <QPushButton>
 #include <QtTest/QTest>
 
 #include "ui/TabBar.h"
@@ -29,6 +31,18 @@ namespace tb::ui
 {
 namespace
 {
+
+class ActionPage : public TabBookPage
+{
+public:
+  QWidget* createTabBarPage(QWidget* parent) override
+  {
+    auto* actions = new QWidget{parent};
+    auto* layout = new QHBoxLayout{actions};
+    layout->addWidget(new QPushButton{"Run", actions});
+    return actions;
+  }
+};
 
 TabBarButton* tabButton(TabBook& tabBook, const QString& accessibleName)
 {
@@ -90,6 +104,23 @@ TEST_CASE("TabBook")
     addTestPages(restoredTabBook);
     REQUIRE(restoredTabBook.restoreState(state));
     CHECK(restoredTabBook.currentPageIndex() == 1);
+  }
+
+  SECTION("external navigation removes empty action rows but retains page commands")
+  {
+    tabBook.addPage(new ActionPage{}, "Actions");
+    tabBook.tabBar()->setNavigationVisible(false);
+    QApplication::processEvents();
+    CHECK_FALSE(tabBook.tabBar()->isVisible());
+    tabBook.switchToPage(2);
+    QApplication::processEvents();
+    CHECK(tabBook.tabBar()->isVisible());
+    CHECK(tabBook.tabBar()->findChild<QPushButton*>()->isVisible());
+    tabBook.switchToPage(0);
+    QApplication::processEvents();
+    CHECK_FALSE(tabBook.tabBar()->isVisible());
+    tabBook.tabBar()->setNavigationVisible(true);
+    CHECK(tabBook.tabBar()->isVisible());
   }
 }
 

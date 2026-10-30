@@ -289,12 +289,14 @@ TEST_CASE("ProjectWindow")
     mode->setCurrentIndex(0);
     if (tools->isExpanded())
       close->click();
-    REQUIRE_FALSE(drawer->isVisible());
+    QTRY_VERIFY_WITH_TIMEOUT(!tools->isAnimating(), 1000);
+    REQUIRE(drawer->isVisible());
+    CHECK_FALSE(window.findChild<ProjectAssetPanel*>()->isVisible());
     auto* bar = tools->findChild<QWidget*>("ProjectToolBar");
     auto* status = tools->findChild<QWidget*>("WorkspaceStatusBar");
     REQUIRE(bar);
     REQUIRE(status);
-    CHECK_FALSE(drawer->isAncestorOf(bar));
+    CHECK(drawer->isAncestorOf(bar));
     CHECK_FALSE(drawer->isAncestorOf(status));
     const auto workspaceHeight = stack->height();
     tools->showContent();
@@ -311,7 +313,7 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(tools->isToolVisible(WorkspaceToolId::OutputLog));
     close->click();
     CHECK_FALSE(tools->isExpanded());
-    CHECK_FALSE(drawer->isAncestorOf(bar));
+    CHECK(drawer->isAncestorOf(bar));
     close->click();
     CHECK(tools->isExpanded());
     CHECK(drawer->isAncestorOf(bar));

@@ -130,6 +130,8 @@ QString workspaceSnapshotPendingReason(QWidget& widget, const QString& target)
   const auto statuses = window->findChildren<MapStatus*>();
   if (!tools || !tabs || statuses.size() != 1)
     return "Workspace must have one tool host, tab strip and status surface";
+  if (tools->isAnimating())
+    return "Workspace drawer animation is still running";
   const auto tool = target == "project-map-switch" ? WorkspaceToolId::PythonConsole
                                                    : WorkspaceToolId::ContentBrowser;
   if (!tools->isToolVisible(tool))
