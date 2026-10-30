@@ -705,6 +705,11 @@ tb.register_callback("selection_changed", on_selection_changed)
     REQUIRE(manager.plugins()[0].session != nullptr);
     manager.unloadPlugins(window);
     CHECK(manager.plugins()[0].session == nullptr);
+    CHECK(pluginPanels(window).empty());
+    REQUIRE(manager.loadPlugins(window));
+    CHECK(pluginPanels(window).size() == 1u);
+    manager.unloadPlugins(window);
+    CHECK(pluginPanels(window).empty());
   }
 
   SECTION("redirects stdout and stderr")

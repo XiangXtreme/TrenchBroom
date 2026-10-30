@@ -25,6 +25,7 @@
 #include "ui/PluginInspector.h"
 
 #include <algorithm>
+#include <memory>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -63,7 +64,8 @@ TEST_CASE("PluginInspector")
     CHECK(hasEmptyPluginInfo(inspector));
     CHECK(pluginPanels(inspector).empty());
 
-    auto* content = inspector.addPluginPanel("Python Tools");
+    auto registration = inspector.addPluginPanel("Python Tools");
+    auto* content = registration.content();
     REQUIRE(content != nullptr);
     QApplication::processEvents();
 
@@ -78,6 +80,53 @@ TEST_CASE("PluginInspector")
 
     CHECK(pluginPanels(inspector).empty());
     CHECK(hasEmptyPluginInfo(inspector));
+    CHECK(registration.content() == nullptr);
+    registration.close();
+  }
+
+  SECTION("unregisters only the requested panel and restores the empty state")
+  {
+    auto first = inspector.addPluginPanel("First");
+    auto second = inspector.addPluginPanel("Second");
+    auto secondContent = QPointer<QWidget>{second.content()};
+    // Cleanup must not depend on names or parent discovery.
+    for (auto* panel : pluginPanels(inspector))
+    {
+      panel->setObjectName("Renamed");
+    }
+
+    first.close();
+    CHECK(first.content() == nullptr);
+    REQUIRE(secondContent != nullptr);
+    CHECK_FALSE(hasEmptyPluginInfo(inspector));
+    first.close();
+    second.close();
+    CHECK(secondContent == nullptr);
+    CHECK(hasEmptyPluginInfo(inspector));
+    CHECK(inspector.addPluginPanel("Reloaded").content() != nullptr);
+    CHECK_FALSE(hasEmptyPluginInfo(inspector));
+  }
+
+  SECTION("registrations safely outlive their host")
+  {
+    auto host = std::make_unique<PluginInspector>();
+    auto registration = host->addPluginPanel("Tool");
+    host.reset();
+    CHECK(registration.content() == nullptr);
+    registration.close();
+  }
+
+  SECTION("session cleanup completes a pending user close")
+  {
+    auto registration = inspector.addPluginPanel("Tool");
+    auto* closeButton = inspector.findChild<QToolButton*>("PluginInspector_CloseButton");
+    REQUIRE(closeButton != nullptr);
+    closeButton->click();
+    registration.close();
+    CHECK(registration.content() == nullptr);
+    CHECK(hasEmptyPluginInfo(inspector));
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    CHECK(pluginPanels(inspector).empty());
   }
 }
 

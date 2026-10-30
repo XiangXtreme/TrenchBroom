@@ -24,14 +24,35 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-#include "ui/QPathUtils.h"
 #include "ui/ClickableTitleBar.h"
 #include "ui/CollapsibleTitledPanel.h"
-#include "ui/InfoPanel.h"
-#include "ui/QWidgetUtils.h"
+
+#include <algorithm>
 
 namespace tb::ui
 {
+
+PluginPanelRegistration::PluginPanelRegistration(
+  PluginInspector& host, QWidget& panel, QWidget& content)
+  : m_host{&host}
+  , m_panel{&panel}
+  , m_content{&content}
+{
+}
+
+QWidget* PluginPanelRegistration::content() const
+{
+  return m_content;
+}
+
+void PluginPanelRegistration::close() const
+{
+  if (m_host && m_panel)
+  {
+    m_host->removePluginPanel(m_panel);
+  }
+}
+
 
 namespace
 {
@@ -55,10 +76,6 @@ PluginInspector::PluginInspector(QWidget* parent)
   m_containerLayout->setContentsMargins(6, 6, 6, 6);
   m_containerLayout->setSpacing(6);
 
-  m_emptyLabel = new QLabel{
-    tr("No plugin panels loaded.\nThis panel is reserved for plugin-provided UI.")};
-  makePluginInfo(m_emptyLabel);
-  m_containerLayout->addWidget(m_emptyLabel, 0);
   m_containerLayout->addStretch(1);
 
   m_container->setLayout(m_containerLayout);
@@ -68,9 +85,10 @@ PluginInspector::PluginInspector(QWidget* parent)
   layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(m_scrollArea, 1);
   setLayout(layout);
+  updateEmptyState();
 }
 
-QWidget* PluginInspector::addPluginPanel(const QString& title)
+PluginPanelRegistration PluginInspector::addPluginPanel(const QString& title)
 {
   if (m_emptyLabel)
   {
@@ -102,38 +120,40 @@ QWidget* PluginInspector::addPluginPanel(const QString& title)
 
     titleBar->layout()->addWidget(closeButton);
 
-    QObject::connect(closeButton, &QToolButton::clicked, panel, [this, panel]() {
+    QObject::connect(closeButton, &QToolButton::clicked, this, [this, panel]() {
+      // Defer deletion until the button has finished dispatching its event.
+      panel->hide();
       m_containerLayout->removeWidget(panel);
+      std::erase(m_panels, panel);
       panel->deleteLater();
-
-      auto hasAnyPluginPanel = false;
-      for (auto i = 0; i < m_containerLayout->count(); ++i)
-      {
-        if (auto* item = m_containerLayout->itemAt(i))
-        {
-          if (auto* w = item->widget())
-          {
-            if (w->objectName() == QStringLiteral("PluginInspector_PluginPanel"))
-            {
-              hasAnyPluginPanel = true;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!hasAnyPluginPanel && m_emptyLabel == nullptr)
-      {
-        m_emptyLabel = new QLabel{
-          tr("No plugin panels loaded.\nThis panel is reserved for plugin-provided UI.")};
-        makePluginInfo(m_emptyLabel);
-        m_containerLayout->insertWidget(1, m_emptyLabel, 0);
-      }
+      updateEmptyState();
     });
   }
   panel->getPanel()->setAttribute(Qt::WA_StyledBackground, true);
   m_containerLayout->insertWidget(insertIndex, panel, 0);
-  return panel->getPanel();
+  m_panels.push_back(panel);
+  return PluginPanelRegistration{*this, *panel, *panel->getPanel()};
+}
+
+void PluginInspector::removePluginPanel(QWidget* panel)
+{
+  // A user-closed panel may still await DeferredDelete. Session teardown must
+  // destroy it now, before releasing its document and Python services.
+  std::erase(m_panels, panel);
+  m_containerLayout->removeWidget(panel);
+  delete panel;
+  updateEmptyState();
+}
+
+void PluginInspector::updateEmptyState()
+{
+  if (m_panels.empty() && !m_emptyLabel)
+  {
+    m_emptyLabel = new QLabel{
+      tr("No plugin panels loaded.\nThis panel is reserved for plugin-provided UI.")};
+    makePluginInfo(m_emptyLabel);
+    m_containerLayout->insertWidget(0, m_emptyLabel);
+  }
 }
 
 } // namespace tb::ui

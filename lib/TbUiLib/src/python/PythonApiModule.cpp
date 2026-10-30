@@ -4075,11 +4075,12 @@ PluginPanelHandle createPluginPanel(const std::string& title)
     throw std::runtime_error{"No active map window"};
   }
 
-  auto* container = context.mapWindow->addPluginPanel(QString::fromStdString(title));
+  auto registration = context.mapWindow->addPluginPanel(QString::fromStdString(title));
+  auto* container = registration.content();
   context.mapWindow->switchToInspectorPage(InspectorPage::Plugin);
   if (auto* session = currentPythonPluginSession())
   {
-    session->addPluginPanel(container);
+    session->addPluginPanel(std::move(registration));
   }
   return PluginPanelHandle{QPointer<QWidget>{container}};
 }

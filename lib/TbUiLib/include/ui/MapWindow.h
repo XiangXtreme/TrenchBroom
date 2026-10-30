@@ -87,6 +87,7 @@ enum class MapViewLayout;
 class MapViewToolBox;
 class ObjExportDialog;
 class PythonConsole;
+class PluginPanelRegistration;
 class ProjectSession;
 class WorkspaceToolPanel;
 class SignalDelayer;
@@ -455,7 +456,8 @@ public:
 
   void runPythonScript();
 
-  QWidget* addPluginPanel(const QString& title, const QString& content = QString());
+  PluginPanelRegistration addPluginPanel(
+    const QString& title, const QString& content = QString());
   void startPlayMode(bool fromCamera);
 
   bool canRevealMaterial() const;

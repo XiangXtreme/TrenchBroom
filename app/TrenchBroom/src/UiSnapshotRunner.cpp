@@ -83,6 +83,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/MaterialBrowser.h"
 #include "ui/PathTool.h"
+#include "ui/PluginInspector.h"
 #include "ui/PreferenceDialog.h"
 #include "ui/QPathUtils.h"
 #include "ui/ThemeRegistry.h"
@@ -879,7 +880,7 @@ void configureInspectorSnapshot(QWidget& targetWidget, const QString& targetName
       mapWindow->findChild<QWidget*>(QStringLiteral("UiSnapshot_PluginPanelContent"))
       == nullptr)
     {
-      auto* content = mapWindow->addPluginPanel(QStringLiteral("Chamfer Tool"));
+      auto* content = mapWindow->addPluginPanel(QStringLiteral("Chamfer Tool")).content();
       content->setObjectName(QStringLiteral("UiSnapshot_PluginPanelContent"));
 
       auto* status = new QLabel{QStringLiteral("Ready"), content};

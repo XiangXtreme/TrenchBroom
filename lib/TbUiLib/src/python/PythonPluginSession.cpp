@@ -1,9 +1,6 @@
 #include "ui/python/PythonPluginSession.h"
 
-#include <QLayout>
-#include <QString>
 #include <QTimer>
-#include <QWidget>
 
 #include "ui/python/PythonRuntime.h"
 
@@ -12,6 +9,7 @@
 #endif
 
 #include <Python.h>
+
 #include <algorithm>
 #include <utility>
 
@@ -121,37 +119,16 @@ std::vector<int> PythonPluginSession::takeCallbackTokens()
   return result;
 }
 
-void PythonPluginSession::addPluginPanel(QWidget* panel)
+void PythonPluginSession::addPluginPanel(PluginPanelRegistration panel)
 {
-  if (panel != nullptr)
-  {
-    m_pluginPanels.push_back(QPointer<QWidget>{panel});
-  }
+  m_pluginPanels.push_back(std::move(panel));
 }
 
 void PythonPluginSession::closePluginPanels()
 {
   for (const auto& panel : m_pluginPanels)
   {
-    if (panel != nullptr)
-    {
-      auto* panelWidget = panel->parentWidget();
-      if (
-        panelWidget == nullptr
-        || panelWidget->objectName() != QStringLiteral("PluginInspector_PluginPanel"))
-      {
-        panelWidget = panel;
-      }
-      if (auto* parentLayout =
-            panelWidget->parentWidget() != nullptr ? panelWidget->parentWidget()->layout()
-                                                   : nullptr)
-      {
-        parentLayout->removeWidget(panelWidget);
-      }
-      panelWidget->hide();
-      panelWidget->setParent(nullptr);
-      delete panelWidget;
-    }
+    panel.close();
   }
   m_pluginPanels.clear();
 }

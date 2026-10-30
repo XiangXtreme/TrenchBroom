@@ -2195,9 +2195,11 @@ void MapWindow::runPythonScript()
   }
 }
 
-QWidget* MapWindow::addPluginPanel(const QString& title, const QString& content)
+PluginPanelRegistration MapWindow::addPluginPanel(
+  const QString& title, const QString& content)
 {
-  auto* container = m_inspector->pluginInspector()->addPluginPanel(title);
+  auto registration = m_inspector->pluginInspector()->addPluginPanel(title);
+  auto* container = registration.content();
   if (!content.isEmpty())
   {
     auto* layout = new QVBoxLayout{};
@@ -2206,7 +2208,7 @@ QWidget* MapWindow::addPluginPanel(const QString& title, const QString& content)
     layout->addWidget(label);
     container->setLayout(layout);
   }
-  return container;
+  return registration;
 }
 
 MapView3D* MapWindow::playModeView()

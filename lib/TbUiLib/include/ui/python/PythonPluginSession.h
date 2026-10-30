@@ -1,7 +1,6 @@
 #pragma once
 
-#include <QPointer>
-
+#include "ui/PluginInspector.h"
 #include "ui/python/PythonExecutionContext.h"
 #include "ui/python/PythonPluginManifest.h"
 
@@ -24,7 +23,7 @@ private:
   PythonPluginManifest m_manifest;
   PythonExecutionContext m_context;
   std::vector<int> m_callbackTokens;
-  std::vector<QPointer<QWidget>> m_pluginPanels;
+  std::vector<PluginPanelRegistration> m_pluginPanels;
   std::vector<std::unique_ptr<PythonSessionTimer>> m_timers;
   std::string m_error;
 
@@ -41,7 +40,7 @@ public:
   void addCallbackToken(int token);
   std::vector<int> takeCallbackTokens();
 
-  void addPluginPanel(QWidget* panel);
+  void addPluginPanel(PluginPanelRegistration panel);
   void closePluginPanels();
 
   int addIntervalTimer(PyObject* callback, int milliseconds, bool singleShot);

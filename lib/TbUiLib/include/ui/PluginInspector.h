@@ -19,7 +19,11 @@
 
 #pragma once
 
+#include <QPointer>
+
 #include "ui/TabBook.h"
+
+#include <vector>
 
 class QLabel;
 class QScrollArea;
@@ -30,19 +34,46 @@ class QString;
 namespace tb::ui
 {
 
+class PluginInspector;
+
+// A non-owning registration. The host owns the widgets; callers explicitly close
+// registrations when their plugin session ends. Closing is safe after either the
+// user or the host has already removed the panel.
+class PluginPanelRegistration
+{
+  friend class PluginInspector;
+
+private:
+  QPointer<PluginInspector> m_host;
+  QPointer<QWidget> m_panel;
+  QPointer<QWidget> m_content;
+
+  PluginPanelRegistration(PluginInspector& host, QWidget& panel, QWidget& content);
+
+public:
+  QWidget* content() const;
+  void close() const;
+};
+
 class PluginInspector : public TabBookPage
 {
+  friend class PluginPanelRegistration;
+
 private:
   QScrollArea* m_scrollArea = nullptr;
   QWidget* m_container = nullptr;
   QVBoxLayout* m_containerLayout = nullptr;
   QLabel* m_emptyLabel = nullptr;
+  std::vector<QWidget*> m_panels;
 
 public:
   explicit PluginInspector(QWidget* parent = nullptr);
 
-  QWidget* addPluginPanel(const QString& title);
+  PluginPanelRegistration addPluginPanel(const QString& title);
+
+private:
+  void removePluginPanel(QWidget* panel);
+  void updateEmptyState();
 };
 
 } // namespace tb::ui
-
