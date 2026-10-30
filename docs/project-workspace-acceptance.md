@@ -38,6 +38,34 @@
 
 ## 3. 自动化验证现状
 
+### 资源生命周期与迁移回归
+
+`ProjectSessionAssetLibrary` 包含可重复运行的隔离临时工程用例：
+
+- 已转换图片的库修订改用另一个纹理名时，更新保留工程纹理名；除名称字段外的 miptex
+  数据与库转换结果一致，不重新转换像素。
+- 纹理重命名发布名称、修改显示名、移动虚拟目录后更新库修订，检查稳定 ID、工程路径、
+  miptex 名称、尺寸和地图引用。保存副本并移到另一个目录，删除原工程与库目录，再重开，
+  检查预览文件、引用解析和编译快照。离线更新失败后，已保存修订与脏状态不变。
+- 使用模型、Sprite、PCM WAV 和六面天空盒构成混合资源工程；模型、Sprite、声音经过
+  显示名修改、虚拟目录移动和重新导入后，发布路径与资源内容保持一致。保存并搬迁副本，
+  删除原工程及库，重新打开、导出固定快照，通过实际编译配置的复制任务发布到带空格的
+  游戏目录，并逐文件比较资源内容。
+
+运行方式（先构建测试目标）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-filtered.ps1 -Target TbUiLibTest -TestFilter ProjectSessionAssetLibrary
+```
+
+这些回归检查工程存储、资源解析与发布文件，不替代第 4.2 节的编译器和游戏内验收。
+
+2026-10-30 本轮验证：上述定向测试 837 条断言通过；完整本地 CI preflight 通过，包含
+两个改动编译单元的严格编译、Release `TrenchBroom` 构建与 120 项 UI 测试通过，另有
+1 项原生鼠标捕获测试按后台窗口策略跳过。
+
+### 历史验证记录
+
 - 最后一次**全量**验证在 `50b995b77`：UI 120 项全部通过（1 项原生鼠标捕获按后台策略跳过），
   本地 CI preflight（PowerShell 7）通过，日志 `build-release-codex/codex-logs/cleanup-preflight7.log`。
 - 之后的提交只做了定向验证，没有重跑全量：

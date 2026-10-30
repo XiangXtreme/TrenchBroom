@@ -795,8 +795,83 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto secondSnapshot = requireProject(
       sandbox.session->store().readAsset(second.id, project::ContentKind::Compatible));
     CHECK(second.library.libraryRevision == imageAsset.revision + 1);
-    CHECK(secondSnapshot == published.wad);
+    const auto updatedWad = requireProject(project::readGoldSrcWad(secondSnapshot));
+    REQUIRE(updatedWad.textures.size() == 1);
+    CHECK(updatedWad.textures.front().name == "wall");
+    CHECK(updatedWad.textures.front().width == 16);
+    auto expectedMiptex =
+      requireProject(project::readGoldSrcWad(published.wad)).textures.front().miptex;
+    std::fill(expectedMiptex.begin(), expectedMiptex.begin() + 16, std::uint8_t{0});
+    std::copy_n("wall", 4, expectedMiptex.begin());
+    CHECK(updatedWad.textures.front().miptex == expectedMiptex);
     CHECK(secondSnapshot != firstSnapshot);
+  }
+
+  SECTION("renamed texture updates survive moving the project away from its sources")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    const auto renamed = requireProject(
+      sandbox.session->renamePublishPath(captured.id, "textures/RENAMED.wad"));
+    requireProject(sandbox.session->renameAsset(captured.id, "Renamed wall"));
+    requireProject(sandbox.session->moveAsset(captured.id, "organized/wall.wad"));
+
+    auto stream = std::ostringstream{};
+    mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Standard, "Portable");
+    stream << "{\n\"classname\" \"worldspawn\"\n{\n"
+              "( 0 0 0 ) ( 64 0 0 ) ( 0 64 0 ) RENAMED 0 0 0 1 1\n"
+              "}\n}\n";
+    const auto mapText = stream.str();
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.virtualPath = "maps/portable.map";
+    input.displayName = "Portable";
+    input.original = input.compatible = {mapText.begin(), mapText.end()};
+    const auto map = requireProject(sandbox.session->importAsset(input));
+
+    sandbox.writeWad({miptexFor("WALL01", 32, 100), floor});
+    sandbox.rescanLibrary();
+    const auto updated =
+      requireProject(sandbox.session->updateLibraryAssets({captured.id}));
+    REQUIRE(updated.size() == 1);
+    CHECK(updated.front().id == captured.id);
+    CHECK(updated.front().publishPath == renamed.asset.publishPath);
+    CHECK(updated.front().virtualPath == "organized/wall.wad");
+    CHECK(updated.front().displayName == "Renamed wall");
+    const auto bytes = requireProject(
+      sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible));
+    const auto wad = requireProject(project::readGoldSrcWad(bytes));
+    REQUIRE(wad.textures.size() == 1);
+    CHECK(wad.textures.front().name == "RENAMED");
+    CHECK(wad.textures.front().width == 32);
+
+    const auto copy = sandbox.root / "portable.tbproj";
+    requireProject(sandbox.session->saveCopy(copy));
+    sandbox.session.reset();
+    const auto relocated = sandbox.root / "another machine" / "portable.tbproj";
+    std::filesystem::create_directories(relocated.parent_path());
+    std::filesystem::rename(copy, relocated);
+    std::filesystem::remove_all(sandbox.libraryFolder);
+    std::filesystem::remove(sandbox.projectPath);
+    sandbox.session = requireProject(ProjectSession::open(relocated));
+    CHECK_FALSE(sandbox.session->modified());
+    const auto restored = requireProject(sandbox.session->store().findAsset(captured.id));
+    REQUIRE(restored);
+    CHECK(*restored == updated.front());
+    CHECK(
+      readProjectFile(requireProject(sandbox.session->assetFile(*restored))) == bytes);
+    const auto audit = requireProject(auditGoldSrcProjectResources(*sandbox.session));
+    REQUIRE(audit.uses.size() == 1);
+    CHECK(audit.uses.front().status == ProjectResourceStatus::Embedded);
+    CHECK(sandbox.session->updateLibraryAssets({captured.id}).is_error());
+    CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == restored);
+    CHECK_FALSE(sandbox.session->modified());
+    const auto destination = sandbox.root / "published";
+    requireProject(sandbox.session->exportCompileSnapshot(map.id, destination));
+    CHECK(readProjectFile(destination / "map.map") == input.compatible);
+    CHECK(readProjectFile(destination / "textures.wad") == bytes);
+    CHECK_FALSE(sandbox.session->modified());
   }
 
   SECTION("relinks a moved library and keeps captured snapshots independent")
@@ -1416,10 +1491,35 @@ TEST_CASE("ProjectSessionAssetLibrary")
         asset.original = asset.compatible = bytes;
         return requireProject(sandbox.session->importAsset(asset));
       };
-      import(project::AssetType::Model, "models/props/crate.mdl", modelBytes);
-      import(project::AssetType::Sprite, "sprites/effects/glow.spr", spriteBytes);
+      const auto model =
+        import(project::AssetType::Model, "models/props/crate.mdl", modelBytes);
+      const auto sprite =
+        import(project::AssetType::Sprite, "sprites/effects/glow.spr", spriteBytes);
       const auto sound =
         import(project::AssetType::Sound, "sound/ambience/wind.wav", soundBytes);
+      for (const auto& resource : {model, sprite, sound})
+      {
+        const auto preview = requireProject(sandbox.session->assetFile(resource));
+        const auto bytes = readProjectFile(preview);
+        requireProject(sandbox.session->renameAsset(resource.id, "Organized resource"));
+        const auto moved = requireProject(sandbox.session->moveAsset(
+          resource.id,
+          "organized/"
+            + std::filesystem::path{resource.virtualPath}.filename().generic_string()));
+        CHECK(moved.publishPath == resource.publishPath);
+        auto reimport = project::AssetImport{};
+        reimport.type = resource.type;
+        reimport.sourceName = "reimported source";
+        reimport.original = reimport.compatible = bytes;
+        const auto replaced =
+          requireProject(sandbox.session->replaceAsset(resource.id, reimport));
+        CHECK(replaced.id == resource.id);
+        CHECK(replaced.publishPath == resource.publishPath);
+        CHECK(replaced.virtualPath == moved.virtualPath);
+        CHECK(replaced.revision > resource.revision);
+        CHECK(
+          readProjectFile(requireProject(sandbox.session->assetFile(replaced))) == bytes);
+      }
       auto mixedMap = input;
       const auto entities = mapText + R"({
 "classname" "cycler"
@@ -1436,10 +1536,15 @@ TEST_CASE("ProjectSessionAssetLibrary")
 )";
       mixedMap.original = mixedMap.compatible = {entities.begin(), entities.end()};
       requireProject(sandbox.session->replaceAsset(map.id, mixedMap));
-      requireProject(sandbox.session->save());
+      const auto copy = sandbox.root / "portable-mixed.tbproj";
+      requireProject(sandbox.session->saveCopy(copy));
       sandbox.session.reset();
+      const auto relocated = sandbox.root / "moved project" / "mixed.tbproj";
+      std::filesystem::create_directories(relocated.parent_path());
+      std::filesystem::rename(copy, relocated);
       std::filesystem::remove_all(sandbox.libraryFolder);
-      sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+      std::filesystem::remove(sandbox.projectPath);
+      sandbox.session = requireProject(ProjectSession::open(relocated));
       requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
       // Updating the live project cannot change the already exported publication input.
       auto changedSound = project::AssetImport{};

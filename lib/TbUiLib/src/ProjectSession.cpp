@@ -1390,6 +1390,28 @@ Result<project::AssetImport> ProjectSession::captureImport(
     fileNameOf(asset.sourceContainer.empty() ? asset.virtualPath : asset.sourceContainer);
   import.original = std::move(original).value();
 
+  // A library conversion may change its miptex name. The project already has maps
+  // referring to its captured name (possibly renamed by the user), so updates must
+  // preserve that name for raw images and preconverted WADs alike.
+  auto capturedTextureName = std::string{};
+  if (existing && asset.type == project::AssetType::Texture)
+  {
+    const auto contents =
+      m_store->readAsset(existing->id, project::ContentKind::Compatible);
+    if (contents.is_error())
+      return std::get<Error>(contents.error());
+    const auto wad = project::readGoldSrcWad(contents.value());
+    if (wad.is_error())
+      return std::get<Error>(wad.error());
+    if (wad.value().textures.size() != 1 || !wad.value().textures.front().valid)
+      return Error{
+        tr("Updating a captured texture requires a readable single-texture WAD.")
+          .toStdString()};
+    capturedTextureName = wad.value().textures.front().name;
+    if (capturedTextureName.empty() || capturedTextureName.size() > 15)
+      return Error{tr("The captured texture name is invalid.").toStdString()};
+  }
+
   if (project::libraryAssetNeedsConversion(asset))
   {
     auto decoded = img::decodeImage(native.value().data(), native.value().size());
@@ -1397,7 +1419,7 @@ Result<project::AssetImport> ProjectSession::captureImport(
       return std::get<Error>(decoded.error());
     const auto& image = decoded.value();
     // Keep the texture name of an existing snapshot so map faces keep resolving.
-    const auto name = existing ? stemOf(existing->publishPath)
+    const auto name = existing ? capturedTextureName
                                : goldSrcTextureName(
                                    stemOf(asset.virtualPath),
                                    image.alphaDomain != img::ImageAlphaDomain::Opaque);
@@ -1416,6 +1438,22 @@ Result<project::AssetImport> ProjectSession::captureImport(
   auto compatible = project::compatibleLibraryContent(asset, native.value());
   if (compatible.is_error())
     return std::get<Error>(compatible.error());
+  if (!capturedTextureName.empty())
+  {
+    const auto wad = project::readGoldSrcWad(compatible.value());
+    if (wad.is_error())
+      return std::get<Error>(wad.error());
+    if (wad.value().textures.size() != 1 || !wad.value().textures.front().valid)
+      return Error{
+        tr("Updating a captured texture requires a readable single-texture WAD.")
+          .toStdString()};
+    auto miptex = wad.value().textures.front().miptex;
+    std::fill(miptex.begin(), miptex.begin() + 16, std::uint8_t{0});
+    std::copy(capturedTextureName.begin(), capturedTextureName.end(), miptex.begin());
+    compatible = project::buildGoldSrcWad({miptex});
+    if (compatible.is_error())
+      return std::get<Error>(compatible.error());
+  }
   import.compatible = std::move(compatible).value();
   import.virtualPath =
     existing ? existing->virtualPath : publishPathFor(asset, native.value());
@@ -1961,10 +1999,18 @@ Result<ProjectSession::PublishRename> ProjectSession::renamePublishPath(
     result.referencesChanged += replaced;
   }
 
-  const auto restoreMaps = [&] {
+  const auto restoreMaps = [&]() -> Result<void> {
     for (const auto& [mapId, text] : rewritten)
-      if (const auto map = m_store->findAsset(mapId); map.is_success() && map.value())
-        writeMapText(*map.value(), text);
+    {
+      const auto map = m_store->findAsset(mapId);
+      if (map.is_error())
+        return std::get<Error>(map.error());
+      if (!map.value())
+        return Error{"Cannot restore a rewritten map: " + mapId};
+      if (const auto restored = writeMapText(*map.value(), text); restored.is_error())
+        return std::get<Error>(restored.error());
+    }
+    return {};
   };
   const auto writeAssetContent = [&](
                                    const std::vector<std::uint8_t>& original,
@@ -1983,7 +2029,11 @@ Result<ProjectSession::PublishRename> ProjectSession::renamePublishPath(
     if (const auto written = writeAssetContent(oldOriginals, newTextureWad);
         written.is_error())
     {
-      restoreMaps();
+      if (const auto restored = restoreMaps(); restored.is_error())
+        return Error{
+          std::get<Error>(written.error()).msg
+          + "; restoring rewritten maps also failed: "
+          + std::get<Error>(restored.error()).msg};
       return std::get<Error>(written.error());
     }
 
@@ -1991,9 +2041,17 @@ Result<ProjectSession::PublishRename> ProjectSession::renamePublishPath(
   if (published.is_error())
   {
     // A rejected path must leave every map and the texture content as they were.
-    restoreMaps();
+    if (const auto restored = restoreMaps(); restored.is_error())
+      return Error{
+        std::get<Error>(published.error()).msg
+        + "; restoring rewritten maps also failed: "
+        + std::get<Error>(restored.error()).msg};
     if (isTexture)
-      writeAssetContent(oldOriginals, oldTextureWad);
+      if (const auto restored = writeAssetContent(oldOriginals, oldTextureWad);
+          restored.is_error())
+        return Error{
+          std::get<Error>(published.error()).msg + "; restoring the texture also failed: "
+          + std::get<Error>(restored.error()).msg};
     return std::get<Error>(published.error());
   }
 

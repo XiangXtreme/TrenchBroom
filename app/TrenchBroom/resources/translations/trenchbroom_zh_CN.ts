@@ -6903,4 +6903,15 @@ Removing them frees about %3. Current assets and versions are kept.</source>
             <translation>全是(&amp;A)</translation>
         </message>
     </context>
+    <context>
+        <name>tb::ui::ProjectSession</name>
+        <message>
+            <source>Updating a captured texture requires a readable single-texture WAD.</source>
+            <translation>更新已捕获纹理需要可读取的单纹理 WAD。</translation>
+        </message>
+        <message>
+            <source>The captured texture name is invalid.</source>
+            <translation>已捕获纹理的名称无效。</translation>
+        </message>
+    </context>
 </TS>
