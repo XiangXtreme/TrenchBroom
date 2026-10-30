@@ -73,6 +73,9 @@ public:
   ~OutlinerEntityPropertyEditor() override;
   void onChoiceComboPopupHidden();
 
+signals:
+  void focusMapViewRequested();
+
 private:
   void connectObservers();
   void scheduleUpdate(bool force = false);

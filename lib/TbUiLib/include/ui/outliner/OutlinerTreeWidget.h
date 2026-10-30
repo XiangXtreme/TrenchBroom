@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <vector>
 
+class QMenu;
+
 namespace tb::mdl
 {
 class Node;
@@ -60,6 +62,10 @@ public:
   void revealNode(mdl::Node* node);
   void setFilterText(const QString& text);
   void setSortMode(SortMode mode);
+
+signals:
+  void contextMenuActionsRequested(QMenu* menu, bool includeRename);
+  void pieMenuRequested();
 
 protected:
   void mouseDoubleClickEvent(QMouseEvent* event) override;

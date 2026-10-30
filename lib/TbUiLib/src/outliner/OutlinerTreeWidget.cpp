@@ -39,8 +39,6 @@
 #include "mdl/WorldNode.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
-#include "ui/MapViewBase.h"
-#include "ui/MapWindow.h"
 #include "ui/QWidgetUtils.h"
 #include "ui/ViewUtils.h"
 
@@ -2145,20 +2143,6 @@ void OutlinerTreeWidget::contextMenuEvent(QContextMenuEvent* event)
     }
   };
 
-  const auto addFocusAction = [&](QMenu& menu) {
-    if (auto* mapWindow = qobject_cast<MapWindow*>(window()))
-    {
-      if (
-        auto* focusAction = mapWindow->findAction("Menu/View/Camera/Focus on Selection"))
-      {
-        if (!menu.actions().isEmpty())
-        {
-          menu.addSeparator();
-        }
-        menu.addAction(focusAction);
-      }
-    }
-  };
 
   if (auto* layerNode = dynamic_cast<mdl::LayerNode*>(node))
   {
@@ -2369,20 +2353,9 @@ void OutlinerTreeWidget::contextMenuEvent(QContextMenuEvent* event)
     }
 
     QMenu menu(this);
-    if (auto* mapWindow = qobject_cast<MapWindow*>(window()))
-    {
-      if (auto* renameGroupsAction = mapWindow->findAction("Menu/Edit/Rename Groups"))
-      {
-        menu.addAction(renameGroupsAction);
-      }
-    }
-    addFocusAction(menu);
-
+    emit contextMenuActionsRequested(&menu, true);
     if (!menu.actions().isEmpty())
-    {
       menu.addSeparator();
-    }
-
     const auto nodes = collectSelectedNodes(
       selectedItems(), [this](QTreeWidgetItem* i) { return nodeFromItem(i); });
     auto* duplicateAction = menu.addAction(
@@ -2392,8 +2365,6 @@ void OutlinerTreeWidget::contextMenuEvent(QContextMenuEvent* event)
     auto* deleteAction = menu.addAction(
       tr("Delete"), this, [this]() { mdl::removeSelectedNodes(m_document.map()); });
     deleteAction->setEnabled(!nodes.empty());
-
-    addFocusAction(menu);
 
     if (!menu.actions().isEmpty())
     {
@@ -2408,12 +2379,6 @@ void OutlinerTreeWidget::contextMenuEvent(QContextMenuEvent* event)
     setSingleSelectionIfNeeded();
 
     QMenu menu(this);
-    addFocusAction(menu);
-    if (!menu.actions().isEmpty())
-    {
-      menu.addSeparator();
-    }
-
     const auto nodes = collectSelectedNodes(
       selectedItems(), [this](QTreeWidgetItem* i) { return nodeFromItem(i); });
     auto* duplicateAction = menu.addAction(
@@ -2423,6 +2388,10 @@ void OutlinerTreeWidget::contextMenuEvent(QContextMenuEvent* event)
     auto* deleteAction = menu.addAction(
       tr("Delete"), this, [this]() { mdl::removeSelectedNodes(m_document.map()); });
     deleteAction->setEnabled(!nodes.empty());
+
+    emit contextMenuActionsRequested(&menu, false);
+    if (!menu.actions().isEmpty())
+      menu.insertSeparator(0);
 
     if (!menu.actions().isEmpty())
     {
@@ -2512,15 +2481,9 @@ void OutlinerTreeWidget::keyPressEvent(QKeyEvent* event)
 
   if (event->key() == Qt::Key_QuoteLeft)
   {
-    if (auto* frame = dynamic_cast<MapWindow*>(window()))
-    {
-      if (auto* view = frame->currentMapViewBase())
-      {
-        view->showPieMenu();
-        event->accept();
-        return;
-      }
-    }
+    emit pieMenuRequested();
+    event->accept();
+    return;
   }
 
   if (

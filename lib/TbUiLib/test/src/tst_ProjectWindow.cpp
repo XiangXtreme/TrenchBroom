@@ -79,6 +79,7 @@
 #include "ui/Splitter.h"
 #include "ui/WorkspaceLayout.h"
 #include "ui/WorkspaceToolPanel.h"
+#include "ui/outliner/OutlinerTreeWidget.h"
 
 #include <algorithm>
 #include <cmath>
@@ -472,6 +473,15 @@ TEST_CASE("ProjectWindow")
     auto context = editor.toolBox().actionContext(appController, view);
     REQUIRE(context.hasDocument());
     CHECK(&context.editorView() == &editor);
+
+    auto* outliner = editor.inspector()->findChild<OutlinerTreeWidget*>();
+    REQUIRE(outliner);
+    auto outlinerMenu = QMenu{};
+    Q_EMIT outliner->contextMenuActionsRequested(&outlinerMenu, true);
+    REQUIRE(outlinerMenu.actions().size() == 3);
+    CHECK(outlinerMenu.actions()[0]->text() == QStringLiteral("Rename Selected Groups"));
+    CHECK(
+      outlinerMenu.actions()[2]->text() == QStringLiteral("Focus Camera on Selection"));
 
     // Reparenting the editor must not change the target of viewport commands.
     auto* parent = editor.parentWidget();

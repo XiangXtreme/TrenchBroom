@@ -40,8 +40,6 @@
 #include "ui/FileDialogDefaultDir.h"
 #include "ui/FlagsEditor.h"
 #include "ui/MapDocument.h"
-#include "ui/MapViewBase.h"
-#include "ui/MapWindow.h"
 #include "ui/QColorUtils.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStringUtils.h"
@@ -985,15 +983,11 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     m_transformCard = new TransformCard{m_document, m_scrollContents};
     m_transformCard->setObjectName("TransformCard");
     m_transformCard->setExpanded(m_transformCardExpanded);
-    connect(m_transformCard, &TransformCard::editingFinished, this, [this]() {
-      if (auto* mapWindow = qobject_cast<MapWindow*>(window()))
-      {
-        if (auto* view = mapWindow->currentMapViewBase())
-        {
-          view->setFocus(Qt::OtherFocusReason);
-        }
-      }
-    });
+    connect(
+      m_transformCard,
+      &TransformCard::editingFinished,
+      this,
+      &OutlinerEntityPropertyEditor::focusMapViewRequested);
     connect(
       m_transformCard,
       &CollapsibleTitledPanel::toggled,

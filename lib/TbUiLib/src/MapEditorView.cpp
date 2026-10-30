@@ -6,11 +6,17 @@
 
 #include "ui/MapEditorView.h"
 
+#include <QAction>
 #include <QApplication>
+#include <QMenu>
 #include <QSettings>
 #include <QVBoxLayout>
 
 #include "mdl/Map.h"
+#include "ui/Action.h"
+#include "ui/ActionBuilder.h"
+#include "ui/ActionExecutionContext.h"
+#include "ui/ActionManager.h"
 #include "ui/AppController.h"
 #include "ui/Console.h"
 #include "ui/CyclingMapView.h"
@@ -20,10 +26,13 @@
 #include "ui/MapEditorController.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/PythonConsole.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableMapViewContainer.h"
 #include "ui/WorkbenchSurface.h"
+#include "ui/outliner/OutlinerEntityPropertyEditor.h"
+#include "ui/outliner/OutlinerTreeWidget.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -93,6 +102,44 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   layout->setContentsMargins(6, 4, 6, 4);
   layout->addWidget(m_hSplitter);
   m_controller = std::make_unique<MapEditorController>(appController, document, *this);
+  for (auto* tree : m_inspector->findChildren<OutlinerTreeWidget*>())
+  {
+    connect(
+      tree,
+      &OutlinerTreeWidget::contextMenuActionsRequested,
+      this,
+      [this](QMenu* menu, const bool includeRename) {
+        auto context = toolBox().actionContext(m_appController, currentMapViewBase());
+        auto actions = std::unordered_map<const Action*, QAction*>{};
+        const auto addAction = [&](const auto& path) {
+          const auto& action = m_appController.actionManager().actionsMap().at(path);
+          auto& qtAction = findOrCreateQtAction(
+            actions,
+            action,
+            [context](const Action& triggered) mutable { triggered.execute(context); },
+            menu);
+          qtAction.setEnabled(action.enabled(context));
+          menu->addAction(&qtAction);
+        };
+        if (includeRename)
+          addAction("Menu/Edit/Rename Groups");
+        if (!menu->actions().isEmpty())
+          menu->addSeparator();
+        addAction("Menu/View/Camera/Focus on Selection");
+      });
+    connect(tree, &OutlinerTreeWidget::pieMenuRequested, this, [this] {
+      if (auto* view = currentMapViewBase())
+        view->showPieMenu();
+    });
+  }
+  for (auto* properties : m_inspector->findChildren<OutlinerEntityPropertyEditor*>())
+  {
+    connect(
+      properties, &OutlinerEntityPropertyEditor::focusMapViewRequested, this, [this] {
+        if (auto* view = currentMapViewBase())
+          view->setFocus(Qt::OtherFocusReason);
+      });
+  }
   restoreLayoutState();
   connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
     if (auto* view = qobject_cast<MapViewBase*>(focus); view && isAncestorOf(view))
