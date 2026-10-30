@@ -64,9 +64,16 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   m_panel->setFrameShape(QFrame::StyledPanel);
   m_panel->setAutoFillBackground(true);
   auto* panelLayout = new QVBoxLayout{m_panel};
-  panelLayout->setContentsMargins(4, 4, 4, 4);
-  auto* header = new QHBoxLayout{};
-  m_title = new QLabel{m_panel};
+  panelLayout->setContentsMargins(0, 0, 0, 0);
+  panelLayout->setSpacing(0);
+  auto* headerSurface = new QWidget{m_panel};
+  headerSurface->setObjectName("WorkspaceToolHeader");
+  headerSurface->setAttribute(Qt::WA_StyledBackground);
+  auto* header = new QHBoxLayout{headerSurface};
+  header->setContentsMargins(10, 4, 6, 4);
+  header->setSpacing(6);
+  m_title = new QLabel{headerSurface};
+  m_title->setProperty("regionAnchor", true);
   header->addWidget(m_title, 1);
   m_pin = new QToolButton{m_panel};
   m_pin->setObjectName("ProjectToolsPin");
@@ -81,15 +88,17 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   close->setProperty("tbControlRole", "compact");
   close->setText(tr("Close"));
   header->addWidget(close);
-  panelLayout->addLayout(header);
+  panelLayout->addWidget(headerSurface);
   m_pages = new QStackedWidget{m_panel};
   m_pages->addWidget(content);
   panelLayout->addWidget(m_pages, 1);
 
   m_bar = new QWidget{this};
   m_bar->setObjectName("ProjectToolBar");
+  m_bar->setAttribute(Qt::WA_StyledBackground);
   auto* barLayout = new QHBoxLayout{m_bar};
-  barLayout->setContentsMargins(4, 2, 4, 2);
+  barLayout->setContentsMargins(6, 3, 6, 3);
+  barLayout->setSpacing(4);
   const auto tools = std::map<WorkspaceToolId, QString>{
     {WorkspaceToolId::ContentBrowser, tr("Content Browser")},
     {WorkspaceToolId::OutputLog, tr("Output Log")},

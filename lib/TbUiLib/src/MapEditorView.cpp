@@ -52,12 +52,12 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
 
   m_hSplitter = new Splitter{Qt::Horizontal, DrawKnob::No, this};
   m_hSplitter->setChildrenCollapsible(false);
-  m_hSplitter->setHandleWidth(4);
+  m_hSplitter->setHandleWidth(6);
   m_hSplitter->setObjectName("MapWindow_HorizontalSplitter");
 
   m_vSplitter = new Splitter{Qt::Vertical, DrawKnob::No, this};
   m_vSplitter->setChildrenCollapsible(false);
-  m_vSplitter->setHandleWidth(4);
+  m_vSplitter->setHandleWidth(6);
   m_vSplitter->setObjectName("MapWindow_VerticalSplitterSplitter");
 
   m_infoPanel = new InfoPanel{m_appController, m_document, this};

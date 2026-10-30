@@ -129,7 +129,7 @@ QWidget#MapWindow_EditorSurface,
 QWidget#MapWindow_InfoPanelSurface,
 QWidget#MapWindow_InspectorSurface {
   border: 1px solid @tb-border;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 QWidget#MapWindow_EditorSurface {
@@ -159,6 +159,8 @@ QLabel#Inspector_PageTitle {
 }
 
 QLabel#Inspector_PageTitle {
+  color: @tb-text;
+  background: @tb-elevated-background;
   border-bottom: 1px solid @tb-border;
 }
 
@@ -172,28 +174,63 @@ QWidget#Inspector_NavigationRail {
   border-right: 1px solid @tb-border;
 }
 
-QToolButton[inspectorNavigation="true"] {
+/* Navigation shares one state language across inspector rails and tool drawers. */
+QToolButton[tbControlRole="navigation"] {
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 4px;
+  color: @tb-secondary-text;
+  min-height: 24px;
+  padding: 1px 7px;
+}
+
+QToolButton[tbControlRole="navigation"]:hover {
+  background: @tb-hover-background;
+  border-color: @tb-border;
+  color: @tb-text;
+}
+
+QToolButton[tbControlRole="navigation"]:checked {
+  background: @tb-pressed-background;
+  border-color: @tb-strong-border;
+  color: @tb-accent;
+}
+
+QToolButton[tbControlRole="navigation"]:focus {
+  border-color: @tb-focus-border;
+}
+
+QToolButton[tbControlRole="navigation"]:disabled {
+  color: @tb-disabled-text;
+}
+
+QWidget#Inspector_NavigationRail QToolButton[tbControlRole="navigation"] {
+  min-width: 0;
   padding: 0;
 }
 
-QToolButton[inspectorNavigation="true"]:hover,
-QToolButton[inspectorNavigation="true"]:focus {
-  background: @tb-hover-background;
-  border-color: @tb-border;
+QWidget#ProjectWorkspaceTabs,
+QWidget#ProjectToolBar {
+  background: @tb-sidebar-background;
+  border-bottom: 1px solid @tb-border;
 }
 
-QToolButton[inspectorNavigation="true"]:checked {
-  background: @tb-pressed-background;
-  border-color: transparent;
+QWidget#ProjectToolBar {
+  border-top: 1px solid @tb-border;
+  border-bottom: none;
 }
 
-QToolButton[inspectorNavigation="true"]:checked:hover,
-QToolButton[inspectorNavigation="true"]:checked:focus {
-  background: @tb-pressed-background;
-  border-color: @tb-focus-border;
+QFrame#ProjectToolDrawer {
+  background: @tb-panel-background;
+  border: 1px solid @tb-border;
+  border-radius: 6px;
+}
+
+QWidget#WorkspaceToolHeader {
+  background: @tb-elevated-background;
+  border-bottom: 1px solid @tb-border;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
 }
 
 QPushButton {

@@ -211,9 +211,13 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
 
   auto* body = new QWidget{this};
   auto* layout = new QVBoxLayout{body};
+  layout->setContentsMargins(6, 4, 6, 4);
+  layout->setSpacing(4);
 
   // Workspace row: one tab per live map view, plus the entry point back to closed views.
   auto* workspace = new QWidget{body};
+  workspace->setObjectName("ProjectWorkspaceTabs");
+  workspace->setAttribute(Qt::WA_StyledBackground);
   auto* workspaceRow = new QHBoxLayout{workspace};
   workspaceRow->setContentsMargins(0, 0, 0, 0);
   m_mapTabs = new QTabBar{workspace};

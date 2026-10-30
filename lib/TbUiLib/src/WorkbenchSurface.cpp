@@ -36,7 +36,7 @@ void WorkbenchSurface::resizeEvent(QResizeEvent* event)
   }
 
   auto path = QPainterPath{};
-  path.addRoundedRect(QRectF{rect()}, 8.0, 8.0);
+  path.addRoundedRect(QRectF{rect()}, 6.0, 6.0);
   setMask(QRegion{path.toFillPolygon().toPolygon()});
 }
 

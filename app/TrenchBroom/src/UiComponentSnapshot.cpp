@@ -242,6 +242,22 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
     makeControlRow(
       {toolButton, checkedToolButton, outlinedToolButton, disabledToolButton}));
 
+  auto* navigation = new QToolButton{};
+  navigation->setText(QStringLiteral("Inspector"));
+  navigation->setProperty("tbControlRole", "navigation");
+  auto* activeNavigation = new QToolButton{};
+  activeNavigation->setText(QStringLiteral("Console"));
+  activeNavigation->setProperty("tbControlRole", "navigation");
+  activeNavigation->setCheckable(true);
+  activeNavigation->setChecked(true);
+  auto* disabledNavigation = new QToolButton{};
+  disabledNavigation->setText(QStringLiteral("Unavailable"));
+  disabledNavigation->setProperty("tbControlRole", "navigation");
+  disabledNavigation->setEnabled(false);
+  actionLayout->addRow(
+    QStringLiteral("Navigation"),
+    makeControlRow({navigation, activeNavigation, disabledNavigation}));
+
   auto* collectionSection = makeSection(QStringLiteral("Collections and navigation"));
   auto* collectionLayout = sectionLayout(*collectionSection);
 

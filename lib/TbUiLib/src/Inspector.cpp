@@ -67,7 +67,7 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
   m_pageTitle = new QLabel{};
   m_pageTitle->setObjectName("Inspector_PageTitle");
   m_pageTitle->setProperty("regionAnchor", true);
-  m_pageTitle->setFixedHeight(28);
+  m_pageTitle->setFixedHeight(34);
 
   auto* navigationRail = new QWidget{};
   navigationRail->setObjectName("Inspector_NavigationRail");
@@ -86,7 +86,7 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
                                      const char* iconPath) {
     auto* button = new QToolButton{navigationRail};
     button->setObjectName(QString::fromLatin1(objectName));
-    button->setProperty("inspectorNavigation", true);
+    button->setProperty("tbControlRole", "navigation");
     button->setToolTip(tooltip);
     button->setAccessibleName(title);
     button->setCheckable(true);
@@ -94,7 +94,7 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
     button->setAutoRaise(true);
     button->setFocusPolicy(Qt::StrongFocus);
     button->setIcon(loadSVGIcon(iconPath));
-    button->setIconSize(QSize{20, 20});
+    button->setIconSize(QSize{16, 16});
     button->setFixedSize(QSize{32, 32});
 
     connect(button, &QToolButton::clicked, this, [this, page]() {
@@ -146,13 +146,17 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
   pageLayout->setContentsMargins(0, 0, 0, 0);
   pageLayout->setSpacing(0);
   pageLayout->addWidget(navigationRail);
-  pageLayout->addWidget(m_tabBook, 1);
+  auto* inspectorContent = new QVBoxLayout{};
+  inspectorContent->setContentsMargins(0, 0, 0, 0);
+  inspectorContent->setSpacing(0);
+  inspectorContent->addWidget(m_pageTitle);
+  inspectorContent->addWidget(m_tabBook, 1);
+  pageLayout->addLayout(inspectorContent, 1);
   pageContainer->setLayout(pageLayout);
 
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
-  layout->addWidget(m_pageTitle);
   layout->addWidget(pageContainer, 1);
   setLayout(layout);
 

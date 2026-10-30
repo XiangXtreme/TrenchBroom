@@ -93,17 +93,17 @@ TEST_CASE("Theme")
     const auto& tokens =
       builtInThemes.resolveTheme(QStringLiteral("builtin.blender")).tokens;
 
-    CHECK(tokens.windowBackground == (QColor{24, 24, 24}));
-    CHECK(tokens.editorBackground == (QColor{48, 48, 48}));
-    CHECK(tokens.sidebarBackground == (QColor{40, 40, 40}));
-    CHECK(tokens.elevatedBackground == (QColor{24, 24, 24}));
-    CHECK(tokens.inputBackground == (QColor{29, 29, 29}));
-    CHECK(tokens.buttonBackground == (QColor{84, 84, 84}));
-    CHECK(tokens.selectionBackground == (QColor{71, 114, 179}));
-    CHECK(tokens.focusBorder == (QColor{71, 114, 179}));
-    CHECK(tokens.text == (QColor{230, 230, 230}));
-    CHECK(tokens.secondaryText == (QColor{152, 152, 152}));
-    CHECK(tokens.accent == (QColor{111, 169, 230}));
+    CHECK(tokens.windowBackground == (QColor{32, 33, 36}));
+    CHECK(tokens.editorBackground == (QColor{39, 40, 43}));
+    CHECK(tokens.sidebarBackground == (QColor{37, 38, 41}));
+    CHECK(tokens.elevatedBackground == (QColor{48, 50, 54}));
+    CHECK(tokens.inputBackground == (QColor{53, 55, 60}));
+    CHECK(tokens.buttonBackground == (QColor{53, 55, 60}));
+    CHECK(tokens.selectionBackground == (QColor{85, 64, 50}));
+    CHECK(tokens.focusBorder == (QColor{234, 131, 47}));
+    CHECK(tokens.text == (QColor{212, 214, 218}));
+    CHECK(tokens.secondaryText == (QColor{163, 166, 173}));
+    CHECK(tokens.accent == (QColor{234, 131, 47}));
   }
 
   SECTION("makeThemePalette")
