@@ -20,6 +20,7 @@
 | --- | --- | --- | --- |
 | 单文件工程（多地图/资源/版本/编译配置） | 已完成 | `lib/TbProjectLib` 的 `ProjectStore`（SQLite 容器、修订、内容块、检查点） | `TbProjectLibTest` 6 用例 453 断言 |
 | 工程地图标签与文档保留 | 已完成 | `ProjectWindow` 标签、`ProjectSession::retainDocument`、`MapEditorView` | `ProjectWindow` 486 断言 |
+| 统一工程工具底栏与内容抽屉 | 已完成 | `ProjectToolPanel` 共用内容、日志、Python、问题入口；临时覆盖与固定停靠复用同一面板，扩展入口连接原有插件检查器 | `ProjectWindow` 覆盖地图切换、自动收起、固定布局、关闭视图生命周期与独立 MAP 设置隔离；Computer Use 验证真实窗口 |
 | 资产库独立、可被多个工程共享 | 已完成 | `project::AssetLibrary`（`.tbassets` 目录文件）、`AssetLibraryWindow` | `AssetLibrary` 测试、库关联用例 |
 | 浏览/预览不捕获，使用才嵌入 | 已完成 | `CatalogAssetDrop`、`ProjectSession::buildCapturePlan/applyAssetCapturePlan` | 拖放/捕获用例（`ProjectWindow`、`ProjectSession`） |
 | 捕获带依赖闭包（模型配套、天空盒六面等） | 已完成 | `LibrarySync`、依赖图 | 依赖闭包与回滚用例 |
@@ -179,7 +180,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build-filtered.ps1 -Target TbUi
 
 | 日期 | 验收项 | 提交 | 结果 | 备注 |
 | --- | --- | --- | --- | --- |
-|  | 4.1 桌面 UI 视觉 |  |  |  |
+| 2026-10-30 | 4.1 工程工具底栏 | 本轮改动 | 通过 | Computer Use 验证内容抽屉、回到地图自动收起、快捷键、固定停靠及 Python/问题页切换；中文翻译随资源重新打包 |
 |  | 4.2 CS 1.6 端到端 |  |  |  |
 |  | 4.3 真实崩溃恢复 |  |  |  |
 |  | 4.4 大工程性能 |  |  |  |

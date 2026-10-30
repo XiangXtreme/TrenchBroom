@@ -64,6 +64,7 @@ public:
   PythonConsole* pythonConsole() const;
   void switchToPage(InfoPanelPage page);
   InfoPanelPage currentPage() const;
+  void setNavigationVisible(bool visible);
 
   QByteArray saveState() const;
   bool restoreState(const QByteArray& state);

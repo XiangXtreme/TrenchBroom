@@ -101,6 +101,12 @@ InfoPanelPage InfoPanel::currentPage() const
   return static_cast<InfoPanelPage>(m_tabBook->currentPageIndex());
 }
 
+void InfoPanel::setNavigationVisible(const bool visible)
+{
+  // Keep the active page's controls (issue filters, Python commands) available.
+  m_tabBook->tabBar()->setNavigationVisible(visible);
+}
+
 QByteArray InfoPanel::saveState() const
 {
   auto result = QByteArray{};

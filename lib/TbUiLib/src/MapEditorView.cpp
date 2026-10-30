@@ -91,15 +91,18 @@ void MapEditorView::restoreLayoutState()
   restoreWidgetState(m_hSplitter);
   restoreWidgetState(m_vSplitter);
   restoreWidgetState(m_inspector);
-  restoreWidgetState(m_infoPanel);
+  if (!m_externalInfoPanel)
+    restoreWidgetState(m_infoPanel);
 
   m_inspectorSurface->setHidden(m_inspector->isHidden());
-  m_infoPanelSurface->setHidden(m_infoPanel->isHidden());
+  m_infoPanelSurface->setHidden(m_externalInfoPanel || m_infoPanel->isHidden());
 }
 
 MapEditorView::~MapEditorView()
 {
   saveWidgetState();
+  if (m_externalInfoPanel)
+    delete m_infoPanel;
 }
 
 SwitchableMapViewContainer* MapEditorView::mapView() const
@@ -114,6 +117,15 @@ MapViewBase* MapEditorView::currentMapViewBase() const
 
 InfoPanel* MapEditorView::infoPanel() const
 {
+  return m_infoPanel;
+}
+
+InfoPanel* MapEditorView::takeInfoPanel()
+{
+  m_externalInfoPanel = true;
+  m_infoPanelSurface->hide();
+  m_infoPanel->setMinimumSize(100, 100);
+  m_infoPanel->setNavigationVisible(false);
   return m_infoPanel;
 }
 
@@ -156,6 +168,11 @@ void MapEditorView::setPythonConsoleCompletionRootProvider(
 
 void MapEditorView::showInfoPanelPage(const InfoPanelPage page)
 {
+  if (m_externalInfoPanel)
+  {
+    emit infoPanelPageRequested(page);
+    return;
+  }
   m_infoPanelSurface->show();
   m_infoPanel->show();
   m_infoPanel->switchToPage(page);
@@ -183,6 +200,11 @@ bool MapEditorView::isInspectorVisible() const
 
 bool MapEditorView::toggleInfoPanel()
 {
+  if (m_externalInfoPanel)
+  {
+    emit infoPanelToggleRequested();
+    return !m_infoPanel->isVisible();
+  }
   const auto hidden = !m_infoPanelSurface->isHidden();
   m_infoPanel->setHidden(hidden);
   m_infoPanelSurface->setHidden(hidden);
@@ -191,7 +213,7 @@ bool MapEditorView::toggleInfoPanel()
 
 bool MapEditorView::isInfoPanelVisible() const
 {
-  return m_infoPanelSurface->isVisible();
+  return m_externalInfoPanel ? m_infoPanel->isVisible() : m_infoPanelSurface->isVisible();
 }
 
 bool MapEditorView::cancelDrag()
@@ -204,7 +226,8 @@ void MapEditorView::saveWidgetState() const
   tb::ui::saveWidgetState(m_hSplitter);
   tb::ui::saveWidgetState(m_vSplitter);
   tb::ui::saveWidgetState(m_inspector);
-  tb::ui::saveWidgetState(m_infoPanel);
+  if (!m_externalInfoPanel)
+    tb::ui::saveWidgetState(m_infoPanel);
 }
 
 } // namespace tb::ui

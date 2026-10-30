@@ -137,6 +137,12 @@ void TabBar::addTab(TabBookPage* bookPage, const QString& title)
   m_barBook->addWidget(barPage);
 }
 
+void TabBar::setNavigationVisible(const bool visible)
+{
+  for (auto* button : m_buttons)
+    button->setVisible(visible);
+}
+
 size_t TabBar::findButtonIndex(QWidget* button) const
 {
   for (size_t i = 0; i < m_buttons.size(); ++i)

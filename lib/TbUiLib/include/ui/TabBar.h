@@ -70,6 +70,7 @@ public:
   explicit TabBar(TabBook* tabBook);
 
   void addTab(TabBookPage* bookPage, const QString& title);
+  void setNavigationVisible(bool visible);
 
 private:
   size_t findButtonIndex(QWidget* button) const;

@@ -53,6 +53,7 @@ private:
   SwitchableMapViewContainer* m_mapView = nullptr;
   InfoPanel* m_infoPanel = nullptr;
   Inspector* m_inspector = nullptr;
+  bool m_externalInfoPanel = false;
 
 public:
   MapEditorView(AppController& appController, MapDocument& document);
@@ -62,6 +63,8 @@ public:
   MapViewBase* currentMapViewBase() const;
 
   InfoPanel* infoPanel() const;
+  /** The editor retains lifetime ownership while the project hosts the panel. */
+  InfoPanel* takeInfoPanel();
   Inspector* inspector() const;
   Console& console() const;
   PythonConsole* pythonConsole() const;
@@ -88,6 +91,10 @@ public:
   void restoreLayoutState();
 
   void saveWidgetState() const;
+
+signals:
+  void infoPanelPageRequested(InfoPanelPage page);
+  void infoPanelToggleRequested();
 };
 
 } // namespace tb::ui

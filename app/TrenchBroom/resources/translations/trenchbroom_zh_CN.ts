@@ -6380,6 +6380,10 @@ The original images stay in the library and each converted texture is stored as 
     <context>
         <name>tb::ui::ProjectWindow</name>
         <message>
+            <source>Content Browser</source>
+            <translation>内容浏览器</translation>
+        </message>
+        <message>
             <source>Asset library files changed. Use Library &gt; Rescan Library and Check for Updates to review them.</source>
             <translation>资产库文件已更改。请使用“资产库 &gt; 重新扫描并检查更新”查看。</translation>
         </message>
@@ -6912,6 +6916,45 @@ Removing them frees about %3. Current assets and versions are kept.</source>
         <message>
             <source>The captured texture name is invalid.</source>
             <translation>已捕获纹理的名称无效。</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::ProjectToolPanel</name>
+        <message>
+            <source>Pin</source>
+            <translation>固定停靠</translation>
+        </message>
+        <message>
+            <source>Keep the tool panel open while editing the map</source>
+            <translation>编辑地图时保持工具面板展开</translation>
+        </message>
+        <message>
+            <source>Close</source>
+            <translation>收起</translation>
+        </message>
+        <message>
+            <source>Content Browser</source>
+            <translation>内容浏览器</translation>
+        </message>
+        <message>
+            <source>Output Log</source>
+            <translation>输出日志</translation>
+        </message>
+        <message>
+            <source>Python Console</source>
+            <translation>Python 控制台</translation>
+        </message>
+        <message>
+            <source>Issues</source>
+            <translation>问题</translation>
+        </message>
+        <message>
+            <source>Content Browser (Ctrl+Shift+Space)</source>
+            <translation>内容浏览器（Ctrl+Shift+Space）</translation>
+        </message>
+        <message>
+            <source>Extensions</source>
+            <translation>扩展</translation>
         </message>
     </context>
 </TS>

@@ -6,7 +6,6 @@
 
 #include <QCloseEvent>
 #include <QCoreApplication>
-#include <QDockWidget>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -47,6 +46,7 @@
 #include "ui/AssetLibraryWatcher.h"
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorView.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectAssetPanel.h"
@@ -56,6 +56,7 @@
 #include "ui/ProjectResourceDialog.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectTextureImport.h"
+#include "ui/ProjectToolPanel.h"
 #include "ui/QPathUtils.h"
 #include "ui/RecentDocuments.h"
 
@@ -274,12 +275,12 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   m_history->setHeaderLabels({tr("Version"), tr("Created"), tr("Description")});
   m_history->setRootIsDecorated(false);
   contentTabs->addTab(m_history, tr("History"));
-  auto* contentDock = new QDockWidget{tr("Project Content"), this};
-  contentDock->setObjectName("ProjectContentDock");
-  contentDock->setWidget(contentTabs);
-  addDockWidget(Qt::BottomDockWidgetArea, contentDock);
-  resizeDocks({contentDock}, {320}, Qt::Vertical);
-  file->addAction(contentDock->toggleViewAction());
+  m_tools = new ProjectToolPanel{body, contentTabs, this};
+  file->addAction(tr("Content Browser"), m_tools, &ProjectToolPanel::showContent);
+  connect(m_tools, &ProjectToolPanel::extensionsRequested, this, [this]() {
+    if (auto* window = activeMapWindow())
+      window->switchToInspectorPage(InspectorPage::Plugin);
+  });
   connect(
     m_session.get(),
     &ProjectSession::browserAssetSelected,
@@ -306,12 +307,8 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
                               : QString{});
   });
   connect(
-    m_session.get(),
-    &ProjectSession::browserFocusRequested,
-    this,
-    [this, contentDock, contentTabs]() {
-      contentDock->show();
-      contentDock->raise();
+    m_session.get(), &ProjectSession::browserFocusRequested, this, [this, contentTabs]() {
+      m_tools->showContent();
       contentTabs->setCurrentWidget(m_browser);
       m_browser->setFocus();
     });
@@ -320,7 +317,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
     &ProjectSession::browserFindUsesRequested,
     this,
     [this](const QString& id) { checkResources(id.toStdString()); });
-  setCentralWidget(body);
+  setCentralWidget(m_tools);
   connect(m_search, &QLineEdit::textChanged, this, [this]() { refresh(); });
   connect(m_mapTabs, &QTabBar::currentChanged, this, [this](const int index) {
     if (index < 0)
@@ -435,6 +432,7 @@ void ProjectWindow::activateMapTab(MapWindow* window)
     return;
   refreshMapTabs();
   m_maps->setCurrentWidget(window);
+  m_tools->setMapPanel(window->findChild<MapEditorView*>()->infoPanel());
   m_browser->setDocument(&window->document());
   const auto id = m_session->assetFor(window->document());
   const auto blocker = QSignalBlocker{m_mapTabs};
@@ -771,6 +769,21 @@ void ProjectWindow::refreshMapTabs()
         continue;
       window->setCommandToolBar(*m_mapToolbar);
       m_maps->addWidget(window);
+      auto* editor = window->findChild<MapEditorView*>();
+      m_tools->setMapPanel(editor->takeInfoPanel());
+      connect(
+        editor,
+        &MapEditorView::infoPanelPageRequested,
+        this,
+        [this, window](const InfoPanelPage page) {
+          m_appController.mapWindowManager().activateMapWindow(*window);
+          m_tools->showInfoPage(page);
+        });
+      connect(
+        editor,
+        &MapEditorView::infoPanelToggleRequested,
+        m_tools,
+        &ProjectToolPanel::toggle);
       connect(
         window, &MapWindow::commandStateChanged, this, &ProjectWindow::refreshCommands);
     }
@@ -801,6 +814,9 @@ void ProjectWindow::refreshMapTabs()
 
   if (m_browser)
     m_browser->setDocument(activeMapWindow() ? &activeMapWindow()->document() : nullptr);
+  m_tools->setMapPanel(
+    activeMapWindow() ? activeMapWindow()->findChild<MapEditorView*>()->infoPanel()
+                      : nullptr);
 
   // The menu is rebuilt from inside a triggered action, so the old actions are removed
   // and scheduled for deletion instead of being destroyed while their signal is still on

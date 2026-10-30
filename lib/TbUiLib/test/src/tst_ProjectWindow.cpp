@@ -25,6 +25,8 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QSaveFile>
+#include <QScopeGuard>
+#include <QSettings>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabBar>
@@ -53,6 +55,7 @@
 #include "ui/CreateEntityTool.h"
 #include "ui/InfoPanel.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorView.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
@@ -62,6 +65,7 @@
 #include "ui/ProjectAssetPanel.h"
 #include "ui/ProjectRecovery.h"
 #include "ui/ProjectSession.h"
+#include "ui/ProjectToolPanel.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
 
@@ -216,6 +220,7 @@ TEST_CASE("ProjectWindow")
 
   SECTION("one project browser survives map switches and closing all map tabs")
   {
+    emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser != nullptr);
     CHECK(window.findChildren<ModelBrowser*>().size() == 1);
@@ -237,6 +242,97 @@ TEST_CASE("ProjectWindow")
     QApplication::processEvents();
     CHECK(window.activeMapWindow() != nullptr);
     CHECK(window.findChild<ModelBrowser*>() == browser);
+  }
+
+  SECTION("one bottom surface hosts content and the active map tools")
+  {
+    auto* tools = window.findChild<ProjectToolPanel*>();
+    auto* drawer = window.findChild<QWidget*>("ProjectToolDrawer");
+    auto* pin = window.findChild<QToolButton*>("ProjectToolsPin");
+    auto* close = window.findChild<QToolButton*>("ProjectToolsClose");
+    auto* editor = alphaWindow->findChild<MapEditorView*>();
+    REQUIRE(tools != nullptr);
+    REQUIRE(drawer != nullptr);
+    REQUIRE(pin != nullptr);
+    REQUIRE(close != nullptr);
+    REQUIRE(editor != nullptr);
+    auto settings = QSettings{};
+    const auto previousPin = settings.value("ProjectTools/Pinned");
+    const auto restorePin = qScopeGuard([&]() {
+      if (previousPin.isValid())
+        settings.setValue("ProjectTools/Pinned", previousPin);
+      else
+        settings.remove("ProjectTools/Pinned");
+    });
+    pin->setChecked(false);
+    close->click();
+    REQUIRE_FALSE(drawer->isVisible());
+    const auto workspaceHeight = stack->height();
+    tools->showContent();
+    QApplication::processEvents();
+    CHECK(drawer->isVisible());
+    CHECK(stack->height() == workspaceHeight);
+    CHECK(window.findChild<ProjectAssetPanel*>()->isVisible());
+    CHECK_FALSE(editor->infoPanel()->isVisible());
+    CHECK_FALSE(editor->findChild<QWidget*>("MapWindow_InfoPanelSurface")->isVisible());
+
+    alphaWindow->switchToInfoPanelPage(InfoPanelPage::PythonConsole);
+    CHECK(editor->infoPanel()->isVisible());
+    CHECK(editor->infoPanel()->currentPage() == InfoPanelPage::PythonConsole);
+    CHECK_FALSE(window.findChild<ProjectAssetPanel*>()->isVisible());
+    const auto alphaPanel = QPointer{editor->infoPanel()};
+    tabs->setCurrentIndex(1);
+    auto* betaEditor = window.activeMapWindow()->findChild<MapEditorView*>();
+    CHECK(betaEditor->infoPanel()->isVisible());
+    CHECK(betaEditor->infoPanel()->currentPage() == InfoPanelPage::PythonConsole);
+    CHECK_FALSE(alphaPanel->isVisible());
+    pin->setChecked(true);
+    QApplication::processEvents();
+    CHECK(stack->height() < workspaceHeight);
+    QMetaObject::invokeMethod(
+      qApp,
+      "focusChanged",
+      Q_ARG(QWidget*, betaEditor->infoPanel()),
+      Q_ARG(QWidget*, window.activeMapWindow()->currentMapViewBase()));
+    CHECK(tools->isExpanded());
+    pin->setChecked(false);
+    tools->showContent();
+    QMetaObject::invokeMethod(
+      qApp,
+      "focusChanged",
+      Q_ARG(QWidget*, drawer),
+      Q_ARG(QWidget*, window.activeMapWindow()->currentMapViewBase()));
+    CHECK_FALSE(tools->isExpanded());
+    tabs->setCurrentIndex(0);
+    closeTab(*tabs, 0);
+    CHECK(alphaPanel.isNull());
+    closeTab(*tabs, 0);
+    tools->showContent();
+    CHECK(window.findChild<ProjectAssetPanel*>()->isVisible());
+    CHECK_FALSE(window.findChild<QToolButton*>("ProjectTool1")->isEnabled());
+  }
+
+  SECTION("closing an embedded map preserves standalone info panel visibility")
+  {
+    // CTest runs other map-window tests concurrently against the same QSettings store.
+    auto* panel = alphaWindow->findChild<MapEditorView*>()->infoPanel();
+    panel->setObjectName("ProjectWindow_StandaloneVisibilityTest");
+    auto settings = QSettings{};
+    const auto key = QString{"Windows/ProjectWindow_StandaloneVisibilityTest/State"};
+    const auto previous = settings.value(key);
+    const auto restore = qScopeGuard([&]() {
+      if (previous.isValid())
+        settings.setValue(key, previous);
+      else
+        settings.remove(key);
+    });
+    const auto standaloneState = QByteArray{"standalone-info-panel"};
+    settings.setValue(key, standaloneState);
+    alphaWindow->switchToInfoPanelPage(InfoPanelPage::Console);
+    REQUIRE(alphaWindow->close());
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QApplication::processEvents();
+    CHECK(settings.value(key).toByteArray() == standaloneState);
   }
 
   SECTION("resource details track metadata dependencies and revisions")

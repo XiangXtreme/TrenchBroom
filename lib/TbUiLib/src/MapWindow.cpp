@@ -2884,7 +2884,9 @@ void MapWindow::closeEvent(QCloseEvent* event)
   saveWidgetState(m_hSplitter);
   saveWidgetState(m_vSplitter);
   saveWidgetState(m_inspector);
-  saveWidgetState(m_infoPanel);
+  // Embedded tools are shown by the project drawer, independently of standalone MAPs.
+  if (!m_embedded)
+    saveWidgetState(m_infoPanel);
 
   if (m_project && !documentRetainedByProject())
     m_project->unregisterDocument(*m_document);

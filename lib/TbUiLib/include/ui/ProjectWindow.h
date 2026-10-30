@@ -33,6 +33,7 @@ class MapCommandSurface;
 class MapWindow;
 class ProjectSession;
 class ProjectAssetPanel;
+class ProjectToolPanel;
 
 class ProjectWindow : public QMainWindow
 {
@@ -40,6 +41,7 @@ class ProjectWindow : public QMainWindow
   AppController& m_appController;
   std::shared_ptr<ProjectSession> m_session;
   ProjectAssetPanel* m_browser = nullptr;
+  ProjectToolPanel* m_tools = nullptr;
   QWidget* m_emptyWorkspace = nullptr;
   QTreeWidget* m_assets = nullptr;
   QTreeWidget* m_history = nullptr;
