@@ -210,6 +210,53 @@ public:
       return;
     }
 
+    if (element == QStyle::PE_IndicatorBranch)
+    {
+      // Paint every indentation level as part of the row, including leaf branches.
+      if (option->state.testFlag(QStyle::State_Selected))
+        painter->fillRect(
+          option->rect,
+          option->state.testFlag(QStyle::State_Active)
+            ? m_themeTokens.selectionBackground
+            : m_themeTokens.inactiveSelectionBackground);
+      else if (option->state.testFlag(QStyle::State_MouseOver))
+        painter->fillRect(option->rect, m_themeTokens.hoverBackground);
+      if (!option->state.testFlag(QStyle::State_Children))
+        return;
+      const auto enabled = option->state.testFlag(QStyle::State_Enabled);
+      const auto selected = option->state.testFlag(QStyle::State_Selected);
+      const auto color = !enabled   ? m_themeTokens.disabledText
+                         : selected ? m_themeTokens.inverseText
+                                    : m_themeTokens.secondaryText;
+      const auto center = QRectF{option->rect}.center();
+      const auto open = option->state.testFlag(QStyle::State_Open);
+      const auto rtl = option->direction == Qt::RightToLeft;
+      auto chevron = QPainterPath{};
+      if (open)
+      {
+        chevron.moveTo(center.x() - 3.0, center.y() - 1.5);
+        chevron.lineTo(center.x(), center.y() + 1.5);
+        chevron.lineTo(center.x() + 3.0, center.y() - 1.5);
+      }
+      else
+      {
+        const auto direction = rtl ? -1.0 : 1.0;
+        chevron.moveTo(center.x() - direction * 1.5, center.y() - 3.0);
+        chevron.lineTo(center.x() + direction * 1.5, center.y());
+        chevron.lineTo(center.x() - direction * 1.5, center.y() + 3.0);
+      }
+      painter->save();
+      painter->setRenderHint(QPainter::Antialiasing);
+      auto pen = QPen{color, 1.25};
+      pen.setCapStyle(Qt::RoundCap);
+      pen.setJoinStyle(Qt::RoundJoin);
+      painter->setPen(pen);
+      painter->setBrush(Qt::NoBrush);
+      painter->drawPath(chevron);
+      painter->restore();
+      return;
+    }
+
     QProxyStyle::drawPrimitive(element, option, painter, widget);
   }
 
@@ -253,6 +300,8 @@ public:
     case QStyle::PM_ExclusiveIndicatorWidth:
     case QStyle::PM_ExclusiveIndicatorHeight:
       return 18;
+    case QStyle::PM_TreeViewIndentation:
+      return 16;
     case QStyle::PM_SmallIconSize:
     case QStyle::PM_ButtonIconSize:
     case QStyle::PM_TabBarIconSize:
@@ -315,8 +364,7 @@ public:
 
         const auto textRect =
           subElementRect(QStyle::SE_PushButtonContents, &sizedButton, widget);
-        const auto itemRect =
-          QProxyStyle::subElementRect(element, &sizedButton, widget);
+        const auto itemRect = QProxyStyle::subElementRect(element, &sizedButton, widget);
 
         // subtract the doubled centers so that the offset is rounded only once
         const auto offset =

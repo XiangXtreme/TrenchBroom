@@ -267,8 +267,11 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
   auto* layerItem =
     new QTreeWidgetItem{worldItem, QStringList{QStringLiteral("Gameplay")}};
   new QTreeWidgetItem{layerItem, QStringList{QStringLiteral("func_detail")}};
-  new QTreeWidgetItem{worldItem, QStringList{QStringLiteral("Lighting")}};
+  auto* lighting =
+    new QTreeWidgetItem{worldItem, QStringList{QStringLiteral("Lighting")}};
+  new QTreeWidgetItem{lighting, QStringList{QStringLiteral("light")}};
   tree->expandAll();
+  lighting->setExpanded(false);
   tree->setCurrentItem(layerItem);
   tree->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
 

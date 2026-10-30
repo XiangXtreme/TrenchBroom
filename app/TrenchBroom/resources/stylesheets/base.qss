@@ -669,6 +669,11 @@ QListView::item {
   padding: 1px 4px;
 }
 
+/* A tree row is one surface, including all indentation levels. */
+QTreeView::item {
+  border-radius: 0;
+}
+
 QListView[tbControlRole="suggest-popup"] {
   background: @tb-panel-background;
   border: 1px solid @tb-border;

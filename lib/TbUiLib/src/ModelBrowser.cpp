@@ -400,6 +400,8 @@ void ModelBrowser::createGui(AppController& appController)
   m_folderTree->setObjectName("ModelBrowser_FolderTree");
   m_folderTree->setHeaderHidden(true);
   m_folderTree->setUniformRowHeights(true);
+  m_folderTree->setMouseTracking(true);
+  m_folderTree->setAllColumnsShowFocus(true);
   m_folderTree->setIconSize(QSize{16, 16});
 
   m_scrollBar = new QScrollBar{Qt::Vertical};
@@ -1711,7 +1713,7 @@ void ModelBrowser::rebuildFolderTree()
   m_folderTree->clear();
   m_folderTreeItems.clear();
 
-  const auto folderIcon = loadSVGIcon(std::filesystem::path{"BrowserFolder.svg"});
+  const auto folderIcon = loadSVGIcon(std::filesystem::path{"BrowserFolderSmall.svg"});
 
   auto rootTitle = m_folderPath.filename().empty() ? std::filesystem::path{"assets"}
                                                    : m_folderPath.filename();
