@@ -10,8 +10,9 @@ UI 架构后续实施入口（2026-10-30）：见
 
 - 已完成：阶段 A 的地图标签切片。`ProjectWindow` 顶部有地图标签栏（脏标记、关闭按钮、
   可重排）和“Reopen Map”入口；关闭标签会**销毁视图**并保留文档。
-- 已完成：编辑工作台抽取。`MapEditorView` 拥有地图视图、信息面板、检查器和分隔器布局
-  及其面板行为；`WorkbenchSurface` 独立成单元；`MapWindow` 保留文档、菜单、工具栏、
+- 已完成：编辑工作台抽取。`MapEditorView` 拥有地图视图、检查器和分隔器布局；独立 MAP 的信息面板
+  由视图拥有，工程的信息面板登记到 `ProjectToolPanel` 并由宿主拥有。视图借用信息面板
+  路由日志与控制台访问；`WorkbenchSurface` 独立成单元；`MapWindow` 保留文档、菜单、工具栏、
   状态栏与对话框，借用视图的控件路由命令。
 - 已完成：文档归属。`ProjectSession::retainDocument` 让工程持有文档；`MapWindow` 持有
   `shared_ptr<MapDocument>`，工程保留时不再注销；`MapWindowManager::closeMapView`

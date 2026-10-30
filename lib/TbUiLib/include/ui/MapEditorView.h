@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <QPointer>
 #include <QWidget>
 
 #include "ui/InfoPanel.h"
@@ -51,9 +52,10 @@ private:
   WorkbenchSurface* m_inspectorSurface = nullptr;
 
   SwitchableMapViewContainer* m_mapView = nullptr;
-  InfoPanel* m_infoPanel = nullptr;
+  QPointer<InfoPanel> m_infoPanel;
   Inspector* m_inspector = nullptr;
   bool m_externalInfoPanel = false;
+  bool m_externalInfoPanelExpanded = false;
 
 public:
   MapEditorView(AppController& appController, MapDocument& document);
@@ -63,8 +65,9 @@ public:
   MapViewBase* currentMapViewBase() const;
 
   InfoPanel* infoPanel() const;
-  /** The editor retains lifetime ownership while the project hosts the panel. */
-  InfoPanel* takeInfoPanel();
+  /** The host takes QWidget ownership and must destroy the panel before the document. */
+  void useExternalInfoPanel();
+  void setExternalInfoPanelExpanded(bool expanded);
   Inspector* inspector() const;
   Console& console() const;
   PythonConsole* pythonConsole() const;
@@ -95,6 +98,7 @@ public:
 signals:
   void infoPanelPageRequested(InfoPanelPage page);
   void infoPanelToggleRequested();
+  void infoPanelVisibilityChanged();
 };
 
 } // namespace tb::ui

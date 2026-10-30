@@ -171,6 +171,8 @@ public:
 
 signals:
   void commandStateChanged();
+  /** External tool hosts release their widgets while the document/context are alive. */
+  void toolPanelsAboutToBeDestroyed();
 
 public:
   /**

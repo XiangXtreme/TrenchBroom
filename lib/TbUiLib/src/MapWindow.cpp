@@ -306,6 +306,7 @@ MapWindow::~MapWindow()
 
   m_notifierConnection.disconnect();
   removeRecentDocumentsMenu();
+  emit toolPanelsAboutToBeDestroyed();
 
   // The order of deletion here is important because both the document and the children
   // need the context manager (and its embedded VBO) to clean up their resources.
@@ -534,6 +535,11 @@ void MapWindow::createGui()
   setWindowTitle("TrenchBroom");
 
   m_editor = new MapEditorView{m_appController, document()};
+  connect(
+    m_editor,
+    &MapEditorView::infoPanelVisibilityChanged,
+    this,
+    &MapWindow::updateActionState);
   setCentralWidget(m_editor);
 
   // The view owns the workbench widgets; the window borrows them to route its commands.

@@ -274,11 +274,16 @@ TEST_CASE("ProjectWindow")
     CHECK(stack->height() == workspaceHeight);
     CHECK(window.findChild<ProjectAssetPanel*>()->isVisible());
     CHECK_FALSE(editor->infoPanel()->isVisible());
+    CHECK(editor->isInfoPanelVisible());
+    CHECK(alphaWindow->infoPanelVisible());
+    CHECK(tools->isToolVisible(ProjectToolId::ContentBrowser));
+    CHECK_FALSE(tools->isToolVisible(ProjectToolId::OutputLog));
     CHECK_FALSE(editor->findChild<QWidget*>("MapWindow_InfoPanelSurface")->isVisible());
 
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::PythonConsole);
     CHECK(editor->infoPanel()->isVisible());
     CHECK(editor->infoPanel()->currentPage() == InfoPanelPage::PythonConsole);
+    CHECK(tools->currentTool() == ProjectToolId::PythonConsole);
     CHECK_FALSE(window.findChild<ProjectAssetPanel*>()->isVisible());
     const auto alphaPanel = QPointer{editor->infoPanel()};
     tabs->setCurrentIndex(1);
@@ -286,6 +291,11 @@ TEST_CASE("ProjectWindow")
     CHECK(betaEditor->infoPanel()->isVisible());
     CHECK(betaEditor->infoPanel()->currentPage() == InfoPanelPage::PythonConsole);
     CHECK_FALSE(alphaPanel->isVisible());
+    CHECK_FALSE(editor->isInfoPanelVisible());
+    CHECK(betaEditor->isInfoPanelVisible());
+    auto* input = betaEditor->infoPanel()->findChild<QWidget*>("PythonConsole_Input");
+    REQUIRE(input != nullptr);
+    input->setFocus();
     pin->setChecked(true);
     QApplication::processEvents();
     CHECK(stack->height() < workspaceHeight);
@@ -296,6 +306,8 @@ TEST_CASE("ProjectWindow")
       Q_ARG(QWidget*, window.activeMapWindow()->currentMapViewBase()));
     CHECK(tools->isExpanded());
     pin->setChecked(false);
+    QApplication::processEvents();
+    CHECK(tools->isExpanded());
     tools->showContent();
     QMetaObject::invokeMethod(
       qApp,
@@ -303,6 +315,7 @@ TEST_CASE("ProjectWindow")
       Q_ARG(QWidget*, drawer),
       Q_ARG(QWidget*, window.activeMapWindow()->currentMapViewBase()));
     CHECK_FALSE(tools->isExpanded());
+    CHECK_FALSE(betaEditor->isInfoPanelVisible());
     tabs->setCurrentIndex(0);
     closeTab(*tabs, 0);
     CHECK(alphaPanel.isNull());
@@ -310,6 +323,54 @@ TEST_CASE("ProjectWindow")
     tools->showContent();
     CHECK(window.findChild<ProjectAssetPanel*>()->isVisible());
     CHECK_FALSE(window.findChild<QToolButton*>("ProjectTool1")->isEnabled());
+  }
+
+  SECTION("closing a background map releases only its hosted tools before its document")
+  {
+    auto* tools = window.findChild<ProjectToolPanel*>();
+    auto* alphaEditor = alphaWindow->findChild<MapEditorView*>();
+    const auto alphaPanel = QPointer{alphaEditor->infoPanel()};
+    tabs->setCurrentIndex(1);
+    auto* betaEditor = window.activeMapWindow()->findChild<MapEditorView*>();
+    const auto betaPanel = QPointer{betaEditor->infoPanel()};
+    tools->showInfoPage(InfoPanelPage::PythonConsole);
+    auto releasedBeforeDocument = false;
+    QObject::connect(
+      alphaWindow, &MapWindow::toolPanelsAboutToBeDestroyed, &window, [&]() {
+        releasedBeforeDocument = alphaPanel.isNull() && !alphaEditor->infoPanel()
+                                 && session->assetFor(alphaWindow->document()) == alphaId;
+      });
+    closeTab(*tabs, 0);
+    CHECK(releasedBeforeDocument);
+    CHECK_FALSE(betaPanel.isNull());
+    CHECK(betaPanel->isVisible());
+    CHECK(tools->isToolVisible(ProjectToolId::PythonConsole));
+    CHECK(window.activeMapWindow()->findChild<MapEditorView*>() == betaEditor);
+    closeTab(*tabs, 0);
+    CHECK(betaPanel.isNull());
+    CHECK(tools->isToolVisible(ProjectToolId::ContentBrowser));
+    tools->showInfoPage(InfoPanelPage::Issues);
+    CHECK(tools->currentTool() == ProjectToolId::ContentBrowser);
+  }
+
+  SECTION("destroying the workspace releases hosted tools before retained documents")
+  {
+    tabs->setCurrentIndex(1);
+    auto* betaWindow = window.activeMapWindow();
+    REQUIRE(betaWindow != nullptr);
+    const auto alphaPanel =
+      QPointer{alphaWindow->findChild<MapEditorView*>()->infoPanel()};
+    const auto betaPanel = QPointer{betaWindow->findChild<MapEditorView*>()->infoPanel()};
+    const auto alphaHandle = alphaWindow->documentHandle();
+    const auto betaHandle = betaWindow->documentHandle();
+    teardownGuard.fn = {};
+    delete host;
+    host = nullptr;
+    CHECK(alphaPanel.isNull());
+    CHECK(betaPanel.isNull());
+    CHECK(manager.mapWindows().empty());
+    CHECK(session->retainedDocument(alphaId) == alphaHandle);
+    CHECK(session->assetFor(*betaHandle).has_value());
   }
 
   SECTION("closing an embedded map preserves standalone info panel visibility")

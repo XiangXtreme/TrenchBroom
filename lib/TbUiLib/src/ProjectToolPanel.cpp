@@ -9,12 +9,16 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QScopedValueRollback>
 #include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include "ui/MapEditorView.h"
+#include "ui/MapViewBase.h"
 
 #include <algorithm>
 
@@ -23,6 +27,7 @@ namespace tb::ui
 ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget* parent)
   : QWidget{parent}
   , m_content{content}
+  , m_workspace{workspace}
 {
   setObjectName("ProjectTools");
   m_surface = new QWidget{this};
@@ -65,20 +70,24 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
   m_bar->setObjectName("ProjectToolBar");
   auto* barLayout = new QHBoxLayout{m_bar};
   barLayout->setContentsMargins(4, 2, 4, 2);
-  const auto titles = QStringList{
-    tr("Content Browser"), tr("Output Log"), tr("Python Console"), tr("Issues")};
-  for (int i = 0; i < titles.size(); ++i)
+  const auto tools = std::map<ProjectToolId, QString>{
+    {ProjectToolId::ContentBrowser, tr("Content Browser")},
+    {ProjectToolId::OutputLog, tr("Output Log")},
+    {ProjectToolId::PythonConsole, tr("Python Console")},
+    {ProjectToolId::Issues, tr("Issues")}};
+  for (const auto& [id, title] : tools)
   {
     auto* button = new QToolButton{m_bar};
-    button->setObjectName(QString{"ProjectTool%1"}.arg(i));
+    button->setObjectName(QString{"ProjectTool%1"}.arg(static_cast<int>(id)));
     button->setProperty("tbControlRole", "navigation");
-    button->setText(titles[i]);
+    button->setText(title);
     button->setCheckable(true);
-    connect(button, &QToolButton::clicked, this, [this, i]() { selectTool(i); });
+    connect(button, &QToolButton::clicked, this, [this, id]() { selectTool(id); });
     barLayout->addWidget(button);
-    m_buttons.push_back(button);
+    m_buttons.emplace(id, button);
   }
-  m_buttons[0]->setToolTip(tr("Content Browser (Ctrl+Shift+Space)"));
+  m_buttons.at(ProjectToolId::ContentBrowser)
+    ->setToolTip(tr("Content Browser (Ctrl+Shift+Space)"));
   auto* extensions = new QToolButton{m_bar};
   extensions->setObjectName("ProjectToolsExtensions");
   extensions->setProperty("tbControlRole", "navigation");
@@ -99,21 +108,31 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
   connect(close, &QToolButton::clicked, this, [this]() { setExpanded(false); });
   connect(m_pin, &QToolButton::toggled, this, [this](const bool pinned) {
     QSettings{}.setValue("ProjectTools/Pinned", pinned);
+    // Reparenting produces intermediate focus changes outside the drawer.
+    const auto changingMode = QScopedValueRollback{m_changingMode, true};
+    const auto focus = QPointer<QWidget>{QApplication::focusWidget()};
     updateGeometryForMode();
     // Reparenting between the splitter and overlay clears Qt's keyboard focus.
     if (m_expanded)
-      m_pages->currentWidget()->setFocus(Qt::OtherFocusReason);
+    {
+      if (focus && (focus == m_panel || m_panel->isAncestorOf(focus)))
+        focus->setFocus(Qt::OtherFocusReason);
+      else
+        m_pages->currentWidget()->setFocus(Qt::OtherFocusReason);
+    }
   });
   auto* shortcut =
     new QShortcut{QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_Space}, this};
-  connect(shortcut, &QShortcut::activated, this, [this]() { selectTool(0); });
+  connect(shortcut, &QShortcut::activated, this, [this]() {
+    selectTool(ProjectToolId::ContentBrowser);
+  });
   auto* escape = new QShortcut{QKeySequence{Qt::Key_Escape}, m_panel};
   escape->setContext(Qt::WidgetWithChildrenShortcut);
   connect(escape, &QShortcut::activated, this, [this]() { setExpanded(false); });
   connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
     if (
-      !m_expanded || m_pin->isChecked() || !focus || QApplication::activePopupWidget()
-      || QApplication::activeModalWidget())
+      !m_expanded || m_changingMode || m_pin->isChecked() || !focus
+      || QApplication::activePopupWidget() || QApplication::activeModalWidget())
       return;
     if (
       focus == m_panel || m_panel->isAncestorOf(focus) || focus == m_bar
@@ -121,26 +140,50 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
       return;
     // Dialogs and menus opened by a tool keep the drawer and its selection intact.
     if (focus->window() == window())
-      setExpanded(false);
+      setExpanded(false, false);
   });
-  setMapPanel(nullptr);
+  setMapEditor(nullptr);
   setExpanded(m_pin->isChecked());
 }
 
-void ProjectToolPanel::setMapPanel(InfoPanel* panel)
+void ProjectToolPanel::registerMapEditor(MapEditorView& editor)
 {
-  m_mapPanel = panel;
-  if (panel && m_pages->indexOf(panel) < 0)
-    m_pages->addWidget(panel);
-  for (size_t i = 1; i < m_buttons.size(); ++i)
-    m_buttons[i]->setEnabled(panel != nullptr);
-  findChild<QToolButton*>("ProjectToolsExtensions")->setEnabled(panel != nullptr);
-  if (!panel)
-    m_tool = 0;
+  if (m_mapPanels.contains(&editor))
+    return;
+  editor.useExternalInfoPanel();
+  auto* panel = editor.infoPanel();
+  m_pages->addWidget(panel);
+  m_mapPanels.emplace(&editor, panel);
+}
+
+void ProjectToolPanel::unregisterMapEditor(MapEditorView& editor)
+{
+  const auto it = m_mapPanels.find(&editor);
+  if (it == m_mapPanels.end())
+    return;
+  if (m_activeEditor == &editor)
+    setMapEditor(nullptr);
+  auto* panel = it->second;
+  m_mapPanels.erase(it);
+  m_pages->removeWidget(panel);
+  delete panel;
+}
+
+void ProjectToolPanel::setMapEditor(MapEditorView* editor)
+{
+  if (m_activeEditor && m_activeEditor != editor)
+    m_activeEditor->setExternalInfoPanelExpanded(false);
+  m_activeEditor = editor;
+  m_mapPanel = editor ? m_mapPanels.at(editor) : nullptr;
+  for (const auto& [id, button] : m_buttons)
+    button->setEnabled(id == ProjectToolId::ContentBrowser || editor != nullptr);
+  findChild<QToolButton*>("ProjectToolsExtensions")->setEnabled(editor != nullptr);
+  if (!editor)
+    m_tool = ProjectToolId::ContentBrowser;
   updatePage();
 }
 
-void ProjectToolPanel::selectTool(const int tool)
+void ProjectToolPanel::selectTool(const ProjectToolId tool)
 {
   if (tool == m_tool && m_expanded)
     setExpanded(false);
@@ -153,7 +196,7 @@ void ProjectToolPanel::selectTool(const int tool)
 
 void ProjectToolPanel::showContent()
 {
-  m_tool = 0;
+  m_tool = ProjectToolId::ContentBrowser;
   setExpanded(true);
 }
 
@@ -163,7 +206,20 @@ void ProjectToolPanel::showInfoPage(const InfoPanelPage page)
     showContent();
   else if (m_mapPanel)
   {
-    m_tool = static_cast<int>(page) + 1;
+    switch (page)
+    {
+    case InfoPanelPage::Console:
+      m_tool = ProjectToolId::OutputLog;
+      break;
+    case InfoPanelPage::PythonConsole:
+      m_tool = ProjectToolId::PythonConsole;
+      break;
+    case InfoPanelPage::Issues:
+      m_tool = ProjectToolId::Issues;
+      break;
+    case InfoPanelPage::Assets:
+      break;
+    }
     setExpanded(true);
   }
 }
@@ -178,27 +234,72 @@ bool ProjectToolPanel::isExpanded() const
   return m_expanded;
 }
 
-void ProjectToolPanel::setExpanded(const bool expanded)
+void ProjectToolPanel::setExpanded(const bool expanded, const bool restoreFocus)
 {
+  const auto wasExpanded = m_expanded;
+  if (expanded && !wasExpanded)
+  {
+    auto* focus = QApplication::focusWidget();
+    if (
+      focus && focus->window() == window() && focus != m_panel
+      && !m_panel->isAncestorOf(focus) && !m_bar->isAncestorOf(focus))
+      m_restoreFocus = focus;
+  }
   m_expanded = expanded;
   updatePage();
   updateGeometryForMode();
   if (expanded)
     m_pages->currentWidget()->setFocus(Qt::ShortcutFocusReason);
+  else if (wasExpanded && restoreFocus)
+  {
+    if (m_restoreFocus && m_restoreFocus->isVisible() && m_restoreFocus->isEnabled())
+      m_restoreFocus->setFocus(Qt::ShortcutFocusReason);
+    else if (m_activeEditor)
+      m_activeEditor->currentMapViewBase()->setFocus(Qt::ShortcutFocusReason);
+    else
+      m_workspace->setFocus(Qt::ShortcutFocusReason);
+  }
+  if (!expanded)
+    m_restoreFocus.clear();
+}
+
+ProjectToolId ProjectToolPanel::currentTool() const
+{
+  return m_tool;
+}
+
+bool ProjectToolPanel::isToolVisible(const ProjectToolId tool) const
+{
+  return m_expanded && m_tool == tool;
 }
 
 void ProjectToolPanel::updatePage()
 {
-  if (m_tool != 0 && m_mapPanel)
+  if (m_tool != ProjectToolId::ContentBrowser && m_mapPanel)
   {
-    m_mapPanel->switchToPage(static_cast<InfoPanelPage>(m_tool - 1));
+    switch (m_tool)
+    {
+    case ProjectToolId::OutputLog:
+      m_mapPanel->switchToPage(InfoPanelPage::Console);
+      break;
+    case ProjectToolId::PythonConsole:
+      m_mapPanel->switchToPage(InfoPanelPage::PythonConsole);
+      break;
+    case ProjectToolId::Issues:
+      m_mapPanel->switchToPage(InfoPanelPage::Issues);
+      break;
+    case ProjectToolId::ContentBrowser:
+      break;
+    }
     m_pages->setCurrentWidget(m_mapPanel);
   }
   else
     m_pages->setCurrentWidget(m_content);
-  for (size_t i = 0; i < m_buttons.size(); ++i)
-    m_buttons[i]->setChecked(m_expanded && int(i) == m_tool);
-  m_title->setText(m_buttons[size_t(m_tool)]->text());
+  for (const auto& [id, button] : m_buttons)
+    button->setChecked(isToolVisible(id));
+  m_title->setText(m_buttons.at(m_tool)->text());
+  if (m_activeEditor)
+    m_activeEditor->setExternalInfoPanelExpanded(m_expanded);
 }
 
 void ProjectToolPanel::updateGeometryForMode()

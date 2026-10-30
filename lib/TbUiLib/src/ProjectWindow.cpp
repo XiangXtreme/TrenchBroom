@@ -432,7 +432,7 @@ void ProjectWindow::activateMapTab(MapWindow* window)
     return;
   refreshMapTabs();
   m_maps->setCurrentWidget(window);
-  m_tools->setMapPanel(window->findChild<MapEditorView*>()->infoPanel());
+  m_tools->setMapEditor(window->findChild<MapEditorView*>());
   m_browser->setDocument(&window->document());
   const auto id = m_session->assetFor(window->document());
   const auto blocker = QSignalBlocker{m_mapTabs};
@@ -770,7 +770,11 @@ void ProjectWindow::refreshMapTabs()
       window->setCommandToolBar(*m_mapToolbar);
       m_maps->addWidget(window);
       auto* editor = window->findChild<MapEditorView*>();
-      m_tools->setMapPanel(editor->takeInfoPanel());
+      m_tools->registerMapEditor(*editor);
+      connect(
+        window, &MapWindow::toolPanelsAboutToBeDestroyed, m_tools, [this, editor]() {
+          m_tools->unregisterMapEditor(*editor);
+        });
       connect(
         editor,
         &MapEditorView::infoPanelPageRequested,
@@ -814,9 +818,8 @@ void ProjectWindow::refreshMapTabs()
 
   if (m_browser)
     m_browser->setDocument(activeMapWindow() ? &activeMapWindow()->document() : nullptr);
-  m_tools->setMapPanel(
-    activeMapWindow() ? activeMapWindow()->findChild<MapEditorView*>()->infoPanel()
-                      : nullptr);
+  m_tools->setMapEditor(
+    activeMapWindow() ? activeMapWindow()->findChild<MapEditorView*>() : nullptr);
 
   // The menu is rebuilt from inside a triggered action, so the old actions are removed
   // and scheduled for deletion instead of being destroyed while their signal is still on
