@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <QPointer>
+
 #include "ui/ActionContext.h"
 
 namespace tb
@@ -42,10 +44,10 @@ private:
   ActionContext::Type m_actionContext;
 
   AppController& m_appController;
-  MapWindow* m_mapWindow;
+  QPointer<MapWindow> m_mapWindow;
   MapDocument* m_document;
-  MapEditorView* m_editorView;
-  MapViewBase* m_mapView;
+  QPointer<MapEditorView> m_editorView;
+  QPointer<MapViewBase> m_mapView;
 
 public:
   ActionExecutionContext(

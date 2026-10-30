@@ -20,6 +20,7 @@
 #include "ui/ActionExecutionContext.h"
 
 #include "ui/MapDocument.h"
+#include "ui/MapEditorView.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapWindow.h"
 
@@ -43,12 +44,16 @@ ActionExecutionContext::ActionExecutionContext(
 
 bool ActionExecutionContext::hasDocument() const
 {
-  return m_document != nullptr;
+  return m_document != nullptr && m_mapWindow && m_editorView && m_mapView;
 }
 
 bool ActionExecutionContext::hasActionContext(
   const ActionContext::Type actionContext) const
 {
+  // An expired document binding must not become an application-only context.
+  if (m_document && !hasDocument())
+    return false;
+
   if (actionContext == ActionContext::Any || m_actionContext == ActionContext::Any)
   {
     return true;

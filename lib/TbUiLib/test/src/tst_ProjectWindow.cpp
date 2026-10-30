@@ -447,6 +447,25 @@ TEST_CASE("ProjectWindow")
     require(session->save());
   }
 
+  SECTION("captured commands expire when their map view closes")
+  {
+    auto context = ActionExecutionContext{
+      appController, alphaWindow, alphaWindow->currentMapViewBase()};
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "message", "retained edit"));
+    const auto& undo = appController.actionManager().actionsMap().at("Menu/Edit/Undo");
+    REQUIRE(undo.enabled(context));
+    closeTab(*tabs, 0);
+    CHECK_FALSE(context.hasDocument());
+    CHECK_FALSE(undo.enabled(context));
+    undo.execute(context);
+    REQUIRE(alphaDocument->map().worldNode().entity().property("message"));
+    CHECK(
+      *alphaDocument->map().worldNode().entity().property("message") == "retained edit");
+    CHECK(window.activeMapWindow() != nullptr);
+    CHECK(&window.activeMapWindow()->document() != alphaDocument);
+    require(session->save());
+  }
+
   SECTION("closing an embedded map preserves standalone info panel visibility")
   {
     // CTest runs other map-window tests concurrently against the same QSettings store.
