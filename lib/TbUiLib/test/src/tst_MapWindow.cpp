@@ -34,6 +34,7 @@
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QScreen>
+#include <QSettings>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStyleOptionViewItem>
@@ -92,6 +93,7 @@
 #include "ui/SpinControl.h"
 #include "ui/SwitchableMapViewContainer.h"
 #include "ui/TransformCard.h"
+#include "ui/WorkspaceToolPanel.h"
 #include "ui/python/PythonScripting.h"
 
 #include <utility>
@@ -223,6 +225,14 @@ struct TestResource
 
 TEST_CASE("MapWindow")
 {
+  const auto applicationName = QApplication::applicationName();
+  QApplication::setApplicationName(
+    QString{"TrenchBroom-MapWindowTest-%1"}.arg(QCoreApplication::applicationPid()));
+  QSettings{}.clear();
+  const auto restoreSettings = qScopeGuard([&]() {
+    QSettings{}.clear();
+    QApplication::setApplicationName(applicationName);
+  });
   setPref(Preferences::DefaultPluginPaths, "");
   setPref(Preferences::PythonPluginDirectories, "");
 
@@ -644,7 +654,7 @@ TEST_CASE("MapWindow")
     REQUIRE(gridChoice != nullptr);
     REQUIRE(snapToggle != nullptr);
     CHECK(gridChoice->parentWidget() == window.findChild<MapStatus*>());
-    CHECK(window.statusBar()->isAncestorOf(gridChoice));
+    CHECK(window.findChild<WorkspaceToolPanel*>()->isAncestorOf(gridChoice));
     CHECK(snapToggle->parentWidget() == window.findChild<MapStatus*>());
     CHECK(snapToggle->isChecked() == window.document().map().grid().snap());
 
@@ -652,11 +662,16 @@ TEST_CASE("MapWindow")
     CHECK_FALSE(window.document().map().grid().snap());
     CHECK_FALSE(snapToggle->isChecked());
 
-    const auto infoPanelWasHidden = infoPanelSurface->isHidden();
+    auto* tools = window.findChild<WorkspaceToolPanel*>();
+    REQUIRE(tools);
+    CHECK(window.centralWidget() == tools);
+    CHECK(infoPanelSurface->isHidden());
+    const auto wasExpanded = tools->isExpanded();
     window.toggleInfoPanel();
-    CHECK(infoPanelSurface->isHidden() != infoPanelWasHidden);
+    CHECK(tools->isExpanded() != wasExpanded);
+    CHECK(window.infoPanelVisible() == tools->isExpanded());
     window.toggleInfoPanel();
-    CHECK(infoPanelSurface->isHidden() == infoPanelWasHidden);
+    CHECK(tools->isExpanded() == wasExpanded);
 
     const auto inspectorWasHidden = inspectorSurface->isHidden();
     window.toggleInspector();
@@ -684,10 +699,38 @@ TEST_CASE("MapWindow")
     window.switchToInfoPanelPage(InfoPanelPage::Assets);
 
     CHECK(infoPanel->currentPage() == InfoPanelPage::Assets);
-    CHECK_FALSE(window.findChild<QWidget*>("MapWindow_InfoPanelSurface")->isHidden());
+    auto* tools = window.findChild<WorkspaceToolPanel*>();
+    REQUIRE(tools);
+    CHECK(tools->isToolVisible(WorkspaceToolId::ContentBrowser));
+    CHECK(window.findChild<QWidget*>("MapWindow_InfoPanelSurface")->isHidden());
     CHECK(window.findChild<QWidget*>("InfoPanel_Assets") != nullptr);
     CHECK(window.findChild<QWidget*>("ModelBrowser_Controls") != nullptr);
     CHECK(window.findChild<QWidget*>("ModelBrowser_FolderTree") != nullptr);
+  }
+
+  SECTION("standalone tools share pinning layout and keep project settings separate")
+  {
+    auto* tools = window.findChild<WorkspaceToolPanel*>();
+    REQUIRE(tools);
+    window.resize(1200, 900);
+    window.show();
+    window.switchToInfoPanelPage(InfoPanelPage::PythonConsole);
+    auto* pin = tools->findChild<QToolButton*>("ProjectToolsPin");
+    REQUIRE(pin);
+    pin->setChecked(true);
+    QApplication::processEvents();
+    CHECK(tools->isToolVisible(WorkspaceToolId::PythonConsole));
+    auto settings = QSettings{};
+    CHECK(loadToolLayout(settings, WorkspaceKind::Map).pinned);
+    CHECK(loadToolLayout(settings, WorkspaceKind::Map).tool == "python-console");
+    CHECK_FALSE(loadToolLayout(settings, WorkspaceKind::Project).pinned);
+    const auto modified = window.document().map().modified();
+    const auto canUndo = window.document().map().canUndoCommand();
+    tools->resetLayout();
+    CHECK_FALSE(tools->isExpanded());
+    CHECK_FALSE(pin->isChecked());
+    CHECK(window.document().map().modified() == modified);
+    CHECK(window.document().map().canUndoCommand() == canUndo);
   }
 
   SECTION("runs commands from the Python console")
@@ -1336,7 +1379,10 @@ TEST_CASE("PlayModeFullScreen")
       QApplication::processEvents();
       auto* parentBefore = view.parentWidget();
       const auto menuHiddenBefore = window.menuBar()->isHidden();
-      const auto statusHiddenBefore = window.statusBar()->isHidden();
+      auto* status = window.findChild<QWidget*>("ProjectToolBar");
+      REQUIRE(status);
+      CHECK(window.findChildren<QStatusBar*>().isEmpty());
+      const auto statusHiddenBefore = status->isHidden();
       auto* inspector = window.findChild<QWidget*>("MapWindow_InspectorSurface");
       REQUIRE(inspector);
       inspector->hide();
@@ -1367,7 +1413,7 @@ TEST_CASE("PlayModeFullScreen")
       CHECK(view.isVisible());
       CHECK(view.parentWidget() == parentBefore);
       CHECK(window.menuBar()->isHidden());
-      CHECK(window.statusBar()->isHidden());
+      CHECK(status->isHidden());
       CHECK(view.size() == window.size());
 
       presentation.leave();
@@ -1376,7 +1422,7 @@ TEST_CASE("PlayModeFullScreen")
       CHECK_FALSE(window.isFullScreen());
       QTRY_COMPARE(window.geometry(), geometryBefore);
       CHECK(window.menuBar()->isHidden() == menuHiddenBefore);
-      CHECK(window.statusBar()->isHidden() == statusHiddenBefore);
+      CHECK(status->isHidden() == statusHiddenBefore);
       CHECK(inspector->isHidden());
       for (auto i = qsizetype{0}; i < splitters.size(); ++i)
       {

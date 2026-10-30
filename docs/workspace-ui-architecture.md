@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | `ProjectWindow` | 通过 `QStackedWidget` 嵌入完整 `MapWindow`，隐藏子窗口菜单与工具栏 | 工程页仍携带完整窗口的命令和关闭职责 |
 | `MapEditorView::takeInfoPanel` | 把信息面板交给工程展示，析构时仍手动删除它 | 第一批已移除此接口；工程宿主登记并拥有面板，地图窗口在文档和 GL 上下文释放前通知宿主销毁面板 |
-| `ProjectToolPanel` | 同时管理工具选择、覆盖布局、固定布局、焦点与设置；通过整数偏移映射 `InfoPanelPage` | 第一批使用 `ProjectToolId` 和显式页面映射；插件工具登记留到第四批 |
+| `WorkspaceToolPanel` | 同时管理工具选择、覆盖布局、固定布局、焦点与设置；通过整数偏移映射 `InfoPanelPage` | 已改为共同 `WorkspaceToolPanel` / `WorkspaceToolId` 和显式页面映射；插件工具登记留到第四批 |
 | `MapEditorView::isInfoPanelVisible` | 外部托管时查询信息面板自身的可见性 | 第一批由宿主发布区域展开状态；工具显示状态通过 `isToolVisible` 单独查询，菜单和底栏随同一状态更新 |
 | `ActionExecutionContext` | 保存 `MapWindow*` 与 `MapViewBase*` | 编辑命令依赖窗口对象；面板移动后容易再次依赖父控件查找 |
 | `WidgetState` | 设置键为 `Windows/<objectName>/<suffix>` | 控件发现名称承担持久化身份；工程和独立 MAP 的布局容易互相影响 |
@@ -77,7 +77,7 @@ flowchart TD
 
 ## 5. 面板契约
 
-在现有 `ProjectToolPanel` 上分离“工具内容”与“区域展示”，再让独立 MAP 使用同一宿主。
+在现有 `WorkspaceToolPanel` 上分离“工具内容”与“区域展示”，再让独立 MAP 使用同一宿主。
 第一步覆盖现有内置工具，接口稳定后再接入插件声明。
 
 每个工具描述至少包含稳定 ID、标题、目标区域、实例作用域、所需能力和内容工厂。
@@ -141,7 +141,7 @@ flowchart TD
 
 ### 第一批：面板宿主与所有权
 
-已实现，保留当前视觉布局。`ProjectToolPanel` 拥有登记的地图信息面板，
+已实现，保留当前视觉布局。`WorkspaceToolPanel` 拥有登记的地图信息面板，
 `MapEditorView` 通过 `QPointer` 借用面板，不再删除宿主树中的控件。
 `MapWindow` 在停止日志转发、保留有效文档和当前 GL 上下文后发出销毁通知；
 宿主解绑并销毁面板，然后地图窗口释放视图与文档。
@@ -209,11 +209,20 @@ flowchart TD
 
 共享 `MapStatus` 明确绑定当前文档。工程只展示一份状态控件，切换标签即时更新网格、
 对齐和摘要；后台文档通知及关闭后保留的文档不会更新当前状态。独立 MAP 复用同一组件。
-无地图时展示空状态并禁用文档操作。独立 MAP 的共同工具宿主接入仍待完成。
+无地图时展示空状态并禁用文档操作。独立 MAP 也已接入 `WorkspaceToolPanel`，复用内容、日志、Python、问题入口、
+临时抽屉与固定区；状态信息与更新提示合入同一底栏，不再额外创建窗口状态栏。
+独立 MAP 的内容浏览保留原有资源浏览器，工程保留工作空间级工程内容。
 
 第三批阶段验收（2026-10-30）：`WorkspaceLayout`、`ProjectWindow`、`MapWindow`
 针对性测试共 1306 条断言通过；覆盖设置隔离、损坏与旧设置、比例恢复、隐藏标签、
 重置布局、活动文档切换及网格操作目标。
+
+共同宿主验收（2026-10-30）：上述测试与 `PlayModeFullScreen` 共 1437 条断言通过。
+6 个变更编译单元严格编译、Release 主程序构建通过；UI CTest 121 项通过，
+1 项原生鼠标捕获测试按后台策略跳过。`workbench`、`supporting`、`python-console`
+三主题、三缩放共 27 张自动快照通过，并检查了汇总图的布局、底栏与工具区域。
+本地预检通过；官方 Qt 包元数据网络检查重试仍未完成（Linux 地址请求失败），
+此次仅跳过该网络检查，未修改 Qt 或 CI 配置。工程专用快照仍待接入。
 
 
 把独立 MAP 与工程的区域布局接入共同宿主，统一底栏和状态展示；

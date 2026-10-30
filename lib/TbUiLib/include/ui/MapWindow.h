@@ -35,14 +35,12 @@
 #include <unordered_map>
 
 class QAction;
-class QComboBox;
 class QDropEvent;
 class QMenuBar;
 class QLabel;
 class QSplitter;
 class QTimer;
 class QToolBar;
-class QToolButton;
 
 namespace tb
 {
@@ -90,6 +88,7 @@ class MapViewToolBox;
 class ObjExportDialog;
 class PythonConsole;
 class ProjectSession;
+class WorkspaceToolPanel;
 class SignalDelayer;
 class SwitchableMapViewContainer;
 class Tool;
@@ -110,13 +109,7 @@ private:
 
   MapEditorView* m_editor = nullptr;
 
-  // Borrowed from m_editor: the view owns these widgets.
-  QSplitter* m_hSplitter = nullptr;
-  QSplitter* m_vSplitter = nullptr;
-
-  QWidget* m_mapViewSurface = nullptr;
-  QWidget* m_infoPanelSurface = nullptr;
-  QWidget* m_inspectorSurface = nullptr;
+  WorkspaceToolPanel* m_tools = nullptr;
 
   SwitchableMapViewContainer* m_mapView = nullptr;
   /**

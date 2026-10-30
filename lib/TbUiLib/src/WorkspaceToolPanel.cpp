@@ -2,7 +2,7 @@
  Copyright (C) 2026 XiangXtreme
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
-#include "ui/ProjectToolPanel.h"
+#include "ui/WorkspaceToolPanel.h"
 
 #include <QApplication>
 #include <QEvent>
@@ -27,20 +27,22 @@ namespace tb::ui
 {
 namespace
 {
-const auto ToolNames = std::map<ProjectToolId, QString>{
-  {ProjectToolId::ContentBrowser, "content-browser"},
-  {ProjectToolId::OutputLog, "output-log"},
-  {ProjectToolId::PythonConsole, "python-console"},
-  {ProjectToolId::Issues, "issues"}};
+const auto ToolNames = std::map<WorkspaceToolId, QString>{
+  {WorkspaceToolId::ContentBrowser, "content-browser"},
+  {WorkspaceToolId::OutputLog, "output-log"},
+  {WorkspaceToolId::PythonConsole, "python-console"},
+  {WorkspaceToolId::Issues, "issues"}};
 }
 
-ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget* parent)
+WorkspaceToolPanel::WorkspaceToolPanel(
+  const WorkspaceKind kind, QWidget* workspace, QWidget* content, QWidget* parent)
   : QWidget{parent}
   , m_content{content}
   , m_workspace{workspace}
+  , m_kind{kind}
 {
   auto settings = QSettings{};
-  m_layout = loadToolLayout(settings, WorkspaceKind::Project);
+  m_layout = loadToolLayout(settings, m_kind);
   m_pendingTool = m_layout.tool;
   setObjectName("ProjectTools");
   m_surface = new QWidget{this};
@@ -88,11 +90,11 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
   m_bar->setObjectName("ProjectToolBar");
   auto* barLayout = new QHBoxLayout{m_bar};
   barLayout->setContentsMargins(4, 2, 4, 2);
-  const auto tools = std::map<ProjectToolId, QString>{
-    {ProjectToolId::ContentBrowser, tr("Content Browser")},
-    {ProjectToolId::OutputLog, tr("Output Log")},
-    {ProjectToolId::PythonConsole, tr("Python Console")},
-    {ProjectToolId::Issues, tr("Issues")}};
+  const auto tools = std::map<WorkspaceToolId, QString>{
+    {WorkspaceToolId::ContentBrowser, tr("Content Browser")},
+    {WorkspaceToolId::OutputLog, tr("Output Log")},
+    {WorkspaceToolId::PythonConsole, tr("Python Console")},
+    {WorkspaceToolId::Issues, tr("Issues")}};
   for (const auto& [id, title] : tools)
   {
     auto* button = new QToolButton{m_bar};
@@ -104,7 +106,7 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
     barLayout->addWidget(button);
     m_buttons.emplace(id, button);
   }
-  m_buttons.at(ProjectToolId::ContentBrowser)
+  m_buttons.at(WorkspaceToolId::ContentBrowser)
     ->setToolTip(tr("Content Browser (Ctrl+Shift+Space)"));
   auto* extensions = new QToolButton{m_bar};
   extensions->setObjectName("ProjectToolsExtensions");
@@ -144,7 +146,7 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
   auto* shortcut =
     new QShortcut{QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_Space}, this};
   connect(shortcut, &QShortcut::activated, this, [this]() {
-    selectTool(ProjectToolId::ContentBrowser);
+    selectTool(WorkspaceToolId::ContentBrowser);
   });
   auto* escape = new QShortcut{QKeySequence{Qt::Key_Escape}, m_panel};
   escape->setContext(Qt::WidgetWithChildrenShortcut);
@@ -167,19 +169,19 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
   m_restoringLayout = false;
 }
 
-void ProjectToolPanel::addStatusWidget(QWidget* status)
+void WorkspaceToolPanel::addStatusWidget(QWidget* status)
 {
   auto* layout = static_cast<QHBoxLayout*>(m_bar->layout());
   delete layout->takeAt(layout->count() - 1);
   layout->addWidget(status, 1);
 }
 
-ProjectToolPanel::~ProjectToolPanel()
+WorkspaceToolPanel::~WorkspaceToolPanel()
 {
   saveLayout();
 }
 
-void ProjectToolPanel::showEvent(QShowEvent* event)
+void WorkspaceToolPanel::showEvent(QShowEvent* event)
 {
   QWidget::showEvent(event);
   if (m_layoutPending)
@@ -199,7 +201,7 @@ void ProjectToolPanel::showEvent(QShowEvent* event)
   }
 }
 
-void ProjectToolPanel::captureHeight()
+void WorkspaceToolPanel::captureHeight()
 {
   if (m_layoutPending || m_panel->parentWidget() != m_splitter || !m_expanded)
     return;
@@ -209,7 +211,7 @@ void ProjectToolPanel::captureHeight()
     m_layout.heightRatio = std::clamp(static_cast<double>(sizes[1]) / total, 0.1, 0.8);
 }
 
-void ProjectToolPanel::saveLayout()
+void WorkspaceToolPanel::saveLayout()
 {
   if (m_restoringLayout)
     return;
@@ -217,12 +219,12 @@ void ProjectToolPanel::saveLayout()
   m_layout.expanded = m_expanded;
   m_layout.pinned = m_pin->isChecked();
   auto settings = QSettings{};
-  saveToolLayout(settings, WorkspaceKind::Project, m_layout);
+  saveToolLayout(settings, m_kind, m_layout);
 }
 
-void ProjectToolPanel::resetLayout()
+void WorkspaceToolPanel::resetLayout()
 {
-  m_tool = ProjectToolId::ContentBrowser;
+  m_tool = WorkspaceToolId::ContentBrowser;
   m_pendingTool.clear();
   m_pin->setChecked(false);
   m_layout = ToolLayout{};
@@ -230,7 +232,7 @@ void ProjectToolPanel::resetLayout()
   saveLayout();
 }
 
-void ProjectToolPanel::registerMapEditor(MapEditorView& editor)
+void WorkspaceToolPanel::registerMapEditor(MapEditorView& editor)
 {
   if (m_mapPanels.contains(&editor))
     return;
@@ -240,7 +242,7 @@ void ProjectToolPanel::registerMapEditor(MapEditorView& editor)
   m_mapPanels.emplace(&editor, panel);
 }
 
-void ProjectToolPanel::unregisterMapEditor(MapEditorView& editor)
+void WorkspaceToolPanel::unregisterMapEditor(MapEditorView& editor)
 {
   const auto it = m_mapPanels.find(&editor);
   if (it == m_mapPanels.end())
@@ -253,17 +255,17 @@ void ProjectToolPanel::unregisterMapEditor(MapEditorView& editor)
   delete panel;
 }
 
-void ProjectToolPanel::setMapEditor(MapEditorView* editor)
+void WorkspaceToolPanel::setMapEditor(MapEditorView* editor)
 {
   if (m_activeEditor && m_activeEditor != editor)
     m_activeEditor->setExternalInfoPanelExpanded(false);
   m_activeEditor = editor;
   m_mapPanel = editor ? m_mapPanels.at(editor) : nullptr;
   for (const auto& [id, button] : m_buttons)
-    button->setEnabled(id == ProjectToolId::ContentBrowser || editor != nullptr);
+    button->setEnabled(id == WorkspaceToolId::ContentBrowser || editor != nullptr);
   findChild<QToolButton*>("ProjectToolsExtensions")->setEnabled(editor != nullptr);
   if (!editor)
-    m_tool = ProjectToolId::ContentBrowser;
+    m_tool = WorkspaceToolId::ContentBrowser;
   else if (!m_pendingTool.isEmpty())
   {
     for (const auto& [id, name] : ToolNames)
@@ -274,7 +276,7 @@ void ProjectToolPanel::setMapEditor(MapEditorView* editor)
   updatePage();
 }
 
-void ProjectToolPanel::selectTool(const ProjectToolId tool)
+void WorkspaceToolPanel::selectTool(const WorkspaceToolId tool)
 {
   if (tool == m_tool && m_expanded)
     setExpanded(false);
@@ -285,13 +287,13 @@ void ProjectToolPanel::selectTool(const ProjectToolId tool)
   }
 }
 
-void ProjectToolPanel::showContent()
+void WorkspaceToolPanel::showContent()
 {
-  m_tool = ProjectToolId::ContentBrowser;
+  m_tool = WorkspaceToolId::ContentBrowser;
   setExpanded(true);
 }
 
-void ProjectToolPanel::showInfoPage(const InfoPanelPage page)
+void WorkspaceToolPanel::showInfoPage(const InfoPanelPage page)
 {
   if (page == InfoPanelPage::Assets)
     showContent();
@@ -300,13 +302,13 @@ void ProjectToolPanel::showInfoPage(const InfoPanelPage page)
     switch (page)
     {
     case InfoPanelPage::Console:
-      m_tool = ProjectToolId::OutputLog;
+      m_tool = WorkspaceToolId::OutputLog;
       break;
     case InfoPanelPage::PythonConsole:
-      m_tool = ProjectToolId::PythonConsole;
+      m_tool = WorkspaceToolId::PythonConsole;
       break;
     case InfoPanelPage::Issues:
-      m_tool = ProjectToolId::Issues;
+      m_tool = WorkspaceToolId::Issues;
       break;
     case InfoPanelPage::Assets:
       break;
@@ -315,17 +317,17 @@ void ProjectToolPanel::showInfoPage(const InfoPanelPage page)
   }
 }
 
-void ProjectToolPanel::toggle()
+void WorkspaceToolPanel::toggle()
 {
   setExpanded(!m_expanded);
 }
 
-bool ProjectToolPanel::isExpanded() const
+bool WorkspaceToolPanel::isExpanded() const
 {
   return m_expanded;
 }
 
-void ProjectToolPanel::setExpanded(const bool expanded, const bool restoreFocus)
+void WorkspaceToolPanel::setExpanded(const bool expanded, const bool restoreFocus)
 {
   const auto wasExpanded = m_expanded;
   if (!expanded)
@@ -357,38 +359,43 @@ void ProjectToolPanel::setExpanded(const bool expanded, const bool restoreFocus)
   saveLayout();
 }
 
-ProjectToolId ProjectToolPanel::currentTool() const
+WorkspaceToolId WorkspaceToolPanel::currentTool() const
 {
   return m_tool;
 }
 
-bool ProjectToolPanel::isToolVisible(const ProjectToolId tool) const
+bool WorkspaceToolPanel::isToolVisible(const WorkspaceToolId tool) const
 {
   return m_expanded && m_tool == tool;
 }
 
-void ProjectToolPanel::updatePage()
+void WorkspaceToolPanel::updatePage()
 {
-  if (m_tool != ProjectToolId::ContentBrowser && m_mapPanel)
+  if (m_tool != WorkspaceToolId::ContentBrowser && m_mapPanel)
   {
     switch (m_tool)
     {
-    case ProjectToolId::OutputLog:
+    case WorkspaceToolId::OutputLog:
       m_mapPanel->switchToPage(InfoPanelPage::Console);
       break;
-    case ProjectToolId::PythonConsole:
+    case WorkspaceToolId::PythonConsole:
       m_mapPanel->switchToPage(InfoPanelPage::PythonConsole);
       break;
-    case ProjectToolId::Issues:
+    case WorkspaceToolId::Issues:
       m_mapPanel->switchToPage(InfoPanelPage::Issues);
       break;
-    case ProjectToolId::ContentBrowser:
+    case WorkspaceToolId::ContentBrowser:
       break;
     }
     m_pages->setCurrentWidget(m_mapPanel);
   }
   else
-    m_pages->setCurrentWidget(m_content);
+  {
+    if (auto* panel = qobject_cast<InfoPanel*>(m_content.data()))
+      panel->switchToPage(InfoPanelPage::Assets);
+    if (m_content)
+      m_pages->setCurrentWidget(m_content);
+  }
   for (const auto& [id, button] : m_buttons)
     button->setChecked(isToolVisible(id));
   m_title->setText(m_buttons.at(m_tool)->text());
@@ -396,7 +403,7 @@ void ProjectToolPanel::updatePage()
     m_activeEditor->setExternalInfoPanelExpanded(m_expanded);
 }
 
-void ProjectToolPanel::updateGeometryForMode()
+void WorkspaceToolPanel::updateGeometryForMode()
 {
   const auto pinned = m_pin->isChecked();
   if (pinned && m_panel->parentWidget() != m_splitter)
@@ -420,7 +427,7 @@ void ProjectToolPanel::updateGeometryForMode()
   m_panel->setVisible(m_expanded);
 }
 
-bool ProjectToolPanel::eventFilter(QObject* watched, QEvent* event)
+bool WorkspaceToolPanel::eventFilter(QObject* watched, QEvent* event)
 {
   if (watched == m_surface && event->type() == QEvent::Resize)
     updateGeometryForMode();

@@ -22,7 +22,7 @@ namespace tb::ui
 {
 class MapEditorView;
 
-enum class ProjectToolId
+enum class WorkspaceToolId
 {
   ContentBrowser,
   OutputLog,
@@ -30,8 +30,8 @@ enum class ProjectToolId
   Issues,
 };
 
-/** One project tool surface, either overlaid temporarily or pinned into the layout. */
-class ProjectToolPanel : public QWidget
+/** One workspace tool surface, either overlaid temporarily or pinned into the layout. */
+class WorkspaceToolPanel : public QWidget
 {
   Q_OBJECT
   QWidget* m_surface = nullptr;
@@ -39,7 +39,7 @@ class ProjectToolPanel : public QWidget
   QSplitter* m_splitter = nullptr;
   QFrame* m_panel = nullptr;
   QStackedWidget* m_pages = nullptr;
-  QWidget* m_content = nullptr;
+  QPointer<QWidget> m_content;
   QPointer<InfoPanel> m_mapPanel;
   MapEditorView* m_activeEditor = nullptr;
   std::map<MapEditorView*, InfoPanel*> m_mapPanels;
@@ -47,18 +47,20 @@ class ProjectToolPanel : public QWidget
   QWidget* m_workspace = nullptr;
   QLabel* m_title = nullptr;
   QToolButton* m_pin = nullptr;
-  std::map<ProjectToolId, QToolButton*> m_buttons;
-  ProjectToolId m_tool = ProjectToolId::ContentBrowser;
+  std::map<WorkspaceToolId, QToolButton*> m_buttons;
+  WorkspaceToolId m_tool = WorkspaceToolId::ContentBrowser;
   bool m_expanded = false;
   bool m_changingMode = false;
   bool m_restoringLayout = true;
   bool m_layoutPending = true;
+  WorkspaceKind m_kind;
   ToolLayout m_layout;
   QString m_pendingTool;
 
 public:
-  ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget* parent = nullptr);
-  ~ProjectToolPanel() override;
+  WorkspaceToolPanel(
+    WorkspaceKind kind, QWidget* workspace, QWidget* content, QWidget* parent = nullptr);
+  ~WorkspaceToolPanel() override;
   void resetLayout();
   void addStatusWidget(QWidget* status);
   /** Transfers panel ownership to this host, until unregisterMapEditor. */
@@ -70,8 +72,8 @@ public:
   void showInfoPage(InfoPanelPage page);
   void toggle();
   bool isExpanded() const;
-  ProjectToolId currentTool() const;
-  bool isToolVisible(ProjectToolId tool) const;
+  WorkspaceToolId currentTool() const;
+  bool isToolVisible(WorkspaceToolId tool) const;
 
 signals:
   void extensionsRequested();
@@ -81,7 +83,7 @@ protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
-  void selectTool(ProjectToolId tool);
+  void selectTool(WorkspaceToolId tool);
   void setExpanded(bool expanded, bool restoreFocus = true);
   void updatePage();
   void updateGeometryForMode();

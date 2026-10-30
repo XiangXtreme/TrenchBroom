@@ -48,7 +48,6 @@
 
 #include "UiComponentSnapshot.h"
 #include "base/PreferenceManager.h"
-#include "kd/filesystem_utils.h"
 #include "fs/DiskIO.h"
 #include "gl/Camera.h"
 #include "gl/Material.h"
@@ -88,6 +87,8 @@
 #include "ui/ThemeRegistry.h"
 #include "ui/UiSnapshot.h"
 #include "ui/WelcomeWindow.h"
+
+#include "kd/filesystem_utils.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -433,9 +434,11 @@ void configureSupportingSnapshot(QWidget& targetWidget)
   }
 
   mapWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
+  if (auto* pin = mapWindow->findChild<QToolButton*>("ProjectToolsPin"))
+    pin->setChecked(true);
   if (
-    auto* splitter = mapWindow->findChild<QSplitter*>(
-      QStringLiteral("MapWindow_VerticalSplitterSplitter")))
+    auto* splitter =
+      mapWindow->findChild<QSplitter*>(QStringLiteral("ProjectToolsSplitter")))
   {
     splitter->setSizes(QList<int>{560, 340});
   }
@@ -517,9 +520,11 @@ void configurePythonConsoleSnapshot(QWidget& targetWidget)
   }
 
   mapWindow->switchToInfoPanelPage(InfoPanelPage::PythonConsole);
+  if (auto* pin = mapWindow->findChild<QToolButton*>("ProjectToolsPin"))
+    pin->setChecked(true);
   if (
-    auto* splitter = mapWindow->findChild<QSplitter*>(
-      QStringLiteral("MapWindow_VerticalSplitterSplitter")))
+    auto* splitter =
+      mapWindow->findChild<QSplitter*>(QStringLiteral("ProjectToolsSplitter")))
   {
     splitter->setSizes(QList<int>{560, 340});
   }

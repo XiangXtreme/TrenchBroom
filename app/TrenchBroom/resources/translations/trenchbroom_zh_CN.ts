@@ -6919,7 +6919,7 @@ Removing them frees about %3. Current assets and versions are kept.</source>
         </message>
     </context>
     <context>
-        <name>tb::ui::ProjectToolPanel</name>
+        <name>tb::ui::WorkspaceToolPanel</name>
         <message>
             <source>Pin</source>
             <translation>固定停靠</translation>

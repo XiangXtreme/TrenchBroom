@@ -192,7 +192,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectTextureImport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectAssetPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectWindow.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectToolPanel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/WorkspaceToolPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabTool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabToolController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PreferenceDialog.cpp
@@ -460,7 +460,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectSession.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectAssetPanel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectWindow.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectToolPanel.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/WorkspaceToolPanel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabTool.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PrefabToolController.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PreferenceDialog.h

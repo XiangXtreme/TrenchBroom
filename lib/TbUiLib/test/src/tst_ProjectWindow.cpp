@@ -72,11 +72,11 @@
 #include "ui/ProjectAssetPanel.h"
 #include "ui/ProjectRecovery.h"
 #include "ui/ProjectSession.h"
-#include "ui/ProjectToolPanel.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
 #include "ui/Splitter.h"
 #include "ui/WorkspaceLayout.h"
+#include "ui/WorkspaceToolPanel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -265,7 +265,7 @@ TEST_CASE("ProjectWindow")
 
   SECTION("one bottom surface hosts content and the active map tools")
   {
-    auto* tools = window.findChild<ProjectToolPanel*>();
+    auto* tools = window.findChild<WorkspaceToolPanel*>();
     auto* drawer = window.findChild<QWidget*>("ProjectToolDrawer");
     auto* pin = window.findChild<QToolButton*>("ProjectToolsPin");
     auto* close = window.findChild<QToolButton*>("ProjectToolsClose");
@@ -295,14 +295,14 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(editor->infoPanel()->isVisible());
     CHECK(editor->isInfoPanelVisible());
     CHECK(alphaWindow->infoPanelVisible());
-    CHECK(tools->isToolVisible(ProjectToolId::ContentBrowser));
-    CHECK_FALSE(tools->isToolVisible(ProjectToolId::OutputLog));
+    CHECK(tools->isToolVisible(WorkspaceToolId::ContentBrowser));
+    CHECK_FALSE(tools->isToolVisible(WorkspaceToolId::OutputLog));
     CHECK_FALSE(editor->findChild<QWidget*>("MapWindow_InfoPanelSurface")->isVisible());
 
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::PythonConsole);
     CHECK(editor->infoPanel()->isVisible());
     CHECK(editor->infoPanel()->currentPage() == InfoPanelPage::PythonConsole);
-    CHECK(tools->currentTool() == ProjectToolId::PythonConsole);
+    CHECK(tools->currentTool() == WorkspaceToolId::PythonConsole);
     CHECK_FALSE(window.findChild<ProjectAssetPanel*>()->isVisible());
     const auto alphaPanel = QPointer{editor->infoPanel()};
     tabs->setCurrentIndex(1);
@@ -346,7 +346,7 @@ TEST_CASE("ProjectWindow")
 
   SECTION("closing a background map releases only its hosted tools before its document")
   {
-    auto* tools = window.findChild<ProjectToolPanel*>();
+    auto* tools = window.findChild<WorkspaceToolPanel*>();
     auto* alphaEditor = alphaWindow->findChild<MapEditorView*>();
     const auto alphaPanel = QPointer{alphaEditor->infoPanel()};
     tabs->setCurrentIndex(1);
@@ -363,13 +363,13 @@ TEST_CASE("ProjectWindow")
     CHECK(releasedBeforeDocument);
     CHECK_FALSE(betaPanel.isNull());
     CHECK(betaPanel->isVisible());
-    CHECK(tools->isToolVisible(ProjectToolId::PythonConsole));
+    CHECK(tools->isToolVisible(WorkspaceToolId::PythonConsole));
     CHECK(window.activeMapWindow()->findChild<MapEditorView*>() == betaEditor);
     closeTab(*tabs, 0);
     CHECK(betaPanel.isNull());
-    CHECK(tools->isToolVisible(ProjectToolId::ContentBrowser));
+    CHECK(tools->isToolVisible(WorkspaceToolId::ContentBrowser));
     tools->showInfoPage(InfoPanelPage::Issues);
-    CHECK(tools->currentTool() == ProjectToolId::ContentBrowser);
+    CHECK(tools->currentTool() == WorkspaceToolId::ContentBrowser);
   }
 
   SECTION("destroying the workspace releases hosted tools before retained documents")
@@ -599,7 +599,7 @@ TEST_CASE("ProjectWindow")
 
   SECTION("tool layout retains pinned height and uses stable tool ids")
   {
-    auto* tools = window.findChild<ProjectToolPanel*>();
+    auto* tools = window.findChild<WorkspaceToolPanel*>();
     auto* pin = window.findChild<QToolButton*>("ProjectToolsPin");
     auto* splitter = window.findChild<QSplitter*>("ProjectToolsSplitter");
     REQUIRE(tools);
@@ -632,7 +632,7 @@ TEST_CASE("ProjectWindow")
     tools->resetLayout();
     CHECK_FALSE(pin->isChecked());
     CHECK_FALSE(tools->isExpanded());
-    CHECK(tools->currentTool() == ProjectToolId::ContentBrowser);
+    CHECK(tools->currentTool() == WorkspaceToolId::ContentBrowser);
     CHECK(session->modified() == modified);
   }
 
@@ -783,12 +783,16 @@ TEST_CASE("ProjectWindow")
     REQUIRE(source.commit());
     auto elapsed = QElapsedTimer{};
     elapsed.start();
-    while (window.statusBar()->currentMessage().isEmpty() && elapsed.elapsed() < 3000)
+    while (
+      window.findChild<QStatusBar*>("WorkspaceNotifications")->currentMessage().isEmpty()
+      && elapsed.elapsed() < 3000)
     {
       QApplication::processEvents();
       QThread::msleep(10);
     }
-    CHECK(window.statusBar()->currentMessage().contains("library files changed"));
+    CHECK(window.findChild<QStatusBar*>("WorkspaceNotifications")
+            ->currentMessage()
+            .contains("library files changed"));
     CHECK_FALSE(session->modified());
     CHECK(require(library->assets()).empty());
   }

@@ -58,9 +58,9 @@
 #include "ui/ProjectResourceDialog.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectTextureImport.h"
-#include "ui/ProjectToolPanel.h"
 #include "ui/QPathUtils.h"
 #include "ui/RecentDocuments.h"
+#include "ui/WorkspaceToolPanel.h"
 
 #include <fmt/ranges.h>
 
@@ -139,7 +139,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   resize(1280, 900);
   m_libraryWatcher = new AssetLibraryWatcher{this};
   connect(m_libraryWatcher, &AssetLibraryWatcher::foldersChanged, this, [this]() {
-    statusBar()->showMessage(
+    m_notifications->showMessage(
       tr("Asset library files changed. Use Library > Rescan Library and Check for "
          "Updates to review them."));
   });
@@ -277,10 +277,14 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   m_history->setHeaderLabels({tr("Version"), tr("Created"), tr("Description")});
   m_history->setRootIsDecorated(false);
   contentTabs->addTab(m_history, tr("History"));
-  m_tools = new ProjectToolPanel{body, contentTabs, this};
+  m_tools = new WorkspaceToolPanel{WorkspaceKind::Project, body, contentTabs, this};
   m_status = new MapStatus{m_tools};
-  m_tools->addStatusWidget(m_status);
-  file->addAction(tr("Content Browser"), m_tools, &ProjectToolPanel::showContent);
+  m_notifications = new QStatusBar{m_tools};
+  m_notifications->setObjectName("WorkspaceNotifications");
+  m_notifications->setSizeGripEnabled(false);
+  m_notifications->addWidget(m_status, 1);
+  m_tools->addStatusWidget(m_notifications);
+  file->addAction(tr("Content Browser"), m_tools, &WorkspaceToolPanel::showContent);
   auto* workspaceMenu = menuBar()->addMenu(tr("Workspace"));
   workspaceMenu->addAction(tr("Reset Layout"), this, [this]() {
     m_tools->resetLayout();
@@ -290,7 +294,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
          m_maps->findChildren<MapWindow*>(QString{}, Qt::FindDirectChildrenOnly))
       mapWindow->editorView().resetLayout();
   });
-  connect(m_tools, &ProjectToolPanel::extensionsRequested, this, [this]() {
+  connect(m_tools, &WorkspaceToolPanel::extensionsRequested, this, [this]() {
     if (auto* window = activeMapWindow())
       window->switchToInspectorPage(InspectorPage::Plugin);
   });
@@ -573,7 +577,7 @@ void ProjectWindow::captureMapResources()
     message += " "
                + tr("%1 reference(s) are not available in the attached libraries.")
                    .arg(summary.unresolved.size());
-  statusBar()->showMessage(message, 8000);
+  m_notifications->showMessage(message, 8000);
   refresh();
 }
 
@@ -602,7 +606,7 @@ void ProjectWindow::attachAssetLibrary()
     return;
   }
   const auto& summary = attached.value();
-  statusBar()->showMessage(
+  m_notifications->showMessage(
     summary.created
       ? tr("Created asset library with %1 resource(s) in %2 group(s).")
           .arg(summary.assets)
@@ -672,7 +676,7 @@ void ProjectWindow::relinkAssetLibrary()
     return;
   }
 
-  statusBar()->showMessage(
+  m_notifications->showMessage(
     tr("Relinked asset library %1.").arg(QString::fromStdString(selected.name)));
   refresh();
 }
@@ -685,7 +689,7 @@ void ProjectWindow::checkLibraryUpdates(const bool rescan)
   if (rescan)
   {
     m_libraryWatcher->acknowledgeChanges();
-    statusBar()->clearMessage();
+    m_notifications->clearMessage();
   }
 }
 
@@ -808,7 +812,7 @@ void ProjectWindow::refreshMapTabs()
         editor,
         &MapEditorView::infoPanelToggleRequested,
         m_tools,
-        &ProjectToolPanel::toggle);
+        &WorkspaceToolPanel::toggle);
       connect(
         window, &MapWindow::commandStateChanged, this, &ProjectWindow::refreshCommands);
     }
@@ -1030,7 +1034,7 @@ void ProjectWindow::autosaveProject()
   if (const auto result = writeProjectRecovery(*m_session, m_session->path());
       result.is_error())
   {
-    statusBar()->showMessage(
+    m_notifications->showMessage(
       tr("Auto-save failed: %1")
         .arg(QString::fromStdString(std::get<Error>(result.error()).msg)),
       8000);
@@ -1243,7 +1247,7 @@ void ProjectWindow::renamePublishedPath()
   }
 
   const auto& summary = renamed.value();
-  statusBar()->showMessage(
+  m_notifications->showMessage(
     tr("Published path is now %1; updated %2 reference(s) in %3 map(s).")
       .arg(QString::fromStdString(summary.asset.publishPath))
       .arg(summary.referencesChanged)
@@ -1448,7 +1452,7 @@ void ProjectWindow::cleanUnusedRevisions()
   }
 
   refresh();
-  statusBar()->showMessage(
+  m_notifications->showMessage(
     tr(
       "Removed %1 unused revision(s) and freed %2. Save the project to keep the cleanup.")
       .arg(qulonglong(removed.value().revisions.size()))

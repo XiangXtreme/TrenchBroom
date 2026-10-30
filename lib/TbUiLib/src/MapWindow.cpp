@@ -22,8 +22,8 @@
 #include <QApplication>
 #include <QChildEvent>
 #include <QClipboard>
-#include <QComboBox>
 #include <QFileDialog>
+#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMenuBar>
@@ -40,7 +40,6 @@
 #include <QTableWidget>
 #include <QTimer>
 #include <QToolBar>
-#include <QToolButton>
 #include <QVBoxLayout>
 #include <QtGlobal>
 
@@ -129,6 +128,7 @@
 #include "ui/WadUtils.h"
 #include "ui/WidgetState.h"
 #include "ui/WorkbenchSurface.h"
+#include "ui/WorkspaceToolPanel.h"
 #include "ui/python/PythonHandleRegistry.h"
 #include "ui/python/PythonPluginManifest.h"
 #include "ui/python/PythonRuntime.h"
@@ -436,7 +436,10 @@ void MapWindow::createMenus()
 
   addRecentDocumentsMenu();
   auto* workspaceMenu = menuBar()->addMenu(tr("Workspace"));
-  workspaceMenu->addAction(tr("Reset Layout"), m_editor, &MapEditorView::resetLayout);
+  workspaceMenu->addAction(tr("Reset Layout"), this, [this]() {
+    m_editor->resetLayout();
+    m_tools->resetLayout();
+  });
 }
 
 void MapWindow::updateShortcuts()
@@ -531,8 +534,30 @@ void MapWindow::createGui()
 
   m_infoPanel = m_editor->infoPanel();
   m_inspector = m_editor->inspector();
-  m_hSplitter = m_editor->hSplitter();
-  m_vSplitter = m_editor->vSplitter();
+  if (!m_embedded)
+  {
+    takeCentralWidget();
+    m_tools = new WorkspaceToolPanel{WorkspaceKind::Map, m_editor, m_infoPanel, this};
+    m_tools->registerMapEditor(*m_editor);
+    m_tools->setMapEditor(m_editor);
+    setCentralWidget(m_tools);
+    connect(this, &MapWindow::toolPanelsAboutToBeDestroyed, m_tools, [this]() {
+      m_tools->unregisterMapEditor(*m_editor);
+    });
+    connect(
+      m_editor,
+      &MapEditorView::infoPanelPageRequested,
+      m_tools,
+      &WorkspaceToolPanel::showInfoPage);
+    connect(
+      m_editor,
+      &MapEditorView::infoPanelToggleRequested,
+      m_tools,
+      &WorkspaceToolPanel::toggle);
+    connect(m_tools, &WorkspaceToolPanel::extensionsRequested, this, [this]() {
+      m_editor->showInspectorPage(InspectorPage::Plugin);
+    });
+  }
   m_console = m_infoPanel->console();
   m_pythonConsole = m_infoPanel->pythonConsole();
 
@@ -564,8 +589,12 @@ void MapWindow::createStatusBar()
 {
   auto* status = new MapStatus{this};
   status->setDocument(m_document);
-  statusBar()->addWidget(status, 1);
-  statusBar()->addPermanentWidget(m_appController.updater().createUpdateIndicator());
+  auto* statusSurface = new QWidget{m_tools};
+  auto* layout = new QHBoxLayout{statusSurface};
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->addWidget(status, 1);
+  layout->addWidget(m_appController.updater().createUpdateIndicator());
+  m_tools->addStatusWidget(statusSurface);
 }
 
 void MapWindow::reloadPythonPlugins()
