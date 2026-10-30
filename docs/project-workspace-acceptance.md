@@ -101,6 +101,29 @@ powershell -ExecutionPolicy Bypass -File scripts\build-filtered.ps1 -Target TbUi
 5. 启动游戏跑图，确认材质、模型、声音、天空盒显示正确。
 - 通过标准：游戏内无缺失材质/模型，天空盒方向正确，发布产物不依赖库路径。
 
+2026-10-30 桌面编译与发布验收（Release `c70643be3`）：
+
+- 使用 Computer Use 重开已保存的 `resource-acceptance.tbproj`，确认关机后工程、资源与
+  独立的「资源工程验收」编译配置仍可使用；地图保存后修订从 1 增至 2。
+- 一次性地图 `tb_asset_acceptance` 含六面封闭房间，以及模型、Sprite、声音和天空盒引用。
+  首次编译因测试地图的 Valve UV 轴不正确，在光照阶段报 `Malformed face normal`；
+  在面检查器中对六个 brush 重置为世界对齐并保存后，hltools 编译退出码为 0。
+- 通过编译配置的 Run Tool、Rename File、Copy Files 三个任务，发布
+  `cstrike/maps/tb_asset_acceptance.bsp`（20,624 字节）与九个配套文件：一个 MDL、
+  一个 SPR、一个 WAV、六面天空盒 TGA。资源复制使用 `${MAP_DIR_PATH}/resources`
+  作为源目录，保留发布路径；编译配置未包含启动游戏任务。
+- 对产物回读：BSP 版本 30，`ACCEPT01` 与 `sky` 两张 32×32 纹理均内嵌 mip 数据；
+  实体仍引用 `models/tbaccept.mdl`、`sprites/tbaccept.spr`、`tbaccept.wav` 和
+  `skyname=tbaccept`。MDL、SPR、WAV 与源文件逐字节一致，六张 TGA 均为
+  32×32、24 位无压缩图像，六面 RGB 颜色符合测试输入。
+- 游戏尚未启动，游戏内显示、声音播放与天空方向仍待用户验证。在 CS 1.6 控制台执行
+  `map tb_asset_acceptance`。这次记录也不覆盖双工程共享库、移走库后的独立编译、
+  强制结束进程恢复或大工程性能验收。
+- 编辑器控制台保留了打开地图时的 `tbaccept.spr` 与 FGD 辅助 Sprite 加载失败记录；
+  本轮产物检查不证明编辑器预览已正确刷新，需要单独复查加载和绑定时序。
+- 记录提交前重新运行完整本地 CI preflight：15 个编译单元严格编译通过，Release
+  `TrenchBroom` 构建通过，UI 测试 120 项通过、1 项原生鼠标捕获按后台策略跳过。
+
 ### 4.3 真实崩溃恢复
 
 1. 打开工程，修改一张地图并新增一个资源捕获，等待自动快照（或手动触发保存前的等待）。
