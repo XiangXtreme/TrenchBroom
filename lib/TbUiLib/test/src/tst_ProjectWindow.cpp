@@ -797,6 +797,28 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(session->modified());
   }
 
+  SECTION("embedded viewport popup uses its map window actions")
+  {
+    auto* view = alphaWindow->currentMapViewBase();
+    REQUIRE(view != nullptr);
+    REQUIRE(view->window() == &window);
+    auto sawGroupAction = false;
+    auto close = QTimer{};
+    QObject::connect(&close, &QTimer::timeout, [&]() {
+      for (auto* widget : QApplication::topLevelWidgets())
+        if (auto* menu = qobject_cast<QMenu*>(widget); menu && menu->isVisible())
+        {
+          sawGroupAction =
+            menu->actions().contains(alphaWindow->findAction("Menu/Edit/Group"));
+          menu->close();
+        }
+    });
+    close.start(10);
+    REQUIRE(QMetaObject::invokeMethod(view, "showPopupMenuLater", Qt::DirectConnection));
+    close.stop();
+    CHECK(sawGroupAction);
+  }
+
   SECTION("host undo follows the active map")
   {
     auto* editMenu = window.menuBar()->actions().at(1)->menu();

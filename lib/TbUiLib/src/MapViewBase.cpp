@@ -128,6 +128,14 @@ void MapViewBase::stopCameraAnimation()
 namespace
 {
 
+MapWindow* owningMapWindow(QWidget* widget)
+{
+  for (auto* parent = widget; parent; parent = parent->parentWidget())
+    if (auto* mapWindow = dynamic_cast<MapWindow*>(parent))
+      return mapWindow;
+  return nullptr;
+}
+
 constexpr auto SmartFaceSelectionAddColor = RgbaF{0.16f, 0.85f, 0.48f, 0.32f};
 constexpr auto SmartFaceSelectionRemoveColor = RgbaF{0.95f, 0.28f, 0.24f, 0.32f};
 
@@ -196,7 +204,7 @@ void MapViewBase::setRenderingThumbnail(const bool renderingThumbnail)
 
 void MapViewBase::showPieMenu()
 {
-  auto* mapWindow = dynamic_cast<MapWindow*>(window());
+  auto* mapWindow = owningMapWindow(this);
   auto* menu = new PieMenu{this};
   auto context = ActionExecutionContext{m_appController, mapWindow, this};
 
@@ -424,7 +432,7 @@ void MapViewBase::updateActionBindings()
 
 void MapViewBase::updateActionStates()
 {
-  auto* mapWindow = dynamic_cast<MapWindow*>(window());
+  auto* mapWindow = owningMapWindow(this);
   auto context = ActionExecutionContext{m_appController, mapWindow, this};
   for (auto& [shortcut, action] : m_shortcuts)
   {
@@ -439,7 +447,7 @@ void MapViewBase::updateActionStatesDelayed()
 
 void MapViewBase::triggerAction(const Action& action)
 {
-  auto* mapWindow = dynamic_cast<MapWindow*>(window());
+  auto* mapWindow = owningMapWindow(this);
   auto context = ActionExecutionContext{m_appController, mapWindow, this};
   action.execute(context);
 }
@@ -1404,6 +1412,9 @@ void MapViewBase::doShowPopupMenu()
 
 void MapViewBase::showPopupMenuLater()
 {
+  auto* mapWindow = owningMapWindow(this);
+  if (!mapWindow)
+    return;
   beforePopupMenu();
 
   auto& map = m_document.map();
@@ -1412,8 +1423,6 @@ void MapViewBase::showPopupMenuLater()
   auto* currentGroup = map.editorContext().currentGroup();
   auto* newGroup = findNewGroupForObjects(nodes);
   auto* mergeGroup = findGroupToMergeGroupsInto(map.selection());
-
-  auto* mapWindow = dynamic_cast<MapWindow*>(window());
 
   auto menu = QMenu{};
   const auto addMainMenuAction = [&](const auto& path) -> QAction* {
