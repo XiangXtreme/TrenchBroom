@@ -480,6 +480,58 @@ TEST_CASE("ProjectWindow")
     require(session->save());
   }
 
+  SECTION("editing controller commands retain their document across tab switches")
+  {
+    auto& alphaMap = alphaDocument->map();
+    const auto points = std::vector<vm::vec3d>{
+      {-64, -64, -64},
+      {-64, -64, 64},
+      {-64, 64, -64},
+      {-64, 64, 64},
+      {64, -64, -64},
+      {64, -64, 64},
+      {64, 64, -64},
+      {64, 64, 64},
+    };
+    REQUIRE(mdl::createBrush(alphaMap, points));
+    REQUIRE(alphaMap.selection().brushes.size() == 1);
+    auto* original = alphaMap.selection().brushes.front();
+    auto context = ActionExecutionContext{
+      appController, alphaWindow, alphaWindow->currentMapViewBase()};
+    tabs->setCurrentIndex(1);
+    auto& betaMap = window.activeMapWindow()->document().map();
+    REQUIRE(mdl::createBrush(betaMap, points));
+    const auto betaSelection = betaMap.selection().nodes;
+    const auto betaChanges = betaMap.modificationCount();
+    const auto& actions = appController.actionManager().actionsMap();
+    const auto& duplicate = actions.at("Menu/Edit/Duplicate");
+    REQUIRE(duplicate.enabled(context));
+    duplicate.execute(context);
+    REQUIRE(alphaMap.selection().brushes.size() == 1);
+    auto* copy = alphaMap.selection().brushes.front();
+    CHECK(copy != original);
+    CHECK(betaMap.selection().nodes == betaSelection);
+    CHECK(betaMap.modificationCount() == betaChanges);
+
+    const auto& deselect = actions.at("Menu/Edit/Deselect All");
+    REQUIRE(deselect.enabled(context));
+    deselect.execute(context);
+    CHECK_FALSE(alphaMap.selection().hasNodes());
+    CHECK(betaMap.selection().nodes == betaSelection);
+    const auto& select = actions.at("Menu/Edit/Select All");
+    REQUIRE(select.enabled(context));
+    select.execute(context);
+    CHECK(
+      std::ranges::find(alphaMap.selection().brushes, original)
+      != alphaMap.selection().brushes.end());
+    CHECK(
+      std::ranges::find(alphaMap.selection().brushes, copy)
+      != alphaMap.selection().brushes.end());
+    CHECK(betaMap.selection().nodes == betaSelection);
+    CHECK(betaMap.modificationCount() == betaChanges);
+    require(session->save());
+  }
+
   SECTION("closing an embedded map preserves standalone info panel visibility")
   {
     // CTest runs other map-window tests concurrently against the same QSettings store.
@@ -670,6 +722,44 @@ TEST_CASE("ProjectWindow")
     panel->showProjectAsset(QString::fromStdString(captured.front().id));
     CHECK(valueFor("Depends On") == "sound/details.wav");
     require(session->save());
+
+    const auto assetCount = require(session->store().assets()).size();
+    const auto mapChanges = alphaDocument->map().modificationCount();
+    panel->showProjectAsset(QString::fromStdString(asset.id));
+    CHECK(valueFor("Name") == QString::fromStdString(updated.displayName));
+    CHECK_FALSE(session->modified());
+    CHECK(require(session->store().assets()).size() == assetCount);
+    CHECK(alphaDocument->map().modificationCount() == mapChanges);
+
+    auto* browser = panel->findChild<ModelBrowserView*>();
+    REQUIRE(browser != nullptr);
+    auto foreign = BrowserAsset{};
+    foreign.source = BrowserSource::Project;
+    foreign.projectId = "another-project";
+    foreign.projectAssetId = asset.id;
+    emit browser->assetSelected(foreign);
+    CHECK(valueFor("Selection") == "The selected asset belongs to another project.");
+    CHECK(valueFor("Asset ID").isEmpty());
+    CHECK(valueFor("Revision").isEmpty());
+    CHECK_FALSE(session->modified());
+
+    auto gameAsset = BrowserAsset{BrowserCellType::Sound, "sound/local.wav"};
+    gameAsset.displayName = "Game sound";
+    emit browser->assetSelected(gameAsset);
+    CHECK(valueFor("Source") == "Game Files");
+    CHECK(valueFor("Name") == "Game sound");
+    CHECK(valueFor("Asset ID").isEmpty());
+    CHECK(valueFor("Depends On").isEmpty());
+    CHECK_FALSE(session->modified());
+
+    panel->showProjectAsset(QString::fromStdString(captured.front().id));
+    require(session->removeAsset(captured.front().id));
+    CHECK(valueFor("Project Snapshot") == "Asset no longer exists");
+    CHECK(valueFor("Name").isEmpty());
+    CHECK(valueFor("Revision").isEmpty());
+    CHECK(valueFor("Depends On").isEmpty());
+    require(session->save());
+    CHECK(alphaDocument->map().modificationCount() == mapChanges);
   }
 
   SECTION("published rename works after saved map tabs close")

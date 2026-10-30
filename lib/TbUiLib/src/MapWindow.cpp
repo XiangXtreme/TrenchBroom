@@ -63,14 +63,6 @@
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Assets.h"
 #include "mdl/Map_Brushes.h"
-#include "mdl/Map_CopyPaste.h"
-#include "mdl/Map_Entities.h"
-#include "mdl/Map_Geometry.h"
-#include "mdl/Map_Groups.h"
-#include "mdl/Map_NodeVisibility.h"
-#include "mdl/Map_Nodes.h"
-#include "mdl/Map_Patches.h"
-#include "mdl/Map_Selection.h"
 #include "mdl/ModelUtils.h"
 #include "mdl/Node.h"
 #include "mdl/NodeQueries.h"
@@ -84,23 +76,20 @@
 #include "ui/ActionExecutionContext.h"
 #include "ui/ActionManager.h"
 #include "ui/AppController.h"
-#include "ui/ChamferTool.h"
 #include "ui/ChoosePathTypeDialog.h"
-#include "ui/ClipTool.h"
 #include "ui/ColorButton.h"
 #include "ui/CommandPaletteDialog.h"
 #include "ui/CompilationDialog.h"
 #include "ui/Console.h"
 #include "ui/CrashReporter.h"
 #include "ui/CyclingMapView.h"
-#include "ui/EdgeTool.h"
 #include "ui/FaceInspector.h"
-#include "ui/FaceTool.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/LaunchGameEngineDialog.h"
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorController.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapStatus.h"
 #include "ui/MapView2D.h"
@@ -119,11 +108,9 @@
 #include "ui/QVecUtils.h"
 #include "ui/RecentDocuments.h"
 #include "ui/RenderView.h"
-#include "ui/ReplaceMaterialDialog.h"
 #include "ui/SignalDelayer.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableMapViewContainer.h"
-#include "ui/VertexTool.h"
 #include "ui/ViewUtils.h"
 #include "ui/WadUtils.h"
 #include "ui/WidgetState.h"
@@ -171,14 +158,6 @@ void showModelessDialog(QDialog* dialog)
   dialog->show();
   dialog->raise();
   dialog->activateWindow();
-}
-
-bool widgetOrChildHasFocus(const QWidget* widget)
-{
-  contract_pre(widget != nullptr);
-
-  const auto* focusWidget = QApplication::focusWidget();
-  return widget == focusWidget || widget->isAncestorOf(focusWidget);
 }
 
 QString lastCompilationProfileSettingsKey(const std::string& gameName)
@@ -1238,647 +1217,322 @@ bool MapWindow::hasRepeatableCommands() const
 
 void MapWindow::cutSelection()
 {
-  if (canCutSelection())
-  {
-    auto& map = m_document->map();
-
-    copyToClipboard();
-    auto transaction = mdl::Transaction{map, "Cut"};
-    removeSelectedNodes(map);
-    transaction.commit();
-  }
+  m_editor->controller().cutSelection();
 }
 
 void MapWindow::copySelection()
 {
-  if (canCopySelection())
-  {
-    copyToClipboard();
-  }
+  m_editor->controller().copySelection();
 }
 
 void MapWindow::copyToClipboard()
 {
-  auto& map = m_document->map();
-  const auto& selection = map.selection();
-  auto str = selection.hasNodes()        ? serializeSelectedNodes(map)
-             : selection.hasBrushFaces() ? serializeSelectedBrushFaces(map)
-                                         : std::string{};
-  if (selection.hasNodes() && pref(Preferences::PrefixWorldspawnHeaderOnCopy))
-  {
-    str = serializeWorldspawnHeader(map) + str;
-  }
-
-  auto* clipboard = QApplication::clipboard();
-  clipboard->setText(mapStringToUnicode(map.encoding(), str));
+  m_editor->controller().copyToClipboard();
 }
 
 bool MapWindow::canCutSelection() const
 {
-  const auto& map = m_document->map();
-  const auto& selection = map.selection();
-  return widgetOrChildHasFocus(m_mapView) && selection.hasNodes()
-         && !m_mapView->toolBox().anyModalToolActive();
+  return m_editor->controller().canCutSelection();
 }
 
 bool MapWindow::canCopySelection() const
 {
-  const auto& map = m_document->map();
-  const auto& selection = map.selection();
-  return widgetOrChildHasFocus(m_mapView)
-         && (selection.hasNodes() || selection.hasBrushFaces());
+  return m_editor->controller().canCopySelection();
 }
 
 void MapWindow::pasteAtCursorPosition()
 {
-  if (canPaste())
-  {
-    auto& map = m_document->map();
-    const auto referenceBounds = map.referenceBounds();
-
-    auto transaction = mdl::Transaction{map, "Paste"};
-    switch (paste())
-    {
-    case mdl::PasteType::Node:
-      if (const auto bounds = map.selectionBounds())
-      {
-        // The pasted objects must be hidden to prevent the picking done in
-        // pasteObjectsDelta from hitting them
-        // (https://github.com/TrenchBroom/TrenchBroom/issues/2755)
-        const auto nodes = map.selection().nodes;
-
-        hideNodes(map, nodes);
-        const auto delta = m_mapView->pasteObjectsDelta(*bounds, referenceBounds);
-        showNodes(map, nodes);
-        selectNodes(map, nodes); // Hiding deselected the nodes, so reselect them
-        if (!translateSelection(map, delta))
-        {
-          transaction.cancel();
-          break;
-        }
-      }
-      transaction.commit();
-      break;
-    case mdl::PasteType::BrushFace:
-      transaction.commit();
-      break;
-    case mdl::PasteType::Failed:
-      transaction.cancel();
-      break;
-    }
-  }
+  m_editor->controller().pasteAtCursorPosition();
 }
 
 void MapWindow::pasteAtOriginalPosition()
 {
-  if (canPaste())
-  {
-    paste();
-  }
+  m_editor->controller().pasteAtOriginalPosition();
 }
 
 mdl::PasteType MapWindow::paste()
 {
-  auto* clipboard = QApplication::clipboard();
-  const auto qtext = clipboard->text();
-
-  if (qtext.isEmpty())
-  {
-    logger().error() << "Clipboard is empty";
-    return mdl::PasteType::Failed;
-  }
-
-  auto& map = m_document->map();
-  return mdl::paste(map, mapStringFromUnicode(map.encoding(), qtext));
+  return m_editor->controller().paste();
 }
 
-/**
- * This is relatively expensive so only call it when the clipboard changes or e.g. the
- * user tries to paste.
- */
 bool MapWindow::canPaste() const
 {
-  if (!widgetOrChildHasFocus(m_mapView) || !m_mapView->isCurrent())
-  {
-    return false;
-  }
-
-  const auto* clipboard = QApplication::clipboard();
-  const auto* mimeData = clipboard->mimeData();
-  return mimeData && mimeData->hasText();
+  return m_editor->controller().canPaste();
 }
 
 void MapWindow::duplicateSelection()
 {
-  if (canDuplicateSelection())
-  {
-    duplicateSelectedNodes(m_document->map());
-  }
+  m_editor->controller().duplicateSelection();
 }
 
 bool MapWindow::canDuplicateSelection() const
 {
-  const auto& map = m_document->map();
-  return map.selection().hasNodes();
+  return m_editor->controller().canDuplicateSelection();
 }
 
 void MapWindow::deleteSelection()
 {
-  if (canDeleteSelection())
-  {
-    auto& toolBox = m_mapView->toolBox();
-
-    if (toolBox.clipToolActive())
-    {
-      toolBox.clipTool().removeLastPoint();
-    }
-    else if (toolBox.vertexToolActive())
-    {
-      toolBox.vertexTool().removeSelection();
-    }
-    else if (toolBox.edgeToolActive())
-    {
-      toolBox.edgeTool().removeSelection();
-    }
-    else if (toolBox.chamferToolActive())
-    {
-      toolBox.chamferTool().removeSelection();
-    }
-    else if (toolBox.faceToolActive())
-    {
-      toolBox.faceTool().removeSelection();
-    }
-    else if (!toolBox.anyModalToolActive())
-    {
-      auto& map = m_document->map();
-      removeSelectedNodes(map);
-    }
-  }
+  m_editor->controller().deleteSelection();
 }
 
 bool MapWindow::canDeleteSelection() const
 {
-  auto& toolBox = m_mapView->toolBox();
-
-  if (toolBox.clipToolActive())
-  {
-    return toolBox.clipTool().canRemoveLastPoint();
-  }
-  if (toolBox.vertexToolActive())
-  {
-    return toolBox.vertexTool().canRemoveSelection();
-  }
-  if (toolBox.edgeToolActive())
-  {
-    return toolBox.edgeTool().canRemoveSelection();
-  }
-  if (toolBox.chamferToolActive())
-  {
-    return toolBox.chamferTool().canRemoveSelection();
-  }
-  if (toolBox.faceToolActive())
-  {
-    return toolBox.faceTool().canRemoveSelection();
-  }
-  return canCutSelection();
+  return m_editor->controller().canDeleteSelection();
 }
 
 void MapWindow::selectAll()
 {
-  if (canSelect())
-  {
-    selectAllNodes(m_document->map());
-  }
+  m_editor->controller().selectAll();
 }
 
 void MapWindow::selectSiblings()
 {
-  if (canSelectSiblings())
-  {
-    selectSiblingNodes(m_document->map());
-  }
+  m_editor->controller().selectSiblings();
 }
 
 void MapWindow::selectTouching()
 {
-  if (canSelectByBrush())
-  {
-    selectTouchingNodes(m_document->map(), true);
-  }
+  m_editor->controller().selectTouching();
 }
 
 void MapWindow::selectInside()
 {
-  if (canSelectByBrush())
-  {
-    selectContainedNodes(m_document->map(), true);
-  }
+  m_editor->controller().selectInside();
 }
 
 void MapWindow::selectTall()
 {
-  if (canSelectTall())
-  {
-    m_mapView->selectTall();
-  }
+  m_editor->controller().selectTall();
 }
 
 void MapWindow::selectByLineNumber()
 {
-  if (canSelect())
-  {
-    const auto string = QInputDialog::getText(
-      this,
-      "Select by Line Numbers",
-      "Enter a comma- or space separated list of line numbers.");
-    if (!string.isEmpty())
-    {
-      auto positions = std::vector<size_t>{};
-      for (const auto& token : string.split(QRegularExpression{"[, ]"}))
-      {
-        auto ok = false;
-        const auto position = token.toLong(&ok);
-        if (ok && position > 0)
-        {
-          positions.push_back(static_cast<size_t>(position));
-        }
-      }
-
-      selectNodesWithFilePosition(m_document->map(), positions);
-    }
-  }
+  m_editor->controller().selectByLineNumber();
 }
 
 void MapWindow::selectInverse()
 {
-  if (canSelectInverse())
-  {
-    invertNodeSelection(m_document->map());
-  }
+  m_editor->controller().selectInverse();
 }
 
 void MapWindow::selectNone()
 {
-  if (canDeselect())
-  {
-    auto& map = m_document->map();
-    deselectAll(map);
-  }
+  m_editor->controller().selectNone();
 }
 
 bool MapWindow::canSelect() const
 {
-  return canChangeSelection();
+  return m_editor->controller().canSelect();
 }
 
 bool MapWindow::canSelectSiblings() const
 {
-  auto& map = m_document->map();
-  return canChangeSelection() && map.selection().hasNodes();
+  return m_editor->controller().canSelectSiblings();
 }
 
 bool MapWindow::canSelectByBrush() const
 {
-  auto& map = m_document->map();
-  return canChangeSelection() && map.selection().hasOnlyBrushes();
+  return m_editor->controller().canSelectByBrush();
 }
 
 bool MapWindow::canSelectTall() const
 {
-  auto& map = m_document->map();
-  return canChangeSelection() && map.selection().hasOnlyBrushes()
-         && m_mapView->canSelectTall();
+  return m_editor->controller().canSelectTall();
 }
 
 bool MapWindow::canDeselect() const
 {
-  auto& map = m_document->map();
-  return canChangeSelection() && map.selection().hasNodes();
+  return m_editor->controller().canDeselect();
 }
 
 bool MapWindow::canChangeSelection() const
 {
-  auto& map = m_document->map();
-  return map.editorContext().canChangeSelection();
+  return m_editor->controller().canChangeSelection();
 }
 
 bool MapWindow::canSelectInverse() const
 {
-  auto& map = m_document->map();
-  return map.editorContext().canChangeSelection();
+  return m_editor->controller().canSelectInverse();
 }
 
 void MapWindow::groupSelectedObjects()
 {
-  if (canGroupSelectedObjects())
-  {
-    const auto name = queryGroupName(this, "Unnamed");
-    if (!name.empty())
-    {
-      groupSelectedNodes(m_document->map(), name);
-    }
-  }
+  m_editor->controller().groupSelectedObjects();
 }
 
 bool MapWindow::canGroupSelectedObjects() const
 {
-  auto& map = m_document->map();
-  return map.selection().hasNodes() && !m_mapView->toolBox().anyModalToolActive();
+  return m_editor->controller().canGroupSelectedObjects();
 }
 
 void MapWindow::ungroupSelectedObjects()
 {
-  if (canUngroupSelectedObjects())
-  {
-    ungroupSelectedNodes(m_document->map());
-  }
+  m_editor->controller().ungroupSelectedObjects();
 }
 
 bool MapWindow::canUngroupSelectedObjects() const
 {
-  auto& map = m_document->map();
-  return map.selection().hasGroups() && !m_mapView->toolBox().anyModalToolActive();
+  return m_editor->controller().canUngroupSelectedObjects();
 }
 
 void MapWindow::renameSelectedGroups()
 {
-  if (canRenameSelectedGroups())
-  {
-    auto& map = m_document->map();
-    contract_assert(map.selection().hasOnlyGroups());
-
-    const auto suggestion = map.selection().groups.front()->name();
-    const auto name = queryGroupName(this, suggestion);
-    if (!name.empty())
-    {
-      mdl::renameSelectedGroups(map, name);
-    }
-  }
+  m_editor->controller().renameSelectedGroups();
 }
 
 bool MapWindow::canRenameSelectedGroups() const
 {
-  auto& map = m_document->map();
-  return map.selection().hasOnlyGroups();
+  return m_editor->controller().canRenameSelectedGroups();
 }
 
 void MapWindow::replaceMaterial()
 {
-  auto dialog = ReplaceMaterialDialog{m_appController, document(), this};
-  dialog.exec();
+  m_editor->controller().replaceMaterial();
 }
 
 void MapWindow::moveSelectedObjects()
 {
-  auto ok = false;
-  const auto str = QInputDialog::getText(
-    this,
-    "Move Objects",
-    "Enter coordinates: X Y Z",
-    QLineEdit::Normal,
-    toString(vm::vec3d{}),
-    &ok);
-  if (ok)
-  {
-    if (const auto offset = parse<double, 3>(str))
-    {
-      auto& map = m_document->map();
-      translateSelection(map, *offset);
-    }
-    else
-    {
-      QMessageBox::warning(this, "Error", tr("Invalid coordinates: '%1'").arg(str));
-    }
-  }
+  m_editor->controller().moveSelectedObjects();
 }
 
 bool MapWindow::canMoveSelectedObjects() const
 {
-  auto& map = m_document->map();
-  return map.selection().hasNodes() && !m_mapView->toolBox().anyModalToolActive();
+  return m_editor->controller().canMoveSelectedObjects();
 }
 
 void MapWindow::togglePathTool()
 {
-  if (canTogglePathTool())
-  {
-    m_mapView->togglePathTool();
-  }
+  m_editor->controller().togglePathTool();
 }
 
 bool MapWindow::canTogglePathTool() const
 {
-  return m_mapView->canTogglePathTool();
+  return m_editor->controller().canTogglePathTool();
 }
 
 bool MapWindow::pathToolActive() const
 {
-  return m_mapView->pathToolActive();
+  return m_editor->controller().pathToolActive();
 }
 
 void MapWindow::performPathCreation()
 {
-  if (pathToolActive())
-  {
-    m_mapView->performPathCreation();
-    m_mapView->togglePathTool();
-  }
+  m_editor->controller().performPathCreation();
 }
 
 void MapWindow::removeLastPathPoint()
 {
-  if (pathToolActive())
-  {
-    m_mapView->removeLastPathPoint();
-  }
+  m_editor->controller().removeLastPathPoint();
 }
 
 void MapWindow::csgConvexMerge()
 {
-  if (canDoCsgConvexMerge())
-  {
-    auto& toolBox = m_mapView->toolBox();
-
-    if (toolBox.vertexToolActive() && toolBox.vertexTool().canDoCsgConvexMerge())
-    {
-      toolBox.vertexTool().csgConvexMerge();
-    }
-    else if (toolBox.edgeToolActive() && toolBox.edgeTool().canDoCsgConvexMerge())
-    {
-      toolBox.edgeTool().csgConvexMerge();
-    }
-    else if (toolBox.faceToolActive() && toolBox.faceTool().canDoCsgConvexMerge())
-    {
-      toolBox.faceTool().csgConvexMerge();
-    }
-    else
-    {
-      mdl::csgConvexMerge(m_document->map());
-    }
-  }
+  m_editor->controller().csgConvexMerge();
 }
 
 bool MapWindow::canDoCsgConvexMerge() const
 {
-  const auto& toolBox = m_mapView->toolBox();
-  const auto& map = m_document->map();
-  const auto& selection = map.selection();
-
-  return (selection.hasBrushFaces() && selection.brushFaces.size() > 1)
-         || (selection.hasOnlyBrushes() && selection.brushes.size() > 1)
-         || (toolBox.vertexToolActive() && toolBox.vertexTool().canDoCsgConvexMerge())
-         || (toolBox.edgeToolActive() && toolBox.edgeTool().canDoCsgConvexMerge())
-         || (toolBox.faceToolActive() && toolBox.faceTool().canDoCsgConvexMerge());
+  return m_editor->controller().canDoCsgConvexMerge();
 }
 
 void MapWindow::csgSubtract()
 {
-  if (canDoCsgSubtract())
-  {
-    mdl::csgSubtract(m_document->map());
-  }
+  m_editor->controller().csgSubtract();
 }
 
 bool MapWindow::canDoCsgSubtract() const
 {
-  const auto& map = m_document->map();
-  const auto& selection = map.selection();
-  return selection.hasOnlyBrushes() && !selection.brushes.empty();
+  return m_editor->controller().canDoCsgSubtract();
 }
 
 void MapWindow::csgHollow()
 {
-  if (canDoCsgHollow())
-  {
-    mdl::csgHollow(m_document->map());
-  }
+  m_editor->controller().csgHollow();
 }
 
 bool MapWindow::canDoCsgHollow() const
 {
-  const auto& map = m_document->map();
-  const auto& selection = map.selection();
-  return selection.hasOnlyBrushes() && !selection.brushes.empty();
+  return m_editor->controller().canDoCsgHollow();
 }
 
 void MapWindow::csgIntersect()
 {
-  if (canDoCsgIntersect())
-  {
-    mdl::csgIntersect(m_document->map());
-  }
+  m_editor->controller().csgIntersect();
 }
 
 bool MapWindow::canDoCsgIntersect() const
 {
-  const auto& map = m_document->map();
-  const auto& selection = map.selection();
-  return selection.hasOnlyBrushes() && selection.brushes.size() > 1;
+  return m_editor->controller().canDoCsgIntersect();
 }
 
 void MapWindow::snapVerticesToInteger()
 {
-  if (canSnapVertices())
-  {
-    auto& map = m_document->map();
-    snapVertices(map, 1u);
-  }
+  m_editor->controller().snapVerticesToInteger();
 }
 
 void MapWindow::snapVerticesToGrid()
 {
-  if (canSnapVertices())
-  {
-    auto& map = m_document->map();
-    snapVertices(map, map.grid().actualSize());
-  }
+  m_editor->controller().snapVerticesToGrid();
 }
 
 bool MapWindow::canSnapVertices() const
 {
-  const auto& map = m_document->map();
-  const auto& selection = map.selection();
-  return !selection.allBrushes().empty();
+  return m_editor->controller().canSnapVertices();
 }
 
 void MapWindow::convertSelectionToPatches()
 {
-  if (canConvertSelectionToPatches())
-  {
-    auto& map = m_document->map();
-    mdl::convertSelectionToPatches(map, 3, 3);
-
-    if (!toolBox().controlPointToolActive())
-    {
-      toolBox().toggleControlPointTool();
-    }
-  }
+  m_editor->controller().convertSelectionToPatches();
 }
 
 bool MapWindow::canConvertSelectionToPatches() const
 {
-  const auto& map = m_document->map();
-  const auto& selection = map.selection();
-  return mdl::hasPatchSupport(map.worldNode().mapFormat())
-         && selection.hasAnyBrushFaces();
+  return m_editor->controller().canConvertSelectionToPatches();
 }
 
 void MapWindow::toggleAlignmentLock()
 {
-  togglePref(Preferences::AlignmentLock);
+  m_editor->controller().toggleAlignmentLock();
 }
 
 void MapWindow::toggleUvLock()
 {
-  togglePref(Preferences::UvLock);
+  m_editor->controller().toggleUvLock();
 }
 
 void MapWindow::toggleShowGrid()
 {
-  auto& map = m_document->map();
-  map.grid().toggleVisible();
+  m_editor->controller().toggleShowGrid();
 }
 
 void MapWindow::toggleSnapToGrid()
 {
-  auto& map = m_document->map();
-  map.grid().toggleSnap();
+  m_editor->controller().toggleSnapToGrid();
 }
 
 void MapWindow::incGridSize()
 {
-  if (canIncGridSize())
-  {
-    auto& map = m_document->map();
-    map.grid().incSize();
-  }
+  m_editor->controller().incGridSize();
 }
 
 bool MapWindow::canIncGridSize() const
 {
-  const auto& map = m_document->map();
-  return map.grid().size() < mdl::Grid::MaxSize;
+  return m_editor->controller().canIncGridSize();
 }
 
 void MapWindow::decGridSize()
 {
-  if (canDecGridSize())
-  {
-    auto& map = m_document->map();
-    map.grid().decSize();
-  }
+  m_editor->controller().decGridSize();
 }
 
 bool MapWindow::canDecGridSize() const
 {
-  const auto& map = m_document->map();
-  return map.grid().size() > mdl::Grid::MinSize;
+  return m_editor->controller().canDecGridSize();
 }
 
 void MapWindow::setGridSize(const int size)
 {
-  auto& map = m_document->map();
-  map.grid().setSize(size);
+  m_editor->controller().setGridSize(size);
 }
 
 void MapWindow::moveCameraToNextPoint()
@@ -1942,35 +1596,27 @@ void MapWindow::moveCameraToPosition()
 
 void MapWindow::isolateSelection()
 {
-  if (canIsolateSelection())
-  {
-    isolateSelectedNodes(m_document->map());
-  }
+  m_editor->controller().isolateSelection();
 }
 
 bool MapWindow::canIsolateSelection() const
 {
-  const auto& map = m_document->map();
-  return map.selection().hasNodes();
+  return m_editor->controller().canIsolateSelection();
 }
 
 void MapWindow::hideSelection()
 {
-  if (canHideSelection())
-  {
-    hideSelectedNodes(m_document->map());
-  }
+  m_editor->controller().hideSelection();
 }
 
 bool MapWindow::canHideSelection() const
 {
-  const auto& map = m_document->map();
-  return map.selection().hasNodes();
+  return m_editor->controller().canHideSelection();
 }
 
 void MapWindow::showAll()
 {
-  showAllNodes(m_document->map());
+  m_editor->controller().showAll();
 }
 
 void MapWindow::switchToInspectorPage(const InspectorPage page)

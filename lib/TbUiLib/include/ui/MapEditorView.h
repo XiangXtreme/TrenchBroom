@@ -15,6 +15,7 @@
 #include "ui/python/PythonCompletionEngine.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace tb::ui
@@ -24,6 +25,7 @@ class AppController;
 class Console;
 class InfoPanel;
 class MapDocument;
+class MapEditorController;
 class MapViewBase;
 class PythonConsole;
 class Splitter;
@@ -44,6 +46,7 @@ class MapEditorView : public QWidget
 private:
   AppController& m_appController;
   MapDocument& m_document;
+  std::unique_ptr<MapEditorController> m_controller;
 
   Splitter* m_hSplitter = nullptr;
   Splitter* m_vSplitter = nullptr;
@@ -64,6 +67,7 @@ public:
   MapEditorView(AppController& appController, MapDocument& document);
   ~MapEditorView() override;
 
+  MapEditorController& controller() const;
   SwitchableMapViewContainer* mapView() const;
   MapViewBase* currentMapViewBase() const;
 

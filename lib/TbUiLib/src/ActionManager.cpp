@@ -34,6 +34,7 @@
 #include "ui/ActionExecutionContext.h"
 #include "ui/AppController.h" // IWYU pragma: keep
 #include "ui/Inspector.h"
+#include "ui/MapEditorController.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapView.h"
 #include "ui/MapViewBase.h"
@@ -190,9 +191,9 @@ void ActionManager::createViewActions()
     "Create Path Entities",
     ActionContext::AnyView | ActionContext::AnyOrNoSelection | ActionContext::PathTool,
     KeySequence{"Return"},
-    [](auto& context) { context.mapWindow().performPathCreation(); },
+    [](auto& context) { context.editorView().controller().performPathCreation(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().pathToolActive();
+      return context.hasDocument() && context.editorView().controller().pathToolActive();
     },
   });
   addAction(Action{
@@ -200,9 +201,9 @@ void ActionManager::createViewActions()
     "Create Path Entities",
     ActionContext::AnyView | ActionContext::AnyOrNoSelection | ActionContext::PathTool,
     KeySequence{"Enter"},
-    [](auto& context) { context.mapWindow().performPathCreation(); },
+    [](auto& context) { context.editorView().controller().performPathCreation(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().pathToolActive();
+      return context.hasDocument() && context.editorView().controller().pathToolActive();
     },
   });
   addAction(Action{
@@ -210,9 +211,9 @@ void ActionManager::createViewActions()
     "Cancel Path Tool",
     ActionContext::AnyView | ActionContext::AnyOrNoSelection | ActionContext::PathTool,
     KeySequence{},
-    [](auto& context) { context.mapWindow().togglePathTool(); },
+    [](auto& context) { context.editorView().controller().togglePathTool(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().pathToolActive();
+      return context.hasDocument() && context.editorView().controller().pathToolActive();
     },
   });
   addAction(Action{
@@ -220,9 +221,9 @@ void ActionManager::createViewActions()
     "Remove Last Path Point",
     ActionContext::AnyView | ActionContext::AnyOrNoSelection | ActionContext::PathTool,
     KeySequence{},
-    [](auto& context) { context.mapWindow().removeLastPathPoint(); },
+    [](auto& context) { context.editorView().controller().removeLastPathPoint(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().pathToolActive();
+      return context.hasDocument() && context.editorView().controller().pathToolActive();
     },
   });
   addAction(Action{
@@ -1107,9 +1108,10 @@ void ActionManager::createEditMenu()
       "Cut",
       ActionContext::Any,
       standardShortcut(StandardShortcut::Cut),
-      [](auto& context) { context.mapWindow().cutSelection(); },
+      [](auto& context) { context.editorView().controller().cutSelection(); },
       [](const auto& context) {
-        return context.hasDocument() && context.mapWindow().canCopySelection();
+        return context.hasDocument()
+               && context.editorView().controller().canCopySelection();
       },
     }),
     MenuEntryType::Cut);
@@ -1119,9 +1121,10 @@ void ActionManager::createEditMenu()
       "Copy",
       ActionContext::Any,
       standardShortcut(StandardShortcut::Copy),
-      [](auto& context) { context.mapWindow().copySelection(); },
+      [](auto& context) { context.editorView().controller().copySelection(); },
       [](const auto& context) {
-        return context.hasDocument() && context.mapWindow().canCopySelection();
+        return context.hasDocument()
+               && context.editorView().controller().canCopySelection();
       },
     }),
     MenuEntryType::Copy);
@@ -1131,9 +1134,9 @@ void ActionManager::createEditMenu()
       "Paste",
       ActionContext::Any,
       standardShortcut(StandardShortcut::Paste),
-      [](auto& context) { context.mapWindow().pasteAtCursorPosition(); },
+      [](auto& context) { context.editorView().controller().pasteAtCursorPosition(); },
       [](const auto& context) {
-        return context.hasDocument() && context.mapWindow().canPaste();
+        return context.hasDocument() && context.editorView().controller().canPaste();
       },
     }),
     MenuEntryType::Paste);
@@ -1143,9 +1146,9 @@ void ActionManager::createEditMenu()
       "Paste at Original Position",
       ActionContext::Any,
       KeySequence{"Ctrl+Alt+V"},
-      [](auto& context) { context.mapWindow().pasteAtOriginalPosition(); },
+      [](auto& context) { context.editorView().controller().pasteAtOriginalPosition(); },
       [](const auto& context) {
-        return context.hasDocument() && context.mapWindow().canPaste();
+        return context.hasDocument() && context.editorView().controller().canPaste();
       },
     }),
     MenuEntryType::PasteAtOriginalPosition);
@@ -1154,9 +1157,10 @@ void ActionManager::createEditMenu()
     "Duplicate",
     ActionContext::Any,
     KeySequence{"Ctrl+D"},
-    [](auto& context) { context.mapWindow().duplicateSelection(); },
+    [](auto& context) { context.editorView().controller().duplicateSelection(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canDuplicateSelection();
+      return context.hasDocument()
+             && context.editorView().controller().canDuplicateSelection();
     },
     std::filesystem::path{"DuplicateObjects.svg"},
   }));
@@ -1165,9 +1169,10 @@ void ActionManager::createEditMenu()
     "Delete",
     ActionContext::Any,
     standardShortcut(StandardShortcut::Delete),
-    [](auto& context) { context.mapWindow().deleteSelection(); },
+    [](auto& context) { context.editorView().controller().deleteSelection(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canDeleteSelection();
+      return context.hasDocument()
+             && context.editorView().controller().canDeleteSelection();
     },
   }));
   editMenu.addSeparator();
@@ -1200,9 +1205,10 @@ void ActionManager::createEditMenu()
     "Move...",
     ActionContext::AnyView | ActionContext::NodeSelection | ActionContext::AnyOrNoTool,
     KeySequence{"Ctrl+Alt+M"},
-    [](auto& context) { context.mapWindow().moveSelectedObjects(); },
+    [](auto& context) { context.editorView().controller().moveSelectedObjects(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canMoveSelectedObjects();
+      return context.hasDocument()
+             && context.editorView().controller().canMoveSelectedObjects();
     },
   }));
 
@@ -1212,9 +1218,10 @@ void ActionManager::createEditMenu()
     "Convex Merge",
     ActionContext::Any,
     KeySequence{"Ctrl+J"},
-    [](auto& context) { context.mapWindow().csgConvexMerge(); },
+    [](auto& context) { context.editorView().controller().csgConvexMerge(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canDoCsgConvexMerge();
+      return context.hasDocument()
+             && context.editorView().controller().canDoCsgConvexMerge();
     },
   }));
   csgMenu.addItem(addAction(Action{
@@ -1222,9 +1229,10 @@ void ActionManager::createEditMenu()
     "Subtract",
     ActionContext::Any,
     KeySequence{"Ctrl+K"},
-    [](auto& context) { context.mapWindow().csgSubtract(); },
+    [](auto& context) { context.editorView().controller().csgSubtract(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canDoCsgSubtract();
+      return context.hasDocument()
+             && context.editorView().controller().canDoCsgSubtract();
     },
   }));
   csgMenu.addItem(addAction(Action{
@@ -1232,9 +1240,9 @@ void ActionManager::createEditMenu()
     "Hollow",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+K"},
-    [](auto& context) { context.mapWindow().csgHollow(); },
+    [](auto& context) { context.editorView().controller().csgHollow(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canDoCsgHollow();
+      return context.hasDocument() && context.editorView().controller().canDoCsgHollow();
     },
   }));
   csgMenu.addItem(addAction(Action{
@@ -1242,9 +1250,10 @@ void ActionManager::createEditMenu()
     "Intersect",
     ActionContext::Any,
     KeySequence{"Ctrl+L"},
-    [](auto& context) { context.mapWindow().csgIntersect(); },
+    [](auto& context) { context.editorView().controller().csgIntersect(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canDoCsgIntersect();
+      return context.hasDocument()
+             && context.editorView().controller().canDoCsgIntersect();
     },
   }));
 
@@ -1254,9 +1263,9 @@ void ActionManager::createEditMenu()
     "Snap Vertices to Integer",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+V"},
-    [](auto& context) { context.mapWindow().snapVerticesToInteger(); },
+    [](auto& context) { context.editorView().controller().snapVerticesToInteger(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSnapVertices();
+      return context.hasDocument() && context.editorView().controller().canSnapVertices();
     },
   }));
   vertexEditingMenu.addItem(addAction(Action{
@@ -1264,9 +1273,9 @@ void ActionManager::createEditMenu()
     "Snap Vertices to Grid",
     ActionContext::Any,
     KeySequence{"Ctrl+Alt+Shift+V"},
-    [](auto& context) { context.mapWindow().snapVerticesToGrid(); },
+    [](auto& context) { context.editorView().controller().snapVerticesToGrid(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSnapVertices();
+      return context.hasDocument() && context.editorView().controller().canSnapVertices();
     },
   }));
 
@@ -1276,9 +1285,10 @@ void ActionManager::createEditMenu()
     "Convert Selection to Patches",
     ActionContext::Any,
     KeySequence{"Ctrl+P"},
-    [](auto& context) { context.mapWindow().convertSelectionToPatches(); },
+    [](auto& context) { context.editorView().controller().convertSelectionToPatches(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canConvertSelectionToPatches();
+      return context.hasDocument()
+             && context.editorView().controller().canConvertSelectionToPatches();
     },
   }));
 
@@ -1288,7 +1298,7 @@ void ActionManager::createEditMenu()
     "Texture Lock",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) { context.mapWindow().toggleAlignmentLock(); },
+    [](auto& context) { context.editorView().controller().toggleAlignmentLock(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto&) { return pref(Preferences::AlignmentLock); },
     std::filesystem::path{"AlignmentLock.svg"},
@@ -1298,7 +1308,7 @@ void ActionManager::createEditMenu()
     "UV Lock",
     ActionContext::Any,
     KeySequence{"U"},
-    [](auto& context) { context.mapWindow().toggleUvLock(); },
+    [](auto& context) { context.editorView().controller().toggleUvLock(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto&) { return pref(Preferences::UvLock); },
     std::filesystem::path{"UVLock.svg"},
@@ -1309,7 +1319,7 @@ void ActionManager::createEditMenu()
     "Replace Material...",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) { context.mapWindow().replaceMaterial(); },
+    [](auto& context) { context.editorView().controller().replaceMaterial(); },
     [](const auto& context) { return context.hasDocument(); },
   }));
 }
@@ -1322,9 +1332,9 @@ void ActionManager::createSelectionMenu()
     "Select All",
     ActionContext::Any,
     standardShortcut(StandardShortcut::SelectAll),
-    [](auto& context) { context.mapWindow().selectAll(); },
+    [](auto& context) { context.editorView().controller().selectAll(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSelect();
+      return context.hasDocument() && context.editorView().controller().canSelect();
     },
   }));
   selectionMenu.addItem(addAction(Action{
@@ -1332,9 +1342,10 @@ void ActionManager::createSelectionMenu()
     "Invert Selection",
     ActionContext::Any,
     KeySequence{"Ctrl+Alt+A"},
-    [](auto& context) { context.mapWindow().selectInverse(); },
+    [](auto& context) { context.editorView().controller().selectInverse(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSelectInverse();
+      return context.hasDocument()
+             && context.editorView().controller().canSelectInverse();
     },
   }));
   selectionMenu.addItem(addAction(Action{
@@ -1342,9 +1353,9 @@ void ActionManager::createSelectionMenu()
     "Deselect All",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+A"},
-    [](auto& context) { context.mapWindow().selectNone(); },
+    [](auto& context) { context.editorView().controller().selectNone(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canDeselect();
+      return context.hasDocument() && context.editorView().controller().canDeselect();
     },
   }));
   selectionMenu.addItem(addAction(Action{
@@ -1363,9 +1374,10 @@ void ActionManager::createSelectionMenu()
     "Select Siblings",
     ActionContext::Any,
     KeySequence{"Ctrl+B"},
-    [](auto& context) { context.mapWindow().selectSiblings(); },
+    [](auto& context) { context.editorView().controller().selectSiblings(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSelectSiblings();
+      return context.hasDocument()
+             && context.editorView().controller().canSelectSiblings();
     },
   }));
   selectionMenu.addItem(addAction(Action{
@@ -1373,9 +1385,10 @@ void ActionManager::createSelectionMenu()
     "Select Touching",
     ActionContext::Any,
     KeySequence{"Ctrl+T"},
-    [](auto& context) { context.mapWindow().selectTouching(); },
+    [](auto& context) { context.editorView().controller().selectTouching(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSelectByBrush();
+      return context.hasDocument()
+             && context.editorView().controller().canSelectByBrush();
     },
   }));
   selectionMenu.addItem(addAction(Action{
@@ -1383,9 +1396,10 @@ void ActionManager::createSelectionMenu()
     "Select Inside",
     ActionContext::Any,
     KeySequence{"Ctrl+E"},
-    [](auto& context) { context.mapWindow().selectInside(); },
+    [](auto& context) { context.editorView().controller().selectInside(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSelectByBrush();
+      return context.hasDocument()
+             && context.editorView().controller().canSelectByBrush();
     },
   }));
   selectionMenu.addItem(addAction(Action{
@@ -1393,9 +1407,9 @@ void ActionManager::createSelectionMenu()
     "Select Tall",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+E"},
-    [](auto& context) { context.mapWindow().selectTall(); },
+    [](auto& context) { context.editorView().controller().selectTall(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSelectTall();
+      return context.hasDocument() && context.editorView().controller().canSelectTall();
     },
   }));
   selectionMenu.addItem(addAction(Action{
@@ -1403,9 +1417,9 @@ void ActionManager::createSelectionMenu()
     "Select by Line Number...",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) { context.mapWindow().selectByLineNumber(); },
+    [](auto& context) { context.editorView().controller().selectByLineNumber(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canSelect();
+      return context.hasDocument() && context.editorView().controller().canSelect();
     },
   }));
 }
@@ -1418,9 +1432,10 @@ void ActionManager::createGroupsMenu()
     "Group Selected Objects",
     ActionContext::Any,
     KeySequence{"Ctrl+G"},
-    [](auto& context) { context.mapWindow().groupSelectedObjects(); },
+    [](auto& context) { context.editorView().controller().groupSelectedObjects(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canGroupSelectedObjects();
+      return context.hasDocument()
+             && context.editorView().controller().canGroupSelectedObjects();
     },
   }));
   groupsMenu.addItem(addAction(Action{
@@ -1428,9 +1443,10 @@ void ActionManager::createGroupsMenu()
     "Ungroup Selected Objects",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+G"},
-    [](auto& context) { context.mapWindow().ungroupSelectedObjects(); },
+    [](auto& context) { context.editorView().controller().ungroupSelectedObjects(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canUngroupSelectedObjects();
+      return context.hasDocument()
+             && context.editorView().controller().canUngroupSelectedObjects();
     },
   }));
   groupsMenu.addItem(addAction(Action{
@@ -1438,9 +1454,10 @@ void ActionManager::createGroupsMenu()
     "Rename Selected Groups",
     ActionContext::Any,
     KeySequence{"Ctrl+Alt+G"},
-    [](auto& context) { context.mapWindow().renameSelectedGroups(); },
+    [](auto& context) { context.editorView().controller().renameSelectedGroups(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canRenameSelectedGroups();
+      return context.hasDocument()
+             && context.editorView().controller().canRenameSelectedGroups();
     },
   }));
   groupsMenu.addSeparator();
@@ -1684,12 +1701,13 @@ void ActionManager::createToolsMenu()
     "Path Tool",
     ActionContext::Any,
     KeySequence{"P"},
-    [](auto& context) { context.mapWindow().togglePathTool(); },
+    [](auto& context) { context.editorView().controller().togglePathTool(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canTogglePathTool();
+      return context.hasDocument()
+             && context.editorView().controller().canTogglePathTool();
     },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().pathToolActive();
+      return context.hasDocument() && context.editorView().controller().pathToolActive();
     },
     std::filesystem::path{"Path.svg"},
   }));
@@ -1732,7 +1750,7 @@ void ActionManager::createViewMenu()
     "Show Grid",
     ActionContext::Any,
     KeySequence{"0"},
-    [](auto& context) { context.mapWindow().toggleShowGrid(); },
+    [](auto& context) { context.editorView().controller().toggleShowGrid(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().visible();
@@ -1743,7 +1761,7 @@ void ActionManager::createViewMenu()
     "Snap to Grid",
     ActionContext::Any,
     KeySequence{"Alt+0"},
-    [](auto& context) { context.mapWindow().toggleSnapToGrid(); },
+    [](auto& context) { context.editorView().controller().toggleSnapToGrid(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().snap();
@@ -1754,9 +1772,9 @@ void ActionManager::createViewMenu()
     "Increase Grid Size",
     ActionContext::Any,
     KeySequence{"+"},
-    [](auto& context) { context.mapWindow().incGridSize(); },
+    [](auto& context) { context.editorView().controller().incGridSize(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canIncGridSize();
+      return context.hasDocument() && context.editorView().controller().canIncGridSize();
     },
   }));
   gridMenu.addItem(addAction(Action{
@@ -1764,9 +1782,9 @@ void ActionManager::createViewMenu()
     "Decrease Grid Size",
     ActionContext::Any,
     KeySequence{"-"},
-    [](auto& context) { context.mapWindow().decGridSize(); },
+    [](auto& context) { context.editorView().controller().decGridSize(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canDecGridSize();
+      return context.hasDocument() && context.editorView().controller().canDecGridSize();
     },
   }));
   gridMenu.addSeparator();
@@ -1775,7 +1793,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 0.125",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) { context.mapWindow().setGridSize(-3); },
+    [](auto& context) { context.editorView().controller().setGridSize(-3); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == -3;
@@ -1786,7 +1804,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 0.25",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) { context.mapWindow().setGridSize(-2); },
+    [](auto& context) { context.editorView().controller().setGridSize(-2); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == -2;
@@ -1797,7 +1815,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 0.5",
     ActionContext::Any,
     KeySequence{},
-    [](auto& context) { context.mapWindow().setGridSize(-1); },
+    [](auto& context) { context.editorView().controller().setGridSize(-1); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == -1;
@@ -1808,7 +1826,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 1",
     ActionContext::Any,
     KeySequence{"1"},
-    [](auto& context) { context.mapWindow().setGridSize(0); },
+    [](auto& context) { context.editorView().controller().setGridSize(0); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 0;
@@ -1819,7 +1837,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 2",
     ActionContext::Any,
     KeySequence{"2"},
-    [](auto& context) { context.mapWindow().setGridSize(1); },
+    [](auto& context) { context.editorView().controller().setGridSize(1); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 1;
@@ -1830,7 +1848,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 4",
     ActionContext::Any,
     KeySequence{"3"},
-    [](auto& context) { context.mapWindow().setGridSize(2); },
+    [](auto& context) { context.editorView().controller().setGridSize(2); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 2;
@@ -1841,7 +1859,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 8",
     ActionContext::Any,
     KeySequence{"4"},
-    [](auto& context) { context.mapWindow().setGridSize(3); },
+    [](auto& context) { context.editorView().controller().setGridSize(3); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 3;
@@ -1852,7 +1870,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 16",
     ActionContext::Any,
     KeySequence{"5"},
-    [](auto& context) { context.mapWindow().setGridSize(4); },
+    [](auto& context) { context.editorView().controller().setGridSize(4); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 4;
@@ -1863,7 +1881,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 32",
     ActionContext::Any,
     KeySequence{"6"},
-    [](auto& context) { context.mapWindow().setGridSize(5); },
+    [](auto& context) { context.editorView().controller().setGridSize(5); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 5;
@@ -1874,7 +1892,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 64",
     ActionContext::Any,
     KeySequence{"7"},
-    [](auto& context) { context.mapWindow().setGridSize(6); },
+    [](auto& context) { context.editorView().controller().setGridSize(6); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 6;
@@ -1885,7 +1903,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 128",
     ActionContext::Any,
     KeySequence{"8"},
-    [](auto& context) { context.mapWindow().setGridSize(7); },
+    [](auto& context) { context.editorView().controller().setGridSize(7); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 7;
@@ -1896,7 +1914,7 @@ void ActionManager::createViewMenu()
     "Set Grid Size 256",
     ActionContext::Any,
     KeySequence{"9"},
-    [](auto& context) { context.mapWindow().setGridSize(8); },
+    [](auto& context) { context.editorView().controller().setGridSize(8); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {
       return context.hasDocument() && context.map().grid().size() == 8;
@@ -1961,9 +1979,10 @@ void ActionManager::createViewMenu()
     "Isolate Selection",
     ActionContext::Any,
     KeySequence{"Ctrl+I"},
-    [](auto& context) { context.mapWindow().isolateSelection(); },
+    [](auto& context) { context.editorView().controller().isolateSelection(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canIsolateSelection();
+      return context.hasDocument()
+             && context.editorView().controller().canIsolateSelection();
     },
   }));
   viewMenu.addItem(addAction(Action{
@@ -1971,9 +1990,10 @@ void ActionManager::createViewMenu()
     "Hide Selection",
     ActionContext::Any,
     KeySequence{"Ctrl+Alt+I"},
-    [](auto& context) { context.mapWindow().hideSelection(); },
+    [](auto& context) { context.editorView().controller().hideSelection(); },
     [](const auto& context) {
-      return context.hasDocument() && context.mapWindow().canHideSelection();
+      return context.hasDocument()
+             && context.editorView().controller().canHideSelection();
     },
   }));
   viewMenu.addItem(addAction(Action{
@@ -1981,7 +2001,7 @@ void ActionManager::createViewMenu()
     "Show All",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+I"},
-    [](auto& context) { context.mapWindow().showAll(); },
+    [](auto& context) { context.editorView().controller().showAll(); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   viewMenu.addSeparator();

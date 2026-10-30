@@ -135,6 +135,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewBase.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewContainer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewToolBox.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MapEditorController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapEditorView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapStatus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapWindow.cpp
@@ -389,6 +390,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LimitedKeySequenceEdit.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapStatus.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/WorkspaceLayout.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapEditorController.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapEditorView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapCommandSurface.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapDocumentActionCache.h

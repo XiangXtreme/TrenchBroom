@@ -15,6 +15,7 @@
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorController.h"
 #include "ui/MapView2D.h"
 #include "ui/PythonConsole.h"
 #include "ui/Splitter.h"
@@ -87,6 +88,7 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(6, 4, 6, 4);
   layout->addWidget(m_hSplitter);
+  m_controller = std::make_unique<MapEditorController>(appController, document, *this);
   restoreLayoutState();
 }
 
@@ -175,6 +177,11 @@ void MapEditorView::resetLayout()
 MapEditorView::~MapEditorView()
 {
   saveWidgetState();
+}
+
+MapEditorController& MapEditorView::controller() const
+{
+  return *m_controller;
 }
 
 SwitchableMapViewContainer* MapEditorView::mapView() const

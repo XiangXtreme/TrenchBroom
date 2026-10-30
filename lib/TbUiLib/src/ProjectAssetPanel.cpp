@@ -109,6 +109,7 @@ void ProjectAssetPanel::showProjectAsset(const QString& id)
     return; // Library and game selections have their own metadata.
   auto asset = BrowserAsset{};
   asset.source = BrowserSource::Project;
+  asset.projectId = m_session->store().info().id;
   asset.projectAssetId = id.toStdString();
   showAsset(asset);
 }
@@ -137,6 +138,13 @@ void ProjectAssetPanel::refreshDetails()
     return QString::fromStdString(value);
   };
   auto selected = *m_selected;
+  if (
+    selected.source == BrowserSource::Project
+    && selected.projectId != m_session->store().info().id)
+  {
+    add(tr("Selection"), tr("The selected asset belongs to another project."));
+    return;
+  }
   if (selected.source == BrowserSource::AssetLibrary)
   {
     const auto captured =
