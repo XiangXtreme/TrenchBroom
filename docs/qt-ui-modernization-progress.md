@@ -1,5 +1,13 @@
 # Qt UI Modernization Progress
 
+## Workspace architecture follow-up (2026-10-30)
+
+The active workspace and panel architecture design is
+[工作空间与面板体系设计](workspace-ui-architecture.md). It defines panel ownership,
+command targets, focus behavior, layout persistence, and staged migration from the current
+project drawer. The historical visual modernization phases below remain a record of the
+theme and component work; they do not imply that the workspace architecture is complete.
+
 ## Status
 
 - Branch: `codex/qt-ui-modernization`
