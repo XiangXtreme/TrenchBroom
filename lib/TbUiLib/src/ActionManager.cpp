@@ -1931,7 +1931,7 @@ void ActionManager::createViewMenu()
     "Reset 2D Cameras",
     ActionContext::Any,
     KeySequence{"Ctrl+Shift+U"},
-    [](auto& context) { context.editorView().reset2dCameras(); },
+    [](auto& context) { context.editorView().reset2dCameras(context.mapView()); },
     [](const auto& context) {
       return context.hasDocument() && !pref(Preferences::Link2DCameras);
     },

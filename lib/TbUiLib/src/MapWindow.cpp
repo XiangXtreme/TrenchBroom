@@ -213,13 +213,14 @@ MapWindow::MapWindow(
   installEventFilter(this);
 
   createGui();
-  createMenus();
-  createToolBar();
+  if (!embedded)
+  {
+    createMenus();
+    createToolBar();
+  }
   createStatusBar();
   if (embedded)
   {
-    menuBar()->hide();
-    m_toolBar->hide();
     m_commands->setShortcutsEnabled(false);
   }
 
@@ -398,6 +399,8 @@ QAction* MapWindow::findAction(const std::filesystem::path& path)
   if (const auto iAction = actionsMap.find(path); iAction != std::end(actionsMap))
   {
     const auto& action = iAction->second;
+    if (m_embedded)
+      return &m_commands->actionFor(action, *this);
     if (auto* qAction = m_commands->findAction(action))
     {
       return qAction;
@@ -462,50 +465,20 @@ void MapWindow::setCommandToolBar(QToolBar& toolbar)
 void MapWindow::refreshCommandSurface(MapCommandSurface& commands)
 {
   commands.updateActionState();
-  for (const auto pair :
-       {std::pair{m_undoAction, commands.undoAction()},
-        std::pair{m_redoAction, commands.redoAction()},
-        std::pair{m_rerunAction, commands.rerunAction()}})
+  commands.updateHistoryActions(m_document->map());
+  if (auto* action = commands.rerunAction())
   {
-    if (pair.first && pair.second)
-    {
-      pair.second->setText(pair.first->text());
-      pair.second->setEnabled(pair.first->isEnabled());
-    }
+    action->setText(
+      m_lastCompilationProfileName
+        ? tr("Re-run \"%1\"...")
+            .arg(QString::fromStdString(*m_lastCompilationProfileName))
+        : tr("Re-run compilation..."));
   }
 }
 
 void MapWindow::updateUndoRedoActions()
 {
-  const auto& map = m_document->map();
-  if (m_undoAction)
-  {
-    if (const auto* undoCommandName = map.undoCommandName())
-    {
-      const auto text = "Undo " + *undoCommandName;
-      m_undoAction->setText(QString::fromStdString(text));
-      m_undoAction->setEnabled(true);
-    }
-    else
-    {
-      m_undoAction->setText("Undo");
-      m_undoAction->setEnabled(false);
-    }
-  }
-  if (m_redoAction)
-  {
-    if (const auto* redoCommandName = map.redoCommandName())
-    {
-      const auto text = "Redo " + *redoCommandName;
-      m_redoAction->setText(QString::fromStdString(text));
-      m_redoAction->setEnabled(true);
-    }
-    else
-    {
-      m_redoAction->setText("Redo");
-      m_redoAction->setEnabled(false);
-    }
-  }
+  m_commands->updateHistoryActions(m_document->map());
   emit commandStateChanged();
 }
 
@@ -516,7 +489,8 @@ void MapWindow::addRecentDocumentsMenu()
 
 void MapWindow::removeRecentDocumentsMenu()
 {
-  m_appController.recentDocuments().removeMenu(*m_recentDocumentsMenu);
+  if (m_recentDocumentsMenu)
+    m_appController.recentDocuments().removeMenu(*m_recentDocumentsMenu);
 }
 
 void MapWindow::updateRecentDocumentsMenu()
@@ -1121,11 +1095,12 @@ void MapWindow::bindEvents()
     // update the "Paste" menu items
     this->updateActionState();
   });
-  connect(
-    m_toolBar, &QToolBar::visibilityChanged, this, [this](const bool /* visible */) {
-      // update the "Toggle Toolbar" menu item
-      this->updateActionState();
-    });
+  if (m_toolBar)
+    connect(
+      m_toolBar, &QToolBar::visibilityChanged, this, [this](const bool /* visible */) {
+        // update the "Toggle Toolbar" menu item
+        this->updateActionState();
+      });
 
   connect(
     m_updateTitleSignalDelayer,
@@ -1510,46 +1485,37 @@ void MapWindow::closeDocument(const bool discardChanges)
 
 void MapWindow::undo()
 {
-  if (canUndo() && !m_mapView->cancelMouseDrag() && !m_inspector->cancelMouseDrag())
-  {
-    m_document->map().undoCommand();
-  }
+  m_editor->undo();
 }
 
 void MapWindow::redo()
 {
-  if (canRedo())
-  {
-    m_document->map().redoCommand();
-  }
+  m_editor->redo();
 }
 
 bool MapWindow::canUndo() const
 {
-  return m_document->map().canUndoCommand();
+  return m_editor->canUndo();
 }
 
 bool MapWindow::canRedo() const
 {
-  return m_document->map().canRedoCommand();
+  return m_editor->canRedo();
 }
 
 void MapWindow::repeatLastCommands()
 {
-  m_document->map().repeatCommands();
+  m_editor->repeatLastCommands();
 }
 
 void MapWindow::clearRepeatableCommands()
 {
-  if (hasRepeatableCommands())
-  {
-    m_document->map().clearRepeatableCommands();
-  }
+  m_editor->clearRepeatableCommands();
 }
 
 bool MapWindow::hasRepeatableCommands() const
 {
-  return m_document->map().canRepeatCommands();
+  return m_editor->hasRepeatableCommands();
 }
 
 void MapWindow::cutSelection()
@@ -2199,36 +2165,27 @@ void MapWindow::setGridSize(const int size)
 
 void MapWindow::moveCameraToNextPoint()
 {
-  if (canMoveCameraToNextPoint())
-  {
-    m_mapView->moveCameraToNextTracePoint();
-  }
+  m_editor->moveCameraToNextTracePoint();
 }
 
 bool MapWindow::canMoveCameraToNextPoint() const
 {
-  return m_mapView->canMoveCameraToNextTracePoint();
+  return m_editor->canMoveCameraToNextTracePoint();
 }
 
 void MapWindow::moveCameraToPreviousPoint()
 {
-  if (canMoveCameraToPreviousPoint())
-  {
-    m_mapView->moveCameraToPreviousTracePoint();
-  }
+  m_editor->moveCameraToPreviousTracePoint();
 }
 
 bool MapWindow::canMoveCameraToPreviousPoint() const
 {
-  return m_mapView->canMoveCameraToPreviousTracePoint();
+  return m_editor->canMoveCameraToPreviousTracePoint();
 }
 
 void MapWindow::reset2dCameras()
 {
-  if (auto* mapView2d = dynamic_cast<ui::MapView2D*>(currentMapViewBase()))
-  {
-    m_mapView->reset2dCameras(mapView2d->camera(), true);
-  }
+  m_editor->reset2dCameras(*currentMapViewBase());
 }
 
 void MapWindow::focusCameraOnSelection()
@@ -2238,16 +2195,12 @@ void MapWindow::focusCameraOnSelection()
 
 void MapWindow::focusCameraOnSelection(const bool animate)
 {
-  if (canFocusCamera())
-  {
-    m_mapView->focusCameraOnSelection(animate);
-  }
+  m_editor->focusCameraOnSelection(animate);
 }
 
 bool MapWindow::canFocusCamera() const
 {
-  auto& map = m_document->map();
-  return map.selection().hasNodes();
+  return m_editor->canFocusCamera();
 }
 
 void MapWindow::moveCameraToPosition()
@@ -2314,12 +2267,13 @@ void MapWindow::switchToInfoPanelPage(const InfoPanelPage page)
 
 void MapWindow::toggleToolbar()
 {
-  m_toolBar->setVisible(!m_toolBar->isVisible());
+  if (m_toolBar)
+    m_toolBar->setVisible(!m_toolBar->isVisible());
 }
 
 bool MapWindow::toolbarVisible() const
 {
-  return m_toolBar->isVisible();
+  return m_toolBar && m_toolBar->isVisible();
 }
 
 void MapWindow::toggleInfoPanel()
@@ -2344,12 +2298,12 @@ bool MapWindow::inspectorVisible() const
 
 void MapWindow::toggleMaximizeCurrentView()
 {
-  m_mapView->toggleMaximizeCurrentView();
+  m_editor->toggleMaximizeCurrentView();
 }
 
 bool MapWindow::currentViewMaximized() const
 {
-  return m_mapView->currentViewMaximized();
+  return m_editor->currentViewMaximized();
 }
 
 void MapWindow::showCompileDialog()

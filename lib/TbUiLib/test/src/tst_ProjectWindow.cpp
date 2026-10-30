@@ -33,6 +33,7 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QtTest/QTest>
@@ -218,7 +219,8 @@ TEST_CASE("ProjectWindow")
   REQUIRE(stack != nullptr);
   REQUIRE(stack->count() == 2);
   CHECK_FALSE(alphaWindow->isWindow());
-  CHECK(alphaWindow->menuBar()->isHidden());
+  CHECK(alphaWindow->findChildren<QMenuBar*>().empty());
+  CHECK(alphaWindow->findChildren<QToolBar*>().empty());
   CHECK(alphaWindow->findAction("Menu/Edit/Undo")->shortcut().isEmpty());
 
   SECTION("one project browser survives map switches and closing all map tabs")
@@ -376,12 +378,15 @@ TEST_CASE("ProjectWindow")
     CHECK(session->assetFor(*betaHandle).has_value());
   }
 
-  SECTION("captured panel command context keeps its original map after a tab switch")
+  SECTION("captured editor commands keep their original map after a tab switch")
   {
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "message", "alpha edit"));
     auto context = ActionExecutionContext{
       appController, alphaWindow, alphaWindow->currentMapViewBase()};
     auto* alphaEditor = alphaWindow->findChild<MapEditorView*>();
     tabs->setCurrentIndex(1);
+    auto& betaMap = window.activeMapWindow()->document().map();
+    REQUIRE(mdl::setEntityProperty(betaMap, "message", "beta edit"));
     auto* betaEditor = window.activeMapWindow()->findChild<MapEditorView*>();
     CHECK(&context.map() == &alphaWindow->document().map());
     CHECK(&context.editorView() == alphaEditor);
@@ -410,7 +415,14 @@ TEST_CASE("ProjectWindow")
     CHECK(focusSelection.enabled(context) == alphaEditor->canFocusCamera());
     CHECK(maximize.checked(context) == alphaEditor->currentViewMaximized());
     undo.execute(context);
+    CHECK_FALSE(alphaDocument->map().worldNode().entity().property("message"));
+    REQUIRE(betaMap.worldNode().entity().property("message"));
+    CHECK(*betaMap.worldNode().entity().property("message") == "beta edit");
+    CHECK(window.activeMapWindow()->documentHandle().get() != alphaDocument);
     redo.execute(context);
+    REQUIRE(alphaDocument->map().worldNode().entity().property("message"));
+    CHECK(*alphaDocument->map().worldNode().entity().property("message") == "alpha edit");
+    CHECK(*betaMap.worldNode().entity().property("message") == "beta edit");
     clearRepeat.execute(context);
     nextTrace.execute(context);
     previousTrace.execute(context);
@@ -430,6 +442,9 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(betaEditor->infoPanel()->isVisible());
     auto empty = ActionExecutionContext{appController, nullptr, nullptr};
     CHECK_FALSE(empty.hasDocument());
+    CHECK_FALSE(undo.enabled(empty));
+    CHECK_FALSE(redo.enabled(empty));
+    require(session->save());
   }
 
   SECTION("closing an embedded map preserves standalone info panel visibility")

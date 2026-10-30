@@ -98,8 +98,8 @@ public:
   void moveCameraToPreviousTracePoint();
   bool canMoveCameraToNextTracePoint() const;
   bool canMoveCameraToPreviousTracePoint() const;
-  void reset2dCameras();
-  void focusCameraOnSelection();
+  void reset2dCameras(MapViewBase& sourceView);
+  void focusCameraOnSelection(bool animate = true);
   bool canFocusCamera() const;
   void toggleMaximizeCurrentView();
   bool currentViewMaximized() const;

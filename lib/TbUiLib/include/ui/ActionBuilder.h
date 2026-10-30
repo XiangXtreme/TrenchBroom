@@ -24,6 +24,7 @@
 class QAction;
 class QMenu;
 class QMenuBar;
+class QObject;
 class QToolBar;
 
 namespace tb::ui
@@ -32,6 +33,12 @@ class Action;
 class ActionManager;
 
 using TriggerFn = std::function<void(const Action&)>;
+
+QAction& findOrCreateQtAction(
+  std::unordered_map<const Action*, QAction*>& actionMap,
+  const Action& action,
+  const TriggerFn& triggerFn,
+  QObject* owner = nullptr);
 
 void updateActionKeySequence(QAction& qAction, const Action& tAction);
 

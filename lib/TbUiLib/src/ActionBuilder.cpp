@@ -59,13 +59,11 @@ void updateActionKeySequence(QAction& qAction, const Action& tAction)
   qAction.setShortcuts(qKeySequences);
 }
 
-namespace
-{
-
 QAction& findOrCreateQtAction(
   std::unordered_map<const Action*, QAction*>& actionMap,
   const Action& tbAction,
-  const TriggerFn& triggerFn)
+  const TriggerFn& triggerFn,
+  QObject* owner)
 {
   if (const auto it = actionMap.find(&tbAction); it != actionMap.end())
   {
@@ -73,7 +71,7 @@ QAction& findOrCreateQtAction(
   }
 
   auto& qtAction =
-    *actionMap.emplace(&tbAction, new QAction{translateUiText(tbAction.label())})
+    *actionMap.emplace(&tbAction, new QAction{translateUiText(tbAction.label()), owner})
        .first->second;
 
   qtAction.setCheckable(tbAction.checkable());
@@ -92,7 +90,6 @@ QAction& findOrCreateQtAction(
 
   return qtAction;
 }
-} // namespace
 
 PopulateMenuResult populateMenuBar(
   ActionManager& actionManager,
@@ -112,7 +109,8 @@ PopulateMenuResult populateMenuBar(
     [&](const MenuAction& actionItem) {
       contract_assert(currentMenu);
 
-      auto& qtAction = findOrCreateQtAction(actionMap, actionItem.action, triggerFn);
+      auto& qtAction =
+        findOrCreateQtAction(actionMap, actionItem.action, triggerFn, &qtMenuBar);
       currentMenu->addAction(&qtAction);
 
       if (actionItem.entryType == MenuEntryType::Undo)
@@ -169,7 +167,8 @@ void populateToolBar(
   actionManager.visitToolBar(kdl::overload(
     [&](const MenuSeparator&) { qtToolBar.addSeparator(); },
     [&](const MenuAction& actionItem) {
-      auto& qtAction = findOrCreateQtAction(actionMap, actionItem.action, triggerFn);
+      auto& qtAction =
+        findOrCreateQtAction(actionMap, actionItem.action, triggerFn, &qtToolBar);
       qtToolBar.addAction(&qtAction);
     },
     [](const auto& thisLambda, const Menu& menu) { menu.visitEntries(thisLambda); }));

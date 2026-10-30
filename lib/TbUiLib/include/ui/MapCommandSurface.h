@@ -17,6 +17,11 @@ class QMenu;
 class QMenuBar;
 class QToolBar;
 
+namespace tb::mdl
+{
+class Map;
+}
+
 namespace tb::ui
 {
 
@@ -51,8 +56,11 @@ public:
   void setShortcutsEnabled(bool enabled);
 
   void updateActionState();
+  void updateHistoryActions(const mdl::Map& map);
 
   QAction* findAction(const Action& action) const;
+  /** A document-bound action for a popup, without constructing a menu or toolbar. */
+  QAction& actionFor(const Action& action, QObject& owner);
 
   QAction* undoAction() const;
   QAction* redoAction() const;

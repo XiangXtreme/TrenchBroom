@@ -284,16 +284,16 @@ bool MapEditorView::canMoveCameraToPreviousTracePoint() const
   return m_mapView->canMoveCameraToPreviousTracePoint();
 }
 
-void MapEditorView::reset2dCameras()
+void MapEditorView::reset2dCameras(MapViewBase& sourceView)
 {
-  if (auto* mapView2d = dynamic_cast<MapView2D*>(currentMapViewBase()))
+  if (auto* mapView2d = dynamic_cast<MapView2D*>(&sourceView))
     m_mapView->reset2dCameras(mapView2d->camera(), true);
 }
 
-void MapEditorView::focusCameraOnSelection()
+void MapEditorView::focusCameraOnSelection(const bool animate)
 {
   if (canFocusCamera())
-    m_mapView->focusCameraOnSelection(true);
+    m_mapView->focusCameraOnSelection(animate);
 }
 
 bool MapEditorView::canFocusCamera() const
