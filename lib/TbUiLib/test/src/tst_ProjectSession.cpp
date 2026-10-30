@@ -39,6 +39,7 @@
 #include <sstream>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace tb::ui
 {
@@ -1668,11 +1669,19 @@ TEST_CASE("ProjectSessionAssetLibrary")
       requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
       const auto before = readProjectFile(folder / "resources/gfx/env/desertbk.tga");
       const auto decoded = requireProject(img::decodeImage(before.data(), before.size()));
-      CHECK(decoded.width == 16);
-      CHECK(decoded.height == 16);
+      CHECK(decoded.width == 256);
+      CHECK(decoded.height == 256);
+      REQUIRE(before.size() == 18 + 256 * 256 * 3);
+      CHECK(before[2] == 2);
+      CHECK(before[16] == 24);
+      CHECK(before[17] == 0);
       CHECK(decoded.pixels[0] == 255);
       CHECK(decoded.pixels[1] == 0);
-      CHECK(decoded.pixels[(16 * 16 - 1) * 4 + 1] == 255);
+      CHECK(decoded.pixels[(256 * 256 - 1) * 4 + 1] == 255);
+      // The first TGA pixel is the source bottom-left, stored in BGR order.
+      CHECK(before[18] == 177);
+      CHECK(before[19] == 93);
+      CHECK(before[20] == 31);
       const auto metadata = readProjectFile(folder / "snapshot.txt");
       const auto text = std::string{metadata.begin(), metadata.end()};
       CHECK(text.find("external gfx/env/") == std::string::npos);
@@ -1701,6 +1710,55 @@ TEST_CASE("ProjectSessionAssetLibrary")
       for (const auto* suffix : {"bk", "rt", "lf", "ft", "up", "dn"})
         CHECK(std::filesystem::exists(
           next / (std::string{"resources/gfx/env/desert"} + suffix + ".tga")));
+    }
+    SECTION("native and high resolution faces publish at the stock engine size")
+    {
+      const auto sourceSize = GENERATE(256, 512);
+      auto source = QImage{sourceSize, sourceSize, QImage::Format_RGBA8888};
+      source.fill(QColor{31, 93, 177});
+      // Large corner blocks survive filtering and expose flips or swapped RGB channels.
+      for (auto y = 0; y < sourceSize / 4; ++y)
+        for (auto x = 0; x < sourceSize / 4; ++x)
+        {
+          source.setPixelColor(x, y, QColor{255, 0, 0});
+          source.setPixelColor(sourceSize - 1 - x, sourceSize - 1 - y, QColor{0, 255, 0});
+        }
+      auto encoded = QByteArray{};
+      auto output = QBuffer{&encoded};
+      REQUIRE(output.open(QIODevice::WriteOnly));
+      REQUIRE(source.save(&output, "PNG"));
+      for (const auto* suffix : {"bk", "rt", "lf", "ft", "up", "dn"})
+        sandbox.write(
+          std::string{"env/desert"} + suffix + ".png", {encoded.begin(), encoded.end()});
+      sandbox.rescanLibrary();
+      for (const auto& face : sandbox.libraryAssets())
+        if (
+          face.virtualPath.starts_with("env/desert")
+          && face.virtualPath.ends_with(".png"))
+          requireProject(sandbox.session->captureLibraryAsset(libraryId, face.id));
+      requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
+      for (const auto* suffix : {"bk", "rt", "lf", "ft", "up", "dn"})
+      {
+        const auto bytes = readProjectFile(
+          folder / (std::string{"resources/gfx/env/desert"} + suffix + ".tga"));
+        REQUIRE(bytes.size() == 18 + 256 * 256 * 3);
+        const auto decoded = requireProject(img::decodeImage(bytes.data(), bytes.size()));
+        CHECK(decoded.width == 256);
+        CHECK(decoded.height == 256);
+        CHECK(decoded.pixels[0] == 255);
+        CHECK(decoded.pixels[1] == 0);
+        CHECK(decoded.pixels[2] == 0);
+        CHECK(decoded.pixels[(256 * 256 - 1) * 4 + 1] == 255);
+        CHECK(decoded.pixels[(128 * 256 + 128) * 4] == 31);
+        CHECK(decoded.pixels[(128 * 256 + 128) * 4 + 1] == 93);
+        CHECK(decoded.pixels[(128 * 256 + 128) * 4 + 2] == 177);
+      }
+      const auto originalFace =
+        requireProject(sandbox.session->store().findAsset(edges.front().dependencyId));
+      REQUIRE(originalFace);
+      const auto original = requireProject(sandbox.session->store().readAsset(
+        originalFace->id, project::ContentKind::Original));
+      CHECK(original == std::vector<std::uint8_t>{encoded.begin(), encoded.end()});
     }
   }
 

@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QImage>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLockFile>
@@ -546,7 +547,10 @@ Result<void> ProjectSession::exportCompileSnapshot(
   };
 
   // Sky groups address six source images, not their WAD-compatible brush textures.
-  // Publish opaque, uncompressed 24-bit TGA (bottom row first), preserving source RGB.
+  // Stock GoldSrc loads sky faces as 256x256 textures. Keep the original in the project,
+  // but publish opaque, uncompressed 24-bit TGA at that size (bottom row first).
+  // See https://github.com/advancedfx/advancedfx/wiki/GoldSrc:mirv_fx_skyhd
+  constexpr auto skyFaceSize = 256;
   auto skyFaces = std::set<std::string>{};
   auto skyPaths = std::set<std::string>{};
   auto skyResources = std::map<std::string, std::vector<std::uint8_t>>{};
@@ -598,22 +602,34 @@ Result<void> ProjectSession::exportCompileSnapshot(
           "Skybox '" + name.value()
           + "' requires six equally sized opaque square images."};
       size = image.width;
+      const auto published =
+        QImage{
+          image.pixels.data(),
+          int(image.width),
+          int(image.height),
+          QImage::Format_RGBA8888}
+          .scaled(
+            skyFaceSize, skyFaceSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+          .convertToFormat(QImage::Format_RGBA8888);
+      if (published.isNull())
+        return Error{"Cannot resize skybox face '" + stem + "'."};
       auto tga = std::vector<std::uint8_t>(18, 0);
       tga[2] = 2;
-      tga[12] = std::uint8_t(size & 255);
-      tga[13] = std::uint8_t(size >> 8);
+      tga[12] = std::uint8_t(skyFaceSize & 255);
+      tga[13] = std::uint8_t(skyFaceSize >> 8);
       tga[14] = tga[12];
       tga[15] = tga[13];
       tga[16] = 24;
-      tga.reserve(18 + size * size * 3);
-      for (auto y = size; y > 0; --y)
-        for (auto x = std::size_t{0}; x < size; ++x)
+      tga.reserve(18 + skyFaceSize * skyFaceSize * 3);
+      for (auto y = skyFaceSize; y > 0; --y)
+      {
+        const auto* row = published.constScanLine(y - 1);
+        for (auto x = 0; x < skyFaceSize; ++x)
         {
-          const auto offset = ((y - 1) * size + x) * 4;
-          tga.insert(
-            tga.end(),
-            {image.pixels[offset + 2], image.pixels[offset + 1], image.pixels[offset]});
+          const auto offset = x * 4;
+          tga.insert(tga.end(), {row[offset + 2], row[offset + 1], row[offset]});
         }
+      }
       const auto target = "gfx/env/" + name.value() + suffix + ".tga";
       const auto normalized = normalizeGamePath(target);
       if (!normalized || !skyPaths.insert(*normalized).second)
