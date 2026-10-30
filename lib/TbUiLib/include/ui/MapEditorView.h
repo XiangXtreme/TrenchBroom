@@ -11,6 +11,7 @@
 
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
+#include "ui/WorkspaceLayout.h"
 #include "ui/python/PythonCompletionEngine.h"
 
 #include <functional>
@@ -54,6 +55,8 @@ private:
   SwitchableMapViewContainer* m_mapView = nullptr;
   QPointer<InfoPanel> m_infoPanel;
   Inspector* m_inspector = nullptr;
+  EditorLayout m_layout;
+  bool m_layoutPending = true;
   bool m_externalInfoPanel = false;
   bool m_externalInfoPanelExpanded = false;
 
@@ -108,10 +111,17 @@ public:
    */
   bool cancelDrag();
 
-  /** Restores splitter and panel state. Call once the view is inside its host widget. */
+  /** Restores panel state and applies proportions when the host has laid out the view. */
   void restoreLayoutState();
+  void resetLayout();
 
   void saveWidgetState() const;
+
+private:
+  void applyLayoutState();
+
+protected:
+  void showEvent(QShowEvent* event) override;
 
 signals:
   void infoPanelPageRequested(InfoPanelPage page);

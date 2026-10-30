@@ -77,6 +77,7 @@
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/MapStatus.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
@@ -240,7 +241,8 @@ TEST_CASE("MapWindow")
                   | kdl::value();
 
   UNSCOPED_INFO("creating MapWindow");
-  auto window = MapWindow{appController, std::shared_ptr<MapDocument>{std::move(document)}};
+  auto window =
+    MapWindow{appController, std::shared_ptr<MapDocument>{std::move(document)}};
   UNSCOPED_INFO("MapWindow created");
 
   SECTION("transform confirmation returns focus to the last map view")
@@ -641,8 +643,9 @@ TEST_CASE("MapWindow")
     auto* snapToggle = window.findChild<QToolButton*>("MapWindow_SnapToggle");
     REQUIRE(gridChoice != nullptr);
     REQUIRE(snapToggle != nullptr);
-    CHECK(gridChoice->parentWidget() == window.statusBar());
-    CHECK(snapToggle->parentWidget() == window.statusBar());
+    CHECK(gridChoice->parentWidget() == window.findChild<MapStatus*>());
+    CHECK(window.statusBar()->isAncestorOf(gridChoice));
+    CHECK(snapToggle->parentWidget() == window.findChild<MapStatus*>());
     CHECK(snapToggle->isChecked() == window.document().map().grid().snap());
 
     QTest::mouseClick(snapToggle, Qt::LeftButton);
@@ -1309,7 +1312,8 @@ TEST_CASE("PlayModeFullScreen")
                     appController.taskManager(),
                     appController.glManager().resourceManager())
                   | kdl::value();
-  auto window = MapWindow{appController, std::shared_ptr<MapDocument>{std::move(document)}};
+  auto window =
+    MapWindow{appController, std::shared_ptr<MapDocument>{std::move(document)}};
   // restoreGeometry clamps off-screen windows. Keep the initial frame inside the
   // available screen, including on small CI desktops, before comparing restoration.
   const auto available = window.screen()->availableGeometry().adjusted(40, 40, -40, -40);
@@ -1426,7 +1430,8 @@ TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
                     appController.taskManager(),
                     appController.glManager().resourceManager())
                   | kdl::value();
-  auto window = MapWindow{appController, std::shared_ptr<MapDocument>{std::move(document)}};
+  auto window =
+    MapWindow{appController, std::shared_ptr<MapDocument>{std::move(document)}};
 
   const auto previousRawInput = pref(Preferences::PlayModeRawInput);
   const auto previousFullScreen = pref(Preferences::PlayModeFullScreen);

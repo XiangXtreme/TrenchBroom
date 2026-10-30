@@ -14,6 +14,7 @@
 #include <QShortcut>
 #include <QSplitter>
 #include <QStackedWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -24,18 +25,35 @@
 
 namespace tb::ui
 {
+namespace
+{
+const auto ToolNames = std::map<ProjectToolId, QString>{
+  {ProjectToolId::ContentBrowser, "content-browser"},
+  {ProjectToolId::OutputLog, "output-log"},
+  {ProjectToolId::PythonConsole, "python-console"},
+  {ProjectToolId::Issues, "issues"}};
+}
+
 ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget* parent)
   : QWidget{parent}
   , m_content{content}
   , m_workspace{workspace}
 {
+  auto settings = QSettings{};
+  m_layout = loadToolLayout(settings, WorkspaceKind::Project);
+  m_pendingTool = m_layout.tool;
   setObjectName("ProjectTools");
   m_surface = new QWidget{this};
   m_surface->installEventFilter(this);
   auto* surfaceLayout = new QVBoxLayout{m_surface};
   surfaceLayout->setContentsMargins(0, 0, 0, 0);
   m_splitter = new QSplitter{Qt::Vertical, m_surface};
+  m_splitter->setObjectName("ProjectToolsSplitter");
   m_splitter->setChildrenCollapsible(false);
+  connect(m_splitter, &QSplitter::splitterMoved, this, [this]() {
+    captureHeight();
+    saveLayout();
+  });
   m_splitter->addWidget(workspace);
   surfaceLayout->addWidget(m_splitter);
 
@@ -54,7 +72,7 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
   m_pin->setText(tr("Pin"));
   m_pin->setToolTip(tr("Keep the tool panel open while editing the map"));
   m_pin->setCheckable(true);
-  m_pin->setChecked(QSettings{}.value("ProjectTools/Pinned", false).toBool());
+  m_pin->setChecked(m_layout.pinned);
   header->addWidget(m_pin);
   auto* close = new QToolButton{m_panel};
   close->setObjectName("ProjectToolsClose");
@@ -107,11 +125,13 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
 
   connect(close, &QToolButton::clicked, this, [this]() { setExpanded(false); });
   connect(m_pin, &QToolButton::toggled, this, [this](const bool pinned) {
-    QSettings{}.setValue("ProjectTools/Pinned", pinned);
+    if (!pinned)
+      captureHeight();
     // Reparenting produces intermediate focus changes outside the drawer.
     const auto changingMode = QScopedValueRollback{m_changingMode, true};
     const auto focus = QPointer<QWidget>{QApplication::focusWidget()};
     updateGeometryForMode();
+    saveLayout();
     // Reparenting between the splitter and overlay clears Qt's keyboard focus.
     if (m_expanded)
     {
@@ -143,7 +163,71 @@ ProjectToolPanel::ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget
       setExpanded(false, false);
   });
   setMapEditor(nullptr);
-  setExpanded(m_pin->isChecked());
+  setExpanded(m_layout.expanded);
+  m_restoringLayout = false;
+}
+
+void ProjectToolPanel::addStatusWidget(QWidget* status)
+{
+  auto* layout = static_cast<QHBoxLayout*>(m_bar->layout());
+  delete layout->takeAt(layout->count() - 1);
+  layout->addWidget(status, 1);
+}
+
+ProjectToolPanel::~ProjectToolPanel()
+{
+  saveLayout();
+}
+
+void ProjectToolPanel::showEvent(QShowEvent* event)
+{
+  QWidget::showEvent(event);
+  if (m_layoutPending)
+  {
+    QTimer::singleShot(0, this, [this]() {
+      if (!m_layoutPending || !isVisible())
+        return;
+      if (m_pin->isChecked())
+      {
+        const auto height = m_splitter->height();
+        const auto panelHeight = static_cast<int>(height * m_layout.heightRatio);
+        m_splitter->setSizes({height - panelHeight, panelHeight});
+      }
+      updateGeometryForMode();
+      m_layoutPending = false;
+    });
+  }
+}
+
+void ProjectToolPanel::captureHeight()
+{
+  if (m_layoutPending || m_panel->parentWidget() != m_splitter || !m_expanded)
+    return;
+  const auto sizes = m_splitter->sizes();
+  const auto total = sizes[0] + sizes[1];
+  if (total > 0 && sizes[1] > 0)
+    m_layout.heightRatio = std::clamp(static_cast<double>(sizes[1]) / total, 0.1, 0.8);
+}
+
+void ProjectToolPanel::saveLayout()
+{
+  if (m_restoringLayout)
+    return;
+  m_layout.tool = ToolNames.at(m_tool);
+  m_layout.expanded = m_expanded;
+  m_layout.pinned = m_pin->isChecked();
+  auto settings = QSettings{};
+  saveToolLayout(settings, WorkspaceKind::Project, m_layout);
+}
+
+void ProjectToolPanel::resetLayout()
+{
+  m_tool = ProjectToolId::ContentBrowser;
+  m_pendingTool.clear();
+  m_pin->setChecked(false);
+  m_layout = ToolLayout{};
+  setExpanded(false);
+  saveLayout();
 }
 
 void ProjectToolPanel::registerMapEditor(MapEditorView& editor)
@@ -180,6 +264,13 @@ void ProjectToolPanel::setMapEditor(MapEditorView* editor)
   findChild<QToolButton*>("ProjectToolsExtensions")->setEnabled(editor != nullptr);
   if (!editor)
     m_tool = ProjectToolId::ContentBrowser;
+  else if (!m_pendingTool.isEmpty())
+  {
+    for (const auto& [id, name] : ToolNames)
+      if (name == m_pendingTool)
+        m_tool = id;
+    m_pendingTool.clear();
+  }
   updatePage();
 }
 
@@ -237,6 +328,8 @@ bool ProjectToolPanel::isExpanded() const
 void ProjectToolPanel::setExpanded(const bool expanded, const bool restoreFocus)
 {
   const auto wasExpanded = m_expanded;
+  if (!expanded)
+    captureHeight();
   if (expanded && !wasExpanded)
   {
     auto* focus = QApplication::focusWidget();
@@ -261,6 +354,7 @@ void ProjectToolPanel::setExpanded(const bool expanded, const bool restoreFocus)
   }
   if (!expanded)
     m_restoreFocus.clear();
+  saveLayout();
 }
 
 ProjectToolId ProjectToolPanel::currentTool() const
@@ -310,13 +404,16 @@ void ProjectToolPanel::updateGeometryForMode()
     m_splitter->addWidget(m_panel);
     m_splitter->setStretchFactor(0, 1);
     m_splitter->setStretchFactor(1, 0);
-    m_splitter->setSizes({std::max(100, m_surface->height() - 320), 320});
+    const auto panelHeight = static_cast<int>(m_surface->height() * m_layout.heightRatio);
+    m_splitter->setSizes({std::max(100, m_surface->height() - panelHeight), panelHeight});
   }
   else if (!pinned)
   {
     if (m_panel->parentWidget() != m_surface)
       m_panel->setParent(m_surface);
-    const auto height = std::min(360, m_surface->height());
+    const auto height = std::min(
+      std::max(100, static_cast<int>(m_surface->height() * m_layout.heightRatio)),
+      m_surface->height());
     m_panel->setGeometry(0, m_surface->height() - height, m_surface->width(), height);
     m_panel->raise();
   }

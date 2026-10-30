@@ -129,9 +129,6 @@ private:
   PythonConsole* m_pythonConsole = nullptr;
   Inspector* m_inspector = nullptr;
 
-  QComboBox* m_gridChoice = nullptr;
-  QToolButton* m_snapToggle = nullptr;
-  QLabel* m_statusBarLabel = nullptr;
 
   QPointer<CompilationDialog> m_compilationDialog;
   QPointer<ObjExportDialog> m_objExportDialog;
@@ -153,7 +150,6 @@ private: // special menu entries
 private:
   SignalDelayer* m_updateTitleSignalDelayer = nullptr;
   SignalDelayer* m_updateActionStateSignalDelayer = nullptr;
-  SignalDelayer* m_updateStatusBarSignalDelayer = nullptr;
   bool m_discardChangesOnClose = false;
 
 public:
@@ -214,12 +210,9 @@ private: // menu bar
 
 private: // tool bar
   void createToolBar();
-  void updateToolBarWidgets();
 
 private: // status bar
   void createStatusBar();
-  void updateStatusBar();
-  void updateStatusBarDelayed();
 
 private: // gui creation
   void createGui();
@@ -243,11 +236,6 @@ private: // notification handlers
   void toolDeactivated(Tool& tool);
   void toolHandleSelectionChanged(Tool& tool);
   void selectionDidChange(const mdl::SelectionChange& selectionChange);
-  void currentLayerDidChange();
-  void groupWasOpened();
-  void groupWasClosed();
-  void nodeVisibilityDidChange(const std::vector<mdl::Node*>& nodes);
-  void editorContextDidChange();
   void triggerVisualEffect(mdl::VisualEffect visualEffect);
 
   void pointFileDidChange();

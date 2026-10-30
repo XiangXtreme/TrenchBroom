@@ -103,6 +103,7 @@
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
+#include "ui/MapStatus.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
@@ -203,7 +204,6 @@ MapWindow::MapWindow(
   , m_autosaveTimer{new QTimer{this}}
   , m_updateTitleSignalDelayer{new SignalDelayer{500ms, this}}
   , m_updateActionStateSignalDelayer{new SignalDelayer{this}}
-  , m_updateStatusBarSignalDelayer{new SignalDelayer{500ms, this}}
 {
   contract_pre(m_document != nullptr);
 
@@ -217,8 +217,8 @@ MapWindow::MapWindow(
   {
     createMenus();
     createToolBar();
+    createStatusBar();
   }
-  createStatusBar();
   if (embedded)
   {
     m_commands->setShortcutsEnabled(false);
@@ -227,7 +227,6 @@ MapWindow::MapWindow(
   updateShortcuts();
   updateActionState();
   updateUndoRedoActions();
-  updateToolBarWidgets();
   loadLastCompilationProfileName();
 
   m_document->setTargetLogger(m_console);
@@ -436,6 +435,8 @@ void MapWindow::createMenus()
   m_rerunAction = createMenuResult.rerunAction;
 
   addRecentDocumentsMenu();
+  auto* workspaceMenu = menuBar()->addMenu(tr("Workspace"));
+  workspaceMenu->addAction(tr("Reset Layout"), m_editor, &MapEditorView::resetLayout);
 }
 
 void MapWindow::updateShortcuts()
@@ -559,273 +560,12 @@ void MapWindow::createToolBar()
   m_commands->populateToolBar(*m_toolBar);
 }
 
-void MapWindow::updateToolBarWidgets()
-{
-  const auto& map = m_document->map();
-  const auto& grid = map.grid();
-  const auto sizeIndex = grid.size() - mdl::Grid::MinSize;
-  m_gridChoice->setCurrentIndex(sizeIndex);
-  m_snapToggle->setChecked(grid.snap());
-}
-
 void MapWindow::createStatusBar()
 {
-  m_statusBarLabel = new QLabel{};
-  m_statusBarLabel->setObjectName("MapWindow_StatusLabel");
-
-  m_gridChoice = new QComboBox{};
-  m_gridChoice->setObjectName("MapWindow_GridChoice");
-  m_gridChoice->setProperty("tbControlRole", "compact");
-  m_gridChoice->setToolTip(tr("Grid size"));
-  for (int i = mdl::Grid::MinSize; i <= mdl::Grid::MaxSize; ++i)
-  {
-    const auto gridSize = mdl::Grid::actualSize(i);
-    const auto gridSizeStr = tr("Grid %1").arg(QString::number(gridSize, 'g'));
-    m_gridChoice->addItem(gridSizeStr, QVariant(i));
-  }
-
-  m_snapToggle = new QToolButton{};
-  m_snapToggle->setObjectName("MapWindow_SnapToggle");
-  m_snapToggle->setProperty("tbControlRole", "compact");
-  m_snapToggle->setText(tr("Snap"));
-  m_snapToggle->setToolTip(tr("Snap to grid"));
-  m_snapToggle->setCheckable(true);
-
-  statusBar()->addWidget(m_statusBarLabel, 1);
-  statusBar()->addPermanentWidget(m_snapToggle);
-  statusBar()->addPermanentWidget(m_gridChoice);
-  statusBar()->addWidget(m_appController.updater().createUpdateIndicator());
-}
-
-namespace
-{
-template <typename T>
-const mdl::EntityNodeBase* commonEntityForNodeList(const std::vector<T*>& nodes)
-{
-  return !nodes.empty()
-             && std::ranges::all_of(
-               nodes,
-               [&](const auto* node) {
-                 return node->entity() == nodes.front()->entity();
-               })
-           ? nodes.front()->entity()
-           : nullptr;
-}
-
-std::optional<std::string> commonClassnameForEntityList(
-  const std::vector<mdl::EntityNode*>& nodes)
-{
-  return !nodes.empty()
-             && std::ranges::all_of(
-               nodes,
-               [&](const auto* entityNode) {
-                 return entityNode->entity().classname()
-                        == nodes.front()->entity().classname();
-               })
-           ? std::optional{nodes.front()->entity().classname()}
-           : std::nullopt;
-}
-
-std::string numberWithSuffix(
-  size_t count, const std::string& singular, const std::string& plural)
-{
-  return std::to_string(count) + " " + kdl::str_plural(count, singular, plural);
-}
-
-QString describeSelection(const mdl::Map& map)
-{
-  const auto& editorContext = map.editorContext();
-
-  const auto Arrow = QString(" ") + QString(QChar(0x203A)) + QString(" ");
-
-  auto pipeSeparatedSections = QStringList{};
-
-  pipeSeparatedSections << QString::fromStdString(map.gameInfo().gameConfig.name)
-                        << QString::fromStdString(
-                             mdl::formatName(map.worldNode().mapFormat()))
-                        << QString::fromStdString(editorContext.currentLayer()->name());
-
-  // open groups
-  auto groups = std::vector<mdl::GroupNode*>{};
-  for (auto* group = editorContext.currentGroup(); group != nullptr;
-       group = group->containingGroup())
-  {
-    groups.push_back(group);
-  }
-
-  if (!groups.empty())
-  {
-    auto openGroups = QStringList{};
-
-    // groups vector is sorted from innermost to outermost, so visit it in reverse order
-    for (auto it = groups.rbegin(); it != groups.rend(); ++it)
-    {
-      const auto* group = *it;
-      openGroups << QString::fromStdString(group->name());
-    }
-
-    const auto openGroupsString =
-      QObject::tr("Open groups: %1").arg(openGroups.join(Arrow));
-    pipeSeparatedSections << openGroupsString;
-  }
-
-  // build a vector of strings describing the things that are selected
-  auto tokens = std::vector<std::string>{};
-
-  const auto& selection = map.selection();
-
-  // selected brushes
-  if (selection.hasBrushes())
-  {
-    const auto* commonEntityNode = commonEntityForNodeList(selection.brushes);
-
-    // if all selected brushes are from the same entity, print the entity name
-    auto token = numberWithSuffix(selection.brushes.size(), "brush", "brushes");
-    token += commonEntityNode ? " (" + commonEntityNode->entity().classname() + ")"
-                              : " (multiple entities)";
-    tokens.push_back(token);
-  }
-
-  // selected patches
-  if (selection.hasPatches())
-  {
-    const auto* commonEntityNode = commonEntityForNodeList(selection.patches);
-
-    // if all selected patches are from the same entity, print the entity name
-    auto token = numberWithSuffix(selection.patches.size(), "patch", "patches");
-    token += commonEntityNode ? " (" + commonEntityNode->entity().classname() + ")"
-                              : " (multiple entities)";
-    tokens.push_back(token);
-  }
-
-  // selected brush faces
-  if (map.selection().hasBrushFaces())
-  {
-    const auto token =
-      numberWithSuffix(map.selection().brushFaces.size(), "face", "faces");
-    tokens.push_back(token);
-  }
-
-  // entities
-  if (selection.hasEntities())
-  {
-    const auto commonClassname = commonClassnameForEntityList(selection.entities);
-
-    auto token = numberWithSuffix(selection.entities.size(), "entity", "entities");
-    token += " (" + commonClassname.value_or("multiple classnames") + ") ";
-    tokens.push_back(token);
-  }
-
-  // groups
-  if (selection.hasGroups())
-  {
-    tokens.push_back(numberWithSuffix(selection.groups.size(), "group", "groups"));
-  }
-
-  // get the layers of the selected nodes
-  const auto selectedObjectLayers =
-    mdl::collectContainingLayersUserSorted(selection.nodes);
-  auto layersDescription = QString{};
-  if (selectedObjectLayers.size() == 1)
-  {
-    auto* layer = selectedObjectLayers.front();
-    layersDescription =
-      QObject::tr(" in layer \"%1\"").arg(QString::fromStdString(layer->name()));
-  }
-  else if (selectedObjectLayers.size() > 1)
-  {
-    layersDescription = QObject::tr(" in %1 layers").arg(selectedObjectLayers.size());
-  }
-
-  // now, turn `tokens` into a comma-separated string
-  if (!tokens.empty())
-  {
-    pipeSeparatedSections << QObject::tr("%1%2 selected")
-                               .arg(QString::fromStdString(
-                                 kdl::str_join(tokens, ", ", ", and ", " and ")))
-                               .arg(layersDescription);
-  }
-
-  // count hidden objects
-  size_t hiddenGroups = 0u;
-  size_t hiddenEntities = 0u;
-  size_t hiddenBrushes = 0u;
-  size_t hiddenPatches = 0u;
-
-  map.worldNode().accept(kdl::overload(
-    [](auto&& thisLambda, const mdl::WorldNode& worldNode) {
-      worldNode.visitChildren(thisLambda);
-    },
-    [](auto&& thisLambda, const mdl::LayerNode& layerNode) {
-      layerNode.visitChildren(thisLambda);
-    },
-    [&](auto&& thisLambda, const mdl::GroupNode& groupNode) {
-      if (!editorContext.visible(groupNode))
-      {
-        ++hiddenGroups;
-      }
-      groupNode.visitChildren(thisLambda);
-    },
-    [&](auto&& thisLambda, const mdl::EntityNode& entityNode) {
-      if (!editorContext.visible(entityNode))
-      {
-        ++hiddenEntities;
-      }
-      entityNode.visitChildren(thisLambda);
-    },
-    [&](const mdl::BrushNode& brushNode) {
-      if (!editorContext.visible(brushNode))
-      {
-        ++hiddenBrushes;
-      }
-    },
-    [&](const mdl::PatchNode& patchNode) {
-      if (!editorContext.visible(patchNode))
-      {
-        ++hiddenPatches;
-      }
-    }));
-
-  // print hidden objects
-  if (hiddenGroups > 0 || hiddenEntities > 0 || hiddenBrushes > 0)
-  {
-    auto hiddenDescriptors = std::vector<std::string>{};
-
-    if (hiddenGroups > 0)
-    {
-      hiddenDescriptors.push_back(numberWithSuffix(hiddenGroups, "group", "groups"));
-    }
-    if (hiddenEntities > 0)
-    {
-      hiddenDescriptors.push_back(numberWithSuffix(hiddenEntities, "entity", "entities"));
-    }
-    if (hiddenBrushes > 0)
-    {
-      hiddenDescriptors.push_back(numberWithSuffix(hiddenBrushes, "brush", "brushes"));
-    }
-    if (hiddenPatches > 0)
-    {
-      hiddenDescriptors.push_back(numberWithSuffix(hiddenPatches, "patch", "patches"));
-    }
-
-    pipeSeparatedSections << QObject::tr("%1 hidden")
-                               .arg(QString::fromStdString(kdl::str_join(
-                                 hiddenDescriptors, ", ", ", and ", " and ")));
-  }
-
-  return pipeSeparatedSections.join(QLatin1String("   |   "));
-}
-
-} // namespace
-
-void MapWindow::updateStatusBar()
-{
-  m_statusBarLabel->setText(QString{describeSelection(m_document->map())});
-}
-
-void MapWindow::updateStatusBarDelayed()
-{
-  m_updateStatusBarSignalDelayer->queueSignal();
+  auto* status = new MapStatus{this};
+  status->setDocument(m_document);
+  statusBar()->addWidget(status, 1);
+  statusBar()->addPermanentWidget(m_appController.updater().createUpdateIndicator());
 }
 
 void MapWindow::reloadPythonPlugins()
@@ -876,16 +616,6 @@ void MapWindow::connectObservers()
       auto& registry = PythonHandleRegistry::instance();
       registry.invalidateNodeLifetimes(removedNodes);
     });
-  m_notifierConnection += m_document->currentLayerDidChangeNotifier.connect(
-    this, &MapWindow::currentLayerDidChange);
-  m_notifierConnection +=
-    m_document->groupWasOpenedNotifier.connect(this, &MapWindow::groupWasOpened);
-  m_notifierConnection +=
-    m_document->groupWasClosedNotifier.connect(this, &MapWindow::groupWasClosed);
-  m_notifierConnection += m_document->nodeVisibilityDidChangeNotifier.connect(
-    this, &MapWindow::nodeVisibilityDidChange);
-  m_notifierConnection += m_document->editorContextDidChangeNotifier.connect(
-    this, &MapWindow::editorContextDidChange);
   m_notifierConnection += m_document->triggerVisualEffectNotifier.connect(
     this, &MapWindow::triggerVisualEffect);
 
@@ -912,7 +642,6 @@ void MapWindow::documentWasLoaded()
   updateTitle();
   updateActionState();
   updateUndoRedoActions();
-  updateToolBarWidgets();
   updateRecentDocumentsMenu();
   loadLastCompilationProfileName();
   PythonRuntime::instance().emitEvent("document_loaded", *this, false);
@@ -1009,7 +738,6 @@ void MapWindow::resourcesWereProcessed(const std::vector<gl::ResourceId>&)
 void MapWindow::gridDidChange()
 {
   updateActionStateDelayed();
-  updateToolBarWidgets();
 }
 
 void MapWindow::toolActivated(Tool&)
@@ -1030,35 +758,7 @@ void MapWindow::toolHandleSelectionChanged(Tool&)
 void MapWindow::selectionDidChange(const mdl::SelectionChange&)
 {
   updateActionStateDelayed();
-  updateStatusBarDelayed();
   PythonRuntime::instance().emitEvent("selection_changed", *this, false);
-}
-
-void MapWindow::currentLayerDidChange()
-{
-  updateStatusBarDelayed();
-}
-
-void MapWindow::groupWasOpened()
-{
-  updateStatusBarDelayed();
-}
-
-void MapWindow::groupWasClosed()
-{
-  updateStatusBarDelayed();
-}
-
-void MapWindow::nodeVisibilityDidChange(const std::vector<mdl::Node*>&)
-{
-  updateStatusBarDelayed();
-}
-
-void MapWindow::editorContextDidChange()
-{
-  // e.g. changing the view filters may cause the number of hidden brushes/entities to
-  // change
-  updateStatusBarDelayed();
 }
 
 void MapWindow::triggerVisualEffect(const mdl::VisualEffect visualEffect)
@@ -1085,12 +785,6 @@ void MapWindow::bindEvents()
 {
   connect(m_autosaveTimer, &QTimer::timeout, this, &MapWindow::triggerAutosave);
   connect(qApp, &QApplication::focusChanged, this, &MapWindow::focusChange);
-  connect(
-    m_gridChoice,
-    QOverload<int>::of(&QComboBox::activated),
-    this,
-    [this](const int index) { setGridSize(index + mdl::Grid::MinSize); });
-  connect(m_snapToggle, &QToolButton::clicked, this, &MapWindow::toggleSnapToGrid);
   connect(QApplication::clipboard(), &QClipboard::dataChanged, this, [this]() {
     // update the "Paste" menu items
     this->updateActionState();
@@ -1112,11 +806,6 @@ void MapWindow::bindEvents()
     &SignalDelayer::processSignal,
     this,
     &MapWindow::updateActionState);
-  connect(
-    m_updateStatusBarSignalDelayer,
-    &SignalDelayer::processSignal,
-    this,
-    &MapWindow::updateStatusBar);
 }
 
 bool MapWindow::saveDocument()
@@ -2846,12 +2535,7 @@ void MapWindow::closeEvent(QCloseEvent* event)
     saveWidgetGeometry(this);
     saveWidgetState(this);
   }
-  saveWidgetState(m_hSplitter);
-  saveWidgetState(m_vSplitter);
-  saveWidgetState(m_inspector);
-  // Embedded tools are shown by the project drawer, independently of standalone MAPs.
-  if (!m_embedded)
-    saveWidgetState(m_infoPanel);
+  m_editor->saveWidgetState();
 
   if (m_project && !documentRetainedByProject())
     m_project->unregisterDocument(*m_document);

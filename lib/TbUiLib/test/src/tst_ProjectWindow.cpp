@@ -27,6 +27,7 @@
 #include <QSaveFile>
 #include <QScopeGuard>
 #include <QSettings>
+#include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTabBar>
@@ -44,6 +45,7 @@
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityDefinitionManager.h"
 #include "mdl/GameManager.h"
+#include "mdl/Grid.h"
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Brushes.h"
@@ -60,6 +62,7 @@
 #include "ui/InfoPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
+#include "ui/MapStatus.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
@@ -72,8 +75,11 @@
 #include "ui/ProjectToolPanel.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
+#include "ui/Splitter.h"
+#include "ui/WorkspaceLayout.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 
 #include <catch2/catch_test_macros.hpp>
@@ -148,6 +154,14 @@ void closeTab(QTabBar& tabs, const int index)
 
 TEST_CASE("ProjectWindow")
 {
+  // Layout tests must neither read user preferences nor race other CTest processes.
+  const auto applicationName = QApplication::applicationName();
+  QApplication::setApplicationName(
+    QString{"TrenchBroom-ProjectWindowTest-%1"}.arg(QCoreApplication::applicationPid()));
+  const auto restoreSettings = qScopeGuard([&]() {
+    QSettings{}.clear();
+    QApplication::setApplicationName(applicationName);
+  });
   auto fixture = AppControllerFixture{[](const auto& writeGameConfig) {
     writeGameConfig(GameName, GameConfig, std::nullopt, std::nullopt);
   }};
@@ -487,6 +501,139 @@ TEST_CASE("ProjectWindow")
     QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QApplication::processEvents();
     CHECK(settings.value(key).toByteArray() == standaloneState);
+  }
+
+  SECTION("layout survives inactive views and reset preserves document edits")
+  {
+    auto& editor = alphaWindow->editorView();
+    editor.showInspectorPage(InspectorPage::Outliner);
+    editor.hSplitter()->setSizes({550, 400});
+    QApplication::processEvents();
+    const auto sizes = editor.hSplitter()->sizes();
+    tabs->setCurrentIndex(1);
+    editor.saveWidgetState();
+    auto settings = QSettings{};
+    const auto layout = loadEditorLayout(settings, WorkspaceKind::Project);
+    CHECK(layout.inspectorVisible);
+    CHECK(layout.inspectorPage == InspectorPage::Outliner);
+    CHECK(
+      std::abs(
+        layout.inspectorRatio - static_cast<double>(sizes[1]) / (sizes[0] + sizes[1]))
+      < 0.01);
+    CHECK_FALSE(settings.contains("WorkspaceLayouts/Map/Editor"));
+    editor.toggleInspector();
+    editor.saveWidgetState();
+    CHECK_FALSE(loadEditorLayout(settings, WorkspaceKind::Project).inspectorVisible);
+    editor.restoreLayoutState();
+    CHECK(editor.inspector()->isHidden());
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "message", "layout keeps this"));
+    const auto modified = alphaDocument->map().modificationCount();
+    const auto undoName = alphaDocument->map().undoCommandName();
+    editor.resetLayout();
+    CHECK_FALSE(editor.inspector()->isHidden());
+    CHECK(editor.inspector()->currentPage() == InspectorPage::Map);
+    CHECK(alphaDocument->map().modificationCount() == modified);
+    CHECK(alphaDocument->map().undoCommandName() == undoName);
+    CHECK(
+      *alphaDocument->map().worldNode().entity().property("message")
+      == "layout keeps this");
+    require(session->save());
+  }
+
+  SECTION("one workspace status follows the active document and disables without maps")
+  {
+    const auto statuses = window.findChildren<MapStatus*>();
+    REQUIRE(statuses.size() == 1);
+    CHECK(alphaWindow->findChildren<QStatusBar*>().isEmpty());
+    auto* grid = statuses.front()->findChild<QComboBox*>("MapWindow_GridChoice");
+    auto* snap = statuses.front()->findChild<QToolButton*>("MapWindow_SnapToggle");
+    REQUIRE(grid);
+    REQUIRE(snap);
+    alphaDocument->map().grid().setSize(2);
+    CHECK(grid->currentIndex() == 2 - mdl::Grid::MinSize);
+    tabs->setCurrentIndex(1);
+    auto& betaMap = window.activeMapWindow()->document().map();
+    betaMap.grid().setSize(4);
+    CHECK(grid->currentIndex() == 4 - mdl::Grid::MinSize);
+    alphaDocument->map().grid().setSize(1);
+    CHECK(grid->currentIndex() == 4 - mdl::Grid::MinSize);
+    QMetaObject::invokeMethod(grid, "activated", Q_ARG(int, 3 - mdl::Grid::MinSize));
+    CHECK(betaMap.grid().size() == 3);
+    CHECK(alphaDocument->map().grid().size() == 1);
+    const auto wasSnapping = betaMap.grid().snap();
+    snap->click();
+    CHECK(betaMap.grid().snap() != wasSnapping);
+    closeTab(*tabs, 1);
+    CHECK(grid->currentIndex() == 1 - mdl::Grid::MinSize);
+    closeTab(*tabs, 0);
+    CHECK_FALSE(grid->isEnabled());
+    CHECK_FALSE(snap->isEnabled());
+    alphaDocument->map().grid().setSize(5);
+    CHECK(grid->currentIndex() == -1);
+  }
+
+  SECTION("reopened views apply saved proportions after host layout")
+  {
+    auto settings = QSettings{};
+    auto saved = EditorLayout{};
+    saved.inspectorRatio = 0.42;
+    saved.inspectorPage = InspectorPage::Outliner;
+    saveEditorLayout(settings, WorkspaceKind::Project, saved);
+    closeTab(*tabs, 0);
+    // Closing saves the old view. Seed the layout of the next newly constructed view.
+    saveEditorLayout(settings, WorkspaceKind::Project, saved);
+    auto* reopen = window.findChild<QToolButton*>("ProjectReopenMaps");
+    REQUIRE(reopen);
+    REQUIRE(reopen->menu()->actions().size() == 1);
+    reopen->menu()->actions().front()->trigger();
+    QApplication::processEvents();
+    auto& editor = window.activeMapWindow()->editorView();
+    const auto sizes = editor.hSplitter()->sizes();
+    CHECK(editor.inspector()->currentPage() == InspectorPage::Outliner);
+    REQUIRE(sizes[0] + sizes[1] > 0);
+    CHECK(std::abs(static_cast<double>(sizes[1]) / (sizes[0] + sizes[1]) - 0.42) < 0.02);
+    tabs->setCurrentIndex(0);
+    tabs->setCurrentIndex(1);
+    CHECK(editor.hSplitter()->sizes() == sizes);
+  }
+
+  SECTION("tool layout retains pinned height and uses stable tool ids")
+  {
+    auto* tools = window.findChild<ProjectToolPanel*>();
+    auto* pin = window.findChild<QToolButton*>("ProjectToolsPin");
+    auto* splitter = window.findChild<QSplitter*>("ProjectToolsSplitter");
+    REQUIRE(tools);
+    REQUIRE(pin);
+    REQUIRE(splitter);
+    tools->showInfoPage(InfoPanelPage::PythonConsole);
+    pin->setChecked(true);
+    QApplication::processEvents();
+    splitter->setSizes({350, 200});
+    QMetaObject::invokeMethod(splitter, "splitterMoved", Q_ARG(int, 350), Q_ARG(int, 1));
+    auto settings = QSettings{};
+    const auto saved = loadToolLayout(settings, WorkspaceKind::Project);
+    CHECK(saved.pinned);
+    CHECK(saved.expanded);
+    CHECK(saved.tool == "python-console");
+    const auto sizes = splitter->sizes();
+    CHECK(
+      std::abs(saved.heightRatio - static_cast<double>(sizes[1]) / (sizes[0] + sizes[1]))
+      < 0.01);
+    pin->setChecked(false);
+    pin->setChecked(true);
+    QApplication::processEvents();
+    const auto restored = splitter->sizes();
+    CHECK(
+      std::abs(
+        saved.heightRatio
+        - static_cast<double>(restored[1]) / (restored[0] + restored[1]))
+      < 0.02);
+    const auto modified = session->modified();
+    tools->resetLayout();
+    CHECK_FALSE(pin->isChecked());
+    CHECK_FALSE(tools->isExpanded());
+    CHECK(tools->currentTool() == ProjectToolId::ContentBrowser);
+    CHECK(session->modified() == modified);
   }
 
   SECTION("resource details track metadata dependencies and revisions")

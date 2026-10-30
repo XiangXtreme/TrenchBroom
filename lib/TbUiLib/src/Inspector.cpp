@@ -36,7 +36,6 @@
 #include "ui/SyncHeightEventFilter.h"
 #include "ui/TabBar.h"
 #include "ui/TabBook.h"
-#include "ui/WidgetState.h"
 #include "ui/outliner/OutlinerInspector.h"
 
 #include <array>
@@ -158,14 +157,10 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
   setLayout(layout);
 
   connect(m_tabBook, &TabBook::pageChanged, this, &Inspector::updateNavigation);
-  restoreWidgetState(m_tabBook);
   updateNavigation(m_tabBook->currentPageIndex());
 }
 
-Inspector::~Inspector()
-{
-  saveWidgetState(m_tabBook);
-}
+Inspector::~Inspector() = default;
 
 void Inspector::connectTopWidgets(MapViewBar* mapViewBar)
 {
@@ -180,6 +175,11 @@ void Inspector::connectTopWidgets(MapViewBar* mapViewBar)
 void Inspector::switchToPage(const InspectorPage page)
 {
   m_tabBook->switchToPage(static_cast<int>(page));
+}
+
+InspectorPage Inspector::currentPage() const
+{
+  return static_cast<InspectorPage>(m_tabBook->currentPageIndex());
 }
 
 void Inspector::updateNavigation(const int page)
@@ -214,7 +214,7 @@ QByteArray Inspector::saveState() const
 {
   auto result = QByteArray{};
   auto stream = QDataStream{&result, QIODevice::WriteOnly};
-  stream << isVisible();
+  stream << !isHidden();
   return result;
 }
 

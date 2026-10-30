@@ -8,6 +8,7 @@
 #include <QWidget>
 
 #include "ui/InfoPanel.h"
+#include "ui/WorkspaceLayout.h"
 
 #include <map>
 
@@ -50,9 +51,16 @@ class ProjectToolPanel : public QWidget
   ProjectToolId m_tool = ProjectToolId::ContentBrowser;
   bool m_expanded = false;
   bool m_changingMode = false;
+  bool m_restoringLayout = true;
+  bool m_layoutPending = true;
+  ToolLayout m_layout;
+  QString m_pendingTool;
 
 public:
   ProjectToolPanel(QWidget* workspace, QWidget* content, QWidget* parent = nullptr);
+  ~ProjectToolPanel() override;
+  void resetLayout();
+  void addStatusWidget(QWidget* status);
   /** Transfers panel ownership to this host, until unregisterMapEditor. */
   void registerMapEditor(MapEditorView& editor);
   /** Called before the editor's document and rendering context are released. */
@@ -69,6 +77,7 @@ signals:
   void extensionsRequested();
 
 protected:
+  void showEvent(QShowEvent* event) override;
   bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
@@ -76,5 +85,7 @@ private:
   void setExpanded(bool expanded, bool restoreFocus = true);
   void updatePage();
   void updateGeometryForMode();
+  void saveLayout();
+  void captureHeight();
 };
 } // namespace tb::ui

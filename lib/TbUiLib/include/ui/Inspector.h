@@ -72,6 +72,7 @@ public:
 
   void connectTopWidgets(MapViewBar* mapViewBar);
   void switchToPage(InspectorPage page);
+  InspectorPage currentPage() const;
   bool cancelMouseDrag();
 
   FaceInspector* faceInspector();

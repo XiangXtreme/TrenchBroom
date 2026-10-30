@@ -33,7 +33,6 @@
 #include "ui/PythonConsole.h"
 #include "ui/TabBar.h"
 #include "ui/TabBook.h"
-#include "ui/WidgetState.h"
 
 namespace tb::ui
 {
@@ -69,14 +68,9 @@ InfoPanel::InfoPanel(AppController& appController, MapDocument& document, QWidge
   sizer->setContentsMargins(0, 0, 0, 0);
   sizer->addWidget(m_tabBook);
   setLayout(sizer);
-
-  restoreWidgetState(m_tabBook);
 }
 
-InfoPanel::~InfoPanel()
-{
-  saveWidgetState(m_tabBook);
-}
+InfoPanel::~InfoPanel() = default;
 
 Console* InfoPanel::console() const
 {
@@ -111,7 +105,7 @@ QByteArray InfoPanel::saveState() const
 {
   auto result = QByteArray{};
   auto stream = QDataStream{&result, QIODevice::WriteOnly};
-  stream << isVisible();
+  stream << !isHidden();
   return result;
 }
 

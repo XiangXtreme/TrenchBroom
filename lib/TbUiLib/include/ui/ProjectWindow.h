@@ -31,6 +31,7 @@ class AssetLibraryWatcher;
 class MapDocument;
 class MapCommandSurface;
 class MapWindow;
+class MapStatus;
 class ProjectSession;
 class ProjectAssetPanel;
 class ProjectToolPanel;
@@ -42,6 +43,7 @@ class ProjectWindow : public QMainWindow
   std::shared_ptr<ProjectSession> m_session;
   ProjectAssetPanel* m_browser = nullptr;
   ProjectToolPanel* m_tools = nullptr;
+  MapStatus* m_status = nullptr;
   QWidget* m_emptyWorkspace = nullptr;
   QTreeWidget* m_assets = nullptr;
   QTreeWidget* m_history = nullptr;

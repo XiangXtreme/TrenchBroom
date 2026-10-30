@@ -6,6 +6,7 @@
 
 #include "ui/MapEditorView.h"
 
+#include <QSettings>
 #include <QVBoxLayout>
 
 #include "mdl/Map.h"
@@ -18,9 +19,9 @@
 #include "ui/PythonConsole.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableMapViewContainer.h"
-#include "ui/WidgetState.h"
 #include "ui/WorkbenchSurface.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <utility>
 
@@ -86,18 +87,89 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(6, 4, 6, 4);
   layout->addWidget(m_hSplitter);
+  restoreLayoutState();
 }
+
+namespace
+{
+WorkspaceKind layoutKind(AppController& app, MapDocument& document)
+{
+  return app.projectFor(document) ? WorkspaceKind::Project : WorkspaceKind::Map;
+}
+
+double splitRatio(const Splitter& splitter, const double fallback)
+{
+  const auto sizes = splitter.sizes();
+  const auto total = sizes[0] + sizes[1];
+  return total > 0 && sizes[1] > 0
+           ? std::clamp(static_cast<double>(sizes[1]) / total, 0.1, 0.8)
+           : fallback;
+}
+
+void setSplitRatio(Splitter& splitter, const double ratio)
+{
+  const auto total = std::max(
+    1,
+    (splitter.orientation() == Qt::Horizontal ? splitter.width() : splitter.height())
+      - splitter.handleWidth());
+  const auto second = static_cast<int>(ratio * total);
+  splitter.setSizes({total - second, second});
+}
+} // namespace
 
 void MapEditorView::restoreLayoutState()
 {
-  restoreWidgetState(m_hSplitter);
-  restoreWidgetState(m_vSplitter);
-  restoreWidgetState(m_inspector);
+  auto settings = QSettings{};
+  m_layout = loadEditorLayout(settings, layoutKind(m_appController, m_document));
+  m_inspector->setVisible(m_layout.inspectorVisible);
+  m_inspectorSurface->setVisible(m_layout.inspectorVisible);
+  m_inspector->switchToPage(m_layout.inspectorPage);
   if (!m_externalInfoPanel)
-    restoreWidgetState(m_infoPanel.data());
+  {
+    m_infoPanel->setVisible(m_layout.infoVisible);
+    m_infoPanel->switchToPage(m_layout.infoPage);
+  }
+  m_infoPanelSurface->setVisible(!m_externalInfoPanel && m_layout.infoVisible);
+  m_layoutPending = !isVisible();
+  if (!m_layoutPending)
+  {
+    applyLayoutState();
+  }
+}
 
-  m_inspectorSurface->setHidden(m_inspector->isHidden());
-  m_infoPanelSurface->setHidden(m_externalInfoPanel || m_infoPanel->isHidden());
+void MapEditorView::applyLayoutState()
+{
+  if (
+    !m_layout.legacyHorizontal.isEmpty()
+    && m_hSplitter->restoreState(m_layout.legacyHorizontal))
+    m_layout.inspectorRatio = splitRatio(*m_hSplitter, m_layout.inspectorRatio);
+  if (
+    !m_layout.legacyVertical.isEmpty()
+    && m_vSplitter->restoreState(m_layout.legacyVertical))
+    m_layout.infoRatio = splitRatio(*m_vSplitter, m_layout.infoRatio);
+  m_layout.legacyHorizontal.clear();
+  m_layout.legacyVertical.clear();
+  setSplitRatio(*m_hSplitter, m_layout.inspectorRatio);
+  setSplitRatio(*m_vSplitter, m_layout.infoRatio);
+  m_layoutPending = false;
+}
+
+void MapEditorView::showEvent(QShowEvent* event)
+{
+  QWidget::showEvent(event);
+  if (m_layoutPending)
+  {
+    layout()->activate();
+    applyLayoutState();
+  }
+}
+
+void MapEditorView::resetLayout()
+{
+  auto settings = QSettings{};
+  saveEditorLayout(settings, layoutKind(m_appController, m_document), EditorLayout{});
+  restoreLayoutState();
+  emit infoPanelVisibilityChanged();
 }
 
 MapEditorView::~MapEditorView()
@@ -195,6 +267,8 @@ void MapEditorView::showInspectorPage(const InspectorPage page)
 bool MapEditorView::toggleInspector()
 {
   const auto hidden = !m_inspectorSurface->isHidden();
+  if (hidden)
+    m_layout.inspectorRatio = splitRatio(*m_hSplitter, m_layout.inspectorRatio);
   m_inspector->setHidden(hidden);
   m_inspectorSurface->setHidden(hidden);
   return hidden;
@@ -202,7 +276,7 @@ bool MapEditorView::toggleInspector()
 
 bool MapEditorView::isInspectorVisible() const
 {
-  return m_inspectorSurface->isVisible();
+  return !m_inspectorSurface->isHidden();
 }
 
 bool MapEditorView::toggleInfoPanel()
@@ -213,6 +287,8 @@ bool MapEditorView::toggleInfoPanel()
     return !m_externalInfoPanelExpanded;
   }
   const auto hidden = !m_infoPanelSurface->isHidden();
+  if (hidden)
+    m_layout.infoRatio = splitRatio(*m_vSplitter, m_layout.infoRatio);
   m_infoPanel->setHidden(hidden);
   m_infoPanelSurface->setHidden(hidden);
   return hidden;
@@ -221,7 +297,7 @@ bool MapEditorView::toggleInfoPanel()
 bool MapEditorView::isInfoPanelVisible() const
 {
   return m_externalInfoPanel ? m_externalInfoPanelExpanded
-                             : m_infoPanelSurface->isVisible();
+                             : !m_infoPanelSurface->isHidden();
 }
 
 void MapEditorView::undo()
@@ -318,11 +394,23 @@ bool MapEditorView::cancelDrag()
 
 void MapEditorView::saveWidgetState() const
 {
-  tb::ui::saveWidgetState(m_hSplitter);
-  tb::ui::saveWidgetState(m_vSplitter);
-  tb::ui::saveWidgetState(m_inspector);
-  if (!m_externalInfoPanel)
-    tb::ui::saveWidgetState(m_infoPanel.data());
+  // An unopened background view must not replace the last visible workspace layout.
+  if (m_layoutPending)
+    return;
+  auto layout = m_layout;
+  layout.inspectorVisible = !m_inspectorSurface->isHidden();
+  layout.inspectorPage = m_inspector->currentPage();
+  if (layout.inspectorVisible && !m_layoutPending)
+    layout.inspectorRatio = splitRatio(*m_hSplitter, layout.inspectorRatio);
+  if (!m_externalInfoPanel && m_infoPanel)
+  {
+    layout.infoVisible = !m_infoPanelSurface->isHidden();
+    layout.infoPage = m_infoPanel->currentPage();
+    if (layout.infoVisible && !m_layoutPending)
+      layout.infoRatio = splitRatio(*m_vSplitter, layout.infoRatio);
+  }
+  auto settings = QSettings{};
+  saveEditorLayout(settings, layoutKind(m_appController, m_document), layout);
 }
 
 } // namespace tb::ui

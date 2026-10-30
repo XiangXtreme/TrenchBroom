@@ -22,6 +22,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSaveFile>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -47,6 +48,7 @@
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
+#include "ui/MapStatus.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectAssetPanel.h"
@@ -276,7 +278,18 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   m_history->setRootIsDecorated(false);
   contentTabs->addTab(m_history, tr("History"));
   m_tools = new ProjectToolPanel{body, contentTabs, this};
+  m_status = new MapStatus{m_tools};
+  m_tools->addStatusWidget(m_status);
   file->addAction(tr("Content Browser"), m_tools, &ProjectToolPanel::showContent);
+  auto* workspaceMenu = menuBar()->addMenu(tr("Workspace"));
+  workspaceMenu->addAction(tr("Reset Layout"), this, [this]() {
+    m_tools->resetLayout();
+    auto settings = QSettings{};
+    saveEditorLayout(settings, WorkspaceKind::Project, EditorLayout{});
+    for (auto* mapWindow :
+         m_maps->findChildren<MapWindow*>(QString{}, Qt::FindDirectChildrenOnly))
+      mapWindow->editorView().resetLayout();
+  });
   connect(m_tools, &ProjectToolPanel::extensionsRequested, this, [this]() {
     if (auto* window = activeMapWindow())
       window->switchToInspectorPage(InspectorPage::Plugin);
@@ -404,6 +417,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
 ProjectWindow::~ProjectWindow()
 {
   m_closing = true;
+  m_status->setDocument(nullptr);
   disconnect(&m_appController.mapWindowManager(), nullptr, this, nullptr);
   delete std::exchange(m_browser, nullptr);
   // Destroy map widgets while the session and host command surface still exist.
@@ -446,6 +460,8 @@ void ProjectWindow::refreshCommands()
 {
   if (m_closing)
     return;
+  m_status->setDocument(
+    activeMapWindow() ? activeMapWindow()->documentHandle() : nullptr);
   m_commands->updateShortcuts();
   auto* mapSave = m_commands->findAction(
     m_appController.actionManager().actionsMap().at("Menu/File/Save"));
@@ -772,7 +788,12 @@ void ProjectWindow::refreshMapTabs()
       auto* editor = window->findChild<MapEditorView*>();
       m_tools->registerMapEditor(*editor);
       connect(
-        window, &MapWindow::toolPanelsAboutToBeDestroyed, m_tools, [this, editor]() {
+        window,
+        &MapWindow::toolPanelsAboutToBeDestroyed,
+        m_tools,
+        [this, editor, window]() {
+          if (activeMapWindow() == window)
+            m_status->setDocument(nullptr);
           m_tools->unregisterMapEditor(*editor);
         });
       connect(
