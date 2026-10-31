@@ -75,7 +75,7 @@ public:
 
   bool active() const;
   MapViewLayout currentMapViewLayout() const;
-  void switchToMapView(MapViewLayout viewId);
+  void switchToMapView(MapViewLayout viewId, bool restoreLayout = false);
 
   bool anyModalToolActive() const;
   void deactivateCurrentTool();

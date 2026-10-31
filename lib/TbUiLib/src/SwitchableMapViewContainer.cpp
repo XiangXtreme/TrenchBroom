@@ -25,7 +25,7 @@
 #include "mdl/Map.h"
 #include "mdl/PointTrace.h"
 #include "prefs/Preferences.h"
-#include "ui/FourPaneMapView.h"
+#include "ui/AreaMapView.h"
 #include "ui/InputState.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
@@ -34,9 +34,6 @@
 #include "ui/MapViewContainer.h"
 #include "ui/MapViewLayout.h"
 #include "ui/MapViewToolBox.h"
-#include "ui/OnePaneMapView.h"
-#include "ui/ThreePaneMapView.h"
-#include "ui/TwoPaneMapView.h"
 
 #include "kd/contracts.h"
 
@@ -52,7 +49,7 @@ SwitchableMapViewContainer::SwitchableMapViewContainer(
   , m_activationTracker{std::make_unique<MapViewActivationTracker>()}
 {
   setObjectName("SwitchableMapViewContainer");
-  switchToMapView(static_cast<MapViewLayout>(pref(Preferences::MapViewLayout)));
+  switchToMapView(static_cast<MapViewLayout>(pref(Preferences::MapViewLayout)), true);
   connectObservers();
 }
 
@@ -89,8 +86,12 @@ MapViewLayout SwitchableMapViewContainer::currentMapViewLayout() const
   return m_currentMapViewLayout;
 }
 
-void SwitchableMapViewContainer::switchToMapView(const MapViewLayout viewId)
+void SwitchableMapViewContainer::switchToMapView(
+  const MapViewLayout viewId, const bool restoreLayout)
 {
+  // Native focusChanged is synchronous. Move focus to a surviving owner while every
+  // old view still has its complete vtable, before deleting the focused GL widget.
+  setFocus(Qt::OtherFocusReason);
   m_activationTracker->clear();
 
   // NOTE: not all widgets are deleted so we can't use deleteChildWidgetsAndLayout()
@@ -99,22 +100,8 @@ void SwitchableMapViewContainer::switchToMapView(const MapViewLayout viewId)
 
   delete layout();
 
-  switch (viewId)
-  {
-  case MapViewLayout::OnePane:
-    m_mapView = new OnePaneMapView{m_appController, m_document, *m_toolBox};
-    break;
-  case MapViewLayout::TwoPanes:
-    m_mapView = new TwoPaneMapView{m_appController, m_document, *m_toolBox};
-    break;
-  case MapViewLayout::ThreePanes:
-    m_mapView = new ThreePaneMapView{m_appController, m_document, *m_toolBox};
-    break;
-  case MapViewLayout::FourPanes:
-    m_mapView = new FourPaneMapView{m_appController, m_document, *m_toolBox};
-    break;
-    switchDefault();
-  }
+  m_mapView =
+    new AreaMapView{m_appController, m_document, *m_toolBox, viewId, restoreLayout};
 
   installActivationTracker(*m_activationTracker);
 

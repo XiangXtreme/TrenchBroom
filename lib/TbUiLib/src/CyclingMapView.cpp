@@ -72,6 +72,7 @@ void CyclingMapView::createGui(
   }
 
   m_layout = new QStackedLayout{};
+  m_layout->setContentsMargins(0, 0, 0, 0);
   // NOTE: It's important to setLayout() before adding widgets, rather than after.
   // Otherwise, they get setVisible immediately (and the first render calls happen during
   // the for loop), which breaks multisampling

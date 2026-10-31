@@ -32,6 +32,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMouseEvent>
 #include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
@@ -73,7 +74,9 @@
 #include "prefs/Preferences.h"
 #include "ui/ActionExecutionContext.h"
 #include "ui/AppController.h"
+#include "ui/AreaMapView.h"
 #include "ui/CommandPaletteDialog.h"
+#include "ui/CyclingMapView.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
@@ -86,6 +89,7 @@
 #include "ui/PluginInspector.h"
 #include "ui/PreferenceDialog.h"
 #include "ui/QPathUtils.h"
+#include "ui/SwitchableMapViewContainer.h"
 #include "ui/ThemeRegistry.h"
 #include "ui/UiSnapshot.h"
 #include "ui/WelcomeWindow.h"
@@ -105,6 +109,9 @@ bool isSupportedUiSnapshotPage(const QString& page)
 {
   static const auto pages = QStringList{
     QStringLiteral("map"),
+    QStringLiteral("map-areas"),
+    QStringLiteral("map-area-split-preview"),
+    QStringLiteral("map-area-join-preview"),
     QStringLiteral("outliner"),
     QStringLiteral("outliner-hierarchy"),
     QStringLiteral("outliner-filter"),
@@ -764,6 +771,18 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
 
 UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& targetName)
 {
+  if (targetName == "map-areas" || targetName.startsWith("map-area-"))
+  {
+    auto* areas = targetWidget.findChild<AreaMapView*>();
+    auto* preview = targetWidget.findChild<QWidget*>("MapViewAreaPreview");
+    if (!areas || areas->areas().size() != 4
+        || (targetName != "map-areas" && (!preview || !preview->isVisible()
+            || preview->property("join").toBool() != (targetName == "map-area-join-preview"))))
+      return {
+        UiSnapshotReadinessState::Failed,
+        "Map area layout or gesture preview is missing"};
+    return {UiSnapshotReadinessState::Ready, "Map area layout and gesture state ready"};
+  }
   if (auto* tools = targetWidget.findChild<WorkspaceToolPanel*>();
       tools && tools->isAnimating())
     return {
@@ -1020,9 +1039,58 @@ void configurePreferencesSnapshot(
   }
 }
 
+void configureMapAreaSnapshot(QWidget& targetWidget, const QString& targetName)
+{
+  auto* container = targetWidget.findChild<SwitchableMapViewContainer*>();
+  if (!container)
+    return;
+  if (!targetWidget.property("mapAreasInitialized").toBool())
+  {
+    container->switchToMapView(MapViewLayout::FourPanes);
+    targetWidget.setProperty("mapAreasInitialized", true);
+  }
+  if (
+    !targetWidget.isVisible() || targetName == "map-areas"
+    || targetWidget.property("mapAreaGestureStarted").toBool())
+    return;
+  auto* layout = container->findChild<AreaMapView*>();
+  auto areas = layout->areas();
+  std::ranges::sort(areas, {}, [&](auto* area) {
+    const auto p = area->mapTo(layout, QPoint{});
+    return p.y() * layout->width() + p.x();
+  });
+  auto* source = areas.front();
+  auto* grip = source->findChild<QWidget*>("MapViewAreaGrip");
+  const auto start = grip->mapToGlobal(grip->rect().center());
+  const auto destination = targetName == "map-area-join-preview"
+                             ? areas[1]->mapToGlobal(areas[1]->rect().center())
+                             : source->mapToGlobal(source->rect().center());
+  auto press = QMouseEvent{
+    QEvent::MouseButtonPress,
+    QPointF{grip->rect().center()},
+    QPointF{start},
+    Qt::LeftButton,
+    Qt::LeftButton,
+    Qt::NoModifier};
+  QApplication::sendEvent(grip, &press);
+  auto move = QMouseEvent{
+    QEvent::MouseMove,
+    QPointF{grip->mapFromGlobal(destination)},
+    QPointF{destination},
+    Qt::NoButton,
+    Qt::LeftButton,
+    Qt::NoModifier};
+  QApplication::sendEvent(grip, &move);
+  targetWidget.setProperty("mapAreaGestureStarted", true);
+}
+
 void configureSnapshot(QWidget& targetWidget, const QString& targetName)
 {
-  if (targetName.startsWith(QStringLiteral("project-")))
+  if (targetName == "map-areas" || targetName.startsWith("map-area-"))
+  {
+    configureMapAreaSnapshot(targetWidget, targetName);
+  }
+  else if (targetName.startsWith(QStringLiteral("project-")))
   {
     configureWorkspaceSnapshot(targetWidget, targetName);
   }

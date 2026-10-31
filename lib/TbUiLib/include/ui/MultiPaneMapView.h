@@ -52,6 +52,7 @@ public:
 
 protected:
   void addMapView(MapView* mapView);
+  void removeMapView(MapView* mapView);
 
 public: // implement MapView interface
   void installActivationTracker(MapViewActivationTracker& activationTracker) override;

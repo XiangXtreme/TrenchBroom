@@ -31,6 +31,12 @@
 
 namespace tb::ui
 {
+void CameraLinkHelper::clear()
+{
+  m_notifierConnection.disconnect();
+  m_cameras.clear();
+}
+
 void CameraLinkHelper::addCamera(gl::Camera* camera)
 {
   contract_pre(camera != nullptr);

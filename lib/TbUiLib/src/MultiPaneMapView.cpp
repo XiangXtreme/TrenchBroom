@@ -42,6 +42,12 @@ void MultiPaneMapView::addMapView(MapView* mapView)
   mapView->setContainer(this);
 }
 
+void MultiPaneMapView::removeMapView(MapView* mapView)
+{
+  contract_pre(!m_maximizedView);
+  std::erase(m_mapViews, mapView);
+}
+
 void MultiPaneMapView::installActivationTracker(
   MapViewActivationTracker& activationTracker)
 {

@@ -94,7 +94,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/FlashSelectionAnimation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/FlyModeHelper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/FormWithSectionsLayout.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/FourPaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GameDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GameEngineDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GameEngineProfileEditor.cpp
@@ -162,9 +161,9 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolRegistry.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MultiCompletionLineEdit.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/AreaMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MultiPaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ObjExportDialog.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/OnePaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/outliner/OutlinerEntityPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/outliner/OutlinerInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/outliner/OutlinerTreeWidget.cpp
@@ -254,13 +253,11 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TextOutputAdapter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Theme.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ThemeRegistry.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ThreePaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TitleBar.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TitledPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ToolBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ToolBoxConnector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TransformCard.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/TwoPaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UiSnapshot.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UvEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UvView.cpp
@@ -359,7 +356,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/FlashSelectionAnimation.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/FlyModeHelper.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/FormWithSectionsLayout.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/FourPaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/GameDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/GameEngineDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/GameEngineProfileEditor.h
@@ -433,9 +429,9 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpBridgeServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpHttpServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MultiCompletionLineEdit.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AreaMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MultiPaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ObjExportDialog.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/OnePaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/outliner/OutlinerEntityPropertyEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/outliner/OutlinerInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/outliner/OutlinerTreeWidget.h
@@ -523,13 +519,11 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TextOutputAdapter.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/Theme.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ThemeRegistry.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ThreePaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TitleBar.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TitledPanel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ToolBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ToolBoxConnector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TransformCard.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TwoPaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UiSnapshot.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UvEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UvView.h

@@ -153,3 +153,11 @@ Before completing a component-style change:
 
 Migration should remove duplicate styling as each family becomes canonical. Do not preserve
 an accidental visual difference by naming it as a new role.
+
+## Map view area gestures
+
+`AreaMapView` owns the corner grip and split/join preview as domain layout visuals.
+They use the application palette (Mid, Accent, Window and WindowText), have no local stylesheet,
+and do not replace a foundational control. The grip supports pointer dragging and
+keyboard access to the normal Qt context menu. Accept `map-areas`,
+`map-area-split-preview` and `map-area-join-preview` across the theme/scale matrix.

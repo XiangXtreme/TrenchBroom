@@ -41,6 +41,7 @@ private:
   NotifierConnection m_notifierConnection;
 
 public:
+  void clear();
   void addCamera(gl::Camera* camera);
   void updateCameras(const gl::Camera& masterCamera);
 
