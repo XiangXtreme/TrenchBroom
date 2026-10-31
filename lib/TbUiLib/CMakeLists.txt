@@ -28,6 +28,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationValidation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AppInfoPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetBrowserModel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryImport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryWatcher.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetPreviewProvider.cpp
@@ -292,6 +293,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AppController.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AppInfoPanel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetBrowserModel.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryImport.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryWatcher.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetPreviewProvider.h

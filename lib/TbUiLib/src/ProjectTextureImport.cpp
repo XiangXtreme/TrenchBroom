@@ -8,8 +8,6 @@
 #include <QDialogButtonBox>
 #include <QImage>
 #include <QInputDialog>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPixmap>
@@ -17,6 +15,7 @@
 
 #include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
+#include "ui/AssetLibraryImport.h"
 #include "ui/QPathUtils.h"
 
 namespace tb::ui
@@ -40,16 +39,8 @@ Result<bool> prepareProjectTexture(
     name = pathAsQString(std::filesystem::path{previous->publishPath}.stem());
   else
   {
-    for (const auto c : QString::fromStdString(asset.displayName))
-      name += (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z')
-                  || (c >= u'0' && c <= u'9') || c == u'_' || c == u'-'
-                ? c
-                : QChar{u'_'};
-    if (name.isEmpty())
-      name = "texture";
-    if (image.alphaDomain != img::ImageAlphaDomain::Opaque)
-      name.prepend('{');
-    name.truncate(15);
+    name = QString::fromStdString(goldSrcTextureNameFromStem(
+      asset.displayName, image.alphaDomain != img::ImageAlphaDomain::Opaque));
     bool accepted = false;
     name = QInputDialog::getText(
       parent,
@@ -112,17 +103,11 @@ Result<bool> prepareProjectTexture(
   if (!libraryAsset)
     asset.virtualPath = "textures/" + result.name + ".wad";
   asset.compatible = result.wad;
-  asset.conversionRecipe = QJsonDocument{QJsonObject{
-                                           {"importer", "goldsrc-texture"},
-                                           {"version", 1},
-                                           {"name", name},
-                                           {"width", int(result.preview.width)},
-                                           {"height", int(result.preview.height)},
-                                           {"masked", result.masked},
-                                           {"alphaThreshold", 128},
-                                           {"formatValidated", true}}}
-                             .toJson(QJsonDocument::Compact)
-                             .toStdString();
+  asset.conversionRecipe = goldSrcTextureRecipe(
+    result.name,
+    static_cast<std::uint32_t>(result.preview.width),
+    static_cast<std::uint32_t>(result.preview.height),
+    result.masked);
   return true;
 }
 } // namespace tb::ui

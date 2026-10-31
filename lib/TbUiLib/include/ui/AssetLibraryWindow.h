@@ -5,9 +5,11 @@
 #pragma once
 
 #include <QDialog>
+#include <QStringList>
 
 #include "project/AssetLibrary.h"
 
+#include <cstddef>
 #include <memory>
 
 class QLabel;
@@ -18,11 +20,12 @@ namespace tb::ui
 {
 
 /**
- * Standalone asset library window.
+ * The application-wide asset library manager, opened from the welcome page.
  *
- * A library is an independent resource collection, so it must be possible to create,
- * inspect and rescan one without opening a project. The window owns nothing but the
- * catalog handle: it never touches project state.
+ * The library is a single folder configured once; projects never choose their own. The
+ * window imports source files into it, converts images to GoldSrc texture content and
+ * shows the current catalog. It owns nothing but the catalog handle and never touches
+ * project state.
  */
 class AssetLibraryWatcher;
 
@@ -41,8 +44,12 @@ public:
 private:
   void chooseFolder();
   void openFolder(const std::filesystem::path& folder, bool createIfMissing);
+  void importFiles();
   void rescan();
   void convertImages();
+  // Converts every library image without converted content. Returns how many textures
+  // were stored; individual failures are appended to `problems`.
+  std::size_t convertPendingImages(QStringList& problems);
   void reload();
 };
 } // namespace tb::ui

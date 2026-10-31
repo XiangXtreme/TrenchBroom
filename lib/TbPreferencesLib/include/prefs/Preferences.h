@@ -262,6 +262,10 @@ inline auto MaterialBrowserIconSize =
   Preference<float>{"Texture Browser/Icon size", 1.0f};
 inline auto AssetBrowserIconSize = Preference<float>{"Asset Browser/Icon size", 1.0f};
 inline auto PrefabDirectory = Preference<std::filesystem::path>{"Prefab/Directory", {}};
+// The single asset library every project shares. Importing, converting and browsing
+// happen from the welcome page manager; projects never choose their own library.
+inline auto AssetLibraryDirectory =
+  Preference<std::filesystem::path>{"AssetLibrary/Directory", {}};
 inline auto MaterialBrowserDefaultColor =
   Preference<Color>{"Texture Browser/Default color", RgbaF{0.0f, 0.0f, 0.0f, 0.0f}};
 inline auto MaterialBrowserSelectedColor =

@@ -14,21 +14,47 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QSettings>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include "base/PreferenceManager.h"
+#include "prefs/Preferences.h"
+#include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryWatcher.h"
-#include "ui/ProjectTextureImport.h"
 #include "ui/QPathUtils.h"
 
 #include <fmt/format.h>
+
+#include <algorithm>
+#include <vector>
 
 namespace tb::ui
 {
 namespace
 {
-constexpr auto LastFolderKey = "AssetLibrary/LastFolder";
+enum class ConflictMode
+{
+  Overwrite,
+  KeepBoth,
+  Skip,
+};
+
+// Finds a free name next to an existing target, e.g. "wall_1.png".
+std::filesystem::path uniqueRelativePath(
+  const std::filesystem::path& libraryFolder, const std::filesystem::path& relative)
+{
+  if (!std::filesystem::exists(libraryFolder / relative))
+    return relative;
+  const auto parent = relative.parent_path();
+  const auto stem = relative.stem().string();
+  const auto extension = relative.extension().string();
+  for (auto counter = 1;; ++counter)
+  {
+    const auto candidate = parent / fmt::format("{}_{}{}", stem, counter, extension);
+    if (!std::filesystem::exists(libraryFolder / candidate))
+      return candidate;
+  }
+}
 
 QString sizeText(const std::uint64_t bytes)
 {
@@ -52,11 +78,13 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   m_path->setReadOnly(true);
   m_path->setPlaceholderText(tr("No asset library open"));
   auto* browse = new QPushButton{tr("Open Folder…"), this};
+  auto* importButton = new QPushButton{tr("Import Files…"), this};
   auto* rescanButton = new QPushButton{tr("Rescan"), this};
   auto* convertButton = new QPushButton{tr("Convert Images…"), this};
   auto* row = new QHBoxLayout{};
   row->addWidget(m_path, 1);
   row->addWidget(browse);
+  row->addWidget(importButton);
   row->addWidget(rescanButton);
   row->addWidget(convertButton);
   layout->addLayout(row);
@@ -81,15 +109,17 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   layout->addWidget(buttons);
 
   connect(browse, &QPushButton::clicked, this, [this]() { chooseFolder(); });
+  connect(importButton, &QPushButton::clicked, this, [this]() { importFiles(); });
   connect(rescanButton, &QPushButton::clicked, this, [this]() { rescan(); });
   connect(convertButton, &QPushButton::clicked, this, [this]() { convertImages(); });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-  // Reopening the window continues with the library used last; the path is only a
-  // convenience, the library identity lives in the catalog itself.
-  const auto last = QSettings{}.value(LastFolderKey).toString();
-  if (!last.isEmpty() && QFileInfo{last}.isDir())
-    openFolder(pathFromQString(last), false);
+  // The library folder is application-wide, so opening the manager always shows the
+  // configured library. The catalog itself owns the library identity.
+  const auto configured =
+    PreferenceManager::instance().get(Preferences::AssetLibraryDirectory);
+  if (!configured.empty() && QFileInfo{pathAsQString(configured)}.isDir())
+    openFolder(configured, false);
   else
     reload();
 }
@@ -159,7 +189,7 @@ void AssetLibraryWindow::openFolder(
     reload();
     return;
   }
-  QSettings{}.setValue(LastFolderKey, pathAsQString(folder));
+  PreferenceManager::instance().set(Preferences::AssetLibraryDirectory, folder);
   reload();
 }
 
@@ -182,6 +212,147 @@ void AssetLibraryWindow::rescan()
   reload();
 }
 
+void AssetLibraryWindow::importFiles()
+{
+  if (!m_library)
+  {
+    QMessageBox::information(
+      this,
+      tr("Import Assets"),
+      tr("Configure and open an asset library folder first."));
+    return;
+  }
+
+  const auto files = QFileDialog::getOpenFileNames(
+    this,
+    tr("Import Assets"),
+    {},
+    tr("Supported assets (*.png *.jpg *.jpeg *.bmp *.tga *.wad *.mdl *.spr *.wav);;"
+       "All files (*)"));
+  if (files.isEmpty())
+    return;
+
+  struct Entry
+  {
+    std::filesystem::path source;
+    std::filesystem::path relative;
+    bool conflict = false;
+  };
+
+  auto entries = std::vector<Entry>{};
+  for (const auto& file : files)
+  {
+    const auto source = pathFromQString(file);
+    const auto folder = librarySubfolderForFile(source);
+    if (folder.empty())
+      continue;
+    const auto relative = folder / source.filename();
+    entries.push_back(
+      {source, relative, std::filesystem::exists(m_library->folder() / relative)});
+  }
+  if (entries.empty())
+  {
+    QMessageBox::information(
+      this,
+      tr("Import Assets"),
+      tr("None of the selected files can be stored in an asset library."));
+    return;
+  }
+
+  const auto conflicts = std::count_if(
+    entries.begin(), entries.end(), [](const Entry& entry) { return entry.conflict; });
+  auto mode = ConflictMode::Overwrite;
+  if (conflicts > 0)
+  {
+    auto box = QMessageBox{
+      QMessageBox::Question,
+      tr("Import Assets"),
+      tr("%1 file(s) already exist in the library.").arg(int(conflicts)),
+      QMessageBox::NoButton,
+      this};
+    auto* overwrite = box.addButton(tr("Overwrite"), QMessageBox::AcceptRole);
+    auto* keepBoth = box.addButton(tr("Keep Both"), QMessageBox::ActionRole);
+    auto* skip = box.addButton(tr("Skip"), QMessageBox::ActionRole);
+    box.addButton(QMessageBox::Cancel);
+    box.exec();
+    if (box.clickedButton() == overwrite)
+      mode = ConflictMode::Overwrite;
+    else if (box.clickedButton() == keepBoth)
+      mode = ConflictMode::KeepBoth;
+    else if (box.clickedButton() == skip)
+      mode = ConflictMode::Skip;
+    else
+      return;
+  }
+
+  auto imported = std::vector<std::string>{};
+  auto problems = QStringList{};
+  auto skipped = 0;
+  for (auto& entry : entries)
+  {
+    if (entry.conflict && mode == ConflictMode::Skip)
+    {
+      ++skipped;
+      continue;
+    }
+    if (entry.conflict && mode == ConflictMode::KeepBoth)
+      entry.relative = uniqueRelativePath(m_library->folder(), entry.relative);
+    if (entry.conflict && mode == ConflictMode::Overwrite)
+      std::filesystem::remove(m_library->folder() / entry.relative);
+
+    const auto added = importFileIntoLibrary(
+      m_library->folder(), entry.source, entry.relative.generic_string());
+    if (added.is_error())
+      problems << QString::fromStdString(std::get<Error>(added.error()).msg);
+    else
+      imported.push_back(added.value());
+  }
+
+  auto converted = std::size_t{0};
+  if (!imported.empty())
+  {
+    const auto scanned = m_library->scan();
+    if (scanned.is_error())
+      problems << QString::fromStdString(std::get<Error>(scanned.error()).msg);
+    else
+    {
+      if (!scanned.value().warning.empty())
+        problems << QString::fromStdString(scanned.value().warning);
+
+      const auto assets = m_library->assets(project::AssetType::Texture);
+      if (assets.is_error())
+        problems << QString::fromStdString(std::get<Error>(assets.error()).msg);
+      else
+        for (const auto& asset : assets.value())
+        {
+          if (
+            asset.nativeFormat != "image"
+            || std::find(imported.begin(), imported.end(), asset.virtualPath)
+                 == imported.end())
+            continue;
+          const auto result = convertLibraryImage(*m_library, asset.id);
+          if (result.is_error())
+            problems << QString::fromStdString(std::get<Error>(result.error()).msg);
+          else if (result.value())
+            ++converted;
+        }
+    }
+  }
+
+  reload();
+  auto summary = tr("Imported %1 file(s); converted %2 texture(s).")
+                   .arg(int(imported.size()))
+                   .arg(int(converted));
+  if (skipped > 0)
+    summary += " " + tr("%1 skipped.").arg(skipped);
+  m_summary->setText(summary);
+  if (!problems.isEmpty())
+    QMessageBox::warning(
+      this,
+      tr("Import Assets"),
+      problems.mid(0, 10).join("\n") + (problems.size() > 10 ? "\n…" : QString{}));
+}
+
 void AssetLibraryWindow::convertImages()
 {
   if (!m_library)
@@ -201,14 +372,14 @@ void AssetLibraryWindow::convertImages()
     return;
   }
 
-  auto images = std::vector<project::LibraryAsset>{};
-  for (const auto& asset : assets.value())
-    if (asset.nativeFormat == "image" || asset.nativeFormat == "goldsrc-wad")
-      images.push_back(asset);
-  if (images.empty())
+  const auto pending = std::count_if(
+    assets.value().begin(), assets.value().end(), [](const auto& asset) {
+      return asset.nativeFormat == "image";
+    });
+  if (pending == 0)
   {
     QMessageBox::information(
-      this, tr("Convert Images"), tr("This library contains no convertible images."));
+      this, tr("Convert Images"), tr("This library contains no unconverted images."));
     return;
   }
 
@@ -216,58 +387,42 @@ void AssetLibraryWindow::convertImages()
     QMessageBox::question(
       this,
       tr("Convert Images"),
-      tr("Convert %1 image(s) to GoldSrc textures?\n\nThe original images stay in the "
-         "library and each converted texture is stored as a new revision.")
-        .arg(images.size()))
+      tr("Convert %1 image(s) to GoldSrc textures?\n\nThe converted textures replace "
+         "the current library content; the original images stay in the folder.")
+        .arg(int(pending)))
     != QMessageBox::Yes)
     return;
 
-  auto converted = 0;
-  auto failed = 0;
-  auto cancelled = false;
-  for (const auto& image : images)
+  auto problems = QStringList{};
+  const auto converted = convertPendingImages(problems);
+  reload();
+  auto message = tr("Converted %1 image(s).").arg(int(converted));
+  if (!problems.isEmpty())
+    message += " " + tr("%1 image(s) failed.").arg(problems.size());
+  m_summary->setText(message);
+}
+
+std::size_t AssetLibraryWindow::convertPendingImages(QStringList& problems)
+{
+  const auto assets = m_library->assets(project::AssetType::Texture);
+  if (assets.is_error())
   {
-    auto original = m_library->readOriginal(image.id);
-    if (original.is_error())
-    {
-      ++failed;
-      continue;
-    }
-
-    auto import = project::AssetImport{};
-    import.type = project::AssetType::Texture;
-    import.displayName = image.displayName;
-    import.virtualPath = image.virtualPath;
-    import.sourceName = image.virtualPath;
-    import.original = std::move(original).value();
-
-    const auto prepared = prepareProjectTexture(this, import, std::nullopt, true);
-    if (prepared.is_error())
-    {
-      ++failed;
-      continue;
-    }
-    if (!prepared.value())
-    {
-      cancelled = true;
-      break;
-    }
-
-    if (m_library
-          ->publishCompatibleContent(image.id, import.compatible, import.conversionRecipe)
-          .is_error())
-      ++failed;
-    else
-      ++converted;
+    problems << QString::fromStdString(std::get<Error>(assets.error()).msg);
+    return 0;
   }
 
-  reload();
-  auto message = tr("Converted %1 image(s).").arg(converted);
-  if (failed > 0)
-    message += " " + tr("%1 image(s) failed.").arg(failed);
-  if (cancelled)
-    message += " " + tr("Conversion cancelled.");
-  m_summary->setText(message);
+  auto converted = std::size_t{0};
+  for (const auto& asset : assets.value())
+  {
+    if (asset.nativeFormat != "image")
+      continue;
+    const auto result = convertLibraryImage(*m_library, asset.id);
+    if (result.is_error())
+      problems << QString::fromStdString(std::get<Error>(result.error()).msg);
+    else if (result.value())
+      ++converted;
+  }
+  return converted;
 }
 
 void AssetLibraryWindow::reload()
