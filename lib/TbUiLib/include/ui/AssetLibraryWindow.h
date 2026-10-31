@@ -20,21 +20,23 @@ class QFormLayout;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QPushButton;
 class QSlider;
 class QToolButton;
 
 namespace tb::ui
 {
 class AssetLibraryItemDelegate;
+class AssetLibraryListView;
 class AssetLibrarySource;
 
 /**
  * The application-wide asset library browser.
  *
- * Mirrors the Blender-style layout the project settled on: categories and smart filters
- * on the left, an asset grid in the middle and an inspector on the right. Everything is
- * read through AssetLibrarySource, so a remote library can replace the local folder
- * without touching this window.
+ * Mirrors the layout the project settled on: the library identity and its actions in a
+ * header bar, categories and smart filters on the left, an asset grid in the middle and
+ * an inspector on the right. Everything is read through AssetLibrarySource, so a remote
+ * library can replace the local folder without touching this window.
  */
 class AssetLibraryWindow : public QDialog
 {
@@ -44,15 +46,26 @@ class AssetLibraryWindow : public QDialog
   std::optional<std::string> m_selectedId;
   QString m_filter = QStringLiteral("all");
   QString m_search;
+  bool m_listMode = false;
 
+  QLabel* m_libraryBadge = nullptr;
   QLabel* m_libraryLabel = nullptr;
+  QLabel* m_libraryPath = nullptr;
+  QLabel* m_libraryChip = nullptr;
+  QPushButton* m_changeButton = nullptr;
+  QPushButton* m_importButton = nullptr;
+  QPushButton* m_rescanButton = nullptr;
+  QPushButton* m_convertButton = nullptr;
+  QPushButton* m_revealButton = nullptr;
   QLineEdit* m_searchEdit = nullptr;
-  QListWidget* m_categories = nullptr;
-  QListWidget* m_grid = nullptr;
+  AssetLibraryListView* m_categories = nullptr;
+  AssetLibraryListView* m_grid = nullptr;
   AssetLibraryItemDelegate* m_delegate = nullptr;
   QSlider* m_sizeSlider = nullptr;
+  QLabel* m_sizeValue = nullptr;
   QToolButton* m_gridButton = nullptr;
   QToolButton* m_listButton = nullptr;
+  QLabel* m_countLabel = nullptr;
   QLabel* m_preview = nullptr;
   QComboBox* m_previewMode = nullptr;
   QLabel* m_name = nullptr;
@@ -64,11 +77,19 @@ class AssetLibraryWindow : public QDialog
 
 public:
   explicit AssetLibraryWindow(QWidget* parent = nullptr);
+  /**
+   * Opens `folder` instead of the remembered library.
+   *
+   * Used by the UI snapshot runner, which browses a disposable fixture and must not
+   * rewrite the user's remembered library folder.
+   */
+  AssetLibraryWindow(const QString& folder, bool remember, QWidget* parent = nullptr);
   ~AssetLibraryWindow() override;
 
 private:
+  void buildUi();
   void chooseLibrary();
-  void openLibrary(const QString& folder);
+  void openLibrary(const QString& folder, bool remember = true);
   void reload();
   void refreshCategories();
   void refreshGrid();
@@ -76,6 +97,9 @@ private:
   void clearInspector();
   void updatePreview();
   void updateStatus();
+  void updateHeader();
+  void updateActions();
+  void applyViewMode();
   void runImport();
   void runRescan();
   void runConvertPending();

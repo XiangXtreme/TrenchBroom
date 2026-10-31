@@ -7,6 +7,8 @@ set(APP_SOURCE
     "${APP_SOURCE_DIR}/ApplicationStyle.cpp"
     "${APP_SOURCE_DIR}/ApplicationStyle.h"
     "${APP_SOURCE_DIR}/Main.cpp"
+    "${APP_SOURCE_DIR}/UiAssetLibrarySnapshot.cpp"
+    "${APP_SOURCE_DIR}/UiAssetLibrarySnapshot.h"
     "${APP_SOURCE_DIR}/UiComponentSnapshot.cpp"
     "${APP_SOURCE_DIR}/UiComponentSnapshot.h"
     "${APP_SOURCE_DIR}/UiSnapshotRunner.cpp"

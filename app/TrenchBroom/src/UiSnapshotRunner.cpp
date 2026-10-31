@@ -47,6 +47,7 @@
 #include <QToolButton>
 #include <QTreeWidget>
 
+#include "UiAssetLibrarySnapshot.h"
 #include "UiComponentSnapshot.h"
 #include "UiWorkspaceSnapshot.h"
 #include "base/PreferenceManager.h"
@@ -134,6 +135,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("python-console"),
     QStringLiteral("command-palette"),
     QStringLiteral("components"),
+    QStringLiteral("asset-library"),
     QStringLiteral("project-empty"),
     QStringLiteral("project-drawer"),
     QStringLiteral("project-pinned"),
@@ -151,6 +153,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
 bool uiSnapshotPageRequiresMap(const QString& page)
 {
   return page != QStringLiteral("map") && page != QStringLiteral("components")
+         && page != QStringLiteral("asset-library")
          && !page.startsWith(QStringLiteral("preferences"));
 }
 
@@ -1304,6 +1307,7 @@ int runUiSnapshot(
   auto preferencesDialog = std::unique_ptr<PreferenceDialog>{};
   auto commandPaletteDialog = std::unique_ptr<CommandPaletteDialog>{};
   auto workspaceSnapshot = std::unique_ptr<UiWorkspaceSnapshot>{};
+  auto assetLibrarySnapshot = std::unique_ptr<QWidget>{};
 
   if (options.page == QStringLiteral("components"))
   {
@@ -1311,6 +1315,18 @@ int runUiSnapshot(
     targetWidget = componentSnapshot.get();
     targetName = options.page;
     targetWidget->resize(1080, 760);
+  }
+  else if (options.page == QStringLiteral("asset-library"))
+  {
+    assetLibrarySnapshot = createUiAssetLibrarySnapshot();
+    if (!assetLibrarySnapshot)
+    {
+      qCritical() << "Could not build the asset library snapshot fixture";
+      return 3;
+    }
+    targetWidget = assetLibrarySnapshot.get();
+    targetName = options.page;
+    targetWidget->resize(1180, 760);
   }
   else if (options.page.startsWith(QStringLiteral("preferences")))
   {

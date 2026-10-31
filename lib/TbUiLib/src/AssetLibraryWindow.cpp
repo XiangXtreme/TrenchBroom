@@ -14,7 +14,6 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QIcon>
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
@@ -27,6 +26,7 @@
 #include <QSize>
 #include <QSlider>
 #include <QSplitter>
+#include <QStyle>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -36,6 +36,7 @@
 #include "prefs/Preferences.h"
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
+#include "ui/AssetLibraryGlyphs.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryItemDelegate.h"
 #include "ui/AssetLibrarySource.h"
@@ -50,6 +51,10 @@ namespace tb::ui
 {
 namespace
 {
+constexpr auto DefaultThumbSide = 112;
+constexpr auto ThumbMinSide = 72;
+constexpr auto ThumbMaxSide = 192;
+
 std::uint32_t readU32(const std::vector<std::uint8_t>& bytes, std::size_t offset)
 {
   if (offset + 4 > bytes.size())
@@ -173,134 +178,271 @@ bool needsConversion(const project::LibraryAsset& asset)
   return asset.type == project::AssetType::Texture && asset.nativeFormat == "image";
 }
 
-// Kept short: the card subtitle has roughly 110 pixels next to the type.
-QString statusText(const project::LibraryAsset& asset)
+int statusFor(const project::LibraryAsset& asset)
 {
   if (asset.missing)
-    return QObject::tr("Missing");
+    return int(AssetLibraryItemDelegate::Missing);
   if (needsConversion(asset))
-    return QObject::tr("Pending");
-  return QObject::tr("Ready");
+    return int(AssetLibraryItemDelegate::Pending);
+  return int(AssetLibraryItemDelegate::Ready);
 }
 
-QString glyphFor(const project::AssetType type)
+/** Card glyph, also used as the kind key for the tinted placeholder tile. */
+AssetLibraryGlyph kindGlyph(const project::AssetType type)
 {
   switch (type)
   {
+  case project::AssetType::Texture:
+  case project::AssetType::Material:
+    return AssetLibraryGlyph::Texture;
   case project::AssetType::Model:
-    return QStringLiteral("MDL");
+  case project::AssetType::Prefab:
+    return AssetLibraryGlyph::Model;
   case project::AssetType::Sprite:
-    return QStringLiteral("SPR");
+    return AssetLibraryGlyph::Sprite;
   case project::AssetType::Sound:
-    return QStringLiteral("WAV");
+    return AssetLibraryGlyph::Sound;
   case project::AssetType::Skybox:
-    return QStringLiteral("SKY");
-  default:
-    return QStringLiteral("TEX");
+    return AssetLibraryGlyph::Skybox;
+  case project::AssetType::Map:
+    return AssetLibraryGlyph::Project;
   }
+  return AssetLibraryGlyph::Texture;
+}
+
+QPushButton* createActionButton(
+  QWidget* parent, const QString& text, const QString& tooltip)
+{
+  auto* button = new QPushButton{text, parent};
+  // A dialog action must never become the default button, otherwise pressing Return in
+  // the search field would trigger it.
+  button->setAutoDefault(false);
+  button->setDefault(false);
+  button->setToolTip(tooltip);
+  button->setCursor(Qt::PointingHandCursor);
+  button->setIconSize(QSize{15, 15});
+  return button;
+}
+
+QToolButton* createGlyphToolButton(
+  QWidget* parent,
+  const AssetLibraryGlyph glyph,
+  const QString& tooltip,
+  const QColor& color,
+  const QString& role)
+{
+  auto* button = new QToolButton{parent};
+  button->setAutoRaise(false);
+  button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  button->setToolTip(tooltip);
+  button->setCursor(Qt::PointingHandCursor);
+  button->setIcon(assetLibraryGlyphIcon(glyph, color));
+  button->setIconSize(QSize{16, 16});
+  button->setProperty("tbControlRole", role);
+  return button;
+}
+
+QColor accentColor(const QWidget& widget)
+{
+  auto accent = widget.palette().color(QPalette::Active, QPalette::Accent);
+  if (!accent.isValid())
+    accent = widget.palette().color(QPalette::Active, QPalette::Highlight);
+  return accent;
 }
 } // namespace
 
 AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   : QDialog{parent}
 {
+  buildUi();
+
+  const auto folder =
+    PreferenceManager::instance().get(Preferences::AssetLibraryDirectory);
+  if (!folder.empty() && project::AssetLibrary::isLibraryFolder(folder))
+    openLibrary(pathAsQString(folder));
+  else
+    reload();
+}
+
+AssetLibraryWindow::AssetLibraryWindow(const QString& folder, const bool remember, QWidget* parent)
+  : QDialog{parent}
+{
+  buildUi();
+  openLibrary(folder, remember);
+}
+
+void AssetLibraryWindow::buildUi()
+{
   setWindowTitle(tr("Asset Library"));
   setObjectName(QStringLiteral("AssetLibraryWindow"));
   resize(1180, 760);
+
+  const auto textColor = palette().color(QPalette::Active, QPalette::Text);
+  const auto dimColor = palette().color(QPalette::Active, QPalette::PlaceholderText);
 
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
 
-  auto* top = new QWidget{this};
-  top->setObjectName(QStringLiteral("AssetLibraryTopBar"));
-  top->setAttribute(Qt::WA_StyledBackground, true);
-  auto* topLayout = new QHBoxLayout{top};
-  topLayout->setContentsMargins(12, 8, 12, 8);
-  topLayout->setSpacing(8);
+  // ---- header bar: library identity, status chip and the library level actions --------
+  auto* header = new QWidget{this};
+  header->setObjectName(QStringLiteral("AssetLibraryHeader"));
+  header->setAttribute(Qt::WA_StyledBackground, true);
+  auto* headerLayout = new QHBoxLayout{header};
+  headerLayout->setContentsMargins(14, 10, 14, 10);
+  headerLayout->setSpacing(10);
 
-  m_libraryLabel = new QLabel{top};
-  m_libraryLabel->setObjectName(QStringLiteral("AssetLibraryLibraryLabel"));
-  auto* change = new QPushButton{tr("Change Library…"), top};
-  auto* import = new QPushButton{tr("Import Files…"), top};
-  auto* rescan = new QPushButton{tr("Rescan"), top};
-  auto* convert = new QPushButton{tr("Convert Pending"), top};
-  m_searchEdit = new QLineEdit{top};
-  m_searchEdit->setPlaceholderText(tr("Search assets…"));
+  m_libraryBadge = new QLabel{header};
+  m_libraryBadge->setObjectName(QStringLiteral("AssetLibraryBadge"));
+  m_libraryBadge->setFixedSize(38, 38);
+  m_libraryBadge->setAlignment(Qt::AlignCenter);
+
+  auto* identity = new QWidget{header};
+  auto* identityLayout = new QVBoxLayout{identity};
+  identityLayout->setContentsMargins(0, 0, 0, 0);
+  identityLayout->setSpacing(1);
+  m_libraryLabel = new QLabel{tr("No asset library"), identity};
+  m_libraryLabel->setObjectName(QStringLiteral("AssetLibraryHeaderTitle"));
+  m_libraryPath = new QLabel{identity};
+  m_libraryPath->setObjectName(QStringLiteral("AssetLibraryHeaderPath"));
+  identityLayout->addWidget(m_libraryLabel);
+  identityLayout->addWidget(m_libraryPath);
+
+  m_libraryChip = new QLabel{tr("No library"), header};
+  m_libraryChip->setObjectName(QStringLiteral("AssetLibraryChip"));
+
+  headerLayout->addWidget(m_libraryBadge);
+  headerLayout->addWidget(identity);
+  headerLayout->addSpacing(2);
+  headerLayout->addWidget(m_libraryChip, 0, Qt::AlignVCenter);
+  headerLayout->addStretch(1);
+
+  m_importButton =
+    createActionButton(header, tr("Import Files…"), tr("Copy assets into this library"));
+  m_rescanButton =
+    createActionButton(header, tr("Rescan"), tr("Re-read the library contents"));
+  m_convertButton = createActionButton(
+    header, tr("Convert Pending"), tr("Convert source textures to GoldSrc miptex"));
+  m_revealButton =
+    createActionButton(header, tr("Reveal"), tr("Show the library folder"));
+  m_changeButton =
+    createActionButton(header, tr("Change Library…"), tr("Open another asset library"));
+
+  m_importButton->setIcon(
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Import, textColor, 15));
+  m_rescanButton->setIcon(
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Rescan, textColor, 15));
+  m_convertButton->setIcon(
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Convert, textColor, 15));
+  m_revealButton->setIcon(
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Reveal, textColor, 15));
+  m_changeButton->setIcon(
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Library, textColor, 15));
+
+  auto* separator = new QFrame{header};
+  separator->setObjectName(QStringLiteral("AssetLibrarySeparator"));
+  separator->setFrameShape(QFrame::VLine);
+  separator->setFixedWidth(1);
+
+  m_searchEdit = new QLineEdit{header};
+  m_searchEdit->setObjectName(QStringLiteral("AssetLibrarySearch"));
+  m_searchEdit->setPlaceholderText(tr("Search assets"));
   m_searchEdit->setClearButtonEnabled(true);
-  m_searchEdit->setMaximumWidth(240);
+  m_searchEdit->setFixedWidth(210);
+  m_searchEdit->addAction(
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Search, dimColor, 14), QLineEdit::LeadingPosition);
 
-  topLayout->addWidget(m_libraryLabel);
-  topLayout->addWidget(change);
-  topLayout->addWidget(import);
-  topLayout->addWidget(rescan);
-  topLayout->addWidget(convert);
-  topLayout->addStretch(1);
-  topLayout->addWidget(m_searchEdit);
-  layout->addWidget(top);
+  headerLayout->addWidget(m_importButton);
+  headerLayout->addWidget(m_rescanButton);
+  headerLayout->addWidget(m_convertButton);
+  headerLayout->addWidget(m_revealButton);
+  headerLayout->addWidget(separator);
+  headerLayout->addWidget(m_changeButton);
+  headerLayout->addWidget(m_searchEdit);
+  layout->addWidget(header);
 
+  // ---- body: categories, grid and inspector ------------------------------------------
   auto* splitter = new QSplitter{Qt::Horizontal, this};
+  splitter->setObjectName(QStringLiteral("AssetLibrarySplitter"));
   splitter->setChildrenCollapsible(false);
+  splitter->setHandleWidth(1);
 
   auto* sidebar = new QWidget{splitter};
   sidebar->setObjectName(QStringLiteral("AssetLibrarySidebar"));
   sidebar->setAttribute(Qt::WA_StyledBackground, true);
   auto* sideLayout = new QVBoxLayout{sidebar};
   sideLayout->setContentsMargins(8, 10, 8, 10);
-  auto* sideTitle = new QLabel{tr("LIBRARY"), sidebar};
-  sideTitle->setObjectName(QStringLiteral("AssetLibrarySideTitle"));
-  m_categories = new QListWidget{sidebar};
+  sideLayout->setSpacing(4);
+  m_categories = new AssetLibraryListView{sidebar};
   m_categories->setObjectName(QStringLiteral("AssetLibraryCategories"));
   m_categories->setFrameShape(QFrame::NoFrame);
-  sideLayout->addWidget(sideTitle);
+  m_categories->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  m_categories->setItemDelegate(new AssetLibraryCategoryDelegate{m_categories});
   sideLayout->addWidget(m_categories, 1);
   splitter->addWidget(sidebar);
 
   auto* center = new QWidget{splitter};
+  center->setObjectName(QStringLiteral("AssetLibraryCenter"));
   auto* centerLayout = new QVBoxLayout{center};
   centerLayout->setContentsMargins(10, 8, 10, 8);
-  centerLayout->setSpacing(6);
+  centerLayout->setSpacing(8);
+
   auto* tools = new QWidget{center};
+  tools->setObjectName(QStringLiteral("AssetLibraryToolBar"));
   auto* toolsLayout = new QHBoxLayout{tools};
-  toolsLayout->setContentsMargins(0, 0, 0, 0);
+  toolsLayout->setContentsMargins(2, 0, 2, 0);
+  toolsLayout->setSpacing(6);
+
+  m_countLabel = new QLabel{tools};
+  m_countLabel->setObjectName(QStringLiteral("AssetLibraryCount"));
+
   auto* sizeLabel = new QLabel{tr("Size"), tools};
+  sizeLabel->setObjectName(QStringLiteral("AssetLibrarySizeLabel"));
   m_sizeSlider = new QSlider{Qt::Horizontal, tools};
-  m_sizeSlider->setRange(72, 192);
-  m_sizeSlider->setValue(112);
-  m_sizeSlider->setMaximumWidth(160);
-  m_gridButton = new QToolButton{tools};
-  m_gridButton->setText(QStringLiteral("▦"));
+  m_sizeSlider->setRange(ThumbMinSide, ThumbMaxSide);
+  m_sizeSlider->setValue(DefaultThumbSide);
+  m_sizeSlider->setFixedWidth(120);
+  m_sizeSlider->setProperty("tbControlRole", QStringLiteral("compact"));
+  m_sizeValue = new QLabel{tools};
+  m_sizeValue->setObjectName(QStringLiteral("AssetLibrarySizeValue"));
+  m_sizeValue->setFixedWidth(28);
+  m_sizeValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+  m_gridButton = createGlyphToolButton(
+    tools, AssetLibraryGlyph::Grid, tr("Grid view"), textColor, QStringLiteral("compact"));
+  m_listButton = createGlyphToolButton(
+    tools, AssetLibraryGlyph::List, tr("List view"), textColor, QStringLiteral("compact"));
   m_gridButton->setCheckable(true);
-  m_gridButton->setChecked(true);
-  m_listButton = new QToolButton{tools};
-  m_listButton->setText(QStringLiteral("☷"));
   m_listButton->setCheckable(true);
+  m_gridButton->setChecked(true);
+
+  toolsLayout->addWidget(m_countLabel);
+  toolsLayout->addStretch(1);
   toolsLayout->addWidget(sizeLabel);
   toolsLayout->addWidget(m_sizeSlider);
-  toolsLayout->addStretch(1);
+  toolsLayout->addWidget(m_sizeValue);
+  toolsLayout->addSpacing(4);
   toolsLayout->addWidget(m_gridButton);
   toolsLayout->addWidget(m_listButton);
 
-  m_grid = new QListWidget{center};
+  m_grid = new AssetLibraryListView{center};
   m_grid->setObjectName(QStringLiteral("AssetLibraryGrid"));
+  m_grid->setFrameShape(QFrame::NoFrame);
+  m_grid->setSelectionMode(QAbstractItemView::SingleSelection);
   m_grid->setViewMode(QListView::IconMode);
-  m_grid->setGridSize(QSize{m_sizeSlider->value() + 26, m_sizeSlider->value() + 66});
   m_grid->setResizeMode(QListView::Adjust);
   m_grid->setMovement(QListView::Static);
   m_grid->setUniformItemSizes(true);
-  m_grid->setWordWrap(true);
-  m_grid->setSpacing(4);
-  m_grid->setFrameShape(QFrame::NoFrame);
-  m_grid->setSelectionMode(QAbstractItemView::SingleSelection);
+  m_grid->setWordWrap(false);
   m_grid->setSpacing(0);
-  m_grid->setMouseTracking(true);
+  m_grid->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   m_delegate = new AssetLibraryItemDelegate{m_grid};
   m_grid->setItemDelegate(m_delegate);
 
-  m_empty = new QLabel{tr("No assets in this library yet. Use Import Files… to add some."),
-                       center};
-  m_empty->setAlignment(Qt::AlignCenter);
+  m_empty = new QLabel{center};
   m_empty->setObjectName(QStringLiteral("AssetLibraryEmpty"));
+  m_empty->setAlignment(Qt::AlignCenter);
+  m_empty->setWordWrap(true);
   m_empty->hide();
 
   centerLayout->addWidget(tools);
@@ -312,10 +454,11 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   inspector->setObjectName(QStringLiteral("AssetLibraryInspector"));
   inspector->setAttribute(Qt::WA_StyledBackground, true);
   auto* inspectorLayout = new QVBoxLayout{inspector};
-  inspectorLayout->setContentsMargins(10, 10, 10, 10);
-  inspectorLayout->setSpacing(8);
-  auto* inspectorTitle = new QLabel{tr("INSPECTOR"), inspector};
-  inspectorTitle->setObjectName(QStringLiteral("AssetLibrarySideTitle"));
+  inspectorLayout->setContentsMargins(12, 10, 12, 10);
+  inspectorLayout->setSpacing(7);
+
+  auto* previewTitle = new QLabel{tr("Preview"), inspector};
+  previewTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
   m_preview = new QLabel{inspector};
   m_preview->setObjectName(QStringLiteral("AssetLibraryPreview"));
   m_preview->setAlignment(Qt::AlignCenter);
@@ -324,29 +467,37 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   m_previewMode = new QComboBox{inspector};
   m_previewMode->addItem(tr("Source"));
   m_previewMode->addItem(tr("Converted"));
+
   m_name = new QLabel{inspector};
-  m_name->setObjectName(QStringLiteral("AssetLibraryName"));
+  m_name->setObjectName(QStringLiteral("AssetLibraryAssetName"));
   m_name->setWordWrap(true);
   m_status = new QLabel{inspector};
   m_status->setObjectName(QStringLiteral("AssetLibraryStatus"));
+
+  auto* propertiesTitle = new QLabel{tr("Details"), inspector};
+  propertiesTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
   auto* propertiesHost = new QWidget{inspector};
   m_properties = new QFormLayout{propertiesHost};
   m_properties->setContentsMargins(0, 0, 0, 0);
-  m_properties->setLabelAlignment(Qt::AlignLeft);
+  m_properties->setLabelAlignment(Qt::AlignLeft | Qt::AlignTop);
+  m_properties->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
   m_properties->setHorizontalSpacing(10);
-  m_properties->setVerticalSpacing(4);
-  auto* dependenciesTitle = new QLabel{tr("DEPENDENCIES"), inspector};
-  dependenciesTitle->setObjectName(QStringLiteral("AssetLibrarySideTitle"));
+  m_properties->setVerticalSpacing(5);
+
+  auto* dependenciesTitle = new QLabel{tr("Dependencies"), inspector};
+  dependenciesTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
   m_dependencies = new QListWidget{inspector};
   m_dependencies->setObjectName(QStringLiteral("AssetLibraryDependencies"));
   m_dependencies->setFrameShape(QFrame::NoFrame);
-  m_dependencies->setMaximumHeight(140);
+  m_dependencies->setSelectionMode(QAbstractItemView::NoSelection);
+  m_dependencies->setMaximumHeight(150);
 
-  inspectorLayout->addWidget(inspectorTitle);
+  inspectorLayout->addWidget(previewTitle);
   inspectorLayout->addWidget(m_preview);
   inspectorLayout->addWidget(m_previewMode);
   inspectorLayout->addWidget(m_name);
   inspectorLayout->addWidget(m_status);
+  inspectorLayout->addWidget(propertiesTitle);
   inspectorLayout->addWidget(propertiesHost);
   inspectorLayout->addWidget(dependenciesTitle);
   inspectorLayout->addWidget(m_dependencies);
@@ -356,25 +507,31 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
   splitter->setStretchFactor(2, 0);
-  splitter->setSizes({190, 640, 300});
+  splitter->setSizes({196, 660, 320});
   layout->addWidget(splitter, 1);
 
   m_footer = new QLabel{this};
   m_footer->setObjectName(QStringLiteral("AssetLibraryFooter"));
-  m_footer->setContentsMargins(10, 4, 10, 4);
+  m_footer->setContentsMargins(14, 5, 14, 5);
   layout->addWidget(m_footer);
 
-  connect(change, &QPushButton::clicked, this, &AssetLibraryWindow::chooseLibrary);
-  connect(import, &QPushButton::clicked, this, &AssetLibraryWindow::runImport);
-  connect(rescan, &QPushButton::clicked, this, &AssetLibraryWindow::runRescan);
-  connect(convert, &QPushButton::clicked, this, &AssetLibraryWindow::runConvertPending);
+  connect(m_changeButton, &QPushButton::clicked, this, &AssetLibraryWindow::chooseLibrary);
+  connect(m_importButton, &QPushButton::clicked, this, &AssetLibraryWindow::runImport);
+  connect(m_rescanButton, &QPushButton::clicked, this, &AssetLibraryWindow::runRescan);
+  connect(
+    m_convertButton, &QPushButton::clicked, this, &AssetLibraryWindow::runConvertPending);
+  connect(m_revealButton, &QPushButton::clicked, this, &AssetLibraryWindow::revealSelected);
   connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
     m_search = text;
     refreshGrid();
   });
   connect(m_categories, &QListWidget::currentRowChanged, this, [this](int) {
     if (const auto* item = m_categories->currentItem())
-      m_filter = item->data(Qt::UserRole).toString();
+    {
+      if (item->data(AssetLibraryCategoryDelegate::SectionRole).toBool())
+        return;
+      m_filter = item->data(AssetLibraryCategoryDelegate::FilterRole).toString();
+    }
     refreshGrid();
   });
   connect(m_grid, &QListWidget::currentItemChanged, this, [this](auto* current, auto*) {
@@ -388,34 +545,21 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
       current->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString();
     showAsset(selectedAsset());
   });
-  connect(m_sizeSlider, &QSlider::valueChanged, this, [this](int value) {
-    m_grid->setGridSize(QSize{value + 26, value + 66});
-  });
+  connect(m_sizeSlider, &QSlider::valueChanged, this, [this](int) { applyViewMode(); });
   connect(m_gridButton, &QToolButton::clicked, this, [this]() {
-    m_delegate->setListMode(false);
-    m_grid->setViewMode(QListView::IconMode);
-    m_grid->setGridSize(QSize{m_sizeSlider->value() + 26, m_sizeSlider->value() + 66});
-    m_gridButton->setChecked(true);
-    m_listButton->setChecked(false);
+    m_listMode = false;
+    applyViewMode();
   });
   connect(m_listButton, &QToolButton::clicked, this, [this]() {
-    m_delegate->setListMode(true);
-    m_grid->setViewMode(QListView::ListMode);
-    m_grid->setGridSize(QSize{});
-    m_grid->setSpacing(0);
-    m_gridButton->setChecked(false);
-    m_listButton->setChecked(true);
+    m_listMode = true;
+    applyViewMode();
   });
   connect(m_previewMode, &QComboBox::currentIndexChanged, this, [this](int) {
     updatePreview();
   });
 
-  const auto folder =
-    PreferenceManager::instance().get(Preferences::AssetLibraryDirectory);
-  if (!folder.empty() && project::AssetLibrary::isLibraryFolder(folder))
-    openLibrary(pathAsQString(folder));
-  else
-    reload();
+  applyViewMode();
+  clearInspector();
 }
 
 AssetLibraryWindow::~AssetLibraryWindow() = default;
@@ -429,7 +573,7 @@ void AssetLibraryWindow::chooseLibrary()
   openLibrary(folder);
 }
 
-void AssetLibraryWindow::openLibrary(const QString& folder)
+void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
 {
   const auto path = pathFromQString(folder);
   if (!project::AssetLibrary::isLibraryFolder(path))
@@ -468,7 +612,8 @@ void AssetLibraryWindow::openLibrary(const QString& folder)
     return;
   }
   m_source = std::move(source);
-  PreferenceManager::instance().set(Preferences::AssetLibraryDirectory, path);
+  if (remember)
+    PreferenceManager::instance().set(Preferences::AssetLibraryDirectory, path);
   reload();
 }
 
@@ -478,17 +623,15 @@ void AssetLibraryWindow::reload()
   m_selectedId.reset();
   if (!m_source)
   {
-    m_libraryLabel->setText(tr("No asset library"));
+    m_empty->setText(tr("No library is open.\nUse Change Library… to choose one."));
     m_empty->show();
     m_grid->hide();
     clearInspector();
-    updateStatus();
+    updateHeader();
     refreshCategories();
+    updateStatus();
     return;
   }
-  m_libraryLabel->setText(
-    QStringLiteral("%1 — %2").arg(m_source->name(), m_source->location()));
-  m_libraryLabel->setToolTip(m_source->location());
 
   const auto assets = m_source->assets();
   if (assets.is_error())
@@ -496,13 +639,83 @@ void AssetLibraryWindow::reload()
     m_empty->setText(QString::fromStdString(std::get<Error>(assets.error()).msg));
     m_empty->show();
     m_grid->hide();
+    updateHeader();
+    refreshCategories();
     updateStatus();
     return;
   }
   m_assets = assets.value();
+  updateHeader();
   refreshCategories();
   refreshGrid();
   updateStatus();
+}
+
+void AssetLibraryWindow::updateHeader()
+{
+  const auto accent = accentColor(*this);
+  m_libraryBadge->setPixmap(
+    assetLibraryGlyphPixmap(AssetLibraryGlyph::Library, accent, 20, devicePixelRatioF()));
+
+  if (!m_source)
+  {
+    m_libraryLabel->setText(tr("No asset library"));
+    m_libraryPath->setText(tr("Choose a folder to browse as an asset library."));
+    m_libraryChip->setText(tr("No library"));
+    m_libraryChip->setProperty("libraryState", QStringLiteral("none"));
+  }
+  else
+  {
+    m_libraryLabel->setText(m_source->name());
+    m_libraryPath->setText(m_source->location());
+    m_libraryPath->setToolTip(m_source->location());
+    const auto remote = m_source->isRemote();
+    m_libraryChip->setText(remote ? tr("Remote") : tr("Local"));
+    m_libraryChip->setProperty(
+      "libraryState", remote ? QStringLiteral("remote") : QStringLiteral("local"));
+  }
+  // Re-evaluate the state property selectors above.
+  m_libraryChip->style()->unpolish(m_libraryChip);
+  m_libraryChip->style()->polish(m_libraryChip);
+  updateActions();
+}
+
+void AssetLibraryWindow::updateActions()
+{
+  const auto hasSource = m_source != nullptr;
+  m_importButton->setEnabled(hasSource && m_source->canImport());
+  m_rescanButton->setEnabled(hasSource);
+  m_convertButton->setEnabled(
+    hasSource && m_source->canConvert() && pendingCount() > 0);
+  m_revealButton->setEnabled(hasSource && m_source->canReveal());
+  m_searchEdit->setEnabled(hasSource);
+}
+
+void AssetLibraryWindow::applyViewMode()
+{
+  const auto side = m_sizeSlider->value();
+  if (m_sizeValue)
+    m_sizeValue->setText(QString::number(side));
+
+  m_gridButton->setChecked(!m_listMode);
+  m_listButton->setChecked(m_listMode);
+  m_delegate->setListMode(m_listMode);
+
+  if (m_listMode)
+  {
+    m_grid->setViewMode(QListView::ListMode);
+    m_grid->setUniformItemSizes(false);
+    m_grid->setGridSize(QSize{});
+  }
+  else
+  {
+    const auto cell = QSize{side + 24, side + 24 + 46};
+    m_delegate->setCellSize(cell);
+    m_grid->setViewMode(QListView::IconMode);
+    m_grid->setUniformItemSizes(true);
+    m_grid->setGridSize(cell);
+  }
+  m_grid->doItemsLayout();
 }
 
 void AssetLibraryWindow::refreshCategories()
@@ -510,14 +723,21 @@ void AssetLibraryWindow::refreshCategories()
   const auto current = m_filter;
   const auto blockers = QSignalBlocker{m_categories};
   m_categories->clear();
-  const auto pending = pendingCount();
-  const auto missing = missingCount();
 
+  const auto addSection = [this](const QString& title) {
+    auto* item = new QListWidgetItem{m_categories};
+    item->setText(title);
+    item->setData(AssetLibraryCategoryDelegate::SectionRole, true);
+    item->setFlags(Qt::NoItemFlags);
+  };
   const auto add = [this](const QString& key, const QString& label, const int count) {
     auto* item = new QListWidgetItem{m_categories};
-    item->setText(count >= 0 ? QStringLiteral("%1  %2").arg(label).arg(count) : label);
-    item->setData(Qt::UserRole, key);
+    item->setText(label);
+    item->setData(AssetLibraryCategoryDelegate::FilterRole, key);
+    item->setData(AssetLibraryCategoryDelegate::CountRole, count);
   };
+
+  addSection(tr("Library"));
   add(QStringLiteral("all"), tr("All assets"), int(m_assets.size()));
   add(QStringLiteral("texture"), tr("Textures"),
       int(std::count_if(m_assets.begin(), m_assets.end(), [](const auto& asset) {
@@ -539,28 +759,45 @@ void AssetLibraryWindow::refreshCategories()
       int(std::count_if(m_assets.begin(), m_assets.end(), [](const auto& asset) {
         return asset.type == project::AssetType::Skybox;
       })));
-  add(QStringLiteral("pending"), tr("Pending conversion"), pending);
-  add(QStringLiteral("missing"), tr("Missing sources"), missing);
+
+  addSection(tr("Attention"));
+  add(QStringLiteral("pending"), tr("Pending"), pendingCount());
+  add(QStringLiteral("missing"), tr("Missing sources"), missingCount());
 
   for (auto row = 0; row < m_categories->count(); ++row)
   {
-    if (m_categories->item(row)->data(Qt::UserRole).toString() == current)
+    auto* item = m_categories->item(row);
+    if (!item->data(AssetLibraryCategoryDelegate::SectionRole).toBool()
+        && item->data(AssetLibraryCategoryDelegate::FilterRole).toString() == current)
     {
       m_categories->setCurrentRow(row);
       return;
     }
   }
+
   m_filter = QStringLiteral("all");
-  m_categories->setCurrentRow(0);
+  for (auto row = 0; row < m_categories->count(); ++row)
+  {
+    auto* item = m_categories->item(row);
+    if (!item->data(AssetLibraryCategoryDelegate::SectionRole).toBool()
+        && item->data(AssetLibraryCategoryDelegate::FilterRole).toString()
+             == QStringLiteral("all"))
+    {
+      m_categories->setCurrentRow(row);
+      return;
+    }
+  }
 }
 
 void AssetLibraryWindow::refreshGrid()
 {
   m_grid->clear();
+  m_empty->hide();
+
   if (!m_source)
   {
-    m_empty->show();
     m_grid->hide();
+    m_countLabel->clear();
     return;
   }
 
@@ -590,18 +827,17 @@ void AssetLibraryWindow::refreshGrid()
     item->setText(displayName);
     item->setData(
       AssetLibraryItemDelegate::AssetIdRole, QString::fromStdString(asset.id));
+    item->setData(AssetLibraryItemDelegate::TypeLabelRole, typeText(asset.type));
+    item->setData(AssetLibraryItemDelegate::DetailRole, sizeText(asset.size));
+    item->setData(AssetLibraryItemDelegate::StatusRole, statusFor(asset));
+    item->setData(AssetLibraryItemDelegate::KindRole, int(kindGlyph(asset.type)));
     item->setData(
-      AssetLibraryItemDelegate::SubtitleRole,
-      QStringLiteral("%1 · %2").arg(typeText(asset.type), statusText(asset)));
-    item->setData(
-      AssetLibraryItemDelegate::StatusRole,
-      asset.missing ? int(AssetLibraryItemDelegate::Missing)
-      : needsConversion(asset)
-        ? int(AssetLibraryItemDelegate::Pending)
-        : int(AssetLibraryItemDelegate::Ready));
-    item->setData(AssetLibraryItemDelegate::GlyphRole, glyphFor(asset.type));
-    item->setToolTip(
-      QStringLiteral("%1\n%2").arg(QString::fromStdString(asset.virtualPath), typeText(asset.type)));
+      AssetLibraryItemDelegate::PathRole, QString::fromStdString(asset.virtualPath));
+    item->setToolTip(QStringLiteral("%1\n%2 · %3")
+                       .arg(
+                         QString::fromStdString(asset.virtualPath),
+                         typeText(asset.type),
+                         sizeText(asset.size)));
 
     auto image = QImage{};
     if (isConverted(asset) && asset.type == project::AssetType::Texture)
@@ -624,12 +860,24 @@ void AssetLibraryWindow::refreshGrid()
     ++shown;
   }
 
-  m_empty->setText(
-    m_assets.empty()
-      ? tr("This library is empty. Use Import Files… to add assets.")
-      : tr("No assets match the current filter."));
-  m_empty->setVisible(shown == 0);
-  m_grid->setVisible(shown > 0);
+  m_countLabel->setText(
+    shown == int(m_assets.size())
+      ? tr("%n asset(s)", nullptr, shown)
+      : tr("%1 of %2 assets").arg(shown).arg(int(m_assets.size())));
+
+  if (shown == 0)
+  {
+    m_empty->setText(
+      m_assets.empty()
+        ? tr("This library is empty.\nUse Import Files… to add assets.")
+        : tr("No assets match the current filter."));
+    m_empty->show();
+    m_grid->hide();
+  }
+  else
+  {
+    m_grid->show();
+  }
 
   if (m_selectedId)
   {
@@ -658,6 +906,7 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
     return;
   }
   m_name->setText(QString::fromStdString(asset->displayName));
+  m_name->setToolTip(QString::fromStdString(asset->virtualPath));
   m_status->setText(
     asset->missing ? tr("Missing source")
     : needsConversion(*asset) ? tr("Pending conversion")
@@ -709,6 +958,7 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
 void AssetLibraryWindow::clearInspector()
 {
   m_name->setText(tr("No asset selected"));
+  m_name->setToolTip({});
   m_status->clear();
   m_preview->setPixmap({});
   m_preview->setText(tr("Select an asset to preview it"));
@@ -754,13 +1004,20 @@ void AssetLibraryWindow::updatePreview()
 
 void AssetLibraryWindow::updateStatus()
 {
-  const auto total = m_assets.size();
+  const auto total = int(m_assets.size());
   const auto pending = pendingCount();
   const auto missing = missingCount();
-  auto text = tr("%1 assets · %2 pending conversion · %3 missing").arg(total).arg(pending).arg(missing);
+  auto text = tr("%1 assets · %2 pending conversion · %3 missing")
+                .arg(total)
+                .arg(pending)
+                .arg(missing);
   if (m_source)
-    text += tr(" · %1").arg(m_source->isRemote() ? tr("Remote library") : tr("Local library"));
+  {
+    text += tr(" · %1")
+              .arg(m_source->isRemote() ? tr("Remote library") : tr("Local library"));
+  }
   m_footer->setText(text);
+  updateActions();
 }
 
 int AssetLibraryWindow::pendingCount() const
@@ -797,6 +1054,7 @@ void AssetLibraryWindow::runRescan()
     return;
   }
   reload();
+  m_footer->setText(tr("Rescanned %1 asset(s).").arg(int(m_assets.size())));
 }
 
 void AssetLibraryWindow::runConvertPending()

@@ -1473,14 +1473,63 @@ QWidget#outlinerPropertyAddBar {
 
 /* Asset library browser: list and tree controls keep the canonical styling; only the
    structural containers and labels carry the panel treatment. */
-QWidget#AssetLibraryTopBar {
+QWidget#AssetLibraryHeader {
   background: @tb-panel-background;
   border-bottom: 1px solid @tb-border;
 }
 
+QLabel#AssetLibraryBadge {
+  background: @tb-elevated-background;
+  border: 1px solid @tb-border;
+  border-radius: 8px;
+}
+
+QLabel#AssetLibraryHeaderTitle {
+  color: @tb-text;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+QLabel#AssetLibraryHeaderPath {
+  color: @tb-secondary-text;
+  font-size: 11px;
+}
+
+QLabel#AssetLibraryChip {
+  background: @tb-alternate-background;
+  border: 1px solid @tb-border;
+  border-radius: 9px;
+  color: @tb-secondary-text;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 9px;
+}
+
+QLabel#AssetLibraryChip[libraryState="local"] {
+  color: @tb-success;
+}
+
+QLabel#AssetLibraryChip[libraryState="remote"] {
+  color: @tb-accent;
+}
+
+QLabel#AssetLibraryChip[libraryState="none"] {
+  color: @tb-disabled-text;
+}
+
+QFrame#AssetLibrarySeparator {
+  background: @tb-border;
+  border: 0;
+  max-width: 1px;
+}
+
 QWidget#AssetLibrarySidebar {
-  background: @tb-panel-background;
+  background: @tb-sidebar-background;
   border-right: 1px solid @tb-border;
+}
+
+QWidget#AssetLibraryCenter {
+  background: @tb-window-background;
 }
 
 QWidget#AssetLibraryInspector {
@@ -1488,22 +1537,27 @@ QWidget#AssetLibraryInspector {
   border-left: 1px solid @tb-border;
 }
 
-QLabel#AssetLibrarySideTitle {
+QLabel#AssetLibrarySectionTitle {
   color: @tb-secondary-text;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 1px;
+  padding-top: 2px;
 }
 
-QLabel#AssetLibraryLibraryLabel {
-  color: @tb-text;
-  font-weight: 600;
+QLabel#AssetLibraryCount {
+  color: @tb-secondary-text;
+}
+
+QLabel#AssetLibrarySizeLabel,
+QLabel#AssetLibrarySizeValue {
+  color: @tb-secondary-text;
 }
 
 QLabel#AssetLibraryPreview {
-  background: @tb-window-background;
+  background: @tb-editor-background;
   border: 1px solid @tb-border;
-  border-radius: 3px;
+  border-radius: 6px;
   color: @tb-secondary-text;
 }
 
@@ -1517,7 +1571,8 @@ QLabel#AssetLibraryFooter {
   color: @tb-secondary-text;
 }
 
-QLabel#AssetLibraryName {
+QLabel#AssetLibraryAssetName {
+  color: @tb-text;
   font-weight: 600;
 }
 
@@ -1529,9 +1584,16 @@ QLabel#AssetLibraryPropertyKey {
   color: @tb-secondary-text;
 }
 
+QLabel#AssetLibraryPropertyValue {
+  color: @tb-text;
+}
+
 QListWidget#AssetLibraryGrid {
   background: @tb-window-background;
   border: 0;
+  qproperty-readyColor: @tb-success;
+  qproperty-pendingColor: @tb-warning;
+  qproperty-missingColor: @tb-error;
 }
 
 QListWidget#AssetLibraryCategories,
@@ -1540,9 +1602,10 @@ QListWidget#AssetLibraryDependencies {
   border: 0;
 }
 
-QListWidget#AssetLibraryCategories::item {
-  border-radius: 3px;
-  padding: 5px 6px;
+QListWidget#AssetLibraryCategories {
+  qproperty-readyColor: @tb-success;
+  qproperty-pendingColor: @tb-warning;
+  qproperty-missingColor: @tb-error;
 }
 
 QWidget#outlinerPropertyRow {
