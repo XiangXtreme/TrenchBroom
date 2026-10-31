@@ -256,6 +256,13 @@ Result<void> CompilationDialog::runProfile(
   const auto& map = m_document.map();
   if (auto project = m_appController.projectFor(m_document))
   {
+    // The compiler reads the project from disk, so unsaved edits are written first; a
+    // failed save aborts instead of compiling an older state.
+    if (project->modified())
+    {
+      if (const auto saved = project->save(); saved.is_error())
+        return std::get<Error>(saved.error());
+    }
     return prepareProjectSnapshot(*project)
            | kdl::and_then([&](const auto& mapPath) -> Result<void> {
                return m_document.prepareReload(mapPath)
