@@ -39,6 +39,7 @@
 #include "ui/AssetLibraryGlyphs.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryItemDelegate.h"
+#include "ui/GoldSrcSpritePreview.h"
 #include "ui/AssetLibrarySource.h"
 #include "ui/QPathUtils.h"
 
@@ -69,6 +70,20 @@ std::uint16_t readU16(const std::vector<std::uint8_t>& bytes, std::size_t offset
   if (offset + 2 > bytes.size())
     return 0;
   return std::uint16_t(bytes[offset]) | (std::uint16_t(bytes[offset + 1]) << 8);
+}
+
+QImage decodeSpriteImage(const std::vector<std::uint8_t>& bytes)
+{
+  const auto preview = loadGoldSrcSpritePreview(bytes);
+  if (!preview || preview->width == 0 || preview->height == 0 || preview->rgba.empty())
+    return {};
+  return QImage{
+    preview->rgba.data(),
+    int(preview->width),
+    int(preview->height),
+    int(preview->width * 4),
+    QImage::Format_RGBA8888}
+    .copy();
 }
 
 QImage decodeEncodedImage(const std::vector<std::uint8_t>& bytes)
@@ -848,7 +863,11 @@ void AssetLibraryWindow::refreshGrid()
     if (image.isNull())
     {
       if (const auto original = m_source->readOriginal(asset.id); original.is_success())
+      {
         image = decodeEncodedImage(original.value());
+        if (image.isNull() && asset.type == project::AssetType::Sprite)
+          image = decodeSpriteImage(original.value());
+      }
     }
     if (!image.isNull())
     {
@@ -986,6 +1005,8 @@ void AssetLibraryWindow::updatePreview()
   else if (const auto original = m_source->readOriginal(asset->id); original.is_success())
   {
     image = decodeEncodedImage(original.value());
+    if (image.isNull() && asset->type == project::AssetType::Sprite)
+      image = decodeSpriteImage(original.value());
   }
 
   if (image.isNull())
