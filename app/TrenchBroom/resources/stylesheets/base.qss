@@ -1525,6 +1525,26 @@ QLabel#AssetLibraryStatus {
   color: @tb-secondary-text;
 }
 
+QLabel#AssetLibraryPropertyKey {
+  color: @tb-secondary-text;
+}
+
+QListWidget#AssetLibraryGrid {
+  background: @tb-window-background;
+  border: 0;
+}
+
+QListWidget#AssetLibraryCategories,
+QListWidget#AssetLibraryDependencies {
+  background: transparent;
+  border: 0;
+}
+
+QListWidget#AssetLibraryCategories::item {
+  border-radius: 3px;
+  padding: 5px 6px;
+}
+
 QWidget#outlinerPropertyRow {
   background: transparent;
   border: none;

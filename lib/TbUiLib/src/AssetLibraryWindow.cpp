@@ -37,6 +37,7 @@
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
 #include "ui/AssetLibraryImport.h"
+#include "ui/AssetLibraryItemDelegate.h"
 #include "ui/AssetLibrarySource.h"
 #include "ui/QPathUtils.h"
 
@@ -171,6 +172,33 @@ bool needsConversion(const project::LibraryAsset& asset)
 {
   return asset.type == project::AssetType::Texture && asset.nativeFormat == "image";
 }
+
+// Kept short: the card subtitle has roughly 110 pixels next to the type.
+QString statusText(const project::LibraryAsset& asset)
+{
+  if (asset.missing)
+    return QObject::tr("Missing");
+  if (needsConversion(asset))
+    return QObject::tr("Pending");
+  return QObject::tr("Ready");
+}
+
+QString glyphFor(const project::AssetType type)
+{
+  switch (type)
+  {
+  case project::AssetType::Model:
+    return QStringLiteral("MDL");
+  case project::AssetType::Sprite:
+    return QStringLiteral("SPR");
+  case project::AssetType::Sound:
+    return QStringLiteral("WAV");
+  case project::AssetType::Skybox:
+    return QStringLiteral("SKY");
+  default:
+    return QStringLiteral("TEX");
+  }
+}
 } // namespace
 
 AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
@@ -256,8 +284,7 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   m_grid = new QListWidget{center};
   m_grid->setObjectName(QStringLiteral("AssetLibraryGrid"));
   m_grid->setViewMode(QListView::IconMode);
-  m_grid->setIconSize(QSize{m_sizeSlider->value(), m_sizeSlider->value()});
-  m_grid->setGridSize(QSize{m_sizeSlider->value() + 34, m_sizeSlider->value() + 44});
+  m_grid->setGridSize(QSize{m_sizeSlider->value() + 26, m_sizeSlider->value() + 66});
   m_grid->setResizeMode(QListView::Adjust);
   m_grid->setMovement(QListView::Static);
   m_grid->setUniformItemSizes(true);
@@ -265,6 +292,10 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   m_grid->setSpacing(4);
   m_grid->setFrameShape(QFrame::NoFrame);
   m_grid->setSelectionMode(QAbstractItemView::SingleSelection);
+  m_grid->setSpacing(0);
+  m_grid->setMouseTracking(true);
+  m_delegate = new AssetLibraryItemDelegate{m_grid};
+  m_grid->setItemDelegate(m_delegate);
 
   m_empty = new QLabel{tr("No assets in this library yet. Use Import Files… to add some."),
                        center};
@@ -353,20 +384,25 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
       clearInspector();
       return;
     }
-    m_selectedId = current->data(Qt::UserRole).toString().toStdString();
+    m_selectedId =
+      current->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString();
     showAsset(selectedAsset());
   });
   connect(m_sizeSlider, &QSlider::valueChanged, this, [this](int value) {
-    m_grid->setIconSize(QSize{value, value});
-    m_grid->setGridSize(QSize{value + 34, value + 44});
+    m_grid->setGridSize(QSize{value + 26, value + 66});
   });
   connect(m_gridButton, &QToolButton::clicked, this, [this]() {
+    m_delegate->setListMode(false);
     m_grid->setViewMode(QListView::IconMode);
+    m_grid->setGridSize(QSize{m_sizeSlider->value() + 26, m_sizeSlider->value() + 66});
     m_gridButton->setChecked(true);
     m_listButton->setChecked(false);
   });
   connect(m_listButton, &QToolButton::clicked, this, [this]() {
+    m_delegate->setListMode(true);
     m_grid->setViewMode(QListView::ListMode);
+    m_grid->setGridSize(QSize{});
+    m_grid->setSpacing(0);
     m_gridButton->setChecked(false);
     m_listButton->setChecked(true);
   });
@@ -552,8 +588,18 @@ void AssetLibraryWindow::refreshGrid()
 
     auto* item = new QListWidgetItem{m_grid};
     item->setText(displayName);
-    item->setData(Qt::UserRole, QString::fromStdString(asset.id));
-    item->setData(Qt::UserRole + 1, typeText(asset.type));
+    item->setData(
+      AssetLibraryItemDelegate::AssetIdRole, QString::fromStdString(asset.id));
+    item->setData(
+      AssetLibraryItemDelegate::SubtitleRole,
+      QStringLiteral("%1 · %2").arg(typeText(asset.type), statusText(asset)));
+    item->setData(
+      AssetLibraryItemDelegate::StatusRole,
+      asset.missing ? int(AssetLibraryItemDelegate::Missing)
+      : needsConversion(asset)
+        ? int(AssetLibraryItemDelegate::Pending)
+        : int(AssetLibraryItemDelegate::Ready));
+    item->setData(AssetLibraryItemDelegate::GlyphRole, glyphFor(asset.type));
     item->setToolTip(
       QStringLiteral("%1\n%2").arg(QString::fromStdString(asset.virtualPath), typeText(asset.type)));
 
@@ -570,12 +616,10 @@ void AssetLibraryWindow::refreshGrid()
     }
     if (!image.isNull())
     {
-      item->setIcon(QIcon{QPixmap::fromImage(
-        image.scaled(256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation))});
-    }
-    else
-    {
-      item->setText(QStringLiteral("%1\n(%2)").arg(displayName, typeText(asset.type)));
+      item->setData(
+        AssetLibraryItemDelegate::ThumbnailRole,
+        QPixmap::fromImage(
+          image.scaled(256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
     }
     ++shown;
   }
@@ -591,12 +635,18 @@ void AssetLibraryWindow::refreshGrid()
   {
     for (auto row = 0; row < m_grid->count(); ++row)
     {
-      if (m_grid->item(row)->data(Qt::UserRole).toString().toStdString() == *m_selectedId)
+      if (m_grid->item(row)->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString()
+          == *m_selectedId)
       {
         m_grid->setCurrentRow(row);
         break;
       }
     }
+  }
+  else if (m_grid->count() > 0)
+  {
+    // Open with something selected so the inspector already shows the first asset.
+    m_grid->setCurrentRow(0);
   }
 }
 
@@ -611,15 +661,19 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
   m_status->setText(
     asset->missing ? tr("Missing source")
     : needsConversion(*asset) ? tr("Pending conversion")
-                              : tr("Ready"));
+    : asset->type == project::AssetType::Skybox ? tr("Skybox group")
+                                                : tr("Ready"));
 
   while (m_properties->rowCount() > 0)
     m_properties->removeRow(0);
   const auto add = [this](const QString& key, const QString& value) {
-    auto* label = new QLabel{value, m_properties->parentWidget()};
-    label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    label->setWordWrap(true);
-    m_properties->addRow(key, label);
+    auto* keyLabel = new QLabel{key, m_properties->parentWidget()};
+    keyLabel->setObjectName(QStringLiteral("AssetLibraryPropertyKey"));
+    auto* valueLabel = new QLabel{value, m_properties->parentWidget()};
+    valueLabel->setObjectName(QStringLiteral("AssetLibraryPropertyValue"));
+    valueLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    valueLabel->setWordWrap(true);
+    m_properties->addRow(keyLabel, valueLabel);
   };
   add(tr("Type"), typeText(asset->type));
   add(tr("Path"), QString::fromStdString(asset->virtualPath));

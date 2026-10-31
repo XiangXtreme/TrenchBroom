@@ -25,6 +25,7 @@ class QToolButton;
 
 namespace tb::ui
 {
+class AssetLibraryItemDelegate;
 class AssetLibrarySource;
 
 /**
@@ -48,6 +49,7 @@ class AssetLibraryWindow : public QDialog
   QLineEdit* m_searchEdit = nullptr;
   QListWidget* m_categories = nullptr;
   QListWidget* m_grid = nullptr;
+  AssetLibraryItemDelegate* m_delegate = nullptr;
   QSlider* m_sizeSlider = nullptr;
   QToolButton* m_gridButton = nullptr;
   QToolButton* m_listButton = nullptr;
