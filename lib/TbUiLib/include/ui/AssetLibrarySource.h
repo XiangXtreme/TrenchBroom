@@ -33,6 +33,10 @@ public:
   virtual ~AssetLibrarySource() = default;
 
   virtual QString name() const = 0;
+  /** Stable catalog identity; empty for a source without one. */
+  virtual std::string libraryId() const {
+    return {};
+  }
   /** Folder path now; a URL once a remote source exists. */
   virtual QString location() const = 0;
   virtual bool isRemote() const {

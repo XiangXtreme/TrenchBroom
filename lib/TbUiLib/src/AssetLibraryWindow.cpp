@@ -48,6 +48,9 @@
 #include "ui/AssetLibraryItemDelegate.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
+#include "ui/RecentDocuments.h"
+
+#include "project/ProjectStore.h"
 #include "ui/AssetLibrarySource.h"
 #include "ui/QPathUtils.h"
 
@@ -573,8 +576,18 @@ void AssetLibraryWindow::buildUi()
   inspectorLayout->addWidget(m_status);
   inspectorLayout->addWidget(propertiesTitle);
   inspectorLayout->addWidget(propertiesHost);
+  auto* usageTitle = new QLabel{tr("Used by"), inspector};
+  usageTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
+  m_usage = new QListWidget{inspector};
+  m_usage->setObjectName(QStringLiteral("AssetLibraryUsage"));
+  m_usage->setFrameShape(QFrame::NoFrame);
+  m_usage->setSelectionMode(QAbstractItemView::NoSelection);
+  m_usage->setMaximumHeight(110);
+
   inspectorLayout->addWidget(dependenciesTitle);
   inspectorLayout->addWidget(m_dependencies);
+  inspectorLayout->addWidget(usageTitle);
+  inspectorLayout->addWidget(m_usage);
   inspectorLayout->addStretch(1);
   splitter->addWidget(inspector);
 
@@ -1068,6 +1081,8 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
   if (m_dependencies->count() == 0)
     m_dependencies->addItem(tr("No recorded dependencies"));
 
+  refreshUsage();
+
   m_previewMode->setEnabled(
     asset->type == project::AssetType::Texture && isConverted(*asset));
   updatePreview();
@@ -1340,6 +1355,48 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
   }
   reload();
   m_footer->setText(tr("Imported %1 file(s).").arg(int(imported.size())));
+}
+
+void AssetLibraryWindow::refreshUsage()
+{
+  m_usage->clear();
+  const auto* asset = selectedAsset();
+  if (!asset || !m_source)
+  {
+    m_usage->addItem(tr("No asset selected"));
+    return;
+  }
+
+  const auto libraryId = m_source->libraryId();
+  if (libraryId.empty())
+  {
+    m_usage->addItem(tr("This library has no catalog identity"));
+    return;
+  }
+
+  // Recent projects are the only project list available without asking the user for a
+  // search root; anything unreadable is skipped instead of interrupting the browser.
+  auto used = 0;
+  for (const auto& path : loadRecentDocuments(12))
+  {
+    if (path.extension() != ".tbproj")
+      continue;
+    const auto store = project::ProjectStore::open(path);
+    if (store.is_error())
+      continue;
+    const auto found = store.value()->findAssetByLibraryAsset(libraryId, asset->id);
+    if (found.is_error() || !found.value())
+      continue;
+
+    m_usage->addItem(
+      QStringLiteral("%1  ·  %2")
+        .arg(
+          QString::fromStdString(path.stem().string()),
+          QString::fromStdString(found.value().value().virtualPath)));
+    ++used;
+  }
+  if (used == 0)
+    m_usage->addItem(tr("Not used by known projects"));
 }
 
 void AssetLibraryWindow::applyTags()

@@ -88,6 +88,7 @@ class AssetLibraryWindow : public QDialog
   QLabel* m_status = nullptr;
   QFormLayout* m_properties = nullptr;
   QListWidget* m_dependencies = nullptr;
+  QListWidget* m_usage = nullptr;
   QLabel* m_footer = nullptr;
   QLabel* m_empty = nullptr;
 
@@ -131,6 +132,7 @@ private:
   void renameSelected();
   void deleteSelected();
   void applyTags();
+  void refreshUsage();
 
   const project::LibraryAsset* selectedAsset() const;
   int pendingCount() const;

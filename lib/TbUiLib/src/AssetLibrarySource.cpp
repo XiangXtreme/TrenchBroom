@@ -33,6 +33,11 @@ public:
     return QString::fromStdString(m_library->info().name);
   }
 
+  std::string libraryId() const override
+  {
+    return m_library->info().id;
+  }
+
   QString location() const override
   {
     return pathAsQString(m_library->folder());
