@@ -21,6 +21,7 @@
 
 #include <QApplication>
 #include <QComboBox>
+#include <QCursor>
 #include <QEvent>
 #include <QFocusEvent>
 #include <QGridLayout>
@@ -105,6 +106,8 @@ private:
   QWidget* m_grabbedWidget = nullptr;
   QPoint m_pressPos;
   QPoint m_lastPos;
+  QPoint m_warpFrom;
+  bool m_waitForWarpMove = false;
   QPoint m_dragDirection;
   int m_verticalStartX = 0;
   size_t m_primary = 0;
@@ -223,6 +226,7 @@ protected:
       m_dragDirection = {};
       m_pressPos = mouse->globalPosition().toPoint();
       m_lastPos = m_pressPos;
+      m_waitForWarpMove = false;
       m_state = State::Pending;
       m_grabbedWidget = static_cast<QWidget*>(watched);
       m_controls[index]->setFocus(Qt::MouseFocusReason);
@@ -246,6 +250,15 @@ protected:
         break;
       }
       const auto pos = mouse->globalPosition().toPoint();
+      if (m_waitForWarpMove)
+      {
+        m_waitForWarpMove = false;
+        if (pos == m_warpFrom)
+        {
+          // A queued event from before the warp would read as a huge jump.
+          return true;
+        }
+      }
       const auto delta = pos - m_pressPos;
       const auto motion = pos - m_lastPos;
       m_lastPos = pos;
@@ -288,7 +301,16 @@ protected:
       }
       if (m_state == State::Scrubbing)
       {
-        scrub(motion.x(), mouse->modifiers());
+        auto dragDelta = motion.x();
+        if (const auto warpTarget = cursorWrapTarget(pos))
+        {
+          QCursor::setPos(*warpTarget);
+          m_warpFrom = pos;
+          m_waitForWarpMove = true;
+          m_lastPos = *warpTarget;
+          dragDelta = 0;
+        }
+        scrub(dragDelta, mouse->modifiers());
         return true;
       }
       break;
@@ -450,6 +472,46 @@ private:
   int gestureThreshold() const
   {
     return std::max(1, m_controls[m_primary]->height() / 4);
+  }
+
+  /**
+   * While a number field is dragged, Blender grabs the cursor with
+   * GHOST_kGrabWrap and warps it back inside the window, keeping the lost
+   * horizontal distance in an accumulator (GHOST_SystemWin32::processCursorEvent,
+   * GHOST_Rect::wrapPoint). Qt has no grab mode that does this, so warp at the
+   * window edges and drop the jump from the drag delta: the physical cursor stays
+   * inside the window while the value keeps following the real motion.
+   *
+   * Synthetic mouse events do not press the physical button, so tests never move
+   * the user's cursor.
+   */
+  std::optional<QPoint> cursorWrapTarget(const QPoint& globalPos) const
+  {
+    static constexpr int WrapMargin = 3;
+
+    if (!QGuiApplication::mouseButtons().testFlag(Qt::LeftButton))
+    {
+      return std::nullopt;
+    }
+    const auto* window = m_grabbedWidget != nullptr ? m_grabbedWidget->window() : nullptr;
+    if (window == nullptr)
+    {
+      return std::nullopt;
+    }
+    const auto bounds = window->geometry();
+    if (bounds.width() <= 2 * WrapMargin)
+    {
+      return std::nullopt;
+    }
+    if (globalPos.x() <= bounds.left() + WrapMargin)
+    {
+      return QPoint{bounds.right() - WrapMargin, globalPos.y()};
+    }
+    if (globalPos.x() >= bounds.right() - WrapMargin)
+    {
+      return QPoint{bounds.left() + WrapMargin, globalPos.y()};
+    }
+    return std::nullopt;
   }
 
   void prepareTextEditing(size_t index)
