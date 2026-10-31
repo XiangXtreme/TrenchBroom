@@ -169,7 +169,7 @@ QLabel#Inspector_PageTitle {
 
 QWidget#Inspector_PageContainer,
 QWidget#Inspector_TabBook {
-  background: @tb-panel-background;
+  background: @tb-sidebar-background;
 }
 
 QWidget#Inspector_NavigationRail {

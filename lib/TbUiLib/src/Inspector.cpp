@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2010 Kristian Duske
+ Copyright (C) 2026 XiangXtreme
 
  This file is part of TrenchBroom.
 
@@ -62,7 +63,7 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
 
   auto* legacyTabBar = m_tabBook->tabBar();
   legacyTabBar->setObjectName("Inspector_LegacyTabBar");
-  legacyTabBar->hide();
+  legacyTabBar->setNavigationVisible(false);
 
   m_pageTitle = new QLabel{};
   m_pageTitle->setObjectName("Inspector_PageTitle");

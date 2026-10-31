@@ -870,6 +870,27 @@ TEST_CASE("MapWindow")
     REQUIRE(faceButton != nullptr);
     REQUIRE(outlinerButton != nullptr);
     REQUIRE(pluginButton != nullptr);
+    auto* surface = window.findChild<QWidget*>("MapWindow_InspectorSurface");
+    auto* tabBook = window.findChild<QWidget*>("Inspector_TabBook");
+    REQUIRE(surface);
+    REQUIRE(tabBook);
+    CHECK(surface->isAncestorOf(navigationRail));
+    CHECK(surface->isAncestorOf(pageTitle));
+    CHECK(surface->isAncestorOf(tabBook));
+    CHECK(
+      surface->findChildren<QWidget*>("WorkbenchBorder", Qt::FindDirectChildrenOnly)
+        .size()
+      == 1);
+    window.show();
+    QApplication::processEvents();
+    const auto checkSingleNavigation = [&]() {
+      CHECK(navigationRail->isVisible());
+      CHECK(pageTitle->isVisible());
+      CHECK(legacyTabBar->isHidden());
+      for (auto* button : legacyTabBar->findChildren<QWidget*>("TabBarButton"))
+        CHECK(button->isHidden());
+    };
+    checkSingleNavigation();
     CHECK(pageTitle->property("regionAnchor").toBool());
 
     CHECK(navigationRail->width() == 40);
@@ -894,21 +915,33 @@ TEST_CASE("MapWindow")
     window.switchToInspectorPage(InspectorPage::Outliner);
     CHECK(outlinerButton->isChecked());
     CHECK(pageTitle->text() == "OUTLINER");
+    checkSingleNavigation();
 
     QTest::keyClick(entityButton, Qt::Key_Space);
     CHECK(entityButton->isChecked());
     CHECK_FALSE(outlinerButton->isChecked());
     CHECK(pageTitle->text() == "ENTITY");
+    checkSingleNavigation();
 
     QTest::mouseClick(faceButton, Qt::LeftButton);
     CHECK(faceButton->isChecked());
     CHECK_FALSE(entityButton->isChecked());
     CHECK(pageTitle->text() == "FACE");
+    checkSingleNavigation();
 
     window.switchToInspectorPage(InspectorPage::Plugin);
     CHECK(pluginButton->isChecked());
     CHECK_FALSE(faceButton->isChecked());
     CHECK(pageTitle->text() == "PLUGINS");
+    checkSingleNavigation();
+    window.switchToInspectorPage(InspectorPage::Map);
+    CHECK(mapButton->isChecked());
+    CHECK(pageTitle->text() == "MAP");
+    checkSingleNavigation();
+    window.hide();
+    window.show();
+    QApplication::processEvents();
+    checkSingleNavigation();
   }
 
   SECTION("uses a focused command palette structure")
