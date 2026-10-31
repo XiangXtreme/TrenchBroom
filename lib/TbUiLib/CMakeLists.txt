@@ -109,6 +109,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GlFunctions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GlQt.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GoldSrcSpritePreview.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ModelThumbnail.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ImageListBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ImageUtils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/InfoPanel.cpp
@@ -376,6 +377,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/GlFunctions.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/GlQt.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/GoldSrcSpritePreview.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ModelThumbnail.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ImageListBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ImageUtils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/InfoPanel.h

@@ -279,6 +279,24 @@ public:
 
   std::unique_ptr<gl::MaterialIndexRangeRenderer> buildRenderer(
     size_t skinIndex, size_t frameIndex) const;
+
+  /**
+   * Returns the number of frame meshes, usually equal to frameCount().
+   */
+  size_t frameMeshCount() const;
+
+  /**
+   * Returns the vertex positions of the given frame in model space.
+   *
+   * Read-only access for callers that cannot use the GL renderer, for example a CPU
+   * rendered thumbnail.
+   */
+  std::vector<vm::vec3f> framePositions(size_t frameIndex) const;
+
+  /**
+   * Returns the triangles of the given frame as indices into framePositions().
+   */
+  std::vector<std::array<size_t, 3>> frameTriangles(size_t frameIndex) const;
 };
 
 /**

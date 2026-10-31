@@ -47,6 +47,7 @@
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryItemDelegate.h"
 #include "ui/GoldSrcSpritePreview.h"
+#include "ui/ModelThumbnail.h"
 #include "ui/AssetLibrarySource.h"
 #include "ui/QPathUtils.h"
 
@@ -937,6 +938,11 @@ void AssetLibraryWindow::refreshGrid()
         image = decodeEncodedImage(original.value());
         if (image.isNull() && asset.type == project::AssetType::Sprite)
           image = decodeSpriteImage(original.value());
+        if (image.isNull() && asset.type == project::AssetType::Model)
+          image = renderModelThumbnail(
+            std::filesystem::path{pathFromQString(m_source->location())},
+            std::filesystem::path{asset.sourceContainer},
+            256);
 
       }
     }
@@ -1100,6 +1106,11 @@ void AssetLibraryWindow::updatePreview()
     image = decodeEncodedImage(original.value());
     if (image.isNull() && asset->type == project::AssetType::Sprite)
       image = decodeSpriteImage(original.value());
+    if (image.isNull() && asset->type == project::AssetType::Model)
+      image = renderModelThumbnail(
+        std::filesystem::path{pathFromQString(m_source->location())},
+        std::filesystem::path{asset->sourceContainer},
+        512);
 
   }
 

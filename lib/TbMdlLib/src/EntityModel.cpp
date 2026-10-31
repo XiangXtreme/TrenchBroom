@@ -263,6 +263,19 @@ public:
     return doBuildRenderer(skin, vertexArray);
   }
 
+  const std::vector<EntityModelVertex>& vertices() const
+  {
+    return m_vertices;
+  }
+
+  /**
+   * Calls the given function for every primitive range in this mesh. The count is the
+   * number of indices for triangle lists and the number of vertices for fans and strips,
+   * matching the spacial tree builder.
+   */
+  virtual void forEachPrimitive(
+    const std::function<void(gl::PrimType, size_t, size_t)>& visitor) const = 0;
+
 private:
   /**
    * Creates and returns the actual mesh renderer
@@ -311,6 +324,12 @@ public:
       });
   }
 
+  void forEachPrimitive(
+    const std::function<void(gl::PrimType, size_t, size_t)>& visitor) const override
+  {
+    m_indices.forEachPrimitive(visitor);
+  }
+
 private:
   std::unique_ptr<gl::MaterialIndexRangeRenderer> doBuildRenderer(
     const gl::Material* skin, const gl::VertexArray& vertices) const override
@@ -355,6 +374,13 @@ public:
                                  const size_t count) {
       frame.addToSpacialTree(m_vertices, primType, index, count);
     });
+  }
+
+  void forEachPrimitive(
+    const std::function<void(gl::PrimType, size_t, size_t)>& /*visitor*/) const override
+  {
+    // Per material meshes come from Quake 3 models, which the library browser does not
+    // preview; only GoldSrc models reach the CPU thumbnail.
   }
 
 private:
@@ -452,6 +478,63 @@ const gl::Material* EntityModelSurface::skin(const std::string& name) const
 const gl::Material* EntityModelSurface::skin(const size_t index) const
 {
   return m_skins->materialByIndex(index);
+}
+
+size_t EntityModelSurface::frameMeshCount() const
+{
+  return m_meshes.size();
+}
+
+std::vector<vm::vec3f> EntityModelSurface::framePositions(const size_t frameIndex) const
+{
+  auto result = std::vector<vm::vec3f>{};
+  if (frameIndex >= m_meshes.size() || !m_meshes[frameIndex])
+    return result;
+
+  const auto& vertices = m_meshes[frameIndex]->vertices();
+  result.reserve(vertices.size());
+  for (const auto& vertex : vertices)
+    result.push_back(gl::getVertexComponent<0>(vertex));
+  return result;
+}
+
+std::vector<std::array<size_t, 3>> EntityModelSurface::frameTriangles(
+  const size_t frameIndex) const
+{
+  auto result = std::vector<std::array<size_t, 3>>{};
+  if (frameIndex >= m_meshes.size() || !m_meshes[frameIndex])
+    return result;
+
+  const auto vertexCount = m_meshes[frameIndex]->vertices().size();
+  const auto emit = [&](const size_t a, const size_t b, const size_t c) {
+    if (a < vertexCount && b < vertexCount && c < vertexCount)
+      result.push_back({a, b, c});
+  };
+
+  m_meshes[frameIndex]->forEachPrimitive(
+    [&](const gl::PrimType primType, const size_t index, const size_t count) {
+      switch (primType)
+      {
+      case gl::PrimType::Triangles:
+        for (auto i = std::size_t{0}; i + 2 < count; i += 3)
+          emit(index + i, index + i + 1, index + i + 2);
+        break;
+      case gl::PrimType::TriangleFan:
+        for (auto i = std::size_t{0}; i + 2 < count; ++i)
+          emit(index, index + i + 1, index + i + 2);
+        break;
+      case gl::PrimType::TriangleStrip:
+        for (auto i = std::size_t{0}; i + 2 < count; ++i)
+          emit(
+            index + i,
+            index + i + (i % 2 == 0 ? 1 : 2),
+            index + i + (i % 2 == 0 ? 2 : 1));
+        break;
+      default:
+        break;
+      }
+    });
+  return result;
 }
 
 std::unique_ptr<gl::MaterialIndexRangeRenderer> EntityModelSurface::buildRenderer(
