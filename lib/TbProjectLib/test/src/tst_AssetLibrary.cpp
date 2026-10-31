@@ -542,6 +542,33 @@ TEST_CASE("AssetLibrary")
     require(library->scan());
     CHECK(require(library->findAsset(wallId)).has_value());
   }
+
+  SECTION("keeps user metadata and a renamed display name across rescans")
+  {
+    workspace.write("custom.wad", require(buildGoldSrcWad({wall})));
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+    const auto assets = require(library->assets());
+    const auto wallId = findByMember(assets, "WALL01").id;
+
+    CHECK(require(library->metadata(wallId)) == AssetLibrary::AssetMetadata{});
+    require(library->setFavorite(wallId, true));
+    require(library->setTags(wallId, {"stone", "exterior"}));
+    const auto metadata = require(library->metadata(wallId));
+    CHECK(metadata.favorite);
+    CHECK(metadata.tags == std::vector<std::string>{"stone", "exterior"});
+
+    const auto renamed = require(library->setDisplayName(wallId, "Castle Brick"));
+    CHECK(renamed.displayName == "Castle Brick");
+
+    // The catalog name survives a rescan; the engine texture name does not change.
+    require(library->scan());
+    CHECK(require(library->findAsset(wallId)).value().displayName == "Castle Brick");
+
+    CHECK(library->setDisplayName("missing", "x").is_error());
+    CHECK(library->setFavorite("missing", true).is_error());
+    CHECK(library->setTags("missing", {"x"}).is_error());
+  }
 }
 
 } // namespace tb::project

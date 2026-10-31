@@ -100,6 +100,21 @@ public:
   // user files is the caller's decision.
   Result<void> removeAsset(const std::string& assetId);
 
+  struct AssetMetadata
+  {
+    bool favorite = false;
+    std::vector<std::string> tags;
+
+    friend bool operator==(const AssetMetadata&, const AssetMetadata&) = default;
+  };
+  Result<AssetMetadata> metadata(const std::string& assetId) const;
+  Result<void> setFavorite(const std::string& assetId, bool favorite);
+  Result<void> setTags(const std::string& assetId, const std::vector<std::string>& tags);
+
+  // Gives the asset a catalog name that a rescan keeps. The engine texture name is
+  // separate: it lives in the converted miptex and only changes by converting again.
+  Result<LibraryAsset> setDisplayName(const std::string& assetId, const std::string& name);
+
 private:
   class Impl;
   std::unique_ptr<Impl> m_impl;

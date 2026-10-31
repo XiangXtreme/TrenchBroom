@@ -522,7 +522,7 @@ LibraryAsset readAssetRow(const detail::Statement& query)
 }
 
 constexpr auto Schema =
-  "PRAGMA application_id=0x54424153; PRAGMA user_version=1;"
+  "PRAGMA application_id=0x54424153; PRAGMA user_version=2;"
   "CREATE TABLE library(id TEXT PRIMARY KEY,name TEXT NOT NULL,"
   "created_at TEXT NOT NULL,updated_at TEXT NOT NULL);"
   "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
@@ -531,6 +531,7 @@ constexpr auto Schema =
   "content_hash TEXT NOT NULL,size INTEGER NOT NULL,asset_count INTEGER NOT NULL,"
   "missing INTEGER NOT NULL DEFAULT 0);"
   "CREATE TABLE assets(id TEXT PRIMARY KEY,type TEXT NOT NULL,display_name TEXT NOT NULL,"
+  "custom_display_name TEXT NOT NULL DEFAULT '',"
   "virtual_path TEXT NOT NULL,group_path TEXT NOT NULL,source_rel_path TEXT NOT NULL,"
   "source_member TEXT NOT NULL,native_format TEXT NOT NULL,identity TEXT NOT NULL,"
   "recipe TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),"
@@ -548,7 +549,9 @@ constexpr auto Schema =
   "recorded_at TEXT NOT NULL,PRIMARY KEY(asset_id,revision));"
   "CREATE TABLE dependencies(asset_id TEXT NOT NULL REFERENCES assets(id),"
   "dependency_id TEXT NOT NULL REFERENCES assets(id),kind TEXT NOT NULL,"
-  "PRIMARY KEY(asset_id,dependency_id,kind),CHECK(asset_id<>dependency_id));";
+  "PRIMARY KEY(asset_id,dependency_id,kind),CHECK(asset_id<>dependency_id));"
+  "CREATE TABLE asset_meta(asset_id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE "
+  "CASCADE,favorite INTEGER NOT NULL DEFAULT 0,tags TEXT NOT NULL DEFAULT '');";
 
 void configure(detail::Database& database)
 {
@@ -656,8 +659,10 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::open(
     {
       auto version = detail::Statement{
         db, "SELECT * FROM pragma_application_id(),pragma_user_version()"};
-      if (!version.next() || version.integer(0) != 0x54424153 || version.integer(1) != 1)
-        throw detail::StoreError{"Not a supported TB asset library (format version 1)."};
+      if (
+        !version.next() || version.integer(0) != 0x54424153
+        || (version.integer(1) != 1 && version.integer(1) != 2))
+        throw detail::StoreError{"Not a supported TB asset library (format version 2)."};
     }
     auto info =
       detail::Statement{db, "SELECT id,name,created_at,updated_at FROM library"};
@@ -678,6 +683,20 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::open(
       if (columns.next() && columns.integer(0) == 0)
         detail::execute(
           db, "ALTER TABLE assets ADD COLUMN dependency_hints TEXT NOT NULL DEFAULT ''");
+
+      // Version 2 adds per asset metadata and a user supplied name that survives rescans.
+      auto customName = detail::Statement{
+        db,
+        "SELECT count(*) FROM pragma_table_info('assets') WHERE name='custom_display_name'"};
+      if (customName.next() && customName.integer(0) == 0)
+        detail::execute(
+          db, "ALTER TABLE assets ADD COLUMN custom_display_name TEXT NOT NULL DEFAULT ''");
+      detail::execute(
+        db,
+        "CREATE TABLE IF NOT EXISTS asset_meta(asset_id TEXT PRIMARY KEY REFERENCES "
+        "assets(id) ON DELETE CASCADE,favorite INTEGER NOT NULL DEFAULT 0,"
+        "tags TEXT NOT NULL DEFAULT '')");
+      detail::execute(db, "PRAGMA user_version=2");
     }
     // Fail closed on missing tables or columns.
     auto probe = detail::Statement{db, "SELECT id FROM assets LIMIT 1"};
@@ -886,7 +905,8 @@ Result<LibraryScan> AssetLibrary::scan()
           const auto& stored = contentRowFor();
           auto update = detail::Statement{
             db,
-            "UPDATE assets SET type=?,display_name=?,virtual_path=?,group_path=?,"
+            "UPDATE assets SET type=?,display_name=CASE WHEN custom_display_name<>'' THEN "
+            "custom_display_name ELSE ? END,virtual_path=?,group_path=?,"
             "source_rel_path=?,source_member=?,native_format=?,identity=?,recipe=?,"
             "revision=?,content_hash=?,content=?,original=?,size=?,dependency_hints=?,"
             "missing=0 WHERE id=?"};
@@ -1370,6 +1390,121 @@ Result<void> AssetLibrary::removeAsset(const std::string& assetId)
       statement.run();
     }
     transaction.commit();
+  });
+}
+
+namespace
+{
+std::string joinTags(const std::vector<std::string>& tags)
+{
+  auto text = std::string{};
+  for (const auto& tag : tags)
+  {
+    if (!text.empty())
+      text.push_back('\n');
+    text += tag;
+  }
+  return text;
+}
+
+std::vector<std::string> splitTags(const std::string& text)
+{
+  auto tags = std::vector<std::string>{};
+  auto start = std::size_t{0};
+  while (start <= text.size())
+  {
+    const auto end = text.find('\n', start);
+    const auto tag = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+    if (!tag.empty())
+      tags.push_back(tag);
+    if (end == std::string::npos)
+      break;
+    start = end + 1;
+  }
+  return tags;
+}
+} // namespace
+
+Result<AssetLibrary::AssetMetadata> AssetLibrary::metadata(const std::string& assetId) const
+{
+  return detail::attempt([&] {
+    detail::validateAssetId(assetId);
+    auto query = detail::Statement{
+      m_impl->database.get(), "SELECT favorite,tags FROM asset_meta WHERE asset_id=?"};
+    query.bind(1, assetId);
+    if (!query.next())
+      return AssetMetadata{};
+    return AssetMetadata{query.integer(0) != 0, splitTags(query.text(1))};
+  });
+}
+
+Result<void> AssetLibrary::setFavorite(const std::string& assetId, const bool favorite)
+{
+  return detail::attempt([&] {
+    detail::validateAssetId(assetId);
+    auto* db = m_impl->database.get();
+    auto exists = detail::Statement{db, "SELECT 1 FROM assets WHERE id=?"};
+    exists.bind(1, assetId);
+    if (!exists.next())
+      throw detail::StoreError{"Library asset not found."};
+    auto statement = detail::Statement{
+      db,
+      "INSERT INTO asset_meta(asset_id,favorite) VALUES(?,?) ON CONFLICT(asset_id) DO UPDATE "
+      "SET favorite=excluded.favorite"};
+    statement.bind(1, assetId);
+    statement.bind(2, static_cast<std::int64_t>(favorite ? 1 : 0));
+    statement.run();
+  });
+}
+
+Result<void> AssetLibrary::setTags(
+  const std::string& assetId, const std::vector<std::string>& tags)
+{
+  return detail::attempt([&] {
+    detail::validateAssetId(assetId);
+    for (const auto& tag : tags)
+      detail::validateText(tag, "tag");
+    auto* db = m_impl->database.get();
+    auto exists = detail::Statement{db, "SELECT 1 FROM assets WHERE id=?"};
+    exists.bind(1, assetId);
+    if (!exists.next())
+      throw detail::StoreError{"Library asset not found."};
+    auto statement = detail::Statement{
+      db,
+      "INSERT INTO asset_meta(asset_id,tags) VALUES(?,?) ON CONFLICT(asset_id) DO UPDATE "
+      "SET tags=excluded.tags"};
+    statement.bind(1, assetId);
+    statement.bind(2, joinTags(tags));
+    statement.run();
+  });
+}
+
+Result<LibraryAsset> AssetLibrary::setDisplayName(
+  const std::string& assetId, const std::string& name)
+{
+  return detail::attempt([&] {
+    detail::validateAssetId(assetId);
+    detail::validateText(name, "display name");
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    auto check = detail::Statement{db, "SELECT 1 FROM assets WHERE id=?"};
+    check.bind(1, assetId);
+    if (!check.next())
+      throw detail::StoreError{"Library asset not found."};
+    auto update = detail::Statement{
+      db, "UPDATE assets SET display_name=?,custom_display_name=? WHERE id=?"};
+    update.bind(1, name);
+    update.bind(2, name);
+    update.bind(3, assetId);
+    update.run();
+    transaction.commit();
+
+    const auto found = findAsset(assetId);
+    if (found.is_error())
+      throw detail::StoreError{std::get<Error>(found.error()).msg};
+    if (!found.value())
+      throw detail::StoreError{"Library asset not found."};
+    return found.value().value();
   });
 }
 
