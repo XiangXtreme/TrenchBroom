@@ -763,6 +763,13 @@ void writeRevisionRow(
   insert.bind(9, asset.size);
   insert.bind(10, nowText(db));
   insert.run();
+
+  // Libraries keep no history: the newest content replaces every earlier revision.
+  auto prune = detail::Statement{
+    db, "DELETE FROM asset_revisions WHERE asset_id=? AND revision<>?"};
+  prune.bind(1, assetId);
+  prune.bind(2, static_cast<std::int64_t>(asset.revision));
+  prune.run();
 }
 
 /**
@@ -1300,6 +1307,13 @@ Result<LibraryAsset> AssetLibrary::publishCompatibleContent(
     insert.bind(9, static_cast<std::int64_t>(asset.size));
     insert.bind(10, nowText(db));
     insert.run();
+
+    // No history: publishing replaces the previous revision of this asset.
+    auto prune = detail::Statement{
+      db, "DELETE FROM asset_revisions WHERE asset_id=? AND revision<>?"};
+    prune.bind(1, assetId);
+    prune.bind(2, static_cast<std::int64_t>(asset.revision));
+    prune.run();
 
     transaction.commit();
     return asset;

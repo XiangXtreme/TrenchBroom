@@ -178,15 +178,13 @@ TEST_CASE("AssetLibrary")
     CHECK(floorAfter->revision == 1);
     CHECK(floorAfter->contentHash == contentHash(floor));
 
-    // Both revisions stay readable for comparison and rollback.
-    CHECK(require(library->readContent(wallId, 1)) == wall);
+    // The library keeps no history: the old content is gone, the new one is current.
+    CHECK(library->readContent(wallId, 1).is_error());
     CHECK(require(library->readContent(wallId)) == changedWall);
     const auto history = require(library->revisions(wallId));
-    REQUIRE(history.size() == 2);
-    CHECK(history[0].revision == 1);
-    CHECK(history[0].contentHash == contentHash(wall));
-    CHECK(history[1].revision == 2);
-    CHECK(history[1].contentHash == contentHash(changedWall));
+    REQUIRE(history.size() == 1);
+    CHECK(history[0].revision == 2);
+    CHECK(history[0].contentHash == contentHash(changedWall));
   }
 
   SECTION("keeps missing assets readable after a source disappears")
@@ -485,10 +483,9 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->readContent(image->id)) == convertedBytes);
     CHECK(require(library->readOriginal(image->id)) == imageBytes);
 
-    // The source hash identifies the file, so the conversion is an extra revision
-    // rather than a replacement of the original.
+    // Converting replaces the previous revision instead of keeping the image revision.
     const auto revisions = require(library->revisions(image->id));
-    REQUIRE(revisions.size() == 2);
+    REQUIRE(revisions.size() == 1);
     CHECK(revisions.back().nativeFormat == "goldsrc-wad");
     CHECK(revisions.back().contentHash == image->contentHash);
 

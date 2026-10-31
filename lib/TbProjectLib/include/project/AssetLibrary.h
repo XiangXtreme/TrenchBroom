@@ -28,7 +28,9 @@ namespace tb::project
  *
  * The catalog lives in `<folder>/.tbassets` (SQLite). Sources stay where the user put
  * them; the catalog only indexes them. Rescanning is the only way library content
- * changes, and a rescan never touches any project.
+ * changes, and a rescan never touches any project. Revisions are not retained: a changed
+ * source or a new conversion replaces the previous content instead of growing a history,
+ * and projects detect the change through the content hash.
  *
  * Granularity rules:
  *  - a WAD is a *container*: each miptex entry becomes an independent asset grouped
@@ -68,7 +70,8 @@ public:
   Result<std::vector<LibrarySource>> sources() const;
   Result<std::vector<std::string>> groups() const;
   Result<std::optional<LibraryAsset>> findAsset(const std::string& id) const;
-  // Every recorded revision, oldest first. Used for "view differences".
+  // The revision currently stored for this asset. Libraries keep no history, so this
+  // contains at most one entry: a content change replaces the previous revision.
   Result<std::vector<LibraryAsset>> revisions(const std::string& id) const;
 
   Result<std::vector<std::uint8_t>> readContent(
