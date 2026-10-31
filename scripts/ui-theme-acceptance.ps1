@@ -243,6 +243,8 @@ foreach ($target in $normalizedTargets) {
       "map-areas",
       "map-area-split-preview",
       "map-area-join-preview",
+      "map-area-partial-join-preview",
+      "map-area-dock-preview",
       "project-empty",
       "project-drawer",
       "project-pinned",
@@ -275,7 +277,7 @@ foreach ($target in $normalizedTargets) {
       "preferences-misc",
       "preferences-kreedzbroom"
     )) {
-    throw "Unsupported target '$target'. Expected welcome, workbench, map-areas, map-area-split-preview, map-area-join-preview, project-empty, project-drawer, project-pinned, project-map-switch, project-all-closed, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, goldsrc-entity-links, face-inspector, material-browser-empty, plugin-inspector, supporting, output-log, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
+    throw "Unsupported target '$target'. Expected welcome, workbench, map-areas, map-area-split-preview, map-area-join-preview, map-area-partial-join-preview, map-area-dock-preview, project-empty, project-drawer, project-pinned, project-map-switch, project-all-closed, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, goldsrc-entity-links, face-inspector, material-browser-empty, plugin-inspector, supporting, output-log, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
   }
 }
 foreach ($theme in $Themes) {

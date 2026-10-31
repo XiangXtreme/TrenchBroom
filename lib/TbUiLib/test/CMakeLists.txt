@@ -31,6 +31,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LaunchGameEngineDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapViewToolBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AreaMapView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapViewAreaGeometry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MaterialBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MiscPreferencePane.cpp

@@ -161,6 +161,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolRegistry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/McpToolRegistry.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MultiCompletionLineEdit.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewAreaGeometry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MapViewAreaLayout.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AreaMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MultiPaneMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ObjExportDialog.cpp
@@ -429,6 +431,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpBridgeServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/mcp/McpHttpServer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MultiCompletionLineEdit.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewAreaGeometry.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewAreaLayout.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AreaMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MultiPaneMapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ObjExportDialog.h

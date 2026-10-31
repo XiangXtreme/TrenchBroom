@@ -112,6 +112,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("map-areas"),
     QStringLiteral("map-area-split-preview"),
     QStringLiteral("map-area-join-preview"),
+    QStringLiteral("map-area-partial-join-preview"),
+    QStringLiteral("map-area-dock-preview"),
     QStringLiteral("outliner"),
     QStringLiteral("outliner-hierarchy"),
     QStringLiteral("outliner-filter"),
@@ -775,9 +777,9 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
   {
     auto* areas = targetWidget.findChild<AreaMapView*>();
     auto* preview = targetWidget.findChild<QWidget*>("MapViewAreaPreview");
-    if (!areas || areas->areas().size() != 4
+    if (!areas || areas->areas().size() != (targetName == "map-area-partial-join-preview" ? 3u : 4u)
         || (targetName != "map-areas" && (!preview || !preview->isVisible()
-            || preview->property("join").toBool() != (targetName == "map-area-join-preview"))))
+            || preview->property("join").toBool() != targetName.endsWith("join-preview"))))
       return {
         UiSnapshotReadinessState::Failed,
         "Map area layout or gesture preview is missing"};
@@ -1046,7 +1048,9 @@ void configureMapAreaSnapshot(QWidget& targetWidget, const QString& targetName)
     return;
   if (!targetWidget.property("mapAreasInitialized").toBool())
   {
-    container->switchToMapView(MapViewLayout::FourPanes);
+    container->switchToMapView(
+      targetName == "map-area-partial-join-preview" ? MapViewLayout::ThreePanes
+                                                    : MapViewLayout::FourPanes);
     targetWidget.setProperty("mapAreasInitialized", true);
   }
   if (
@@ -1062,8 +1066,10 @@ void configureMapAreaSnapshot(QWidget& targetWidget, const QString& targetName)
   auto* source = areas.front();
   auto* grip = source->findChild<QWidget*>("MapViewAreaGrip");
   const auto start = grip->mapToGlobal(grip->rect().center());
-  const auto destination = targetName == "map-area-join-preview"
-                             ? areas[1]->mapToGlobal(areas[1]->rect().center())
+  const auto destination = targetName == "map-area-dock-preview"
+                             ? areas.back()->mapToGlobal(areas.back()->rect().center())
+                           : targetName.endsWith("join-preview")
+                             ? areas[1]->mapToGlobal(QPoint{8, areas[1]->height() / 2})
                              : source->mapToGlobal(source->rect().center());
   auto press = QMouseEvent{
     QEvent::MouseButtonPress,

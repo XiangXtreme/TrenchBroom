@@ -8,7 +8,6 @@
 #include <QMouseEvent>
 #include <QScopeGuard>
 #include <QSettings>
-#include <QSplitter>
 #include <QtTest/QTest>
 
 #include "base/PreferenceManager.h"
@@ -82,16 +81,16 @@ TEST_CASE("AreaMapView")
     REQUIRE(layout->splitArea(other, Qt::Vertical));
     QApplication::processEvents();
     REQUIRE(layout->areas().size() == 3);
-    CHECK_FALSE(layout->canJoinAreas(original, other));
+    CHECK(layout->canJoinAreas(original, other));
     auto* bottom = original;
     for (auto* area : layout->areas())
       if (area != original && area != other)
         bottom = area;
-    auto removed = QPointer<CyclingMapView>{bottom};
+    auto removed = QPointer<CyclingMapView>{other};
     REQUIRE(layout->joinAreas(bottom, other));
     QApplication::processEvents();
     CHECK(removed.isNull());
-    REQUIRE(layout->joinAreas(other, original));
+    REQUIRE(layout->joinAreas(original, bottom));
     QApplication::processEvents();
     CHECK(layout->areas().size() == 1);
     CHECK(original->firstMapViewBase() == native);
@@ -115,19 +114,121 @@ TEST_CASE("AreaMapView")
     });
     REQUIRE(sorted.size() == 4);
     REQUIRE(layout->canJoinAreas(sorted[0], sorted[1]));
-    auto* survivor = sorted[1]->firstMapViewBase();
+    auto* survivor = sorted[0]->firstMapViewBase();
     REQUIRE(layout->joinAreas(sorted[0], sorted[1]));
     QApplication::processEvents();
     CHECK(layout->areas().size() == 3);
-    CHECK(sorted[1]->firstMapViewBase() == survivor);
+    CHECK(sorted[0]->firstMapViewBase() == survivor);
     CHECK(layout->perspectiveCamera().position() == perspectivePosition);
     REQUIRE(layout->joinAreas(sorted[2], sorted[3]));
     QApplication::processEvents();
-    REQUIRE(layout->joinAreas(sorted[3], sorted[1]));
+    REQUIRE(layout->joinAreas(sorted[0], sorted[2]));
     QApplication::processEvents();
     CHECK(layout->areas().size() == 1);
-    CHECK(sorted[1]->firstMapViewBase() == survivor);
+    CHECK(sorted[0]->firstMapViewBase() == survivor);
     survivor->camera().setZoom(1.5f);
+  }
+
+  SECTION("partial joins preserve the source and copy target remainder cameras")
+  {
+    REQUIRE(layout->splitArea(original, Qt::Horizontal));
+    auto* other =
+      layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
+    REQUIRE(layout->splitArea(other, Qt::Vertical));
+    QApplication::processEvents();
+    const auto source = QPointer<CyclingMapView>{other};
+    const auto removed = QPointer<CyclingMapView>{original};
+    auto* sourceNative = other->firstMapViewBase();
+    const auto sourcePosition = sourceNative->camera().position();
+    native->setFocus();
+    REQUIRE(layout->joinAreas(other, original));
+    QApplication::processEvents();
+    REQUIRE(source);
+    CHECK(removed.isNull());
+    CHECK(source->firstMapViewBase() == sourceNative);
+    CHECK(sourceNative->camera().position() == sourcePosition);
+    CHECK(layout->areaBounds(source) == QRectF{0, 0, 1, 0.5});
+    const auto feedback =
+      QPointer<QWidget>{layout->findChild<QWidget*>("MapViewAreaFeedback")};
+    REQUIRE(feedback);
+    REQUIRE(QTest::qWaitFor([&]() { return feedback.isNull(); }, 2000));
+    REQUIRE(layout->areas().size() == 3);
+    for (auto* area : layout->areas())
+      if (layout->areaBounds(area) == QRectF{0, 0.5, 0.5, 0.5})
+        CHECK(area->firstMapViewBase()->camera().position() == position);
+    layout->refreshViews();
+    CHECK_FALSE(document->map().modified());
+  }
+
+  SECTION("nonadjacent docking retains native source and closes its old location")
+  {
+    REQUIRE(layout->splitArea(original, Qt::Horizontal));
+    auto* right =
+      layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
+    REQUIRE(layout->splitArea(original, Qt::Vertical));
+    REQUIRE(layout->splitArea(right, Qt::Vertical));
+    QApplication::processEvents();
+    auto* target = original;
+    for (auto* area : layout->areas())
+      if (layout->areaBounds(area) == QRectF{0.5, 0.5, 0.5, 0.5})
+        target = area;
+    REQUIRE(target != original);
+    const auto removed = QPointer<CyclingMapView>{target};
+    target->firstMapViewBase()->setFocus();
+    REQUIRE(layout->dockArea(original, target, areaGeometry::Dock::Center));
+    QApplication::processEvents();
+    CHECK(removed.isNull());
+    CHECK(layout->areas().size() == 3);
+    CHECK(layout->areaBounds(original) == QRectF{0.5, 0.5, 0.5, 0.5});
+    CHECK(original->firstMapViewBase() == native);
+    CHECK(native->camera().position() == position);
+  }
+
+  SECTION("shared edges resize connected regions and Escape restores the mosaic")
+  {
+    REQUIRE(layout->splitArea(original, Qt::Horizontal));
+    auto* other =
+      layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
+    REQUIRE(layout->splitArea(other, Qt::Vertical, 0.7));
+    QApplication::processEvents();
+    const auto findVertical = [&]() -> QWidget* {
+      for (auto* candidate : layout->findChildren<QWidget*>("MapViewAreaEdge"))
+        if (candidate->property("axis").toInt() == 0)
+          return candidate;
+      return nullptr;
+    };
+    auto* edge = findVertical();
+    REQUIRE(edge);
+    const auto bounds = layout->areaBounds(original);
+    const auto start = edge->mapToGlobal(edge->rect().center());
+    const auto sendMouse = [&](const QEvent::Type type, const QPoint global) {
+      auto event = QMouseEvent{
+        type,
+        QPointF{edge->mapFromGlobal(global)},
+        QPointF{global},
+        type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+        type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton,
+        Qt::NoModifier};
+      QApplication::sendEvent(edge, &event);
+    };
+    sendMouse(QEvent::MouseButtonPress, start);
+    sendMouse(QEvent::MouseMove, start + QPoint{80, 0});
+    CHECK(layout->areaBounds(original).width() > bounds.width());
+    for (auto* candidate : layout->findChildren<QWidget*>("MapViewAreaEdge"))
+      if (candidate->property("axis").toInt() == 1)
+        CHECK(candidate->x() > edge->x());
+    QTest::keyClick(edge, Qt::Key_Escape);
+    CHECK(layout->areaBounds(original) == bounds);
+    QApplication::processEvents();
+    edge = findVertical();
+    REQUIRE(edge);
+    sendMouse(QEvent::MouseButtonPress, start);
+    sendMouse(QEvent::MouseMove, start + QPoint{40, 0});
+    sendMouse(QEvent::MouseButtonRelease, start + QPoint{40, 0});
+    QApplication::processEvents();
+    CHECK(layout->areaBounds(original).width() > bounds.width());
+    CHECK(original->firstMapViewBase() == native);
+    CHECK(native->camera().position() == position);
   }
 
   SECTION("corner drag previews, cancels and commits")
@@ -165,23 +266,43 @@ TEST_CASE("AreaMapView")
       layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
     grip = original->findChild<QWidget*>("MapViewAreaGrip");
     drag(QEvent::MouseButtonPress, grip->mapToGlobal(grip->rect().center()));
-    const auto target = other->mapToGlobal(other->rect().center());
+    const auto target = other->mapToGlobal(QPoint{8, other->height() / 2});
     drag(QEvent::MouseMove, target);
     CHECK(preview->isVisible());
     CHECK(preview->property("join").toBool());
     drag(QEvent::MouseButtonRelease, target);
     QApplication::processEvents();
     CHECK(layout->areas().size() == 1);
-    CHECK(layout->areas().front() == other);
+    CHECK(layout->areas().front() == original);
+  }
+
+  SECTION("saved splitter trees migrate and overlapping rectangles are rejected")
+  {
+    container->switchToMapView(MapViewLayout::TwoPanes);
+    QSettings{}.setValue(
+      "Windows/MapViewAreas/0",
+      R"({"version":1,"root":{"axis":1,"ratio":0.4,"first":{"mask":15,"active":0},"second":{"mask":14,"active":1}}})");
+    container->switchToMapView(MapViewLayout::OnePane, true);
+    QApplication::processEvents();
+    layout = window.findChild<AreaMapView*>();
+    REQUIRE(layout->areas().size() == 2);
+    for (auto* area : layout->areas())
+      CHECK(
+        (layout->areaBounds(area) == QRectF{0, 0, 1, 0.4}
+         || layout->areaBounds(area) == QRectF{0, 0.4, 1, 0.6}));
+    container->switchToMapView(MapViewLayout::TwoPanes);
+    QSettings{}.setValue(
+      "Windows/MapViewAreas/0",
+      R"({"version":2,"areas":[{"mask":15,"active":0,"x":0,"y":0,"w":1,"h":1},{"mask":15,"active":0,"x":0,"y":0,"w":1,"h":1}]})");
+    container->switchToMapView(MapViewLayout::OnePane, true);
+    CHECK(window.findChild<AreaMapView*>()->areas().size() == 1);
   }
 
   SECTION("layout restoration, maximization, preset reset and invalid settings")
   {
     REQUIRE(layout->splitArea(original, Qt::Vertical, 0.4));
     QApplication::processEvents();
-    auto* splitter = qobject_cast<QSplitter*>(original->parentWidget());
-    REQUIRE(splitter);
-    const auto sizes = splitter->sizes();
+    const auto bounds = layout->areaBounds(original);
     auto focus = QFocusEvent{QEvent::FocusIn};
     QApplication::sendEvent(native, &focus);
     layout->toggleMaximizeCurrentView();
@@ -190,7 +311,7 @@ TEST_CASE("AreaMapView")
     layout->toggleMaximizeCurrentView();
     CHECK_FALSE(layout->currentViewMaximized());
     QApplication::processEvents();
-    CHECK(splitter->sizes() == sizes);
+    CHECK(layout->areaBounds(original) == bounds);
     container->switchToMapView(MapViewLayout::OnePane, true);
     QApplication::processEvents();
     CHECK(window.findChild<AreaMapView*>()->areas().size() == 2);

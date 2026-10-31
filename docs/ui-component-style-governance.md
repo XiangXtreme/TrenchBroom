@@ -160,4 +160,18 @@ an accidental visual difference by naming it as a new role.
 They use the application palette (Mid, Accent, Window and WindowText), have no local stylesheet,
 and do not replace a foundational control. The grip supports pointer dragging and
 keyboard access to the normal Qt context menu. Accept `map-areas`,
-`map-area-split-preview` and `map-area-join-preview` across the theme/scale matrix.
+`map-area-split-preview`, `map-area-join-preview`, `map-area-partial-join-preview`
+and `map-area-dock-preview` across the theme/scale matrix. Rectangular area boundaries
+use the shared style's `PM_SplitterWidth` and `CE_Splitter`; the domain widget only
+owns hit testing, connected-edge resizing and topology.
+
+The map-only gestures follow the local Blender 5.2 area rules: the drag source survives;
+the close mask darkens the theme window color; partial joins trim overhangs and close
+source remainders into the best adjacent area; small offsets align screen edges. Commit
+highlights fade over 150ms without delaying the layout edit. The common-edge band joins,
+while deeper side/center
+targets dock or replace, closing the old location. Qt device-independent pixels provide
+Blender's scaled 29px minimum width, 26px header and 52px split minimum. Layout settings
+store a validated rectangular tiling (v2), migrating previously saved splitter trees (v1).
+Reference: `source/blender/editors/screen/screen_edit.cc` (`screen_area_join_ex`,
+`screen_area_close`) and `screen_ops.cc` (`area_docking_target`, `area_docking_apply`).

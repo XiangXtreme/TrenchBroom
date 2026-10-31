@@ -10,6 +10,7 @@
 #include <QRectF>
 
 #include "gl/PerspectiveCamera.h"
+#include "ui/MapViewAreaGeometry.h"
 #include "ui/MapViewLayout.h"
 #include "ui/MultiPaneMapView.h"
 
@@ -24,9 +25,9 @@ class AppController;
 class CyclingMapView;
 class MapDocument;
 class MapViewToolBox;
+class MapViewAreaLayout;
 
-/** A binary splitter tree whose leaves retain their native map views during layout edits.
- */
+/** Editor areas retain their native views while a rectangular topology is edited. */
 class AreaMapView : public MultiPaneMapView
 {
   Q_OBJECT
@@ -36,6 +37,7 @@ private:
   MapViewToolBox& m_toolBox;
   MapViewLayout m_preset;
   QWidget* m_root = nullptr;
+  MapViewAreaLayout* m_areaLayout = nullptr;
   std::map<CyclingMapView*, int> m_views;
   MapViewActivationTracker* m_tracker = nullptr;
   gl::PerspectiveCamera m_lastPerspective;
@@ -47,6 +49,14 @@ private:
   double m_splitRatio = 0.5;
   bool m_dragMoved = false;
   QWidget* m_preview = nullptr;
+  QWidget* m_closedPreview = nullptr;
+  areaGeometry::Plan m_gesturePlan;
+  areaGeometry::Dock m_dock = areaGeometry::Dock::None;
+  std::vector<QWidget*> m_edges;
+  QPointer<QWidget> m_edgeGrip;
+  areaGeometry::Rects m_edgeStartRects;
+  QPoint m_edgeStart;
+  bool m_edgesPending = false;
 
 public:
   AreaMapView(
@@ -59,9 +69,19 @@ public:
   ~AreaMapView() override;
 
   std::vector<CyclingMapView*> areas() const;
-  bool splitArea(CyclingMapView* area, Qt::Orientation orientation, double ratio = 0.5);
+  bool splitArea(
+    CyclingMapView* area,
+    Qt::Orientation orientation,
+    double ratio = 0.5,
+    bool newFirst = false);
   bool canJoinAreas(CyclingMapView* source, CyclingMapView* target) const;
   bool joinAreas(CyclingMapView* source, CyclingMapView* target);
+  bool dockArea(
+    CyclingMapView* source,
+    CyclingMapView* target,
+    areaGeometry::Dock side,
+    double fraction = 0.5);
+  QRectF areaBounds(CyclingMapView* area) const;
   void installActivationTracker(MapViewActivationTracker& tracker) override;
   const gl::PerspectiveCamera& perspectiveCamera() const override;
   void toggleMaximizeCurrentView() override;
@@ -71,21 +91,23 @@ protected:
 
 private:
   CyclingMapView* createArea(int mask);
-  void createPreset();
+  void createPreset(bool restoreLegacy);
+  CyclingMapView* copyArea(CyclingMapView* source);
   void rebuildConnections();
   void finishLayoutChange(CyclingMapView* focus);
   void maximizeView(MapView* view) override;
   void restoreViews() override;
   void cancelGesture();
-  void updateGesture(const QPoint& globalPosition);
+  void updateGesture(const QPoint& globalPosition, Qt::KeyboardModifiers modifiers);
   void showAreaMenu(CyclingMapView* area, const QPoint& globalPosition);
   QString settingsKey() const;
   void saveLayout() const;
-  QJsonObject serialize(QWidget* node) const;
-  QWidget* deserialize(const QJsonObject& node);
-  using AreaRects = std::map<CyclingMapView*, QRectF>;
-  AreaRects areaRects() const;
-  AreaRects joinedRects(CyclingMapView* source, CyclingMapView* target) const;
-  QJsonObject partition(const AreaRects& rects) const;
+  bool restoreLayout(const QJsonObject& saved);
+  areaGeometry::Rects geometryRects() const;
+  bool applyPlan(const areaGeometry::Plan& plan, CyclingMapView* focus);
+  void setRects(const areaGeometry::Rects& rects);
+  void scheduleEdges();
+  void updateEdges();
+  bool edgeEvent(QWidget* edge, QEvent* event);
 };
 } // namespace tb::ui
