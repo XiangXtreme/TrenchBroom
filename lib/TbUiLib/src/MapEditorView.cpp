@@ -1,5 +1,6 @@
 /*
   Copyright (C) 2026 XiangXtreme
+ Copyright (C) 2026 XiangXtreme
 
   This file is part of TrenchBroom.
 */
@@ -69,8 +70,10 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
 
   m_mapView->connectTopWidgets(m_inspector);
 
-  m_mapViewSurface =
-    new WorkbenchSurface{QStringLiteral("MapWindow_EditorSurface"), m_mapView};
+  m_mapViewSurface = new WorkbenchSurface{
+    QStringLiteral("MapWindow_EditorSurface"),
+    m_mapView,
+    WorkbenchSurface::Kind::Workspace};
   m_infoPanelSurface =
     new WorkbenchSurface{QStringLiteral("MapWindow_InfoPanelSurface"), m_infoPanel};
   m_inspectorSurface =
@@ -99,7 +102,7 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_vSplitter->setSizes(QList<int>{1'000'000, 1});
 
   auto* layout = new QVBoxLayout{this};
-  layout->setContentsMargins(6, 4, 6, 4);
+  layout->setContentsMargins(6, 6, 6, 6);
   layout->addWidget(m_hSplitter);
   m_controller = std::make_unique<MapEditorController>(appController, document, *this);
   for (auto* tree : m_inspector->findChildren<OutlinerTreeWidget*>())
@@ -265,7 +268,14 @@ MapView3D& MapEditorView::activate3DMapView()
   const auto views = m_mapView->findChildren<MapView3D*>();
   if (views.empty())
     throw std::runtime_error{"No 3D viewport is available"};
-  auto* view = views.front();
+  auto* view = currentOrFirstVisible3DMapView();
+  if (!view)
+  {
+    if (auto* area = qobject_cast<CyclingMapView*>(currentMapViewBase()->parentWidget()))
+      view = qobject_cast<MapView3D*>(area->mapViewForType(CyclingMapView::View_3D));
+  }
+  if (!view)
+    view = views.front();
   if (auto* cycling = qobject_cast<CyclingMapView*>(view->parentWidget()))
     cycling->switchToMapView(view);
   m_currentMapView = view;

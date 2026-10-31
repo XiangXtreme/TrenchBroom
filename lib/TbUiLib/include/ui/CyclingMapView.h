@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2010 Kristian Duske
+ Copyright (C) 2026 XiangXtreme
 
  This file is part of TrenchBroom.
 
@@ -25,12 +26,14 @@
 #include <vector>
 
 class QStackedLayout;
+class QToolButton;
 
 namespace tb::ui
 {
 class AppController;
 class MapDocument;
 class MapViewToolBox;
+class WorkbenchBorder;
 
 class CyclingMapView : public MapViewContainer, public CameraLinkableView
 {
@@ -48,9 +51,12 @@ private:
   MapDocument& m_document;
 
   std::vector<MapViewBase*> m_mapViews;
+  std::vector<int> m_viewTypes;
   MapViewBase* m_currentMapView = nullptr;
 
   QStackedLayout* m_layout = nullptr;
+  QToolButton* m_viewButton = nullptr;
+  WorkbenchBorder* m_border = nullptr;
 
 public:
   CyclingMapView(
@@ -62,10 +68,20 @@ public:
 
 private:
   void createGui(AppController& appController, MapViewToolBox& toolBox, int views);
-  void addMapView(MapViewBase* mapView);
+  void addMapView(MapViewBase* mapView, int type);
+  void updateChrome();
 
 public:
   void switchToMapView(MapViewBase* mapView);
+  void setViewType(int type);
+  int viewType() const;
+  MapViewBase* mapViewForType(int type) const;
+
+signals:
+  void viewChanged(int previousType, int currentType);
+
+protected:
+  void resizeEvent(QResizeEvent* event) override;
 
 public: // implement MapView interface
   void installActivationTracker(MapViewActivationTracker& activationTracker) override;

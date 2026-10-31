@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2026 Kristian Duske
+ Copyright (C) 2026 XiangXtreme
 
  This file is part of TrenchBroom.
 
@@ -30,6 +31,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -47,6 +49,8 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QWidget>
+
+#include "ui/WorkbenchSurface.h"
 
 #include <initializer_list>
 
@@ -275,6 +279,19 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
   drawerTabs->setObjectName("ProjectToolBar");
   drawerTabs->setAttribute(Qt::WA_StyledBackground);
   actionLayout->addRow(QStringLiteral("Drawer tabs"), drawerTabs);
+
+  auto* viewSelector = new QToolButton{};
+  viewSelector->setText(QStringLiteral("Perspective (3D)"));
+  viewSelector->setProperty("tbControlRole", "overlay");
+  viewSelector->setPopupMode(QToolButton::InstantPopup);
+  auto* viewTypeMenu = new QMenu{viewSelector};
+  viewTypeMenu->addAction(QStringLiteral("Perspective (3D)"))->setCheckable(true);
+  viewTypeMenu->actions().front()->setChecked(true);
+  viewTypeMenu->addAction(QStringLiteral("Top (XY)"));
+  viewSelector->setMenu(viewTypeMenu);
+  auto* card = new WorkbenchSurface{
+    QStringLiteral("MapWindow_InspectorSurface"), makeControlRow({viewSelector})};
+  actionLayout->addRow(QStringLiteral("View card"), card);
 
   auto* collectionSection = makeSection(QStringLiteral("Collections and navigation"));
   auto* collectionLayout = sectionLayout(*collectionSection);

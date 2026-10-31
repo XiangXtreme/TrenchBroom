@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2026 Kristian Duske
+ Copyright (C) 2026 XiangXtreme
 
  This file is part of TrenchBroom.
 
@@ -129,6 +130,15 @@ struct CurrentPathGuard
 private:
   std::filesystem::path m_oldCurrentPath;
 };
+
+template <typename T>
+T* visibleMapView(MapWindow& window)
+{
+  const auto views = window.findChildren<T*>();
+  const auto found =
+    std::ranges::find_if(views, [&](auto* view) { return view->isVisibleTo(&window); });
+  return found != views.end() ? *found : nullptr;
+}
 
 std::vector<QWidget*> pluginPanels(MapWindow& window)
 {
@@ -270,7 +280,7 @@ TEST_CASE("MapWindow")
     mdl::addNodes(map, {{&mdl::parentForNodes(map), {entity}}});
     mdl::selectNodes(map, {entity});
     QApplication::processEvents();
-    auto* view = window.findChild<MapView2D*>();
+    auto* view = visibleMapView<MapView2D>(window);
     REQUIRE(view);
     view->setFocus();
     // Record the view explicitly as background windows do not get native activation.
@@ -327,7 +337,7 @@ TEST_CASE("MapWindow")
     window.resize(1200, 900);
     window.show();
     QApplication::processEvents();
-    auto* view = window.findChild<MapView2D*>();
+    auto* view = visibleMapView<MapView2D>(window);
     REQUIRE(view);
     const auto showWindows = qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1;
     const auto originalCursorPos = QCursor::pos();
@@ -500,7 +510,7 @@ TEST_CASE("MapWindow")
     mdl::addNodes(map, {{&mdl::parentForNodes(map), {brush}}});
 
     for (auto* view : std::vector<MapViewBase*>{
-           window.findChild<MapView2D*>(), window.findChild<MapView3D*>()})
+           visibleMapView<MapView2D>(window), window.findChild<MapView3D*>()})
     {
       REQUIRE(view);
       for (const auto defaultSelectMode : {false, true})
@@ -1436,6 +1446,9 @@ TEST_CASE("PlayModeFullScreen")
       auto& view = window.activate3DMapView();
       QApplication::processEvents();
       auto* parentBefore = view.parentWidget();
+      auto* selector = parentBefore->findChild<QToolButton*>("MapViewTypeButton");
+      REQUIRE(selector);
+      const auto selectorVisibleBefore = selector->isVisible();
       const auto menuHiddenBefore = window.menuBar()->isHidden();
       auto* status = window.findChild<QWidget*>("WorkspaceStatusBar");
       auto* navigation = window.findChild<QWidget*>("ProjectToolBar");
@@ -1477,6 +1490,7 @@ TEST_CASE("PlayModeFullScreen")
       CHECK_FALSE(status->isVisible());
       CHECK_FALSE(navigation->isVisible());
       CHECK(view.size() == window.size());
+      CHECK_FALSE(selector->isVisible());
 
       presentation.leave();
       presentation.leave();
@@ -1487,6 +1501,7 @@ TEST_CASE("PlayModeFullScreen")
       CHECK(status->isHidden() == statusHiddenBefore);
       CHECK(navigation->isHidden() == navigationHiddenBefore);
       CHECK(inspector->isHidden());
+      CHECK(selector->isVisible() == selectorVisibleBefore);
       for (auto i = qsizetype{0}; i < splitters.size(); ++i)
       {
         CHECK(splitters[i]->sizes() == sizes[static_cast<size_t>(i)]);

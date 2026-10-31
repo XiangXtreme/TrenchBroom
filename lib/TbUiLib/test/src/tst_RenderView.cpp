@@ -419,8 +419,14 @@ TEST_CASE("RenderView profile external map", "[.][render-profile]")
   window.resize(1400, 900);
   auto* view = window.findChild<MapView3D*>();
   REQUIRE(view != nullptr);
-  auto* dragView = fourPanes ? static_cast<MapViewBase*>(window.findChild<MapView2D*>())
-                             : static_cast<MapViewBase*>(view);
+  auto* dragView = static_cast<MapViewBase*>(view);
+  if (fourPanes)
+  {
+    const auto views = window.findChildren<MapView2D*>();
+    const auto found = std::ranges::find_if(
+      views, [&](auto* candidate) { return candidate->isVisibleTo(&window); });
+    dragView = found != views.end() ? *found : nullptr;
+  }
   REQUIRE(dragView);
   qint64 firstFrameMs = -1;
   auto presentedFrames = 0;

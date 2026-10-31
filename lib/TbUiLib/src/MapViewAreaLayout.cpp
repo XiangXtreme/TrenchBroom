@@ -45,8 +45,11 @@ const std::map<QWidget*, QRectF>& MapViewAreaLayout::areas() const
 }
 int MapViewAreaLayout::handleWidth() const
 {
-  return parentWidget()->style()->pixelMetric(
-    QStyle::PM_SplitterWidth, nullptr, parentWidget());
+  return std::max(
+    parentWidget()->style()->pixelMetric(
+      QStyle::PM_SplitterWidth, nullptr, parentWidget()),
+    parentWidget()->style()->pixelMetric(
+      QStyle::PM_LayoutHorizontalSpacing, nullptr, parentWidget()));
 }
 QRect MapViewAreaLayout::pixelRect(const QRectF& rect) const
 {

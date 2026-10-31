@@ -5,9 +5,11 @@
 
 #include <QApplication>
 #include <QFocusEvent>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QScopeGuard>
 #include <QSettings>
+#include <QToolButton>
 #include <QtTest/QTest>
 
 #include "base/PreferenceManager.h"
@@ -22,6 +24,7 @@
 #include "ui/AreaMapView.h"
 #include "ui/CyclingMapView.h"
 #include "ui/MapDocument.h"
+#include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapWindow.h"
 #include "ui/SwitchableMapViewContainer.h"
@@ -68,6 +71,59 @@ TEST_CASE("AreaMapView")
   auto* native = original->firstMapViewBase();
   native->camera().moveTo(vm::vec3f{128, 256, 512});
   const auto position = native->camera().position();
+
+  SECTION("each area can select every view without losing cameras or changing the map")
+  {
+    auto* button = original->findChild<QToolButton*>("MapViewTypeButton");
+    REQUIRE(button);
+    REQUIRE(button->menu());
+    REQUIRE(button->menu()->actions().size() == 4);
+    for (auto* action : button->menu()->actions())
+    {
+      action->trigger();
+      CHECK(original->viewType() == action->data().toInt());
+      CHECK(action->isChecked());
+      CHECK(button->text() == action->text());
+    }
+    original->setViewType(CyclingMapView::View_3D);
+    CHECK(original->firstMapViewBase() == native);
+    CHECK(native->camera().position() == position);
+    original->setViewType(CyclingMapView::View_XZ);
+    CHECK(layout->perspectiveCamera().position() == position);
+    REQUIRE(layout->splitArea(original, Qt::Horizontal));
+    for (auto* area : layout->areas())
+    {
+      CHECK(area->viewType() == CyclingMapView::View_XZ);
+      area->setViewType(CyclingMapView::View_3D);
+      CHECK(area->firstMapViewBase()->camera().position() == position);
+    }
+    container->switchToMapView(MapViewLayout::TwoPanes);
+    QApplication::processEvents();
+    layout = window.findChild<AreaMapView*>();
+    REQUIRE(layout->areas().size() == 2);
+    for (auto* area : layout->areas())
+    {
+      area->setViewType(CyclingMapView::View_YZ);
+      CHECK(area->viewType() == CyclingMapView::View_YZ);
+      area->setViewType(CyclingMapView::View_3D);
+      CHECK(area->viewType() == CyclingMapView::View_3D);
+    }
+    for (auto* area : layout->areas())
+    {
+      auto* view = area->firstMapViewBase();
+      view->camera().moveTo(vm::vec3f{float(area->x()), 32, 64});
+      auto focus = QFocusEvent{QEvent::FocusIn};
+      QApplication::sendEvent(view, &focus);
+      Q_EMIT qApp->focusChanged(nullptr, view);
+      CHECK(layout->perspectiveCamera().position() == view->camera().position());
+      CHECK(&window.activate3DMapView() == view);
+    }
+    container->switchToMapView(MapViewLayout::TwoPanes, true);
+    QApplication::processEvents();
+    for (auto* area : window.findChild<AreaMapView*>()->areas())
+      CHECK(area->viewType() == CyclingMapView::View_3D);
+    CHECK_FALSE(document->map().modified());
+  }
 
   SECTION("nested splits and joins preserve surviving views and cameras")
   {
@@ -287,9 +343,14 @@ TEST_CASE("AreaMapView")
     layout = window.findChild<AreaMapView*>();
     REQUIRE(layout->areas().size() == 2);
     for (auto* area : layout->areas())
+    {
       CHECK(
         (layout->areaBounds(area) == QRectF{0, 0, 1, 0.4}
          || layout->areaBounds(area) == QRectF{0, 0.4, 1, 0.6}));
+      CHECK(
+        area->viewType()
+        == (layout->areaBounds(area).y() == 0 ? CyclingMapView::View_3D : CyclingMapView::View_XZ));
+    }
     container->switchToMapView(MapViewLayout::TwoPanes);
     QSettings{}.setValue(
       "Windows/MapViewAreas/0",

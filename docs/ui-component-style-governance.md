@@ -63,6 +63,10 @@ remain related to the default control.
 - `outlined`: an icon command whose persistent boundary communicates a mode or selectable
   tool outside a toolbar. It is not a general-purpose way to make one button look stronger.
 
+- `overlay`: a control above an image or OpenGL canvas. An opaque themed surface
+  keeps its label legible independently of the rendered content; persistent borders
+  identify the hit area. The standard 28 px command height and states apply.
+
 New roles require a documented interaction or density reason and a component snapshot.
 "This page looks different" is not a valid reason.
 
@@ -175,3 +179,15 @@ Blender's scaled 29px minimum width, 26px header and 52px split minimum. Layout 
 store a validated rectangular tiling (v2), migrating previously saved splitter trees (v1).
 Reference: `source/blender/editors/screen/screen_edit.cc` (`screen_area_join_ex`,
 `screen_area_close`) and `screen_ops.cc` (`area_docking_target`, `area_docking_apply`).
+
+## Workbench card edges
+
+`WorkbenchSurface` and its shared `WorkbenchBorder` overlay own workbench card edges,
+including OpenGL viewport edges. The overlay paints only the border and outer corner
+cutouts with antialiasing, leaves input to the content, and does not reparent renderers.
+Its radius, stroke and colors are global `tbSurfaceFrame` properties in `base.qss`.
+Each viewport owns one frame; the containing workspace has no second card border.
+Panel surfaces use the same frame. Area gutters use the greater of the shared splitter
+and horizontal layout spacing metrics. Accept `components`, `workbench`, `outliner`
+and `map-areas`, plus the existing gesture previews across the theme/scale matrix.
+View selectors use standard overlay tool buttons and exclusive Qt menu actions.

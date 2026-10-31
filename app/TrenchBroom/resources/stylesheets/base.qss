@@ -125,15 +125,18 @@ QWidget#MapWindow_WorkbenchShell {
   background: @tb-window-background;
 }
 
-QWidget#MapWindow_EditorSurface,
-QWidget#MapWindow_InfoPanelSurface,
-QWidget#MapWindow_InspectorSurface {
-  border: 1px solid @tb-border;
-  border-radius: 6px;
+/* All pane corners use one antialiased frame, including OpenGL viewports. */
+QWidget[tbSurfaceFrame="true"] {
+  qproperty-cornerRadius: 6;
+  qproperty-borderWidth: 1;
+  qproperty-borderColor: @tb-border;
+  qproperty-activeBorderColor: @tb-accent;
+  qproperty-outsideColor: @tb-window-background;
 }
 
-QWidget#MapWindow_EditorSurface {
-  background: @tb-editor-background;
+QWidget#MapWindow_EditorSurface,
+QWidget#MapViewAreaSurface {
+  background: @tb-window-background;
 }
 
 QWidget#MapWindow_InfoPanelSurface {
@@ -345,14 +348,27 @@ QToolButton[tbControlRole="outlined"] {
   border-color: @tb-border;
 }
 
+/* Solid surface keeps controls readable above map grids and rendered images. */
+QToolButton[tbControlRole="overlay"] {
+  background: @tb-elevated-background;
+  border-color: @tb-border;
+  border-radius: 4px;
+  min-height: 22px;
+  padding: 2px 6px;
+}
+
 QToolButton[tbControlRole="outlined"]:hover,
-QToolButton[tbControlRole="outlined"]:focus {
+QToolButton[tbControlRole="outlined"]:focus,
+QToolButton[tbControlRole="overlay"]:hover,
+QToolButton[tbControlRole="overlay"]:focus {
   background: @tb-hover-background;
   border-color: @tb-focus-border;
 }
 
 QToolButton[tbControlRole="outlined"]:pressed,
-QToolButton[tbControlRole="outlined"]:checked {
+QToolButton[tbControlRole="outlined"]:checked,
+QToolButton[tbControlRole="overlay"]:pressed,
+QToolButton[tbControlRole="overlay"]:checked {
   background: @tb-pressed-background;
   border-color: @tb-strong-border;
 }

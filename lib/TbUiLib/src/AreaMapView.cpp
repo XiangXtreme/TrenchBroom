@@ -29,6 +29,7 @@
 #include "ui/WidgetState.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <utility>
 
@@ -253,6 +254,7 @@ AreaMapView::AreaMapView(
   box->setSpacing(0);
   m_root = new QWidget{this};
   m_root->setObjectName("MapViewAreaSurface");
+  m_root->setAttribute(Qt::WA_StyledBackground);
   m_areaLayout = new MapViewAreaLayout{m_root};
   m_root->installEventFilter(this);
   box->addWidget(m_root);
@@ -282,7 +284,13 @@ CyclingMapView* AreaMapView::createArea(const int mask)
 {
   auto* area = new CyclingMapView{m_appController, m_document, m_toolBox, mask, m_root};
   area->setMinimumSize(areaGeometry::MinimumWidth, areaGeometry::HeaderHeight);
-  m_views.emplace(area, mask);
+  m_views.emplace(area, CyclingMapView::View_ALL);
+  connect(area, &CyclingMapView::viewChanged, this, [this, area](int previous, int) {
+    if (previous == CyclingMapView::View_3D)
+      copyCamera(area->perspectiveCamera(), m_lastPerspective);
+    if (m_preview && m_areaLayout->areas().contains(area))
+      saveLayout();
+  });
   addMapView(area);
   auto* grip = new AreaGrip{area};
   grip->installEventFilter(this);
@@ -296,14 +304,10 @@ CyclingMapView* AreaMapView::createArea(const int mask)
 CyclingMapView* AreaMapView::copyArea(CyclingMapView* source)
 {
   auto* copy = createArea(m_views.at(source));
-  const auto originals = source->findChildren<MapViewBase*>();
-  const auto copies = copy->findChildren<MapViewBase*>();
-  for (auto i = qsizetype{0}; i < originals.size(); ++i)
-  {
-    copyCamera(originals[i]->camera(), copies[i]->camera());
-    if (originals[i] == source->firstMapViewBase())
-      copy->switchToMapView(copies[i]);
-  }
+  for (auto type = 1; type <= CyclingMapView::View_YZ; type <<= 1)
+    copyCamera(
+      source->mapViewForType(type)->camera(), copy->mapViewForType(type)->camera());
+  copy->setViewType(source->viewType());
   return copy;
 }
 void AreaMapView::createPreset(const bool restoreLegacy)
@@ -534,7 +538,10 @@ bool AreaMapView::dockArea(
 const gl::PerspectiveCamera& AreaMapView::perspectiveCamera() const
 {
   for (const auto& [area, mask] : m_views)
-    if (mask & CyclingMapView::View_3D)
+    if (area->viewType() == CyclingMapView::View_3D && area->isCurrent())
+      return area->perspectiveCamera();
+  for (const auto& [area, mask] : m_views)
+    if (area->viewType() == CyclingMapView::View_3D)
       return area->perspectiveCamera();
   return m_lastPerspective;
 }
@@ -572,9 +579,7 @@ void AreaMapView::saveLayout() const
     const auto r = areaBounds(area);
     saved.append(QJsonObject{
       {"mask", mask},
-      {"active",
-       static_cast<int>(
-         area->findChildren<MapViewBase*>().indexOf(area->firstMapViewBase()))},
+      {"active", std::countr_zero(static_cast<unsigned int>(area->viewType()))},
       {"x", r.x()},
       {"y", r.y()},
       {"w", r.width()},
@@ -651,8 +656,14 @@ bool AreaMapView::restoreLayout(const QJsonObject& saved)
   {
     const auto node = entries[i].toObject();
     auto* area = createArea(node.value("mask").toInt());
-    area->switchToMapView(
-      area->findChildren<MapViewBase*>().at(node.value("active").toInt()));
+    auto active = node.value("active").toInt();
+    for (auto type = 1; type <= CyclingMapView::View_YZ; type <<= 1)
+      if (node.value("mask").toInt() & type)
+        if (active-- == 0)
+        {
+          area->setViewType(type);
+          break;
+        }
     widgets.emplace(area, rects.at(static_cast<int>(i)));
   }
   m_areaLayout->setAreas(widgets);
