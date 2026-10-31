@@ -1,55 +1,86 @@
 /*
   Copyright (C) 2026 XiangXtreme
+
   This file is part of TrenchBroom, licensed under GPL version 3 or later.
- */
+*/
 #pragma once
 
 #include <QDialog>
-#include <QStringList>
+#include <QString>
 
-#include "project/AssetLibrary.h"
+#include "project/ProjectAsset.h"
 
-#include <cstddef>
 #include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 
+class QComboBox;
+class QFormLayout;
 class QLabel;
 class QLineEdit;
-class QTreeWidget;
+class QListWidget;
+class QSlider;
+class QToolButton;
 
 namespace tb::ui
 {
+class AssetLibrarySource;
 
 /**
- * The application-wide asset library manager, opened from the welcome page.
+ * The application-wide asset library browser.
  *
- * The library is a single folder configured once; projects never choose their own. The
- * window imports source files into it, converts images to GoldSrc texture content and
- * shows the current catalog. It owns nothing but the catalog handle and never touches
- * project state.
+ * Mirrors the Blender-style layout the project settled on: categories and smart filters
+ * on the left, an asset grid in the middle and an inspector on the right. Everything is
+ * read through AssetLibrarySource, so a remote library can replace the local folder
+ * without touching this window.
  */
-class AssetLibraryWatcher;
-
 class AssetLibraryWindow : public QDialog
 {
   Q_OBJECT
-  QLineEdit* m_path = nullptr;
-  AssetLibraryWatcher* m_watcher = nullptr;
-  QLabel* m_summary = nullptr;
-  QTreeWidget* m_assets = nullptr;
-  std::unique_ptr<project::AssetLibrary> m_library;
+  std::unique_ptr<AssetLibrarySource> m_source;
+  std::vector<project::LibraryAsset> m_assets;
+  std::optional<std::string> m_selectedId;
+  QString m_filter = QStringLiteral("all");
+  QString m_search;
+
+  QLabel* m_libraryLabel = nullptr;
+  QLineEdit* m_searchEdit = nullptr;
+  QListWidget* m_categories = nullptr;
+  QListWidget* m_grid = nullptr;
+  QSlider* m_sizeSlider = nullptr;
+  QToolButton* m_gridButton = nullptr;
+  QToolButton* m_listButton = nullptr;
+  QLabel* m_preview = nullptr;
+  QComboBox* m_previewMode = nullptr;
+  QLabel* m_name = nullptr;
+  QLabel* m_status = nullptr;
+  QFormLayout* m_properties = nullptr;
+  QListWidget* m_dependencies = nullptr;
+  QLabel* m_footer = nullptr;
+  QLabel* m_empty = nullptr;
 
 public:
   explicit AssetLibraryWindow(QWidget* parent = nullptr);
+  ~AssetLibraryWindow() override;
 
 private:
-  void chooseFolder();
-  void openFolder(const std::filesystem::path& folder, bool createIfMissing);
-  void importFiles();
-  void rescan();
-  void convertImages();
-  // Converts every library image without converted content. Returns how many textures
-  // were stored; individual failures are appended to `problems`.
-  std::size_t convertPendingImages(QStringList& problems);
+  void chooseLibrary();
+  void openLibrary(const QString& folder);
   void reload();
+  void refreshCategories();
+  void refreshGrid();
+  void showAsset(const project::LibraryAsset* asset);
+  void clearInspector();
+  void updatePreview();
+  void updateStatus();
+  void runImport();
+  void runRescan();
+  void runConvertPending();
+  void revealSelected();
+
+  const project::LibraryAsset* selectedAsset() const;
+  int pendingCount() const;
+  int missingCount() const;
 };
 } // namespace tb::ui

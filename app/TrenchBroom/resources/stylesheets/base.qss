@@ -1471,6 +1471,60 @@ QWidget#outlinerPropertyAddBar {
   border-top: 1px solid @tb-border;
 }
 
+/* Asset library browser: list and tree controls keep the canonical styling; only the
+   structural containers and labels carry the panel treatment. */
+QWidget#AssetLibraryTopBar {
+  background: @tb-panel-background;
+  border-bottom: 1px solid @tb-border;
+}
+
+QWidget#AssetLibrarySidebar {
+  background: @tb-panel-background;
+  border-right: 1px solid @tb-border;
+}
+
+QWidget#AssetLibraryInspector {
+  background: @tb-panel-background;
+  border-left: 1px solid @tb-border;
+}
+
+QLabel#AssetLibrarySideTitle {
+  color: @tb-secondary-text;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+QLabel#AssetLibraryLibraryLabel {
+  color: @tb-text;
+  font-weight: 600;
+}
+
+QLabel#AssetLibraryPreview {
+  background: @tb-window-background;
+  border: 1px solid @tb-border;
+  border-radius: 3px;
+  color: @tb-secondary-text;
+}
+
+QLabel#AssetLibraryEmpty {
+  color: @tb-secondary-text;
+}
+
+QLabel#AssetLibraryFooter {
+  background: @tb-panel-background;
+  border-top: 1px solid @tb-border;
+  color: @tb-secondary-text;
+}
+
+QLabel#AssetLibraryName {
+  font-weight: 600;
+}
+
+QLabel#AssetLibraryStatus {
+  color: @tb-secondary-text;
+}
+
 QWidget#outlinerPropertyRow {
   background: transparent;
   border: none;
