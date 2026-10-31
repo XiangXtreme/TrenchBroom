@@ -23,6 +23,7 @@ class QFormLayout;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QImage;
 class QProgressBar;
 class QPushButton;
 class QTimer;
@@ -133,6 +134,8 @@ private:
   void deleteSelected();
   void applyTags();
   void refreshUsage();
+  QImage previewImage(
+    const project::LibraryAsset& asset, bool converted, int size) const;
 
   const project::LibraryAsset* selectedAsset() const;
   int pendingCount() const;

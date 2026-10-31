@@ -213,6 +213,31 @@ int statusFor(const project::LibraryAsset& asset)
   return int(AssetLibraryItemDelegate::Ready);
 }
 
+/** Category key to asset type; the sidebar, the filter and the counts share it. */
+struct TypeFilter
+{
+  const char* key;
+  project::AssetType type;
+};
+
+constexpr std::array kTypeFilters{
+  TypeFilter{"texture", project::AssetType::Texture},
+  TypeFilter{"model", project::AssetType::Model},
+  TypeFilter{"sprite", project::AssetType::Sprite},
+  TypeFilter{"sound", project::AssetType::Sound},
+  TypeFilter{"skybox", project::AssetType::Skybox},
+};
+
+std::optional<project::AssetType> typeForFilter(const QString& filter)
+{
+  for (const auto& candidate : kTypeFilters)
+  {
+    if (filter == QLatin1String{candidate.key})
+      return candidate.type;
+  }
+  return std::nullopt;
+}
+
 /** Card glyph, also used as the kind key for the tinted placeholder tile. */
 AssetLibraryGlyph kindGlyph(const project::AssetType type)
 {
@@ -837,26 +862,16 @@ void AssetLibraryWindow::refreshCategories()
   addSection(tr("Library"));
   add(QStringLiteral("all"), tr("All assets"), int(m_assets.size()));
   add(QStringLiteral("favourites"), tr("Favourites"), int(m_favorites.size()));
-  add(QStringLiteral("texture"), tr("Textures"),
-      int(std::count_if(m_assets.begin(), m_assets.end(), [](const auto& asset) {
-        return asset.type == project::AssetType::Texture;
-      })));
-  add(QStringLiteral("model"), tr("Models"),
-      int(std::count_if(m_assets.begin(), m_assets.end(), [](const auto& asset) {
-        return asset.type == project::AssetType::Model;
-      })));
-  add(QStringLiteral("sprite"), tr("Sprites"),
-      int(std::count_if(m_assets.begin(), m_assets.end(), [](const auto& asset) {
-        return asset.type == project::AssetType::Sprite;
-      })));
-  add(QStringLiteral("sound"), tr("Sounds"),
-      int(std::count_if(m_assets.begin(), m_assets.end(), [](const auto& asset) {
-        return asset.type == project::AssetType::Sound;
-      })));
-  add(QStringLiteral("skybox"), tr("Skyboxes"),
-      int(std::count_if(m_assets.begin(), m_assets.end(), [](const auto& asset) {
-        return asset.type == project::AssetType::Skybox;
-      })));
+  const auto countOf = [this](const project::AssetType type) {
+    return int(std::count_if(
+      m_assets.begin(), m_assets.end(),
+      [type](const auto& asset) { return asset.type == type; }));
+  };
+  add(QStringLiteral("texture"), tr("Textures"), countOf(project::AssetType::Texture));
+  add(QStringLiteral("model"), tr("Models"), countOf(project::AssetType::Model));
+  add(QStringLiteral("sprite"), tr("Sprites"), countOf(project::AssetType::Sprite));
+  add(QStringLiteral("sound"), tr("Sounds"), countOf(project::AssetType::Sound));
+  add(QStringLiteral("skybox"), tr("Skyboxes"), countOf(project::AssetType::Skybox));
 
   addSection(tr("Attention"));
   add(QStringLiteral("pending"), tr("Pending"), pendingCount());
@@ -903,13 +918,10 @@ void AssetLibraryWindow::refreshGrid()
   auto shown = 0;
   for (const auto& asset : m_assets)
   {
+    const auto typeFilter = typeForFilter(m_filter);
     const auto matchesType =
       m_filter == QStringLiteral("all")
-      || (m_filter == QStringLiteral("texture") && asset.type == project::AssetType::Texture)
-      || (m_filter == QStringLiteral("model") && asset.type == project::AssetType::Model)
-      || (m_filter == QStringLiteral("sprite") && asset.type == project::AssetType::Sprite)
-      || (m_filter == QStringLiteral("sound") && asset.type == project::AssetType::Sound)
-      || (m_filter == QStringLiteral("skybox") && asset.type == project::AssetType::Skybox)
+      || (typeFilter && asset.type == *typeFilter)
       || (m_filter == QStringLiteral("pending") && needsConversion(asset))
       || (m_filter == QStringLiteral("missing") && asset.missing)
       || (m_filter == QStringLiteral("favourites") && m_favorites.contains(asset.id));
@@ -938,27 +950,7 @@ void AssetLibraryWindow::refreshGrid()
                          typeText(asset.type),
                          sizeText(asset.size)));
 
-    auto image = QImage{};
-    if (isConverted(asset) && asset.type == project::AssetType::Texture)
-    {
-      if (const auto content = m_source->readContent(asset.id); content.is_success())
-        image = decodeMiptexWad(content.value());
-    }
-    if (image.isNull())
-    {
-      if (const auto original = m_source->readOriginal(asset.id); original.is_success())
-      {
-        image = decodeEncodedImage(original.value());
-        if (image.isNull() && asset.type == project::AssetType::Sprite)
-          image = decodeSpriteImage(original.value());
-        if (image.isNull() && asset.type == project::AssetType::Model)
-          image = renderModelThumbnail(
-            std::filesystem::path{pathFromQString(m_source->location())},
-            std::filesystem::path{asset.sourceContainer},
-            256);
-
-      }
-    }
+    const auto image = previewImage(asset, true, 256);
     if (!image.isNull())
     {
       item->setData(
@@ -1100,6 +1092,37 @@ void AssetLibraryWindow::clearInspector()
     m_properties->removeRow(0);
 }
 
+QImage AssetLibraryWindow::previewImage(
+  const project::LibraryAsset& asset, const bool converted, const int size) const
+{
+  if (!m_source)
+    return {};
+
+  if (converted && isConverted(asset) && asset.type == project::AssetType::Texture)
+  {
+    if (const auto content = m_source->readContent(asset.id); content.is_success())
+    {
+      if (auto image = decodeMiptexWad(content.value()); !image.isNull())
+        return image;
+    }
+  }
+
+  const auto original = m_source->readOriginal(asset.id);
+  if (original.is_error())
+    return {};
+
+  if (auto image = decodeEncodedImage(original.value()); !image.isNull())
+    return image;
+  if (asset.type == project::AssetType::Sprite)
+    return decodeSpriteImage(original.value());
+  if (asset.type == project::AssetType::Model)
+    return renderModelThumbnail(
+      std::filesystem::path{pathFromQString(m_source->location())},
+      std::filesystem::path{asset.sourceContainer},
+      size);
+  return {};
+}
+
 void AssetLibraryWindow::updatePreview()
 {
   const auto* asset = selectedAsset();
@@ -1109,25 +1132,7 @@ void AssetLibraryWindow::updatePreview()
     return;
   }
 
-  auto image = QImage{};
-  if (m_previewMode->currentIndex() == 1 && isConverted(*asset)
-      && asset->type == project::AssetType::Texture)
-  {
-    if (const auto content = m_source->readContent(asset->id); content.is_success())
-      image = decodeMiptexWad(content.value());
-  }
-  else if (const auto original = m_source->readOriginal(asset->id); original.is_success())
-  {
-    image = decodeEncodedImage(original.value());
-    if (image.isNull() && asset->type == project::AssetType::Sprite)
-      image = decodeSpriteImage(original.value());
-    if (image.isNull() && asset->type == project::AssetType::Model)
-      image = renderModelThumbnail(
-        std::filesystem::path{pathFromQString(m_source->location())},
-        std::filesystem::path{asset->sourceContainer},
-        512);
-
-  }
+  const auto image = previewImage(*asset, m_previewMode->currentIndex() == 1, 512);
 
   if (image.isNull())
   {
