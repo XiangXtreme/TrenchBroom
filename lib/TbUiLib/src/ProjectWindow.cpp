@@ -42,10 +42,8 @@
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/MapHeader.h"
-#include "project/AssetLibrary.h"
 #include "ui/ActionManager.h"
 #include "ui/AppController.h"
-#include "ui/AssetLibraryWatcher.h"
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
@@ -54,7 +52,6 @@
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectAssetPanel.h"
 #include "ui/ProjectCaptureConflictDialog.h"
-#include "ui/ProjectLibraryDialog.h"
 #include "ui/ProjectRecovery.h"
 #include "ui/ProjectResourceDialog.h"
 #include "ui/ProjectSession.h"
@@ -138,12 +135,6 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   setAttribute(Qt::WA_DeleteOnClose);
   setObjectName("ProjectWindow");
   resize(1280, 900);
-  m_libraryWatcher = new AssetLibraryWatcher{this};
-  connect(m_libraryWatcher, &AssetLibraryWatcher::foldersChanged, this, [this]() {
-    m_notifications->showMessage(
-      tr("Asset library files changed. Use Library > Rescan Library and Check for "
-         "Updates to review them."));
-  });
   m_commands = std::make_unique<MapCommandSurface>(m_appController, [this]() {
     auto* window = activeMapWindow();
     return ActionExecutionContext{
@@ -182,16 +173,6 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   file->addAction(
     tr("Export Compile Snapshot…"), this, &ProjectWindow::exportCompileSnapshot);
   file->addAction(tr("Close Project"), this, &QWidget::close);
-  auto* library = menuBar()->addMenu(tr("Library"));
-  library->addAction(
-    tr("Attach Asset Library…"), this, &ProjectWindow::attachAssetLibrary);
-  library->addAction(
-    tr("Relink Moved Library…"), this, &ProjectWindow::relinkAssetLibrary);
-  library->addAction(
-    tr("Check for Asset Updates…"), this, [this]() { checkLibraryUpdates(false); });
-  library->addAction(tr("Rescan Library and Check for Updates…"), this, [this]() {
-    checkLibraryUpdates(true);
-  });
   auto* asset = menuBar()->addMenu(tr("Asset"));
   asset->addAction(tr("Open Map"), this, &ProjectWindow::openSelected);
   asset->addAction(tr("Reimport…"), this, &ProjectWindow::reimportSelected);
@@ -433,7 +414,6 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   if (auto* window = activeMapWindow())
     m_appController.mapWindowManager().activateMapWindow(*window);
   refreshCommands();
-  QTimer::singleShot(0, this, [this]() { maybePromptForLibraryUpdates(); });
 
   // A full project snapshot is only written while there is unsaved work, and only every
   // few minutes: recovery must not compete with editing for disk bandwidth.
@@ -601,136 +581,10 @@ void ProjectWindow::captureMapResources()
     tr("Captured %1 resource(s) referenced by the map.").arg(summary.captured.size());
   if (!summary.unresolved.empty())
     message += " "
-               + tr("%1 reference(s) are not available in the attached libraries.")
+               + tr("%1 reference(s) are not available in the asset library.")
                    .arg(summary.unresolved.size());
   m_notifications->showMessage(message, 8000);
   refresh();
-}
-
-void ProjectWindow::attachAssetLibrary()
-{
-  const auto folder = QFileDialog::getExistingDirectory(
-    this, tr("Attach Asset Library"), {}, QFileDialog::ShowDirsOnly);
-  if (folder.isEmpty())
-    return;
-  const auto path = pathFromQString(folder);
-  // Attaching a plain folder is the normal way to start a library, but writing a catalog
-  // into an arbitrary folder must be an explicit decision.
-  const auto create = !project::AssetLibrary::isLibraryFolder(path)
-                      && QMessageBox::question(
-                           this,
-                           tr("Create Asset Library"),
-                           tr("'%1' is not an asset library yet.\n\n"
-                              "Create a catalog inside it and import the resources it "
-                              "contains?")
-                             .arg(QFileInfo{folder}.fileName()))
-                           == QMessageBox::Yes;
-  const auto attached = m_session->attachLibrary(path, create);
-  if (attached.is_error())
-  {
-    report(Error{std::get<Error>(attached.error()).msg});
-    return;
-  }
-  const auto& summary = attached.value();
-  m_notifications->showMessage(
-    summary.created
-      ? tr("Created asset library with %1 resource(s) in %2 group(s).")
-          .arg(summary.assets)
-          .arg(summary.groups)
-      : tr("Attached asset library with %1 resource(s).").arg(summary.assets));
-  if (!summary.warnings.empty())
-    QMessageBox::warning(
-      this,
-      tr("Asset Library"),
-      QString::fromStdString(fmt::format("{}", fmt::join(summary.warnings, "\n"))));
-  refresh();
-}
-
-void ProjectWindow::relinkAssetLibrary()
-{
-  const auto libraries = m_session->libraries();
-  if (libraries.is_error())
-  {
-    report(Error{std::get<Error>(libraries.error()).msg});
-    return;
-  }
-
-  auto missing = std::vector<project::LibraryInfo>{};
-  for (const auto& connection : libraries.value())
-    if (!connection.available)
-      missing.push_back(connection.info);
-  if (missing.empty())
-  {
-    QMessageBox::information(
-      this, tr("Relink Asset Library"), tr("Every attached asset library is reachable."));
-    return;
-  }
-
-  auto selected = missing.front();
-  if (missing.size() > 1)
-  {
-    auto names = QStringList{};
-    for (const auto& info : missing)
-      names << QString::fromStdString(info.name);
-    auto accepted = false;
-    const auto name = QInputDialog::getItem(
-      this,
-      tr("Relink Asset Library"),
-      tr("Asset library to relink:"),
-      names,
-      0,
-      false,
-      &accepted);
-    if (!accepted)
-      return;
-    selected = missing.at(static_cast<std::size_t>(names.indexOf(name)));
-  }
-
-  const auto folder = QFileDialog::getExistingDirectory(
-    this,
-    tr("Relink \"%1\"").arg(QString::fromStdString(selected.name)),
-    {},
-    QFileDialog::ShowDirsOnly);
-  if (folder.isEmpty())
-    return;
-
-  if (const auto relocated =
-        m_session->relocateLibrary(selected.id, pathFromQString(folder));
-      relocated.is_error())
-  {
-    report(Error{std::get<Error>(relocated.error()).msg});
-    return;
-  }
-
-  m_notifications->showMessage(
-    tr("Relinked asset library %1.").arg(QString::fromStdString(selected.name)));
-  refresh();
-}
-
-void ProjectWindow::checkLibraryUpdates(const bool rescan)
-{
-  auto dialog = ProjectLibraryDialog{*m_session, rescan, this};
-  dialog.exec();
-  refresh();
-  if (rescan)
-  {
-    m_libraryWatcher->acknowledgeChanges();
-    m_notifications->clearMessage();
-  }
-}
-
-void ProjectWindow::maybePromptForLibraryUpdates()
-{
-  // Only a project that already references a library can have library updates, and the
-  // user can defer the prompt for this session.
-  if (m_session->libraryUpdatesDeferred())
-    return;
-  const auto updates = m_session->checkLibraryUpdates(false);
-  if (updates.is_error() || std::ranges::none_of(updates.value(), [](const auto& update) {
-        return update.needsAttention();
-      }))
-    return;
-  checkLibraryUpdates(false);
 }
 
 bool ProjectWindow::report(const Result<void>& result)
@@ -933,13 +787,6 @@ std::optional<std::string> ProjectWindow::selectedAsset() const
 
 void ProjectWindow::refresh()
 {
-  if (const auto libraries = m_session->store().libraries(); libraries.is_success())
-  {
-    auto folders = QStringList{};
-    for (const auto& library : libraries.value())
-      folders.push_back(QString::fromStdString(library.path));
-    m_libraryWatcher->setFolders(std::move(folders));
-  }
   const auto selected = selectedAsset();
   const auto historyId = m_history->currentItem()
                            ? m_history->currentItem()->data(0, Qt::UserRole).toString()

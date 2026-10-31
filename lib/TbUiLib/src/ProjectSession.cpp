@@ -14,12 +14,14 @@
 #include <QLockFile>
 #include <QSaveFile>
 
+#include "base/PreferenceManager.h"
 #include "base/Uuid.h"
 #include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
 #include "project/ContentHash.h"
+#include "prefs/Preferences.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
 #include "ui/MapDocument.h"
@@ -1217,10 +1219,26 @@ Result<void> ProjectSession::restore(const std::string& id)
   return {};
 }
 
+Result<std::vector<project::LibraryInfo>> ProjectSession::libraryInfos() const
+{
+  const auto folder =
+    PreferenceManager::instance().get(Preferences::AssetLibraryDirectory);
+  if (!folder.empty() && project::AssetLibrary::isLibraryFolder(folder))
+  {
+    auto library = project::AssetLibrary::open(folder);
+    if (library.is_error())
+      return std::get<Error>(library.error());
+    return std::vector<project::LibraryInfo>{library.value()->info()};
+  }
+  // Projects captured before the library became application-wide keep their own links so
+  // their snapshots can still report updates.
+  return m_store->libraries();
+}
+
 Result<std::unique_ptr<project::AssetLibrary>> ProjectSession::openLibrary(
   const std::string& libraryId) const
 {
-  const auto libraries = m_store->libraries();
+  const auto libraries = libraryInfos();
   if (libraries.is_error())
     return std::get<Error>(libraries.error());
   const auto& infos = libraries.value();
@@ -1317,7 +1335,7 @@ Result<void> ProjectSession::relocateLibrary(
 
 Result<std::vector<ProjectSession::LibraryConnection>> ProjectSession::libraries() const
 {
-  const auto infos = m_store->libraries();
+  const auto infos = libraryInfos();
   if (infos.is_error())
     return std::get<Error>(infos.error());
   auto result = std::vector<LibraryConnection>{};
@@ -1341,7 +1359,7 @@ Result<project::LibraryState> ProjectSession::libraryState(
   // Unavailable libraries are a normal state, not an error: the project must keep working
   // and reporting its own snapshot.
   auto state = project::LibraryState{libraryId, {}, {}, false, {}, {}};
-  const auto infos = m_store->libraries();
+  const auto infos = libraryInfos();
   if (infos.is_error())
     return std::get<Error>(infos.error());
   const auto& entries = infos.value();

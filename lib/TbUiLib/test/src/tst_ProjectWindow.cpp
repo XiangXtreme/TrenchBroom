@@ -1038,6 +1038,12 @@ TEST_CASE("ProjectWindow")
     CHECK(manager.topMapWindow() == alphaWindow);
   }
 
+  SECTION("the project window no longer offers per-project library management")
+  {
+    for (auto* menu : window.findChildren<QMenu*>())
+      CHECK(menu->title() != "Library");
+  }
+
   SECTION("maps created after the host opens become embedded active tabs")
   {
     require(manager.createProjectMap(session, "gamma", mdl::MapFormat::Valve));
@@ -1049,34 +1055,6 @@ TEST_CASE("ProjectWindow")
     CHECK(manager.topMapWindow() == window.activeMapWindow());
   }
 
-  SECTION("library disk changes prompt without scanning or dirtying the project")
-  {
-    const auto folder = directory.filePath("library");
-    REQUIRE(QDir{}.mkdir(folder));
-    auto library =
-      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(session->attachLibrary(pathFromQString(folder)));
-    require(session->save());
-    REQUIRE_FALSE(session->modified());
-    auto source = QSaveFile{folder + "/new.wav"};
-    REQUIRE(source.open(QIODevice::WriteOnly));
-    REQUIRE(source.write("new source") == 10);
-    REQUIRE(source.commit());
-    auto elapsed = QElapsedTimer{};
-    elapsed.start();
-    while (
-      window.findChild<QStatusBar*>("WorkspaceNotifications")->currentMessage().isEmpty()
-      && elapsed.elapsed() < 3000)
-    {
-      QApplication::processEvents();
-      QThread::msleep(10);
-    }
-    CHECK(window.findChild<QStatusBar*>("WorkspaceNotifications")
-            ->currentMessage()
-            .contains("library files changed"));
-    CHECK_FALSE(session->modified());
-    CHECK(require(library->assets()).empty());
-  }
 
   SECTION(
     "catalog models render from isolated files and a missing catalog model never uses "

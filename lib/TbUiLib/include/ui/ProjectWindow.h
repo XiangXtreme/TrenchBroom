@@ -28,7 +28,6 @@ class QToolButton;
 namespace tb::ui
 {
 class AppController;
-class AssetLibraryWatcher;
 class MapDocument;
 class MapCommandSurface;
 class MapWindow;
@@ -55,7 +54,6 @@ class ProjectWindow : public QMainWindow
   QMenu* m_reopenMapsMenu = nullptr;
   bool m_mapTabsRefreshScheduled = false;
   bool m_closing = false;
-  AssetLibraryWatcher* m_libraryWatcher = nullptr;
   QStackedWidget* m_maps = nullptr;
   std::unique_ptr<MapCommandSurface> m_commands;
   QAction* m_saveProject = nullptr;
@@ -99,12 +97,7 @@ private:
   void exportSelected();
   void checkResources(std::optional<std::string> assetId = std::nullopt);
   void exportCompileSnapshot();
-  void attachAssetLibrary();
-  void relinkAssetLibrary();
   void captureMapResources();
-  void checkLibraryUpdates(bool rescan);
-  // Shows the update review when a captured resource has a newer library revision.
-  void maybePromptForLibraryUpdates();
   void createCheckpoint();
   void compareCheckpoint();
   void restoreCheckpoint();

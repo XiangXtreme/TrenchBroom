@@ -22,7 +22,6 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QHBoxLayout>
@@ -667,13 +666,7 @@ void ModelBrowser::bindEvents(AppController& appController)
     QOverload<int>::of(&QComboBox::currentIndexChanged),
     this,
     [&](const int index) {
-      const auto value = m_libraryCombo->itemData(index).toString();
-      if (value == "choose")
-      {
-        chooseLibrary();
-        return;
-      }
-      m_libraryId = value.toStdString();
+      m_libraryId = m_libraryCombo->itemData(index).toString().toStdString();
       markAssetsDirty();
       scheduleAssetRefresh();
     });
@@ -1533,99 +1526,37 @@ void ModelBrowser::refreshLibraryChoices()
   const QSignalBlocker blocker{m_libraryCombo};
   m_libraryCombo->clear();
   m_libraryError.clear();
+  m_libraryId.clear();
   if (!m_project)
   {
-    m_libraryId.clear();
     m_libraryCombo->setEnabled(false);
     return;
   }
 
-  auto requestedIndex = -1;
-  if (const auto libraries = m_project->libraries(); libraries.is_success())
+  const auto libraries = m_project->libraries();
+  if (libraries.is_success() && !libraries.value().empty())
   {
-    for (const auto& library : libraries.value())
-    {
-      const auto name = QString::fromStdString(library.info.name);
-      m_libraryCombo->addItem(
-        library.available ? name : tr("%1 (unavailable)").arg(name),
-        QString::fromStdString(library.info.id));
-      if (!library.error.empty())
-        m_libraryCombo->setItemData(
-          m_libraryCombo->count() - 1,
-          QString::fromStdString(library.error),
-          Qt::ToolTipRole);
-      if (library.info.id == m_libraryId)
-        requestedIndex = m_libraryCombo->count() - 1;
-    }
+    // A single application-wide library backs every project, so the combo is only an
+    // indicator of which catalog the browser lists.
+    const auto& library = libraries.value().front();
+    const auto name = QString::fromStdString(library.info.name);
+    m_libraryCombo->addItem(
+      library.available ? name : tr("%1 (unavailable)").arg(name),
+      QString::fromStdString(library.info.id));
+    if (!library.error.empty())
+      m_libraryCombo->setItemData(
+        0, QString::fromStdString(library.error), Qt::ToolTipRole);
+    m_libraryId = library.info.id;
+    m_libraryCombo->setCurrentIndex(0);
   }
-  m_libraryCombo->addItem(tr("Choose Asset Library…"), QString{"choose"});
-  m_libraryCombo->setEnabled(true);
-
-  if (requestedIndex < 0)
+  else
   {
-    // Keep a selected library even when it is currently unreachable, otherwise the
-    // browser would silently switch away from a project's origin.
-    if (m_libraryCombo->count() <= 1)
-      m_libraryId.clear();
-    requestedIndex = 0;
+    m_libraryCombo->addItem(tr("No asset library"), QString{});
+    m_libraryCombo->setCurrentIndex(0);
   }
-  if (m_libraryCombo->count() > 1)
-  {
-    const auto value = m_libraryCombo->itemData(requestedIndex).toString();
-    if (value != "choose" && m_libraryId.empty())
-      m_libraryId = value.toStdString();
-  }
-  m_libraryCombo->setCurrentIndex(requestedIndex);
+  m_libraryCombo->setEnabled(false);
 }
 
-void ModelBrowser::chooseLibrary()
-{
-  if (!m_project)
-    return;
-  const auto folder = QFileDialog::getExistingDirectory(
-    this, tr("Attach Asset Library"), {}, QFileDialog::ShowDirsOnly);
-  if (folder.isEmpty())
-  {
-    refreshLibraryChoices();
-    return;
-  }
-  const auto path = pathFromQString(folder);
-  // The browser can also start a library, but only after the user confirms that a catalog
-  // should be created inside the selected folder.
-  const auto create =
-    !project::AssetLibrary::isLibraryFolder(path)
-    && QMessageBox::question(
-         this,
-         tr("Create Asset Library"),
-         tr("'%1' is not an asset library yet.\n\nCreate one and import "
-            "the resources it contains?")
-           .arg(QFileInfo{folder}.fileName()))
-         == QMessageBox::Yes;
-  const auto attached = m_project->attachLibrary(path, create);
-  if (attached.is_error())
-  {
-    QMessageBox::critical(
-      this,
-      tr("Asset Library"),
-      QString::fromStdString(std::get<Error>(attached.error()).msg));
-    refreshLibraryChoices();
-    return;
-  }
-  if (const auto libraries = m_project->libraries(); libraries.is_success())
-  {
-    for (const auto& library : libraries.value())
-    {
-      if (pathFromQString(QString::fromStdString(library.info.path)) == path)
-      {
-        m_libraryId = library.info.id;
-        break;
-      }
-    }
-  }
-  refreshLibraryChoices();
-  markAssetsDirty();
-  scheduleAssetRefresh();
-}
 
 void ModelBrowser::captureLibraryAsset(
   const QString& libraryId, const QString& libraryAssetId)

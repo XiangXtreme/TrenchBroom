@@ -150,7 +150,6 @@ private:
   std::vector<BrowserAsset> visibleAssets() const;
   void updateSourceControls();
   void refreshLibraryChoices();
-  void chooseLibrary();
   void captureLibraryAsset(const QString& libraryId, const QString& libraryAssetId);
   void updateProjectAsset(const QString& projectAssetId);
   void findProjectAssetUses(const QString& projectAssetId);

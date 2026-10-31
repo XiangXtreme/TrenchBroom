@@ -89,6 +89,14 @@ class ProjectSession : public QObject, public std::enable_shared_from_this<Proje
   void bindDocument(MapDocument& document);
   void changed();
 
+  /**
+   * Library records the session works with.
+   *
+   * The application-wide library configured on the welcome page is the only one projects
+   * use. Projects that captured from an older, project-specific library keep those links
+   * so their snapshots can still report updates until the links are dropped.
+   */
+  Result<std::vector<project::LibraryInfo>> libraryInfos() const;
   Result<std::unique_ptr<project::AssetLibrary>> openLibrary(
     const std::string& libraryId) const;
   /** Builds the snapshot import for a library asset without writing anything. */
