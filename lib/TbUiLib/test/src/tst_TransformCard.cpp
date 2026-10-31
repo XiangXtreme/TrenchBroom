@@ -28,7 +28,6 @@
 #include <QMouseEvent>
 #include <QScopeGuard>
 #include <QSignalSpy>
-#include <QToolButton>
 #include <QWheelEvent>
 #include <QtTest/QTest>
 
@@ -169,25 +168,24 @@ TEST_CASE("TransformCard")
     CHECK(entity->entity().origin() == vm::vec3d{99, 99, 30});
   }
 
-  SECTION("vertical selection also works upward and skips locked axes")
+  SECTION("vertical selection also works upward")
   {
     auto* entity = addLight();
     auto* x = channel("TransformCard_PosX");
     auto* y = channel("TransformCard_PosY");
     auto* z = channel("TransformCard_PosZ");
-    card.findChild<QToolButton*>("TransformCard_LockPosY")->setChecked(true);
     mouseFocus(z);
     const auto start = z->mapToGlobal(z->rect().center());
     const auto end = x->mapToGlobal(x->rect().center());
     mouse(z, QEvent::MouseButtonPress, start, Qt::LeftButton, Qt::LeftButton);
     mouse(z, QEvent::MouseMove, end, Qt::NoButton, Qt::LeftButton);
     CHECK(x->property("multiSelected").toBool());
-    CHECK_FALSE(y->property("multiSelected").toBool());
+    CHECK(y->property("multiSelected").toBool());
     CHECK(z->property("multiSelected").toBool());
     mouse(z, QEvent::MouseButtonRelease, end, Qt::LeftButton, Qt::NoButton);
     QTest::keyClicks(z->findChild<QLineEdit*>(), "55");
     QTest::keyClick(z, Qt::Key_Return);
-    CHECK(entity->entity().origin() == vm::vec3d{55, 20, 55});
+    CHECK(entity->entity().origin() == vm::vec3d{55, 55, 55});
   }
 
   SECTION("keyboard focus selects the numeric part of an angle")
@@ -827,18 +825,15 @@ TEST_CASE("TransformCard")
     CHECK(entity->entity().origin() == vm::vec3d{10, 20, 30});
   }
 
-  SECTION("uniform scale preserves proportions and locked axes")
+  SECTION("uniform scale preserves proportions across axes")
   {
     auto* entity = addLight("10 20 30", "2 3 4");
     CHECK_FALSE(card.uniformScale());
     CHECK(channel("TransformCard_ScaleX")->text() == "2.000");
     card.setUniformScale(true);
-    auto* lock = card.findChild<QToolButton*>("TransformCard_LockScaleZ");
-    REQUIRE(lock);
-    lock->setChecked(true);
     channel("TransformCard_ScaleY")->setValue(6);
-    CHECK(card.currentScale() == vm::vec3d{4, 6, 4});
-    CHECK(*entity->entity().property("scale") == "4 6 4");
+    CHECK(card.currentScale() == vm::vec3d{4, 6, 8});
+    CHECK(*entity->entity().property("scale") == "4 6 8");
     map.undoCommand();
     CHECK(card.currentScale() == vm::vec3d{2, 3, 4});
   }
@@ -899,24 +894,6 @@ TEST_CASE("TransformCard")
     CHECK(entity->entity().origin() == vm::vec3d{10, 20, 30});
     CHECK(x->value() == 10);
     CHECK_FALSE(z->property("multiSelected").toBool());
-  }
-
-  SECTION("vertical selection skips a locked channel")
-  {
-    auto* entity = addLight();
-    auto* lock = card.findChild<QToolButton*>("TransformCard_LockPosY");
-    REQUIRE(lock);
-    lock->setChecked(true);
-    auto* x = channel("TransformCard_PosX");
-    auto* z = channel("TransformCard_PosZ");
-    const auto start = x->mapToGlobal(x->rect().center());
-    const auto end = z->mapToGlobal(z->rect().center());
-    mouse(x, QEvent::MouseButtonPress, start, Qt::LeftButton, Qt::LeftButton);
-    mouse(x, QEvent::MouseMove, end, Qt::NoButton, Qt::LeftButton);
-    mouse(x, QEvent::MouseButtonRelease, end, Qt::LeftButton, Qt::NoButton);
-    x->findChild<QLineEdit*>()->setText("99");
-    QTest::keyClick(x, Qt::Key_Return);
-    CHECK(entity->entity().origin() == vm::vec3d{99, 20, 99});
   }
 
   SECTION("precision dragging retains fractional mouse increments")
@@ -1068,30 +1045,6 @@ TEST_CASE("TransformCard")
     CHECK(!posX->property("multiSelected").toBool());
     CHECK(!posY->property("multiSelected").toBool());
     CHECK(!posZ->property("multiSelected").toBool());
-  }
-
-  SECTION("axis lock toggle disables spin control")
-  {
-    auto* posX = card.findChild<SpinControl*>("TransformCard_PosX");
-    REQUIRE(posX != nullptr);
-    CHECK(posX->isEnabled());
-
-    const auto lockButtons = card.findChildren<QToolButton*>();
-    QToolButton* lockX = nullptr;
-    for (auto* btn : lockButtons)
-    {
-      if (btn->toolTip().contains("Lock X Location"))
-      {
-        lockX = btn;
-        break;
-      }
-    }
-    REQUIRE(lockX != nullptr);
-    lockX->setChecked(true);
-    CHECK(!posX->isEnabled());
-
-    lockX->setChecked(false);
-    CHECK(posX->isEnabled());
   }
 
   SECTION("horizontal scrubbing adjusts value by delta")

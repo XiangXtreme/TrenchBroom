@@ -55,25 +55,16 @@ private:
   SpinControl* m_posX = nullptr;
   SpinControl* m_posY = nullptr;
   SpinControl* m_posZ = nullptr;
-  QToolButton* m_lockLocX = nullptr;
-  QToolButton* m_lockLocY = nullptr;
-  QToolButton* m_lockLocZ = nullptr;
 
   SpinControl* m_rotX = nullptr;
   SpinControl* m_rotY = nullptr;
   SpinControl* m_rotZ = nullptr;
-  QToolButton* m_lockRotX = nullptr;
-  QToolButton* m_lockRotY = nullptr;
-  QToolButton* m_lockRotZ = nullptr;
   QComboBox* m_rotModeCombo = nullptr;
   RotationMode m_rotMode = RotationMode::XyzEuler;
 
   SpinControl* m_scaleX = nullptr;
   SpinControl* m_scaleY = nullptr;
   SpinControl* m_scaleZ = nullptr;
-  QToolButton* m_lockScaleX = nullptr;
-  QToolButton* m_lockScaleY = nullptr;
-  QToolButton* m_lockScaleZ = nullptr;
   QToolButton* m_uniformScaleButton = nullptr;
   bool m_uniformScale = false;
 

@@ -934,19 +934,6 @@ void TransformCard::createGui()
     return spin;
   };
 
-  auto createLock = [this](const QString& tip, SpinControl* target) {
-    auto* btn = createBitmapToggleButton("Lock_off.svg", tip, this);
-    btn->setProperty("tbControlRole", "compact");
-    btn->setIconSize(QSize{16, 16});
-    btn->setAccessibleName(tip);
-    connect(btn, &QAbstractButton::toggled, this, [btn, target](const bool locked) {
-      btn->setIcon(loadSVGIcon(locked ? "Lock_on.svg" : "Lock_off.svg"));
-      target->setEnabled(!locked);
-      btn->setAccessibleDescription(locked ? tr("Locked in this panel") : tr("Unlocked"));
-    });
-    return btn;
-  };
-
   auto createLabel = [this](const QString& text) {
     auto* label = new QLabel{text, this};
     label->setProperty("tbTextRole", "secondary");
@@ -961,21 +948,14 @@ void TransformCard::createGui()
   m_posY->setObjectName("TransformCard_PosY");
   m_posZ = createSpin(-1000000.0, 1000000.0, 0, 3, 1.0, 8.0, 0.1);
   m_posZ->setObjectName("TransformCard_PosZ");
-  m_lockLocX = createLock(tr("Lock X Location"), m_posX);
-  m_lockLocY = createLock(tr("Lock Y Location"), m_posY);
-  m_lockLocZ = createLock(tr("Lock Z Location"), m_posZ);
-
   grid->addWidget(createLabel(tr("Location X")), 0, 0);
   grid->addWidget(m_posX, 0, 1);
-  grid->addWidget(m_lockLocX, 0, 2);
 
   grid->addWidget(createLabel(tr("Y")), 1, 0);
   grid->addWidget(m_posY, 1, 1);
-  grid->addWidget(m_lockLocY, 1, 2);
 
   grid->addWidget(createLabel(tr("Z")), 2, 0);
   grid->addWidget(m_posZ, 2, 1);
-  grid->addWidget(m_lockLocZ, 2, 2);
 
   // Rotation
   m_rotX = createSpin(-3600.0, 3600.0, 0, 2, 15.0, 90.0, 1.0, QStringLiteral("°"));
@@ -984,21 +964,14 @@ void TransformCard::createGui()
   m_rotY->setObjectName("TransformCard_RotY");
   m_rotZ = createSpin(-3600.0, 3600.0, 0, 2, 15.0, 90.0, 1.0, QStringLiteral("°"));
   m_rotZ->setObjectName("TransformCard_RotZ");
-  m_lockRotX = createLock(tr("Lock X Rotation"), m_rotX);
-  m_lockRotY = createLock(tr("Lock Y Rotation"), m_rotY);
-  m_lockRotZ = createLock(tr("Lock Z Rotation"), m_rotZ);
-
   grid->addWidget(createLabel(tr("Rotation X")), 4, 0);
   grid->addWidget(m_rotX, 4, 1);
-  grid->addWidget(m_lockRotX, 4, 2);
 
   grid->addWidget(createLabel(tr("Y")), 5, 0);
   grid->addWidget(m_rotY, 5, 1);
-  grid->addWidget(m_lockRotY, 5, 2);
 
   grid->addWidget(createLabel(tr("Z")), 6, 0);
   grid->addWidget(m_rotZ, 6, 1);
-  grid->addWidget(m_lockRotZ, 6, 2);
 
   // Rotation mode
   m_rotModeCombo = new QComboBox{this};
@@ -1021,13 +994,9 @@ void TransformCard::createGui()
   m_scaleY->setObjectName("TransformCard_ScaleY");
   m_scaleZ = createSpin(0.001, 1000.0, 3, 3, 0.1, 1.0, 0.01);
   m_scaleZ->setObjectName("TransformCard_ScaleZ");
-  m_lockScaleX = createLock(tr("Lock X Scale"), m_scaleX);
-  m_lockScaleY = createLock(tr("Lock Y Scale"), m_scaleY);
-  m_lockScaleZ = createLock(tr("Lock Z Scale"), m_scaleZ);
-
   m_uniformScaleButton = createBitmapToggleButton(
     "ProportionalScale_off.svg",
-    tr("Uniform scale: preserve proportions of unlocked axes"),
+    tr("Uniform scale: scale all axes by the same factor"),
     this);
   m_uniformScaleButton->setProperty("tbControlRole", "compact");
   m_uniformScaleButton->setObjectName("TransformCard_UniformScale");
@@ -1051,15 +1020,12 @@ void TransformCard::createGui()
   scaleLabelLayout->addWidget(createLabel(tr("Scale X")));
   grid->addWidget(scaleLabel, 10, 0);
   grid->addWidget(m_scaleX, 10, 1);
-  grid->addWidget(m_lockScaleX, 10, 2);
 
   grid->addWidget(createLabel(tr("Y")), 11, 0);
   grid->addWidget(m_scaleY, 11, 1);
-  grid->addWidget(m_lockScaleY, 11, 2);
 
   grid->addWidget(createLabel(tr("Z")), 12, 0);
   grid->addWidget(m_scaleZ, 12, 1);
-  grid->addWidget(m_lockScaleZ, 12, 2);
 
   grid->setRowMinimumHeight(3, 8);
   grid->setRowMinimumHeight(7, 4);
@@ -1083,16 +1049,8 @@ void TransformCard::createGui()
                  : "middle");
     }
   }
-  m_lockLocX->setObjectName("TransformCard_LockPosX");
-  m_lockLocY->setObjectName("TransformCard_LockPosY");
-  m_lockLocZ->setObjectName("TransformCard_LockPosZ");
-  m_lockScaleX->setObjectName("TransformCard_LockScaleX");
-  m_lockScaleY->setObjectName("TransformCard_LockScaleY");
-  m_lockScaleZ->setObjectName("TransformCard_LockScaleZ");
-
   grid->setColumnStretch(0, 0);
   grid->setColumnStretch(1, 1);
-  grid->setColumnStretch(2, 0);
 
   panelLayout->addLayout(grid);
 
@@ -1286,10 +1244,8 @@ void TransformCard::updateFromSelection()
   }
 
   const auto yawOnly = m_rotMode == RotationMode::YawOnly;
-  m_rotX->setEnabled(!yawOnly && !m_lockRotX->isChecked());
-  m_rotY->setEnabled(!yawOnly && !m_lockRotY->isChecked());
-  m_lockRotX->setEnabled(!yawOnly);
-  m_lockRotY->setEnabled(!yawOnly);
+  m_rotX->setEnabled(!yawOnly);
+  m_rotY->setEnabled(!yawOnly);
   m_rotModeCombo->setEnabled(isSinglePointEntity);
   m_updatingFromModel = false;
 }
@@ -1328,8 +1284,7 @@ void TransformCard::onScaleChanged(const size_t axis)
       m_currentScale[axis] != 0.0 ? newScale[axis] / m_currentScale[axis] : 1.0;
     for (size_t i = 0; i < controls.size(); ++i)
     {
-      newScale[i] =
-        controls[i]->isEnabled() ? m_currentScale[i] * factor : m_currentScale[i];
+      newScale[i] = m_currentScale[i] * factor;
       const QSignalBlocker blocker{controls[i]};
       controls[i]->setValue(newScale[i]);
       newScale[i] = controls[i]->value();
