@@ -28,6 +28,7 @@ class FlagsEditor;
 class MapDocument;
 class SmartSkyboxEditor;
 class SmartWadEditor;
+class CollapsibleTitledPanel;
 class TransformCard;
 
 class OutlinerEntityPropertyEditor : public QWidget
@@ -64,9 +65,13 @@ private:
   bool m_spawnflagsEditorExpanded = false;
   QWidget* m_transformContainer = nullptr;
   TransformCard* m_transformCard = nullptr;
+  QWidget* m_propertiesContainer = nullptr;
+  CollapsibleTitledPanel* m_propertiesCard = nullptr;
+  QVBoxLayout* m_propertiesCardLayout = nullptr;
   std::vector<mdl::EntityNodeBase*> m_rowEntities;
   bool m_rowBrushSelection = false;
   bool m_transformCardExpanded = true;
+  bool m_propertiesCardExpanded = true;
 
   bool m_updateQueued = false;
   bool m_forceUpdate = false;

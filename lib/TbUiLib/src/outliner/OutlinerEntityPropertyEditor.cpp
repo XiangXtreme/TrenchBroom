@@ -39,6 +39,7 @@
 #include "mdl/PropertyDefinition.h"
 #include "prefs/Preferences.h"
 #include "ui/BitmapButton.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/ElidedLabel.h"
 #include "ui/FileDialogDefaultDir.h"
 #include "ui/FlagsEditor.h"
@@ -90,7 +91,17 @@ public:
     m_keyWidget = keyWidget;
     m_valueWidget = valueWidget;
     m_actionsWidget = actionsWidget;
-    updateLayout(width());
+    auto initialWidth = width();
+    for (auto* p = parentWidget(); initialWidth <= 0 && p != nullptr;
+         p = p->parentWidget())
+    {
+      if (p->width() > 0)
+      {
+        initialWidth = p->width();
+        break;
+      }
+    }
+    updateLayout(initialWidth);
   }
 
 protected:
@@ -140,6 +151,7 @@ private:
       m_layout->setColumnStretch(0, 1);
       m_layout->setColumnStretch(1, 2);
     }
+    m_layout->activate();
   }
 };
 
@@ -637,7 +649,7 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   m_scrollContents->setAttribute(Qt::WA_StyledBackground, true);
   m_scrollLayout = new QVBoxLayout{m_scrollContents};
   m_scrollLayout->setContentsMargins(6, 4, 6, 4);
-  m_scrollLayout->setSpacing(2);
+  m_scrollLayout->setSpacing(6);
   m_scrollLayout->addStretch(1);
   m_scrollArea->setWidget(m_scrollContents);
 
@@ -722,6 +734,27 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
     m_transformCard, &CollapsibleTitledPanel::toggled, this, [this](const bool expanded) {
       m_transformCardExpanded = expanded;
     });
+
+  m_propertiesContainer = new QWidget{m_scrollContents};
+  auto* propertiesContainerLayout = new QVBoxLayout{m_propertiesContainer};
+  propertiesContainerLayout->setContentsMargins(0, 0, 0, 0);
+  propertiesContainerLayout->setSpacing(0);
+  m_propertiesCard = new CollapsibleTitledPanel{
+    tr("Entity Properties"), m_propertiesCardExpanded, m_propertiesContainer};
+  m_propertiesCard->setObjectName("EntityPropertyCard");
+  // CollapsibleTitledPanel is a plain QWidget, so Qt only paints its style sheet
+  // card background when the styled background attribute is set (see TransformCard).
+  m_propertiesCard->setAttribute(Qt::WA_StyledBackground, true);
+  propertiesContainerLayout->addWidget(m_propertiesCard);
+  m_propertiesCardLayout = new QVBoxLayout{m_propertiesCard->getPanel()};
+  m_propertiesCardLayout->setContentsMargins(6, 6, 6, 8);
+  m_propertiesCardLayout->setSpacing(2);
+  m_propertiesContainer->hide();
+  connect(
+    m_propertiesCard,
+    &CollapsibleTitledPanel::toggled,
+    this,
+    [this](const bool expanded) { m_propertiesCardExpanded = expanded; });
 
   connectObservers();
   scheduleUpdate(true);
@@ -930,26 +963,34 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   setUpdatesEnabled(false);
   const auto restoreUpdates = qScopeGuard([&] { setUpdatesEnabled(updatesEnabled); });
 
-  const auto clearLayout = [&](auto&& self, QLayout* l) -> void {
+  // The card containers survive a rebuild; every other widget in the layouts is
+  // recreated from the current selection.
+  const auto clearLayout =
+    [&](auto&& self, QLayout* l, const bool keepCardContainers) -> void {
     while (auto* item = l->takeAt(0))
     {
       if (auto* w = item->widget())
       {
-        if (w != m_transformContainer)
+        if (
+          !keepCardContainers
+          || (w != m_transformContainer && w != m_propertiesContainer))
           delete w;
       }
       if (auto* childLayout = item->layout())
       {
-        self(self, childLayout);
+        self(self, childLayout, keepCardContainers);
         delete childLayout;
       }
       delete item;
     }
   };
 
-  clearLayout(clearLayout, m_scrollLayout);
+  clearLayout(clearLayout, m_scrollLayout, true);
   m_transformContainer->hide();
+  m_propertiesContainer->hide();
   m_scrollLayout->addWidget(m_transformContainer, 0);
+  m_scrollLayout->addWidget(m_propertiesContainer, 0);
+  clearLayout(clearLayout, m_propertiesCardLayout, false);
 
   if (entityNodes.empty())
   {
@@ -1020,6 +1061,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     (firstClass == mdl::EntityPropertyValues::WorldspawnClassname
      && !m_document.map().selection().hasBrushes());
   m_transformContainer->setVisible(!isWorldspawnOnly);
+  m_propertiesContainer->show();
 
   const auto keys = buildKeyOrderWithInactiveDefinitions(entityNodes, entityDefinition);
   const auto& wadKey = m_document.map().gameInfo().gameConfig.materialConfig.property;
@@ -1033,7 +1075,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   auto actionWidgets = std::vector<QWidget*>{};
   for (const auto& key : keys)
   {
-    auto* row = new ResponsivePropertyRow{m_scrollContents};
+    auto* row = new ResponsivePropertyRow{m_propertiesCard->getPanel()};
     row->setObjectName("outlinerPropertyRow");
     row->setProperty("propertyKey", QString::fromStdString(key));
     row->setAttribute(Qt::WA_StyledBackground, true);
@@ -1365,11 +1407,11 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     row->setWidgets(
       keyLabel, valueCombo ? static_cast<QWidget*>(valueCombo) : valueEdit, actions);
 
-    m_scrollLayout->addWidget(row, 0);
+    m_propertiesCardLayout->addWidget(row, 0);
 
     if (spawnflagsToggleButton)
     {
-      auto* container = new QWidget{m_scrollContents};
+      auto* container = new QWidget{m_propertiesCard->getPanel()};
       container->setObjectName("outlinerEmbeddedSpawnflagsEditor");
       auto* containerLayout = new QVBoxLayout{container};
       containerLayout->setContentsMargins(6, 0, 6, 4);
@@ -1396,7 +1438,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
 
       containerLayout->addWidget(flagsEditor, 1);
       container->setVisible(m_spawnflagsEditorExpanded);
-      m_scrollLayout->addWidget(container, 0);
+      m_propertiesCardLayout->addWidget(container, 0);
 
       connect(
         spawnflagsToggleButton,
@@ -1421,7 +1463,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
 
     if (wadToggleButton)
     {
-      auto* container = new QWidget{m_scrollContents};
+      auto* container = new QWidget{m_propertiesCard->getPanel()};
       container->setObjectName("outlinerEmbeddedWadEditor");
       auto* containerLayout = new QVBoxLayout{container};
       containerLayout->setContentsMargins(6, 0, 6, 4);
@@ -1434,7 +1476,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
       containerLayout->addWidget(m_embeddedWadEditor, 1);
 
       container->setVisible(m_wadEditorExpanded);
-      m_scrollLayout->addWidget(container, 0);
+      m_propertiesCardLayout->addWidget(container, 0);
 
       connect(
         wadToggleButton,
@@ -1449,7 +1491,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
 
     if (skyboxToggleButton)
     {
-      auto* container = new QWidget{m_scrollContents};
+      auto* container = new QWidget{m_propertiesCard->getPanel()};
       container->setObjectName("outlinerEmbeddedSkyboxEditor");
       auto* containerLayout = new QVBoxLayout{container};
       containerLayout->setContentsMargins(6, 0, 6, 4);
@@ -1466,7 +1508,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
       });
 
       container->setVisible(m_skyboxEditorExpanded);
-      m_scrollLayout->addWidget(container, 0);
+      m_propertiesCardLayout->addWidget(container, 0);
 
       connect(
         skyboxToggleButton,
@@ -1720,6 +1762,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   }
 
   m_scrollLayout->addStretch(1);
+  m_propertiesCardLayout->activate();
 }
 
 } // namespace tb::ui

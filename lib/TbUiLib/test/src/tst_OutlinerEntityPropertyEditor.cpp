@@ -44,6 +44,7 @@
 #include "mdl/TestFactory.h"
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/ElidedLabel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
@@ -198,6 +199,22 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     REQUIRE(scrollArea != nullptr);
     REQUIRE(addKey != nullptr);
     CHECK(!scrollArea->isAncestorOf(addKey));
+  }
+
+  SECTION("wraps the property rows in a styled card")
+  {
+    auto* card = editor.findChild<CollapsibleTitledPanel*>("EntityPropertyCard");
+    REQUIRE(card != nullptr);
+    // The style sheet card background is only painted with this attribute.
+    CHECK(card->testAttribute(Qt::WA_StyledBackground));
+
+    const auto* scrollArea = editor.findChild<QScrollArea*>("outlinerPropertyScrollArea");
+    REQUIRE(scrollArea != nullptr);
+    CHECK(scrollArea->isAncestorOf(card));
+
+    auto* classnameRow = propertyRow(editor, "classname");
+    REQUIRE(classnameRow != nullptr);
+    CHECK(classnameRow->parentWidget() == card->getPanel());
   }
 
   SECTION("uses the disabled text palette for inactive properties")
