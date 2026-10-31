@@ -247,6 +247,14 @@ bool expandThemeStyleSheet(QString& styleSheet, const ThemeTokens& tokens, QStri
     QStringLiteral("@tb-spin-up-arrow-disabled-image"),
     darkTheme ? QStringLiteral("url(:/controls/chevron-up-disabled-dark)")
               : QStringLiteral("url(:/controls/chevron-up-disabled-light)"));
+  expanded.replace(
+    QStringLiteral("@tb-tab-close-image"),
+    darkTheme ? QStringLiteral("url(:/controls/tab-close-dark)")
+              : QStringLiteral("url(:/controls/tab-close-light)"));
+  expanded.replace(
+    QStringLiteral("@tb-tab-close-hover-image"),
+    darkTheme ? QStringLiteral("url(:/controls/tab-close-hover-dark)")
+              : QStringLiteral("url(:/controls/tab-close-hover-light)"));
 
   const auto unknownTokenExpression =
     QRegularExpression{QStringLiteral(R"(@tb-[a-z0-9-]+)")};

@@ -11,6 +11,10 @@
     <file alias="chevron-up-disabled-dark">controls/chevron-up-disabled-dark.svg</file>
     <file alias="chevron-up-disabled-light">controls/chevron-up-disabled-light.svg</file>
     <file alias="chevron-up-light">controls/chevron-up-light.svg</file>
+    <file alias="tab-close-dark">controls/tab-close-dark.svg</file>
+    <file alias="tab-close-hover-dark">controls/tab-close-hover-dark.svg</file>
+    <file alias="tab-close-hover-light">controls/tab-close-hover-light.svg</file>
+    <file alias="tab-close-light">controls/tab-close-light.svg</file>
 </qresource>
 <qresource prefix="/translations">
     <file alias="trenchbroom_zh_CN">../translations/trenchbroom_zh_CN.qm</file>

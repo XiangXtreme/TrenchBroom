@@ -207,6 +207,36 @@ TEST_CASE("Theme")
         "url(:/controls/chevron-up-disabled-light); }"));
   }
 
+  SECTION("expandThemeStyleSheet selects tab close assets")
+  {
+    auto error = QString{};
+    const auto& darkTokens =
+      builtInThemes.resolveTheme(QStringLiteral("builtin.dark")).tokens;
+    auto darkStyleSheet = QStringLiteral(
+      "QTabBar::close-button { image: @tb-tab-close-image; } "
+      "QTabBar::close-button:hover { image: @tb-tab-close-hover-image; }");
+    CHECK(expandThemeStyleSheet(darkStyleSheet, darkTokens, &error));
+    CHECK(error.isEmpty());
+    CHECK(
+      darkStyleSheet
+      == QStringLiteral("QTabBar::close-button { image: url(:/controls/tab-close-dark); } "
+                        "QTabBar::close-button:hover { image: "
+                        "url(:/controls/tab-close-hover-dark); }"));
+
+    const auto& lightTokens =
+      builtInThemes.resolveTheme(QStringLiteral("builtin.light")).tokens;
+    auto lightStyleSheet = QStringLiteral(
+      "QTabBar::close-button { image: @tb-tab-close-image; } "
+      "QTabBar::close-button:hover { image: @tb-tab-close-hover-image; }");
+    CHECK(expandThemeStyleSheet(lightStyleSheet, lightTokens, &error));
+    CHECK(error.isEmpty());
+    CHECK(
+      lightStyleSheet
+      == QStringLiteral("QTabBar::close-button { image: url(:/controls/tab-close-light); } "
+                        "QTabBar::close-button:hover { image: "
+                        "url(:/controls/tab-close-hover-light); }"));
+  }
+
   SECTION("expandThemeStyleSheet rejects unknown tokens without changing the input")
   {
     const auto& tokens =

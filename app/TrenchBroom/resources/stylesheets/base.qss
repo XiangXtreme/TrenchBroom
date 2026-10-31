@@ -810,6 +810,14 @@ QTabBar::tab:disabled {
   color: @tb-disabled-text;
 }
 
+QTabBar::close-button {
+  image: @tb-tab-close-image;
+}
+
+QTabBar::close-button:hover {
+  image: @tb-tab-close-hover-image;
+}
+
 QWidget#TabBarButton {
   background: transparent;
   border: 1px solid transparent;

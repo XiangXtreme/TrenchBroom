@@ -24,6 +24,11 @@ Foundational control presentation has three owners:
 3. `app/TrenchBroom/resources/stylesheets/base.qss` owns canonical component geometry and
    visual states.
 
+Theme-dependent control assets follow the same split: `expandThemeStyleSheet` maps
+`@tb-...-image` tokens to the light/dark files under `resources/qrc/controls/`, so QSS
+never hardcodes an asset path and a theme switch cannot leave a control with the wrong
+icon.
+
 Feature modules own content, data, accessibility, interaction, and layout. They may not
 become a fourth source of foundational component styling.
 
