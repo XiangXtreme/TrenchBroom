@@ -34,7 +34,7 @@
 - Tests use Catch2.
 - If VS Code test discovery is unavailable, run the built test executable directly from the build tree, for example build/lib/TbMdlLib/test/TbMdlLibTest.
 - Use --list-tests to discover available tests and Catch2 filters to run a focused subset.
-- Prefer `ctest --test-dir <build>/lib/<Name>/test -j` over invoking the test binary directly. `catch_discover_tests` registers every Catch2 test case as its own CTest test, so `-j` (no thread count — let ctest pick) runs them in parallel and is markedly faster than one sequential process. Build the test target first; ctest does not build.
+- Prefer `ctest --test-dir <build>/lib/<Name>/test --parallel 2` over invoking the test binary directly. `catch_discover_tests` registers every Catch2 test case separately. Keep local Qt/OpenGL test concurrency bounded so the shared desktop stays responsive; do not use bare `-j` for local UI tests. Build the test target first; ctest does not build.
 - Use Build.md for platform-specific setup and dependency details.
 
 ### Windows Release build used by this branch
@@ -69,6 +69,7 @@
   & scripts\ci-preflight.ps1 -Full
   ```
   Use `-BaseRef <ref>` or `-Paths @('path1', 'path2')` only to narrow an intentional investigation; do not skip checks in the final push preflight without recording why.
+- Local preflight defaults to 4 build jobs and 2 concurrent CTest cases (individual cases may spawn child probes). Use `-BuildJobs <n>` / `-TestJobs <n>` to change those caps; `-ShowTestWindows` forces serial tests. The background window policy applies before builds as well as tests, including Catch discovery. Do not run separate native-window tests or another build concurrently with preflight. Native desktop validation must be intentional and kept separate from routine background verification.
 - `TbUiLibTest` runs with background windows by default, including direct runs and CTest. The test-only window policy preserves Qt visibility, layout, events and rendering while preventing QWidget windows and popups from appearing on the desktop. It also uses Qt dialogs instead of native system dialogs. Preflight enforces this default even when the calling shell has `TB_TEST_SHOW_WINDOWS=1`. Use `-ShowTestWindows` only for intentional desktop validation. For a focused native-window check, set `$env:TB_TEST_SHOW_WINDOWS = '1'`, run the relevant CTest filter, and restore the variable afterward. Background tests do not establish native focus, activation, mouse capture or system-dialog behavior; new tests for those paths must be explicitly validated on the desktop.
 - For deterministic UI theme acceptance, run the checked-in snapshot matrix:
   ```powershell

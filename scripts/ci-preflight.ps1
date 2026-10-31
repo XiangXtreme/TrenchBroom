@@ -4,6 +4,10 @@ param(
   [string[]] $Paths = @(),
   [string] $QtBin = "D:\Qtx\6.11.1\msvc2022_64\bin",
   [string] $ClangCl = "",
+  [ValidateRange(1, 256)]
+  [int] $BuildJobs = 4,
+  [ValidateRange(1, 256)]
+  [int] $TestJobs = 2,
   [switch] $Full,
   [switch] $ShowTestWindows,
   [switch] $SkipStrictCompile,
@@ -322,7 +326,8 @@ function Invoke-FilteredBuild {
     [string] $RepositoryRoot,
     [string] $BuildDirectory,
     [string] $Target,
-    [string] $QtBinaryDirectory
+    [string] $QtBinaryDirectory,
+    [int] $ParallelJobs
   )
 
   $buildScript = Join-Path $RepositoryRoot "scripts\build-filtered.ps1"
@@ -333,7 +338,7 @@ function Invoke-FilteredBuild {
   & powershell.exe -ExecutionPolicy Bypass -File $buildScript `
     -BuildDir $BuildDirectory `
     -Target $Target `
-    -QtBin $QtBinaryDirectory @environmentArgs
+    -QtBin $QtBinaryDirectory -Jobs $ParallelJobs @environmentArgs
   if ($LASTEXITCODE -ne 0) {
     throw "Build failed for target $Target"
   }
@@ -345,6 +350,12 @@ $originalShowTestWindows = $env:TB_TEST_SHOW_WINDOWS
 try {
   $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
   Set-Location $repositoryRoot
+
+  # Catch discovery also executes UI test binaries during the build. Apply the
+  # window policy before any child process, regardless of the caller's environment.
+  $env:TB_TEST_SHOW_WINDOWS = if ($ShowTestWindows) { "1" } else { "0" }
+  # Native focus/mouse-capture tests cannot safely share the desktop.
+  $effectiveTestJobs = if ($ShowTestWindows) { 1 } else { $TestJobs }
 
   $resolvedBuildDir = Resolve-Path $BuildDir -ErrorAction SilentlyContinue
   if (-not $resolvedBuildDir) {
@@ -367,6 +378,7 @@ try {
   Write-Host "==> Local CI preflight"
   Write-Host "Repository: $repositoryRoot"
   Write-Host "Base ref:   $effectiveBaseRef"
+  Write-Host "Concurrency: build=$BuildJobs, tests=$effectiveTestJobs"
 
   Invoke-GitCheck @("diff", "--check", "$effectiveBaseRef...HEAD", "--")
   Invoke-GitCheck @("diff", "--cached", "--check", "--")
@@ -404,7 +416,7 @@ try {
     Write-Host "Build skipped: $($plan.BuildTargets -join ', ')"
   } else {
     foreach ($target in $plan.BuildTargets) {
-      Invoke-FilteredBuild $repositoryRoot $resolvedBuildDir.Path $target $QtBin
+      Invoke-FilteredBuild $repositoryRoot $resolvedBuildDir.Path $target $QtBin $BuildJobs
     }
   }
 
@@ -412,7 +424,6 @@ try {
     Write-Host "Tests skipped"
   } else {
     $env:PATH = "$QtBin;$originalPath"
-    $env:TB_TEST_SHOW_WINDOWS = if ($ShowTestWindows) { "1" } else { "0" }
     Write-Host $(if ($ShowTestWindows) {
       "UI tests: native windows enabled (-ShowTestWindows)"
     } else {
@@ -423,7 +434,7 @@ try {
         $repositoryRoot, $testDirectory)
       $buildTestDirectory = Join-Path $resolvedBuildDir.Path $relativeTestDirectory
       Write-Host "==> Test $relativeTestDirectory"
-      & ctest --test-dir $buildTestDirectory -j --output-on-failure
+      & ctest --test-dir $buildTestDirectory --parallel $effectiveTestJobs --output-on-failure
       if ($LASTEXITCODE -ne 0) {
         throw "CTest failed in $buildTestDirectory"
       }

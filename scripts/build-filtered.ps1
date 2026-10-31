@@ -7,6 +7,9 @@ param(
   [string] $TestExe = "",
   [string] $QtBin = "D:\Qtx\6.11.1\msvc2022_64\bin",
   [string] $VsDevCmd = "D:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat",
+  # Zero preserves CMake's default for standalone builds; preflight supplies a cap.
+  [ValidateRange(0, 256)]
+  [int] $Jobs = 0,
   [switch] $NoVsDevCmd,
   [switch] $NoFilter
 )
@@ -223,6 +226,9 @@ $cmakeArgs = @(
   "--config", $Config,
   "--parallel"
 )
+if ($Jobs -gt 0) {
+  $cmakeArgs += [string] $Jobs
+}
 $cmakeCommand = Join-CommandArgs $cmakeArgs
 
 if (-not $NoVsDevCmd) {
