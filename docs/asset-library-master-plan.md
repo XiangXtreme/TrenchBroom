@@ -106,3 +106,26 @@
 - 捕获 → 删除库目录 → 重新打开工程 → 编译成功且贴图正确。
 - 覆盖导入 → 工程出现角标 → 点按更新 → 地图引用与撤销链正常。
 - 旧工程打开后不再显示库关联，资源与编译不受影响。
+
+## 9. 实施状态
+
+已完成：
+
+- **A 全局库**（`32a5005d4`）：`Preferences::AssetLibraryDirectory`、欢迎页管理器、
+  「Import Files…」按类型入库 + 同名冲突、「导入即转换」、转换预览，命名与配方抽到
+  `ui/AssetLibraryImport`，并有 `AssetLibraryImport` 定向测试。
+- **B1 工程侧统一**（`2235c0622`）：工程库查询走全局库（旧链接仅兜底），删除
+  Library 菜单、Attach/Relink、更新审阅对话框、库目录监视器与 `ProjectLibraryDialog`；
+  内容浏览器把库显示为只读指示。
+- **C1 编译前自动保存**（`2cf557725`）+ **工程编译变量**（`547f2b772`）：
+  `${PROJECT_PATH}` / `${MAP_NAME}` 可用于 profile。
+- **C2 hltools 读取工程**（hltools 仓库 `3a9b9dd`）：
+  `hltools compile --project <file> --map <name> [--output <bsp>]`，只读 schema 2/3，
+  贴图嵌入 BSP、不产出 WAD；用真实工程（Half-Life）编译验证通过，并有 schema 2/3
+  与非法文件的单元测试。
+
+未完成：
+
+- **B3** 移除库修订历史（`AssetLibrary` 的 revision/历史表与相关字段）。
+- **A/B 收尾**：欢迎页管理器里的库内重命名；旧工程链接字段的正式迁移。
+- **D** 文档与手册同步、全量测试、UI 快照与治理检查。
