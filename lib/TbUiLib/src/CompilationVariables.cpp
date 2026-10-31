@@ -118,6 +118,14 @@ CompilationVariables::CompilationVariables(
   set(WORK_DIR_PATH, el::Value{workDir});
 }
 
+void CompilationVariables::setProject(
+  std::string projectPath, std::string mapName)
+{
+  using namespace CompilationVariableNames;
+  set(PROJECT_PATH, el::Value{std::move(projectPath)});
+  set(MAP_NAME, el::Value{std::move(mapName)});
+}
+
 LaunchGameEngineVariables::LaunchGameEngineVariables(const mdl::Map& map)
   : CommonVariables{map}
 {

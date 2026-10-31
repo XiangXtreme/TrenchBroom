@@ -50,6 +50,13 @@ namespace ui
 {
 class CompilationRunner;
 
+/** The project file a compiled map belongs to. */
+struct ProjectCompileInfo
+{
+  std::filesystem::path projectPath;
+  std::string mapName;
+};
+
 class CompilationRun : public QObject
 {
   Q_OBJECT
@@ -79,12 +86,14 @@ public:
     const mdl::CompilationProfile& profile,
     std::shared_ptr<const mdl::Map> map,
     const gl::PerspectiveCamera& camera,
-    QTextEdit* currentOutput);
+    QTextEdit* currentOutput,
+    std::optional<ProjectCompileInfo> project = std::nullopt);
   Result<void> testSnapshot(
     const mdl::CompilationProfile& profile,
     std::shared_ptr<const mdl::Map> map,
     const gl::PerspectiveCamera& camera,
-    QTextEdit* currentOutput);
+    QTextEdit* currentOutput,
+    std::optional<ProjectCompileInfo> project = std::nullopt);
   void terminate();
 
 private:
@@ -96,7 +105,8 @@ private:
     QTextEdit* currentOutput,
     bool test,
     const std::optional<std::filesystem::path>& mapPath,
-    std::shared_ptr<const mdl::Map> snapshot = {});
+    std::shared_ptr<const mdl::Map> snapshot = {},
+    std::optional<ProjectCompileInfo> project = std::nullopt);
 
 private:
   Result<std::string> buildWorkDir(

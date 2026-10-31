@@ -263,6 +263,22 @@ Result<void> CompilationDialog::runProfile(
       if (const auto saved = project->save(); saved.is_error())
         return std::get<Error>(saved.error());
     }
+
+    // The project file itself is the compile input for project aware tools, so profiles
+    // can resolve the map by name instead of using the temporary export below.
+    const auto assetId = project->assetFor(m_document);
+    if (!assetId)
+      return Error{"This document is not a project map."};
+    const auto asset = project->store().findAsset(*assetId);
+    if (asset.is_error())
+      return std::get<Error>(asset.error());
+    if (!asset.value())
+      return Error{"The project map no longer exists."};
+    auto mapName = asset.value()->displayName;
+    if (mapName.empty())
+      mapName = std::filesystem::path{asset.value()->publishPath}.stem().string();
+    const auto projectInfo = ProjectCompileInfo{project->path(), mapName};
+
     return prepareProjectSnapshot(*project)
            | kdl::and_then([&](const auto& mapPath) -> Result<void> {
                return m_document.prepareReload(mapPath)
@@ -270,9 +286,11 @@ Result<void> CompilationDialog::runProfile(
                           auto snapshot =
                             std::shared_ptr<const mdl::Map>{std::move(frozenMap)};
                           return test ? m_run.testSnapshot(
-                                          profile, snapshot, m_camera, m_output)
+                                          profile, snapshot, m_camera, m_output,
+                                          projectInfo)
                                       : m_run.runSnapshot(
-                                          profile, snapshot, m_camera, m_output);
+                                          profile, snapshot, m_camera, m_output,
+                                          projectInfo);
                         });
              });
   }

@@ -69,18 +69,22 @@ Result<void> CompilationRun::runSnapshot(
   const mdl::CompilationProfile& profile,
   std::shared_ptr<const mdl::Map> map,
   const gl::PerspectiveCamera& camera,
-  QTextEdit* currentOutput)
+  QTextEdit* currentOutput,
+  std::optional<ProjectCompileInfo> project)
 {
-  return run(profile, *map, camera, currentOutput, false, map->path(), map);
+  return run(
+    profile, *map, camera, currentOutput, false, map->path(), map, std::move(project));
 }
 
 Result<void> CompilationRun::testSnapshot(
   const mdl::CompilationProfile& profile,
   std::shared_ptr<const mdl::Map> map,
   const gl::PerspectiveCamera& camera,
-  QTextEdit* currentOutput)
+  QTextEdit* currentOutput,
+  std::optional<ProjectCompileInfo> project)
 {
-  return run(profile, *map, camera, currentOutput, true, map->path(), map);
+  return run(
+    profile, *map, camera, currentOutput, true, map->path(), map, std::move(project));
 }
 
 void CompilationRun::terminate()
@@ -103,7 +107,8 @@ Result<void> CompilationRun::run(
   QTextEdit* currentOutput,
   const bool test,
   const std::optional<std::filesystem::path>& mapPath,
-  std::shared_ptr<const mdl::Map> snapshot)
+  std::shared_ptr<const mdl::Map> snapshot,
+  std::optional<ProjectCompileInfo> project)
 {
   contract_pre(!profile.tasks.empty());
   contract_pre(currentOutput != nullptr);
@@ -114,6 +119,9 @@ Result<void> CompilationRun::run(
   return buildWorkDir(profile, map, mapPath) | kdl::transform([&](const auto& workDir) {
            auto variables =
              CompilationVariables{map, workDir, mapPath.value_or(map.path())};
+           if (project)
+             variables.setProject(
+               project->projectPath.string(), project->mapName);
            auto compilationContext = CompilationContext{
              map,
              camera,

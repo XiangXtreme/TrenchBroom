@@ -43,6 +43,10 @@ inline const std::string MAP_FULL_NAME = "MAP_FULL_NAME";
 inline const std::string CPU_COUNT = "CPU_COUNT";
 inline const std::string GAME_DIR_PATH = "GAME_DIR_PATH";
 inline const std::string MODS = "MODS";
+// Available when the compiled map belongs to a project: the project file and the map
+// name a project aware tool (for example `hltools compile`) resolves the map from.
+inline const std::string PROJECT_PATH = "PROJECT_PATH";
+inline const std::string MAP_NAME = "MAP_NAME";
 inline const std::string APP_DIR_PATH = "APP_DIR_PATH";
 } // namespace CompilationVariableNames
 
@@ -84,6 +88,12 @@ public:
     const mdl::Map& map,
     const std::string& workDir,
     const std::filesystem::path& mapPath);
+
+  /**
+   * Names the project this map belongs to, so profiles can compile the project file
+   * instead of a temporary export of the map.
+   */
+  void setProject(std::string projectPath, std::string mapName);
 };
 
 class LaunchGameEngineVariables : public CommonVariables
