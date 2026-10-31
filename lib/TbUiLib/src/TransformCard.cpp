@@ -116,6 +116,7 @@ private:
   std::vector<double> m_dragValues;
   bool m_transaction = false;
   bool m_cursorOverridden = false;
+  bool m_cursorHidden = false;
   bool m_dragChanged = false;
   bool m_consumeRelease = false;
   bool m_suppressContextMenu = false;
@@ -638,7 +639,15 @@ private:
   void beginScrub()
   {
     m_state = State::Scrubbing;
-    QGuiApplication::setOverrideCursor(Qt::SizeHorCursor);
+    // Blender hides the system cursor while a number field is dragged and draws a
+    // software cursor instead, so the real cursor does not appear to slide across
+    // the window. TB has no software cursor, so hide it for the whole gesture and
+    // put it back where the drag started when the gesture ends. Synthetic events do
+    // not press the physical button; keep the plain shape there and never move the
+    // user's cursor.
+    m_cursorHidden = QGuiApplication::mouseButtons().testFlag(Qt::LeftButton);
+    QGuiApplication::setOverrideCursor(
+      m_cursorHidden ? Qt::BlankCursor : Qt::SizeHorCursor);
     m_cursorOverridden = true;
     m_map.startTransaction("Edit Transform", mdl::TransactionScope::LongRunning);
     m_transaction = true;
@@ -722,6 +731,11 @@ private:
     {
       QGuiApplication::restoreOverrideCursor();
       m_cursorOverridden = false;
+    }
+    if (m_cursorHidden)
+    {
+      QCursor::setPos(m_pressPos);
+      m_cursorHidden = false;
     }
   }
 

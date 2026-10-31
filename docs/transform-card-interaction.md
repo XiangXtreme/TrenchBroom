@@ -20,6 +20,7 @@
 | 同文件：`event_to_snap`、`numedit_apply_snapf`、`numedit_but_NUM` | Shift 精调，Ctrl 吸附，Ctrl+Shift 使用较小吸附间隔；拖动过程中修饰键变化重新计算吸附 |
 | 同文件：`do_button`、`handle_button_event` | 悬停复制/粘贴、属性上下文菜单、空文本恢复 RNA 默认值属于属性系统的通用处理 |
 | 同文件：`button_is_cursor_warp`、`screen_mx`；`intern/ghost/intern/GHOST_SystemWin32.cc`：`processCursorEvent`；`intern/ghost/GHOST_Rect.hh`：`wrapPoint` | 拖动数值时用 `GHOST_kGrabWrap` 抓住光标：光标每进入窗口边界 2px 就绕回另一侧，并把绕过的距离累加进事件坐标，所以界面始终看到单调连续的横坐标 |
+| 同文件：`button_activate_state` 中的 `WM_cursor_grab_enable(..., hide=true)`、`ungrab_mval`、`WM_cursor_grab_disable(window, mouse_ungrab_xy)`；`windowmanager/intern/wm_draw.cc`：软件光标 | 进入数值拖动时隐藏系统光标并绘制软件光标；松手时重新显示，并把光标放到按钮内与最终数值对应的位置（限制在按钮矩形内） |
 | `source/blender/editors/interface/interface_widgets.cc`：`widget_draw_text`；`interface.cc`：`button_drag_multi_edit_get` | 连选字段在输入期间绘制主字段的同一编辑字符串；中间态文本也实时一致，确认后统一写入属性 |
 | `interface.cc`：`number_from_string`、`button_string_eval_number` | 数值输入先求值表达式，再应用属性范围；启用 Python 的 Blender 使用 Python 数值表达式求值 |
 | `source/blender/makesrna/intern/rna_object.cc`：`rna_def_object` | Scale 标记 `PROP_PROPORTIONAL`；Location、Euler Rotation 与 Scale 有各自的单位、精度、范围和步长 |
@@ -40,7 +41,8 @@ Qt 适配通过统一 `ApplicationStyle` 的
 | 编辑中再次点击或拖动 | 交给原生文本编辑器定位光标或选择文本 |
 | Ctrl+单击 | 立即全选数字并进入文本编辑，松手不清除选区 |
 | 横向拖动 | 超过阈值后建立基准，随后实时修改地图；松手形成一个撤销步骤，释放数值框焦点并返回上次的地图视图 |
-| 横拖到窗口左右边缘 | 光标绕回窗口另一侧，环绕跳变不计入增量；数值继续跟随真实移动，不会因光标撞到屏幕边缘而停住 |
+| 横向拖动期间 | 隐藏系统光标，数值继续跟随真实位移；隐藏光标到窗口左右边缘时绕回另一侧，环绕跳变不计入增量，所以不会因撞到屏幕边缘而停住 |
+| 横拖松手 / Esc 取消 | 恢复系统光标，并放回按下该数值框时的位置 |
 | 纵向划过 X/Y/Z | 高亮同一向量组中被线段经过的可编辑轴；往回划可缩小范围 |
 | 连选后松手 | 保持高亮，主字段全选数字；所有选中字段实时镜像主字段输入，包含负号、删除、粘贴等中间态；确认后统一写入地图，取消则恢复各自原值 |
 | 连选后转为横拖 | 固定选中轴集合；Location/Rotation 保留各轴差值，Scale 保留各轴比例 |
@@ -59,8 +61,9 @@ Qt 适配通过统一 `ApplicationStyle` 的
 
 ## TB 的适配边界
 
-- Qt 没有等价于 `GHOST_kGrabWrap` 的光标抓取模式。TB 在窗口客户区左右各留 3px 自行环绕，且只在物理左键按下时执行，
-  合成事件不会移动真实光标；环绕后可能先收到一条旧位置的事件，按 Blender 的做法丢弃它，避免数值瞬间跳变。
+- Qt 没有等价于 `GHOST_kGrabWrap` 的光标抓取模式，也没有 Blender 那样的软件光标。TB 在窗口客户区左右各留 3px
+  自行环绕隐藏光标，松手后把光标放回按下位置；两者都只在物理左键按下时执行，合成事件不会隐藏或移动真实光标。
+  环绕后可能先收到一条旧位置的事件，按 Blender 的做法丢弃它，避免数值瞬间跳变。
 - 手势阈值使用控件逻辑高度的四分之一，随 Qt 缩放；精调系数为 0.1。
   Location、Rotation、Scale 分别保留 TB 当前的每像素步长；Ctrl 吸附使用当前地图网格、5° 和 0.1，
   Ctrl+Shift 将对应吸附间隔再缩小到十分之一。
