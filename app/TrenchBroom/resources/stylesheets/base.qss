@@ -1459,7 +1459,7 @@ QLabel#outlinerPropertySelectionSummary {
 }
 
 QWidget#outlinerPropertyAddBar {
-  background: @tb-editor-background;
+  background: transparent;
   border-top: 1px solid @tb-border;
 }
 

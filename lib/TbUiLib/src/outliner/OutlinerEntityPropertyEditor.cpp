@@ -653,61 +653,11 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   m_scrollLayout->addStretch(1);
   m_scrollArea->setWidget(m_scrollContents);
 
-  auto* addPropertyBar = new ResponsivePropertyRow{m_propertiesPanel->getPanel()};
-  m_addPropertyBar = addPropertyBar;
-  addPropertyBar->setObjectName("outlinerPropertyAddBar");
-  addPropertyBar->setAttribute(Qt::WA_StyledBackground, true);
-
-  m_addKey = new QLineEdit{m_addPropertyBar};
-  m_addKey->setObjectName("outlinerPropertyAddKey");
-  m_addKey->setPlaceholderText(tr("Key"));
-  m_addKey->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-
-  m_addKeyCompleter = new QCompleter{this};
-  m_addKeyCompleter->setCaseSensitivity(Qt::CaseInsensitive);
-  m_addKeyCompleter->setFilterMode(Qt::MatchContains);
-  m_completerModel = new QStringListModel{m_addKeyCompleter};
-  m_addKeyCompleter->setModel(m_completerModel);
-  m_addKey->setCompleter(m_addKeyCompleter);
-
-  m_addValue = new QLineEdit{m_addPropertyBar};
-  m_addValue->setObjectName("outlinerPropertyAddValue");
-  m_addValue->setPlaceholderText(tr("Value"));
-  m_addValue->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-  auto* addActions = new QWidget{m_addPropertyBar};
-  auto* addActionsLayout = new QHBoxLayout{addActions};
-  addActionsLayout->setContentsMargins(0, 0, 0, 0);
-  addActionsLayout->setSpacing(2);
-
-  auto* addButton = createBitmapButton("Add.svg", tr("Add property"), addActions);
-  addButton->setProperty("tbControlRole", "compact");
-  addButton->setIconSize(QSize{16, 16});
-  addButton->setFixedSize(QSize{24, 24});
-  addActionsLayout->addWidget(addButton);
-
-  addPropertyBar->setWidgets(m_addKey, m_addValue, addActions);
-
-  connect(addButton, &QAbstractButton::clicked, this, [this]() {
-    const auto key = m_addKey->text().trimmed();
-    if (key.isEmpty())
-    {
-      return;
-    }
-
-    mdl::setEntityProperty(
-      m_document.map(), key.toStdString(), m_addValue->text().toStdString(), false);
-    m_addKey->clear();
-    m_addValue->clear();
-    scheduleUpdate(true);
-  });
-
   auto* propertiesLayout = new QVBoxLayout{m_propertiesPanel->getPanel()};
   propertiesLayout->setContentsMargins(0, 0, 0, 0);
   propertiesLayout->setSpacing(0);
   propertiesLayout->addWidget(m_selectionSummary, 0);
   propertiesLayout->addWidget(m_scrollArea, 1);
-  propertiesLayout->addWidget(m_addPropertyBar, 0);
 
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(0, 0, 0, 0);
@@ -755,6 +705,57 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
     &CollapsibleTitledPanel::toggled,
     this,
     [this](const bool expanded) { m_propertiesCardExpanded = expanded; });
+
+  // The key / value entry lives in the card so that adding a property happens where
+  // the properties are shown; rebuilding the rows re-appends it to the layout.
+  auto* addPropertyBar = new ResponsivePropertyRow{m_propertiesCard->getPanel()};
+  m_addPropertyBar = addPropertyBar;
+  addPropertyBar->setObjectName("outlinerPropertyAddBar");
+  addPropertyBar->setAttribute(Qt::WA_StyledBackground, true);
+
+  m_addKey = new QLineEdit{m_addPropertyBar};
+  m_addKey->setObjectName("outlinerPropertyAddKey");
+  m_addKey->setPlaceholderText(tr("Key"));
+  m_addKey->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+
+  m_addKeyCompleter = new QCompleter{this};
+  m_addKeyCompleter->setCaseSensitivity(Qt::CaseInsensitive);
+  m_addKeyCompleter->setFilterMode(Qt::MatchContains);
+  m_completerModel = new QStringListModel{m_addKeyCompleter};
+  m_addKeyCompleter->setModel(m_completerModel);
+  m_addKey->setCompleter(m_addKeyCompleter);
+
+  m_addValue = new QLineEdit{m_addPropertyBar};
+  m_addValue->setObjectName("outlinerPropertyAddValue");
+  m_addValue->setPlaceholderText(tr("Value"));
+  m_addValue->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+  auto* addActions = new QWidget{m_addPropertyBar};
+  auto* addActionsLayout = new QHBoxLayout{addActions};
+  addActionsLayout->setContentsMargins(0, 0, 0, 0);
+  addActionsLayout->setSpacing(2);
+
+  auto* addButton = createBitmapButton("Add.svg", tr("Add property"), addActions);
+  addButton->setProperty("tbControlRole", "compact");
+  addButton->setIconSize(QSize{16, 16});
+  addButton->setFixedSize(QSize{24, 24});
+  addActionsLayout->addWidget(addButton);
+
+  addPropertyBar->setWidgets(m_addKey, m_addValue, addActions);
+
+  connect(addButton, &QAbstractButton::clicked, this, [this]() {
+    const auto key = m_addKey->text().trimmed();
+    if (key.isEmpty())
+    {
+      return;
+    }
+
+    mdl::setEntityProperty(
+      m_document.map(), key.toStdString(), m_addValue->text().toStdString(), false);
+    m_addKey->clear();
+    m_addValue->clear();
+    scheduleUpdate(true);
+  });
 
   connectObservers();
   scheduleUpdate(true);
@@ -971,10 +972,13 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     {
       if (auto* w = item->widget())
       {
-        if (
-          !keepCardContainers
-          || (w != m_transformContainer && w != m_propertiesContainer))
+        const auto keep =
+          w == m_addPropertyBar
+          || (keepCardContainers && (w == m_transformContainer || w == m_propertiesContainer));
+        if (!keep)
+        {
           delete w;
+        }
       }
       if (auto* childLayout = item->layout())
       {
@@ -1761,6 +1765,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     actionWidget->setFixedWidth(actionWidth);
   }
 
+  m_propertiesCardLayout->addWidget(m_addPropertyBar, 0);
   m_scrollLayout->addStretch(1);
   m_propertiesCardLayout->activate();
 }

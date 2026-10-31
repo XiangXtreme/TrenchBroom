@@ -23,6 +23,7 @@
 #include <QComboBox>
 #include <QCompleter>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QPalette>
 #include <QPointer>
@@ -192,13 +193,24 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     CHECK(hasInfoLabel(editor, "Different entity types selected"));
   }
 
-  SECTION("keeps add controls outside the scrolling property list")
+  SECTION("shows the add controls after the rows inside the property card")
   {
-    const auto* scrollArea = editor.findChild<QScrollArea*>("outlinerPropertyScrollArea");
-    const auto* addKey = editor.findChild<QLineEdit*>("outlinerPropertyAddKey");
-    REQUIRE(scrollArea != nullptr);
+    auto* card = editor.findChild<CollapsibleTitledPanel*>("EntityPropertyCard");
+    REQUIRE(card != nullptr);
+
+    auto* addBar = editor.findChild<QWidget*>("outlinerPropertyAddBar");
+    auto* addKey = editor.findChild<QLineEdit*>("outlinerPropertyAddKey");
+    REQUIRE(addBar != nullptr);
     REQUIRE(addKey != nullptr);
-    CHECK(!scrollArea->isAncestorOf(addKey));
+    CHECK(addBar->parentWidget() == card->getPanel());
+
+    auto* cardLayout = card->getPanel()->layout();
+    REQUIRE(cardLayout != nullptr);
+    const auto rowIndex = cardLayout->indexOf(propertyRow(editor, "classname"));
+    const auto addBarIndex = cardLayout->indexOf(addBar);
+    REQUIRE(rowIndex >= 0);
+    REQUIRE(addBarIndex >= 0);
+    CHECK(rowIndex < addBarIndex);
   }
 
   SECTION("wraps the property rows in a styled card")
