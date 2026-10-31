@@ -13,6 +13,8 @@
 #include <QDropEvent>
 #include <QFileDialog>
 #include <QInputDialog>
+#include <QProgressBar>
+#include <QTimer>
 #include <QMimeData>
 #include <QUrl>
 #include <QFileInfo>
@@ -438,7 +440,22 @@ void AssetLibraryWindow::buildUi()
   m_listButton->setCheckable(true);
   m_gridButton->setChecked(true);
 
+  m_convertProgress = new QProgressBar{tools};
+  m_convertProgress->setMaximumWidth(180);
+  m_convertProgress->setTextVisible(false);
+  m_convertProgress->hide();
+  m_convertCancel = new QPushButton{tr("Cancel"), tools};
+  m_convertCancel->hide();
+  m_convertTimer = new QTimer{this};
+  m_convertTimer->setInterval(0);
+  connect(
+    m_convertTimer, &QTimer::timeout, this, &AssetLibraryWindow::stepConvertQueue);
+  connect(
+    m_convertCancel, &QPushButton::clicked, this, &AssetLibraryWindow::cancelConvertQueue);
+
   toolsLayout->addWidget(m_countLabel);
+  toolsLayout->addWidget(m_convertProgress);
+  toolsLayout->addWidget(m_convertCancel);
   toolsLayout->addStretch(1);
   toolsLayout->addWidget(sizeLabel);
   toolsLayout->addWidget(m_sizeSlider);
@@ -1159,22 +1176,61 @@ void AssetLibraryWindow::runConvertPending()
 {
   if (!m_source || !m_source->canConvert())
     return;
-  auto converted = 0;
-  auto failed = 0;
+  m_convertQueue.clear();
   for (const auto& asset : m_assets)
   {
-    if (!needsConversion(asset))
-      continue;
-    const auto result = m_source->convertAsset(asset.id);
-    if (result.is_error() || !result.value())
-      ++failed;
-    else
-      ++converted;
+    if (needsConversion(asset))
+      m_convertQueue.push_back(asset.id);
   }
+  if (m_convertQueue.empty())
+    return;
+
+  m_convertDone = 0;
+  m_convertFailed = 0;
+  m_convertProgress->setRange(0, int(m_convertQueue.size()));
+  m_convertProgress->setValue(0);
+  m_convertProgress->show();
+  m_convertCancel->show();
+  m_convertTimer->start();
+}
+
+void AssetLibraryWindow::stepConvertQueue()
+{
+  if (!m_source || m_convertQueue.empty())
+  {
+    m_convertTimer->stop();
+    return;
+  }
+
+  const auto id = m_convertQueue.front();
+  m_convertQueue.erase(m_convertQueue.begin());
+  const auto result = m_source->convertAsset(id);
+  if (result.is_error() || !result.value())
+    ++m_convertFailed;
+  ++m_convertDone;
+  m_convertProgress->setValue(m_convertDone);
+
+  if (m_convertQueue.empty())
+  {
+    m_convertTimer->stop();
+    m_convertProgress->hide();
+    m_convertCancel->hide();
+    reload();
+    m_footer->setText(
+      tr("Converted %1 asset(s)%2.")
+        .arg(m_convertDone - m_convertFailed)
+        .arg(
+          m_convertFailed > 0 ? tr(", %1 failed").arg(m_convertFailed) : QString{}));
+  }
+}
+
+void AssetLibraryWindow::cancelConvertQueue()
+{
+  m_convertTimer->stop();
+  m_convertQueue.clear();
+  m_convertProgress->hide();
+  m_convertCancel->hide();
   reload();
-  m_footer->setText(
-    tr("Converted %1 asset(s)%2.").arg(converted).arg(failed > 0 ? tr(", %1 failed").arg(failed)
-                                                                : QString{}));
 }
 
 void AssetLibraryWindow::runImport()

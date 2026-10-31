@@ -23,7 +23,9 @@ class QFormLayout;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QProgressBar;
 class QPushButton;
+class QTimer;
 class QSlider;
 class QToolButton;
 
@@ -65,6 +67,12 @@ class AssetLibraryWindow : public QDialog
   QPushButton* m_renameButton = nullptr;
   QPushButton* m_deleteButton = nullptr;
   QLineEdit* m_tagsEdit = nullptr;
+  QProgressBar* m_convertProgress = nullptr;
+  QPushButton* m_convertCancel = nullptr;
+  QTimer* m_convertTimer = nullptr;
+  std::vector<std::string> m_convertQueue;
+  int m_convertDone = 0;
+  int m_convertFailed = 0;
   QLineEdit* m_searchEdit = nullptr;
   AssetLibraryListView* m_categories = nullptr;
   AssetLibraryListView* m_grid = nullptr;
@@ -116,6 +124,8 @@ private:
   void importFiles(const QStringList& files);
   void runRescan();
   void runConvertPending();
+  void stepConvertQueue();
+  void cancelConvertQueue();
   void revealSelected();
   void toggleFavorite();
   void renameSelected();
