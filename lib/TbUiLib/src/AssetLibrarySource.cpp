@@ -99,6 +99,37 @@ public:
   {
     return convertLibraryImage(*m_library, assetId);
   }
+
+  bool canManage() const override
+  {
+    return true;
+  }
+
+  Result<Metadata> metadata(const std::string& assetId) override
+  {
+    const auto meta = m_library->metadata(assetId);
+    if (meta.is_error())
+      return std::get<Error>(meta.error());
+    return Metadata{meta.value().favorite, meta.value().tags};
+  }
+
+  Result<void> setFavorite(const std::string& assetId, const bool favorite) override
+  {
+    return m_library->setFavorite(assetId, favorite);
+  }
+
+  Result<void> renameAsset(const std::string& assetId, const std::string& name) override
+  {
+    const auto renamed = m_library->setDisplayName(assetId, name);
+    if (renamed.is_error())
+      return std::get<Error>(renamed.error());
+    return {};
+  }
+
+  Result<void> removeAsset(const std::string& assetId) override
+  {
+    return m_library->removeAsset(assetId);
+  }
 };
 
 } // namespace

@@ -61,6 +61,29 @@ public:
   virtual bool canReveal() const {
     return false;
   }
+  /** Whether this source supports catalog edits (favourite, rename, delete). */
+  virtual bool canManage() const {
+    return false;
+  }
+
+  struct Metadata
+  {
+    bool favorite = false;
+    std::vector<std::string> tags;
+  };
+  virtual Result<Metadata> metadata(const std::string& /*assetId*/) {
+    return Error{"This asset library is read only."};
+  }
+  virtual Result<void> setFavorite(const std::string& /*assetId*/, bool /*favorite*/) {
+    return Error{"This asset library is read only."};
+  }
+  virtual Result<void> renameAsset(
+    const std::string& /*assetId*/, const std::string& /*name*/) {
+    return Error{"This asset library is read only."};
+  }
+  virtual Result<void> removeAsset(const std::string& /*assetId*/) {
+    return Error{"This asset library is read only."};
+  }
 
   // Mutating operations. A read-only source reports the matching capability as false and
   // the browser hides the action instead of calling these.

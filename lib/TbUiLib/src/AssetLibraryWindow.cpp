@@ -12,6 +12,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QMimeData>
 #include <QUrl>
 #include <QFileInfo>
@@ -489,6 +490,25 @@ void AssetLibraryWindow::buildUi()
   m_previewMode->addItem(tr("Source"));
   m_previewMode->addItem(tr("Converted"));
 
+  auto* actionRow = new QWidget{inspector};
+  auto* actionLayout = new QHBoxLayout{actionRow};
+  actionLayout->setContentsMargins(0, 0, 0, 0);
+  actionLayout->setSpacing(6);
+  m_favoriteButton = new QPushButton{QStringLiteral("☆ Favourite"), actionRow};
+  m_favoriteButton->setCheckable(true);
+  m_favoriteButton->setObjectName(QStringLiteral("AssetLibraryFavoriteButton"));
+  m_renameButton = new QPushButton{tr("Rename…"), actionRow};
+  m_deleteButton = new QPushButton{tr("Delete…"), actionRow};
+  m_favoriteButton->setEnabled(false);
+  m_renameButton->setEnabled(false);
+  m_deleteButton->setEnabled(false);
+  actionLayout->addWidget(m_favoriteButton, 1);
+  actionLayout->addWidget(m_renameButton, 1);
+  actionLayout->addWidget(m_deleteButton, 1);
+  connect(m_favoriteButton, &QPushButton::clicked, this, &AssetLibraryWindow::toggleFavorite);
+  connect(m_renameButton, &QPushButton::clicked, this, &AssetLibraryWindow::renameSelected);
+  connect(m_deleteButton, &QPushButton::clicked, this, &AssetLibraryWindow::deleteSelected);
+
   m_name = new QLabel{inspector};
   m_name->setObjectName(QStringLiteral("AssetLibraryAssetName"));
   m_name->setWordWrap(true);
@@ -516,6 +536,7 @@ void AssetLibraryWindow::buildUi()
   inspectorLayout->addWidget(previewTitle);
   inspectorLayout->addWidget(m_preview);
   inspectorLayout->addWidget(m_previewMode);
+  inspectorLayout->addWidget(actionRow);
   inspectorLayout->addWidget(m_name);
   inspectorLayout->addWidget(m_status);
   inspectorLayout->addWidget(propertiesTitle);
@@ -930,6 +951,20 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
     clearInspector();
     return;
   }
+  const auto manageable = m_source && m_source->canManage();
+  m_favoriteButton->setEnabled(manageable);
+  m_renameButton->setEnabled(manageable);
+  m_deleteButton->setEnabled(manageable);
+  auto favorite = false;
+  if (manageable)
+  {
+    if (const auto meta = m_source->metadata(asset->id); meta.is_success())
+      favorite = meta.value().favorite;
+  }
+  m_favoriteButton->setChecked(favorite);
+  m_favoriteButton->setText(
+    favorite ? QStringLiteral("★ Favourite") : QStringLiteral("☆ Favourite"));
+
   m_name->setText(QString::fromStdString(asset->displayName));
   m_name->setToolTip(QString::fromStdString(asset->virtualPath));
   m_status->setText(
@@ -1202,6 +1237,75 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
   }
   reload();
   m_footer->setText(tr("Imported %1 file(s).").arg(int(imported.size())));
+}
+
+void AssetLibraryWindow::toggleFavorite()
+{
+  const auto* asset = selectedAsset();
+  if (!asset || !m_source || !m_source->canManage())
+    return;
+  const auto favorite = m_favoriteButton->isChecked();
+  if (const auto result = m_source->setFavorite(asset->id, favorite); result.is_error())
+  {
+    QMessageBox::critical(
+      this, tr("Favourite"), QString::fromStdString(std::get<Error>(result.error()).msg));
+    m_favoriteButton->setChecked(!favorite);
+    return;
+  }
+  m_favoriteButton->setText(
+    favorite ? QStringLiteral("★ Favourite") : QStringLiteral("☆ Favourite"));
+}
+
+void AssetLibraryWindow::renameSelected()
+{
+  const auto* asset = selectedAsset();
+  if (!asset || !m_source || !m_source->canManage())
+    return;
+
+  auto accepted = false;
+  const auto name = QInputDialog::getText(
+    this,
+    tr("Rename Asset"),
+    tr("Catalog name"),
+    QLineEdit::Normal,
+    QString::fromStdString(asset->displayName),
+    &accepted);
+  if (!accepted || name.trimmed().isEmpty())
+    return;
+
+  if (const auto result = m_source->renameAsset(asset->id, name.trimmed().toStdString());
+      result.is_error())
+  {
+    QMessageBox::critical(
+      this, tr("Rename Asset"), QString::fromStdString(std::get<Error>(result.error()).msg));
+    return;
+  }
+  reload();
+}
+
+void AssetLibraryWindow::deleteSelected()
+{
+  const auto* asset = selectedAsset();
+  if (!asset || !m_source || !m_source->canManage())
+    return;
+
+  const auto answer = QMessageBox::question(
+    this,
+    tr("Delete Asset"),
+    tr("Remove '%1' from the library catalog?\n\nThe source file is kept.")
+      .arg(QString::fromStdString(asset->displayName)),
+    QMessageBox::Yes | QMessageBox::Cancel);
+  if (answer != QMessageBox::Yes)
+    return;
+
+  if (const auto result = m_source->removeAsset(asset->id); result.is_error())
+  {
+    QMessageBox::critical(
+      this, tr("Delete Asset"), QString::fromStdString(std::get<Error>(result.error()).msg));
+    return;
+  }
+  m_selectedId.reset();
+  reload();
 }
 
 void AssetLibraryWindow::revealSelected()

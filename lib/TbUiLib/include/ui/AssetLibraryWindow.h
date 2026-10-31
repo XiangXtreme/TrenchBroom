@@ -59,6 +59,9 @@ class AssetLibraryWindow : public QDialog
   QPushButton* m_rescanButton = nullptr;
   QPushButton* m_convertButton = nullptr;
   QPushButton* m_revealButton = nullptr;
+  QPushButton* m_favoriteButton = nullptr;
+  QPushButton* m_renameButton = nullptr;
+  QPushButton* m_deleteButton = nullptr;
   QLineEdit* m_searchEdit = nullptr;
   AssetLibraryListView* m_categories = nullptr;
   AssetLibraryListView* m_grid = nullptr;
@@ -111,6 +114,9 @@ private:
   void runRescan();
   void runConvertPending();
   void revealSelected();
+  void toggleFavorite();
+  void renameSelected();
+  void deleteSelected();
 
   const project::LibraryAsset* selectedAsset() const;
   int pendingCount() const;
