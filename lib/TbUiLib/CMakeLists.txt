@@ -32,7 +32,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryImport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryItemDelegate.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibrarySource.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryWatcher.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetPreviewProvider.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CatalogModelPreview.cpp
@@ -300,7 +299,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryImport.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryItemDelegate.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibrarySource.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryWatcher.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetPreviewProvider.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CatalogModelPreview.h
