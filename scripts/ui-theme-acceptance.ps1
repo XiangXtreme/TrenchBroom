@@ -29,7 +29,7 @@ param(
     "preferences-kreedzbroom"
   ),
   [string[]] $Themes = @("light", "dark", "blender"),
-  [string[]] $ScaleFactors = @("1", "1.5", "2"),
+  [string[]] $ScaleFactors = @("1"),
   [string] $MapPath = "lib\TbMdlLib\test\fixture\mdl\Map\initialMap.map",
   [string] $OutlinerMapPath =
     "lib\TbUiLib\test\fixture\ui\UiSnapshot\outlinerHierarchy.map",

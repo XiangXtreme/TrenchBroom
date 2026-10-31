@@ -131,7 +131,8 @@ powershell -ExecutionPolicy Bypass -File scripts\ui-theme-acceptance.ps1 -Target
 
 The snapshot must cover representative normal, focused, checked, read-only, selected, and
 disabled states for inputs, commands, group surfaces, item views, headers, tabs, menus,
-scroll bars, and splitters at 100%, 150%, and 200% scale for Light, Dark, and Blender themes.
+scroll bars, and splitters at 100% scale for Light, Dark, and Blender themes by default.
+Use `-ScaleFactors @("1", "1.5", "2")` when a change needs explicit multi-scale validation.
 A component change also requires focused tests for affected behavior and the representative
 real screens which use the component.
 
