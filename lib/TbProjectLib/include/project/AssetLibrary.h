@@ -95,6 +95,11 @@ public:
   Result<std::vector<AssetDependency>> dependencies(const std::string& assetId) const;
   Result<std::vector<AssetDependency>> dependents(const std::string& dependencyId) const;
 
+  // Removes the asset from the catalog together with its dependency edges. The source
+  // file on disk is left alone: a container (a WAD) may hold other assets, and deleting
+  // user files is the caller's decision.
+  Result<void> removeAsset(const std::string& assetId);
+
 private:
   class Impl;
   std::unique_ptr<Impl> m_impl;

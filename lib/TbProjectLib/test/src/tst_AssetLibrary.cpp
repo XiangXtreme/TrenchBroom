@@ -519,6 +519,29 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->dependents(floorId)).size() == 1);
     CHECK(library->addDependency(wallId, "missing", "companion").is_error());
   }
+
+  SECTION("removes an asset together with its dependency edges")
+  {
+    workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+    const auto assets = require(library->assets());
+    const auto wallId = findByMember(assets, "WALL01").id;
+    const auto floorId = findByMember(assets, "FLOOR01").id;
+    require(library->addDependency(wallId, floorId, "companion"));
+
+    require(library->removeAsset(wallId));
+
+    CHECK_FALSE(require(library->findAsset(wallId)).has_value());
+    CHECK(require(library->dependencies(wallId)).empty());
+    CHECK(require(library->dependents(floorId)).empty());
+    CHECK(require(library->assets()).size() == assets.size() - 1);
+    CHECK(library->removeAsset(wallId).is_error());
+
+    // The source file stays on disk, so a rescan brings the asset back.
+    require(library->scan());
+    CHECK(require(library->findAsset(wallId)).has_value());
+  }
 }
 
 } // namespace tb::project

@@ -1347,6 +1347,32 @@ Result<void> AssetLibrary::addDependency(
   });
 }
 
+Result<void> AssetLibrary::removeAsset(const std::string& assetId)
+{
+  return detail::attempt([&] {
+    detail::validateAssetId(assetId);
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    auto exists = detail::Statement{db, "SELECT 1 FROM assets WHERE id=?"};
+    exists.bind(1, assetId);
+    if (!exists.next())
+      throw detail::StoreError{"Library asset not found."};
+
+    for (const auto* sql : {
+           "DELETE FROM dependencies WHERE asset_id=? OR dependency_id=?",
+           "DELETE FROM asset_revisions WHERE asset_id=?",
+           "DELETE FROM assets WHERE id=?"})
+    {
+      auto statement = detail::Statement{db, sql};
+      statement.bind(1, assetId);
+      if (std::string_view{sql}.find(" OR ") != std::string_view::npos)
+        statement.bind(2, assetId);
+      statement.run();
+    }
+    transaction.commit();
+  });
+}
+
 Result<std::vector<AssetDependency>> AssetLibrary::dependencies(
   const std::string& assetId) const
 {
