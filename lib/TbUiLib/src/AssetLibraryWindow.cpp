@@ -9,7 +9,11 @@
 #include <QColor>
 #include <QComboBox>
 #include <QDesktopServices>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileDialog>
+#include <QMimeData>
+#include <QUrl>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
@@ -270,6 +274,7 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   : QDialog{parent}
 {
   buildUi();
+  setAcceptDrops(true);
 
   const auto folder =
     PreferenceManager::instance().get(Preferences::AssetLibraryDirectory);
@@ -283,6 +288,7 @@ AssetLibraryWindow::AssetLibraryWindow(const QString& folder, const bool remembe
   : QDialog{parent}
 {
   buildUi();
+  setAcceptDrops(true);
   openLibrary(folder, remember);
 }
 
@@ -1112,7 +1118,11 @@ void AssetLibraryWindow::runImport()
        "All files (*)"));
   if (files.isEmpty())
     return;
+  importFiles(files);
+}
 
+void AssetLibraryWindow::importFiles(const QStringList& files)
+{
   struct Entry
   {
     std::filesystem::path source;
@@ -1199,5 +1209,38 @@ void AssetLibraryWindow::revealSelected()
   if (!m_source || !m_source->canReveal())
     return;
   QDesktopServices::openUrl(QUrl::fromLocalFile(m_source->location()));
+}
+
+void AssetLibraryWindow::dragEnterEvent(QDragEnterEvent* event)
+{
+  if (!m_source || !m_source->canImport() || !event->mimeData()->hasUrls())
+    return;
+  const auto droppable = std::any_of(
+    event->mimeData()->urls().begin(), event->mimeData()->urls().end(),
+    [](const QUrl& url) {
+      return url.isLocalFile()
+             && !librarySubfolderForFile(pathFromQString(url.toLocalFile())).empty();
+    });
+  if (droppable)
+    event->acceptProposedAction();
+}
+
+void AssetLibraryWindow::dropEvent(QDropEvent* event)
+{
+  if (!m_source || !m_source->canImport())
+    return;
+  auto files = QStringList{};
+  for (const auto& url : event->mimeData()->urls())
+  {
+    if (!url.isLocalFile())
+      continue;
+    const auto path = url.toLocalFile();
+    if (!librarySubfolderForFile(pathFromQString(path)).empty())
+      files.push_back(path);
+  }
+  if (files.isEmpty())
+    return;
+  event->acceptProposedAction();
+  importFiles(files);
 }
 } // namespace tb::ui

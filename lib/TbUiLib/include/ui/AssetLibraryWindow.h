@@ -16,6 +16,8 @@
 #include <vector>
 
 class QComboBox;
+class QDragEnterEvent;
+class QDropEvent;
 class QFormLayout;
 class QLabel;
 class QLineEdit;
@@ -86,6 +88,10 @@ public:
   AssetLibraryWindow(const QString& folder, bool remember, QWidget* parent = nullptr);
   ~AssetLibraryWindow() override;
 
+protected:
+  void dragEnterEvent(QDragEnterEvent* event) override;
+  void dropEvent(QDropEvent* event) override;
+
 private:
   void buildUi();
   void chooseLibrary();
@@ -101,6 +107,7 @@ private:
   void updateActions();
   void applyViewMode();
   void runImport();
+  void importFiles(const QStringList& files);
   void runRescan();
   void runConvertPending();
   void revealSelected();
