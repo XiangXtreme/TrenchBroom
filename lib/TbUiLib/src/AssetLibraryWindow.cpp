@@ -701,6 +701,16 @@ void AssetLibraryWindow::reload()
     return;
   }
   m_assets = assets.value();
+  m_favorites.clear();
+  if (m_source->canManage())
+  {
+    for (const auto& asset : m_assets)
+    {
+      if (const auto meta = m_source->metadata(asset.id);
+          meta.is_success() && meta.value().favorite)
+        m_favorites.insert(asset.id);
+    }
+  }
   updateHeader();
   refreshCategories();
   refreshGrid();
@@ -795,6 +805,7 @@ void AssetLibraryWindow::refreshCategories()
 
   addSection(tr("Library"));
   add(QStringLiteral("all"), tr("All assets"), int(m_assets.size()));
+  add(QStringLiteral("favourites"), tr("Favourites"), int(m_favorites.size()));
   add(QStringLiteral("texture"), tr("Textures"),
       int(std::count_if(m_assets.begin(), m_assets.end(), [](const auto& asset) {
         return asset.type == project::AssetType::Texture;
@@ -869,7 +880,8 @@ void AssetLibraryWindow::refreshGrid()
       || (m_filter == QStringLiteral("sound") && asset.type == project::AssetType::Sound)
       || (m_filter == QStringLiteral("skybox") && asset.type == project::AssetType::Skybox)
       || (m_filter == QStringLiteral("pending") && needsConversion(asset))
-      || (m_filter == QStringLiteral("missing") && asset.missing);
+      || (m_filter == QStringLiteral("missing") && asset.missing)
+      || (m_filter == QStringLiteral("favourites") && m_favorites.contains(asset.id));
     if (!matchesType)
       continue;
     const auto displayName = QString::fromStdString(asset.displayName);
@@ -1296,6 +1308,12 @@ void AssetLibraryWindow::toggleFavorite()
   }
   m_favoriteButton->setText(
     favorite ? QStringLiteral("★ Favourite") : QStringLiteral("☆ Favourite"));
+  if (favorite)
+    m_favorites.insert(asset->id);
+  else
+    m_favorites.erase(asset->id);
+  refreshCategories();
+  refreshGrid();
 }
 
 void AssetLibraryWindow::renameSelected()

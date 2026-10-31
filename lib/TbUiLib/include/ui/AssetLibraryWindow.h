@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,7 @@ class AssetLibraryWindow : public QDialog
   Q_OBJECT
   std::unique_ptr<AssetLibrarySource> m_source;
   std::vector<project::LibraryAsset> m_assets;
+  std::set<std::string> m_favorites;
   std::optional<std::string> m_selectedId;
   QString m_filter = QStringLiteral("all");
   QString m_search;
