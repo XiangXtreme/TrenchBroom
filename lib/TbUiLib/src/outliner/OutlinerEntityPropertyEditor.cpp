@@ -1,3 +1,5 @@
+// Copyright (C) 2026 XiangXtreme
+
 #include "ui/outliner/OutlinerEntityPropertyEditor.h"
 
 #include <QApplication>
@@ -15,6 +17,7 @@
 #include <QPalette>
 #include <QPixmap>
 #include <QResizeEvent>
+#include <QScopeGuard>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QStringList>
@@ -699,8 +702,29 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   layout->setSpacing(0);
   layout->addWidget(m_propertiesPanel, 1);
 
+  // Keep the transform controls alive across selections. Their document observers
+  // update values directly; rebuilding the property rows must not recreate them.
+  m_transformContainer = new QWidget{m_scrollContents};
+  auto* transformLayout = new QVBoxLayout{m_transformContainer};
+  transformLayout->setContentsMargins(0, 0, 0, 0);
+  transformLayout->setSpacing(0);
+  m_transformCard = new TransformCard{m_document, m_transformContainer};
+  m_transformCard->setObjectName("TransformCard");
+  m_transformCard->setExpanded(m_transformCardExpanded);
+  transformLayout->addWidget(m_transformCard);
+  m_transformContainer->hide();
+  connect(
+    m_transformCard,
+    &TransformCard::editingFinished,
+    this,
+    &OutlinerEntityPropertyEditor::focusMapViewRequested);
+  connect(
+    m_transformCard, &CollapsibleTitledPanel::toggled, this, [this](const bool expanded) {
+      m_transformCardExpanded = expanded;
+    });
+
   connectObservers();
-  scheduleUpdate();
+  scheduleUpdate(true);
 }
 
 OutlinerEntityPropertyEditor::~OutlinerEntityPropertyEditor() = default;
@@ -709,11 +733,15 @@ void OutlinerEntityPropertyEditor::connectObservers()
 {
   m_notifierConnection += m_document.selectionDidChangeNotifier.connect(
     [this](const mdl::SelectionChange&) { scheduleUpdate(); });
-  m_notifierConnection +=
-    m_document.entityDefinitionsDidChangeNotifier.connect([this]() { scheduleUpdate(); });
+  m_notifierConnection += m_document.entityDefinitionsDidChangeNotifier.connect(
+    [this]() { scheduleUpdate(true); });
   m_notifierConnection +=
     m_document.documentWasLoadedNotifier.connect([this]() { scheduleUpdate(true); });
+  m_notifierConnection += m_document.nodesWillBeRemovedNotifier.connect(
+    [this](const auto&) { m_rowEntities.clear(); });
   m_notifierConnection += m_document.nodesDidChangeNotifier.connect([this](const auto&) {
+    // Property presence, classname and read-only state can change row structure.
+    m_rowEntities.clear();
     refreshVisiblePropertyValues();
     refreshEmbeddedEditors();
   });
@@ -780,11 +808,20 @@ void OutlinerEntityPropertyEditor::updateFromSelection()
       return;
     }
   }
+  const auto force = m_forceUpdate;
   m_forceUpdate = false;
   m_updateDeferred = false;
 
-  const auto entities = m_document.map().selection().allEntities();
+  const auto& selection = m_document.map().selection();
+  const auto entities = selection.allEntities();
+  const auto brushSelection = selection.hasBrushes();
+  // Switching brushes inside one brush entity does not change its property rows.
+  // TransformCard already observes the selection and updates its numeric values.
+  if (!force && entities == m_rowEntities && brushSelection == m_rowBrushSelection)
+    return;
   rebuildPropertyRows(entities);
+  m_rowEntities = entities;
+  m_rowBrushSelection = brushSelection;
 }
 
 void OutlinerEntityPropertyEditor::refreshVisiblePropertyValues()
@@ -889,15 +926,17 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   m_embeddedSkyboxEditor = nullptr;
   m_embeddedSpawnflagsEditorContainer = nullptr;
   m_embeddedSpawnflagsEditor = nullptr;
-  m_transformCard = nullptr;
+  const auto updatesEnabled = this->updatesEnabled();
+  setUpdatesEnabled(false);
+  const auto restoreUpdates = qScopeGuard([&] { setUpdatesEnabled(updatesEnabled); });
 
   const auto clearLayout = [&](auto&& self, QLayout* l) -> void {
     while (auto* item = l->takeAt(0))
     {
       if (auto* w = item->widget())
       {
-        w->setParent(nullptr);
-        delete w;
+        if (w != m_transformContainer)
+          delete w;
       }
       if (auto* childLayout = item->layout())
       {
@@ -909,6 +948,8 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   };
 
   clearLayout(clearLayout, m_scrollLayout);
+  m_transformContainer->hide();
+  m_scrollLayout->addWidget(m_transformContainer, 0);
 
   if (entityNodes.empty())
   {
@@ -978,23 +1019,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   const auto isWorldspawnOnly =
     (firstClass == mdl::EntityPropertyValues::WorldspawnClassname
      && !m_document.map().selection().hasBrushes());
-  if (!isWorldspawnOnly)
-  {
-    m_transformCard = new TransformCard{m_document, m_scrollContents};
-    m_transformCard->setObjectName("TransformCard");
-    m_transformCard->setExpanded(m_transformCardExpanded);
-    connect(
-      m_transformCard,
-      &TransformCard::editingFinished,
-      this,
-      &OutlinerEntityPropertyEditor::focusMapViewRequested);
-    connect(
-      m_transformCard,
-      &CollapsibleTitledPanel::toggled,
-      this,
-      [this](const bool expanded) { m_transformCardExpanded = expanded; });
-    m_scrollLayout->addWidget(m_transformCard, 0);
-  }
+  m_transformContainer->setVisible(!isWorldspawnOnly);
 
   const auto keys = buildKeyOrderWithInactiveDefinitions(entityNodes, entityDefinition);
   const auto& wadKey = m_document.map().gameInfo().gameConfig.materialConfig.property;

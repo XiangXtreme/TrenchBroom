@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2026 Kristian Duske
+ Copyright (C) 2026 XiangXtreme
 
  This file is part of TrenchBroom.
 
@@ -24,10 +25,12 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPalette>
+#include <QPointer>
 #include <QScrollArea>
 #include <QToolButton>
 #include <QtTest/QTest>
 
+#include "base/PreferenceManager.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityDefinition.h"
@@ -40,12 +43,13 @@
 #include "mdl/Node.h"
 #include "mdl/TestFactory.h"
 #include "mdl/WorldNode.h"
-#include "ui/MapDocument.h"
-#include "ui/MapDocumentFixture.h"
-#include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
 #include "ui/ElidedLabel.h"
+#include "ui/MapDocument.h"
+#include "ui/MapDocumentFixture.h"
 #include "ui/SmartSkyboxEditor.h"
+#include "ui/SpinControl.h"
+#include "ui/TransformCard.h"
 #include "ui/outliner/OutlinerEntityPropertyEditor.h"
 
 #include "kd/flat_map.h"
@@ -447,6 +451,59 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     auto& entity = selectedEntity(map).entity();
     REQUIRE(entity.property("targetname") != nullptr);
     CHECK(*entity.property("targetname") == "renamed_light");
+  }
+
+  SECTION("brush selection reuses property rows and transform controls")
+  {
+    auto* first = mdl::createBrushNode(map);
+    auto* second = mdl::createBrushNode(map);
+    auto* entity = new mdl::EntityNode{
+      mdl::Entity{{{"classname", "func_detail"}, {"targetname", "detail"}}}};
+    entity->addChild(first);
+    entity->addChild(second);
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {entity}}});
+    mdl::selectNodes(map, {first});
+    processOutlinerUpdates();
+    auto card = QPointer{editor.findChild<TransformCard*>()};
+    auto row = QPointer{propertyRow(editor, "targetname")};
+    REQUIRE(card);
+    REQUIRE(row);
+    const auto widgetCount = editor.findChildren<QWidget*>().size();
+    for (auto i = 0; i < 16; ++i)
+    {
+      mdl::deselectAll(map);
+      mdl::selectNodes(map, {i % 2 == 0 ? second : first});
+      processOutlinerUpdates();
+      REQUIRE_FALSE(row.isNull());
+      CHECK(editor.findChild<TransformCard*>() == card);
+      CHECK(propertyRow(editor, "targetname") == row);
+      CHECK(editor.findChildren<QWidget*>().size() == widgetCount);
+    }
+    mdl::setEntityProperty(map, "new_key", "value", false);
+    mdl::deselectAll(map);
+    mdl::selectNodes(map, {second});
+    processOutlinerUpdates();
+    REQUIRE_FALSE(card.isNull());
+    REQUIRE(propertyValueEdit(editor, "new_key"));
+    CHECK(propertyValueEdit(editor, "new_key")->text() == "value");
+    CHECK(row.isNull());
+    auto* other = new mdl::EntityNode{mdl::Entity{
+      {{"classname", "light"}, {"targetname", "other"}, {"origin", "128 16 32"}}}};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {other}}});
+    mdl::deselectAll(map);
+    mdl::selectNodes(map, {other});
+    processOutlinerUpdates();
+    REQUIRE_FALSE(card.isNull());
+    CHECK(propertyValueEdit(editor, "targetname")->text() == "other");
+    auto* positionX = card->findChild<SpinControl*>("TransformCard_PosX");
+    REQUIRE(positionX);
+    CHECK(positionX->value() == 128.0);
+    mdl::selectNodes(map, {first});
+    processOutlinerUpdates();
+    CHECK_FALSE(card->isVisibleTo(&editor));
+    mdl::deselectAll(map);
+    processOutlinerUpdates();
+    CHECK_FALSE(card->isVisibleTo(&editor));
   }
 
   SECTION("stores choice values instead of display labels")

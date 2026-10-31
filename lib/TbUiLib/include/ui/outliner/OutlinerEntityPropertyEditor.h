@@ -1,3 +1,5 @@
+// Copyright (C) 2026 XiangXtreme
+
 #pragma once
 
 #include <QWidget>
@@ -60,7 +62,10 @@ private:
   QWidget* m_embeddedSpawnflagsEditorContainer = nullptr;
   FlagsEditor* m_embeddedSpawnflagsEditor = nullptr;
   bool m_spawnflagsEditorExpanded = false;
+  QWidget* m_transformContainer = nullptr;
   TransformCard* m_transformCard = nullptr;
+  std::vector<mdl::EntityNodeBase*> m_rowEntities;
+  bool m_rowBrushSelection = false;
   bool m_transformCardExpanded = true;
 
   bool m_updateQueued = false;
