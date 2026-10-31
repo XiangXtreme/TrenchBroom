@@ -84,6 +84,10 @@ public:
   virtual Result<void> removeAsset(const std::string& /*assetId*/) {
     return Error{"This asset library is read only."};
   }
+  virtual Result<void> setTags(
+    const std::string& /*assetId*/, const std::vector<std::string>& /*tags*/) {
+    return Error{"This asset library is read only."};
+  }
 
   // Mutating operations. A read-only source reports the matching capability as false and
   // the browser hides the action instead of calling these.

@@ -130,6 +130,11 @@ public:
   {
     return m_library->removeAsset(assetId);
   }
+
+  Result<void> setTags(const std::string& assetId, const std::vector<std::string>& tags) override
+  {
+    return m_library->setTags(assetId, tags);
+  }
 };
 
 } // namespace

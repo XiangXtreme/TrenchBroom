@@ -509,6 +509,19 @@ void AssetLibraryWindow::buildUi()
   connect(m_renameButton, &QPushButton::clicked, this, &AssetLibraryWindow::renameSelected);
   connect(m_deleteButton, &QPushButton::clicked, this, &AssetLibraryWindow::deleteSelected);
 
+  auto* tagsRow = new QWidget{inspector};
+  auto* tagsLayout = new QHBoxLayout{tagsRow};
+  tagsLayout->setContentsMargins(0, 0, 0, 0);
+  tagsLayout->setSpacing(6);
+  auto* tagsLabel = new QLabel{tr("Tags"), tagsRow};
+  tagsLabel->setObjectName(QStringLiteral("AssetLibraryPropertyKey"));
+  m_tagsEdit = new QLineEdit{tagsRow};
+  m_tagsEdit->setPlaceholderText(tr("comma separated"));
+  m_tagsEdit->setEnabled(false);
+  tagsLayout->addWidget(tagsLabel);
+  tagsLayout->addWidget(m_tagsEdit, 1);
+  connect(m_tagsEdit, &QLineEdit::editingFinished, this, &AssetLibraryWindow::applyTags);
+
   m_name = new QLabel{inspector};
   m_name->setObjectName(QStringLiteral("AssetLibraryAssetName"));
   m_name->setWordWrap(true);
@@ -537,6 +550,7 @@ void AssetLibraryWindow::buildUi()
   inspectorLayout->addWidget(m_preview);
   inspectorLayout->addWidget(m_previewMode);
   inspectorLayout->addWidget(actionRow);
+  inspectorLayout->addWidget(tagsRow);
   inspectorLayout->addWidget(m_name);
   inspectorLayout->addWidget(m_status);
   inspectorLayout->addWidget(propertiesTitle);
@@ -894,6 +908,7 @@ void AssetLibraryWindow::refreshGrid()
         image = decodeEncodedImage(original.value());
         if (image.isNull() && asset.type == project::AssetType::Sprite)
           image = decodeSpriteImage(original.value());
+
       }
     }
     if (!image.isNull())
@@ -956,11 +971,19 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
   m_renameButton->setEnabled(manageable);
   m_deleteButton->setEnabled(manageable);
   auto favorite = false;
+  auto tags = QString{};
   if (manageable)
   {
     if (const auto meta = m_source->metadata(asset->id); meta.is_success())
+    {
       favorite = meta.value().favorite;
+      for (const auto& tag : meta.value().tags)
+        tags += (tags.isEmpty() ? QString{} : QStringLiteral(", "))
+                + QString::fromStdString(tag);
+    }
   }
+  m_tagsEdit->setEnabled(manageable);
+  m_tagsEdit->setText(tags);
   m_favoriteButton->setChecked(favorite);
   m_favoriteButton->setText(
     favorite ? QStringLiteral("★ Favourite") : QStringLiteral("☆ Favourite"));
@@ -1048,6 +1071,7 @@ void AssetLibraryWindow::updatePreview()
     image = decodeEncodedImage(original.value());
     if (image.isNull() && asset->type == project::AssetType::Sprite)
       image = decodeSpriteImage(original.value());
+
   }
 
   if (image.isNull())
@@ -1237,6 +1261,24 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
   }
   reload();
   m_footer->setText(tr("Imported %1 file(s).").arg(int(imported.size())));
+}
+
+void AssetLibraryWindow::applyTags()
+{
+  const auto* asset = selectedAsset();
+  if (!asset || !m_source || !m_source->canManage())
+    return;
+
+  auto tags = std::vector<std::string>{};
+  for (const auto& part : m_tagsEdit->text().split(',', Qt::SkipEmptyParts))
+  {
+    const auto tag = part.trimmed().toStdString();
+    if (!tag.empty())
+      tags.push_back(tag);
+  }
+  if (const auto result = m_source->setTags(asset->id, tags); result.is_error())
+    QMessageBox::critical(
+      this, tr("Tags"), QString::fromStdString(std::get<Error>(result.error()).msg));
 }
 
 void AssetLibraryWindow::toggleFavorite()

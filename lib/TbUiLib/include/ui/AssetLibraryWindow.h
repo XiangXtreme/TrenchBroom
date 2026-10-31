@@ -62,6 +62,7 @@ class AssetLibraryWindow : public QDialog
   QPushButton* m_favoriteButton = nullptr;
   QPushButton* m_renameButton = nullptr;
   QPushButton* m_deleteButton = nullptr;
+  QLineEdit* m_tagsEdit = nullptr;
   QLineEdit* m_searchEdit = nullptr;
   AssetLibraryListView* m_categories = nullptr;
   AssetLibraryListView* m_grid = nullptr;
@@ -117,6 +118,7 @@ private:
   void toggleFavorite();
   void renameSelected();
   void deleteSelected();
+  void applyTags();
 
   const project::LibraryAsset* selectedAsset() const;
   int pendingCount() const;
