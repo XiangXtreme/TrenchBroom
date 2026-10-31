@@ -89,23 +89,58 @@ protected:
   void paintEvent(QPaintEvent*) override
   {
     auto painter = QPainter{this};
-    auto color = palette().color(QPalette::Accent);
-    color.setAlpha(45);
-    painter.fillRect(rect(), color);
-    painter.setPen(QPen{palette().color(QPalette::Accent), 2});
-    painter.drawRect(rect().adjusted(1, 1, -1, -1));
-    const auto text = property("label").toString();
-    if (width() > 100 && height() > 40)
+    const auto accent = palette().color(QPalette::Accent);
+    const auto split = property("split").toBool();
+    auto highlight = rect();
+    auto divider = QLine{};
+    if (split)
     {
+      const auto horizontal = property("splitHorizontal").toBool();
+      const auto ratio = property("splitRatio").toDouble();
+      const auto position = qRound((horizontal ? width() : height()) * ratio);
+      if (horizontal)
+      {
+        highlight.setLeft(position);
+        divider = QLine{position, 0, position, height()};
+      }
+      else
+      {
+        highlight.setBottom(position);
+        divider = QLine{0, position, width(), position};
+      }
+    }
+    auto color = accent;
+    color.setAlpha(split ? 65 : 45);
+    painter.fillRect(highlight, color);
+    painter.setPen(QPen{accent, 2});
+    painter.drawRect(highlight.adjusted(1, 1, -1, -1));
+    if (split)
+    {
+      // A contrasting halo keeps the divider legible over both a grid and a 3D scene.
+      painter.setPen(QPen{palette().color(QPalette::Window), 6});
+      painter.drawLine(divider);
+      painter.setPen(QPen{accent, 2});
+      painter.drawLine(divider);
+    }
+    const auto text = property("label").toString();
+    if (width() > 100 && height() > 60)
+    {
+      auto textWidth = 0;
+      const auto lines = text.split('\n');
+      for (const auto& line : lines)
+        textWidth = std::max(textWidth, fontMetrics().horizontalAdvance(line));
       auto badge = QRect{
         QPoint{},
-        QSize{fontMetrics().horizontalAdvance(text) + 20, fontMetrics().height() + 10}};
+        QSize{
+          std::min(textWidth + 24, width() - 16),
+          static_cast<int>(lines.size()) * fontMetrics().height() + 14}};
       badge.moveCenter(rect().center());
-      painter.setPen(Qt::NoPen);
+      painter.setRenderHint(QPainter::Antialiasing);
+      painter.setPen(QPen{accent, 1});
       painter.setBrush(palette().color(QPalette::Window));
       painter.drawRoundedRect(badge, 4, 4);
       painter.setPen(palette().color(QPalette::WindowText));
-      painter.drawText(badge, Qt::AlignCenter, text);
+      painter.drawText(badge.adjusted(8, 4, -8, -4), Qt::AlignCenter, text);
     }
   }
 };
@@ -938,7 +973,8 @@ void AreaMapView::updateGesture(
   if (!m_dragSource)
     return;
   const auto delta = globalPosition - m_dragStart;
-  m_dragMoved |= std::max(std::abs(delta.x()), std::abs(delta.y())) > 20;
+  m_dragMoved |= std::max(std::abs(delta.x()), std::abs(delta.y()))
+                 >= QApplication::startDragDistance();
   m_dragTarget.clear();
   m_gesturePlan = {};
   m_dock = areaGeometry::Dock::None;
@@ -985,6 +1021,7 @@ void AreaMapView::updateGesture(
     closed->show();
     closed->raise();
     closed->update();
+    m_preview->setProperty("split", false);
     m_preview->setProperty("join", m_dock == areaGeometry::Dock::None);
     m_preview->setProperty(
       "label",
@@ -1028,14 +1065,19 @@ void AreaMapView::updateGesture(
     ratio = 0.5;
   const auto minimum = static_cast<double>(MinimumAreaSize) / extent;
   m_splitRatio = std::clamp(ratio, minimum, 1 - minimum);
-  auto preview = bounds;
-  if (horizontal)
-    preview.setLeft(bounds.left() + bounds.width() * m_splitRatio);
-  else
-    preview.setHeight(bounds.height() * m_splitRatio);
+  m_preview->setProperty("split", true);
+  m_preview->setProperty("splitHorizontal", horizontal);
+  m_preview->setProperty("splitRatio", m_splitRatio);
   m_preview->setProperty("join", false);
-  m_preview->setProperty("label", tr("Split view"));
-  m_preview->setGeometry(m_areaLayout->pixelRect(preview));
+  const auto percent = qRound(m_splitRatio * 100);
+  m_preview->setProperty(
+    "label",
+    (horizontal ? tr("Split left / right (%1% / %2%)")
+                : tr("Split top / bottom (%1% / %2%)"))
+        .arg(percent)
+        .arg(100 - percent)
+      + "\n" + tr("Release to split / Esc to cancel"));
+  m_preview->setGeometry(area->geometry());
   m_preview->show();
   m_preview->raise();
   m_preview->update();
@@ -1168,10 +1210,14 @@ bool AreaMapView::eventFilter(QObject* watched, QEvent* event)
     auto* mouse = static_cast<QMouseEvent*>(event);
     if (mouse->button() != Qt::LeftButton)
       return true;
-    updateGesture(mouse->globalPosition().toPoint(), mouse->modifiers());
+    // Release may refine an existing preview, but must never invent a split which
+    // had no preview during the drag (e.g. a compressed press/release event pair).
+    const auto hadPreview = m_dragMoved && m_preview->isVisible();
+    if (hadPreview)
+      updateGesture(mouse->globalPosition().toPoint(), mouse->modifiers());
     const auto source = m_dragSource;
     const auto target = m_dragTarget;
-    const auto commit = m_dragMoved && m_preview->isVisible();
+    const auto commit = hadPreview && m_preview->isVisible();
     const auto axis = m_splitOrientation;
     const auto ratio = m_splitRatio;
     const auto plan = m_gesturePlan;

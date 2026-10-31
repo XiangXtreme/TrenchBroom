@@ -163,7 +163,10 @@ an accidental visual difference by naming it as a new role.
 `AreaMapView` owns the corner grip and split/join preview as domain layout visuals.
 They use the application palette (Mid, Accent, Window and WindowText), have no local stylesheet,
 and do not replace a foundational control. The grip supports pointer dragging and
-keyboard access to the normal Qt context menu. Accept `map-areas`,
+keyboard access to the normal Qt context menu. Split dragging shows the full source
+area, a high-contrast divider, the new region and a ratio/release/cancel hint after the
+shared Qt drag threshold. Only a drag with an existing valid preview can commit on
+release; previewing leaves the viewport tree and cameras untouched. Accept `map-areas`,
 `map-area-split-preview`, `map-area-join-preview`, `map-area-partial-join-preview`
 and `map-area-dock-preview` across the theme/scale matrix. Rectangular area boundaries
 use the shared style's `PM_SplitterWidth` and `CE_Splitter`; the domain widget only
