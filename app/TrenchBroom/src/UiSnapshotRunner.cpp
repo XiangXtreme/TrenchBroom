@@ -138,6 +138,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("components"),
     QStringLiteral("asset-library"),
     QStringLiteral("asset-library-project"),
+    QStringLiteral("asset-library-narrow"),
+    QStringLiteral("asset-library-project-narrow"),
     QStringLiteral("project-empty"),
     QStringLiteral("project-drawer"),
     QStringLiteral("project-pinned"),
@@ -811,7 +813,9 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
                            : UiSnapshotReadinessState::Failed,
       "Output log must meet the drawer tab strip without a blank spacer"};
   }
-  if (targetName == QStringLiteral("asset-library-project"))
+  if (
+    targetName == QStringLiteral("asset-library-project")
+    || targetName == QStringLiteral("asset-library-project-narrow"))
   {
     auto* usage = targetWidget.findChild<QListWidget*>("AssetLibraryUsage");
     auto* inspector = targetWidget.findChild<AssetInspector*>();
@@ -1337,7 +1341,8 @@ int runUiSnapshot(
   else if (options.page.startsWith(QStringLiteral("asset-library")))
   {
     assetLibrarySnapshot = createUiAssetLibrarySnapshot(
-      options.page == QStringLiteral("asset-library-project"));
+      options.page == QStringLiteral("asset-library-project")
+      || options.page == QStringLiteral("asset-library-project-narrow"));
     if (!assetLibrarySnapshot)
     {
       qCritical() << "Could not build the asset library snapshot fixture";
@@ -1345,7 +1350,11 @@ int runUiSnapshot(
     }
     targetWidget = assetLibrarySnapshot.get();
     targetName = options.page;
-    targetWidget->resize(1180, 760);
+    // The narrow targets keep the same panes but check that they degrade instead of
+    // clipping: they are the only UI snapshot below 1000 logical pixels.
+    targetWidget->resize(
+      options.page.endsWith(QStringLiteral("-narrow")) ? QSize{900, 640}
+                                                       : QSize{1180, 760});
   }
   else if (options.page.startsWith(QStringLiteral("preferences")))
   {
