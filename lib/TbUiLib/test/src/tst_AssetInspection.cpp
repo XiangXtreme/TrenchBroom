@@ -10,8 +10,9 @@
 #include <QMediaPlayer>
 #include <QPushButton>
 #include <QSlider>
-#include <QTest>
 #include <QTemporaryDir>
+#include <QTest>
+#include <QTimer>
 #include <QTreeWidget>
 
 #include "img/GoldSrcTexture.h"
@@ -355,6 +356,20 @@ TEST_CASE("AssetInspection")
     CHECK(red > 0);
     CHECK(green > 0);
 
+    const auto geometry = loadGoldSrcStudioFrame(bytes, 0, 1, {}, false);
+    REQUIRE(geometry);
+    CHECK(geometry->texCoords == scene->frames.front().texCoords);
+    REQUIRE(geometry->textures.size() == 1);
+    CHECK(geometry->textures.front().pixels.empty());
+
+    auto edge = scene->frames.front();
+    std::fill(edge.texCoords.begin(), edge.texCoords.end(), std::array{0.0f, 0.0f});
+    const auto edgeImage = renderModelPreview(edge, 64);
+    for (auto y = 0; y < edgeImage.height(); ++y)
+      for (auto x = 0; x < edgeImage.width(); ++x)
+        if (const auto color = edgeImage.pixelColor(x, y); color.alpha() > 0)
+          CHECK(color.green() == 0);
+
     auto asset = inspection::Asset{};
     asset.resource.type = BrowserCellType::Model;
     asset.resource.path = "models/ui_studio.mdl";
@@ -379,6 +394,7 @@ TEST_CASE("AssetInspection")
     REQUIRE(sequence != nullptr);
     REQUIRE(frame != nullptr);
     REQUIRE(play != nullptr);
+    inspector.show();
     CHECK_FALSE(sequence->isHidden());
     CHECK(sequence->count() == 4);
     CHECK(frame->maximum() == 1);
@@ -396,9 +412,50 @@ TEST_CASE("AssetInspection")
     CHECK(valueFor("Skin families") == "3");
     CHECK(valueFor("Embedded textures") == "brick");
     CHECK(valueFor("Sequences") == "4 in 2 external groups");
-    CHECK(summary->text().contains("bind pose"));
+    CHECK(summary->text().contains("idle0 frame 1"));
     body->setCurrentIndex(1);
-    CHECK(summary->text().contains("bind pose"));
+    CHECK(summary->text().contains("idle0 frame 1"));
+    play->setChecked(true);
+    sequence->setCurrentIndex(1);
+    CHECK_FALSE(play->isChecked());
+
+    // Hiding, clearing and selecting another resource must stop the studio timer.
+    play->setChecked(true);
+    inspector.hide();
+    CHECK_FALSE(play->isChecked());
+    inspector.show();
+    play->setChecked(true);
+    inspector.clear();
+    CHECK_FALSE(play->isChecked());
+    for (auto* timer : inspector.findChildren<QTimer*>())
+      CHECK_FALSE(timer->isActive());
+    // A stale control event after clearing must not dereference missing metadata.
+    play->setChecked(true);
+    CHECK_FALSE(play->isChecked());
+  }
+  SECTION("non-looping studio sequences stop on their final frame")
+  {
+    auto bytes = studioModel();
+    auto sequenceOffset = std::uint32_t{};
+    std::memcpy(&sequenceOffset, bytes.data() + 168, sizeof(sequenceOffset));
+    std::fill(
+      bytes.begin() + sequenceOffset + 36,
+      bytes.begin() + sequenceOffset + 40,
+      std::uint8_t{0});
+    auto asset = inspection::Asset{};
+    asset.resource.type = BrowserCellType::Model;
+    asset.original = asset.compatible = bytes;
+    auto inspector = AssetInspector{};
+    inspector.setAsset(asset);
+    inspector.show();
+    auto* play = inspector.findChild<QPushButton*>("AssetInspector_ModelPlay");
+    auto* frame = inspector.findChild<QSlider*>("AssetInspector_ModelFrame");
+    REQUIRE(play);
+    REQUIRE(frame);
+    play->setChecked(true);
+    QTRY_COMPARE(frame->value(), 1);
+    QTRY_VERIFY(!play->isChecked());
+    CHECK(frame->value() == 1);
   }
   SECTION("studio metadata without a readable mesh keeps preview controls safe")
   {
@@ -470,6 +527,7 @@ TEST_CASE("AssetInspection")
       CHECK(next->positions != scene->frames.front().positions);
       CHECK(next->texCoords.size() == next->positions.size());
     }
+    REQUIRE_FALSE(scene->frames.empty());
     const auto image = renderModelPreview(scene->frames.front(), 256, 0.55f, 0.38f);
     REQUIRE_FALSE(image.isNull());
     auto painted = 0;

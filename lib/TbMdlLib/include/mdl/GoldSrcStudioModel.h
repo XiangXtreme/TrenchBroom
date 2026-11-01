@@ -40,9 +40,7 @@ struct GoldSrcStudioBodyPart
  * Metadata of a GoldSrc studio model (version 10) that can be read without animation
  * data.
  *
- * The renderer only previews the bind pose, so sequences are reported as a count and
- * never presented as playable. Textures are embedded in the model and only listed for
- * diagnostics.
+ * Includes sequence metadata, embedded texture names and body variant names.
  */
 struct GoldSrcStudioModelInfo
 {
@@ -76,7 +74,7 @@ struct GoldSrcStudioTexture
 struct GoldSrcStudioMesh
 {
   std::vector<vm::vec3f> positions;
-  // Texture coordinates parallel to positions, using the engine's texel-space values.
+  // Normalized texture coordinates parallel to positions.
   std::vector<std::array<float, 2>> texCoords;
   std::vector<std::array<std::size_t, 3>> triangles;
   // Index into textures, parallel to triangles.
@@ -89,13 +87,16 @@ struct GoldSrcStudioMesh
  *
  * The pose is decoded from the requested sequence, which is how the engine renders a
  * model; frame 0 of the first sequence is therefore the bind pose. Models without
- * sequences fall back to the bone rest values. Bone controllers and skin textures are not
- * applied, so the geometry is a readable silhouette for the asset browser.
+ * sequences fall back to the bone rest values. Uses the default skin family; bone
+ * controllers and external sequence groups are not applied. When decodeTexturePixels
+ * is false, only texture dimensions and normalized UVs are read so callers can reuse
+ * pixels decoded for an earlier frame of the same model.
  */
 Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   const std::vector<std::uint8_t>& bytes,
   const std::vector<std::size_t>& variants = {},
   std::size_t sequence = 0,
-  std::size_t frame = 0);
+  std::size_t frame = 0,
+  bool decodeTexturePixels = true);
 
 } // namespace tb::mdl

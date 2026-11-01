@@ -20,12 +20,7 @@ class QImage;
 
 namespace tb::ui
 {
-struct ModelPreviewTexture
-{
-  std::size_t width = 0;
-  std::size_t height = 0;
-  std::vector<std::uint32_t> pixels;
-};
+using ModelPreviewTexture = mdl::GoldSrcStudioTexture;
 
 struct ModelPreviewFrame
 {
@@ -39,8 +34,7 @@ struct ModelPreviewFrame
 struct ModelPreviewScene
 {
   std::vector<ModelPreviewFrame> frames;
-  // Set for GoldSrc studio models: the bind pose is the only decoded frame, but the
-  // inspector can offer the authored body variants from this metadata.
+  // Studio metadata drives the inspector's on-demand sequence and body controls.
   std::optional<mdl::GoldSrcStudioModelInfo> studioModel;
 };
 
@@ -48,8 +42,8 @@ struct ModelPreviewScene
  * Loads the bind pose of a GoldSrc studio model.
  *
  * The entity model loaders do not understand the GoldSrc studio format, so the asset
- * browser reads it directly. Animation, skins and bone controllers are not decoded; the
- * mesh is the authored rest pose. Returns nullopt for other formats or unreadable models.
+ * browser reads it directly. The scene starts with sequence 0, frame 0 and default skin
+ * textures. Returns nullopt for other formats or unreadable model metadata.
  */
 std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
   const std::vector<std::uint8_t>& bytes);
@@ -59,9 +53,14 @@ std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
  *
  * The scene loader only builds the first frame; playback asks for frames on demand so a
  * model with dozens of sequences does not decode all of them up front.
+ * Pass decodeTexturePixels=false to reuse pixels already decoded for this model.
  */
 std::optional<ModelPreviewFrame> loadGoldSrcStudioFrame(
-  const std::vector<std::uint8_t>& bytes, std::size_t sequence, std::size_t frame);
+  const std::vector<std::uint8_t>& bytes,
+  std::size_t sequence,
+  std::size_t frame,
+  const std::vector<std::size_t>& variants = {},
+  bool decodeTexturePixels = true);
 
 std::optional<ModelPreviewScene> loadModelPreviewScene(
   const std::filesystem::path& folder,
@@ -76,13 +75,12 @@ QImage renderModelPreview(
   bool origin = false);
 
 /**
- * Renders the first frame of a GoldSrc studio model into a flat shaded thumbnail.
+ * Renders the first frame of a GoldSrc studio model into a textured thumbnail.
  *
  * TrenchBroom renders models through the GPU for the model browser, which needs a game
  * context and a GL surface. The asset library browses files that no game owns, so it gets
  * a small software projection through TbMdlLib's read-only geometry accessors instead.
- * Textures, animation and blended materials are ignored: the thumbnail only has to say
- * "this is a barrel".
+ * Uses embedded default skin textures; blended materials are not simulated.
  */
 QImage renderModelThumbnail(
   const std::filesystem::path& folder,

@@ -90,7 +90,8 @@ std::string readFixedString(
 struct Header;
 
 /** Decodes every embedded texture from its indexed pixels and 256 colour palette. */
-std::vector<GoldSrcStudioTexture> decodeTextures(const Bytes& bytes, const Header& header);
+std::vector<GoldSrcStudioTexture> decodeTextures(
+  const Bytes& bytes, const Header& header, bool decodePixels);
 
 /** Smallest box containing every authored vertex of every body variant. */
 std::optional<vm::bbox3f> measureBounds(
@@ -109,7 +110,6 @@ struct Header
   std::size_t skinReferences = 0;
   std::size_t skinFamilies = 0;
   std::size_t skinOffset = 0;
-  std::size_t textureDataOffset = 0;
   std::size_t bodyParts = 0;
   std::size_t bodyPartOffset = 0;
   vm::bbox3f bounds;
@@ -136,10 +136,12 @@ std::size_t tableAt(
   return count > 0 && contains(bytes, start, total) ? start : 0;
 }
 
-std::vector<GoldSrcStudioTexture> decodeTextures(const Bytes& bytes, const Header& header)
+std::vector<GoldSrcStudioTexture> decodeTextures(
+  const Bytes& bytes, const Header& header, const bool decodePixels)
 {
   auto textures = std::vector<GoldSrcStudioTexture>{};
   textures.reserve(header.textures);
+  auto remainingBytes = std::size_t{64 * 1024 * 1024};
   for (auto index = std::size_t{0}; index < header.textures; ++index)
   {
     const auto offset = header.textureOffset + index * TextureSize;
@@ -157,13 +159,17 @@ std::vector<GoldSrcStudioTexture> decodeTextures(const Bytes& bytes, const Heade
     texture.height = std::size_t(height);
     const auto count = texture.width * texture.height;
     const auto pixelOffset = std::size_t(std::max(0, pixels));
-    if (!contains(bytes, pixelOffset, count) || !contains(bytes, pixelOffset + count, 768))
+    if (
+      !decodePixels || pixels <= 0 || count > remainingBytes / sizeof(std::uint32_t)
+      || !contains(bytes, pixelOffset, count)
+      || !contains(bytes, pixelOffset + count, 768))
     {
       textures.push_back(std::move(texture));
       continue;
     }
 
     texture.pixels.resize(count);
+    remainingBytes -= count * sizeof(std::uint32_t);
     for (auto i = std::size_t{0}; i < count; ++i)
     {
       const auto entry = std::size_t{bytes[pixelOffset + i]} * 3;
@@ -242,7 +248,6 @@ Result<Header> readHeader(const Bytes& bytes)
   header.skinReferences = countAt(bytes, 192, 4096);
   header.skinFamilies = countAt(bytes, 196, 4096);
   header.skinOffset = std::size_t(std::max(0, readi32(bytes, 200)));
-  header.textureDataOffset = std::size_t(std::max(0, readi32(bytes, 188)));
   header.bodyParts = countAt(bytes, 204, MaxBodyParts);
   header.bodyPartOffset = tableAt(bytes, 208, header.bodyParts, BodyPartSize);
 
@@ -386,13 +391,15 @@ std::optional<float> readAnimationValue(
       return std::nullopt;
     const auto valid = std::size_t{bytes[position]};
     const auto total = std::size_t{bytes[position + 1]};
-    if (total == 0)
+    if (
+      total == 0 || valid == 0 || valid > total
+      || !contains(bytes, position + 2, valid * 2))
       return std::nullopt;
     if (total > remaining)
     {
-      if (valid > remaining && contains(bytes, position + 2 + remaining * 2, 2))
-        return float(readi16(bytes, position + 2 + remaining * 2));
-      return std::nullopt;
+      // HLSDK repeats the last stored sample through the remainder of the run.
+      const auto sample = std::min(remaining, valid - 1);
+      return float(readi16(bytes, position + 2 + sample * 2));
     }
     remaining -= total;
     position += 2 + valid * 2;
@@ -549,7 +556,8 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   const std::vector<std::uint8_t>& bytes,
   const std::vector<std::size_t>& variants,
   const std::size_t sequence,
-  const std::size_t frame)
+  const std::size_t frame,
+  const bool decodeTexturePixels)
 {
   auto header = readHeader(bytes);
   if (header.is_error())
@@ -560,7 +568,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
 
   const auto pose = readSequencePose(bytes, value, sequence, frame);
   const auto bones = readBoneTransforms(bytes, value, pose);
-  const auto textures = decodeTextures(bytes, value);
+  auto textures = decodeTextures(bytes, value, decodeTexturePixels);
   auto result = GoldSrcStudioMesh{};
 
   for (auto part = std::size_t{0}; part < value.bodyParts; ++part)
@@ -683,7 +691,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   if (result.triangles.empty())
     return Error{"The studio model has no readable geometry."};
 
-  result.textures = textures;
+  result.textures = std::move(textures);
   return result;
 }
 

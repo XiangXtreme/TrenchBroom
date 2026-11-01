@@ -309,6 +309,40 @@ TEST_CASE("GoldSrcStudioModel")
     CHECK(buildGoldSrcStudioMesh(bytes, {2}).is_error());
   }
 
+  SECTION("holds compressed animation samples and advances to the next run")
+  {
+    auto bytes = makeStudioModel();
+    auto header = *reinterpret_cast<const StudioHeader*>(bytes.data());
+    const auto sequenceOffset = bytes.size();
+    const auto animationOffset = sequenceOffset + 176;
+    bytes.resize(animationOffset + 24 + 8, 0);
+    header.numseq = 1;
+    header.seqindex = int32_t(sequenceOffset);
+    writeAt(bytes, 0, header);
+    writeAt(bytes, sequenceOffset + 56, int32_t{5});
+    writeAt(bytes, sequenceOffset + 120, int32_t{1});
+    writeAt(bytes, sequenceOffset + 124, int32_t(animationOffset));
+    writeAt(bytes, animationOffset, uint16_t{24});
+    writeAt(bytes, std::size_t(header.boneindex) + 88, 1.0f);
+    const auto samples = animationOffset + 24;
+    bytes[samples] = 1;
+    bytes[samples + 1] = 3;
+    writeAt(bytes, samples + 2, int16_t{5});
+    bytes[samples + 4] = 1;
+    bytes[samples + 5] = 2;
+    writeAt(bytes, samples + 6, int16_t{9});
+    for (auto frame = std::size_t{0}; frame < 5; ++frame)
+    {
+      const auto mesh = buildGoldSrcStudioMesh(bytes, {}, 0, frame);
+      REQUIRE(mesh.is_success());
+      CHECK(mesh.value().positions.front().x() == (frame < 3 ? 16.0f : 20.0f));
+    }
+    bytes[samples] = 0;
+    CHECK(buildGoldSrcStudioMesh(bytes).value().positions.front().x() == 11.0f);
+    bytes[samples] = 4;
+    CHECK(buildGoldSrcStudioMesh(bytes).value().positions.front().x() == 11.0f);
+  }
+
   SECTION("composes bone rotations in the rest pose")
   {
     const auto bytes = makeStudioModel(3.14159265f / 2.0f);

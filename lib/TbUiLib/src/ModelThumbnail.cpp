@@ -56,22 +56,23 @@ std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
 std::optional<ModelPreviewFrame> loadGoldSrcStudioFrame(
   const std::vector<std::uint8_t>& bytes,
   const std::size_t sequence,
-  const std::size_t frame)
+  const std::size_t frame,
+  const std::vector<std::size_t>& variants,
+  const bool decodeTexturePixels)
 {
-  const auto mesh = mdl::buildGoldSrcStudioMesh(bytes, {}, sequence, frame);
+  auto mesh =
+    mdl::buildGoldSrcStudioMesh(bytes, variants, sequence, frame, decodeTexturePixels);
   if (mesh.is_error() || mesh.value().triangles.empty())
     return std::nullopt;
 
-  const auto& value = mesh.value();
+  auto value = std::move(mesh).value();
   auto preview = ModelPreviewFrame{};
   preview.name = "Sequence " + std::to_string(sequence) + " frame " + std::to_string(frame);
-  preview.positions = value.positions;
-  preview.texCoords = value.texCoords;
-  preview.triangles = value.triangles;
-  preview.triangleTextures = value.triangleTextures;
-  preview.textures.reserve(value.textures.size());
-  for (const auto& texture : value.textures)
-    preview.textures.push_back({texture.width, texture.height, texture.pixels});
+  preview.positions = std::move(value.positions);
+  preview.texCoords = std::move(value.texCoords);
+  preview.triangles = std::move(value.triangles);
+  preview.triangleTextures = std::move(value.triangleTextures);
+  preview.textures = std::move(value.textures);
   return preview;
 }
 
@@ -276,10 +277,12 @@ QImage renderModelPreview(
           const auto height = int(item.texture->height);
           const auto fx = u * float(width) - 0.5f;
           const auto fy = v * float(height) - 0.5f;
-          const auto x0 = std::clamp(int(std::floor(fx)), 0, width - 1);
-          const auto y0 = std::clamp(int(std::floor(fy)), 0, height - 1);
-          const auto x1 = std::clamp(x0 + 1, 0, width - 1);
-          const auto y1 = std::clamp(y0 + 1, 0, height - 1);
+          const auto rawX = int(std::floor(fx));
+          const auto rawY = int(std::floor(fy));
+          const auto x0 = std::clamp(rawX, 0, width - 1);
+          const auto y0 = std::clamp(rawY, 0, height - 1);
+          const auto x1 = std::clamp(rawX + 1, 0, width - 1);
+          const auto y1 = std::clamp(rawY + 1, 0, height - 1);
           const auto tx = std::clamp(fx - std::floor(fx), 0.0f, 1.0f);
           const auto ty = std::clamp(fy - std::floor(fy), 0.0f, 1.0f);
           const auto sample = [&](const int x, const int y) {

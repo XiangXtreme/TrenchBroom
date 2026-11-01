@@ -340,6 +340,7 @@ AssetInspector::AssetInspector(QWidget* parent)
   });
   m_studioTimer = new QTimer{this};
   connect(m_studioSequence, &QComboBox::currentIndexChanged, this, [this]() {
+    m_studioPlay->setChecked(false);
     if (!m_studioModel || m_studioSequence->currentIndex() < 0)
       return;
     m_studioSequenceIndex = std::size_t(m_studioSequence->currentIndex());
@@ -363,13 +364,13 @@ AssetInspector::AssetInspector(QWidget* parent)
       m_studioTimer->stop();
       return;
     }
-    const auto sequence = m_studioSequenceIndex < m_studioModel->sequenceList.size()
-                            ? m_studioSequenceIndex
-                            : std::size_t{0};
-    const auto fps = m_studioModel && sequence < m_studioModel->sequenceList.size()
-                       ? m_studioModel->sequenceList[sequence].fps
-                       : 0.0f;
-    const auto delay = fps > 0.1f ? 1000.0f / fps : 100.0f;
+    if (!m_studioModel || m_studioSequenceIndex >= m_studioModel->sequenceList.size())
+    {
+      m_studioPlay->setChecked(false);
+      return;
+    }
+    const auto fps = m_studioModel->sequenceList[m_studioSequenceIndex].fps;
+    const auto delay = std::isfinite(fps) && fps > 0.1f ? 1000.0f / fps : 100.0f;
     m_studioTimer->start(int(std::clamp(delay, 20.0f, 1000.0f)));
   });
   connect(m_studioTimer, &QTimer::timeout, this, &AssetInspector::stepStudioAnimation);
@@ -438,6 +439,8 @@ AssetInspector::~AssetInspector()
 
 void AssetInspector::stopPreview()
 {
+  m_studioTimer->stop();
+  m_studioPlay->setChecked(false);
   m_player->stop();
   m_player->setSource({});
   m_audio->close();
@@ -455,6 +458,7 @@ void AssetInspector::clear()
   m_studioModel.reset();
   m_studioVariants.clear();
   m_studioChoices.clear();
+  m_studioControls->hide();
   if (m_modelBody)
   {
     const auto blocker = QSignalBlocker{m_modelBody};
@@ -874,24 +878,26 @@ void AssetInspector::rebuildStudioPose()
 {
   if (!m_asset || !m_studioModel || !m_model)
     return;
-  const auto mesh = mdl::buildGoldSrcStudioMesh(
-    m_asset->compatible, m_studioVariants, m_studioSequenceIndex, m_studioFrameIndex);
-  if (mesh.is_error())
+  const auto reuseTextures = !m_model->frames.empty();
+  auto frame = loadGoldSrcStudioFrame(
+    m_asset->compatible,
+    m_studioSequenceIndex,
+    m_studioFrameIndex,
+    m_studioVariants,
+    !reuseTextures);
+  if (!frame)
   {
-    m_summary->setText(QString::fromStdString(std::get<Error>(mesh.error()).msg));
+    m_studioPlay->setChecked(false);
+    m_summary->setText(tr("The studio model has no readable geometry for this frame."));
     return;
   }
-  const auto& value = mesh.value();
-  auto frame = ModelPreviewFrame{};
-  frame.name = "Frame";
-  frame.positions = value.positions;
-  frame.texCoords = value.texCoords;
-  frame.triangles = value.triangles;
-  frame.triangleTextures = value.triangleTextures;
-  frame.textures.reserve(value.textures.size());
-  for (const auto& texture : value.textures)
-    frame.textures.push_back({texture.width, texture.height, texture.pixels});
-  m_model->frames.assign(1, std::move(frame));
+  if (reuseTextures)
+  {
+    frame->textures = std::move(m_model->frames.front().textures);
+    m_model->frames.front() = std::move(*frame);
+  }
+  else
+    m_model->frames.push_back(std::move(*frame));
   showModel();
 }
 
@@ -903,12 +909,21 @@ void AssetInspector::showStudioFrame()
 void AssetInspector::stepStudioAnimation()
 {
   if (!m_studioModel || m_studioSequenceIndex >= m_studioModel->sequenceList.size() || !isVisible())
+  {
+    m_studioTimer->stop();
+    m_studioPlay->setChecked(false);
     return;
+  }
   const auto& sequence = m_studioModel->sequenceList[m_studioSequenceIndex];
   const auto frames = std::max<std::size_t>(1, sequence.frameCount);
   if (frames < 2)
   {
     m_studioTimer->stop();
+    m_studioPlay->setChecked(false);
+    return;
+  }
+  if (!sequence.looping && m_studioFrameIndex + 1 >= frames)
+  {
     m_studioPlay->setChecked(false);
     return;
   }
@@ -1007,6 +1022,8 @@ const std::optional<inspection::Asset>& AssetInspector::asset() const
 
 void AssetInspector::hideEvent(QHideEvent* event)
 {
+  m_studioTimer->stop();
+  m_studioPlay->setChecked(false);
   m_player->stop();
   m_spriteTimer->stop();
   m_spritePlay->setText(tr("Play animation"));
