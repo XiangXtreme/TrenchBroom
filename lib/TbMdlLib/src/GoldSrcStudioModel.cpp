@@ -130,7 +130,7 @@ std::optional<vm::bbox3f> measureBounds(const Bytes& bytes, const Header& header
       high = point;
       return;
     }
-    for (auto axis = 0; axis < 3; ++axis)
+    for (auto axis = std::size_t{0}; axis < 3; ++axis)
     {
       (*low)[axis] = std::min((*low)[axis], point[axis]);
       (*high)[axis] = std::max((*high)[axis], point[axis]);
@@ -396,7 +396,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
       rawHigh = point;
       return;
     }
-    for (auto axis = 0; axis < 3; ++axis)
+    for (auto axis = std::size_t{0}; axis < 3; ++axis)
     {
       (*rawLow)[axis] = std::min((*rawLow)[axis], point[axis]);
       (*rawHigh)[axis] = std::max((*rawHigh)[axis], point[axis]);
@@ -483,12 +483,12 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
     auto posedLow = result.positions.front();
     auto posedHigh = posedLow;
     for (const auto& point : result.positions)
-      for (auto axis = 0; axis < 3; ++axis)
+      for (auto axis = std::size_t{0}; axis < 3; ++axis)
       {
         posedLow[axis] = std::min(posedLow[axis], point[axis]);
         posedHigh[axis] = std::max(posedHigh[axis], point[axis]);
       }
-    for (auto axis = 0; axis < 3; ++axis)
+    for (auto axis = std::size_t{0}; axis < 3; ++axis)
     {
       const auto raw = (*rawHigh)[axis] - (*rawLow)[axis];
       // Flat parts have no extent on one axis; only judge axes the model actually spans.
