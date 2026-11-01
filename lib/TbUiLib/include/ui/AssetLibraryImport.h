@@ -48,7 +48,8 @@ std::string goldSrcTextureRecipe(
 Result<std::string> importFileIntoLibrary(
   const std::filesystem::path& libraryFolder,
   const std::filesystem::path& source,
-  const std::string& relativePath);
+  const std::string& relativePath,
+  bool overwrite = false);
 
 /**
  * Converts one uncompiled library image into GoldSrc texture content.
@@ -57,5 +58,6 @@ Result<std::string> importFileIntoLibrary(
  * content, so previews and later captures use the converted result. Returns false when
  * the asset is not an unconverted image (WAD members and native models are skipped).
  */
-Result<bool> convertLibraryImage(project::AssetLibrary& library, const std::string& assetId);
+Result<bool> convertLibraryImage(
+  project::AssetLibrary& library, const std::string& assetId);
 } // namespace tb::ui

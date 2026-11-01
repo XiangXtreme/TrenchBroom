@@ -26,6 +26,7 @@ class SmartModelEditor : public SmartPropertyEditor
   Q_OBJECT
 private:
   QPushButton* m_browseButton = nullptr;
+  QPushButton* m_assetButton = nullptr;
 
 public:
   explicit SmartModelEditor(MapDocument& document, QWidget* parent = nullptr);

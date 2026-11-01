@@ -38,6 +38,17 @@ struct GoldSrcSpritePreview
     default;
 };
 
+struct GoldSrcSpriteAnimation
+{
+  std::vector<GoldSrcSpritePreview> frames;
+  // Zero duration means a single frame with user-controlled rate; groups retain timing.
+  std::vector<float> durations;
+  int alphaType = 0;
+};
+
+std::optional<GoldSrcSpriteAnimation> loadGoldSrcSpriteAnimation(
+  std::span<const std::uint8_t> data);
+
 std::optional<GoldSrcSpritePreview> loadGoldSrcSpritePreview(
   std::span<const std::uint8_t> data);
 

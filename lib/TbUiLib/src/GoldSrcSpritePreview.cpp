@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <type_traits>
@@ -158,7 +159,9 @@ std::optional<GoldSrcSpritePreview> decodeFrame(
   unused(*originY);
 
   auto pixelCount = std::size_t{};
-  if (!checkedPixelCount(*frameWidth, *frameHeight, pixelCount))
+  if (
+    !checkedPixelCount(*frameWidth, *frameHeight, pixelCount)
+    || pixelCount > 16 * 1024 * 1024)
   {
     return std::nullopt;
   }
@@ -205,8 +208,10 @@ std::optional<GoldSrcSpritePreview> decodeFrame(
 
 } // namespace
 
-std::optional<GoldSrcSpritePreview> loadGoldSrcSpritePreview(
-  const std::span<const std::uint8_t> data)
+namespace
+{
+std::optional<GoldSrcSpriteAnimation> decodeSprite(
+  const std::span<const std::uint8_t> data, const bool firstOnly)
 {
   auto reader = ByteReader{data};
   const auto magicBytes = reader.readBytes(SpriteMagic.size());
@@ -227,7 +232,7 @@ std::optional<GoldSrcSpritePreview> loadGoldSrcSpritePreview(
   if (
     !version || !spriteType || !rawAlphaType || !radius || !width || !height
     || !frameCount || !beamLength || !syncType || *version != HalfLifeSpriteVersion
-    || *frameCount <= 0)
+    || *frameCount <= 0 || *frameCount > 4096)
   {
     return std::nullopt;
   }
@@ -264,34 +269,64 @@ std::optional<GoldSrcSpritePreview> loadGoldSrcSpritePreview(
     return std::nullopt;
   }
 
-  const auto rawFrameType = reader.read<std::int32_t>();
-  if (!rawFrameType)
+  auto result = GoldSrcSpriteAnimation{};
+  result.alphaType = *rawAlphaType;
+  auto totalBytes = std::size_t{};
+  for (auto i = 0; i < *frameCount; ++i)
   {
+    const auto type = reader.read<std::int32_t>();
+    if (
+      !type
+      || (*type != int(SpriteFrameType::Single) && *type != int(SpriteFrameType::Group)))
+      return std::nullopt;
+    auto durations = std::vector<float>{0.0f};
+    if (*type == int(SpriteFrameType::Group))
+    {
+      const auto count = reader.read<std::int32_t>();
+      if (!count || *count <= 0 || *count > 4096)
+        return std::nullopt;
+      durations.clear();
+      auto previous = 0.0f;
+      for (auto j = 0; j < *count; ++j)
+      {
+        const auto interval = reader.read<float>();
+        if (!interval || !std::isfinite(*interval) || *interval <= previous)
+          return std::nullopt;
+        durations.push_back(*interval - previous);
+        previous = *interval;
+      }
+    }
+    for (const auto duration : durations)
+    {
+      auto frame = decodeFrame(reader, *palette, alphaType);
+      if (!frame)
+        return std::nullopt;
+      totalBytes += frame->rgba.size();
+      if (totalBytes > 64 * 1024 * 1024 || result.frames.size() >= 4096)
+        return std::nullopt;
+      result.frames.push_back(std::move(*frame));
+      result.durations.push_back(duration);
+      if (firstOnly)
+        return result;
+    }
+  }
+  return result;
+}
+} // namespace
+
+std::optional<GoldSrcSpriteAnimation> loadGoldSrcSpriteAnimation(
+  const std::span<const std::uint8_t> data)
+{
+  return decodeSprite(data, false);
+}
+
+std::optional<GoldSrcSpritePreview> loadGoldSrcSpritePreview(
+  const std::span<const std::uint8_t> data)
+{
+  auto animation = decodeSprite(data, true);
+  if (!animation || animation->frames.empty())
     return std::nullopt;
-  }
-
-  if (*rawFrameType == int(SpriteFrameType::Single))
-  {
-    return decodeFrame(reader, *palette, alphaType);
-  }
-
-  if (*rawFrameType != int(SpriteFrameType::Group))
-  {
-    return std::nullopt;
-  }
-
-  const auto groupFrameCount = reader.read<std::int32_t>();
-  if (!groupFrameCount || *groupFrameCount <= 0)
-  {
-    return std::nullopt;
-  }
-
-  if (!reader.skip(std::size_t(*groupFrameCount) * sizeof(float)))
-  {
-    return std::nullopt;
-  }
-
-  return decodeFrame(reader, *palette, alphaType);
+  return std::move(animation->frames.front());
 }
 
 } // namespace tb::ui

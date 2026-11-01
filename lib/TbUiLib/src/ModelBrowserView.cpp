@@ -727,10 +727,6 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
     }
     else
     {
-      // A skybox group is a manifest of six faces, so there is no single image to show.
-      const auto* asset = assetAt(item.path);
-      if (asset && asset->skybox)
-        return;
       emit assetPreviewRequested(pathAsGenericQString(item.path));
     }
   }
@@ -739,7 +735,7 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
 void ModelBrowserView::doContextMenu(
   Layout& layout, const float x, const float y, QContextMenuEvent* event)
 {
-  if (m_previewOnly)
+  if (m_previewOnly || m_selectionOnly)
     return;
   const auto* cell = layout.cellAt(x, y);
   if (!cell)
@@ -1707,7 +1703,7 @@ vm::mat4x4f ModelBrowserView::itemTransformation(
 
 bool ModelBrowserView::dndEnabled()
 {
-  return !m_previewOnly;
+  return !m_previewOnly && !m_selectionOnly;
 }
 
 QString ModelBrowserView::dndData(const Cell& cell)

@@ -51,6 +51,7 @@ class QTimer;
 namespace tb::ui
 {
 class AppController;
+class AssetInspector;
 class MapDocument;
 class ProjectSession;
 
@@ -98,11 +99,21 @@ private:
   NotifierConnection m_notifierConnection;
   NotifierConnection m_mapNotifierConnection;
   bool m_assetRefreshPending = true;
+  bool m_mapActionsEnabled = true;
+  bool m_selectionOnly = false;
+  std::optional<bool> m_skyboxFilter;
   bool m_assetRefreshQueued = false;
   bool m_deferAssetRefreshAfterDocumentLoad = false;
   int m_assetRefreshDeferralGeneration = 0;
 
 public:
+  static Result<std::optional<std::string>> chooseAssetPath(
+    AppController& app,
+    MapDocument& document,
+    BrowserCellType type,
+    QWidget* parent,
+    const std::function<bool()>& targetValid,
+    bool skybox = false);
   ModelBrowser(
     AppController& appController,
     MapDocument& document,
@@ -110,7 +121,12 @@ public:
     std::shared_ptr<ProjectSession> project = nullptr);
   void setDocument(MapDocument& document);
   void addViewOption(QWidget* control);
+  void bindInspector(AssetInspector& inspector, bool mapActions);
+  void setMapActionsEnabled(bool enabled);
   ~ModelBrowser() override;
+
+signals:
+  void actionContextChanged();
 
 protected:
   bool eventFilter(QObject* obj, QEvent* event) override;

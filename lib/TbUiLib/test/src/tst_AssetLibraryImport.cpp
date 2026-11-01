@@ -4,19 +4,18 @@
   This file is part of TrenchBroom, licensed under GPL version 3 or later.
 */
 
-#include "ui/AssetLibraryImport.h"
-
 #include "base/Uuid.h"
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
-
-#include <catch2/catch_test_macros.hpp>
+#include "ui/AssetLibraryImport.h"
 
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <system_error>
 #include <vector>
+
+#include <catch2/catch_test_macros.hpp>
 
 namespace tb::ui
 {
@@ -117,7 +116,30 @@ TEST_CASE("AssetLibraryImport")
       require(importFileIntoLibrary(workspace.folder, source, "textures/wall01.tga"));
     CHECK(imported == "textures/wall01.tga");
     CHECK(std::filesystem::exists(workspace.folder / "textures/wall01.tga"));
-    CHECK(importFileIntoLibrary(workspace.folder, source, "textures/wall01.tga").is_error());
+    CHECK(
+      importFileIntoLibrary(workspace.folder, source, "textures/wall01.tga").is_error());
+  }
+
+  SECTION("failed replacement preserves the existing source and rejects escaping paths")
+  {
+    auto workspace = Workspace{};
+    const auto source = workspace.write("source/wall.tga", makeTga(16, 16, false));
+    require(importFileIntoLibrary(workspace.folder, source, "textures/wall.tga"));
+    CHECK(importFileIntoLibrary(
+            workspace.folder, workspace.directory / "missing", "textures/wall.tga", true)
+            .is_error());
+    CHECK(
+      std::filesystem::file_size(workspace.folder / "textures/wall.tga")
+      == makeTga(16, 16, false).size());
+    const auto replacement =
+      workspace.write("replacement/wall.tga", makeTga(32, 16, false));
+    require(
+      importFileIntoLibrary(workspace.folder, replacement, "textures/wall.tga", true));
+    CHECK(
+      std::filesystem::file_size(workspace.folder / "textures/wall.tga")
+      == makeTga(32, 16, false).size());
+    CHECK(importFileIntoLibrary(workspace.folder, source, "../escaped.tga").is_error());
+    CHECK_FALSE(std::filesystem::exists(workspace.directory / "escaped.tga"));
   }
 
   SECTION("converts an imported image into GoldSrc texture content")
@@ -139,7 +161,8 @@ TEST_CASE("AssetLibraryImport")
     const auto converted = require(library->findAsset(asset.id));
     CHECK(converted->nativeFormat == "goldsrc-wad");
 
-    const auto archive = require(project::readGoldSrcWad(require(library->readContent(asset.id))));
+    const auto archive =
+      require(project::readGoldSrcWad(require(library->readContent(asset.id))));
     REQUIRE(archive.textures.size() == 1);
     CHECK(archive.textures.front().name == "wall01");
     CHECK_FALSE(require(convertLibraryImage(*library, asset.id)));
@@ -157,8 +180,8 @@ TEST_CASE("AssetLibraryImport")
     const auto assets = require(library->assets(project::AssetType::Texture));
     REQUIRE(assets.size() == 1);
     CHECK(require(convertLibraryImage(*library, assets.front().id)));
-    const auto archive = require(
-      project::readGoldSrcWad(require(library->readContent(assets.front().id))));
+    const auto archive =
+      require(project::readGoldSrcWad(require(library->readContent(assets.front().id))));
     REQUIRE(archive.textures.size() == 1);
     CHECK(archive.textures.front().name == "{glass");
   }

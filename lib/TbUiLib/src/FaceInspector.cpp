@@ -20,6 +20,8 @@
 #include "ui/FaceInspector.h"
 
 #include <QLabel>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QVBoxLayout>
 
 #include "gl/Material.h"
@@ -29,11 +31,13 @@
 #include "mdl/Map.h"
 #include "mdl/Map_Brushes.h"
 #include "mdl/UpdateBrushFaceAttributes.h"
+#include "ui/AppController.h"
 #include "ui/BorderLine.h"
 #include "ui/FaceAttribsEditor.h"
 #include "ui/MapDocument.h"
 #include "ui/MaterialBrowser.h"
 #include "ui/MaterialCollectionEditor.h"
+#include "ui/ModelBrowser.h"
 #include "ui/QStyleUtils.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableTitledPanel.h"
@@ -124,6 +128,36 @@ QWidget* FaceInspector::createMaterialBrowser(AppController& appController)
   auto* materialBrowserLayout = new QVBoxLayout{};
   materialBrowserLayout->setContentsMargins(0, 0, 0, 0);
   materialBrowserLayout->addWidget(m_materialBrowser, 1);
+  if (appController.projectFor(m_document))
+  {
+    auto* choose = new QPushButton{tr("Choose texture asset…")};
+    materialBrowserLayout->addWidget(choose);
+    connect(choose, &QPushButton::clicked, this, [this, &appController]() {
+      const auto faces = m_document.map().selection().allBrushFaces();
+      if (faces.empty())
+        return;
+      const auto result = ModelBrowser::chooseAssetPath(
+        appController, m_document, BrowserCellType::Texture, this, [this, faces]() {
+          return faces == m_document.map().selection().allBrushFaces();
+        });
+      if (result.is_error())
+        QMessageBox::warning(
+          this,
+          tr("Select Texture"),
+          QString::fromStdString(std::get<Error>(result.error()).msg));
+      else if (result.value())
+        mdl::setBrushFaceAttributes(
+          m_document.map(), faces, {.materialName = *result.value()});
+    });
+    const auto update = [this, choose](const auto&...) {
+      choose->setEnabled(!m_document.map().selection().allBrushFaces().empty());
+      choose->setToolTip(
+        choose->isEnabled() ? tr("Apply a project or library texture to selected faces")
+                            : tr("Select one or more brush faces"));
+    };
+    m_notifierConnection += m_document.selectionDidChangeNotifier.connect(update);
+    update();
+  }
   panel->getPanel(0)->setLayout(materialBrowserLayout);
 
   auto* materialCollectionEditor = new MaterialCollectionEditor{m_document};

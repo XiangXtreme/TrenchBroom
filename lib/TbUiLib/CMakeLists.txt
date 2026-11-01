@@ -27,6 +27,9 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationTransaction.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/automation/AutomationValidation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AppInfoPanel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetInspection.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SmartAssetPropertyEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetBrowserModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryGlyphs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/AssetLibraryImport.cpp
@@ -294,6 +297,9 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AnimationManager.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AppController.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AppInfoPanel.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetInspection.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/SmartAssetPropertyEditor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetBrowserModel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryGlyphs.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/AssetLibraryImport.h

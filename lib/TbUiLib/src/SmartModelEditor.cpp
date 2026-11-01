@@ -6,6 +6,7 @@
 
 #include "mdl/EntityNodeBase.h"
 #include "mdl/Map.h"
+#include "ui/AssetBrowserModel.h"
 #include "ui/FileDialogDefaultDir.h"
 #include "ui/MapDocument.h"
 #include "ui/QPathUtils.h"
@@ -81,11 +82,21 @@ void SmartModelEditor::createGui()
   m_browseButton->setText(tr("Load Model File"));
 
   layout->addWidget(m_browseButton);
+  m_assetButton = new QPushButton{tr("Choose project asset")};
+  layout->addWidget(m_assetButton);
+  connect(m_assetButton, &QPushButton::clicked, this, [this]() {
+    const auto selected = nodes();
+    const auto sprite = !selected.empty() && (selected.front()->entity().classname() == "env_sprite" || selected.front()->entity().classname() == "env_glow");
+    browseAsset(sprite ? BrowserCellType::Sprite : BrowserCellType::Model);
+  });
 
   connect(m_browseButton, &QPushButton::clicked, this, &SmartModelEditor::browseFile);
 }
 
-void SmartModelEditor::doUpdateVisual(const std::vector<mdl::EntityNodeBase*>&) {}
+void SmartModelEditor::doUpdateVisual(const std::vector<mdl::EntityNodeBase*>&)
+{
+  m_assetButton->setVisible(canBrowseProjectAssets());
+}
 
 void SmartModelEditor::browseFile()
 {

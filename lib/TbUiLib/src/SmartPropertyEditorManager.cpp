@@ -28,6 +28,7 @@
 #include "mdl/Map.h"
 #include "mdl/PropertyDefinition.h"
 #include "ui/MapDocument.h"
+#include "ui/SmartAssetPropertyEditor.h"
 #include "ui/SmartChoiceEditor.h"
 #include "ui/SmartColorEditor.h"
 #include "ui/SmartDefaultPropertyEditor.h"
@@ -147,6 +148,21 @@ void SmartPropertyEditorManager::createEditors()
   registerEditor(
     makeSmartPropertyEditorKeyMatcher({"model", "mdl"}),
     new SmartModelEditor{m_document, this});
+  registerEditor(
+    [](const auto& key, const auto& nodes) {
+      return !nodes.empty() && std::ranges::all_of(nodes, [&](const auto* node) {
+        const auto& classname = node->entity().classname();
+        return (classname == "ambient_generic" && key == "message")
+               || (classname == "env_message" && key == "messagesound");
+      });
+    },
+    new SmartAssetPropertyEditor{m_document, BrowserCellType::Sound, false, this});
+  registerEditor(
+    [](const auto& key, const auto& nodes) {
+      return key == "skyname" && nodes.size() == 1
+             && nodes.front()->entity().classname() == "worldspawn";
+    },
+    new SmartAssetPropertyEditor{m_document, BrowserCellType::Texture, true, this});
   registerEditor(
     [](const auto&, const auto&) { return true; },
     new SmartDefaultPropertyEditor{m_document, this});

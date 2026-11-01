@@ -32,6 +32,7 @@ class QToolButton;
 
 namespace tb::ui
 {
+class AssetInspector;
 class AssetLibraryItemDelegate;
 class AssetLibraryListView;
 class AssetLibrarySource;
@@ -74,6 +75,8 @@ class AssetLibraryWindow : public QDialog
   std::vector<std::string> m_convertQueue;
   int m_convertDone = 0;
   int m_convertFailed = 0;
+  QStringList m_conversionReport;
+  std::vector<std::string> m_failedConversions;
   QLineEdit* m_searchEdit = nullptr;
   AssetLibraryListView* m_categories = nullptr;
   AssetLibraryListView* m_grid = nullptr;
@@ -83,8 +86,7 @@ class AssetLibraryWindow : public QDialog
   QToolButton* m_gridButton = nullptr;
   QToolButton* m_listButton = nullptr;
   QLabel* m_countLabel = nullptr;
-  QLabel* m_preview = nullptr;
-  QComboBox* m_previewMode = nullptr;
+  AssetInspector* m_inspector = nullptr;
   QLabel* m_name = nullptr;
   QLabel* m_status = nullptr;
   QFormLayout* m_properties = nullptr;
@@ -128,14 +130,17 @@ private:
   void runConvertPending();
   void stepConvertQueue();
   void cancelConvertQueue();
+  void showOperationReport(
+    const QStringList& lines,
+    const QStringList& files = {},
+    const std::vector<std::string>& conversions = {});
   void revealSelected();
   void toggleFavorite();
   void renameSelected();
   void deleteSelected();
   void applyTags();
   void refreshUsage();
-  QImage previewImage(
-    const project::LibraryAsset& asset, bool converted, int size) const;
+  QImage previewImage(const project::LibraryAsset& asset, bool converted, int size) const;
 
   const project::LibraryAsset* selectedAsset() const;
   int pendingCount() const;

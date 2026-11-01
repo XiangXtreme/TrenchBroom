@@ -115,9 +115,11 @@ private:
   // its source marker.
   bool m_showSourceMarkers = false;
   bool m_previewOnly = false;
+  bool m_selectionOnly = false;
   AssetPreviewPathResolver m_previewPathResolver;
 
 public:
+  void setSelectionOnly(bool selectionOnly) { m_selectionOnly = selectionOnly; }
   ModelBrowserView(
     AppController& appController, QScrollBar* scrollBar, MapDocument& document);
   ~ModelBrowserView() override;

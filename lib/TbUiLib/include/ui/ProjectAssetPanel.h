@@ -15,6 +15,7 @@ class QTreeWidget;
 namespace tb::ui
 {
 class AppController;
+class AssetInspector;
 class MapDocument;
 class ModelBrowser;
 class ProjectSession;
@@ -26,6 +27,8 @@ class ProjectAssetPanel : public QWidget
   std::shared_ptr<ProjectSession> m_session;
   std::unique_ptr<MapDocument> m_fallback;
   ModelBrowser* m_browser = nullptr;
+  AssetInspector* m_inspector = nullptr;
+  MapDocument* m_document = nullptr;
   QTreeWidget* m_details = nullptr;
   std::optional<BrowserAsset> m_selected;
 

@@ -5,6 +5,9 @@
 */
 #pragma once
 
+#include <QObject>
+#include <QString>
+
 #include "base/Result.h"
 #include "project/ProjectAsset.h"
 
@@ -14,10 +17,17 @@
 #include <string>
 #include <vector>
 
-#include <QString>
-
 namespace tb::ui
 {
+/** Content/metadata invalidation only; it never changes a project's captured bytes. */
+class AssetLibraryChanges : public QObject
+{
+  Q_OBJECT
+public:
+  static AssetLibraryChanges& instance();
+signals:
+  void changed(const QString& libraryId);
+};
 
 /**
  * Read-only view of one asset library.
@@ -34,19 +44,13 @@ public:
 
   virtual QString name() const = 0;
   /** Stable catalog identity; empty for a source without one. */
-  virtual std::string libraryId() const {
-    return {};
-  }
+  virtual std::string libraryId() const { return {}; }
   /** Folder path now; a URL once a remote source exists. */
   virtual QString location() const = 0;
-  virtual bool isRemote() const {
-    return false;
-  }
+  virtual bool isRemote() const { return false; }
 
   virtual bool isAvailable() const = 0;
-  virtual QString error() const {
-    return {};
-  }
+  virtual QString error() const { return {}; }
 
   virtual Result<std::vector<project::LibraryAsset>> assets() const = 0;
   virtual Result<std::vector<std::uint8_t>> readOriginal(
@@ -56,54 +60,56 @@ public:
   virtual Result<std::vector<project::AssetDependency>> dependencies(
     const std::string& assetId) const = 0;
 
-  virtual bool canImport() const {
-    return false;
-  }
-  virtual bool canConvert() const {
-    return false;
-  }
-  virtual bool canReveal() const {
-    return false;
-  }
+  virtual bool canImport() const { return false; }
+  virtual bool canConvert() const { return false; }
+  virtual bool canReveal() const { return false; }
   /** Whether this source supports catalog edits (favourite, rename, delete). */
-  virtual bool canManage() const {
-    return false;
-  }
+  virtual bool canManage() const { return false; }
 
   struct Metadata
   {
     bool favorite = false;
     std::vector<std::string> tags;
   };
-  virtual Result<Metadata> metadata(const std::string& /*assetId*/) {
+  virtual Result<Metadata> metadata(const std::string& /*assetId*/)
+  {
     return Error{"This asset library is read only."};
   }
-  virtual Result<void> setFavorite(const std::string& /*assetId*/, bool /*favorite*/) {
+  virtual Result<void> setFavorite(const std::string& /*assetId*/, bool /*favorite*/)
+  {
     return Error{"This asset library is read only."};
   }
   virtual Result<void> renameAsset(
-    const std::string& /*assetId*/, const std::string& /*name*/) {
+    const std::string& /*assetId*/, const std::string& /*name*/)
+  {
     return Error{"This asset library is read only."};
   }
-  virtual Result<void> removeAsset(const std::string& /*assetId*/) {
+  virtual Result<void> removeAsset(const std::string& /*assetId*/)
+  {
     return Error{"This asset library is read only."};
   }
   virtual Result<void> setTags(
-    const std::string& /*assetId*/, const std::vector<std::string>& /*tags*/) {
+    const std::string& /*assetId*/, const std::vector<std::string>& /*tags*/)
+  {
     return Error{"This asset library is read only."};
   }
 
   // Mutating operations. A read-only source reports the matching capability as false and
   // the browser hides the action instead of calling these.
-  virtual Result<void> rescan() {
-    return Error{"This asset library is read only."};
-  }
+  virtual Result<void> rescan() { return Error{"This asset library is read only."}; }
   virtual Result<std::string> importFile(
-    const std::filesystem::path& /*source*/, const std::string& /*relativePath*/) {
+    const std::filesystem::path& /*source*/, const std::string& /*relativePath*/)
+  {
     return Error{"This asset library is read only."};
   }
-  virtual Result<bool> convertAsset(const std::string& /*assetId*/) {
+  virtual Result<bool> convertAsset(const std::string& /*assetId*/)
+  {
     return Error{"This asset library is read only."};
+  }
+  virtual Result<std::string> replaceFile(
+    const std::filesystem::path&, const std::string&)
+  {
+    return Error{"This asset library does not support replacing source files."};
   }
 };
 

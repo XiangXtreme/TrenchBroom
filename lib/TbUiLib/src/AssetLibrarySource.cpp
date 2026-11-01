@@ -15,6 +15,11 @@
 
 namespace tb::ui
 {
+AssetLibraryChanges& AssetLibraryChanges::instance()
+{
+  static auto changes = AssetLibraryChanges{};
+  return changes;
+}
 namespace
 {
 
@@ -28,25 +33,13 @@ public:
   {
   }
 
-  QString name() const override
-  {
-    return QString::fromStdString(m_library->info().name);
-  }
+  QString name() const override { return QString::fromStdString(m_library->info().name); }
 
-  std::string libraryId() const override
-  {
-    return m_library->info().id;
-  }
+  std::string libraryId() const override { return m_library->info().id; }
 
-  QString location() const override
-  {
-    return pathAsQString(m_library->folder());
-  }
+  QString location() const override { return pathAsQString(m_library->folder()); }
 
-  bool isAvailable() const override
-  {
-    return true;
-  }
+  bool isAvailable() const override { return true; }
 
   Result<std::vector<project::LibraryAsset>> assets() const override
   {
@@ -59,8 +52,7 @@ public:
     return m_library->readOriginal(assetId);
   }
 
-  Result<std::vector<std::uint8_t>> readContent(
-    const std::string& assetId) const override
+  Result<std::vector<std::uint8_t>> readContent(const std::string& assetId) const override
   {
     return m_library->readContent(assetId);
   }
@@ -71,26 +63,18 @@ public:
     return m_library->dependencies(assetId);
   }
 
-  bool canImport() const override
-  {
-    return true;
-  }
+  bool canImport() const override { return true; }
 
-  bool canConvert() const override
-  {
-    return true;
-  }
+  bool canConvert() const override { return true; }
 
-  bool canReveal() const override
-  {
-    return true;
-  }
+  bool canReveal() const override { return true; }
 
   Result<void> rescan() override
   {
     const auto scanned = m_library->scan();
     if (scanned.is_error())
       return std::get<Error>(scanned.error());
+    emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
     return {};
   }
 
@@ -100,15 +84,21 @@ public:
     return importFileIntoLibrary(m_library->folder(), source, relativePath);
   }
 
-  Result<bool> convertAsset(const std::string& assetId) override
+  Result<std::string> replaceFile(
+    const std::filesystem::path& source, const std::string& relativePath) override
   {
-    return convertLibraryImage(*m_library, assetId);
+    return importFileIntoLibrary(m_library->folder(), source, relativePath, true);
   }
 
-  bool canManage() const override
+  Result<bool> convertAsset(const std::string& assetId) override
   {
-    return true;
+    auto result = convertLibraryImage(*m_library, assetId);
+    if (result.is_success() && result.value())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
   }
+
+  bool canManage() const override { return true; }
 
   Result<Metadata> metadata(const std::string& assetId) override
   {
@@ -120,7 +110,10 @@ public:
 
   Result<void> setFavorite(const std::string& assetId, const bool favorite) override
   {
-    return m_library->setFavorite(assetId, favorite);
+    auto result = m_library->setFavorite(assetId, favorite);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
   }
 
   Result<void> renameAsset(const std::string& assetId, const std::string& name) override
@@ -128,17 +121,25 @@ public:
     const auto renamed = m_library->setDisplayName(assetId, name);
     if (renamed.is_error())
       return std::get<Error>(renamed.error());
+    emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
     return {};
   }
 
   Result<void> removeAsset(const std::string& assetId) override
   {
-    return m_library->removeAsset(assetId);
+    auto result = m_library->removeAsset(assetId);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
   }
 
-  Result<void> setTags(const std::string& assetId, const std::vector<std::string>& tags) override
+  Result<void> setTags(
+    const std::string& assetId, const std::vector<std::string>& tags) override
   {
-    return m_library->setTags(assetId, tags);
+    auto result = m_library->setTags(assetId, tags);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
   }
 };
 
@@ -150,8 +151,8 @@ std::unique_ptr<AssetLibrarySource> openLocalAssetLibrary(
   if (!project::AssetLibrary::isLibraryFolder(folder))
   {
     if (error)
-      *error = QObject::tr("'%1' is not an asset library folder.")
-                 .arg(pathAsQString(folder));
+      *error =
+        QObject::tr("'%1' is not an asset library folder.").arg(pathAsQString(folder));
     return nullptr;
   }
 

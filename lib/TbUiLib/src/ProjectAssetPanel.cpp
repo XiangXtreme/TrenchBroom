@@ -17,6 +17,9 @@
 #include "mdl/GameManager.h"
 #include "mdl/MapFormat.h"
 #include "ui/AppController.h"
+#include "ui/AssetInspector.h"
+#include "ui/AssetLibrarySource.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/ModelBrowser.h"
 #include "ui/ModelBrowserView.h"
@@ -79,7 +82,15 @@ ProjectAssetPanel::ProjectAssetPanel(
   auto* detailsTitle = new QLabel{tr("Asset Details")};
   detailsTitle->setProperty("regionAnchor", true);
   detailsLayout->addWidget(detailsTitle);
-  detailsLayout->addWidget(m_details, 1);
+  m_inspector = new AssetInspector{detailsSurface};
+  m_browser->setMapActionsEnabled(false);
+  m_browser->bindInspector(*m_inspector, true);
+  detailsLayout->addWidget(m_inspector, 1);
+  auto* metadata =
+    new CollapsibleTitledPanel{tr("Project and dependency details"), false};
+  auto* metadataLayout = new QVBoxLayout{metadata->getPanel()};
+  metadataLayout->addWidget(m_details);
+  detailsLayout->addWidget(metadata);
   splitter->addWidget(detailsSurface);
   splitter->setChildrenCollapsible(false);
   splitter->setHandleWidth(1);
@@ -113,6 +124,12 @@ ProjectAssetPanel::ProjectAssetPanel(
     this,
     &ProjectAssetPanel::refreshDetails);
   refreshDetails();
+  connect(
+    &AssetLibraryChanges::instance(),
+    &AssetLibraryChanges::changed,
+    this,
+    &ProjectAssetPanel::refreshDetails,
+    Qt::QueuedConnection);
 }
 
 ProjectAssetPanel::~ProjectAssetPanel()
@@ -123,6 +140,16 @@ ProjectAssetPanel::~ProjectAssetPanel()
 
 void ProjectAssetPanel::setDocument(MapDocument* document)
 {
+  // Project refreshes may rebind the same document after a resource revision changes.
+  // Only a real map switch invalidates the inspector's target and selection.
+  if (m_document == document)
+    return;
+  m_document = document;
+  if (m_browser)
+    m_browser->setMapActionsEnabled(document != nullptr);
+  if (m_inspector)
+    m_inspector->clear();
+  m_selected.reset();
   if (m_browser)
     m_browser->setDocument(document ? *document : *m_fallback);
 }
@@ -149,6 +176,11 @@ void ProjectAssetPanel::refreshDetails()
   if (!m_details)
     return;
   m_details->clear();
+  if (m_selected)
+    m_inspector->setAsset(inspection::readBrowserAsset(
+      *m_selected, m_session.get(), m_document ? *m_document : *m_fallback));
+  else
+    m_inspector->clear();
   const auto add = [this](const QString& key, const QString& value) {
     auto* item = new QTreeWidgetItem{m_details, {key, value}};
     item->setToolTip(1, value);

@@ -184,6 +184,15 @@ TEST_CASE("GoldSrcSpritePreview")
     appendFrame(data, 2, 1, {5, 6});
 
     const auto preview = loadGoldSrcSpritePreview(data);
+    const auto animation = loadGoldSrcSpriteAnimation(data);
+    REQUIRE(animation);
+    CHECK(animation->frames.size() == 2);
+    REQUIRE(animation->durations.size() == 2);
+    CHECK(animation->durations[0] > 0.09f);
+    CHECK(animation->durations[1] < 0.11f);
+    data.pop_back();
+    CHECK_FALSE(loadGoldSrcSpriteAnimation(data));
+    CHECK(loadGoldSrcSpritePreview(data));
 
     REQUIRE(preview.has_value());
     CHECK(

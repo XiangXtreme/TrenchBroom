@@ -34,6 +34,7 @@ class EntityNodeBase;
 namespace ui
 {
 class MapDocument;
+enum class BrowserCellType;
 
 class SmartPropertyEditor : public QWidget
 {
@@ -60,6 +61,8 @@ protected:
   const std::string& propertyKey() const;
   const std::vector<mdl::EntityNodeBase*> nodes() const;
   void addOrUpdateProperty(const std::string& value);
+  bool canBrowseProjectAssets() const;
+  void browseAsset(BrowserCellType type, bool skybox = false);
 
 private:
   virtual void doUpdateVisual(const std::vector<mdl::EntityNodeBase*>& nodes) = 0;

@@ -9,31 +9,33 @@
 #include <QColor>
 #include <QComboBox>
 #include <QDesktopServices>
+#include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
-#include <QInputDialog>
-#include <QProgressBar>
-#include <QTimer>
-#include <QMimeData>
-#include <QUrl>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QImage>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QPixmap>
+#include <QProgressBar>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSize>
 #include <QSlider>
 #include <QSplitter>
 #include <QStyle>
+#include <QTextEdit>
+#include <QTimer>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -43,16 +45,16 @@
 #include "prefs/Preferences.h"
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
+#include "project/ProjectStore.h"
+#include "ui/AssetInspector.h"
 #include "ui/AssetLibraryGlyphs.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryItemDelegate.h"
+#include "ui/AssetLibrarySource.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
-#include "ui/RecentDocuments.h"
-
-#include "project/ProjectStore.h"
-#include "ui/AssetLibrarySource.h"
 #include "ui/QPathUtils.h"
+#include "ui/RecentDocuments.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -66,98 +68,6 @@ namespace
 constexpr auto DefaultThumbSide = 112;
 constexpr auto ThumbMinSide = 72;
 constexpr auto ThumbMaxSide = 192;
-
-std::uint32_t readU32(const std::vector<std::uint8_t>& bytes, std::size_t offset)
-{
-  if (offset + 4 > bytes.size())
-    return 0;
-  return std::uint32_t(bytes[offset]) | (std::uint32_t(bytes[offset + 1]) << 8)
-         | (std::uint32_t(bytes[offset + 2]) << 16)
-         | (std::uint32_t(bytes[offset + 3]) << 24);
-}
-
-std::uint16_t readU16(const std::vector<std::uint8_t>& bytes, std::size_t offset)
-{
-  if (offset + 2 > bytes.size())
-    return 0;
-  return std::uint16_t(bytes[offset]) | (std::uint16_t(bytes[offset + 1]) << 8);
-}
-
-QImage decodeSpriteImage(const std::vector<std::uint8_t>& bytes)
-{
-  const auto preview = loadGoldSrcSpritePreview(bytes);
-  if (!preview || preview->width == 0 || preview->height == 0 || preview->rgba.empty())
-    return {};
-  return QImage{
-    preview->rgba.data(),
-    int(preview->width),
-    int(preview->height),
-    int(preview->width * 4),
-    QImage::Format_RGBA8888}
-    .copy();
-}
-
-QImage decodeEncodedImage(const std::vector<std::uint8_t>& bytes)
-{
-  if (bytes.empty())
-    return {};
-  const auto decoded = img::decodeImage(bytes.data(), bytes.size());
-  if (decoded.is_error())
-    return {};
-  const auto& image = decoded.value();
-  if (image.width == 0 || image.height == 0)
-    return {};
-  return QImage{
-    image.pixels.data(),
-    int(image.width),
-    int(image.height),
-    int(image.width * 4),
-    QImage::Format_RGBA8888}
-    .copy();
-}
-
-// Decodes the mip 0 image of a single texture WAD3 archive. The palette follows the
-// smallest mip level and stores BGR triples.
-QImage decodeMiptexWad(const std::vector<std::uint8_t>& bytes)
-{
-  const auto wad = project::readGoldSrcWad(bytes);
-  if (wad.is_error() || wad.value().textures.empty())
-    return {};
-  const auto& miptex = wad.value().textures.front().miptex;
-  if (miptex.size() < 40)
-    return {};
-
-  const auto width = readU32(miptex, 16);
-  const auto height = readU32(miptex, 20);
-  if (width == 0 || height == 0 || width > 4096 || height > 4096)
-    return {};
-  const auto pixels = std::size_t{width} * height;
-  const auto mip0 = std::size_t{readU32(miptex, 24)};
-  const auto mip3 = std::size_t{readU32(miptex, 36)};
-  if (mip0 + pixels > miptex.size())
-    return {};
-
-  const auto paletteOffset = mip3 + pixels / 64;
-  const auto colors = readU16(miptex, paletteOffset);
-  const auto palette = paletteOffset + 2;
-  if (colors == 0 || palette + std::size_t{colors} * 3 > miptex.size())
-    return {};
-
-  auto image = QImage{int(width), int(height), QImage::Format_RGB888};
-  for (auto y = 0u; y < height; ++y)
-  {
-    for (auto x = 0u; x < width; ++x)
-    {
-      const auto index = std::uint8_t(miptex[mip0 + std::size_t{y} * width + x]);
-      const auto slot = std::size_t(index < colors ? index : 0u) * 3 + palette;
-      image.setPixelColor(
-        int(x),
-        int(y),
-        QColor(int(miptex[slot + 2]), int(miptex[slot + 1]), int(miptex[slot])));
-    }
-  }
-  return image;
-}
 
 QString sizeText(const std::uint64_t bytes)
 {
@@ -316,7 +226,8 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
     reload();
 }
 
-AssetLibraryWindow::AssetLibraryWindow(const QString& folder, const bool remember, QWidget* parent)
+AssetLibraryWindow::AssetLibraryWindow(
+  const QString& folder, const bool remember, QWidget* parent)
   : QDialog{parent}
 {
   buildUi();
@@ -403,7 +314,8 @@ void AssetLibraryWindow::buildUi()
   m_searchEdit->setClearButtonEnabled(true);
   m_searchEdit->setFixedWidth(210);
   m_searchEdit->addAction(
-    assetLibraryGlyphIcon(AssetLibraryGlyph::Search, dimColor, 14), QLineEdit::LeadingPosition);
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Search, dimColor, 14),
+    QLineEdit::LeadingPosition);
 
   headerLayout->addWidget(m_importButton);
   headerLayout->addWidget(m_rescanButton);
@@ -462,9 +374,17 @@ void AssetLibraryWindow::buildUi()
   m_sizeValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
   m_gridButton = createGlyphToolButton(
-    tools, AssetLibraryGlyph::Grid, tr("Grid view"), textColor, QStringLiteral("compact"));
+    tools,
+    AssetLibraryGlyph::Grid,
+    tr("Grid view"),
+    textColor,
+    QStringLiteral("compact"));
   m_listButton = createGlyphToolButton(
-    tools, AssetLibraryGlyph::List, tr("List view"), textColor, QStringLiteral("compact"));
+    tools,
+    AssetLibraryGlyph::List,
+    tr("List view"),
+    textColor,
+    QStringLiteral("compact"));
   m_gridButton->setCheckable(true);
   m_listButton->setCheckable(true);
   m_gridButton->setChecked(true);
@@ -477,10 +397,12 @@ void AssetLibraryWindow::buildUi()
   m_convertCancel->hide();
   m_convertTimer = new QTimer{this};
   m_convertTimer->setInterval(0);
+  connect(m_convertTimer, &QTimer::timeout, this, &AssetLibraryWindow::stepConvertQueue);
   connect(
-    m_convertTimer, &QTimer::timeout, this, &AssetLibraryWindow::stepConvertQueue);
-  connect(
-    m_convertCancel, &QPushButton::clicked, this, &AssetLibraryWindow::cancelConvertQueue);
+    m_convertCancel,
+    &QPushButton::clicked,
+    this,
+    &AssetLibraryWindow::cancelConvertQueue);
 
   toolsLayout->addWidget(m_countLabel);
   toolsLayout->addWidget(m_convertProgress);
@@ -527,15 +449,7 @@ void AssetLibraryWindow::buildUi()
 
   auto* previewTitle = new QLabel{tr("Preview"), inspector};
   previewTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
-  m_preview = new QLabel{inspector};
-  m_preview->setObjectName(QStringLiteral("AssetLibraryPreview"));
-  m_preview->setAlignment(Qt::AlignCenter);
-  m_preview->setMinimumHeight(180);
-  m_preview->setScaledContents(false);
-  m_previewMode = new QComboBox{inspector};
-  m_previewMode->addItem(tr("Source"));
-  m_previewMode->addItem(tr("Converted"));
-
+  m_inspector = new AssetInspector{inspector};
   auto* actionRow = new QWidget{inspector};
   auto* actionLayout = new QHBoxLayout{actionRow};
   actionLayout->setContentsMargins(0, 0, 0, 0);
@@ -551,9 +465,12 @@ void AssetLibraryWindow::buildUi()
   actionLayout->addWidget(m_favoriteButton, 1);
   actionLayout->addWidget(m_renameButton, 1);
   actionLayout->addWidget(m_deleteButton, 1);
-  connect(m_favoriteButton, &QPushButton::clicked, this, &AssetLibraryWindow::toggleFavorite);
-  connect(m_renameButton, &QPushButton::clicked, this, &AssetLibraryWindow::renameSelected);
-  connect(m_deleteButton, &QPushButton::clicked, this, &AssetLibraryWindow::deleteSelected);
+  connect(
+    m_favoriteButton, &QPushButton::clicked, this, &AssetLibraryWindow::toggleFavorite);
+  connect(
+    m_renameButton, &QPushButton::clicked, this, &AssetLibraryWindow::renameSelected);
+  connect(
+    m_deleteButton, &QPushButton::clicked, this, &AssetLibraryWindow::deleteSelected);
 
   auto* tagsRow = new QWidget{inspector};
   auto* tagsLayout = new QHBoxLayout{tagsRow};
@@ -593,8 +510,7 @@ void AssetLibraryWindow::buildUi()
   m_dependencies->setMaximumHeight(150);
 
   inspectorLayout->addWidget(previewTitle);
-  inspectorLayout->addWidget(m_preview);
-  inspectorLayout->addWidget(m_previewMode);
+  inspectorLayout->addWidget(m_inspector, 1);
   inspectorLayout->addWidget(actionRow);
   inspectorLayout->addWidget(tagsRow);
   inspectorLayout->addWidget(m_name);
@@ -627,12 +543,14 @@ void AssetLibraryWindow::buildUi()
   m_footer->setContentsMargins(14, 5, 14, 5);
   layout->addWidget(m_footer);
 
-  connect(m_changeButton, &QPushButton::clicked, this, &AssetLibraryWindow::chooseLibrary);
+  connect(
+    m_changeButton, &QPushButton::clicked, this, &AssetLibraryWindow::chooseLibrary);
   connect(m_importButton, &QPushButton::clicked, this, &AssetLibraryWindow::runImport);
   connect(m_rescanButton, &QPushButton::clicked, this, &AssetLibraryWindow::runRescan);
   connect(
     m_convertButton, &QPushButton::clicked, this, &AssetLibraryWindow::runConvertPending);
-  connect(m_revealButton, &QPushButton::clicked, this, &AssetLibraryWindow::revealSelected);
+  connect(
+    m_revealButton, &QPushButton::clicked, this, &AssetLibraryWindow::revealSelected);
   connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
     m_search = text;
     refreshGrid();
@@ -666,9 +584,7 @@ void AssetLibraryWindow::buildUi()
     m_listMode = true;
     applyViewMode();
   });
-  connect(m_previewMode, &QComboBox::currentIndexChanged, this, [this](int) {
-    updatePreview();
-  });
+
 
   applyViewMode();
   clearInspector();
@@ -700,18 +616,22 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
     if (!create)
       return;
     auto created = project::AssetLibrary::create(
-      path, path.filename().empty() ? std::string{"Asset Library"}
-                                    : path.filename().string());
+      path,
+      path.filename().empty() ? std::string{"Asset Library"} : path.filename().string());
     if (created.is_error())
     {
       QMessageBox::critical(
-        this, tr("Asset Library"), QString::fromStdString(std::get<Error>(created.error()).msg));
+        this,
+        tr("Asset Library"),
+        QString::fromStdString(std::get<Error>(created.error()).msg));
       return;
     }
     if (const auto scanned = created.value()->scan(); scanned.is_error())
     {
       QMessageBox::critical(
-        this, tr("Asset Library"), QString::fromStdString(std::get<Error>(scanned.error()).msg));
+        this,
+        tr("Asset Library"),
+        QString::fromStdString(std::get<Error>(scanned.error()).msg));
       return;
     }
   }
@@ -807,8 +727,7 @@ void AssetLibraryWindow::updateActions()
   const auto hasSource = m_source != nullptr;
   m_importButton->setEnabled(hasSource && m_source->canImport());
   m_rescanButton->setEnabled(hasSource);
-  m_convertButton->setEnabled(
-    hasSource && m_source->canConvert() && pendingCount() > 0);
+  m_convertButton->setEnabled(hasSource && m_source->canConvert() && pendingCount() > 0);
   m_revealButton->setEnabled(hasSource && m_source->canReveal());
   m_searchEdit->setEnabled(hasSource);
 }
@@ -863,9 +782,9 @@ void AssetLibraryWindow::refreshCategories()
   add(QStringLiteral("all"), tr("All assets"), int(m_assets.size()));
   add(QStringLiteral("favourites"), tr("Favourites"), int(m_favorites.size()));
   const auto countOf = [this](const project::AssetType type) {
-    return int(std::count_if(
-      m_assets.begin(), m_assets.end(),
-      [type](const auto& asset) { return asset.type == type; }));
+    return int(std::count_if(m_assets.begin(), m_assets.end(), [type](const auto& asset) {
+      return asset.type == type;
+    }));
   };
   add(QStringLiteral("texture"), tr("Textures"), countOf(project::AssetType::Texture));
   add(QStringLiteral("model"), tr("Models"), countOf(project::AssetType::Model));
@@ -880,8 +799,9 @@ void AssetLibraryWindow::refreshCategories()
   for (auto row = 0; row < m_categories->count(); ++row)
   {
     auto* item = m_categories->item(row);
-    if (!item->data(AssetLibraryCategoryDelegate::SectionRole).toBool()
-        && item->data(AssetLibraryCategoryDelegate::FilterRole).toString() == current)
+    if (
+      !item->data(AssetLibraryCategoryDelegate::SectionRole).toBool()
+      && item->data(AssetLibraryCategoryDelegate::FilterRole).toString() == current)
     {
       m_categories->setCurrentRow(row);
       return;
@@ -892,9 +812,10 @@ void AssetLibraryWindow::refreshCategories()
   for (auto row = 0; row < m_categories->count(); ++row)
   {
     auto* item = m_categories->item(row);
-    if (!item->data(AssetLibraryCategoryDelegate::SectionRole).toBool()
-        && item->data(AssetLibraryCategoryDelegate::FilterRole).toString()
-             == QStringLiteral("all"))
+    if (
+      !item->data(AssetLibraryCategoryDelegate::SectionRole).toBool()
+      && item->data(AssetLibraryCategoryDelegate::FilterRole).toString()
+           == QStringLiteral("all"))
     {
       m_categories->setCurrentRow(row);
       return;
@@ -920,18 +841,16 @@ void AssetLibraryWindow::refreshGrid()
   {
     const auto typeFilter = typeForFilter(m_filter);
     const auto matchesType =
-      m_filter == QStringLiteral("all")
-      || (typeFilter && asset.type == *typeFilter)
+      m_filter == QStringLiteral("all") || (typeFilter && asset.type == *typeFilter)
       || (m_filter == QStringLiteral("pending") && needsConversion(asset))
       || (m_filter == QStringLiteral("missing") && asset.missing)
       || (m_filter == QStringLiteral("favourites") && m_favorites.contains(asset.id));
     if (!matchesType)
       continue;
     const auto displayName = QString::fromStdString(asset.displayName);
-    if (!search.isEmpty()
-        && !displayName.contains(search, Qt::CaseInsensitive)
-        && !QString::fromStdString(asset.virtualPath)
-              .contains(search, Qt::CaseInsensitive))
+    if (
+      !search.isEmpty() && !displayName.contains(search, Qt::CaseInsensitive)
+      && !QString::fromStdString(asset.virtualPath).contains(search, Qt::CaseInsensitive))
       continue;
 
     auto* item = new QListWidgetItem{m_grid};
@@ -969,9 +888,8 @@ void AssetLibraryWindow::refreshGrid()
   if (shown == 0)
   {
     m_empty->setText(
-      m_assets.empty()
-        ? tr("This library is empty.\nUse Import Files… to add assets.")
-        : tr("No assets match the current filter."));
+      m_assets.empty() ? tr("This library is empty.\nUse Import Files… to add assets.")
+                       : tr("No assets match the current filter."));
     m_empty->show();
     m_grid->hide();
   }
@@ -984,8 +902,12 @@ void AssetLibraryWindow::refreshGrid()
   {
     for (auto row = 0; row < m_grid->count(); ++row)
     {
-      if (m_grid->item(row)->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString()
-          == *m_selectedId)
+      if (
+        m_grid->item(row)
+          ->data(AssetLibraryItemDelegate::AssetIdRole)
+          .toString()
+          .toStdString()
+        == *m_selectedId)
       {
         m_grid->setCurrentRow(row);
         break;
@@ -1031,8 +953,8 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
   m_name->setText(QString::fromStdString(asset->displayName));
   m_name->setToolTip(QString::fromStdString(asset->virtualPath));
   m_status->setText(
-    asset->missing ? tr("Missing source")
-    : needsConversion(*asset) ? tr("Pending conversion")
+    asset->missing                              ? tr("Missing source")
+    : needsConversion(*asset)                   ? tr("Pending conversion")
     : asset->type == project::AssetType::Skybox ? tr("Skybox group")
                                                 : tr("Ready"));
 
@@ -1061,7 +983,9 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
     {
       auto name = QString::fromStdString(dependency.dependencyId);
       if (const auto it = std::find_if(
-            m_assets.begin(), m_assets.end(), [&](const auto& candidate) {
+            m_assets.begin(),
+            m_assets.end(),
+            [&](const auto& candidate) {
               return candidate.id == dependency.dependencyId;
             });
           it != m_assets.end())
@@ -1075,8 +999,6 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
 
   refreshUsage();
 
-  m_previewMode->setEnabled(
-    asset->type == project::AssetType::Texture && isConverted(*asset));
   updatePreview();
 }
 
@@ -1085,8 +1007,7 @@ void AssetLibraryWindow::clearInspector()
   m_name->setText(tr("No asset selected"));
   m_name->setToolTip({});
   m_status->clear();
-  m_preview->setPixmap({});
-  m_preview->setText(tr("Select an asset to preview it"));
+  m_inspector->clear();
   m_dependencies->clear();
   while (m_properties->rowCount() > 0)
     m_properties->removeRow(0);
@@ -1098,54 +1019,36 @@ QImage AssetLibraryWindow::previewImage(
   if (!m_source)
     return {};
 
-  if (converted && isConverted(asset) && asset.type == project::AssetType::Texture)
-  {
-    if (const auto content = m_source->readContent(asset.id); content.is_success())
-    {
-      if (auto image = decodeMiptexWad(content.value()); !image.isNull())
-        return image;
-    }
-  }
-
-  const auto original = m_source->readOriginal(asset.id);
-  if (original.is_error())
+  const auto bytes =
+    converted ? m_source->readContent(asset.id) : m_source->readOriginal(asset.id);
+  if (bytes.is_error())
     return {};
-
-  if (auto image = decodeEncodedImage(original.value()); !image.isNull())
-    return image;
+  if (const auto image = inspection::decodeImage(bytes.value()); image.is_success())
+    return image.value();
   if (asset.type == project::AssetType::Sprite)
-    return decodeSpriteImage(original.value());
+  {
+    const auto sprite = loadGoldSrcSpritePreview(bytes.value());
+    if (sprite)
+      return QImage{
+        sprite->rgba.data(),
+        int(sprite->width),
+        int(sprite->height),
+        int(sprite->width * 4),
+        QImage::Format_RGBA8888}
+        .copy();
+  }
   if (asset.type == project::AssetType::Model)
     return renderModelThumbnail(
-      std::filesystem::path{pathFromQString(m_source->location())},
-      std::filesystem::path{asset.sourceContainer},
-      size);
+      pathFromQString(m_source->location()), asset.sourceContainer, size);
   return {};
 }
 
 void AssetLibraryWindow::updatePreview()
 {
-  const auto* asset = selectedAsset();
-  if (!asset || !m_source)
-  {
-    clearInspector();
-    return;
-  }
-
-  const auto image = previewImage(*asset, m_previewMode->currentIndex() == 1, 512);
-
-  if (image.isNull())
-  {
-    m_preview->setPixmap({});
-    m_preview->setText(tr("No preview available"));
-    return;
-  }
-  m_preview->setText({});
-  m_preview->setPixmap(QPixmap::fromImage(image).scaled(
-    m_preview->width() > 0 ? m_preview->width() - 8 : 220,
-    m_preview->height() > 0 ? m_preview->height() - 8 : 170,
-    Qt::KeepAspectRatio,
-    Qt::SmoothTransformation));
+  if (const auto* asset = selectedAsset(); asset && m_source)
+    m_inspector->setAsset(inspection::readLibraryAsset(*m_source, *asset));
+  else
+    m_inspector->clear();
 }
 
 void AssetLibraryWindow::updateStatus()
@@ -1159,8 +1062,8 @@ void AssetLibraryWindow::updateStatus()
                 .arg(missing);
   if (m_source)
   {
-    text += tr(" · %1")
-              .arg(m_source->isRemote() ? tr("Remote library") : tr("Local library"));
+    text +=
+      tr(" · %1").arg(m_source->isRemote() ? tr("Remote library") : tr("Local library"));
   }
   m_footer->setText(text);
   updateActions();
@@ -1183,9 +1086,9 @@ const project::LibraryAsset* AssetLibraryWindow::selectedAsset() const
 {
   if (!m_selectedId)
     return nullptr;
-  const auto it = std::find_if(
-    m_assets.begin(), m_assets.end(),
-    [&](const auto& asset) { return asset.id == *m_selectedId; });
+  const auto it = std::find_if(m_assets.begin(), m_assets.end(), [&](const auto& asset) {
+    return asset.id == *m_selectedId;
+  });
   return it == m_assets.end() ? nullptr : &*it;
 }
 
@@ -1218,6 +1121,8 @@ void AssetLibraryWindow::runConvertPending()
 
   m_convertDone = 0;
   m_convertFailed = 0;
+  m_conversionReport.clear();
+  m_failedConversions.clear();
   m_convertProgress->setRange(0, int(m_convertQueue.size()));
   m_convertProgress->setValue(0);
   m_convertProgress->show();
@@ -1237,7 +1142,13 @@ void AssetLibraryWindow::stepConvertQueue()
   m_convertQueue.erase(m_convertQueue.begin());
   const auto result = m_source->convertAsset(id);
   if (result.is_error() || !result.value())
+  {
     ++m_convertFailed;
+    m_failedConversions.push_back(id);
+    m_conversionReport
+      << QString::fromStdString(id) + ": "
+           + (result.is_error() ? QString::fromStdString(std::get<Error>(result.error()).msg) : tr("No compatible content was produced."));
+  }
   ++m_convertDone;
   m_convertProgress->setValue(m_convertDone);
 
@@ -1250,18 +1161,24 @@ void AssetLibraryWindow::stepConvertQueue()
     m_footer->setText(
       tr("Converted %1 asset(s)%2.")
         .arg(m_convertDone - m_convertFailed)
-        .arg(
-          m_convertFailed > 0 ? tr(", %1 failed").arg(m_convertFailed) : QString{}));
+        .arg(m_convertFailed > 0 ? tr(", %1 failed").arg(m_convertFailed) : QString{}));
+    if (!m_failedConversions.empty())
+      showOperationReport(m_conversionReport, {}, m_failedConversions);
   }
 }
 
 void AssetLibraryWindow::cancelConvertQueue()
 {
   m_convertTimer->stop();
+  const auto remaining = m_convertQueue.size();
   m_convertQueue.clear();
   m_convertProgress->hide();
   m_convertCancel->hide();
   reload();
+  m_footer->setText(tr("Cancelled: %1 completed, %2 failed, %3 pending.")
+                      .arg(m_convertDone)
+                      .arg(m_convertFailed)
+                      .arg(qulonglong(remaining)));
 }
 
 void AssetLibraryWindow::runImport()
@@ -1279,87 +1196,193 @@ void AssetLibraryWindow::runImport()
   importFiles(files);
 }
 
+void AssetLibraryWindow::showOperationReport(
+  const QStringList& lines,
+  const QStringList& files,
+  const std::vector<std::string>& conversions)
+{
+  auto dialog = QDialog{this};
+  dialog.setWindowTitle(tr("Asset operation results"));
+  dialog.resize(700, 420);
+  auto* layout = new QVBoxLayout{&dialog};
+  auto* report = new QTextEdit{};
+  report->setReadOnly(true);
+  report->setPlainText(lines.join("\n"));
+  layout->addWidget(report);
+  auto* buttons = new QDialogButtonBox{QDialogButtonBox::Close};
+  if (!files.empty())
+    connect(
+      buttons->addButton(tr("Retry failed imports"), QDialogButtonBox::ActionRole),
+      &QPushButton::clicked,
+      &dialog,
+      [&]() { dialog.done(1); });
+  if (!conversions.empty())
+    connect(
+      buttons->addButton(tr("Retry failed conversions"), QDialogButtonBox::ActionRole),
+      &QPushButton::clicked,
+      &dialog,
+      [&]() { dialog.done(2); });
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(buttons);
+  const auto result = dialog.exec();
+  if (result == 1)
+    importFiles(files);
+  else if (result == 2)
+  {
+    const auto retryConversions = conversions;
+    m_convertQueue = retryConversions;
+    m_convertDone = m_convertFailed = 0;
+    m_conversionReport.clear();
+    m_failedConversions.clear();
+    m_convertProgress->setRange(0, int(retryConversions.size()));
+    m_convertProgress->setValue(0);
+    m_convertProgress->show();
+    m_convertCancel->show();
+    m_convertTimer->start();
+  }
+}
+
 void AssetLibraryWindow::importFiles(const QStringList& files)
 {
+  if (!m_source || !m_source->canImport())
+    return;
   struct Entry
   {
     std::filesystem::path source;
     std::filesystem::path relative;
     bool conflict = false;
   };
-
-  const auto folder = std::filesystem::path{pathFromQString(m_source->location())};
+  const auto folder = pathFromQString(m_source->location());
   auto entries = std::vector<Entry>{};
+  auto report = QStringList{};
+  auto retry = QStringList{};
+  auto failedConversions = std::vector<std::string>{};
   for (const auto& file : files)
   {
     const auto source = pathFromQString(file);
     const auto subfolder = librarySubfolderForFile(source);
     if (subfolder.empty())
+    {
+      report << tr("%1: unsupported file type").arg(file);
       continue;
+    }
     const auto relative = subfolder / source.filename();
-    entries.push_back({source, relative, std::filesystem::exists(folder / relative)});
+    auto ec = std::error_code{};
+    entries.push_back({source, relative, std::filesystem::exists(folder / relative, ec)});
   }
-  if (entries.empty())
-  {
-    QMessageBox::information(
-      this, tr("Import Assets"),
-      tr("None of the selected files can be stored in an asset library."));
-    return;
-  }
-
   auto overwrite = false;
-  if (std::any_of(entries.begin(), entries.end(), [](const auto& entry) { return entry.conflict; }))
+  if (std::ranges::any_of(entries, [](const auto& entry) { return entry.conflict; }))
   {
     const auto answer = QMessageBox::question(
-      this, tr("Import Assets"),
-      tr("Some files already exist in the library. Overwrite them?\n\nChoosing No keeps both "
-         "by adding a suffix."),
+      this,
+      tr("Import Assets"),
+      tr("Some files already exist in the library. Overwrite them?\n\nChoosing No keeps "
+         "both by adding a suffix."),
       QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
     if (answer == QMessageBox::Cancel)
       return;
     overwrite = answer == QMessageBox::Yes;
   }
-
+  auto progress = QProgressDialog{
+    tr("Importing and converting assets"),
+    tr("Cancel"),
+    0,
+    int(entries.size() * 2),
+    this};
+  progress.setWindowModality(Qt::WindowModal);
+  progress.setMinimumDuration(0);
   auto imported = std::vector<std::string>{};
+  auto copied = 0;
   for (auto& entry : entries)
   {
-    if (entry.conflict)
+    progress.setValue(copied);
+    if (progress.wasCanceled())
+      break;
+    auto ec = std::error_code{};
+    if (!overwrite)
     {
-      if (overwrite)
-        std::filesystem::remove(folder / entry.relative);
-      else
-      {
-        const auto stem = entry.relative.stem().string();
-        const auto extension = entry.relative.extension().string();
-        for (auto counter = 1;; ++counter)
-        {
-          const auto candidate = entry.relative.parent_path()
-                                 / (stem + "_" + std::to_string(counter) + extension);
-          if (!std::filesystem::exists(folder / candidate))
-          {
-            entry.relative = candidate;
-            break;
-          }
-        }
-      }
+      const auto requested = entry.relative;
+      for (auto counter = 1; std::filesystem::exists(folder / entry.relative, ec);
+           ++counter)
+        entry.relative = requested.parent_path() / (requested.stem().string() + "_" + std::to_string(counter) + requested.extension().string());
     }
-    const auto added = m_source->importFile(entry.source, entry.relative.generic_string());
-    if (added.is_success())
+    const auto added =
+      overwrite ? m_source->replaceFile(entry.source, entry.relative.generic_string())
+                : m_source->importFile(entry.source, entry.relative.generic_string());
+    if (added.is_error())
+    {
+      report << tr("%1: import failed: %2")
+                  .arg(
+                    pathAsQString(entry.source),
+                    QString::fromStdString(std::get<Error>(added.error()).msg));
+      retry << pathAsQString(entry.source);
+    }
+    else
+    {
       imported.push_back(added.value());
+      report << tr("%1: imported as %2")
+                  .arg(
+                    pathAsQString(entry.source), QString::fromStdString(added.value()));
+    }
+    ++copied;
   }
-
   if (!imported.empty())
-    (void)m_source->rescan();
-  reload();
-
-  for (const auto& asset : m_assets)
   {
-    if (needsConversion(asset)
-        && std::find(imported.begin(), imported.end(), asset.virtualPath) != imported.end())
-      (void)m_source->convertAsset(asset.id);
+    const auto scanned = m_source->rescan();
+    if (scanned.is_error())
+      report << tr("Index failed: %1")
+                  .arg(QString::fromStdString(std::get<Error>(scanned.error()).msg));
   }
   reload();
-  m_footer->setText(tr("Imported %1 file(s).").arg(int(imported.size())));
+  // Copy IDs before converting: each publication can invalidate a browser's listing.
+  auto convert = std::vector<std::pair<std::string, std::string>>{};
+  for (const auto& asset : m_assets)
+    if (
+      std::ranges::find(imported, asset.sourceContainer) != imported.end()
+      || std::ranges::find(imported, asset.virtualPath) != imported.end())
+    {
+      if (needsConversion(asset))
+        convert.emplace_back(asset.id, asset.virtualPath);
+      else
+        report << tr("%1: ready to use").arg(QString::fromStdString(asset.virtualPath));
+    }
+  auto converted = 0;
+  for (const auto& [id, path] : convert)
+  {
+    if (progress.wasCanceled())
+      break;
+    progress.setValue(int(entries.size()) + converted);
+    if (progress.wasCanceled())
+      break;
+    const auto result = m_source->convertAsset(id);
+    if (result.is_error() || !result.value())
+    {
+      report << tr("%1: imported, conversion failed: %2")
+                  .arg(
+                    QString::fromStdString(path),
+                    result.is_error()
+                      ? QString::fromStdString(std::get<Error>(result.error()).msg)
+                      : tr("No compatible content was produced."));
+      failedConversions.push_back(id);
+    }
+    else
+      report << tr("%1: converted and ready to use").arg(QString::fromStdString(path));
+    ++converted;
+  }
+  const auto cancelled = progress.wasCanceled();
+  progress.close();
+  if (cancelled)
+    report << tr(
+                "Cancelled: %1 file(s) not imported; %2 conversion(s) pending. Completed "
+                "imports were kept.")
+                .arg(int(entries.size()) - copied)
+                .arg(int(convert.size()) - converted);
+  reload();
+  m_footer->setText(tr("Imported %1 file(s); converted %2; failed %3.")
+                      .arg(int(imported.size()))
+                      .arg(converted - int(failedConversions.size()))
+                      .arg(retry.size() + qsizetype(failedConversions.size())));
+  showOperationReport(report, retry, failedConversions);
 }
 
 void AssetLibraryWindow::refreshUsage()
@@ -1393,11 +1416,10 @@ void AssetLibraryWindow::refreshUsage()
     if (found.is_error() || !found.value())
       continue;
 
-    m_usage->addItem(
-      QStringLiteral("%1  ·  %2")
-        .arg(
-          QString::fromStdString(path.stem().string()),
-          QString::fromStdString(found.value().value().virtualPath)));
+    m_usage->addItem(QStringLiteral("%1  ·  %2")
+                       .arg(
+                         QString::fromStdString(path.stem().string()),
+                         QString::fromStdString(found.value().value().virtualPath)));
     ++used;
   }
   if (used == 0)
@@ -1466,7 +1488,9 @@ void AssetLibraryWindow::renameSelected()
       result.is_error())
   {
     QMessageBox::critical(
-      this, tr("Rename Asset"), QString::fromStdString(std::get<Error>(result.error()).msg));
+      this,
+      tr("Rename Asset"),
+      QString::fromStdString(std::get<Error>(result.error()).msg));
     return;
   }
   reload();
@@ -1490,7 +1514,9 @@ void AssetLibraryWindow::deleteSelected()
   if (const auto result = m_source->removeAsset(asset->id); result.is_error())
   {
     QMessageBox::critical(
-      this, tr("Delete Asset"), QString::fromStdString(std::get<Error>(result.error()).msg));
+      this,
+      tr("Delete Asset"),
+      QString::fromStdString(std::get<Error>(result.error()).msg));
     return;
   }
   m_selectedId.reset();
@@ -1509,7 +1535,8 @@ void AssetLibraryWindow::dragEnterEvent(QDragEnterEvent* event)
   if (!m_source || !m_source->canImport() || !event->mimeData()->hasUrls())
     return;
   const auto droppable = std::any_of(
-    event->mimeData()->urls().begin(), event->mimeData()->urls().end(),
+    event->mimeData()->urls().begin(),
+    event->mimeData()->urls().end(),
     [](const QUrl& url) {
       return url.isLocalFile()
              && !librarySubfolderForFile(pathFromQString(url.toLocalFile())).empty();

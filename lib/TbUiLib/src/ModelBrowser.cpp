@@ -31,6 +31,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QShowEvent>
 #include <QSignalBlocker>
@@ -58,19 +59,24 @@
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Assets.h"
+#include "mdl/Map_Brushes.h"
 #include "mdl/Map_CopyPaste.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/Map_World.h"
 #include "mdl/PatchNode.h"
 #include "mdl/SetVisibilityCommand.h"
 #include "mdl/Transaction.h"
+#include "mdl/UpdateBrushFaceAttributes.h"
 #include "mdl/WadPropertyUtils.h"
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "project/AssetLibrary.h"
 #include "ui/AppController.h"
 #include "ui/AssetBrowserModel.h"
+#include "ui/AssetInspector.h"
+#include "ui/AssetLibrarySource.h"
 #include "ui/BitmapButton.h"
+#include "ui/CatalogAssetDrop.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView3D.h"
@@ -252,6 +258,15 @@ ModelBrowser::ModelBrowser(
   updateFolderEdit();
   if (m_project)
   {
+    connect(
+      &AssetLibraryChanges::instance(),
+      &AssetLibraryChanges::changed,
+      this,
+      [this]() {
+        markAssetsDirty();
+        scheduleAssetRefresh();
+      },
+      Qt::QueuedConnection);
     refreshLibraryChoices();
   }
   updateSourceControls();
@@ -498,7 +513,7 @@ void ModelBrowser::addViewOption(QWidget* control)
   layout->insertWidget(0, control);
 }
 
-void ModelBrowser::previewAsset(AppController& appController, const QString& path)
+void ModelBrowser::previewAsset(AppController&, const QString& path)
 {
   const auto found = std::ranges::find_if(m_assets, [&](const auto& asset) {
     return pathAsGenericQString(asset.path) == path;
@@ -510,27 +525,217 @@ void ModelBrowser::previewAsset(AppController& appController, const QString& pat
   dialog.setObjectName("AssetPreviewDialog");
   dialog.setWindowTitle(
     asset.displayName.empty() ? path : QString::fromStdString(asset.displayName));
-  dialog.resize(420, 300);
+  dialog.resize(640, 560);
   auto* layout = new QVBoxLayout{&dialog};
-  auto* row = new QHBoxLayout{};
-  auto* scroll = new QScrollBar{Qt::Vertical, &dialog};
-  auto* view = new ModelBrowserView{appController, scroll, *m_document};
-  view->setPreviewOnly(true);
-  view->setIncludeDefaultRoots(false);
-  if (m_project)
-    view->setPreviewPathResolver([session = m_project](const BrowserAsset& entry) {
-      return session->libraryAssetFile(entry.libraryId, entry.libraryAssetId);
-    });
-  view->setAssets(m_folderPath, {asset});
-  view->setCurrentFolderPath(
-    (asset.catalogPath.empty() ? asset.path : asset.catalogPath).parent_path());
-  row->addWidget(view, 1);
-  row->addWidget(scroll);
-  layout->addLayout(row, 1);
+  auto* inspector = new AssetInspector{&dialog};
+  if (!m_selectionOnly)
+    bindInspector(*inspector, true);
+  inspector->setAsset(inspection::readBrowserAsset(asset, m_project.get(), *m_document));
+  layout->addWidget(inspector, 1);
   auto* close = new QDialogButtonBox{QDialogButtonBox::Close, &dialog};
   connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
   layout->addWidget(close);
   dialog.exec();
+}
+
+void ModelBrowser::setMapActionsEnabled(const bool enabled)
+{
+  m_mapActionsEnabled = enabled;
+  emit actionContextChanged();
+}
+
+Result<std::optional<std::string>> ModelBrowser::chooseAssetPath(
+  AppController& app,
+  MapDocument& document,
+  const BrowserCellType type,
+  QWidget* parent,
+  const std::function<bool()>& targetValid,
+  const bool skybox)
+{
+  auto session = app.projectFor(document);
+  auto dialog = QDialog{parent};
+  dialog.setObjectName("AssetSelectionDialog");
+  dialog.setWindowTitle(tr("Select asset for current target"));
+  dialog.resize(1000, 640);
+  auto* layout = new QVBoxLayout{&dialog};
+  auto* scope =
+    new QLabel{tr("Target map: %1. The resource is captured only when you confirm.")
+                 .arg(pathAsQString(document.map().path()))};
+  scope->setWordWrap(true);
+  layout->addWidget(scope);
+  auto* split = new QSplitter{Qt::Horizontal};
+  auto* browser = new ModelBrowser{app, document, split, session};
+  browser->m_selectionOnly = true;
+  browser->m_view->setSelectionOnly(true);
+  browser->m_skyboxFilter = skybox;
+  browser->setTypeFilter(type);
+  browser->m_typeCombo->setCurrentIndex(browser->m_typeCombo->findData(int(type)));
+  browser->m_typeCombo->setEnabled(false);
+  browser->m_savePrefabButton->hide();
+  auto* inspector = new AssetInspector{split};
+  split->setStretchFactor(0, 3);
+  split->setStretchFactor(1, 2);
+  layout->addWidget(split, 1);
+  auto* buttons = new QDialogButtonBox{QDialogButtonBox::Ok | QDialogButtonBox::Cancel};
+  auto* ok = buttons->button(QDialogButtonBox::Ok);
+  ok->setEnabled(false);
+  layout->addWidget(buttons);
+  auto selection = std::optional<BrowserAsset>{};
+  connect(
+    browser->m_view,
+    &ModelBrowserView::assetSelected,
+    &dialog,
+    [&](const BrowserAsset& asset) {
+      inspector->setAsset(inspection::readBrowserAsset(asset, session.get(), document));
+      selection =
+        inspector->asset() ? std::optional{inspector->asset()->resource} : std::nullopt;
+      ok->setEnabled(
+        selection && !selection->missing && selection->type == type
+        && selection->skybox == skybox && targetValid());
+    });
+  connect(browser->m_view, &ModelBrowserView::selectionCleared, &dialog, [&]() {
+    selection.reset();
+    inspector->clear();
+    ok->setEnabled(false);
+  });
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  if (dialog.exec() != QDialog::Accepted || !selection)
+    return std::optional<std::string>{};
+  if (!targetValid())
+    return Error{"The editing target changed. Select the target again."};
+  auto path = selection->path.generic_string();
+  if (selection->source != BrowserSource::GameFiles)
+  {
+    if (!session)
+      return Error{"A catalog resource requires a project target."};
+    auto prepared = PreparedAssetDrop::prepare(
+      session, catalogAssetDragData(*selection, session->store().info().id));
+    if (prepared.is_error())
+      return std::get<Error>(prepared.error());
+    auto drop = std::move(prepared).value();
+    for (const auto& conflict : drop->conflicts())
+      if (!confirmCaptureConflict(parent, conflict))
+        return std::optional<std::string>{};
+    if (!targetValid())
+      return Error{"The editing target changed. Select the target again."};
+    drop->resolveConflicts(CaptureConflictChoice::Replace);
+    const auto payload = drop->nativePayload();
+    path = payload.substr(payload.find(':') + 1);
+    const auto committed = drop->commit();
+    if (committed.is_error())
+      return std::get<Error>(committed.error());
+  }
+  else if (type == BrowserCellType::Texture && !skybox)
+    path = selection->path.stem().string();
+  return std::optional{path};
+}
+
+void ModelBrowser::bindInspector(AssetInspector& inspector, const bool mapActions)
+{
+  const auto refresh = [this, &inspector, mapActions]() {
+    if (!inspector.asset())
+      return;
+    const auto& asset = inspector.asset()->resource;
+    const auto canApply =
+      mapActions && m_mapActionsEnabled && asset.type == BrowserCellType::Texture
+      && (asset.skybox || !m_document->map().selection().allBrushFaces().empty());
+    inspector.setActions(
+      canApply && !asset.missing,
+      m_project && isLibraryAsset(asset) && !asset.missing
+        && asset.projectAssetId.empty(),
+      m_project && asset.projectUpdateAvailable && !asset.missing,
+      m_project && (!asset.projectAssetId.empty() || !asset.assetId.empty()),
+      tr("Project: %1\nMap: %2")
+        .arg(
+          m_project ? QString::fromStdString(m_project->store().info().name) : tr("None"))
+        .arg(
+          mapActions && m_mapActionsEnabled ? pathAsQString(m_document->map().path())
+                                            : tr("None")));
+  };
+  connect(&inspector, &AssetInspector::assetChanged, this, refresh);
+  connect(this, &ModelBrowser::actionContextChanged, &inspector, refresh);
+  connect(&inspector, &AssetInspector::captureRequested, this, [this, &inspector]() {
+    if (inspector.asset())
+    {
+      const auto asset = inspector.asset()->resource;
+      captureLibraryAsset(
+        QString::fromStdString(asset.libraryId),
+        QString::fromStdString(asset.libraryAssetId));
+    }
+  });
+  connect(&inspector, &AssetInspector::updateRequested, this, [this, &inspector]() {
+    if (inspector.asset())
+    {
+      const auto asset = inspector.asset()->resource;
+      updateProjectAsset(QString::fromStdString(
+        asset.projectAssetId.empty() ? asset.assetId : asset.projectAssetId));
+    }
+  });
+  connect(&inspector, &AssetInspector::findUsesRequested, this, [this, &inspector]() {
+    if (inspector.asset())
+    {
+      const auto& asset = inspector.asset()->resource;
+      findProjectAssetUses(QString::fromStdString(
+        asset.projectAssetId.empty() ? asset.assetId : asset.projectAssetId));
+    }
+  });
+  connect(
+    &inspector, &AssetInspector::applyRequested, this, [this, &inspector, mapActions]() {
+      if (!mapActions || !m_mapActionsEnabled || !inspector.asset())
+        return;
+      const auto asset = inspector.asset()->resource;
+      if (asset.type != BrowserCellType::Texture)
+        return;
+      auto* target = m_document;
+      const auto faces = target->map().selection().allBrushFaces();
+      if (!asset.skybox && faces.empty())
+        return;
+      auto name = asset.path.stem().string();
+      if (asset.source != BrowserSource::GameFiles)
+      {
+        if (!m_project)
+          return;
+        auto prepared = PreparedAssetDrop::prepare(
+          m_project, catalogAssetDragData(asset, m_project->store().info().id));
+        if (prepared.is_error())
+        {
+          QMessageBox::warning(
+            this,
+            tr("Apply Asset"),
+            QString::fromStdString(std::get<Error>(prepared.error()).msg));
+          return;
+        }
+        auto drop = std::move(prepared).value();
+        for (const auto& conflict : drop->conflicts())
+          if (!confirmCaptureConflict(this, conflict))
+            return;
+        if (
+          m_document != target || !m_mapActionsEnabled
+          || faces != target->map().selection().allBrushFaces())
+          return;
+        drop->resolveConflicts(CaptureConflictChoice::Replace);
+        const auto& payload = drop->nativePayload();
+        name = payload.substr(payload.find(':') + 1);
+        const auto committed = drop->commit();
+        if (committed.is_error())
+        {
+          QMessageBox::warning(
+            this,
+            tr("Apply Asset"),
+            QString::fromStdString(std::get<Error>(committed.error()).msg));
+          return;
+        }
+      }
+      // The same native commands as catalog drops: map Undo reverts the map edit;
+      // the captured resource remains an explicit project snapshot.
+      if (asset.skybox)
+        mdl::setWorldProperty(target->map(), "skyname", name);
+      else
+        mdl::setBrushFaceAttributes(target->map(), faces, {.materialName = name});
+      emit actionContextChanged();
+    });
+  refresh();
 }
 
 void ModelBrowser::bindEvents(AppController& appController)
@@ -724,8 +929,11 @@ void ModelBrowser::connectMapObservers()
   m_mapNotifierConnection.disconnect();
   m_mapNotifierConnection +=
     m_document->map().modsDidChangeNotifier.connect(this, &ModelBrowser::modsDidChange);
-  m_mapNotifierConnection += m_document->selectionDidChangeNotifier.connect(
-    [this](const auto&) { updateSavePrefabButton(); });
+  m_mapNotifierConnection +=
+    m_document->selectionDidChangeNotifier.connect([this](const auto&) {
+      updateSavePrefabButton();
+      emit actionContextChanged();
+    });
   updateSavePrefabButton();
 }
 
@@ -1488,7 +1696,11 @@ void ModelBrowser::applyTypeFilter()
 
 std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
 {
-  return filterBrowserAssets(m_assets, m_typeFilter);
+  auto assets = filterBrowserAssets(m_assets, m_typeFilter);
+  if (m_skyboxFilter)
+    std::erase_if(
+      assets, [&](const auto& asset) { return asset.skybox != *m_skyboxFilter; });
+  return assets;
 }
 
 void ModelBrowser::updateSourceControls()
