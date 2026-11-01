@@ -156,8 +156,10 @@ std::vector<std::uint8_t> makeStudioModel(const float boneAngleZ = 0.0f)
   const auto bodyPartOffset = textureOffset + sizeof(StudioTexture);
   const auto modelOffset = bodyPartOffset + sizeof(StudioBodyPart);
   const auto meshOffset = modelOffset + 2 * sizeof(StudioModel);
+  // Each variant stores one triangle strip: a count, three 4-short vertices, a zero.
+  const auto stripSize = 2 + 3 * sizeof(StudioTriVertex) + 2;
   const auto triangleOffset = meshOffset + 2 * sizeof(StudioMesh);
-  const auto vertexInfoOffset = triangleOffset + 2 * sizeof(StudioTriVertex);
+  const auto vertexInfoOffset = triangleOffset + 2 * stripSize;
   const auto vertexOffset = vertexInfoOffset + 2 * 3;
   const auto totalSize = vertexOffset + 2 * 36;
 
@@ -174,7 +176,7 @@ std::vector<std::uint8_t> makeStudioModel(const float boneAngleZ = 0.0f)
   header.max[2] = 8.0f;
   header.numbones = 2;
   header.boneindex = int32_t(boneOffset);
-  header.numseq = 3;
+  header.numseq = 0;
   header.numseqgroups = 2;
   header.numtextures = 1;
   header.textureindex = int32_t(textureOffset);
@@ -223,14 +225,18 @@ std::vector<std::uint8_t> makeStudioModel(const float boneAngleZ = 0.0f)
 
     auto mesh = StudioMesh{};
     mesh.numtris = 1;
-    mesh.triindex = int32_t(triangleOffset + variant * sizeof(StudioTriVertex));
+    mesh.triindex = int32_t(triangleOffset + variant * stripSize);
     writeAt(data, meshOffset + variant * sizeof(StudioMesh), mesh);
 
-    auto triangle = StudioTriVertex{};
-    triangle.vertex[0] = 0;
-    triangle.vertex[1] = 1;
-    triangle.vertex[2] = 2;
-    writeAt(data, triangleOffset + variant * sizeof(StudioTriVertex), triangle);
+    const auto stripStart = triangleOffset + variant * stripSize;
+    writeAt(data, stripStart, int16_t{3});
+    for (auto corner = std::size_t{0}; corner < 3; ++corner)
+    {
+      auto triangle = StudioTriVertex{};
+      triangle.vertex[0] = int16_t(corner);
+      writeAt(data, stripStart + 2 + corner * sizeof(StudioTriVertex), triangle);
+    }
+    writeAt(data, stripStart + 2 + 3 * sizeof(StudioTriVertex), int16_t{0});
 
     const auto points = std::array<std::array<float, 3>, 3>{
       std::array<float, 3>{variant == 0 ? 1.0f : 2.0f, 0.0f, 0.0f},
@@ -271,7 +277,8 @@ TEST_CASE("GoldSrcStudioModel")
     const auto& model = info.value();
     CHECK(model.name == "testmodel");
     CHECK(model.bones == 2);
-    CHECK(model.sequences == 3);
+    CHECK(model.sequences == 0);
+  CHECK(model.sequenceList.empty());
     CHECK(model.sequenceGroups == 2);
     CHECK(model.skinFamilies == 2);
     CHECK(model.skinReferences == 1);

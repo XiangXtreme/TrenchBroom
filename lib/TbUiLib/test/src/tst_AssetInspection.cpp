@@ -71,7 +71,9 @@ inspection::Bytes studioModel()
   constexpr auto BodyPartSize = std::size_t{76};
   constexpr auto ModelSize = std::size_t{112};
   constexpr auto MeshSize = std::size_t{20};
-  constexpr auto TriangleSize = std::size_t{8};
+  constexpr auto VertexSize = std::size_t{8};
+  // Each variant stores one triangle strip: a count, three 4-short vertices, a zero.
+  constexpr auto StripSize = std::size_t{2} + 3 * VertexSize + 2;
 
   const auto boneOffset = Header;
   const auto textureOffset = boneOffset + 2 * BoneSize;
@@ -79,10 +81,12 @@ inspection::Bytes studioModel()
   const auto modelOffset = bodyPartOffset + BodyPartSize;
   const auto meshOffset = modelOffset + 2 * ModelSize;
   const auto triangleOffset = meshOffset + 2 * MeshSize;
-  const auto vertexInfoOffset = triangleOffset + 2 * TriangleSize;
+  const auto vertexInfoOffset = triangleOffset + 2 * StripSize;
   const auto vertexOffset = vertexInfoOffset + 2 * 3;
+  constexpr auto SequenceSize = std::size_t{176};
+  const auto sequenceOffset = vertexOffset + 2 * 36;
 
-  auto data = inspection::Bytes(vertexOffset + 2 * 36, 0);
+  auto data = inspection::Bytes(sequenceOffset + 4 * SequenceSize, 0);
   const auto put32 = [&](const std::size_t offset, const std::int32_t value) {
     std::memcpy(data.data() + offset, &value, 4);
   };
@@ -109,6 +113,7 @@ inspection::Bytes studioModel()
   put32(140, 2); // bones
   put32(144, std::int32_t(boneOffset));
   put32(164, 4); // sequences
+  put32(168, std::int32_t(sequenceOffset));
   put32(172, 2); // external groups
   put32(180, 1); // textures
   put32(184, std::int32_t(textureOffset));
@@ -144,12 +149,20 @@ inspection::Bytes studioModel()
 
     const auto mesh = meshOffset + std::size_t(variant) * MeshSize;
     put32(mesh, 1);
-    put32(mesh + 4, std::int32_t(triangleOffset + std::size_t(variant) * TriangleSize));
-    const auto triangle = std::array<std::int16_t, 4>{0, 1, 2, 0};
+    const auto strip = triangleOffset + std::size_t(variant) * StripSize;
+    put32(mesh + 4, std::int32_t(strip));
+    const auto count = std::int16_t{3};
+    std::memcpy(data.data() + strip, &count, sizeof(count));
+    for (auto corner = std::size_t{0}; corner < 3; ++corner)
+    {
+      const auto vertex = std::array<std::int16_t, 4>{
+        std::int16_t(corner), 0, 0, 0};
+      std::memcpy(
+        data.data() + strip + 2 + corner * VertexSize, vertex.data(), sizeof(vertex));
+    }
+    const auto terminator = std::int16_t{0};
     std::memcpy(
-      data.data() + triangleOffset + std::size_t(variant) * TriangleSize,
-      triangle.data(),
-      sizeof(triangle));
+      data.data() + strip + 2 + 3 * VertexSize, &terminator, sizeof(terminator));
 
     const auto spread = variant == 0 ? 12.0f : 6.0f;
     const auto points = std::array<std::array<float, 3>, 3>{
@@ -166,6 +179,22 @@ inspection::Bytes studioModel()
         12);
     }
   }
+
+  // Four sequences without animation data: metadata is reported, the pose falls back to
+  // the bone rest values.
+  for (auto index = std::size_t{0}; index < 4; ++index)
+  {
+    const auto offset = sequenceOffset + index * SequenceSize;
+    const auto label = "idle" + std::to_string(index);
+    putText(offset, label.c_str(), 32);
+    putFloat(offset + 32, 15.0f);
+    put32(offset + 36, 1);
+    put32(offset + 56, 1);
+    put32(offset + 120, 1);
+    put32(offset + 124, 0);
+    put32(offset + 156, index % 2);
+  }
+
   return data;
 }
 } // namespace

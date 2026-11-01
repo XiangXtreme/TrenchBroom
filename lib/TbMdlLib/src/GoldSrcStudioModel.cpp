@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <cstring>
 
 namespace tb::mdl
@@ -28,9 +29,12 @@ constexpr std::size_t TextureSize = 80;
 constexpr std::size_t BodyPartSize = 76;
 constexpr std::size_t ModelSize = 112;
 constexpr std::size_t MeshSize = 20;
-constexpr std::size_t TriangleSize = 8;
+
+constexpr std::size_t SequenceSize = 176;
+constexpr std::size_t AnimationSize = 12;
 
 constexpr std::size_t MaxBones = 2048;
+constexpr std::size_t MaxSequences = 8192;
 constexpr std::size_t MaxTextures = 4096;
 constexpr std::size_t MaxBodyParts = 512;
 constexpr std::size_t MaxVariants = 256;
@@ -52,6 +56,13 @@ std::uint32_t readu32(const Bytes& bytes, const std::size_t offset)
 std::int32_t readi32(const Bytes& bytes, const std::size_t offset)
 {
   return static_cast<std::int32_t>(readu32(bytes, offset));
+}
+
+std::uint16_t readu16(const Bytes& bytes, const std::size_t offset)
+{
+  return static_cast<std::uint16_t>(
+    static_cast<std::uint16_t>(bytes[offset])
+    | static_cast<std::uint16_t>(std::uint16_t{bytes[offset + 1]} << 8));
 }
 
 std::int16_t readi16(const Bytes& bytes, const std::size_t offset)
@@ -88,6 +99,7 @@ struct Header
   std::size_t bones = 0;
   std::size_t boneOffset = 0;
   std::size_t sequences = 0;
+  std::size_t sequenceOffset = 0;
   std::size_t sequenceGroups = 1;
   std::size_t textures = 0;
   std::size_t textureOffset = 0;
@@ -177,7 +189,8 @@ Result<Header> readHeader(const Bytes& bytes)
   header.name = readFixedString(bytes, 8, 64);
   header.bones = countAt(bytes, 140, MaxBones);
   header.boneOffset = tableAt(bytes, 144, header.bones, BoneSize);
-  header.sequences = countAt(bytes, 164, 8192);
+  header.sequences = countAt(bytes, 164, MaxSequences);
+  header.sequenceOffset = tableAt(bytes, 168, header.sequences, SequenceSize);
   header.sequenceGroups = std::max(std::size_t{1}, countAt(bytes, 172, 1024));
   header.textures = countAt(bytes, 180, MaxTextures);
   header.textureOffset = tableAt(bytes, 184, header.textures, TextureSize);
@@ -192,6 +205,8 @@ Result<Header> readHeader(const Bytes& bytes)
     return Error{"The studio model texture table lies outside the file."};
   if (header.bodyParts > 0 && header.bodyPartOffset == 0)
     return Error{"The studio model body part table lies outside the file."};
+  if (header.sequences > 0 && header.sequenceOffset == 0)
+    return Error{"The studio model sequence table lies outside the file."};
 
   auto low = vm::vec3f{readf32(bytes, 88), readf32(bytes, 92), readf32(bytes, 96)};
   auto high = vm::vec3f{readf32(bytes, 100), readf32(bytes, 104), readf32(bytes, 108)};
@@ -220,16 +235,14 @@ struct Transform
   std::array<float, 3> translation{0, 0, 0};
 };
 
-// HLSDK AngleQuaternion: the rest pose stores Euler angles in radians.
-Transform boneRestTransform(const Bytes& bytes, const std::size_t offset)
+// HLSDK AngleQuaternion: values 0..2 are the position and 3..5 the Euler angles in
+// radians, so one helper serves both the rest pose and a decoded animation frame.
+Transform transformFromValues(const std::array<float, 6>& values)
 {
-  const auto position = vm::vec3f{
-    readf32(bytes, offset + 64),
-    readf32(bytes, offset + 68),
-    readf32(bytes, offset + 72)};
-  const auto rx = readf32(bytes, offset + 76) * 0.5f;
-  const auto ry = readf32(bytes, offset + 80) * 0.5f;
-  const auto rz = readf32(bytes, offset + 84) * 0.5f;
+  const auto position = vm::vec3f{values[0], values[1], values[2]};
+  const auto rx = values[3] * 0.5f;
+  const auto ry = values[4] * 0.5f;
+  const auto rz = values[5] * 0.5f;
 
   const auto sr = std::sin(rx), cr = std::cos(rx);
   const auto sp = std::sin(ry), cp = std::cos(ry);
@@ -255,6 +268,14 @@ Transform boneRestTransform(const Bytes& bytes, const std::size_t offset)
   return result;
 }
 
+Transform boneRestTransform(const Bytes& bytes, const std::size_t offset)
+{
+  auto values = std::array<float, 6>{};
+  for (auto channel = std::size_t{0}; channel < 6; ++channel)
+    values[channel] = readf32(bytes, offset + 64 + channel * 4);
+  return transformFromValues(values);
+}
+
 vm::vec3f applyTransform(const Transform& transform, const vm::vec3f& point)
 {
   // HLSDK stores row-major matrices and multiplies row vectors: out = p * R + t.
@@ -278,21 +299,107 @@ Transform compose(const Transform& parent, const Transform& child)
         value += parent.rotation[row * 3 + inner] * child.rotation[inner * 3 + column];
       result.rotation[row * 3 + column] = value;
     }
-  for (auto column = std::size_t{0}; column < 3; ++column)
+  // HLSDK ConcatTransforms: translation = parent rotation * child translation + parent.
+  for (auto row = std::size_t{0}; row < 3; ++row)
   {
-    auto value = parent.translation[column];
+    auto value = parent.translation[row];
     for (auto inner = std::size_t{0}; inner < 3; ++inner)
-      value += child.translation[inner] * parent.rotation[inner * 3 + column];
-    result.translation[column] = value;
+      value += parent.rotation[row * 3 + inner] * child.translation[inner];
+    result.translation[row] = value;
   }
   return result;
 }
 
-std::vector<Transform> readBoneTransforms(const Bytes& bytes, const Header& header)
+/** Per-bone angles and positions of one animation frame. */
+struct BonePose
+{
+  std::array<float, 6> values{};
+};
+
+/**
+ * Reads one animated channel of a bone.
+ *
+ * The stream stores runs of frames: a header with the number of valid values and the
+ * number of frames it covers, followed by that many int16 values. A run that does not
+ * cover the requested frame is skipped, which is how the engine plays sparse tracks.
+ */
+std::optional<float> readAnimationValue(
+  const Bytes& bytes, const std::size_t offset, const std::size_t frame)
+{
+  auto position = offset;
+  auto remaining = frame;
+  for (auto guard = std::size_t{0}; guard < 4096; ++guard)
+  {
+    if (!contains(bytes, position, 2))
+      return std::nullopt;
+    const auto valid = std::size_t{bytes[position]};
+    const auto total = std::size_t{bytes[position + 1]};
+    if (total == 0)
+      return std::nullopt;
+    if (total > remaining)
+    {
+      if (valid > remaining && contains(bytes, position + 2 + remaining * 2, 2))
+        return float(readi16(bytes, position + 2 + remaining * 2));
+      return std::nullopt;
+    }
+    remaining -= total;
+    position += 2 + valid * 2;
+  }
+  return std::nullopt;
+}
+
+/** Decodes the pose of one frame of a sequence, or nothing when the data is unusable. */
+std::optional<std::vector<BonePose>> readSequencePose(
+  const Bytes& bytes, const Header& header, const std::size_t sequence, const std::size_t frame)
+{
+  if (sequence >= header.sequences || header.sequenceOffset == 0)
+    return std::nullopt;
+
+  const auto offset = header.sequenceOffset + sequence * SequenceSize;
+  const auto frameCount = countAt(bytes, offset + 56, 100000);
+  const auto blends = countAt(bytes, offset + 120, 16);
+  const auto animIndex = readi32(bytes, offset + 124);
+  const auto group = readi32(bytes, offset + 156);
+  // Only the embedded sequence group is available; external _T.mdl groups live in
+  // another file that the browser does not open.
+  if (frameCount == 0 || blends == 0 || animIndex <= 0 || group != 0)
+    return std::nullopt;
+  if (frame >= frameCount)
+    return std::nullopt;
+
+  const auto animationOffset = std::size_t(animIndex);
+  if (!contains(bytes, animationOffset, blends * header.bones * AnimationSize))
+    return std::nullopt;
+
+  auto pose = std::vector<BonePose>(header.bones, BonePose{});
+  for (auto bone = std::size_t{0}; bone < header.bones; ++bone)
+  {
+    const auto boneOffset = header.boneOffset + bone * BoneSize;
+    const auto block = animationOffset + bone * AnimationSize;
+    for (auto channel = std::size_t{0}; channel < 6; ++channel)
+    {
+      const auto channelOffset = std::size_t{readu16(bytes, block + channel * 2)};
+      const auto base = readf32(bytes, boneOffset + 64 + channel * 4);
+      const auto scale = readf32(bytes, boneOffset + 88 + channel * 4);
+      pose[bone].values[channel] = base;
+      if (channelOffset != 0)
+      {
+        if (const auto value = readAnimationValue(bytes, block + channelOffset, frame);
+            value)
+          pose[bone].values[channel] = base + scale * *value;
+      }
+    }
+  }
+  return pose;
+}
+
+std::vector<Transform> readBoneTransforms(
+  const Bytes& bytes, const Header& header, const std::optional<std::vector<BonePose>>& pose)
 {
   auto local = std::vector<Transform>(header.bones, Transform{});
   for (auto i = std::size_t{0}; i < header.bones; ++i)
-    local[i] = boneRestTransform(bytes, header.boneOffset + i * BoneSize);
+    local[i] = pose && i < pose->size() ? transformFromValues((*pose)[i].values)
+                                        : boneRestTransform(bytes, header.boneOffset + i * BoneSize);
 
   auto world = std::vector<Transform>(header.bones, Transform{});
   // Parents precede children in every engine-authored model; resolve in passes so a
@@ -354,6 +461,17 @@ Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
     result.textures.push_back(
       readFixedString(bytes, value.textureOffset + i * TextureSize, 64));
 
+  for (auto i = std::size_t{0}; i < value.sequences; ++i)
+  {
+    const auto offset = value.sequenceOffset + i * SequenceSize;
+    auto sequence = GoldSrcStudioSequence{};
+    sequence.label = readFixedString(bytes, offset, 32);
+    sequence.fps = readf32(bytes, offset + 32);
+    sequence.looping = (readi32(bytes, offset + 36) & 1) != 0;
+    sequence.frameCount = countAt(bytes, offset + 56, 100000);
+    result.sequenceList.push_back(std::move(sequence));
+  }
+
   for (auto part = std::size_t{0}; part < value.bodyParts; ++part)
   {
     const auto offset = value.bodyPartOffset + part * BodyPartSize;
@@ -376,7 +494,10 @@ Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
 }
 
 Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
-  const std::vector<std::uint8_t>& bytes, const std::vector<std::size_t>& variants)
+  const std::vector<std::uint8_t>& bytes,
+  const std::vector<std::size_t>& variants,
+  const std::size_t sequence,
+  const std::size_t frame)
 {
   auto header = readHeader(bytes);
   if (header.is_error())
@@ -385,23 +506,9 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   if (value.bodyParts == 0)
     return Error{"The studio model has no body parts."};
 
-  const auto bones = readBoneTransforms(bytes, value);
+  const auto pose = readSequencePose(bytes, value, sequence, frame);
+  const auto bones = readBoneTransforms(bytes, value, pose);
   auto result = GoldSrcStudioMesh{};
-  auto rawLow = std::optional<vm::vec3f>{};
-  auto rawHigh = std::optional<vm::vec3f>{};
-  const auto extendRaw = [&](const vm::vec3f& point) {
-    if (!rawLow || !rawHigh)
-    {
-      rawLow = point;
-      rawHigh = point;
-      return;
-    }
-    for (auto axis = std::size_t{0}; axis < 3; ++axis)
-    {
-      (*rawLow)[axis] = std::min((*rawLow)[axis], point[axis]);
-      (*rawHigh)[axis] = std::max((*rawHigh)[axis], point[axis]);
-    }
-  };
 
   for (auto part = std::size_t{0}; part < value.bodyParts; ++part)
   {
@@ -430,73 +537,79 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
     for (auto mesh = std::size_t{0}; mesh < meshCount; ++mesh)
     {
       const auto offset = meshOffset + mesh * MeshSize;
-      const auto triangleCount = countAt(bytes, offset, MaxTriangles);
-      const auto triangleOffset = tableAt(bytes, offset + 4, triangleCount, TriangleSize);
-      if (triangleCount == 0 || triangleOffset == 0)
+      const auto streamOffset = readi32(bytes, offset + 4);
+      if (streamOffset < 0 || std::size_t(streamOffset) >= bytes.size())
         continue;
 
-      for (auto triangle = std::size_t{0}; triangle < triangleCount; ++triangle)
+      // Each mesh stores runs of triangles: a positive count is a strip, a negative one
+      // a fan, and zero terminates the mesh. Every vertex is four int16 values whose first
+      // entry indexes the model's vertex array.
+      auto stream = std::size_t(streamOffset);
+      auto emitted = std::size_t{0};
+      while (emitted < MaxTriangles * 3)
       {
-        const auto triangleOffsetBytes = triangleOffset + triangle * TriangleSize;
-        const auto base = result.positions.size();
-        auto skipped = false;
-        for (auto corner = std::size_t{0}; corner < 3; ++corner)
+        if (!contains(bytes, stream, 2))
+          break;
+        const auto count = readi16(bytes, stream);
+        stream += 2;
+        if (count == 0)
+          break;
+
+        const auto vertexCountInRun = std::size_t(std::abs(count));
+        if (
+          vertexCountInRun < 3 || vertexCountInRun > MaxVertices
+          || !contains(bytes, stream, vertexCountInRun * 8))
+          break;
+
+        auto runVertices = std::vector<std::size_t>{};
+        runVertices.reserve(vertexCountInRun);
+        for (auto k = std::size_t{0}; k < vertexCountInRun; ++k)
         {
-          const auto vertex = readi16(bytes, triangleOffsetBytes + corner * 2);
-          // Some retail models carry stale indices in a variant's mesh; skip that
-          // triangle instead of discarding the whole model.
-          if (vertex < 0 || std::size_t(vertex) >= vertexCount)
+          const auto vertex = readi16(bytes, stream + k * 8);
+          runVertices.push_back(
+            vertex >= 0 && std::size_t(vertex) < vertexCount ? std::size_t(vertex)
+                                                             : vertexCount);
+        }
+        stream += vertexCountInRun * 8;
+
+        for (auto k = std::size_t{2}; k < vertexCountInRun; ++k)
+        {
+          // Strips alternate their winding; fans share their first vertex.
+          const auto first = count > 0 ? (k % 2 == 0 ? k - 2 : k - 1) : std::size_t{0};
+          const auto second = count > 0 ? (k % 2 == 0 ? k - 1 : k - 2) : k - 1;
+          const auto base = result.positions.size();
+          auto skipped = false;
+          for (const auto index : {runVertices[first], runVertices[second], runVertices[k]})
           {
-            skipped = true;
-            break;
+            // Retail models can carry stale indices; skip that triangle instead of
+            // discarding the whole model.
+            if (index >= vertexCount)
+            {
+              skipped = true;
+              break;
+            }
+            const auto bone = bytes[vertexInfoOffset + index];
+            const auto position = vm::vec3f{
+              readf32(bytes, vertexOffset + index * 12),
+              readf32(bytes, vertexOffset + index * 12 + 4),
+              readf32(bytes, vertexOffset + index * 12 + 8)};
+            result.positions.push_back(
+              bone < bones.size() ? applyTransform(bones[bone], position) : position);
           }
-          const auto index = std::size_t(vertex);
-          const auto bone = bytes[vertexInfoOffset + index];
-          const auto position = vm::vec3f{
-            readf32(bytes, vertexOffset + index * 12),
-            readf32(bytes, vertexOffset + index * 12 + 4),
-            readf32(bytes, vertexOffset + index * 12 + 8)};
-          extendRaw(position);
-          result.positions.push_back(
-            bone < bones.size() ? applyTransform(bones[bone], position) : position);
+          if (skipped)
+          {
+            result.positions.resize(base);
+            continue;
+          }
+          result.triangles.push_back({base, base + 1, base + 2});
+          emitted += 3;
         }
-        if (skipped)
-        {
-          result.positions.resize(base);
-          continue;
-        }
-        result.triangles.push_back({base, base + 1, base + 2});
       }
     }
   }
 
   if (result.triangles.empty())
     return Error{"The studio model has no readable geometry."};
-
-  // Real game models store vertices in bone space and derive the render pose from a
-  // sequence. Without animation decoding the rest values can fold the mesh into itself,
-  // so compare the posed extent with the authored one and refuse to show a wrong shape.
-  // The check only applies to rigged models; small authored fixtures use rest values that
-  // already are the bind pose.
-  if (rawLow && rawHigh && value.bones > 8)
-  {
-    auto posedLow = result.positions.front();
-    auto posedHigh = posedLow;
-    for (const auto& point : result.positions)
-      for (auto axis = std::size_t{0}; axis < 3; ++axis)
-      {
-        posedLow[axis] = std::min(posedLow[axis], point[axis]);
-        posedHigh[axis] = std::max(posedHigh[axis], point[axis]);
-      }
-    for (auto axis = std::size_t{0}; axis < 3; ++axis)
-    {
-      const auto raw = (*rawHigh)[axis] - (*rawLow)[axis];
-      // Flat parts have no extent on one axis; only judge axes the model actually spans.
-      if (raw >= 4.0f && posedHigh[axis] - posedLow[axis] > 1.75f * raw)
-        return Error{
-          "GoldSrc bind pose depends on sequence animation, which is not decoded yet."};
-    }
-  }
 
   return result;
 }

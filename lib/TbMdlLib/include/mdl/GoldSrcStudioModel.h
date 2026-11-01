@@ -19,6 +19,15 @@
 namespace tb::mdl
 {
 
+/** One authored sequence; frame 0 of the first sequence is the model's bind pose. */
+struct GoldSrcStudioSequence
+{
+  std::string label;
+  float fps = 0.0f;
+  bool looping = false;
+  std::size_t frameCount = 0;
+};
+
 /** One body part of a GoldSrc studio model and its selectable variants. */
 struct GoldSrcStudioBodyPart
 {
@@ -42,6 +51,7 @@ struct GoldSrcStudioModelInfo
   std::size_t bones = 0;
   std::size_t sequenceGroups = 1;
   std::size_t sequences = 0;
+  std::vector<GoldSrcStudioSequence> sequenceList;
   std::size_t skinFamilies = 0;
   std::size_t skinReferences = 0;
   std::vector<std::string> textures;
@@ -61,13 +71,17 @@ struct GoldSrcStudioMesh
 };
 
 /**
- * Builds the bind-pose geometry of the given variant of every body part.
+ * Builds the geometry of the given variant of every body part at one animation frame.
  *
- * Bone rest transforms are composed from the skeleton, so a mesh whose vertices belong to
- * several bones keeps its authored shape. Animation, bone controllers and skin textures
- * are not applied; the geometry is only a readable silhouette for the asset browser.
+ * The pose is decoded from the requested sequence, which is how the engine renders a
+ * model; frame 0 of the first sequence is therefore the bind pose. Models without
+ * sequences fall back to the bone rest values. Bone controllers and skin textures are not
+ * applied, so the geometry is a readable silhouette for the asset browser.
  */
 Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
-  const std::vector<std::uint8_t>& bytes, const std::vector<std::size_t>& variants = {});
+  const std::vector<std::uint8_t>& bytes,
+  const std::vector<std::size_t>& variants = {},
+  std::size_t sequence = 0,
+  std::size_t frame = 0);
 
 } // namespace tb::mdl

@@ -369,15 +369,22 @@ Release `TrenchBroom` 与样式治理、差异空白及冲突标记检查通过�
 
 1. **顶点是 float32 三元组**，不是 int16。项目自带的 GoldSrcMdlScaler 早已按 float
    处理，解析器现在与之一致。
-2. **绑定姿态不由骨骼静止值决定**。真实模型的渲染姿态来自序列动画；用静止值合成会把
-   网格折叠成尖刺状。解析器现在对多骨骼模型做合理性校验（姿态包围盒不得明显超出顶点
-   自身的包围盒），不成立时返回明确错误 “bind pose depends on sequence animation”，
-   界面据此只展示骨骼/序列/贴图统计而不画出错误几何。
+2. **三角形是命令流**，不是定长数组：正数是三角带、负数是三角扇、0 结束，每个顶点
+   占 4 个 int16（顶点索引、法线索引、s、t）。这是此前“统计正确但画面错乱”的根因；
+   参考本机 xash3d-fwgs 的 mod_studio.c 与 mdldec 确认。
+3. **绑定姿态来自序列第 0 帧**。按 Valve 官方 studio.h 的 mstudioseqdesc_t（176 字节，
+   numframes 在 +56、numblends 在 +120、animindex 在 +124）解码动画通道后，gordon 第 0
+   帧的包围盒与该序列自带的 bbmin/bbmax 完全吻合，渲染出正确的人形而不是尖刺团。
+4. **无动画数据时退回骨骼静止值**。外置 _T.mdl 序列组与没有序列的模型仍需该路径，
+   解析器按 animindex<=0 或 seqgroup!=0 判定不可解码。
 
 新增按环境变量启用的验收：设置 TB_GOLDSRC_MODEL 指向任意 retail .mdl 时，TbMdlLibTest
-校验头、骨骼、Body 变体与非空几何（或明确的动画依赖错误），TbUiLibTest 校验预览场景
-与渲染管线；未设置时自动 SKIP，仓库不包含任何游戏资源。实测 gordon.mdl（42 骨骼、
-2 贴图、2 个 Body 变体）与 agrunt.mdl 均通过。
+校验头、骨骼、Body 变体与非空几何，TbUiLibTest 校验预览场景与渲染管线；未设置时自动
+SKIP，仓库不包含任何游戏资源。实测 gordon.mdl（42 骨骼、2 贴图、2 个 Body 变体，
+77 个序列）渲染出的第 0 帧与该序列的 bbmin/bbmax 一致，agrunt.mdl 同样通过。
 
-仍待解决：mstudioseqdesc_t 的实际字段顺序（候选 128/132/176 字节布局在真实数据上均未
-通过校验）。解决后才能取序列首帧作为绑定姿态，并实现动画播放与 Skin 贴图采样。
+验证方法：先用 Python 版解码器（build-release-codex/codex-logs/mdl_render.py）出图，
+确认顶点、三角带/扇与姿态合成正确后，再把同一套逻辑移植到 C++，两边渲染结果一致。
+
+仍待完成：Skin 贴图采样（需要贴图索引与 UV，当前只画无贴图剪影）与动画播放控件
+（解码已可用于任意序列与帧，界面目前固定展示第一个序列的第 0 帧）。
