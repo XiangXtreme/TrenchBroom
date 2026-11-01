@@ -82,6 +82,13 @@ TEST_CASE("PrefabAsset")
     CHECK(prefab.sounds == std::vector<std::string>{"sound/ambience/wind.wav"});
     CHECK(prefab.skies == std::vector<std::string>{"desert"});
     CHECK(prefab.bounds.size() == vm::vec3d{64, 64, 64});
+    CHECK(prefab.brushBounds.size() == 1);
+
+    const auto thumbnail = renderPrefabThumbnail(prefab, 64);
+    REQUIRE_FALSE(thumbnail.isNull());
+    CHECK(thumbnail.size() == QSize{64, 64});
+    CHECK(thumbnail.pixelColor(32, 32).alpha() > 0);
+    CHECK(renderPrefabThumbnail(PrefabContents{}, 64).isNull());
   }
 
   SECTION("rejects prefab text without a worldspawn entity")

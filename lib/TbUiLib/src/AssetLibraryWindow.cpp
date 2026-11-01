@@ -1212,6 +1212,21 @@ QImage AssetLibraryWindow::previewImage(
   if (asset.type == project::AssetType::Model)
     return renderModelThumbnail(
       pathFromQString(m_source->location()), asset.sourceContainer, size);
+  if (asset.type == project::AssetType::Prefab)
+  {
+    // An editor-saved thumbnail wins; otherwise draw the authored footprint so the card
+    // shows the prefab's volume instead of a generic type icon.
+    const auto location = pathFromQString(m_source->location());
+    const auto saved = QImage{pathAsQString(
+      prefabThumbnailPath(location / std::filesystem::path{asset.virtualPath}))};
+    if (!saved.isNull())
+      return saved;
+    const auto& data = bytes.value();
+    if (const auto contents =
+          readPrefabContents(std::string{data.begin(), data.end()});
+        contents.is_success())
+      return renderPrefabThumbnail(contents.value(), size);
+  }
   return {};
 }
 

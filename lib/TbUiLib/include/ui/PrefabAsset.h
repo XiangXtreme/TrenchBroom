@@ -77,6 +77,8 @@ struct PrefabContents
   std::size_t entities = 0;
   std::size_t faces = 0;
   vm::bbox3d bounds;
+  // Footprint of every brush, for the generated thumbnail.
+  std::vector<vm::bbox3d> brushBounds;
   std::vector<std::string> materials;
   std::vector<std::string> models;
   std::vector<std::string> sounds;
@@ -85,6 +87,14 @@ struct PrefabContents
 
 /** Reads volumes and references from prefab MAP text (Valve first, then Standard). */
 Result<PrefabContents> readPrefabContents(const std::string& text);
+
+/**
+ * Draws a top-down footprint of the prefab brushes.
+ *
+ * The library has no renderer, so a prefab card shows what the prefab occupies instead of
+ * a generic type icon. Returns a transparent image when there is nothing to draw.
+ */
+QImage renderPrefabThumbnail(const PrefabContents& contents, int size);
 
 Result<void> writePrefabAsset(const std::filesystem::path& path, const std::string& text);
 

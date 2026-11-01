@@ -20,6 +20,8 @@
 #include "ui/PrefabAsset.h"
 
 #include <QColor>
+#include <QPainter>
+#include <QPen>
 
 #include "base/Error.h"
 #include "base/Logger.h"
@@ -113,6 +115,8 @@ class PrefabContentsParser : public mdl::StandardMapParser
   bool m_sawWorld = false;
   std::optional<vm::vec3d> m_low;
   std::optional<vm::vec3d> m_high;
+  std::optional<vm::vec3d> m_brushLow;
+  std::optional<vm::vec3d> m_brushHigh;
 
 public:
   PrefabContentsParser(const std::string& text, const mdl::MapFormat format)
@@ -142,19 +146,26 @@ public:
   }
 
 private:
-  void extendBounds(const vm::vec3d& point)
+  static void extend(
+    std::optional<vm::vec3d>& low, std::optional<vm::vec3d>& high, const vm::vec3d& point)
   {
-    if (!m_low || !m_high)
+    if (!low || !high)
     {
-      m_low = point;
-      m_high = point;
+      low = point;
+      high = point;
       return;
     }
     for (auto axis = 0u; axis < 3u; ++axis)
     {
-      (*m_low)[axis] = std::min((*m_low)[axis], point[axis]);
-      (*m_high)[axis] = std::max((*m_high)[axis], point[axis]);
+      (*low)[axis] = std::min((*low)[axis], point[axis]);
+      (*high)[axis] = std::max((*high)[axis], point[axis]);
     }
+  }
+
+  void extendBounds(const vm::vec3d& point)
+  {
+    extend(m_low, m_high, point);
+    extend(m_brushLow, m_brushHigh, point);
   }
 
   void addFace(
@@ -218,8 +229,17 @@ private:
     }
   }
   void onEndEntity(const FileLocation&, ParserStatus&) override {}
-  void onBeginBrush(const FileLocation&, ParserStatus&) override { ++m_contents.brushes; }
-  void onEndBrush(const FileLocation&, ParserStatus&) override {}
+  void onBeginBrush(const FileLocation&, ParserStatus&) override
+  {
+    ++m_contents.brushes;
+    m_brushLow.reset();
+    m_brushHigh.reset();
+  }
+  void onEndBrush(const FileLocation&, ParserStatus&) override
+  {
+    if (m_brushLow && m_brushHigh)
+      m_contents.brushBounds.emplace_back(*m_brushLow, *m_brushHigh);
+  }
   void onStandardBrushFace(
     const FileLocation&,
     mdl::MapFormat,
@@ -282,6 +302,39 @@ Result<PrefabContents> readPrefabContents(const std::string& text)
   if (standard.is_success())
     return standard;
   return valve;
+}
+
+QImage renderPrefabThumbnail(const PrefabContents& contents, const int size)
+{
+  if (size <= 0 || size > 512 || contents.brushBounds.empty())
+    return {};
+
+  const auto& bounds = contents.bounds;
+  const auto extentX = bounds.max.x() - bounds.min.x();
+  const auto extentY = bounds.max.y() - bounds.min.y();
+  const auto extent = std::max({extentX, extentY, 1.0});
+  const auto scale = double(size) * 0.8 / extent;
+  const auto offsetX =
+    (double(size) - extentX * scale) / 2.0 - bounds.min.x() * scale;
+  const auto offsetY =
+    (double(size) - extentY * scale) / 2.0 - bounds.min.y() * scale;
+
+  auto image = QImage{size, size, QImage::Format_ARGB32_Premultiplied};
+  image.fill(Qt::transparent);
+  auto painter = QPainter{&image};
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.setPen(QPen{QColor{132, 148, 172, 220}, 1.5});
+  painter.setBrush(QColor{132, 148, 172, 90});
+  for (const auto& brush : contents.brushBounds)
+  {
+    const auto x = brush.min.x() * scale + offsetX;
+    const auto y = brush.min.y() * scale + offsetY;
+    const auto width = std::max(1.0, (brush.max.x() - brush.min.x()) * scale);
+    const auto height = std::max(1.0, (brush.max.y() - brush.min.y()) * scale);
+    painter.drawRect(QRectF{x, y, width, height});
+  }
+  painter.end();
+  return image;
 }
 
 bool isPrefabAssetPath(const std::filesystem::path& path)

@@ -77,9 +77,9 @@ inspection::Bytes studioModel()
   const auto meshOffset = modelOffset + 2 * ModelSize;
   const auto triangleOffset = meshOffset + 2 * MeshSize;
   const auto vertexInfoOffset = triangleOffset + 2 * TriangleSize;
-  const auto vertexOffset = vertexInfoOffset + 2;
+  const auto vertexOffset = vertexInfoOffset + 2 * 3;
 
-  auto data = inspection::Bytes(vertexOffset + 12, 0);
+  auto data = inspection::Bytes(vertexOffset + 2 * 18, 0);
   const auto put32 = [&](const std::size_t offset, const std::int32_t value) {
     std::memcpy(data.data() + offset, &value, 4);
   };
@@ -135,17 +135,33 @@ inspection::Bytes studioModel()
     putText(model, variant == 0 ? "body_a" : "body_b", 64);
     put32(model + 72, 1);
     put32(model + 76, std::int32_t(meshOffset + std::size_t(variant) * MeshSize));
-    put32(model + 80, 1);
-    put32(model + 84, std::int32_t(vertexInfoOffset + std::size_t(variant)));
-    put32(model + 88, std::int32_t(vertexOffset + std::size_t(variant) * 6));
+    put32(model + 80, 3);
+    put32(model + 84, std::int32_t(vertexInfoOffset + std::size_t(variant) * 3));
+    put32(model + 88, std::int32_t(vertexOffset + std::size_t(variant) * 18));
 
     const auto mesh = meshOffset + std::size_t(variant) * MeshSize;
     put32(mesh, 1);
     put32(mesh + 4, std::int32_t(triangleOffset + std::size_t(variant) * TriangleSize));
+    const auto triangle = std::array<std::int16_t, 4>{0, 1, 2, 0};
+    std::memcpy(
+      data.data() + triangleOffset + std::size_t(variant) * TriangleSize,
+      triangle.data(),
+      sizeof(triangle));
 
-    data[vertexInfoOffset + std::size_t(variant)] = std::uint8_t(variant == 0 ? 1 : 0);
-    const auto x = static_cast<std::int16_t>(variant == 0 ? 1 : 2);
-    std::memcpy(data.data() + vertexOffset + std::size_t(variant) * 6, &x, 2);
+    const auto spread = static_cast<std::int16_t>(variant == 0 ? 12 : 6);
+    const auto points = std::array<std::array<std::int16_t, 3>, 3>{
+      std::array<std::int16_t, 3>{1, 0, 0},
+      std::array<std::int16_t, 3>{spread, spread, 0},
+      std::array<std::int16_t, 3>{static_cast<std::int16_t>(-spread), spread, 0}};
+    for (auto vertex = std::size_t{0}; vertex < 3; ++vertex)
+    {
+      data[vertexInfoOffset + std::size_t(variant) * 3 + vertex] =
+        std::uint8_t(variant == 0 ? 1 : 0);
+      std::memcpy(
+        data.data() + vertexOffset + std::size_t(variant) * 18 + vertex * 6,
+        points[vertex].data(),
+        6);
+    }
   }
   return data;
 }
@@ -248,6 +264,15 @@ TEST_CASE("AssetInspection")
     CHECK(scene->frames.front().triangles.size() == 1);
     CHECK(scene->frames.front().positions.front() == vm::vec3f{11.0f, 0.0f, 0.0f});
     CHECK_FALSE(loadGoldSrcStudioPreviewScene({1, 2, 3}));
+
+    const auto image =
+      renderModelPreview(scene->frames.front(), 64, 0.55f, 0.38f);
+    REQUIRE_FALSE(image.isNull());
+    auto painted = 0;
+    for (auto y = 0; y < image.height(); ++y)
+      for (auto x = 0; x < image.width(); ++x)
+        painted += image.pixelColor(x, y).alpha() > 0 ? 1 : 0;
+    CHECK(painted > 0);
 
     auto asset = inspection::Asset{};
     asset.resource.type = BrowserCellType::Model;
