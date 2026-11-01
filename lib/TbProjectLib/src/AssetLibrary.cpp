@@ -796,7 +796,7 @@ void writeRevisionRow(
   auto prune = detail::Statement{
     db, "DELETE FROM asset_revisions WHERE asset_id=? AND revision<>?"};
   prune.bind(1, assetId);
-  prune.bind(2, static_cast<std::int64_t>(asset.revision));
+  prune.bind(2, asset.revision);
   prune.run();
 }
 
@@ -1315,9 +1315,9 @@ Result<LibraryAsset> AssetLibrary::publishCompatibleContent(
       "WHERE id=?"};
     update.bind(1, asset.nativeFormat);
     update.bind(2, asset.recipe);
-    update.bind(3, static_cast<std::int64_t>(asset.revision));
+    update.bind(3, asset.revision);
     update.bind(4, contentRow);
-    update.bind(5, static_cast<std::int64_t>(asset.size));
+    update.bind(5, asset.size);
     update.bind(6, assetId);
     update.run();
 
@@ -1326,14 +1326,14 @@ Result<LibraryAsset> AssetLibrary::publishCompatibleContent(
       "INSERT INTO asset_revisions(asset_id,revision,display_name,virtual_path,recipe,"
       "content_hash,content,original,size,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?)"};
     insert.bind(1, assetId);
-    insert.bind(2, static_cast<std::int64_t>(asset.revision));
+    insert.bind(2, asset.revision);
     insert.bind(3, asset.displayName);
     insert.bind(4, asset.virtualPath);
     insert.bind(5, asset.recipe);
     insert.bind(6, asset.contentHash);
     insert.bind(7, contentRow);
     insert.bind(8, originalRow);
-    insert.bind(9, static_cast<std::int64_t>(asset.size));
+    insert.bind(9, asset.size);
     insert.bind(10, nowText(db));
     insert.run();
 
@@ -1341,7 +1341,7 @@ Result<LibraryAsset> AssetLibrary::publishCompatibleContent(
     auto prune = detail::Statement{
       db, "DELETE FROM asset_revisions WHERE asset_id=? AND revision<>?"};
     prune.bind(1, assetId);
-    prune.bind(2, static_cast<std::int64_t>(asset.revision));
+    prune.bind(2, asset.revision);
     prune.run();
 
     transaction.commit();
@@ -1461,7 +1461,7 @@ Result<void> AssetLibrary::setFavorite(const std::string& assetId, const bool fa
       "INSERT INTO asset_meta(asset_id,favorite) VALUES(?,?) ON CONFLICT(asset_id) DO UPDATE "
       "SET favorite=excluded.favorite"};
     statement.bind(1, assetId);
-    statement.bind(2, static_cast<std::int64_t>(favorite ? 1 : 0));
+    statement.bind(2, std::uint64_t{favorite ? 1u : 0u});
     statement.run();
   });
 }
