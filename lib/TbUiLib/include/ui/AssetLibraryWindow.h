@@ -82,6 +82,8 @@ class AssetLibraryWindow : public QDialog
   QLineEdit* m_tagsEdit = nullptr;
   QProgressBar* m_convertProgress = nullptr;
   QPushButton* m_convertCancel = nullptr;
+  QPushButton* m_retryButton = nullptr;
+  std::vector<std::string> m_retryIds;
   QTimer* m_convertTimer = nullptr;
   std::vector<std::string> m_convertQueue;
   int m_convertDone = 0;
@@ -149,6 +151,7 @@ private:
   void importFiles(const QStringList& files);
   void runRescan();
   void runConvertPending();
+  void retryFailedConversions();
   void stepConvertQueue();
   void cancelConvertQueue();
   void showOperationReport(

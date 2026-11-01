@@ -1157,6 +1157,9 @@ TEST_CASE("ProjectWindow")
     soundKind->setCurrentIndex(0);
     QApplication::processEvents();
     CHECK(visibleIds().size() == 2);
+    auto* retry = libraryWindow.findChild<QPushButton*>("AssetLibraryRetryFailed");
+    REQUIRE(retry);
+    CHECK(retry->isHidden());
     CHECK(
       grid->currentItem()
         ->data(AssetLibraryItemDelegate::AssetIdRole)

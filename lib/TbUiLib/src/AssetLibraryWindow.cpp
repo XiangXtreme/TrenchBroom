@@ -304,6 +304,7 @@ void AssetLibraryWindow::buildUi()
     createActionButton(header, tr("Rescan"), tr("Re-read the library contents"));
   m_convertButton = createActionButton(
     header, tr("Convert Pending"), tr("Convert source textures to GoldSrc miptex"));
+  m_convertButton->setObjectName("AssetLibraryConvert");
   m_revealButton =
     createActionButton(header, tr("Reveal"), tr("Show the library folder"));
   m_changeButton =
@@ -412,6 +413,14 @@ void AssetLibraryWindow::buildUi()
   m_convertProgress->hide();
   m_convertCancel = new QPushButton{tr("Cancel"), tools};
   m_convertCancel->hide();
+  m_retryButton = new QPushButton{tr("Retry failed"), tools};
+  m_retryButton->setObjectName("AssetLibraryRetryFailed");
+  m_retryButton->setProperty("tbControlRole", "compact");
+  m_retryButton->setToolTip(
+    tr("Re-run conversion only for the assets that failed in the last batch."));
+  m_retryButton->hide();
+  connect(
+    m_retryButton, &QPushButton::clicked, this, &AssetLibraryWindow::retryFailedConversions);
   m_convertTimer = new QTimer{this};
   m_convertTimer->setInterval(0);
   connect(m_convertTimer, &QTimer::timeout, this, &AssetLibraryWindow::stepConvertQueue);
@@ -424,6 +433,7 @@ void AssetLibraryWindow::buildUi()
   toolsLayout->addWidget(m_countLabel);
   toolsLayout->addWidget(m_convertProgress);
   toolsLayout->addWidget(m_convertCancel);
+  toolsLayout->addWidget(m_retryButton);
   toolsLayout->addStretch(1);
   toolsLayout->addWidget(sizeLabel);
   toolsLayout->addWidget(m_sizeSlider);
@@ -1313,6 +1323,25 @@ void AssetLibraryWindow::runRescan()
   m_footer->setText(tr("Rescanned %1 asset(s).").arg(int(m_assets.size())));
 }
 
+void AssetLibraryWindow::retryFailedConversions()
+{
+  if (!m_source || !m_source->canConvert() || m_retryIds.empty())
+    return;
+
+  m_convertQueue = m_retryIds;
+  m_retryIds.clear();
+  m_retryButton->hide();
+  m_convertDone = 0;
+  m_convertFailed = 0;
+  m_conversionReport.clear();
+  m_failedConversions.clear();
+  m_convertProgress->setRange(0, int(m_convertQueue.size()));
+  m_convertProgress->setValue(0);
+  m_convertProgress->show();
+  m_convertCancel->show();
+  m_convertTimer->start();
+}
+
 void AssetLibraryWindow::runConvertPending()
 {
   if (!m_source || !m_source->canConvert())
@@ -1370,7 +1399,18 @@ void AssetLibraryWindow::stepConvertQueue()
         .arg(m_convertDone - m_convertFailed)
         .arg(m_convertFailed > 0 ? tr(", %1 failed").arg(m_convertFailed) : QString{}));
     if (!m_failedConversions.empty())
+    {
+      m_retryIds = m_failedConversions;
+      m_retryButton->setText(
+        tr("Retry failed (%1)").arg(qulonglong(m_retryIds.size())));
+      m_retryButton->show();
       showOperationReport(m_conversionReport, {}, m_failedConversions);
+    }
+    else
+    {
+      m_retryIds.clear();
+      m_retryButton->hide();
+    }
   }
 }
 
