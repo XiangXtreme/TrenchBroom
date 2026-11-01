@@ -299,6 +299,7 @@ void ModelBrowser::setDocument(MapDocument& document)
   m_mapNotifierConnection.disconnect();
   m_notifierConnection.disconnect();
   m_document = &document;
+  m_usageRefreshTimer->stop();
   m_view->setDocument(document);
   connectObservers();
   markAssetsDirty();
@@ -426,6 +427,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_folderTree->setIconSize(QSize{16, 16});
 
   m_scrollBar = new QScrollBar{Qt::Vertical};
+  m_scrollBar->setObjectName("ModelBrowser_ScrollBar");
   m_view = new ModelBrowserView{appController, m_scrollBar, *m_document};
   m_view->setProject(m_project);
   m_view->setSearchText(m_searchBox->text());
@@ -475,6 +477,28 @@ void ModelBrowser::createGui(AppController& appController)
   footerLayout->setContentsMargins(8, 3, 8, 3);
   footerLayout->setSpacing(6);
   footerLayout->addStretch();
+  m_usedButton = new QToolButton{};
+  m_usedButton->setObjectName("ModelBrowser_UsedInMap");
+  m_usedButton->setText(tr("Current map uses"));
+  m_usedButton->setProperty("tbControlRole", "compact");
+  m_usedButton->setCheckable(true);
+  m_usedButton->setEnabled(bool(m_project));
+  m_usageRefreshTimer = new QTimer{this};
+  m_usageRefreshTimer->setSingleShot(true);
+  m_usageRefreshTimer->setInterval(150);
+  connect(m_usageRefreshTimer, &QTimer::timeout, this, [this]() {
+    if (m_usedButton->isChecked())
+    {
+      refreshUsage();
+      applyTypeFilter();
+    }
+  });
+  footerLayout->insertWidget(0, m_usedButton);
+  connect(m_usedButton, &QToolButton::toggled, this, [this]() {
+    m_usageRefreshTimer->stop();
+    refreshUsage();
+    applyTypeFilter();
+  });
   footerLayout->addWidget(new QLabel{tr("Thumbnail size")});
   footerLayout->addWidget(m_iconSizeCombo);
 
@@ -541,6 +565,9 @@ void ModelBrowser::previewAsset(AppController&, const QString& path)
 void ModelBrowser::setMapActionsEnabled(const bool enabled)
 {
   m_mapActionsEnabled = enabled;
+  m_usedButton->setEnabled(enabled && bool(m_project));
+  refreshUsage();
+  applyTypeFilter();
   emit actionContextChanged();
 }
 
@@ -927,6 +954,11 @@ void ModelBrowser::connectObservers()
 void ModelBrowser::connectMapObservers()
 {
   m_mapNotifierConnection.disconnect();
+  m_mapNotifierConnection +=
+    m_document->documentDidChangeNotifier.connect([this](const auto&...) {
+      if (m_usedButton->isChecked())
+        m_usageRefreshTimer->start();
+    });
   m_mapNotifierConnection +=
     m_document->map().modsDidChangeNotifier.connect(this, &ModelBrowser::modsDidChange);
   m_mapNotifierConnection +=
@@ -1661,9 +1693,11 @@ void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
   {
     return;
   }
+  saveBrowsingState();
   m_sourceFilter = source;
   m_folderPath.clear();
   m_currentFolderPath.clear();
+  restoreBrowsingState();
   updateFolderEdit();
   refreshLibraryChoices();
   updateSourceControls();
@@ -1677,30 +1711,90 @@ void ModelBrowser::setTypeFilter(const std::optional<BrowserCellType> type)
   {
     return;
   }
+  saveBrowsingState();
   m_typeFilter = type;
-  // The current folder may not contain the filtered type, so start from the asset root.
-  m_currentFolderPath.clear();
+  restoreBrowsingState();
   updateFolderEdit();
   applyTypeFilter();
+}
+
+int ModelBrowser::browsingStateKey() const
+{
+  return int(m_sourceFilter) * 16 + (m_typeFilter ? int(*m_typeFilter) + 1 : 0);
+}
+
+void ModelBrowser::saveBrowsingState()
+{
+  m_browsingStates[browsingStateKey()] = {
+    m_currentFolderPath,
+    m_searchBox->text(),
+    m_pendingScrollRestore.value_or(m_scrollBar->value())};
+}
+
+void ModelBrowser::restoreBrowsingState()
+{
+  const auto key = browsingStateKey();
+  const auto found = m_browsingStates.find(key);
+  const auto state = found == m_browsingStates.end() ? BrowsingState{} : found->second;
+  m_currentFolderPath = state.folder;
+  m_pendingScrollRestore = state.scroll;
+  m_searchBox->setText(state.search);
 }
 
 void ModelBrowser::applyTypeFilter()
 {
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles)
-    && !m_typeFilter);
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
+    && !m_usedButton->isChecked());
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
+  if (!m_assetRefreshPending && m_pendingScrollRestore)
+  {
+    m_view->setScrollPosition(*m_pendingScrollRestore);
+    m_pendingScrollRestore.reset();
+  }
 }
 
 std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
 {
   auto assets = filterBrowserAssets(m_assets, m_typeFilter);
+  if (m_usedButton->isChecked())
+  {
+    const auto id =
+      m_project && m_mapActionsEnabled ? m_project->assetFor(*m_document) : std::nullopt;
+    assets =
+      id ? browserAssetsUsedInMap(assets, m_usage, *id) : std::vector<BrowserAsset>{};
+  }
   if (m_skyboxFilter)
     std::erase_if(
       assets, [&](const auto& asset) { return asset.skybox != *m_skyboxFilter; });
   return assets;
+}
+
+void ModelBrowser::refreshUsage()
+{
+  m_usage = {};
+  m_usageError.clear();
+  const auto id =
+    m_project && m_mapActionsEnabled ? m_project->assetFor(*m_document) : std::nullopt;
+  if (m_usedButton->isChecked() && id)
+  {
+    const auto audit = auditGoldSrcProjectResources(*m_project, *id);
+    if (audit.is_success())
+      m_usage = audit.value();
+    else
+      m_usageError = QString::fromStdString(std::get<Error>(audit.error()).msg);
+    for (const auto& use : m_usage.uses)
+      if (use.status == ProjectResourceStatus::ScanError)
+        m_usageError += QString::fromStdString(use.detail) + "\n";
+  }
+  m_usedButton->setToolTip(
+    !id ? tr("An active project map is required")
+    : !m_usageError.isEmpty()
+      ? tr("Cannot scan current map: %1").arg(m_usageError)
+      : tr("Explicit MAP resource references, including unsaved edits. Captured "
+           "resources match by identity; game files match by engine path."));
 }
 
 void ModelBrowser::updateSourceControls()
@@ -1821,6 +1915,8 @@ void ModelBrowser::findProjectAssetUses(const QString& projectAssetId)
 
 void ModelBrowser::reloadModels()
 {
+  const auto scroll = m_pendingScrollRestore.value_or(m_scrollBar->value());
+  refreshUsage();
   auto nextAssets = scanAssets();
 
   if (!nextAssets)
@@ -1840,11 +1936,13 @@ void ModelBrowser::reloadModels()
 
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles)
-    && !m_typeFilter);
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
+    && !m_usedButton->isChecked());
   m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
+  m_view->setScrollPosition(scroll);
+  m_pendingScrollRestore.reset();
 }
 
 void ModelBrowser::rebuildFolderTree()
@@ -1875,7 +1973,7 @@ void ModelBrowser::rebuildFolderTree()
   rootItem->setIcon(0, folderIcon);
   m_folderTreeItems.emplace(std::filesystem::path{}, rootItem);
 
-  if (m_folderPath.empty() && !m_typeFilter)
+  if (m_folderPath.empty() && !m_typeFilter && !m_usedButton->isChecked())
   {
     for (const auto& [type, rootPath] : assetBrowserRoots())
     {
@@ -2057,8 +2155,8 @@ void ModelBrowser::rescanWatchedDirectory()
   m_lastWriteTimes = std::move(newLastWriteTimes);
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles)
-    && !m_typeFilter);
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
+    && !m_usedButton->isChecked());
   m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);

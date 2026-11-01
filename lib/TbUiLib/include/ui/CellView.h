@@ -77,6 +77,8 @@ public:
   explicit CellView(AppController& appController, QScrollBar* scrollBar = nullptr);
   void invalidate();
   void clear();
+  /** Restore a pixel position after rebuilding the current layout and scroll range. */
+  void setScrollPosition(int position);
   void resizeEvent(QResizeEvent* event) override;
 
   /**

@@ -85,6 +85,36 @@ std::vector<std::uint8_t> textureWad(const std::string& name)
 
 TEST_CASE("ProjectResourceAudit")
 {
+  SECTION("browser usage is scoped and snapshot identities remain separate")
+  {
+    auto first = BrowserAsset{BrowserCellType::Sound, "sound/test.wav"};
+    first.source = BrowserSource::Project;
+    first.assetId = "first";
+    auto second = first;
+    second.assetId = "second";
+    auto game = BrowserAsset{BrowserCellType::Sound, "sound/test.wav"};
+    auto library = first;
+    library.source = BrowserSource::AssetLibrary;
+    auto captured = library;
+    captured.projectAssetId = "first";
+    auto audit = ProjectResourceAudit{};
+    audit.uses.push_back(
+      {"a",
+       "maps/a.map",
+       1,
+       "ambient_generic.message",
+       "SOUND/TEST.WAV",
+       ProjectResourceStatus::Embedded,
+       {"first"},
+       {}});
+    const auto used =
+      browserAssetsUsedInMap({first, second, library, captured, game}, audit, "a");
+    REQUIRE(used.size() == 3);
+    CHECK(used.front().assetId == "first");
+    CHECK(used[1].projectAssetId == "first");
+    CHECK(used.back().source == BrowserSource::GameFiles);
+    CHECK(browserAssetsUsedInMap({first, second, game}, audit, "b").empty());
+  }
   auto temporary = QTemporaryDir{};
   REQUIRE(temporary.isValid());
   const auto path = pathFromQString(temporary.path()) / "audit.tbproj";
@@ -97,7 +127,7 @@ TEST_CASE("ProjectResourceAudit")
     CHECK(moved.publishPath == sound.publishPath);
     const auto model =
       addFile(*session, "models/custom/tree.mdl", project::AssetType::Model);
-    addMap(*session, "maps/a.map", R"({"classname" "worldspawn"}
+    const auto firstMap = addMap(*session, "maps/a.map", R"({"classname" "worldspawn"}
       {"classname" "ambient_generic" "message" "AMBIENCE\TEST.WAV"}
       {"classname" "cycler" "model" "models/custom/tree.mdl"}
       {"classname" "env_sprite" "model" "sprites/missing.spr"})");
@@ -118,6 +148,24 @@ TEST_CASE("ProjectResourceAudit")
     CHECK(useOf(audit, "sprites/missing.spr").status == ProjectResourceStatus::Missing);
     CHECK_FALSE(session->modified());
     CHECK(checked(session->store().assets()) == before);
+    const auto scoped = checked(auditGoldSrcProjectResources(*session, firstMap.id));
+    CHECK(scoped.mapsScanned == 1);
+    REQUIRE(scoped.uses.size() == 3);
+    for (const auto& scopedUse : scoped.uses)
+      CHECK(scopedUse.mapId == firstMap.id);
+  }
+
+  SECTION("sky group identity resolves from worldspawn face references")
+  {
+    const auto sky = addFile(*session, "skyboxes/live.tbsky", project::AssetType::Skybox);
+    const auto map =
+      addMap(*session, "maps/sky.map", R"({"classname" "worldspawn" "skyname" "live"})");
+    const auto audit = checked(auditGoldSrcProjectResources(*session, map.id));
+    auto entry = BrowserAsset{BrowserCellType::Texture, "skyboxes/live.tbsky"};
+    entry.source = BrowserSource::Project;
+    entry.assetId = sky.id;
+    entry.skybox = true;
+    CHECK(browserAssetsUsedInMap({entry}, audit, map.id).size() == 1);
   }
 
   SECTION("only explicit runtime fields count and indirect catalogs remain visible")

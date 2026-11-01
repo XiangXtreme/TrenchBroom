@@ -27,6 +27,7 @@
 #include <QMimeData>
 #include <QSaveFile>
 #include <QScopeGuard>
+#include <QScrollBar>
 #include <QSettings>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -813,6 +814,106 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(tools->isExpanded());
     CHECK(tools->currentTool() == WorkspaceToolId::ContentBrowser);
     CHECK(session->modified() == modified);
+  }
+
+  SECTION("content browser remembers search independently by asset type")
+  {
+    auto* panel = window.findChild<ProjectAssetPanel*>();
+    REQUIRE(panel);
+    auto* type = panel->findChild<QComboBox*>("ModelBrowser_Type");
+    auto* search = panel->findChild<QLineEdit*>("ModelBrowser_Search");
+    REQUIRE(type);
+    REQUIRE(search);
+    search->setText("all resources");
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
+    CHECK(search->text().isEmpty());
+    search->setText("ambience");
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Model)));
+    CHECK(search->text().isEmpty());
+    search->setText("props");
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
+    CHECK(search->text() == "ambience");
+    type->setCurrentIndex(type->findData(-1));
+    CHECK(search->text() == "all resources");
+  }
+
+  SECTION("content browser restores folder and scrolling after a type or map switch")
+  {
+    for (auto i = 0; i < 60; ++i)
+    {
+      auto input = project::AssetImport{};
+      input.type = project::AssetType::Sound;
+      input.virtualPath = "sound/clip" + std::to_string(i) + ".wav";
+      input.displayName = "Clip " + std::to_string(i);
+      input.original = input.compatible = {1, 2, 3};
+      require(session->importAsset(input));
+    }
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
+    auto* scroll = browser->findChild<QScrollBar*>("ModelBrowser_ScrollBar");
+    auto* view = browser->findChild<ModelBrowserView*>();
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    REQUIRE(source);
+    REQUIRE(type);
+    REQUIRE(scroll);
+    REQUIRE(view);
+    REQUIRE(folders);
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
+    emit view->folderActivated("sound");
+    QTRY_VERIFY(scroll->maximum() > 100);
+    scroll->setValue(100);
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Model)));
+    QApplication::processEvents();
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
+    QTRY_COMPARE(scroll->value(), 100);
+    REQUIRE(folders->currentItem());
+    CHECK(folders->currentItem()->data(0, Qt::UserRole).toString() == "sound");
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::GameFiles)));
+    QApplication::processEvents();
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    QTRY_COMPARE(scroll->value(), 100);
+    tabs->setCurrentIndex(1);
+    QApplication::processEvents();
+    QTRY_COMPARE(scroll->value(), 100);
+    require(session->save());
+  }
+
+  SECTION("current map filter refreshes unsaved sky references and map context")
+  {
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Skybox;
+    input.virtualPath = "skyboxes/live.tbsky";
+    input.displayName = "Live sky";
+    input.original = input.compatible = {'{', '}'};
+    require(session->importAsset(input));
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* used = browser->findChild<QToolButton*>("ModelBrowser_UsedInMap");
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    REQUIRE(source);
+    REQUIRE(used);
+    REQUIRE(folders);
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    used->setChecked(true);
+    QApplication::processEvents();
+    CHECK(folders->findItems("skyboxes", Qt::MatchRecursive).empty());
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "skyname", "live"));
+    QTRY_COMPARE(folders->findItems("skyboxes", Qt::MatchRecursive).size(), 1);
+    tabs->setCurrentIndex(1);
+    QTRY_VERIFY(folders->findItems("skyboxes", Qt::MatchRecursive).empty());
+    tabs->setCurrentIndex(0);
+    QTRY_COMPARE(folders->findItems("skyboxes", Qt::MatchRecursive).size(), 1);
+    require(session->save());
+    closeTab(*tabs, 1);
+    closeTab(*tabs, 0);
+    CHECK_FALSE(used->isEnabled());
+    CHECK(used->toolTip().contains("active project map"));
   }
 
   SECTION("resource details track metadata dependencies and revisions")

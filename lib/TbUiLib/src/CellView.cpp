@@ -155,6 +155,13 @@ void CellView::validate()
   }
 }
 
+void CellView::setScrollPosition(const int position)
+{
+  validate();
+  if (m_scrollBar)
+    m_scrollBar->setValue(position);
+}
+
 const CellView::Group* CellView::groupTitleAt(const float x, const float y)
 {
   const auto visible = visibleRect();

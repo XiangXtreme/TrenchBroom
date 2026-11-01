@@ -25,6 +25,7 @@
 #include "project/LibrarySync.h"
 #include "ui/AssetBrowserModel.h"
 #include "ui/ModelBrowserView.h"
+#include "ui/ProjectResourceAudit.h"
 
 #include "kd/path_hash.h"
 
@@ -71,6 +72,9 @@ private:
   QComboBox* m_typeCombo = nullptr;
   QComboBox* m_libraryCombo = nullptr;
   QComboBox* m_iconSizeCombo = nullptr;
+  QToolButton* m_usedButton = nullptr;
+  ProjectResourceAudit m_usage;
+  QString m_usageError;
   QLineEdit* m_folderEdit = nullptr;
   QLineEdit* m_searchBox = nullptr;
 
@@ -80,6 +84,7 @@ private:
 
   QFileSystemWatcher* m_fileSystemWatcher = nullptr;
   QTimer* m_rescanTimer = nullptr;
+  QTimer* m_usageRefreshTimer = nullptr;
 
   BrowserSourceFilter m_sourceFilter = BrowserSourceFilter::GameFiles;
   // The unified listing mixes maps, textures, models and sounds; a type filter narrows it
@@ -88,6 +93,14 @@ private:
   std::string m_libraryId;
   std::vector<project::LibraryUpdate> m_libraryUpdates;
   QString m_libraryError;
+  struct BrowsingState
+  {
+    std::filesystem::path folder;
+    QString search;
+    int scroll = 0;
+  };
+  std::unordered_map<int, BrowsingState> m_browsingStates;
+  std::optional<int> m_pendingScrollRestore;
 
   std::filesystem::path m_folderPath;
   std::filesystem::path m_currentFolderPath;
@@ -162,6 +175,9 @@ private:
   std::optional<std::vector<BrowserAsset>> scanLibraryAssets() const;
   void setAssetSource(BrowserSourceFilter source);
   void setTypeFilter(std::optional<BrowserCellType> type);
+  int browsingStateKey() const;
+  void saveBrowsingState();
+  void restoreBrowsingState();
   void applyTypeFilter();
   std::vector<BrowserAsset> visibleAssets() const;
   void updateSourceControls();
@@ -170,6 +186,7 @@ private:
   void updateProjectAsset(const QString& projectAssetId);
   void findProjectAssetUses(const QString& projectAssetId);
   void reloadModels();
+  void refreshUsage();
   void rebuildFolderTree();
 
   void documentWasLoaded();

@@ -15,6 +15,7 @@
 
 #include <optional>
 #include <sstream>
+#include <unordered_set>
 
 namespace tb::ui
 {
@@ -180,7 +181,8 @@ Result<std::vector<Reference>> scan(const std::vector<std::uint8_t>& bytes)
 
 } // namespace
 
-Result<ProjectResourceAudit> auditGoldSrcProjectResources(const ProjectSession& session)
+Result<ProjectResourceAudit> auditGoldSrcProjectResources(
+  const ProjectSession& session, const std::optional<std::string>& mapId)
 {
   const auto index = ProjectReferenceIndex::build(session);
   if (index.is_error())
@@ -203,7 +205,7 @@ Result<ProjectResourceAudit> auditGoldSrcProjectResources(const ProjectSession& 
 
   for (const auto& map : assets.value())
   {
-    if (map.type != project::AssetType::Map)
+    if (map.type != project::AssetType::Map || (mapId && map.id != *mapId))
       continue;
     const auto references = session.workingMapContents(map.id) | kdl::and_then(scan);
     if (references.is_error())
@@ -244,11 +246,10 @@ Result<ProjectResourceAudit> auditGoldSrcProjectResources(const ProjectSession& 
         use.assetIds.reserve(match.assets.size());
         for (const auto& asset : match.assets)
           use.assetIds.push_back(asset.id);
-        use.status = match.status == ReferenceStatus::Resolved
-                       ? ProjectResourceStatus::Embedded
-                     : match.status == ReferenceStatus::Ambiguous
-                       ? ProjectResourceStatus::Ambiguous
-                       : ProjectResourceStatus::Missing;
+        use.status =
+          match.status == ReferenceStatus::Resolved    ? ProjectResourceStatus::Embedded
+          : match.status == ReferenceStatus::Ambiguous ? ProjectResourceStatus::Ambiguous
+                                                       : ProjectResourceStatus::Missing;
         if (use.status == ProjectResourceStatus::Missing)
           use.detail =
             "Not embedded in this project; may be supplied by the installed game.";
@@ -264,6 +265,39 @@ Result<ProjectResourceAudit> auditGoldSrcProjectResources(const ProjectSession& 
       }
       result.uses.push_back(std::move(use));
     }
+  }
+  return result;
+}
+
+std::vector<BrowserAsset> browserAssetsUsedInMap(
+  const std::vector<BrowserAsset>& assets,
+  const ProjectResourceAudit& audit,
+  const std::string& mapId)
+{
+  auto ids = std::unordered_set<std::string>{};
+  auto paths = std::unordered_set<std::string>{};
+  for (const auto& use : audit.uses)
+  {
+    if (
+      use.mapId != mapId || use.status == ProjectResourceStatus::ScanError
+      || use.status == ProjectResourceStatus::InvalidPath
+      || use.status == ProjectResourceStatus::Unsupported)
+      continue;
+    ids.insert(use.assetIds.begin(), use.assetIds.end());
+    if (const auto path = normalizeGamePath(use.reference))
+      paths.insert(*path);
+  }
+  auto result = std::vector<BrowserAsset>{};
+  for (const auto& asset : assets)
+  {
+    const auto& id =
+      asset.source == BrowserSource::AssetLibrary ? asset.projectAssetId : asset.assetId;
+    // Project identity wins; a different snapshot with the same path is not a use.
+    const auto gamePath = asset.source == BrowserSource::GameFiles
+                            ? normalizeGamePath(asset.path.generic_string())
+                            : std::nullopt;
+    if ((!id.empty() && ids.contains(id)) || (gamePath && paths.contains(*gamePath)))
+      result.push_back(asset);
   }
   return result;
 }

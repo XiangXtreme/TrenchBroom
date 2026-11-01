@@ -5,8 +5,10 @@
 #pragma once
 
 #include "base/Result.h"
+#include "ui/AssetBrowserModel.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -44,5 +46,11 @@ struct ProjectResourceAudit
 
 // Explicit GoldSrc MAP references only. Embedded means present, not engine validated.
 // Results are rebuilt from current contents, including open unsaved maps. No mutation.
-Result<ProjectResourceAudit> auditGoldSrcProjectResources(const ProjectSession& session);
+Result<ProjectResourceAudit> auditGoldSrcProjectResources(
+  const ProjectSession& session, const std::optional<std::string>& mapId = std::nullopt);
+
+std::vector<BrowserAsset> browserAssetsUsedInMap(
+  const std::vector<BrowserAsset>& assets,
+  const ProjectResourceAudit& audit,
+  const std::string& mapId);
 } // namespace tb::ui
