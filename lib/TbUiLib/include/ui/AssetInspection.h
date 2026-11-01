@@ -77,7 +77,9 @@ QImage renderSkyView(
 /** GoldSrc palettes contain RGB triples. Masked miptex index 255 is transparent. */
 Result<QImage> decodeImage(const Bytes& bytes);
 Result<Asset> readLibraryAsset(
-  const AssetLibrarySource& source, const project::LibraryAsset& asset);
+  const AssetLibrarySource& source,
+  const project::LibraryAsset& asset,
+  ProjectSession* project = nullptr);
 Result<Asset> readBrowserAsset(
   const BrowserAsset& asset, ProjectSession* project, MapDocument& document);
 } // namespace inspection

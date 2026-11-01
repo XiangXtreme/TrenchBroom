@@ -764,6 +764,9 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
 
 void AssetLibraryWindow::reload()
 {
+  // Reload is also the dependency/source invalidation boundary. Filtering keeps caches.
+  m_thumbnailCache.clear();
+  m_waveInfoCache.clear();
   m_assets.clear();
   if (!m_source)
   {
@@ -1042,13 +1045,10 @@ void AssetLibraryWindow::refreshGrid()
                          typeText(asset.type),
                          sizeText(asset.size)));
 
-    const auto image = previewImage(asset, true, 256);
+    const auto image = thumbnail(asset);
     if (!image.isNull())
     {
-      item->setData(
-        AssetLibraryItemDelegate::ThumbnailRole,
-        QPixmap::fromImage(
-          image.scaled(256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+      item->setData(AssetLibraryItemDelegate::ThumbnailRole, QPixmap::fromImage(image));
     }
     ++shown;
   }
@@ -1195,18 +1195,38 @@ void AssetLibraryWindow::clearInspector()
     m_properties->removeRow(0);
 }
 
-QImage AssetLibraryWindow::previewImage(
-  const project::LibraryAsset& asset, const bool converted, const int size) const
+QImage AssetLibraryWindow::thumbnail(const project::LibraryAsset& asset) const
 {
-  if (!m_source)
+  const auto key = QString::fromStdString(asset.id);
+  if (const auto* cached = m_thumbnailCache.object(key))
+    return *cached;
+  auto image = loadThumbnail(asset);
+  if (!image.isNull())
+    image = image.scaled(256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  const auto cost = std::max(qsizetype{1}, (image.sizeInBytes() + 1023) / 1024);
+  m_thumbnailCache.insert(key, new QImage{image}, cost);
+  return image;
+}
+
+QImage AssetLibraryWindow::loadThumbnail(const project::LibraryAsset& asset) const
+{
+  if (
+    !m_source || asset.type == project::AssetType::Sound
+    || asset.type == project::AssetType::Skybox)
     return {};
 
-  const auto bytes =
-    converted ? m_source->readContent(asset.id) : m_source->readOriginal(asset.id);
+  if (asset.type == project::AssetType::Model)
+    return renderModelThumbnail(
+      pathFromQString(m_source->location()), asset.sourceContainer, 256);
+  const auto bytes = m_source->readContent(asset.id);
   if (bytes.is_error())
     return {};
-  if (const auto image = inspection::decodeImage(bytes.value()); image.is_success())
-    return image.value();
+  if (asset.type == project::AssetType::Texture)
+  {
+    if (const auto image = inspection::decodeImage(bytes.value()); image.is_success())
+      return image.value();
+    return {};
+  }
   if (asset.type == project::AssetType::Sprite)
   {
     const auto sprite = loadGoldSrcSpritePreview(bytes.value());
@@ -1219,9 +1239,6 @@ QImage AssetLibraryWindow::previewImage(
         QImage::Format_RGBA8888}
         .copy();
   }
-  if (asset.type == project::AssetType::Model)
-    return renderModelThumbnail(
-      pathFromQString(m_source->location()), asset.sourceContainer, size);
   if (asset.type == project::AssetType::Prefab)
   {
     // An editor-saved thumbnail wins; otherwise draw the authored footprint so the card
@@ -1231,11 +1248,11 @@ QImage AssetLibraryWindow::previewImage(
       prefabThumbnailPath(location / std::filesystem::path{asset.virtualPath}))};
     if (!saved.isNull())
       return saved;
-    const auto& data = bytes.value();
+    const auto& contentsBytes = bytes.value();
     if (const auto contents =
-          readPrefabContents(std::string{data.begin(), data.end()});
+          readPrefabContents(std::string{contentsBytes.begin(), contentsBytes.end()});
         contents.is_success())
-      return renderPrefabThumbnail(contents.value(), size);
+      return renderPrefabThumbnail(contents.value(), 256);
   }
   return {};
 }
@@ -1244,14 +1261,15 @@ void AssetLibraryWindow::updatePreview()
 {
   if (const auto* asset = selectedAsset(); asset && m_source)
   {
-    auto inspected = inspection::readLibraryAsset(*m_source, *asset);
+    const auto project = m_project.lock();
+    auto inspected = inspection::readLibraryAsset(*m_source, *asset, project.get());
     if (inspected.is_success())
     {
       auto loaded = std::move(inspected).value();
       if (m_projectAssetId)
       {
         loaded.resource.projectAssetId = *m_projectAssetId;
-        if (const auto project = m_project.lock())
+        if (project)
         {
           const auto snapshot = project->store().findAsset(*m_projectAssetId);
           if (snapshot.is_success() && snapshot.value())

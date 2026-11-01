@@ -1094,6 +1094,118 @@ TEST_CASE("ProjectWindow")
     CHECK(alphaDocument->map().modificationCount() == mapChanges);
   }
 
+  SECTION("sound filters isolate current library content from project snapshots")
+  {
+    const auto folder = directory.filePath("sound-identity-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    const auto path = folder + "/clip.wav";
+    const auto writeSound = [&](const bool loop) {
+      auto file = QFile{path};
+      REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+      const auto bytes = wavBytes(loop);
+      REQUIRE(
+        file.write(reinterpret_cast<const char*>(bytes.data()), qint64(bytes.size()))
+        == qint64(bytes.size()));
+    };
+    writeSound(true);
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->scan());
+    require(session->attachLibrary(pathFromQString(folder)));
+    const auto resource = require(library->assets()).front();
+    auto libraryWindow = AssetLibraryWindow{folder, false, &window};
+    libraryWindow.setProjectContext(session);
+    libraryWindow.findChild<QPushButton*>("AssetInspector_Capture")->click();
+    REQUIRE(
+      require(session->projectAssetForLibraryAsset(library->info().id, resource.id)));
+    writeSound(false);
+    auto source = openLocalAssetLibrary(pathFromQString(folder));
+    require(source->rescan());
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* sourceChoice = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* kind = browser->findChild<QComboBox*>("ModelBrowser_SoundKind");
+    auto* view = browser->findChild<ModelBrowserView*>();
+    REQUIRE(sourceChoice);
+    REQUIRE(kind);
+    REQUIRE(view);
+    sourceChoice->setCurrentIndex(
+      sourceChoice->findData(int(BrowserSourceFilter::AssetLibrary)));
+    kind->setCurrentIndex(kind->findData(int(inspection::WaveKind::OneShot)));
+    QTRY_COMPARE(view->assets().size(), 1u);
+    sourceChoice->setCurrentIndex(
+      sourceChoice->findData(int(BrowserSourceFilter::Project)));
+    QTRY_VERIFY(view->assets().empty());
+    kind->setCurrentIndex(kind->findData(int(inspection::WaveKind::Looping)));
+    QTRY_COMPARE(view->assets().size(), 1u);
+  }
+
+  SECTION("library prefab inspection uses the bound project reference context")
+  {
+    const auto folder = directory.filePath("prefab-context-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    auto file = QFile{folder + "/empty.tbprefab"};
+    REQUIRE(file.open(QIODevice::WriteOnly));
+    REQUIRE(file.write("{\n\"classname\" \"worldspawn\"\n}\n") > 0);
+    file.close();
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->scan());
+    require(session->attachLibrary(pathFromQString(folder)));
+    auto source = openLocalAssetLibrary(pathFromQString(folder));
+    const auto resource = require(library->assets()).front();
+    CHECK_FALSE(
+      require(inspection::readLibraryAsset(*source, resource)).prefabIssues.isEmpty());
+    CHECK(require(inspection::readLibraryAsset(*source, resource, session.get()))
+            .prefabIssues.isEmpty());
+    auto asset = BrowserAsset{};
+    asset.source = BrowserSource::AssetLibrary;
+    asset.libraryId = library->info().id;
+    asset.libraryAssetId = resource.id;
+    const auto inspected =
+      require(inspection::readBrowserAsset(asset, session.get(), *alphaDocument));
+    REQUIRE(inspected.prefab);
+    CHECK(inspected.prefabIssues.isEmpty());
+  }
+
+  SECTION("library thumbnails survive filtering and invalidate on source reload")
+  {
+    const auto folder = directory.filePath("thumbnail-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    const auto path = folder + "/color.png";
+    auto image = QImage{32, 32, QImage::Format_RGB32};
+    image.fill(Qt::red);
+    REQUIRE(image.save(path));
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->scan());
+    auto browser = AssetLibraryWindow{folder, false, &window};
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* search = browser.findChild<QLineEdit*>("AssetLibrarySearch");
+    REQUIRE(grid);
+    REQUIRE(search);
+    const auto thumbnail = [grid]() {
+      REQUIRE(grid->count() == 1);
+      return grid->item(0)
+        ->data(AssetLibraryItemDelegate::ThumbnailRole)
+        .value<QPixmap>()
+        .toImage();
+    };
+    REQUIRE_FALSE(thumbnail().isNull());
+    CHECK(thumbnail().pixelColor(0, 0) == QColor{Qt::red});
+    // Filtering must reuse the card image without reading the changed file.
+    image.fill(Qt::blue);
+    REQUIRE(image.save(path));
+    search->setText("absent");
+    CHECK(grid->count() == 0);
+    search->clear();
+    CHECK(thumbnail().pixelColor(0, 0) == QColor{Qt::red});
+    auto source = openLocalAssetLibrary(pathFromQString(folder));
+    REQUIRE(source);
+    require(source->rescan());
+    QTRY_COMPARE(thumbnail().pixelColor(0, 0), QColor{Qt::blue});
+  }
+
   SECTION("library and project browsers share metadata capture and identity navigation")
   {
     const auto folder = directory.filePath("shared-library");

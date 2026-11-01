@@ -377,7 +377,9 @@ Result<QImage> decodeImage(const Bytes& bytes)
 }
 
 Result<Asset> readLibraryAsset(
-  const AssetLibrarySource& source, const project::LibraryAsset& asset)
+  const AssetLibrarySource& source,
+  const project::LibraryAsset& asset,
+  ProjectSession* session)
 {
   auto original = source.readOriginal(asset.id);
   if (original.is_error())
@@ -421,7 +423,7 @@ Result<Asset> readLibraryAsset(
     checkSky(result);
   }
   if (result.resource.type == BrowserCellType::Prefab)
-    inspectPrefab(result, nullptr);
+    inspectPrefab(result, session);
   return result;
 }
 
@@ -448,15 +450,13 @@ Result<Asset> readBrowserAsset(
       for (const auto& entry : entries.value())
         if (entry.id == asset.libraryAssetId)
         {
-          auto result = readLibraryAsset(*source, entry);
+          auto result = readLibraryAsset(*source, entry, session);
           if (result.is_success())
           {
             auto loaded = std::move(result).value();
             loaded.resource.projectAssetId = asset.projectAssetId;
             loaded.resource.projectRevision = asset.projectRevision;
             loaded.resource.projectUpdateAvailable = asset.projectUpdateAvailable;
-            if (loaded.resource.type == BrowserCellType::Prefab)
-              inspectPrefab(loaded, session);
             return loaded;
           }
           return result;

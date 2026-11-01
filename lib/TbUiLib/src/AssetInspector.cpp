@@ -594,7 +594,10 @@ void AssetInspector::refreshPreview()
 
 void AssetInspector::showModel()
 {
-  if (!m_model || m_modelFrame->currentIndex() < 0)
+  if (
+    !m_asset || m_asset->resource.type != BrowserCellType::Model || !m_model
+    || m_modelFrame->currentIndex() < 0
+    || size_t(m_modelFrame->currentIndex()) >= m_model->frames.size())
     return;
   m_image->orbit = [this](const QPoint delta) {
     m_modelYaw += float(delta.x()) * 0.01f;

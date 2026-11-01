@@ -3,6 +3,7 @@
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
 #include <QBuffer>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QImage>
 #include <QLabel>
@@ -334,6 +335,26 @@ TEST_CASE("AssetInspection")
     CHECK(summary->text().contains("bind pose"));
     body->setCurrentIndex(1);
     CHECK(summary->text().contains("bind pose"));
+  }
+  SECTION("studio metadata without a readable mesh keeps preview controls safe")
+  {
+    auto bytes = studioModel();
+    // A valid metadata header with no body parts cannot supply a preview frame.
+    std::fill(bytes.begin() + 204, bytes.begin() + 208, std::uint8_t{0});
+    const auto scene = loadGoldSrcStudioPreviewScene(bytes);
+    REQUIRE(scene);
+    REQUIRE(scene->frames.empty());
+    auto asset = inspection::Asset{};
+    asset.resource.type = BrowserCellType::Model;
+    asset.compatible = bytes;
+    asset.original = bytes;
+    auto inspector = AssetInspector{};
+    inspector.setAsset(asset);
+    for (auto* control : inspector.findChildren<QCheckBox*>())
+      control->setChecked(true);
+    CHECK(
+      inspector.findChild<QLabel*>("AssetInspector_Summary")->text()
+      == "The studio model has no readable bind pose.");
   }
   SECTION("sky preview separates source and published faces")
   {

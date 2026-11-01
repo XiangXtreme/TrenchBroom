@@ -5,6 +5,7 @@
 */
 #pragma once
 
+#include <QCache>
 #include <QDialog>
 #include <QString>
 
@@ -96,6 +97,8 @@ class AssetLibraryWindow : public QDialog
   inspection::WaveKind m_waveKind = inspection::WaveKind::All;
   mutable std::unordered_map<std::string, std::optional<inspection::WaveInfo>>
     m_waveInfoCache;
+  // KiB budget; cache only card-sized images, including failed decodes.
+  mutable QCache<QString, QImage> m_thumbnailCache{16 * 1024};
   QLabel* m_projectScope = nullptr;
   QTimer* m_reloadTimer = nullptr;
   AssetLibraryListView* m_categories = nullptr;
@@ -167,7 +170,8 @@ private:
   void updateProjectActions();
   void captureSelected();
   void updateSelected();
-  QImage previewImage(const project::LibraryAsset& asset, bool converted, int size) const;
+  QImage loadThumbnail(const project::LibraryAsset& asset) const;
+  QImage thumbnail(const project::LibraryAsset& asset) const;
   std::optional<inspection::WaveInfo> waveInfo(const project::LibraryAsset& asset) const;
 
   const project::LibraryAsset* selectedAsset() const;

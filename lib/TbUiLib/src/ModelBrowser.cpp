@@ -1852,18 +1852,26 @@ std::optional<inspection::WaveInfo> ModelBrowser::waveInfoFor(
   const BrowserAsset& asset) const
 {
   const auto key = [&]() {
-    if (!asset.libraryId.empty())
+    if (asset.source == BrowserSource::AssetLibrary)
       return fmt::format(
         "library/{}/{}/{}", asset.libraryId, asset.libraryAssetId, asset.libraryRevision);
-    if (!asset.projectAssetId.empty())
-      return fmt::format("project/{}/{}", asset.projectAssetId, asset.projectRevision);
-    return fmt::format("path/{}", asset.path.generic_string());
+    if (asset.source == BrowserSource::Project)
+      return fmt::format(
+        "project/{}/{}/{}",
+        asset.projectId,
+        asset.projectAssetId.empty() ? asset.assetId : asset.projectAssetId,
+        asset.revision);
+    return fmt::format(
+      "path/{}/{}/{}",
+      asset.path.generic_string(),
+      asset.absolutePath.generic_string(),
+      asset.lastModified ? asset.lastModified->time_since_epoch().count() : 0);
   }();
   if (const auto cached = m_waveInfoCache.find(key); cached != m_waveInfoCache.end())
     return cached->second;
 
   auto info = std::optional<inspection::WaveInfo>{};
-  if (m_project && !asset.path.empty())
+  if (!asset.path.empty())
   {
     const auto inspected =
       inspection::readBrowserAsset(asset, m_project.get(), *m_document);
