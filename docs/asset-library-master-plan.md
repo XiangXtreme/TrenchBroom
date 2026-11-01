@@ -135,5 +135,8 @@
 
 后续可选增强（不属于本轮总纲验收）：
 
+资源浏览与使用体验的实施清单见
+[Asset Browsers 与 Content Browser 体验增强 TODO](asset-browser-experience-todo.md)。
+
 - 库管理器里的纹理重命名（需要按新名字重新转换并检查重名）。
 - 旧工程 `libraries` 表的正式清理（当前只是兜底读取，不再写入）。
