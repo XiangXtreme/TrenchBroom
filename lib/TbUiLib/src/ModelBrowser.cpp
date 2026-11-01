@@ -95,6 +95,8 @@
 #include "kd/path_utils.h"
 #include "kd/ranges/to.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <optional>
 #include <ranges>
@@ -514,10 +516,25 @@ void ModelBrowser::createGui(AppController& appController)
   m_tagCombo->setToolTip(metadataScope);
   footerLayout->insertWidget(1, m_favoritesButton);
   footerLayout->insertWidget(2, m_tagCombo);
+  m_soundCombo = new QComboBox{};
+  m_soundCombo->setObjectName("ModelBrowser_SoundKind");
+  m_soundCombo->setProperty("tbControlRole", "compact");
+  m_soundCombo->addItem(tr("All sounds"), int(inspection::WaveKind::All));
+  m_soundCombo->addItem(tr("Looping"), int(inspection::WaveKind::Looping));
+  m_soundCombo->addItem(tr("One-shot"), int(inspection::WaveKind::OneShot));
+  m_soundCombo->setMaximumWidth(128);
+  m_soundCombo->setToolTip(tr(
+    "Filter sound assets by their WAV sampler loop chunk. Waveforms are read on demand "
+    "and cached until the asset revision changes."));
+  footerLayout->insertWidget(3, m_soundCombo);
   connect(
     m_favoritesButton, &QToolButton::toggled, this, [this]() { applyTypeFilter(); });
   connect(
     m_tagCombo, &QComboBox::currentIndexChanged, this, [this]() { applyTypeFilter(); });
+  connect(m_soundCombo, &QComboBox::currentIndexChanged, this, [this]() {
+    m_waveKind = inspection::WaveKind(m_soundCombo->currentData().toInt());
+    applyTypeFilter();
+  });
   connect(m_usedButton, &QToolButton::toggled, this, [this]() {
     m_usageRefreshTimer->stop();
     refreshUsage();
@@ -1821,7 +1838,46 @@ std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
   if (m_skyboxFilter)
     std::erase_if(
       assets, [&](const auto& asset) { return asset.skybox != *m_skyboxFilter; });
+  if (m_waveKind != inspection::WaveKind::All)
+    std::erase_if(assets, [&](const auto& asset) {
+      if (asset.type != BrowserCellType::Sound)
+        return true;
+      const auto info = waveInfoFor(asset);
+      return !info || !inspection::matchesWaveKind(*info, m_waveKind);
+    });
   return assets;
+}
+
+std::optional<inspection::WaveInfo> ModelBrowser::waveInfoFor(
+  const BrowserAsset& asset) const
+{
+  const auto key = [&]() {
+    if (!asset.libraryId.empty())
+      return fmt::format(
+        "library/{}/{}/{}", asset.libraryId, asset.libraryAssetId, asset.libraryRevision);
+    if (!asset.projectAssetId.empty())
+      return fmt::format("project/{}/{}", asset.projectAssetId, asset.projectRevision);
+    return fmt::format("path/{}", asset.path.generic_string());
+  }();
+  if (const auto cached = m_waveInfoCache.find(key); cached != m_waveInfoCache.end())
+    return cached->second;
+
+  auto info = std::optional<inspection::WaveInfo>{};
+  if (m_project && !asset.path.empty())
+  {
+    const auto inspected =
+      inspection::readBrowserAsset(asset, m_project.get(), *m_document);
+    if (inspected.is_success())
+    {
+      const auto wave = inspection::readWaveInfo(inspected.value().compatible);
+      if (wave.is_success())
+        info = wave.value();
+    }
+  }
+  if (m_waveInfoCache.size() > 4096)
+    m_waveInfoCache.clear();
+  m_waveInfoCache[key] = info;
+  return info;
 }
 
 void ModelBrowser::refreshMetadataFilters()

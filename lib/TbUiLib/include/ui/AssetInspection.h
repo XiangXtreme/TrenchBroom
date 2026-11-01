@@ -11,6 +11,7 @@
 #include "base/Result.h"
 #include "project/ProjectAsset.h"
 #include "ui/AssetBrowserModel.h"
+#include "ui/PrefabAsset.h"
 
 #include <array>
 #include <cstdint>
@@ -35,6 +36,16 @@ struct WaveInfo
 };
 Result<WaveInfo> readWaveInfo(const Bytes& bytes);
 
+/** Sound browser filter: every waveform, only looping ones, or only one-shot cues. */
+enum class WaveKind
+{
+  All,
+  Looping,
+  OneShot,
+};
+
+bool matchesWaveKind(const WaveInfo& info, WaveKind kind);
+
 /** A read-only selection snapshot. Each host owns one; no global selection or cache. */
 struct Asset
 {
@@ -49,6 +60,10 @@ struct Asset
   std::array<QImage, 6> skyOriginal;
   std::array<QImage, 6> skyCompatible;
   QStringList diagnostics;
+  // Set for prefabs: authored volumes plus explicit resource references.
+  std::optional<PrefabContents> prefab;
+  // Reference problems, or a note that they could not be checked without a project.
+  QStringList prefabIssues;
 };
 
 QImage renderSkyCross(const std::array<QImage, 6>& faces, int side = 160);

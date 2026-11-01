@@ -278,6 +278,76 @@ TEST_CASE("AssetInspection")
     body->setCurrentIndex(1);
     CHECK(summary->text().contains("bind pose"));
   }
+  SECTION("sky preview separates source and published faces")
+  {
+    auto asset = inspection::Asset{};
+    asset.resource.type = BrowserCellType::Texture;
+    asset.resource.skybox = true;
+    asset.name = "night";
+    asset.resource.path = "gfx/env/night";
+    for (auto i = size_t{}; i < 6; ++i)
+    {
+      asset.skyOriginal[i] = QImage{8, 8, QImage::Format_RGB32};
+      asset.skyOriginal[i].fill(Qt::blue);
+      asset.skyCompatible[i] = QImage{4, 4, QImage::Format_RGB32};
+      asset.skyCompatible[i].fill(Qt::green);
+    }
+    auto inspector = AssetInspector{};
+    inspector.setAsset(asset);
+    auto* summary = inspector.findChild<QLabel*>("AssetInspector_Summary");
+    auto* mode = inspector.findChild<QComboBox*>("AssetInspector_ContentKind");
+    REQUIRE(summary != nullptr);
+    REQUIRE(mode != nullptr);
+    CHECK(summary->text().contains("Published"));
+    CHECK(summary->text().contains("source 8 × 8"));
+    CHECK(summary->text().contains("published 4 × 4"));
+    mode->setCurrentIndex(1);
+    CHECK(summary->text().contains("Source"));
+  }
+  SECTION("prefabs report authored volumes and references")
+  {
+    const auto text = std::string{
+      "{\n"
+      "\"classname\" \"worldspawn\"\n"
+      "\"skyname\" \"desert\"\n"
+      "{\n"
+      "( 0 0 0 ) ( 128 0 0 ) ( 0 128 0 ) WALL01 0 0 0 1 1\n"
+      "( 0 0 64 ) ( 128 0 64 ) ( 0 128 64 ) WALL01 0 0 0 1 1\n"
+      "}\n"
+      "}\n"
+      "{\n"
+      "\"classname\" \"cycler\"\n"
+      "\"model\" \"models/barrel.mdl\"\n"
+      "}\n"};
+    auto asset = inspection::Asset{};
+    asset.resource.type = BrowserCellType::Prefab;
+    asset.resource.path = "prefabs/crate.tbprefab";
+    asset.name = "crate";
+    asset.original.assign(text.begin(), text.end());
+    asset.compatible = asset.original;
+    asset.prefab = require(readPrefabContents(text));
+    asset.prefabIssues << "Open the prefab from a project to verify references.";
+
+    auto inspector = AssetInspector{};
+    inspector.setAsset(asset);
+    auto* summary = inspector.findChild<QLabel*>("AssetInspector_Summary");
+    auto* details = inspector.findChild<QTreeWidget*>("AssetInspector_Details");
+    REQUIRE(summary != nullptr);
+    REQUIRE(details != nullptr);
+    CHECK(summary->text().contains("1 brushes"));
+    CHECK(summary->text().contains("128.0 × 128.0 × 64.0"));
+    CHECK(summary->text().contains("Open the prefab from a project"));
+    const auto valueFor = [details](const QString& key) {
+      const auto items = details->findItems(key, Qt::MatchExactly, 0);
+      return items.empty() ? QString{} : items.front()->text(1);
+    };
+    CHECK(valueFor("Brushes") == "1");
+    CHECK(valueFor("Entities") == "1");
+    CHECK(valueFor("Faces") == "2");
+    CHECK(valueFor("Materials") == "WALL01");
+    CHECK(valueFor("Models and sprites") == "models/barrel.mdl");
+    CHECK(valueFor("Sky") == "desert");
+  }
   SECTION("WAVE chunks are bounded and sampler loop is optional")
   {
     auto bytes = inspection::Bytes{

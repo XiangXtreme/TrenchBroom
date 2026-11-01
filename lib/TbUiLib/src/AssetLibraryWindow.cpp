@@ -60,6 +60,8 @@
 #include "ui/QPathUtils.h"
 #include "ui/RecentDocuments.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -592,7 +594,22 @@ void AssetLibraryWindow::buildUi()
   m_tagCombo->setProperty("tbControlRole", "compact");
   m_tagCombo->setMaximumWidth(180);
   toolsLayout->insertWidget(0, m_tagCombo);
+  m_soundCombo = new QComboBox{};
+  m_soundCombo->setObjectName("AssetLibrary_SoundKind");
+  m_soundCombo->setProperty("tbControlRole", "compact");
+  m_soundCombo->addItem(tr("All sounds"), int(inspection::WaveKind::All));
+  m_soundCombo->addItem(tr("Looping"), int(inspection::WaveKind::Looping));
+  m_soundCombo->addItem(tr("One-shot"), int(inspection::WaveKind::OneShot));
+  m_soundCombo->setMaximumWidth(128);
+  m_soundCombo->setToolTip(
+    tr("Filter sounds by their WAV sampler loop chunk. Waveforms are read on demand and "
+       "cached until the library revision changes."));
+  toolsLayout->insertWidget(1, m_soundCombo);
   connect(m_tagCombo, &QComboBox::currentIndexChanged, this, [this]() { refreshGrid(); });
+  connect(m_soundCombo, &QComboBox::currentIndexChanged, this, [this]() {
+    m_waveKind = inspection::WaveKind(m_soundCombo->currentData().toInt());
+    refreshGrid();
+  });
   connect(m_usage, &QListWidget::itemDoubleClicked, this, [this](const auto* item) {
     const auto mapId = item->data(Qt::UserRole).toString();
     if (const auto project = m_project.lock(); project && !mapId.isEmpty())
@@ -924,6 +941,30 @@ void AssetLibraryWindow::refreshCategories()
   }
 }
 
+std::optional<inspection::WaveInfo> AssetLibraryWindow::waveInfo(
+  const project::LibraryAsset& asset) const
+{
+  const auto key = fmt::format("{}/{}/{}", asset.id, asset.contentHash, asset.revision);
+  if (const auto cached = m_waveInfoCache.find(key); cached != m_waveInfoCache.end())
+    return cached->second;
+
+  auto info = std::optional<inspection::WaveInfo>{};
+  if (m_source)
+  {
+    const auto bytes = m_source->readContent(asset.id);
+    if (bytes.is_success())
+    {
+      const auto wave = inspection::readWaveInfo(bytes.value());
+      if (wave.is_success())
+        info = wave.value();
+    }
+  }
+  if (m_waveInfoCache.size() > 4096)
+    m_waveInfoCache.clear();
+  m_waveInfoCache[key] = info;
+  return info;
+}
+
 void AssetLibraryWindow::refreshGrid()
 {
   const auto selection = m_selectedId;
@@ -957,6 +998,14 @@ void AssetLibraryWindow::refreshGrid()
     if (!assetMetadataMatches(
           metadata, m_filter == "favourites", m_tagCombo->currentData().toString()))
       continue;
+    if (m_waveKind != inspection::WaveKind::All)
+    {
+      if (asset.type != project::AssetType::Sound)
+        continue;
+      const auto info = waveInfo(asset);
+      if (!info || !inspection::matchesWaveKind(*info, m_waveKind))
+        continue;
+    }
     const auto displayName = QString::fromStdString(asset.displayName);
     if (!assetSearchMatches(
           displayName,

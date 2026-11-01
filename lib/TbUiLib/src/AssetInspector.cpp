@@ -187,8 +187,14 @@ AssetInspector::AssetInspector(QWidget* parent)
   volume->setAccessibleName(tr("Preview volume"));
   volume->setRange(0, 100);
   volume->setValue(50);
+  m_autoplay = new QCheckBox{tr("Auto-play")};
+  m_autoplay->setObjectName("AssetInspector_Autoplay");
+  m_autoplay->setAccessibleName(tr("Auto-play preview"));
+  m_autoplay->setToolTip(
+    tr("Start playing as soon as a sound is selected in this preview."));
   buttons->addWidget(m_play);
   buttons->addWidget(stop);
+  buttons->addWidget(m_autoplay);
   buttons->addWidget(new QLabel{tr("Volume")});
   buttons->addWidget(volume, 1);
   audioLayout->addWidget(m_position);
@@ -459,7 +465,7 @@ void AssetInspector::refreshPreview()
     m_mode->currentIndex() == 0 ? m_asset->compatible : m_asset->original;
   const auto type = m_asset->resource.type;
   m_audioControls->setVisible(type == BrowserCellType::Sound);
-  m_image->setVisible(type != BrowserCellType::Sound);
+  m_image->setVisible(type != BrowserCellType::Sound && type != BrowserCellType::Prefab);
   m_spriteControls->setVisible(type == BrowserCellType::Sprite);
   m_modelControls->setVisible(type == BrowserCellType::Model);
   m_sprite.reset();
@@ -479,6 +485,11 @@ void AssetInspector::refreshPreview()
   if (m_asset->resource.skybox)
   {
     showSky();
+    return;
+  }
+  if (type == BrowserCellType::Prefab)
+  {
+    showPrefab();
     return;
   }
   if (type == BrowserCellType::Sound)
@@ -503,6 +514,12 @@ void AssetInspector::refreshPreview()
     m_audio->setData(
       QByteArray{reinterpret_cast<const char*>(bytes.data()), qsizetype(bytes.size())});
     m_audio->open(QIODevice::ReadOnly);
+    if (m_autoplay->isChecked())
+    {
+      m_player->stop();
+      m_player->setSourceDevice(m_audio, QUrl{"preview.wav"});
+      m_player->play();
+    }
     return;
   }
   auto image = QImage{};
@@ -603,6 +620,76 @@ void AssetInspector::showModel()
                       .arg(frame.positions.size())
                       .arg(frame.triangles.size())
                       .arg(m_model->frames.size()));
+}
+
+void AssetInspector::showPrefab()
+{
+  if (!m_asset)
+    return;
+  if (!m_asset->prefab)
+  {
+    m_summary->setText(
+      m_asset->prefabIssues.isEmpty() ? tr("The prefab could not be read.")
+                                      : m_asset->prefabIssues.join(QStringLiteral("\n")));
+    return;
+  }
+
+  const auto& prefab = *m_asset->prefab;
+  const auto size = prefab.bounds.is_empty() ? vm::vec3d{} : prefab.bounds.size();
+  auto summary = tr("%1 brushes · %2 entities · %3 faces\n%4 × %5 × %6 units")
+                   .arg(qulonglong(prefab.brushes))
+                   .arg(qulonglong(prefab.entities))
+                   .arg(qulonglong(prefab.faces))
+                   .arg(size.x(), 0, 'f', 1)
+                   .arg(size.y(), 0, 'f', 1)
+                   .arg(size.z(), 0, 'f', 1);
+  if (!m_asset->prefabIssues.isEmpty())
+    summary += "\n" + m_asset->prefabIssues.join(QStringLiteral("\n"));
+  m_summary->setText(summary);
+
+  const auto keys = std::array{
+    tr("Brushes"),
+    tr("Entities"),
+    tr("Faces"),
+    tr("Size"),
+    tr("Materials"),
+    tr("Models and sprites"),
+    tr("Sounds"),
+    tr("Sky"),
+    tr("Reference check")};
+  for (const auto& key : keys)
+    for (auto* item : m_details->findItems(key, Qt::MatchExactly, 0))
+      delete item;
+
+  const auto add = [this](const QString& key, const QString& value) {
+    auto* item = new QTreeWidgetItem{m_details, {key, value}};
+    item->setToolTip(1, value);
+  };
+  const auto joined = [](const std::vector<std::string>& values) {
+    auto list = QStringList{};
+    for (const auto& value : values)
+      list << QString::fromStdString(value);
+    return list.isEmpty() ? QObject::tr("None") : list.join(QStringLiteral(", "));
+  };
+  add(tr("Brushes"), QString::number(qulonglong(prefab.brushes)));
+  add(tr("Entities"), QString::number(qulonglong(prefab.entities)));
+  add(tr("Faces"), QString::number(qulonglong(prefab.faces)));
+  add(
+    tr("Size"),
+    prefab.bounds.is_empty() ? tr("No brush volume")
+                             : tr("%1 × %2 × %3")
+                                 .arg(size.x(), 0, 'f', 1)
+                                 .arg(size.y(), 0, 'f', 1)
+                                 .arg(size.z(), 0, 'f', 1));
+  add(tr("Materials"), joined(prefab.materials));
+  add(tr("Models and sprites"), joined(prefab.models));
+  add(tr("Sounds"), joined(prefab.sounds));
+  add(tr("Sky"), joined(prefab.skies));
+  add(
+    tr("Reference check"),
+    m_asset->prefabIssues.isEmpty()
+      ? tr("Referenced resources resolve in the current project")
+      : m_asset->prefabIssues.join(QStringLiteral("\n")));
 }
 
 void AssetInspector::configureStudioModel()
@@ -714,10 +801,24 @@ void AssetInspector::showSky()
     cross ? inspection::renderSkyCross(faces)
           : inspection::renderSkyView(faces, m_skyYaw, m_skyPitch),
     false);
-  m_summary->setText(
-    m_asset->diagnostics.empty()
-      ? tr("Six faces · compatible publish preview: 256 × 256, opaque RGB")
-      : m_asset->diagnostics.join("\n"));
+  const auto faceSize = [](const std::array<QImage, 6>& faces) {
+    for (const auto& face : faces)
+      if (!face.isNull())
+        return face.size();
+    return QSize{};
+  };
+  const auto source = faceSize(m_asset->skyOriginal);
+  const auto published = faceSize(m_asset->skyCompatible);
+  auto summary = tr("%1 · source %2 × %3 · published %4 × %5 opaque RGB")
+                   .arg(
+                     m_mode->currentIndex() == 0 ? tr("Published") : tr("Source"),
+                     QString::number(source.width()),
+                     QString::number(source.height()),
+                     QString::number(published.width()),
+                     QString::number(published.height()));
+  if (!m_asset->diagnostics.isEmpty())
+    summary += "\n" + m_asset->diagnostics.join(QStringLiteral("\n"));
+  m_summary->setText(summary);
 }
 
 void AssetInspector::showSpriteFrame()

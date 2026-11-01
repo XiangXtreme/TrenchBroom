@@ -47,6 +47,7 @@ class AssetInspector : public QWidget
   QAudioOutput* m_output = nullptr;
   QBuffer* m_audio = nullptr;
   QPushButton* m_play = nullptr;
+  QCheckBox* m_autoplay = nullptr;
   QSlider* m_position = nullptr;
   QPushButton* m_apply = nullptr;
   QPushButton* m_capture = nullptr;
@@ -104,6 +105,7 @@ private:
   void showSpriteFrame();
   void showSky();
   void showModel();
+  void showPrefab();
   void configureStudioModel();
   void rebuildStudioPose();
 };

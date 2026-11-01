@@ -10,12 +10,14 @@
 
 #include "project/ProjectAsset.h"
 #include "ui/AssetBrowserModel.h"
+#include "ui/AssetInspection.h"
 
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class QComboBox;
@@ -88,6 +90,10 @@ class AssetLibraryWindow : public QDialog
   std::vector<std::string> m_failedConversions;
   QLineEdit* m_searchEdit = nullptr;
   QComboBox* m_tagCombo = nullptr;
+  QComboBox* m_soundCombo = nullptr;
+  inspection::WaveKind m_waveKind = inspection::WaveKind::All;
+  mutable std::unordered_map<std::string, std::optional<inspection::WaveInfo>>
+    m_waveInfoCache;
   QLabel* m_projectScope = nullptr;
   QTimer* m_reloadTimer = nullptr;
   AssetLibraryListView* m_categories = nullptr;
@@ -159,6 +165,7 @@ private:
   void captureSelected();
   void updateSelected();
   QImage previewImage(const project::LibraryAsset& asset, bool converted, int size) const;
+  std::optional<inspection::WaveInfo> waveInfo(const project::LibraryAsset& asset) const;
 
   const project::LibraryAsset* selectedAsset() const;
   int pendingCount() const;

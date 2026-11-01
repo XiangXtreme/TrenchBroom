@@ -21,16 +21,21 @@
 
 #include <QColor>
 
-#include "kd/filesystem_utils.h"
 #include "base/Error.h"
+#include "base/Logger.h"
 #include "base/PreferenceManager.h"
-#include "prefs/Preferences.h"
+#include "base/SimpleParserStatus.h"
 #include "fs/DiskIO.h"
 #include "fs/File.h"
 #include "fs/PathInfo.h"
 #include "fs/Reader.h"
+#include "mdl/EntityProperties.h"
+#include "mdl/MapFormat.h"
+#include "mdl/StandardMapParser.h"
+#include "prefs/Preferences.h"
 #include "ui/SystemPaths.h"
 
+#include "kd/filesystem_utils.h"
 #include "kd/path_utils.h"
 #include "kd/vector_utils.h"
 
@@ -100,7 +105,184 @@ std::vector<T> prefabMetadata(
   return kdl::vec_sort_and_remove_duplicates(std::move(result));
 }
 
+/** Collects authored volumes and the explicit GoldSrc references of a prefab. */
+class PrefabContentsParser : public mdl::StandardMapParser
+{
+  PrefabContents m_contents;
+  std::string m_classname;
+  bool m_sawWorld = false;
+  std::optional<vm::vec3d> m_low;
+  std::optional<vm::vec3d> m_high;
+
+public:
+  PrefabContentsParser(const std::string& text, const mdl::MapFormat format)
+    : StandardMapParser{text, format, format}
+  {
+  }
+
+  Result<PrefabContents> read()
+  {
+    auto logger = NullLogger{};
+    auto status = SimpleParserStatus{logger};
+    return parseEntities(status) | kdl::and_then([&]() -> Result<PrefabContents> {
+             if (!m_sawWorld)
+               return Error{"Prefab text has no worldspawn entity."};
+             if (m_low && m_high)
+               m_contents.bounds = vm::bbox3d{*m_low, *m_high};
+             m_contents.materials =
+               kdl::vec_sort_and_remove_duplicates(std::move(m_contents.materials));
+             m_contents.models =
+               kdl::vec_sort_and_remove_duplicates(std::move(m_contents.models));
+             m_contents.sounds =
+               kdl::vec_sort_and_remove_duplicates(std::move(m_contents.sounds));
+             m_contents.skies =
+               kdl::vec_sort_and_remove_duplicates(std::move(m_contents.skies));
+             return std::move(m_contents);
+           });
+  }
+
+private:
+  void extendBounds(const vm::vec3d& point)
+  {
+    if (!m_low || !m_high)
+    {
+      m_low = point;
+      m_high = point;
+      return;
+    }
+    for (auto axis = 0u; axis < 3u; ++axis)
+    {
+      (*m_low)[axis] = std::min((*m_low)[axis], point[axis]);
+      (*m_high)[axis] = std::max((*m_high)[axis], point[axis]);
+    }
+  }
+
+  void addFace(
+    const vm::vec3d& point1,
+    const vm::vec3d& point2,
+    const vm::vec3d& point3,
+    std::string material)
+  {
+    ++m_contents.faces;
+    if (!material.empty())
+      m_contents.materials.push_back(std::move(material));
+    extendBounds(point1);
+    extendBounds(point2);
+    extendBounds(point3);
+  }
+
+  void onBeginEntity(
+    const FileLocation&,
+    std::vector<mdl::EntityProperty> properties,
+    ParserStatus&) override
+  {
+    m_classname = mdl::findEntityPropertyOrDefault(properties, "classname");
+    m_sawWorld |= m_classname == "worldspawn";
+    if (m_classname != "worldspawn")
+      ++m_contents.entities;
+
+    for (const auto& property : properties)
+    {
+      const auto& key = property.key();
+      const auto& value = property.value();
+      if (value.empty())
+        continue;
+      if (m_classname == "worldspawn" && key == "skyname")
+      {
+        m_contents.skies.push_back(value);
+        continue;
+      }
+      const auto sound = (m_classname == "ambient_generic" && key == "message")
+                         || (m_classname == "env_message" && key == "messagesound");
+      if (sound)
+      {
+        if (value.front() != '!')
+          m_contents.sounds.push_back("sound/" + value);
+        continue;
+      }
+      // Same class/key pairs as the project resource audit: editor preview models are
+      // not runtime dependencies.
+      const auto model = key == "model"
+                         && (m_classname == "cycler" || m_classname == "cycler_sprite"
+                             || m_classname == "cycler_wreckage"
+                             || m_classname == "env_sprite" || m_classname == "env_glow"
+                             || m_classname == "hostage_entity");
+      const auto sprite =
+        (m_classname == "env_beam" && key == "texture")
+        || (m_classname == "env_laser" && (key == "texture" || key == "EndSprite"));
+      const auto gib = (m_classname == "func_breakable" || m_classname == "func_pushable")
+                       && key == "gibmodel";
+      const auto shooter = m_classname == "env_shooter" && key == "shootmodel";
+      if (model || sprite || gib || shooter)
+        m_contents.models.push_back(value);
+    }
+  }
+  void onEndEntity(const FileLocation&, ParserStatus&) override {}
+  void onBeginBrush(const FileLocation&, ParserStatus&) override { ++m_contents.brushes; }
+  void onEndBrush(const FileLocation&, ParserStatus&) override {}
+  void onStandardBrushFace(
+    const FileLocation&,
+    mdl::MapFormat,
+    const vm::vec3d& point1,
+    const vm::vec3d& point2,
+    const vm::vec3d& point3,
+    std::string materialName,
+    const mdl::UvAttributes&,
+    const mdl::SurfaceAttributes&,
+    ParserStatus&) override
+  {
+    addFace(point1, point2, point3, std::move(materialName));
+  }
+  void onValveBrushFace(
+    const FileLocation&,
+    mdl::MapFormat,
+    const vm::vec3d& point1,
+    const vm::vec3d& point2,
+    const vm::vec3d& point3,
+    std::string materialName,
+    const mdl::UvAttributes&,
+    const mdl::SurfaceAttributes&,
+    const vm::vec3d&,
+    const vm::vec3d&,
+    ParserStatus&) override
+  {
+    addFace(point1, point2, point3, std::move(materialName));
+  }
+  void onPatch(
+    const FileLocation&,
+    const FileLocation&,
+    mdl::MapFormat,
+    size_t,
+    size_t,
+    std::vector<vm::vec<double, 5>>,
+    std::string,
+    ParserStatus&) override
+  {
+    // Patches are not common in GoldSrc prefabs and have no brush volume to report.
+  }
+};
+
+Result<PrefabContents> parsePrefabContents(
+  const std::string& text, const mdl::MapFormat format)
+{
+  auto parser = PrefabContentsParser{text, format};
+  return parser.read();
+}
+
 } // namespace
+
+Result<PrefabContents> readPrefabContents(const std::string& text)
+{
+  // Prefabs inherit the map format they were saved from. Valve is attempted first because
+  // GoldSrc maps dominate this project; Standard text fails the Valve face grammar.
+  auto valve = parsePrefabContents(text, mdl::MapFormat::Valve);
+  if (valve.is_success())
+    return valve;
+  auto standard = parsePrefabContents(text, mdl::MapFormat::Standard);
+  if (standard.is_success())
+    return standard;
+  return valve;
+}
 
 bool isPrefabAssetPath(const std::filesystem::path& path)
 {

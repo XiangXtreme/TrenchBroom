@@ -25,6 +25,7 @@
 #include "base/NotifierConnection.h"
 #include "project/LibrarySync.h"
 #include "ui/AssetBrowserModel.h"
+#include "ui/AssetInspection.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/ProjectResourceAudit.h"
 
@@ -74,6 +75,10 @@ private:
   QComboBox* m_typeCombo = nullptr;
   QComboBox* m_libraryCombo = nullptr;
   QComboBox* m_iconSizeCombo = nullptr;
+  QComboBox* m_soundCombo = nullptr;
+  inspection::WaveKind m_waveKind = inspection::WaveKind::All;
+  mutable std::unordered_map<std::string, std::optional<inspection::WaveInfo>>
+    m_waveInfoCache;
   QToolButton* m_usedButton = nullptr;
   QToolButton* m_favoritesButton = nullptr;
   QComboBox* m_tagCombo = nullptr;
@@ -186,6 +191,7 @@ private:
   void restoreBrowsingState();
   void applyTypeFilter();
   std::vector<BrowserAsset> visibleAssets() const;
+  std::optional<inspection::WaveInfo> waveInfoFor(const BrowserAsset& asset) const;
   void updateSourceControls();
   void refreshLibraryChoices();
   void captureLibraryAsset(const QString& libraryId, const QString& libraryAssetId);

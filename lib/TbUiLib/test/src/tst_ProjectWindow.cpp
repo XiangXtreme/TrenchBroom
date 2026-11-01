@@ -154,6 +154,58 @@ MapWindow* windowFor(AppController& appController, const MapDocument& document)
   return nullptr;
 }
 
+/**
+ * A minimal 16-bit mono WAVE. The optional `smpl` chunk is what separates a looping cue
+ * from a one-shot cue for the sound browser filters.
+ */
+std::vector<std::uint8_t> wavBytes(const bool loop)
+{
+  auto data = std::vector<std::uint8_t>{};
+  const auto u16 = [&](const std::uint16_t value) {
+    data.push_back(std::uint8_t(value & 0xffu));
+    data.push_back(std::uint8_t(value >> 8));
+  };
+  const auto u32 = [&](const std::uint32_t value) {
+    for (auto i = 0u; i < 4; ++i)
+      data.push_back(std::uint8_t(value >> (i * 8)));
+  };
+  const auto tag = [&](const char* text) { data.insert(data.end(), text, text + 4); };
+
+  tag("RIFF");
+  u32(0);
+  tag("WAVE");
+  tag("fmt ");
+  u32(16);
+  u16(1);
+  u16(1);
+  u32(22050);
+  u32(44100);
+  u16(2);
+  u16(16);
+  if (loop)
+  {
+    tag("smpl");
+    u32(60);
+    for (auto i = 0; i < 7; ++i)
+      u32(0);
+    u32(1); // loop count
+    u32(0); // sampler data
+    u32(0);
+    u32(0);
+    u32(0);
+    u32(1000);
+    u32(0);
+    u32(1);
+  }
+  tag("data");
+  u32(2205);
+  data.resize(data.size() + 2205, 0);
+  const auto size = std::uint32_t(data.size() - 8);
+  for (auto i = 0u; i < 4; ++i)
+    data[4 + i] = std::uint8_t(size >> (i * 8));
+  return data;
+}
+
 // Emitting the signal is what a click on the tab's close button does.
 void closeTab(QTabBar& tabs, const int index)
 {
@@ -889,6 +941,51 @@ TEST_CASE("ProjectWindow")
     require(session->save());
   }
 
+  SECTION("sound kind filter narrows the browser to looping or one-shot cues")
+  {
+    for (const auto& [path, bytes] : std::array{
+           std::pair{"sound/loop.wav", wavBytes(true)},
+           std::pair{"sound/hit.wav", wavBytes(false)}})
+    {
+      auto input = project::AssetImport{};
+      input.type = project::AssetType::Sound;
+      input.virtualPath = path;
+      input.displayName = path;
+      input.original = input.compatible = bytes;
+      require(session->importAsset(input));
+    }
+
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
+    auto* sounds = browser->findChild<QComboBox*>("ModelBrowser_SoundKind");
+    auto* view = browser->findChild<ModelBrowserView*>();
+    REQUIRE(source);
+    REQUIRE(type);
+    REQUIRE(sounds);
+    REQUIRE(view);
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
+    emit view->folderActivated("sound");
+    QTRY_COMPARE(view->assets().size(), 2);
+
+    const auto selectKind = [&](const inspection::WaveKind kind) {
+      sounds->setCurrentIndex(sounds->findData(int(kind)));
+      QApplication::processEvents();
+    };
+    selectKind(inspection::WaveKind::Looping);
+    REQUIRE(view->assets().size() == 1);
+    CHECK(view->assets().front().path.filename() == "loop.wav");
+    selectKind(inspection::WaveKind::OneShot);
+    REQUIRE(view->assets().size() == 1);
+    CHECK(view->assets().front().path.filename() == "hit.wav");
+    selectKind(inspection::WaveKind::All);
+    CHECK(view->assets().size() == 2);
+    require(session->save());
+  }
+
   SECTION("current map filter refreshes unsaved sky references and map context")
   {
     auto input = project::AssetImport{};
@@ -1001,11 +1098,15 @@ TEST_CASE("ProjectWindow")
   {
     const auto folder = directory.filePath("shared-library");
     REQUIRE(QDir{}.mkpath(folder + "/sound"));
-    for (const auto& name : {"clip", "unused"})
+    for (const auto& [name, loop] :
+         std::array{std::pair{"clip", true}, std::pair{"unused", false}})
     {
       auto file = QFile{folder + "/sound/" + name + ".wav"};
       REQUIRE(file.open(QIODevice::WriteOnly));
-      REQUIRE(file.write("RIFF preview") > 0);
+      const auto bytes = wavBytes(loop);
+      REQUIRE(
+        file.write(reinterpret_cast<const char*>(bytes.data()), qint64(bytes.size()))
+        == qint64(bytes.size()));
     }
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Shared library"));
@@ -1033,6 +1134,29 @@ TEST_CASE("ProjectWindow")
     REQUIRE(grid->currentItem());
     CHECK(libraryWindow.revealAsset("different-library", resource.id).is_error());
     CHECK(libraryWindow.revealAsset(libraryId, "missing-resource").is_error());
+    const auto visibleIds = [grid]() {
+      auto ids = std::vector<std::string>{};
+      for (auto row = 0; row < grid->count(); ++row)
+        ids.push_back(grid->item(row)
+                        ->data(AssetLibraryItemDelegate::AssetIdRole)
+                        .toString()
+                        .toStdString());
+      return ids;
+    };
+    auto* soundKind = libraryWindow.findChild<QComboBox*>("AssetLibrary_SoundKind");
+    REQUIRE(soundKind);
+    REQUIRE(visibleIds().size() == 2);
+    soundKind->setCurrentIndex(soundKind->findData(int(inspection::WaveKind::Looping)));
+    QApplication::processEvents();
+    REQUIRE(visibleIds().size() == 1);
+    CHECK(visibleIds().front() == resource.id);
+    soundKind->setCurrentIndex(soundKind->findData(int(inspection::WaveKind::OneShot)));
+    QApplication::processEvents();
+    REQUIRE(visibleIds().size() == 1);
+    CHECK(visibleIds().front() != resource.id);
+    soundKind->setCurrentIndex(0);
+    QApplication::processEvents();
+    CHECK(visibleIds().size() == 2);
     CHECK(
       grid->currentItem()
         ->data(AssetLibraryItemDelegate::AssetIdRole)

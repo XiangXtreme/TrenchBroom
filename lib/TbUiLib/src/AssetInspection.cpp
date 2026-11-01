@@ -16,6 +16,7 @@
 #include "project/GoldSrcWad.h"
 #include "ui/AssetLibrarySource.h"
 #include "ui/MapDocument.h"
+#include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
@@ -82,6 +83,108 @@ void addSkyFace(Asset& result, const std::string& name, Result<Bytes> bytes)
     return;
   }
 }
+/**
+ * Adds prefab volumes and resolves its explicit references against the project.
+ *
+ * Without a project there is nothing to resolve against, so only the authored statistics
+ * are reported instead of guessing that a reference is missing.
+ */
+void inspectPrefab(Asset& asset, ProjectSession* session)
+{
+  const auto text = std::string{asset.compatible.begin(), asset.compatible.end()};
+  auto contents = readPrefabContents(text);
+  if (contents.is_error())
+  {
+    asset.prefabIssues << QObject::tr("Prefab text could not be read: %1")
+                            .arg(QString::fromStdString(
+                              std::get<Error>(contents.error()).msg));
+    return;
+  }
+  asset.prefab = std::move(contents).value();
+  if (!session)
+  {
+    asset.prefabIssues << QObject::tr(
+      "Open the prefab from a project to verify that its resources are captured.");
+    return;
+  }
+
+  const auto index = ProjectReferenceIndex::build(*session);
+  if (index.is_error())
+  {
+    asset.prefabIssues << QObject::tr("Reference index unavailable: %1")
+                            .arg(
+                              QString::fromStdString(std::get<Error>(index.error()).msg));
+    return;
+  }
+
+  const auto isToolTexture = [](const std::string& name) {
+    auto lowered = name;
+    std::ranges::transform(lowered, lowered.begin(), [](const unsigned char c) {
+      return char(std::tolower(c));
+    });
+    static constexpr auto names = std::array{
+      std::string_view{"aaatrigger"},
+      std::string_view{"bevel"},
+      std::string_view{"clip"},
+      std::string_view{"hint"},
+      std::string_view{"hintskip"},
+      std::string_view{"light"},
+      std::string_view{"null"},
+      std::string_view{"origin"},
+      std::string_view{"skip"},
+      std::string_view{"split"},
+      std::string_view{"trigger"},
+      std::string_view{"waterskip"}};
+    return std::ranges::any_of(
+      names, [&](const auto candidate) { return lowered == candidate; });
+  };
+
+  auto missing = QStringList{};
+  auto ambiguous = QStringList{};
+  for (const auto& material : asset.prefab->materials)
+  {
+    if (isToolTexture(material))
+      continue;
+    const auto match = index.value().resolveTexture(material);
+    if (match.status == ReferenceStatus::Missing)
+      missing << QString::fromStdString(material);
+    else if (match.status == ReferenceStatus::Ambiguous)
+      ambiguous << QString::fromStdString(material);
+  }
+  for (const auto& reference : asset.prefab->models)
+  {
+    const auto match = index.value().resolvePath(reference);
+    if (match.status == ReferenceStatus::Missing)
+      missing << QString::fromStdString(reference);
+    else if (match.status == ReferenceStatus::Ambiguous)
+      ambiguous << QString::fromStdString(reference);
+  }
+  for (const auto& reference : asset.prefab->sounds)
+  {
+    const auto match = index.value().resolvePath(reference);
+    if (match.status == ReferenceStatus::Missing)
+      missing << QString::fromStdString(reference);
+    else if (match.status == ReferenceStatus::Ambiguous)
+      ambiguous << QString::fromStdString(reference);
+  }
+
+  constexpr auto MaxNames = 6;
+  const auto summarize = [](const QStringList& names) {
+    auto visible = names.mid(0, MaxNames).join(QStringLiteral(", "));
+    if (names.size() > MaxNames)
+      visible += QObject::tr(" … and %1 more").arg(names.size() - MaxNames);
+    return visible;
+  };
+  if (!missing.isEmpty())
+    asset.prefabIssues << QObject::tr("%1 referenced resource(s) not captured: %2")
+                            .arg(missing.size())
+                            .arg(summarize(missing));
+  if (!ambiguous.isEmpty())
+    asset.prefabIssues << QObject::tr("%1 ambiguous reference(s): %2")
+                            .arg(ambiguous.size())
+                            .arg(summarize(ambiguous));
+}
+
 void checkSky(Asset& result)
 {
   auto size = QSize{};
@@ -97,6 +200,11 @@ void checkSky(Asset& result)
   }
 }
 } // namespace
+
+bool matchesWaveKind(const WaveInfo& info, const WaveKind kind)
+{
+  return kind == WaveKind::All || (kind == WaveKind::Looping) == info.loop.has_value();
+}
 
 QImage renderSkyCross(const std::array<QImage, 6>& faces, const int side)
 {
@@ -312,6 +420,8 @@ Result<Asset> readLibraryAsset(
               addSkyFace(result, face.virtualPath, source.readOriginal(face.id));
     checkSky(result);
   }
+  if (result.resource.type == BrowserCellType::Prefab)
+    inspectPrefab(result, nullptr);
   return result;
 }
 
@@ -345,6 +455,8 @@ Result<Asset> readBrowserAsset(
             loaded.resource.projectAssetId = asset.projectAssetId;
             loaded.resource.projectRevision = asset.projectRevision;
             loaded.resource.projectUpdateAvailable = asset.projectUpdateAvailable;
+            if (loaded.resource.type == BrowserCellType::Prefab)
+              inspectPrefab(loaded, session);
             return loaded;
           }
           return result;
@@ -439,6 +551,8 @@ Result<Asset> readBrowserAsset(
     result.identity = pathAsQString(path) + "/"
                       + QString::fromStdString(project::contentHash(result.original));
   }
+  if (result.resource.type == BrowserCellType::Prefab)
+    inspectPrefab(result, session);
   return result;
 }
 } // namespace tb::ui::inspection

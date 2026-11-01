@@ -128,6 +128,8 @@ public:
   void setDocument(MapDocument& document);
   void setProject(std::shared_ptr<ProjectSession> project);
   void setAssets(std::filesystem::path rootFolderPath, std::vector<BrowserAsset> assets);
+  /** The assets currently listed, after every browser filter has been applied. */
+  const std::vector<BrowserAsset>& assets() const { return m_assets; }
   void setCurrentFolderPath(std::filesystem::path currentFolderPath);
   void setSearchText(QString searchText);
   void setIncludeDefaultRoots(bool includeDefaultRoots);

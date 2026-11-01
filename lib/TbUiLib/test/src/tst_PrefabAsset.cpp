@@ -21,8 +21,8 @@
 
 #include "base/Error.h"
 #include "base/PreferenceManager.h"
-#include "prefs/Preferences.h"
 #include "fs/TestEnvironment.h"
+#include "prefs/Preferences.h"
 #include "ui/PrefabAsset.h"
 #include "ui/SystemPaths.h"
 
@@ -54,6 +54,40 @@ TEST_CASE("PrefabAsset")
 
     REQUIRE(readResult);
     CHECK(readResult.value() == text);
+  }
+
+  SECTION("reads brush volume and explicit references from prefab text")
+  {
+    const auto text = std::string{
+      "{\n"
+      "\"classname\" \"worldspawn\"\n"
+      "\"skyname\" \"desert\"\n"
+      "{\n"
+      "( 0 0 0 ) ( 64 0 0 ) ( 0 64 0 ) BRICK 0 0 0 1 1\n"
+      "( 0 0 64 ) ( 64 0 64 ) ( 0 64 64 ) BRICK 0 0 0 1 1\n"
+      "}\n"
+      "}\n"
+      "{\n"
+      "\"classname\" \"ambient_generic\"\n"
+      "\"message\" \"ambience/wind.wav\"\n"
+      "}\n"};
+
+    const auto contents = readPrefabContents(text);
+    REQUIRE(contents.is_success());
+    const auto& prefab = contents.value();
+    CHECK(prefab.brushes == 1);
+    CHECK(prefab.entities == 1);
+    CHECK(prefab.faces == 2);
+    CHECK(prefab.materials == std::vector<std::string>{"BRICK"});
+    CHECK(prefab.sounds == std::vector<std::string>{"sound/ambience/wind.wav"});
+    CHECK(prefab.skies == std::vector<std::string>{"desert"});
+    CHECK(prefab.bounds.size() == vm::vec3d{64, 64, 64});
+  }
+
+  SECTION("rejects prefab text without a worldspawn entity")
+  {
+    CHECK(readPrefabContents("{\n\"classname\" \"info_null\"\n}\n").is_error());
+    CHECK(readPrefabContents("not a map").is_error());
   }
 
   SECTION("uses user data prefab directory by default")

@@ -23,6 +23,9 @@
 
 #include "base/Result.h"
 
+#include "vm/bbox.h"
+
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -59,6 +62,29 @@ Result<void> checkPrefabNameAvailable(
   const std::filesystem::path& directory, const std::string& name);
 
 Result<std::string> readPrefabAsset(const std::filesystem::path& path);
+
+/**
+ * What a prefab contains, computed from its MAP text.
+ *
+ * The counts describe authored content, not a rendered scene. References are the same
+ * explicit GoldSrc links the project resource audit understands, so the asset inspector
+ * can resolve them against the project or the game files without a second grammar.
+ */
+struct PrefabContents
+{
+  std::size_t brushes = 0;
+  // Entities other than the prefab's synthetic worldspawn.
+  std::size_t entities = 0;
+  std::size_t faces = 0;
+  vm::bbox3d bounds;
+  std::vector<std::string> materials;
+  std::vector<std::string> models;
+  std::vector<std::string> sounds;
+  std::vector<std::string> skies;
+};
+
+/** Reads volumes and references from prefab MAP text (Valve first, then Standard). */
+Result<PrefabContents> readPrefabContents(const std::string& text);
 
 Result<void> writePrefabAsset(const std::filesystem::path& path, const std::string& text);
 
