@@ -293,6 +293,25 @@ AssetInspector::AssetInspector(QWidget* parent)
   auto* modelPoseRow = new QHBoxLayout{};
   modelPoseRow->addWidget(m_modelFrame, 1);
   modelPoseRow->addWidget(m_modelBody, 1);
+  m_studioControls = new QWidget{};
+  m_studioControls->hide();
+  auto* studioLayout = new QVBoxLayout{m_studioControls};
+  studioLayout->setContentsMargins(0, 0, 0, 0);
+  m_studioSequence = new QComboBox{};
+  m_studioSequence->setAccessibleName(tr("Sequence"));
+  m_studioSequence->setObjectName("AssetInspector_ModelSequence");
+  m_studioPlay = new QPushButton{tr("Play")};
+  m_studioPlay->setObjectName("AssetInspector_ModelPlay");
+  m_studioPlay->setProperty("tbControlRole", "compact");
+  m_studioPlay->setCheckable(true);
+  m_studioFrame = new QSlider{Qt::Horizontal};
+  m_studioFrame->setObjectName("AssetInspector_ModelFrame");
+  m_studioFrame->setAccessibleName(tr("Animation frame"));
+  auto* studioTop = new QHBoxLayout{};
+  studioTop->addWidget(m_studioSequence, 1);
+  studioTop->addWidget(m_studioPlay);
+  studioLayout->addLayout(studioTop);
+  studioLayout->addWidget(m_studioFrame);
   auto* modelButtons = new QHBoxLayout{};
   m_modelBounds = new QCheckBox{tr("Bounds")};
   m_modelOrigin = new QCheckBox{tr("Origin")};
@@ -301,6 +320,7 @@ AssetInspector::AssetInspector(QWidget* parent)
   modelButtons->addWidget(m_modelOrigin);
   modelButtons->addWidget(modelReset);
   modelLayout->addLayout(modelPoseRow);
+  modelLayout->addWidget(m_studioControls);
   modelLayout->addLayout(modelButtons);
   m_modelLimits = new QLabel{};
   m_modelLimits->setObjectName("AssetInspector_ModelLimits");
@@ -318,6 +338,41 @@ AssetInspector::AssetInspector(QWidget* parent)
       m_studioVariants[part] = variant;
     rebuildStudioPose();
   });
+  m_studioTimer = new QTimer{this};
+  connect(m_studioSequence, &QComboBox::currentIndexChanged, this, [this]() {
+    if (!m_studioModel || m_studioSequence->currentIndex() < 0)
+      return;
+    m_studioSequenceIndex = std::size_t(m_studioSequence->currentIndex());
+    const auto frames = m_studioSequenceIndex < m_studioModel->sequenceList.size()
+                          ? m_studioModel->sequenceList[m_studioSequenceIndex].frameCount
+                          : std::size_t{1};
+    const auto blocker = QSignalBlocker{m_studioFrame};
+    m_studioFrame->setRange(0, int(std::max<std::size_t>(1, frames)) - 1);
+    m_studioFrame->setValue(0);
+    m_studioFrameIndex = 0;
+    showStudioFrame();
+  });
+  connect(m_studioFrame, &QSlider::valueChanged, this, [this](const int value) {
+    m_studioFrameIndex = std::size_t(std::max(0, value));
+    showStudioFrame();
+  });
+  connect(m_studioPlay, &QPushButton::toggled, this, [this](const bool playing) {
+    m_studioPlay->setText(playing ? tr("Pause") : tr("Play"));
+    if (!playing)
+    {
+      m_studioTimer->stop();
+      return;
+    }
+    const auto sequence = m_studioSequenceIndex < m_studioModel->sequenceList.size()
+                            ? m_studioSequenceIndex
+                            : std::size_t{0};
+    const auto fps = m_studioModel && sequence < m_studioModel->sequenceList.size()
+                       ? m_studioModel->sequenceList[sequence].fps
+                       : 0.0f;
+    const auto delay = fps > 0.1f ? 1000.0f / fps : 100.0f;
+    m_studioTimer->start(int(std::clamp(delay, 20.0f, 1000.0f)));
+  });
+  connect(m_studioTimer, &QTimer::timeout, this, &AssetInspector::stepStudioAnimation);
   connect(m_modelBounds, &QCheckBox::toggled, this, [this]() { showModel(); });
   connect(m_modelOrigin, &QCheckBox::toggled, this, [this]() { showModel(); });
   connect(modelReset, &QPushButton::clicked, this, [this]() {
@@ -563,6 +618,7 @@ void AssetInspector::refreshPreview()
       m_asset->resource.absolutePath.filename());
     if (m_model)
     {
+      m_modelFrame->setVisible(true);
       const auto blocker = QSignalBlocker{m_modelFrame};
       m_modelFrame->clear();
       for (const auto& frame : m_model->frames)
@@ -614,10 +670,20 @@ void AssetInspector::showModel()
       m_modelBounds->isChecked(),
       m_modelOrigin->isChecked()),
     false);
+  auto poseLabel = tr("bind pose");
+  if (m_studioModel && m_studioSequenceIndex < m_studioModel->sequenceList.size())
+  {
+    const auto& sequence = m_studioModel->sequenceList[m_studioSequenceIndex];
+    const auto label = sequence.label.empty()
+                         ? tr("Sequence %1").arg(m_studioSequenceIndex + 1)
+                         : QString::fromStdString(sequence.label);
+    poseLabel = tr("%1 frame %2").arg(label).arg(qulonglong(m_studioFrameIndex));
+  }
   m_summary->setText(
-    m_studioModel ? tr("%1 vertices · %2 triangles · bind pose · %3 bone(s)")
+    m_studioModel ? tr("%1 vertices · %2 triangles · %3 · %4 bone(s)")
                       .arg(frame.positions.size())
                       .arg(frame.triangles.size())
+                      .arg(poseLabel)
                       .arg(m_studioModel->bones)
                   : tr("%1 vertices · %2 triangles · %3 pose(s)")
                       .arg(frame.positions.size())
@@ -720,9 +786,43 @@ void AssetInspector::configureStudioModel()
     }
   }
   m_modelBody->setVisible(!m_studioChoices.empty());
+
+  {
+    const auto blocker = QSignalBlocker{m_studioSequence};
+    m_studioSequence->clear();
+    for (auto index = std::size_t{0}; index < studio.sequenceList.size(); ++index)
+    {
+      const auto& sequence = studio.sequenceList[index];
+      auto label = QString::fromStdString(sequence.label);
+      if (label.isEmpty())
+        label = tr("Sequence %1").arg(index + 1);
+      m_studioSequence->addItem(
+        tr("%1 · %2 frames").arg(label).arg(qulonglong(sequence.frameCount)));
+    }
+  }
+  const auto animated = !studio.sequenceList.empty();
+  m_studioSequence->setVisible(animated);
+  m_studioControls->setVisible(animated);
+  // The pose combo describes scene frames; a studio model uses its sequence instead.
+  m_modelFrame->setVisible(!animated);
+  if (m_studioTimer)
+    m_studioTimer->stop();
+  m_studioPlay->setChecked(false);
+  m_studioPlay->setText(tr("Play"));
+  m_studioSequenceIndex = 0;
+  m_studioFrameIndex = 0;
+  if (animated)
+  {
+    const auto frames =
+      std::max<std::size_t>(1, studio.sequenceList.front().frameCount);
+    const auto blocker = QSignalBlocker{m_studioFrame};
+    m_studioFrame->setRange(0, int(frames) - 1);
+    m_studioFrame->setValue(0);
+  }
+
   m_modelLimits->setText(
-    tr("GoldSrc studio model · bind pose from bone rest transforms.\nDrag to orbit, "
-       "wheel to zoom. Animation, skins and bone controllers are not decoded."));
+    tr("GoldSrc studio model · animation and embedded textures decoded.\n"
+       "Pick a sequence and frame, or press Play. Drag to orbit, wheel to zoom."));
 
   const auto keys = std::array{
     tr("Bones"),
@@ -774,18 +874,46 @@ void AssetInspector::rebuildStudioPose()
 {
   if (!m_asset || !m_studioModel || !m_model)
     return;
-  const auto mesh = mdl::buildGoldSrcStudioMesh(m_asset->compatible, m_studioVariants);
+  const auto mesh = mdl::buildGoldSrcStudioMesh(
+    m_asset->compatible, m_studioVariants, m_studioSequenceIndex, m_studioFrameIndex);
   if (mesh.is_error())
   {
     m_summary->setText(QString::fromStdString(std::get<Error>(mesh.error()).msg));
     return;
   }
+  const auto& value = mesh.value();
   auto frame = ModelPreviewFrame{};
-  frame.name = "Bind pose";
-  frame.positions = mesh.value().positions;
-  frame.triangles = mesh.value().triangles;
+  frame.name = "Frame";
+  frame.positions = value.positions;
+  frame.texCoords = value.texCoords;
+  frame.triangles = value.triangles;
+  frame.triangleTextures = value.triangleTextures;
+  frame.textures.reserve(value.textures.size());
+  for (const auto& texture : value.textures)
+    frame.textures.push_back({texture.width, texture.height, texture.pixels});
   m_model->frames.assign(1, std::move(frame));
   showModel();
+}
+
+void AssetInspector::showStudioFrame()
+{
+  rebuildStudioPose();
+}
+
+void AssetInspector::stepStudioAnimation()
+{
+  if (!m_studioModel || m_studioSequenceIndex >= m_studioModel->sequenceList.size() || !isVisible())
+    return;
+  const auto& sequence = m_studioModel->sequenceList[m_studioSequenceIndex];
+  const auto frames = std::max<std::size_t>(1, sequence.frameCount);
+  if (frames < 2)
+  {
+    m_studioTimer->stop();
+    m_studioPlay->setChecked(false);
+    return;
+  }
+  const auto next = (m_studioFrameIndex + 1) % frames;
+  m_studioFrame->setValue(int(next));
 }
 
 void AssetInspector::showSky()

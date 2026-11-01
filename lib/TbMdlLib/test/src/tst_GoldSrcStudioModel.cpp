@@ -298,6 +298,9 @@ TEST_CASE("GoldSrcStudioModel")
     REQUIRE(first.is_success());
     REQUIRE(first.value().positions.size() == 3);
     CHECK(first.value().positions.front() == vm::vec3f{11.0f, 0.0f, 0.0f});
+    CHECK(first.value().texCoords.size() == first.value().positions.size());
+    CHECK(first.value().triangleTextures.size() == first.value().triangles.size());
+    CHECK(first.value().textures.size() == 1);
 
     const auto second = buildGoldSrcStudioMesh(bytes, {1});
     REQUIRE(second.is_success());

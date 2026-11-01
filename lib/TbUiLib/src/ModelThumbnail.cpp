@@ -48,15 +48,31 @@ std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
 
   auto scene = ModelPreviewScene{};
   scene.studioModel = std::move(info).value();
-  if (const auto mesh = mdl::buildGoldSrcStudioMesh(bytes); mesh.is_success())
-  {
-    auto frame = ModelPreviewFrame{};
-    frame.name = "Bind pose";
-    frame.positions = mesh.value().positions;
-    frame.triangles = mesh.value().triangles;
-    scene.frames.push_back(std::move(frame));
-  }
+  if (auto frame = loadGoldSrcStudioFrame(bytes, 0, 0); frame)
+    scene.frames.push_back(std::move(*frame));
   return scene;
+}
+
+std::optional<ModelPreviewFrame> loadGoldSrcStudioFrame(
+  const std::vector<std::uint8_t>& bytes,
+  const std::size_t sequence,
+  const std::size_t frame)
+{
+  const auto mesh = mdl::buildGoldSrcStudioMesh(bytes, {}, sequence, frame);
+  if (mesh.is_error() || mesh.value().triangles.empty())
+    return std::nullopt;
+
+  const auto& value = mesh.value();
+  auto preview = ModelPreviewFrame{};
+  preview.name = "Sequence " + std::to_string(sequence) + " frame " + std::to_string(frame);
+  preview.positions = value.positions;
+  preview.texCoords = value.texCoords;
+  preview.triangles = value.triangles;
+  preview.triangleTextures = value.triangleTextures;
+  preview.textures.reserve(value.textures.size());
+  for (const auto& texture : value.textures)
+    preview.textures.push_back({texture.width, texture.height, texture.pixels});
+  return preview;
 }
 
 std::optional<ModelPreviewScene> loadModelPreviewScene(
@@ -157,16 +173,21 @@ QImage renderModelPreview(
 
   struct Projected
   {
-    QPolygonF polygon;
+    std::array<float, 2> screen[3];
+    std::array<float, 2> uv[3];
+    const ModelPreviewTexture* texture = nullptr;
     QColor color;
+    float shade = 1.0f;
     float depth = 0.0f;
   };
   auto projected = std::vector<Projected>{};
   projected.reserve(triangles.size());
 
+  const auto textured = mesh.texCoords.size() == positions.size();
   const auto light = Vec3{-0.35f, 0.55f, 0.75f};
-  for (const auto& triangle : triangles)
+  for (auto index = std::size_t{0}; index < triangles.size(); ++index)
   {
+    const auto& triangle = triangles[index];
     const auto a = project(positions[triangle[0]]);
     const auto b = project(positions[triangle[1]]);
     const auto c = project(positions[triangle[2]]);
@@ -183,28 +204,108 @@ QImage renderModelPreview(
       std::abs(normal.x * light.x + normal.y * light.y + normal.z * light.z);
     const auto shade = 0.35f + 0.65f * lambert;
 
-    auto polygon = QPolygonF{};
-    polygon << QPointF{a[0], a[1]} << QPointF{b[0], b[1]} << QPointF{c[0], c[1]};
-    projected.push_back(
-      {polygon,
-       QColor(int(120 * shade + 30), int(132 * shade + 34), int(146 * shade + 38)),
-       (a[2] + b[2] + c[2]) / 3.0f});
+    const ModelPreviewTexture* texture = nullptr;
+    if (index < mesh.triangleTextures.size())
+    {
+      const auto textureIndex = mesh.triangleTextures[index];
+      if (textureIndex < mesh.textures.size())
+      {
+        const auto& candidate = mesh.textures[textureIndex];
+        if (
+          candidate.width > 0 && candidate.height > 0
+          && candidate.pixels.size() == candidate.width * candidate.height)
+          texture = &candidate;
+      }
+    }
+
+    auto item = Projected{};
+    item.screen[0] = {a[0], a[1]};
+    item.screen[1] = {b[0], b[1]};
+    item.screen[2] = {c[0], c[1]};
+    if (textured)
+      for (auto corner = 0; corner < 3; ++corner)
+        item.uv[corner] = mesh.texCoords[triangle[std::size_t(corner)]];
+    item.texture = texture;
+    item.color = QColor(
+      int(120 * shade + 30), int(132 * shade + 34), int(146 * shade + 38));
+    item.shade = shade;
+    item.depth = (a[2] + b[2] + c[2]) / 3.0f;
+    projected.push_back(item);
   }
 
   std::sort(projected.begin(), projected.end(), [](const auto& left, const auto& right) {
     return left.depth < right.depth;
   });
 
-  auto image = QImage{size, size, QImage::Format_ARGB32_Premultiplied};
+  auto image = QImage{size, size, QImage::Format_ARGB32};
   image.fill(Qt::transparent);
-  auto painter = QPainter{&image};
-  painter.setRenderHint(QPainter::Antialiasing, true);
-  painter.setPen(Qt::NoPen);
   for (const auto& item : projected)
   {
-    painter.setBrush(item.color);
-    painter.drawPolygon(item.polygon);
+    const auto& a = item.screen[0];
+    const auto& b = item.screen[1];
+    const auto& c = item.screen[2];
+    const auto den =
+      (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+    if (std::abs(den) < 1e-6f)
+      continue;
+
+    const auto minX = std::max(0, int(std::floor(std::min({a[0], b[0], c[0]}))));
+    const auto maxX = std::min(size - 1, int(std::ceil(std::max({a[0], b[0], c[0]}))));
+    const auto minY = std::max(0, int(std::floor(std::min({a[1], b[1], c[1]}))));
+    const auto maxY = std::min(size - 1, int(std::ceil(std::max({a[1], b[1], c[1]}))));
+    for (auto y = minY; y <= maxY; ++y)
+      for (auto x = minX; x <= maxX; ++x)
+      {
+        const auto px = float(x) + 0.5f;
+        const auto py = float(y) + 0.5f;
+        const auto w0 =
+          ((b[1] - c[1]) * (px - c[0]) + (c[0] - b[0]) * (py - c[1])) / den;
+        const auto w1 =
+          ((c[1] - a[1]) * (px - c[0]) + (a[0] - c[0]) * (py - c[1])) / den;
+        const auto w2 = 1.0f - w0 - w1;
+        if (w0 < 0.0f || w1 < 0.0f || w2 < 0.0f)
+          continue;
+
+        auto color = item.color;
+        if (item.texture)
+        {
+          const auto u = w0 * item.uv[0][0] + w1 * item.uv[1][0] + w2 * item.uv[2][0];
+          const auto v = w0 * item.uv[0][1] + w1 * item.uv[1][1] + w2 * item.uv[2][1];
+          // Bilinear sampling keeps the small thumbnail readable instead of speckled.
+          const auto width = int(item.texture->width);
+          const auto height = int(item.texture->height);
+          const auto fx = u * float(width) - 0.5f;
+          const auto fy = v * float(height) - 0.5f;
+          const auto x0 = std::clamp(int(std::floor(fx)), 0, width - 1);
+          const auto y0 = std::clamp(int(std::floor(fy)), 0, height - 1);
+          const auto x1 = std::clamp(x0 + 1, 0, width - 1);
+          const auto y1 = std::clamp(y0 + 1, 0, height - 1);
+          const auto tx = std::clamp(fx - std::floor(fx), 0.0f, 1.0f);
+          const auto ty = std::clamp(fy - std::floor(fy), 0.0f, 1.0f);
+          const auto sample = [&](const int x, const int y) {
+            return item.texture->pixels[std::size_t(y) * item.texture->width
+                                        + std::size_t(x)];
+          };
+          const auto c00 = sample(x0, y0);
+          const auto c10 = sample(x1, y0);
+          const auto c01 = sample(x0, y1);
+          const auto c11 = sample(x1, y1);
+          const auto blend = [&](const int shift) {
+            const auto top = float((c00 >> shift) & 0xFF) * (1.0f - tx)
+                             + float((c10 >> shift) & 0xFF) * tx;
+            const auto bottom = float((c01 >> shift) & 0xFF) * (1.0f - tx)
+                                + float((c11 >> shift) & 0xFF) * tx;
+            return std::clamp(
+              int((top * (1.0f - ty) + bottom * ty) * item.shade), 0, 255);
+          };
+          color = QColor(blend(16), blend(8), blend(0));
+        }
+        image.setPixel(x, y, color.rgb());
+      }
   }
+
+  auto painter = QPainter{&image};
+  painter.setRenderHint(QPainter::Antialiasing, true);
   if (bounds)
   {
     painter.setPen(QColor{220, 180, 80});

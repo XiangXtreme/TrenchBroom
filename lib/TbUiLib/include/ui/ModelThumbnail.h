@@ -20,11 +20,21 @@ class QImage;
 
 namespace tb::ui
 {
+struct ModelPreviewTexture
+{
+  std::size_t width = 0;
+  std::size_t height = 0;
+  std::vector<std::uint32_t> pixels;
+};
+
 struct ModelPreviewFrame
 {
   std::string name;
   std::vector<vm::vec3f> positions;
+  std::vector<std::array<float, 2>> texCoords;
   std::vector<std::array<size_t, 3>> triangles;
+  std::vector<std::size_t> triangleTextures;
+  std::vector<ModelPreviewTexture> textures;
 };
 struct ModelPreviewScene
 {
@@ -43,6 +53,15 @@ struct ModelPreviewScene
  */
 std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
   const std::vector<std::uint8_t>& bytes);
+
+/**
+ * Builds one frame of one sequence, for the inspector's playback controls.
+ *
+ * The scene loader only builds the first frame; playback asks for frames on demand so a
+ * model with dozens of sequences does not decode all of them up front.
+ */
+std::optional<ModelPreviewFrame> loadGoldSrcStudioFrame(
+  const std::vector<std::uint8_t>& bytes, std::size_t sequence, std::size_t frame);
 
 std::optional<ModelPreviewScene> loadModelPreviewScene(
   const std::filesystem::path& folder,

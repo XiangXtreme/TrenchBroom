@@ -8,6 +8,9 @@
 #include <QImage>
 #include <QLabel>
 #include <QMediaPlayer>
+#include <QPushButton>
+#include <QSlider>
+#include <QTest>
 #include <QTemporaryDir>
 #include <QTreeWidget>
 
@@ -86,8 +89,16 @@ inspection::Bytes studioModel()
   const auto vertexOffset = vertexInfoOffset + 2 * 3;
   constexpr auto SequenceSize = std::size_t{176};
   const auto sequenceOffset = vertexOffset + 2 * 36;
+  // A 64x64 texture whose left half is palette entry 0 and right half entry 1, so a
+  // rendered triangle must show both colours.
+  constexpr auto TextureWidth = std::size_t{64};
+  constexpr auto TextureHeight = std::size_t{64};
+  const auto textureDataOffset = sequenceOffset + 4 * SequenceSize;
+  const auto skinOffset = textureDataOffset + TextureWidth * TextureHeight + 768;
+  // One skin reference per family, three families in the fixture.
+  constexpr auto SkinBytes = std::size_t{3 * 2};
 
-  auto data = inspection::Bytes(sequenceOffset + 4 * SequenceSize, 0);
+  auto data = inspection::Bytes(skinOffset + SkinBytes, 0);
   const auto put32 = [&](const std::size_t offset, const std::int32_t value) {
     std::memcpy(data.data() + offset, &value, 4);
   };
@@ -154,10 +165,15 @@ inspection::Bytes studioModel()
     put32(mesh + 4, std::int32_t(strip));
     const auto count = std::int16_t{3};
     std::memcpy(data.data() + strip, &count, sizeof(count));
+    // Corners sample the left, right and centre of the texture.
+    const auto coords = std::array<std::array<std::int16_t, 2>, 3>{
+      std::array<std::int16_t, 2>{6, 32},
+      std::array<std::int16_t, 2>{58, 32},
+      std::array<std::int16_t, 2>{32, 32}};
     for (auto corner = std::size_t{0}; corner < 3; ++corner)
     {
       const auto vertex = std::array<std::int16_t, 4>{
-        std::int16_t(corner), 0, 0, 0};
+        std::int16_t(corner), 0, coords[corner][0], coords[corner][1]};
       std::memcpy(
         data.data() + strip + 2 + corner * VertexSize, vertex.data(), sizeof(vertex));
     }
@@ -190,11 +206,29 @@ inspection::Bytes studioModel()
     putText(offset, label.c_str(), 32);
     putFloat(offset + 32, 15.0f);
     put32(offset + 36, 1);
-    put32(offset + 56, 1);
+    put32(offset + 56, 2);
     put32(offset + 120, 1);
     put32(offset + 124, 0);
     put32(offset + 156, index % 2);
   }
+
+  // Indexed pixels and their palette; skin family 0 points at this texture.
+  for (auto y = std::size_t{0}; y < TextureHeight; ++y)
+    for (auto x = std::size_t{0}; x < TextureWidth; ++x)
+      data[textureDataOffset + y * TextureWidth + x] = x < TextureWidth / 2 ? 0 : 1;
+  data[textureDataOffset + TextureWidth * TextureHeight + 0] = 255;
+  data[textureDataOffset + TextureWidth * TextureHeight + 1] = 0;
+  data[textureDataOffset + TextureWidth * TextureHeight + 2] = 0;
+  data[textureDataOffset + TextureWidth * TextureHeight + 3] = 0;
+  data[textureDataOffset + TextureWidth * TextureHeight + 4] = 255;
+  data[textureDataOffset + TextureWidth * TextureHeight + 5] = 0;
+  for (auto index = std::size_t{0}; index < SkinBytes; ++index)
+    data[skinOffset + index] = 0;
+  put32(textureOffset + 68, int32_t(TextureWidth));
+  put32(textureOffset + 72, int32_t(TextureHeight));
+  put32(textureOffset + 76, int32_t(textureDataOffset));
+  put32(188, int32_t(textureDataOffset));
+  put32(200, int32_t(skinOffset));
 
   return data;
 }
@@ -307,6 +341,20 @@ TEST_CASE("AssetInspection")
         painted += image.pixelColor(x, y).alpha() > 0 ? 1 : 0;
     CHECK(painted > 0);
 
+    // The fixture texture is red on the left half and green on the right half, so a
+    // correctly sampled triangle shows both.
+    auto red = 0;
+    auto green = 0;
+    for (auto y = 0; y < image.height(); ++y)
+      for (auto x = 0; x < image.width(); ++x)
+      {
+        const auto color = image.pixelColor(x, y);
+        red += color.red() > color.green() + 20 ? 1 : 0;
+        green += color.green() > color.red() + 20 ? 1 : 0;
+      }
+    CHECK(red > 0);
+    CHECK(green > 0);
+
     auto asset = inspection::Asset{};
     asset.resource.type = BrowserCellType::Model;
     asset.resource.path = "models/ui_studio.mdl";
@@ -324,6 +372,22 @@ TEST_CASE("AssetInspection")
     CHECK_FALSE(body->isHidden());
     CHECK(body->count() == 2);
     CHECK(body->itemText(0).contains("body_a"));
+
+    auto* sequence = inspector.findChild<QComboBox*>("AssetInspector_ModelSequence");
+    auto* frame = inspector.findChild<QSlider*>("AssetInspector_ModelFrame");
+    auto* play = inspector.findChild<QPushButton*>("AssetInspector_ModelPlay");
+    REQUIRE(sequence != nullptr);
+    REQUIRE(frame != nullptr);
+    REQUIRE(play != nullptr);
+    CHECK_FALSE(sequence->isHidden());
+    CHECK(sequence->count() == 4);
+    CHECK(frame->maximum() == 1);
+    CHECK(frame->value() == 0);
+    play->setChecked(true);
+    CHECK(play->isChecked());
+    QTRY_VERIFY(frame->value() == 1);
+    play->setChecked(false);
+    CHECK(frame->value() == 1);
     const auto valueFor = [details](const QString& key) {
       const auto items = details->findItems(key, Qt::MatchExactly, 0);
       return items.empty() ? QString{} : items.front()->text(1);
@@ -396,10 +460,16 @@ TEST_CASE("AssetInspection")
     REQUIRE(scene);
     REQUIRE(scene->studioModel);
     CHECK(scene->studioModel->bones > 0);
-    // Models whose render pose comes from a sequence have no decoded bind pose yet; they
-    // must report metadata without inventing geometry.
-    if (scene->frames.empty())
-      return;
+    CHECK_FALSE(scene->studioModel->sequenceList.empty());
+    if (
+      !scene->studioModel->sequenceList.empty()
+      && scene->studioModel->sequenceList.front().frameCount > 1 && !scene->frames.empty())
+    {
+      const auto next = loadGoldSrcStudioFrame(bytes, 0, 1);
+      REQUIRE(next);
+      CHECK(next->positions != scene->frames.front().positions);
+      CHECK(next->texCoords.size() == next->positions.size());
+    }
     const auto image = renderModelPreview(scene->frames.front(), 256, 0.55f, 0.38f);
     REQUIRE_FALSE(image.isNull());
     auto painted = 0;
@@ -407,8 +477,36 @@ TEST_CASE("AssetInspection")
       for (auto x = 0; x < image.width(); ++x)
         painted += image.pixelColor(x, y).alpha() > 0 ? 1 : 0;
     CHECK(painted > 256);
-    if (const auto out = std::getenv("TB_GOLDSRC_PREVIEW_OUT"); out && *out)
+    const auto out = std::getenv("TB_GOLDSRC_PREVIEW_OUT");
+    if (out && *out)
       CHECK(image.save(QString::fromUtf8(out)));
+
+    // The inspector must expose the authored sequences and a frame control.
+    auto asset = inspection::Asset{};
+    asset.resource.type = BrowserCellType::Model;
+    asset.resource.path = "models/player/gordon.mdl";
+    asset.name = "gordon";
+    asset.original = bytes;
+    asset.compatible = bytes;
+    auto inspector = AssetInspector{};
+    inspector.resize(420, 620);
+    inspector.setAsset(asset);
+    auto* sequence = inspector.findChild<QComboBox*>("AssetInspector_ModelSequence");
+    auto* frame = inspector.findChild<QSlider*>("AssetInspector_ModelFrame");
+    auto* play = inspector.findChild<QPushButton*>("AssetInspector_ModelPlay");
+    REQUIRE(sequence);
+    REQUIRE(frame);
+    REQUIRE(play);
+    CHECK_FALSE(sequence->isHidden());
+    CHECK(sequence->count() == int(scene->studioModel->sequenceList.size()));
+    CHECK(frame->maximum() > 0);
+    if (out && *out)
+    {
+      inspector.show();
+      QTest::qWait(120);
+      CHECK(inspector.grab().save(QString::fromUtf8(out) + ".panel.png"));
+      inspector.hide();
+    }
   }
   SECTION("prefabs report authored volumes and references")
   {

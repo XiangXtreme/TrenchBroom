@@ -89,6 +89,9 @@ std::string readFixedString(
 
 struct Header;
 
+/** Decodes every embedded texture from its indexed pixels and 256 colour palette. */
+std::vector<GoldSrcStudioTexture> decodeTextures(const Bytes& bytes, const Header& header);
+
 /** Smallest box containing every authored vertex of every body variant. */
 std::optional<vm::bbox3f> measureBounds(
   const Bytes& bytes, const Header& header);
@@ -105,6 +108,8 @@ struct Header
   std::size_t textureOffset = 0;
   std::size_t skinReferences = 0;
   std::size_t skinFamilies = 0;
+  std::size_t skinOffset = 0;
+  std::size_t textureDataOffset = 0;
   std::size_t bodyParts = 0;
   std::size_t bodyPartOffset = 0;
   vm::bbox3f bounds;
@@ -129,6 +134,46 @@ std::size_t tableAt(
   const auto start = std::size_t(value);
   const auto total = count * entrySize;
   return count > 0 && contains(bytes, start, total) ? start : 0;
+}
+
+std::vector<GoldSrcStudioTexture> decodeTextures(const Bytes& bytes, const Header& header)
+{
+  auto textures = std::vector<GoldSrcStudioTexture>{};
+  textures.reserve(header.textures);
+  for (auto index = std::size_t{0}; index < header.textures; ++index)
+  {
+    const auto offset = header.textureOffset + index * TextureSize;
+    auto texture = GoldSrcStudioTexture{};
+    const auto width = readi32(bytes, offset + 68);
+    const auto height = readi32(bytes, offset + 72);
+    const auto pixels = readi32(bytes, offset + 76);
+    if (width <= 0 || height <= 0 || width > 4096 || height > 4096)
+    {
+      textures.push_back(std::move(texture));
+      continue;
+    }
+
+    texture.width = std::size_t(width);
+    texture.height = std::size_t(height);
+    const auto count = texture.width * texture.height;
+    const auto pixelOffset = std::size_t(std::max(0, pixels));
+    if (!contains(bytes, pixelOffset, count) || !contains(bytes, pixelOffset + count, 768))
+    {
+      textures.push_back(std::move(texture));
+      continue;
+    }
+
+    texture.pixels.resize(count);
+    for (auto i = std::size_t{0}; i < count; ++i)
+    {
+      const auto entry = std::size_t{bytes[pixelOffset + i]} * 3;
+      texture.pixels[i] = 0xFF000000u | (std::uint32_t{bytes[pixelOffset + count + entry]} << 16)
+                          | (std::uint32_t{bytes[pixelOffset + count + entry + 1]} << 8)
+                          | std::uint32_t{bytes[pixelOffset + count + entry + 2]};
+    }
+    textures.push_back(std::move(texture));
+  }
+  return textures;
 }
 
 std::optional<vm::bbox3f> measureBounds(const Bytes& bytes, const Header& header)
@@ -196,6 +241,8 @@ Result<Header> readHeader(const Bytes& bytes)
   header.textureOffset = tableAt(bytes, 184, header.textures, TextureSize);
   header.skinReferences = countAt(bytes, 192, 4096);
   header.skinFamilies = countAt(bytes, 196, 4096);
+  header.skinOffset = std::size_t(std::max(0, readi32(bytes, 200)));
+  header.textureDataOffset = std::size_t(std::max(0, readi32(bytes, 188)));
   header.bodyParts = countAt(bytes, 204, MaxBodyParts);
   header.bodyPartOffset = tableAt(bytes, 208, header.bodyParts, BodyPartSize);
 
@@ -207,6 +254,11 @@ Result<Header> readHeader(const Bytes& bytes)
     return Error{"The studio model body part table lies outside the file."};
   if (header.sequences > 0 && header.sequenceOffset == 0)
     return Error{"The studio model sequence table lies outside the file."};
+  if (
+    header.skinReferences > 0
+    && !contains(
+      bytes, header.skinOffset, header.skinReferences * header.skinFamilies * 2))
+    return Error{"The studio model skin table lies outside the file."};
 
   auto low = vm::vec3f{readf32(bytes, 88), readf32(bytes, 92), readf32(bytes, 96)};
   auto high = vm::vec3f{readf32(bytes, 100), readf32(bytes, 104), readf32(bytes, 108)};
@@ -508,6 +560,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
 
   const auto pose = readSequencePose(bytes, value, sequence, frame);
   const auto bones = readBoneTransforms(bytes, value, pose);
+  const auto textures = decodeTextures(bytes, value);
   auto result = GoldSrcStudioMesh{};
 
   for (auto part = std::size_t{0}; part < value.bodyParts; ++part)
@@ -537,6 +590,11 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
     for (auto mesh = std::size_t{0}; mesh < meshCount; ++mesh)
     {
       const auto offset = meshOffset + mesh * MeshSize;
+      const auto skinReference = readi32(bytes, offset + 8);
+      const auto textureIndex =
+        skinReference >= 0 && std::size_t(skinReference) < value.skinReferences
+          ? std::size_t(readu16(bytes, value.skinOffset + std::size_t(skinReference) * 2))
+          : std::size_t{0};
       const auto streamOffset = readi32(bytes, offset + 4);
       if (streamOffset < 0 || std::size_t(streamOffset) >= bytes.size())
         continue;
@@ -561,14 +619,24 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
           || !contains(bytes, stream, vertexCountInRun * 8))
           break;
 
+        const auto* texture =
+          textureIndex < textures.size() ? &textures[textureIndex] : nullptr;
         auto runVertices = std::vector<std::size_t>{};
+        auto runCoords = std::vector<std::array<float, 2>>{};
         runVertices.reserve(vertexCountInRun);
+        runCoords.reserve(vertexCountInRun);
         for (auto k = std::size_t{0}; k < vertexCountInRun; ++k)
         {
           const auto vertex = readi16(bytes, stream + k * 8);
           runVertices.push_back(
             vertex >= 0 && std::size_t(vertex) < vertexCount ? std::size_t(vertex)
                                                              : vertexCount);
+          // s and t are stored in texel units; the image rows start at t = 0.
+          const auto s = float(readi16(bytes, stream + k * 8 + 4));
+          const auto t = float(readi16(bytes, stream + k * 8 + 6));
+          runCoords.push_back(
+            {texture && texture->width > 0 ? s / float(texture->width) : 0.0f,
+             texture && texture->height > 0 ? t / float(texture->height) : 0.0f});
         }
         stream += vertexCountInRun * 8;
 
@@ -579,8 +647,9 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
           const auto second = count > 0 ? (k % 2 == 0 ? k - 1 : k - 2) : k - 1;
           const auto base = result.positions.size();
           auto skipped = false;
-          for (const auto index : {runVertices[first], runVertices[second], runVertices[k]})
+          for (const auto corner : {first, second, k})
           {
+            const auto index = runVertices[corner];
             // Retail models can carry stale indices; skip that triangle instead of
             // discarding the whole model.
             if (index >= vertexCount)
@@ -595,13 +664,16 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
               readf32(bytes, vertexOffset + index * 12 + 8)};
             result.positions.push_back(
               bone < bones.size() ? applyTransform(bones[bone], position) : position);
+            result.texCoords.push_back(runCoords[corner]);
           }
           if (skipped)
           {
             result.positions.resize(base);
+            result.texCoords.resize(base);
             continue;
           }
           result.triangles.push_back({base, base + 1, base + 2});
+          result.triangleTextures.push_back(textureIndex);
           emitted += 3;
         }
       }
@@ -611,6 +683,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   if (result.triangles.empty())
     return Error{"The studio model has no readable geometry."};
 
+  result.textures = textures;
   return result;
 }
 

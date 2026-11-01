@@ -63,11 +63,25 @@ bool isGoldSrcStudioModel(const std::vector<std::uint8_t>& bytes);
 Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
   const std::vector<std::uint8_t>& bytes);
 
-/** Bind-pose geometry of one variant per body part, in model space. */
+/** One embedded texture, decoded from the indexed pixels and its 256 colour palette. */
+struct GoldSrcStudioTexture
+{
+  std::size_t width = 0;
+  std::size_t height = 0;
+  // Row-major 0xAARRGGBB pixels.
+  std::vector<std::uint32_t> pixels;
+};
+
+/** Geometry of one variant per body part at one animation frame, in model space. */
 struct GoldSrcStudioMesh
 {
   std::vector<vm::vec3f> positions;
+  // Texture coordinates parallel to positions, using the engine's texel-space values.
+  std::vector<std::array<float, 2>> texCoords;
   std::vector<std::array<std::size_t, 3>> triangles;
+  // Index into textures, parallel to triangles.
+  std::vector<std::size_t> triangleTextures;
+  std::vector<GoldSrcStudioTexture> textures;
 };
 
 /**

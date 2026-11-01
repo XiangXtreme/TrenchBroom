@@ -70,6 +70,13 @@ class AssetInspector : public QWidget
   QLabel* m_modelLimits = nullptr;
   QCheckBox* m_modelBounds = nullptr;
   QCheckBox* m_modelOrigin = nullptr;
+  QWidget* m_studioControls = nullptr;
+  QComboBox* m_studioSequence = nullptr;
+  QPushButton* m_studioPlay = nullptr;
+  QSlider* m_studioFrame = nullptr;
+  QTimer* m_studioTimer = nullptr;
+  std::size_t m_studioSequenceIndex = 0;
+  std::size_t m_studioFrameIndex = 0;
   std::optional<ModelPreviewScene> m_model;
   std::optional<mdl::GoldSrcStudioModelInfo> m_studioModel;
   std::vector<std::size_t> m_studioVariants;
@@ -108,5 +115,7 @@ private:
   void showPrefab();
   void configureStudioModel();
   void rebuildStudioPose();
+  void showStudioFrame();
+  void stepStudioAnimation();
 };
 } // namespace tb::ui
