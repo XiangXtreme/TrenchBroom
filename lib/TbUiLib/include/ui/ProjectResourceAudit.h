@@ -25,6 +25,7 @@ enum class ProjectResourceStatus
   Unsupported,
   ScanError,
 };
+QString projectResourceStatusLabel(ProjectResourceStatus status);
 
 struct ProjectResourceUse
 {

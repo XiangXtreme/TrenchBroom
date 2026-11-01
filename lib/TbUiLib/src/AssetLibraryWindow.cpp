@@ -29,6 +29,7 @@
 #include <QProgressBar>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSize>
 #include <QSlider>
@@ -53,6 +54,9 @@
 #include "ui/AssetLibrarySource.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
+#include "ui/ProjectCaptureConflictDialog.h"
+#include "ui/ProjectResourceAudit.h"
+#include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/RecentDocuments.h"
 
@@ -100,11 +104,6 @@ QString typeText(const project::AssetType type)
     return QObject::tr("Prefab");
   }
   return QObject::tr("Unknown");
-}
-
-bool isConverted(const project::LibraryAsset& asset)
-{
-  return asset.nativeFormat == "goldsrc-wad" || asset.nativeFormat == "goldsrc-miptex";
 }
 
 // Only raster textures go through the GoldSrc converter; models, sprites, sounds and
@@ -240,6 +239,21 @@ void AssetLibraryWindow::buildUi()
   setWindowTitle(tr("Asset Library"));
   setObjectName(QStringLiteral("AssetLibraryWindow"));
   resize(1180, 760);
+  m_reloadTimer = new QTimer{this};
+  m_reloadTimer->setSingleShot(true);
+  connect(m_reloadTimer, &QTimer::timeout, this, &AssetLibraryWindow::reload);
+  m_usageTimer = new QTimer{this};
+  m_usageTimer->setSingleShot(true);
+  m_usageTimer->setInterval(150);
+  connect(m_usageTimer, &QTimer::timeout, this, &AssetLibraryWindow::refreshUsage);
+  connect(
+    &AssetLibraryChanges::instance(),
+    &AssetLibraryChanges::changed,
+    this,
+    [this](const QString& id) {
+      if (m_source && id.toStdString() == m_source->libraryId())
+        m_reloadTimer->start(0);
+    });
 
   const auto textColor = palette().color(QPalette::Active, QPalette::Text);
   const auto dimColor = palette().color(QPalette::Active, QPalette::PlaceholderText);
@@ -440,7 +454,7 @@ void AssetLibraryWindow::buildUi()
   centerLayout->addWidget(m_empty, 1);
   splitter->addWidget(center);
 
-  auto* inspector = new QWidget{splitter};
+  auto* inspector = new QWidget{};
   inspector->setObjectName(QStringLiteral("AssetLibraryInspector"));
   inspector->setAttribute(Qt::WA_StyledBackground, true);
   auto* inspectorLayout = new QVBoxLayout{inspector};
@@ -522,15 +536,32 @@ void AssetLibraryWindow::buildUi()
   m_usage = new QListWidget{inspector};
   m_usage->setObjectName(QStringLiteral("AssetLibraryUsage"));
   m_usage->setFrameShape(QFrame::NoFrame);
-  m_usage->setSelectionMode(QAbstractItemView::NoSelection);
+  m_usage->setSelectionMode(QAbstractItemView::SingleSelection);
   m_usage->setMaximumHeight(110);
 
   inspectorLayout->addWidget(dependenciesTitle);
   inspectorLayout->addWidget(m_dependencies);
   inspectorLayout->addWidget(usageTitle);
+  m_projectScope =
+    new QLabel{tr("Saved captures in up to 12 recent projects"), inspector};
+  m_projectScope->setObjectName("AssetLibrary_ProjectScope");
+  m_projectScope->setWordWrap(true);
+  inspectorLayout->addWidget(m_projectScope);
+  auto* refreshUsage = createActionButton(
+    inspector,
+    tr("Refresh usage"),
+    tr("Query the bound project, including current unsaved map edits"));
+  refreshUsage->setObjectName("AssetLibrary_RefreshUsage");
+  connect(refreshUsage, &QPushButton::clicked, this, &AssetLibraryWindow::refreshUsage);
+  inspectorLayout->addWidget(refreshUsage);
   inspectorLayout->addWidget(m_usage);
   inspectorLayout->addStretch(1);
-  splitter->addWidget(inspector);
+  auto* inspectorScroll = new QScrollArea{splitter};
+  inspectorScroll->setObjectName("AssetLibrary_InspectorScroll");
+  inspectorScroll->setWidgetResizable(true);
+  inspectorScroll->setFrameShape(QFrame::NoFrame);
+  inspectorScroll->setWidget(inspector);
+  splitter->addWidget(inspectorScroll);
 
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
@@ -554,6 +585,58 @@ void AssetLibraryWindow::buildUi()
   connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
     m_search = text;
     refreshGrid();
+  });
+  m_tagCombo = new QComboBox{};
+  m_tagCombo->setObjectName("AssetLibrary_Tag");
+  m_tagCombo->addItem(tr("All tags"), QString{});
+  m_tagCombo->setProperty("tbControlRole", "compact");
+  m_tagCombo->setMaximumWidth(180);
+  toolsLayout->insertWidget(0, m_tagCombo);
+  connect(m_tagCombo, &QComboBox::currentIndexChanged, this, [this]() { refreshGrid(); });
+  connect(m_usage, &QListWidget::itemDoubleClicked, this, [this](const auto* item) {
+    const auto mapId = item->data(Qt::UserRole).toString();
+    if (const auto project = m_project.lock(); project && !mapId.isEmpty())
+    {
+      emit project->browserOpenMapRequested(mapId);
+      hide();
+    }
+  });
+  connect(m_inspector, &AssetInspector::showSnapshotRequested, this, [this]() {
+    if (const auto project = m_project.lock(); project && m_projectAssetId)
+    {
+      emit project->browserRevealAssetRequested(
+        QString::fromStdString(*m_projectAssetId));
+      hide();
+    }
+  });
+  connect(m_inspector, &AssetInspector::findUsesRequested, this, [this]() {
+    if (const auto project = m_project.lock(); project && m_projectAssetId)
+      emit project->browserFindUsesRequested(QString::fromStdString(*m_projectAssetId));
+  });
+  connect(
+    m_inspector,
+    &AssetInspector::captureRequested,
+    this,
+    &AssetLibraryWindow::captureSelected);
+  connect(
+    m_inspector,
+    &AssetInspector::updateRequested,
+    this,
+    &AssetLibraryWindow::updateSelected);
+  connect(m_grid, &QListWidget::itemDoubleClicked, this, [this]() {
+    if (!m_inspector->asset())
+      return;
+    auto dialog = QDialog{this};
+    dialog.setWindowTitle(tr("Asset preview"));
+    dialog.resize(820, 720);
+    auto* layout = new QVBoxLayout{&dialog};
+    auto* inspector = new AssetInspector{&dialog};
+    inspector->setAsset(*m_inspector->asset());
+    layout->addWidget(inspector);
+    auto* buttons = new QDialogButtonBox{QDialogButtonBox::Close};
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.exec();
   });
   connect(m_categories, &QListWidget::currentRowChanged, this, [this](int) {
     if (const auto* item = m_categories->currentItem())
@@ -644,6 +727,8 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
     return;
   }
   m_source = std::move(source);
+  m_selectedId.reset();
+  m_filter = QStringLiteral("all");
   if (remember)
     PreferenceManager::instance().set(Preferences::AssetLibraryDirectory, path);
   reload();
@@ -652,7 +737,6 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
 void AssetLibraryWindow::reload()
 {
   m_assets.clear();
-  m_selectedId.reset();
   if (!m_source)
   {
     m_empty->setText(tr("No library is open.\nUse Change Library… to choose one."));
@@ -678,15 +762,32 @@ void AssetLibraryWindow::reload()
   }
   m_assets = assets.value();
   m_favorites.clear();
-  if (m_source->canManage())
+  m_metadata.clear();
+  const auto tag = m_tagCombo->currentData().toString();
+  const auto tagBlocker = QSignalBlocker{m_tagCombo};
+  m_tagCombo->clear();
+  m_tagCombo->addItem(tr("All tags"), QString{});
+  auto tags = QStringList{};
   {
     for (const auto& asset : m_assets)
     {
-      if (const auto meta = m_source->metadata(asset.id);
-          meta.is_success() && meta.value().favorite)
-        m_favorites.insert(asset.id);
+      if (const auto meta = m_source->metadata(asset.id); meta.is_success())
+      {
+        m_metadata.emplace(asset.id, meta.value());
+        if (meta.value().favorite)
+          m_favorites.insert(asset.id);
+        for (const auto& value : meta.value().tags)
+          if (!tags.contains(QString::fromStdString(value), Qt::CaseInsensitive))
+            tags.push_back(QString::fromStdString(value));
+      }
     }
   }
+  tags.sort(Qt::CaseInsensitive);
+  for (const auto& value : tags)
+    m_tagCombo->addItem(value, value);
+  if (!tag.isEmpty() && m_tagCombo->findData(tag) < 0)
+    m_tagCombo->addItem(tag, tag);
+  m_tagCombo->setCurrentIndex(std::max(0, m_tagCombo->findData(tag)));
   updateHeader();
   refreshCategories();
   refreshGrid();
@@ -825,6 +926,8 @@ void AssetLibraryWindow::refreshCategories()
 
 void AssetLibraryWindow::refreshGrid()
 {
+  const auto selection = m_selectedId;
+  const auto blocker = QSignalBlocker{m_grid};
   m_grid->clear();
   m_empty->hide();
 
@@ -847,10 +950,19 @@ void AssetLibraryWindow::refreshGrid()
       || (m_filter == QStringLiteral("favourites") && m_favorites.contains(asset.id));
     if (!matchesType)
       continue;
+    const auto found = m_metadata.find(asset.id);
+    const auto metadata = found == m_metadata.end()
+                            ? std::optional<BrowserAssetMetadata>{}
+                            : std::optional{found->second};
+    if (!assetMetadataMatches(
+          metadata, m_filter == "favourites", m_tagCombo->currentData().toString()))
+      continue;
     const auto displayName = QString::fromStdString(asset.displayName);
-    if (
-      !search.isEmpty() && !displayName.contains(search, Qt::CaseInsensitive)
-      && !QString::fromStdString(asset.virtualPath).contains(search, Qt::CaseInsensitive))
+    if (!assetSearchMatches(
+          displayName,
+          QString::fromStdString(asset.virtualPath),
+          metadata ? metadata->tags : std::vector<std::string>{},
+          search))
       continue;
 
     auto* item = new QListWidgetItem{m_grid};
@@ -898,7 +1010,7 @@ void AssetLibraryWindow::refreshGrid()
     m_grid->show();
   }
 
-  if (m_selectedId)
+  if (selection)
   {
     for (auto row = 0; row < m_grid->count(); ++row)
     {
@@ -907,7 +1019,7 @@ void AssetLibraryWindow::refreshGrid()
           ->data(AssetLibraryItemDelegate::AssetIdRole)
           .toString()
           .toStdString()
-        == *m_selectedId)
+        == *selection)
       {
         m_grid->setCurrentRow(row);
         break;
@@ -919,6 +1031,12 @@ void AssetLibraryWindow::refreshGrid()
     // Open with something selected so the inspector already shows the first asset.
     m_grid->setCurrentRow(0);
   }
+  if (const auto* current = m_grid->currentItem())
+    m_selectedId =
+      current->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString();
+  else
+    m_selectedId.reset();
+  showAsset(selectedAsset());
 }
 
 void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
@@ -1004,6 +1122,9 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
 
 void AssetLibraryWindow::clearInspector()
 {
+  m_projectAssetId.reset();
+  m_usage->clear();
+  m_usage->addItem(tr("No asset selected"));
   m_name->setText(tr("No asset selected"));
   m_name->setToolTip({});
   m_status->clear();
@@ -1046,9 +1167,29 @@ QImage AssetLibraryWindow::previewImage(
 void AssetLibraryWindow::updatePreview()
 {
   if (const auto* asset = selectedAsset(); asset && m_source)
-    m_inspector->setAsset(inspection::readLibraryAsset(*m_source, *asset));
+  {
+    auto inspected = inspection::readLibraryAsset(*m_source, *asset);
+    if (inspected.is_success())
+    {
+      auto loaded = std::move(inspected).value();
+      if (m_projectAssetId)
+      {
+        loaded.resource.projectAssetId = *m_projectAssetId;
+        if (const auto project = m_project.lock())
+        {
+          const auto snapshot = project->store().findAsset(*m_projectAssetId);
+          if (snapshot.is_success() && snapshot.value())
+            loaded.resource.projectRevision = snapshot.value()->revision;
+        }
+      }
+      m_inspector->setAsset(std::move(loaded));
+    }
+    else
+      m_inspector->setAsset(std::move(inspected));
+  }
   else
     m_inspector->clear();
+  updateProjectActions();
 }
 
 void AssetLibraryWindow::updateStatus()
@@ -1388,6 +1529,7 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
 void AssetLibraryWindow::refreshUsage()
 {
   m_usage->clear();
+  m_projectAssetId.reset();
   const auto* asset = selectedAsset();
   if (!asset || !m_source)
   {
@@ -1401,29 +1543,246 @@ void AssetLibraryWindow::refreshUsage()
     m_usage->addItem(tr("This library has no catalog identity"));
     return;
   }
+  if (const auto project = m_project.lock())
+  {
+    auto projectRevision = std::uint64_t{0};
+    m_projectScope->setText(tr("Project: %1\n%2\nExplicit MAP references, including "
+                               "unsaved edits. Double-click a reference to open its map.")
+                              .arg(
+                                QString::fromStdString(project->store().info().name),
+                                pathAsQString(project->path())));
+    const auto captured = project->projectAssetForLibraryAsset(libraryId, asset->id);
+    if (captured.is_error())
+      m_usage->addItem(
+        tr("Snapshot lookup failed: %1")
+          .arg(QString::fromStdString(std::get<Error>(captured.error()).msg)));
+    else if (!captured.value())
+      m_usage->addItem(tr("Not captured in this project"));
+    else
+    {
+      m_projectAssetId = captured.value()->id;
+      projectRevision = captured.value()->revision;
+      const auto audit = auditGoldSrcProjectResources(*project);
+      if (audit.is_error())
+        m_usage->addItem(
+          tr("Usage check failed: %1")
+            .arg(QString::fromStdString(std::get<Error>(audit.error()).msg)));
+      else
+      {
+        auto matches = 0;
+        auto failures = 0;
+        for (const auto& use : audit.value().uses)
+        {
+          const auto failed = use.status == ProjectResourceStatus::ScanError;
+          if (
+            !failed
+            && std::ranges::find(use.assetIds, *m_projectAssetId) == use.assetIds.end())
+            continue;
+          auto* row = new QListWidgetItem{
+            failed ? tr("Scan failed: %1 — %2")
+                       .arg(
+                         QString::fromStdString(use.mapPath),
+                         QString::fromStdString(use.detail))
+                   : tr("%1 : %2 · %3 · %4 · %5")
+                       .arg(QString::fromStdString(use.mapPath))
+                       .arg(qulonglong(use.line))
+                       .arg(projectResourceStatusLabel(use.status))
+                       .arg(
+                         QString::fromStdString(use.location),
+                         QString::fromStdString(use.reference)),
+            m_usage};
+          row->setData(Qt::UserRole, QString::fromStdString(use.mapId));
+          row->setToolTip(row->text());
+          if (failed)
+            ++failures;
+          else
+            ++matches;
+        }
+        if (matches == 0)
+          m_usage->addItem(
+            failures
+              ? tr("No matching references found; failed scans leave usage incomplete.")
+              : tr("Captured, with no explicit references in the scanned project maps."));
+      }
+    }
+    // Refresh capture annotations only when the snapshot changed, preserving ongoing
+    // playback and the preview view while map edits merely refresh the usage list.
+    if (m_inspector->asset()
+        && (m_inspector->asset()->resource.projectAssetId != m_projectAssetId.value_or("")
+            || m_inspector->asset()->resource.projectRevision != projectRevision))
+      updatePreview();
+    else
+      updateProjectActions();
+    return;
+  }
 
-  // Recent projects are the only project list available without asking the user for a
-  // search root; anything unreadable is skipped instead of interrupting the browser.
+  m_projectScope->setText(
+    tr("Saved captures in up to 12 recent projects. Live map references are checked only "
+       "when opened from a project."));
   auto used = 0;
+  auto inaccessible = 0;
   for (const auto& path : loadRecentDocuments(12))
   {
     if (path.extension() != ".tbproj")
       continue;
     const auto store = project::ProjectStore::open(path);
     if (store.is_error())
+    {
+      auto* row =
+        new QListWidgetItem{tr("Unavailable: %1").arg(pathAsQString(path)), m_usage};
+      row->setToolTip(QString::fromStdString(std::get<Error>(store.error()).msg));
+      ++inaccessible;
       continue;
+    }
     const auto found = store.value()->findAssetByLibraryAsset(libraryId, asset->id);
-    if (found.is_error() || !found.value())
+    if (found.is_error())
+    {
+      m_usage->addItem(tr("Cannot check: %1 — %2")
+                         .arg(
+                           pathAsQString(path),
+                           QString::fromStdString(std::get<Error>(found.error()).msg)));
+      ++inaccessible;
+      continue;
+    }
+    if (!found.value())
       continue;
 
-    m_usage->addItem(QStringLiteral("%1  ·  %2")
+    m_usage->addItem(tr("Captured: %1  ·  %2")
                        .arg(
                          QString::fromStdString(path.stem().string()),
                          QString::fromStdString(found.value().value().virtualPath)));
     ++used;
   }
   if (used == 0)
-    m_usage->addItem(tr("Not used by known projects"));
+    m_usage->addItem(
+      inaccessible ? tr("No captures found in readable recent projects; some projects "
+                        "could not be checked.")
+                   : tr("No saved captures found in the checked recent projects."));
+  updateProjectActions();
+}
+
+void AssetLibraryWindow::setProjectContext(const std::shared_ptr<ProjectSession>& project)
+{
+  QObject::disconnect(m_projectConnection);
+  QObject::disconnect(m_mapConnection);
+  m_project = project;
+  if (project)
+  {
+    m_projectConnection =
+      connect(project.get(), &ProjectSession::stateChanged, this, [this]() {
+        m_usageTimer->start();
+      });
+    m_mapConnection =
+      connect(project.get(), &ProjectSession::mapContentsChanged, this, [this]() {
+        m_usageTimer->start();
+      });
+  }
+  refreshUsage();
+  updatePreview();
+}
+
+std::string AssetLibraryWindow::libraryId() const
+{
+  return m_source ? m_source->libraryId() : std::string{};
+}
+
+Result<void> AssetLibraryWindow::revealAsset(
+  const std::string& libraryId, const std::string& assetId)
+{
+  if (!m_source || m_source->libraryId() != libraryId)
+    return Error{"The requested resource belongs to another asset library."};
+  if (std::ranges::find(m_assets, assetId, &project::LibraryAsset::id) == m_assets.end())
+  {
+    reload();
+    if (
+      std::ranges::find(m_assets, assetId, &project::LibraryAsset::id) == m_assets.end())
+      return Error{"The requested asset no longer exists in this library."};
+  }
+  m_filter = QStringLiteral("all");
+  const auto searchBlocker = QSignalBlocker{m_searchEdit};
+  const auto tagBlocker = QSignalBlocker{m_tagCombo};
+  m_searchEdit->clear();
+  m_search.clear();
+  m_tagCombo->setCurrentIndex(0);
+  m_selectedId = assetId;
+  refreshCategories();
+  refreshGrid();
+  if (const auto* current = m_grid->currentItem())
+    m_grid->scrollToItem(current);
+  return {};
+}
+
+void AssetLibraryWindow::updateProjectActions()
+{
+  const auto project = m_project.lock();
+  const auto* asset = selectedAsset();
+  auto canCapture = false;
+  auto canUpdate = false;
+  if (project && asset && m_source && !asset->missing)
+  {
+    const auto libraries = project->libraries();
+    canCapture =
+      !m_projectAssetId && libraries.is_success()
+      && std::ranges::any_of(libraries.value(), [&](const auto& connection) {
+           return connection.info.id == m_source->libraryId() && connection.available;
+         });
+    if (m_projectAssetId)
+    {
+      const auto updates = project->checkLibraryUpdates();
+      if (updates.is_success())
+        for (const auto& update : updates.value())
+          if (update.projectAssetId == *m_projectAssetId)
+            canUpdate =
+              update.state == project::LibraryUpdateState::NewVersion
+              || update.state == project::LibraryUpdateState::DependenciesChanged;
+    }
+  }
+  m_inspector->setActions(
+    false,
+    canCapture,
+    canUpdate,
+    bool(project && m_projectAssetId),
+    project ? tr("Target project: %1\n%2")
+                .arg(
+                  QString::fromStdString(project->store().info().name),
+                  pathAsQString(project->path()))
+            : QString{});
+  m_inspector->setNavigation(false, bool(project && m_projectAssetId));
+}
+
+void AssetLibraryWindow::captureSelected()
+{
+  const auto project = m_project.lock();
+  const auto* asset = selectedAsset();
+  if (!project || !asset || !m_source)
+    return;
+  const auto captured = project->captureLibraryAssetResolving(
+    m_source->libraryId(), asset->id, [this](const CaptureConflict& conflict) {
+      return confirmCaptureConflict(this, conflict) ? CaptureConflictChoice::Replace
+                                                    : CaptureConflictChoice::Cancel;
+    });
+  if (captured.is_error())
+    QMessageBox::warning(
+      this,
+      tr("Add to project"),
+      QString::fromStdString(std::get<Error>(captured.error()).msg));
+  refreshUsage();
+  updatePreview();
+}
+
+void AssetLibraryWindow::updateSelected()
+{
+  const auto project = m_project.lock();
+  if (!project || !m_projectAssetId)
+    return;
+  const auto updated = project->updateLibraryAssets({*m_projectAssetId});
+  if (updated.is_error())
+    QMessageBox::warning(
+      this,
+      tr("Update project resource"),
+      QString::fromStdString(std::get<Error>(updated.error()).msg));
+  refreshUsage();
+  updatePreview();
 }
 
 void AssetLibraryWindow::applyTags()

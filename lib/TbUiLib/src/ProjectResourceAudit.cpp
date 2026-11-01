@@ -4,6 +4,8 @@
  */
 #include "ui/ProjectResourceAudit.h"
 
+#include <QObject>
+
 #include "base/FileLocation.h"
 #include "base/Logger.h"
 #include "base/SimpleParserStatus.h"
@@ -19,6 +21,25 @@
 
 namespace tb::ui
 {
+QString projectResourceStatusLabel(const ProjectResourceStatus status)
+{
+  switch (status)
+  {
+  case ProjectResourceStatus::Embedded:
+    return QObject::tr("Embedded");
+  case ProjectResourceStatus::Missing:
+    return QObject::tr("Not embedded");
+  case ProjectResourceStatus::Ambiguous:
+    return QObject::tr("Ambiguous");
+  case ProjectResourceStatus::InvalidPath:
+    return QObject::tr("Invalid path");
+  case ProjectResourceStatus::Unsupported:
+    return QObject::tr("Needs lookup");
+  case ProjectResourceStatus::ScanError:
+    return QObject::tr("Scan failed");
+  }
+  return {};
+}
 namespace
 {
 enum class ReferenceKind

@@ -147,28 +147,7 @@ void ProjectResourceDialog::refresh()
       ++issues;
     if (m_issuesOnly->isChecked() && use.status == ProjectResourceStatus::Embedded)
       continue;
-    auto status = QString{};
-    switch (use.status)
-    {
-    case ProjectResourceStatus::Embedded:
-      status = tr("Embedded");
-      break;
-    case ProjectResourceStatus::Missing:
-      status = tr("Not embedded");
-      break;
-    case ProjectResourceStatus::Ambiguous:
-      status = tr("Ambiguous");
-      break;
-    case ProjectResourceStatus::InvalidPath:
-      status = tr("Invalid path");
-      break;
-    case ProjectResourceStatus::Unsupported:
-      status = tr("Needs lookup");
-      break;
-    case ProjectResourceStatus::ScanError:
-      status = tr("Scan failed");
-      break;
-    }
+    const auto status = projectResourceStatusLabel(use.status);
     auto embedded = QStringList{};
     for (const auto& id : use.assetIds)
       embedded.push_back(paths.contains(id) ? paths.at(id) : QString::fromStdString(id));

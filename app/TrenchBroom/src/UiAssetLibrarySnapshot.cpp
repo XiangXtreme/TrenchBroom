@@ -14,15 +14,21 @@
 #include <QPainter>
 #include <QTemporaryDir>
 
+#include "mdl/MapFormat.h"
+#include "mdl/MapHeader.h"
 #include "project/AssetLibrary.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryWindow.h"
+#include "ui/ProjectReference.h"
+#include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -39,6 +45,7 @@ namespace
 class TemporaryLibrary : public QObject
 {
   QTemporaryDir m_directory;
+  std::shared_ptr<ProjectSession> m_project;
 
 public:
   explicit TemporaryLibrary(QObject* parent)
@@ -47,9 +54,10 @@ public:
     m_directory.setAutoRemove(true);
   }
 
-  std::filesystem::path folder() const
+  std::filesystem::path folder() const { return pathFromQString(m_directory.path()); }
+  void setProject(std::shared_ptr<ProjectSession> project)
   {
-    return pathFromQString(m_directory.path());
+    m_project = std::move(project);
   }
 };
 
@@ -58,7 +66,8 @@ void writeBytes(const std::filesystem::path& path, const std::vector<std::uint8_
   auto error = std::error_code{};
   std::filesystem::create_directories(path.parent_path(), error);
   auto stream = std::ofstream{path, std::ios::binary};
-  stream.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+  stream.write(
+    reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
 }
 
 void writeText(const std::filesystem::path& path, const std::string& text)
@@ -94,14 +103,22 @@ bool writeTexture(const std::filesystem::path& path, const QColor& from, const Q
 void createTextures(const std::filesystem::path& folder)
 {
   const auto textures = folder / "textures";
-  writeTexture(textures / "wall01.png", QColor{0x4a, 0x6f, 0x9c}, QColor{0x24, 0x3b, 0x57});
-  writeTexture(textures / "wall02.png", QColor{0x7c, 0x5a, 0x92}, QColor{0x3d, 0x2a, 0x4d});
-  writeTexture(textures / "floor_dirt.png", QColor{0x8a, 0x6f, 0x4a}, QColor{0x4b, 0x39, 0x24});
-  writeTexture(textures / "floor_grass.png", QColor{0x5c, 0x8a, 0x4a}, QColor{0x2f, 0x4a, 0x24});
-  writeTexture(textures / "trim_metal.png", QColor{0x78, 0x80, 0x88}, QColor{0x3a, 0x40, 0x46});
-  writeTexture(textures / "trim_rust.png", QColor{0x9c, 0x5a, 0x3a}, QColor{0x52, 0x2c, 0x1c});
-  writeTexture(textures / "sign_arrow.png", QColor{0xc9, 0xb4, 0x5a}, QColor{0x6b, 0x5c, 0x24});
-  writeTexture(textures / "grate.png", QColor{0x55, 0x55, 0x5c}, QColor{0x2a, 0x2a, 0x30});
+  writeTexture(
+    textures / "wall01.png", QColor{0x4a, 0x6f, 0x9c}, QColor{0x24, 0x3b, 0x57});
+  writeTexture(
+    textures / "wall02.png", QColor{0x7c, 0x5a, 0x92}, QColor{0x3d, 0x2a, 0x4d});
+  writeTexture(
+    textures / "floor_dirt.png", QColor{0x8a, 0x6f, 0x4a}, QColor{0x4b, 0x39, 0x24});
+  writeTexture(
+    textures / "floor_grass.png", QColor{0x5c, 0x8a, 0x4a}, QColor{0x2f, 0x4a, 0x24});
+  writeTexture(
+    textures / "trim_metal.png", QColor{0x78, 0x80, 0x88}, QColor{0x3a, 0x40, 0x46});
+  writeTexture(
+    textures / "trim_rust.png", QColor{0x9c, 0x5a, 0x3a}, QColor{0x52, 0x2c, 0x1c});
+  writeTexture(
+    textures / "sign_arrow.png", QColor{0xc9, 0xb4, 0x5a}, QColor{0x6b, 0x5c, 0x24});
+  writeTexture(
+    textures / "grate.png", QColor{0x55, 0x55, 0x5c}, QColor{0x2a, 0x2a, 0x30});
 
   // Six faces with a shared stem make one logical skybox asset.
   const auto faces = std::array<std::pair<const char*, QColor>, 6>{
@@ -157,7 +174,7 @@ void dropOneSource(const std::filesystem::path& folder)
 }
 } // namespace
 
-std::unique_ptr<QWidget> createUiAssetLibrarySnapshot()
+std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(const bool projectContext)
 {
   auto holder = std::unique_ptr<TemporaryLibrary>{};
   const auto folder = [&]() {
@@ -183,7 +200,54 @@ std::unique_ptr<QWidget> createUiAssetLibrarySnapshot()
   if (library.scan().is_error())
     return {};
 
+  const auto assets = library.assets();
+  if (assets.is_error())
+    return {};
+  const auto chosen = std::ranges::find_if(assets.value(), [&](const auto& asset) {
+    return projectContext ? asset.type == project::AssetType::Skybox
+                          : asset.type == project::AssetType::Texture
+                              && asset.nativeFormat == "goldsrc-wad" && !asset.missing;
+  });
+  if (chosen == assets.value().end())
+    return {};
+  if (
+    library.setFavorite(chosen->id, true).is_error()
+    || library.setTags(chosen->id, {"Environment", "Courtyard"}).is_error())
+    return {};
+  auto session = std::shared_ptr<ProjectSession>{};
+  if (projectContext)
+  {
+    auto createdProject =
+      ProjectSession::create(folder / "review.tbproj", "Courtyard", "Half-Life");
+    if (createdProject.is_error())
+      return {};
+    session = std::move(createdProject).value();
+    if (session->attachLibrary(folder).is_error())
+      return {};
+    const auto captured = session->captureLibraryAsset(library.info().id, chosen->id);
+    if (captured.is_error())
+      return {};
+    const auto skyName = gameName(*session, captured.value());
+    if (skyName.is_error())
+      return {};
+    auto stream = std::ostringstream{};
+    mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Valve, "Snapshot");
+    stream << "{\"classname\" \"worldspawn\" \"skyname\" \"" << skyName.value() << "\"}";
+    const auto text = stream.str();
+    auto map = project::AssetImport{};
+    map.type = project::AssetType::Map;
+    map.virtualPath = "maps/courtyard.map";
+    map.displayName = "Courtyard";
+    map.original = map.compatible = {text.begin(), text.end()};
+    if (session->importAsset(map).is_error() || session->save().is_error())
+      return {};
+    holder->setProject(session);
+  }
   auto window = std::make_unique<AssetLibraryWindow>(pathAsQString(folder), false);
+  if (session)
+    window->setProjectContext(session);
+  if (window->revealAsset(library.info().id, chosen->id).is_error())
+    return {};
   holder->setParent(window.get());
   window->resize(1180, 760);
   return window;

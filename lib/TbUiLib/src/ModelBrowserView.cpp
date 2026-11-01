@@ -678,6 +678,25 @@ bool ModelBrowserView::isCellSelected(const Cell& cell) const
   return item.type == m_selectedType && item.path == m_selectedPath;
 }
 
+bool ModelBrowserView::selectProjectAsset(const std::string& assetId)
+{
+  const auto found = std::ranges::find_if(m_assets, [&](const auto& asset) {
+    return asset.source == BrowserSource::Project && asset.projectAssetId == assetId;
+  });
+  if (found == m_assets.end())
+    return false;
+  const auto asset = *found;
+  stopSoundPreview();
+  m_selectedType = asset.type;
+  m_selectedPath = asset.path;
+  m_hasSelection = true;
+  scrollToCell([&](const auto& cell) { return cellData(cell).path == asset.path; });
+  emit assetSelected(asset);
+  emit projectAssetSelected(QString::fromStdString(assetId));
+  update();
+  return true;
+}
+
 void ModelBrowserView::doLeftClick(Layout& layout, const float x, const float y)
 {
   if (const auto* cell = layout.cellAt(x, y))
@@ -744,14 +763,42 @@ void ModelBrowserView::doContextMenu(
   }
 
   const auto& item = cellData(*cell);
+  auto menu = QMenu{this};
+  if (const auto* asset = assetAt(item.path);
+      asset && asset->source != BrowserSource::GameFiles)
+  {
+    if (!asset->libraryId.empty() && !asset->libraryAssetId.empty())
+      menu.addAction(tr("Show in Asset Library"), this, [this, copy = *asset]() {
+        emit showInLibraryRequested(copy);
+      });
+    if (asset->source == BrowserSource::AssetLibrary && !asset->projectAssetId.empty())
+      menu.addAction(
+        tr("Show Project Snapshot"), this, [this, id = asset->projectAssetId]() {
+          emit showProjectSnapshotRequested(QString::fromStdString(id));
+        });
+    if (asset->source == BrowserSource::Project)
+    {
+      const auto id = QString::fromStdString(asset->projectAssetId);
+      menu.addAction(tr("Find Uses in Project"), this, [this, id]() {
+        emit libraryAssetFindUsesRequested(id);
+      });
+      if (!asset->libraryId.empty())
+      {
+        auto* update = menu.addAction(tr("Update Project Resource"), this, [this, id]() {
+          emit libraryAssetUpdateRequested(id);
+        });
+        update->setEnabled(asset->projectUpdateAvailable && !asset->missing);
+      }
+    }
+  }
   if (const auto* asset = assetAt(item.path); asset && isLibraryAsset(*asset))
   {
-    auto menu = QMenu{this};
     const auto libraryId = QString::fromStdString(asset->libraryId);
     const auto libraryAssetId = QString::fromStdString(asset->libraryAssetId);
     auto* capture = menu.addAction(
       asset->projectAssetId.empty() ? tr("Add to Project")
                                     : tr("Use Current Library Version"));
+    capture->setEnabled(!asset->missing);
     connect(capture, &QAction::triggered, this, [=, this]() {
       emit libraryAssetCaptureRequested(libraryId, libraryAssetId);
     });
@@ -759,7 +806,7 @@ void ModelBrowserView::doContextMenu(
     {
       const auto projectAssetId = QString::fromStdString(asset->projectAssetId);
       auto* update = menu.addAction(tr("Update Project Resource"));
-      update->setEnabled(asset->projectUpdateAvailable);
+      update->setEnabled(asset->projectUpdateAvailable && !asset->missing);
       connect(update, &QAction::triggered, this, [=, this]() {
         emit libraryAssetUpdateRequested(projectAssetId);
       });
@@ -774,7 +821,6 @@ void ModelBrowserView::doContextMenu(
 
   if (item.type == BrowserCellType::Prefab)
   {
-    auto menu = QMenu{this};
     menu.addAction(tr("Rename..."), this, [this, prefabPath = item.path]() {
       emit renamePrefabRequested(pathAsGenericQString(prefabPath));
     });
@@ -787,15 +833,18 @@ void ModelBrowserView::doContextMenu(
 
   if (item.type != BrowserCellType::Model)
   {
+    if (!menu.isEmpty())
+      menu.exec(event->globalPos());
     return;
   }
 
   if (kdl::path_to_lower(item.path.extension()) != ".mdl")
   {
+    if (!menu.isEmpty())
+      menu.exec(event->globalPos());
     return;
   }
 
-  auto menu = QMenu{this};
   menu.addAction(tr("Scale MDL..."), this, [this, modelPath = item.path]() {
     auto ok = false;
     const auto scale = QInputDialog::getDouble(

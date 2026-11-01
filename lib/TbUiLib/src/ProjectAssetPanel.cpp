@@ -109,6 +109,14 @@ ProjectAssetPanel::ProjectAssetPanel(
   layout->addWidget(splitter);
   auto* view = m_browser->findChild<ModelBrowserView*>();
   connect(view, &ModelBrowserView::assetSelected, this, &ProjectAssetPanel::showAsset);
+  connect(
+    m_session.get(),
+    &ProjectSession::browserRevealAssetRequested,
+    this,
+    [this, detailsToggle](const QString& id) {
+      m_browser->revealProjectAsset(id.toStdString());
+      detailsToggle->setChecked(true);
+    });
   connect(view, &ModelBrowserView::selectionCleared, this, [this]() {
     m_selected.reset();
     refreshDetails();

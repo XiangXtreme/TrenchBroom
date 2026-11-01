@@ -61,6 +61,26 @@ std::vector<std::string> rootStrings(
 
 TEST_CASE("AssetBrowserModel")
 {
+  SECTION("shared library filters include tags without confusing content revisions")
+  {
+    auto metadata = BrowserAssetMetadata{true, {"Industrial", "Ambient loops"}};
+    CHECK(assetSearchMatches("Valve", "sound/valve.wav", metadata.tags, "ambient"));
+    CHECK(assetSearchMatches("Valve", "sound/valve.wav", metadata.tags, "SOUND/"));
+    CHECK_FALSE(assetSearchMatches("Valve", "sound/valve.wav", metadata.tags, "metal"));
+    CHECK(assetMetadataMatches(metadata, true, "industrial"));
+    CHECK_FALSE(assetMetadataMatches(metadata, true, "ind"));
+    CHECK_FALSE(assetMetadataMatches(std::nullopt, true, {}));
+    CHECK_FALSE(assetMetadataMatches(std::nullopt, false, "Industrial"));
+    CHECK(assetMetadataMatches(std::nullopt, false, {}));
+    auto before = BrowserAsset{BrowserCellType::Sound, "sound/valve.wav"};
+    auto after = before;
+    after.libraryMetadata = metadata;
+    CHECK_FALSE(before == after);
+    CHECK(sameBrowserAssetContent(before, after));
+    const auto entries = modelBrowserEntries({}, {after}, {}, "ambient", false);
+    REQUIRE(entries.size() == 2);
+    CHECK(entries.back().cellData.path == after.path);
+  }
   SECTION("project revisions invalidate previews independently of file timestamps")
   {
     auto before = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};

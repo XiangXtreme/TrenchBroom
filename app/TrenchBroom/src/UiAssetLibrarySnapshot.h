@@ -21,6 +21,6 @@ namespace tb::ui
  * GoldSrc conversion, a converted texture, a skybox group, a model, a sprite, a sound and
  * a source file that went missing after the scan.
  */
-std::unique_ptr<QWidget> createUiAssetLibrarySnapshot();
+std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(bool projectContext = false);
 
 } // namespace tb::ui

@@ -20,8 +20,8 @@
 #include "img/GoldSrcTexture.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
-#include "project/ContentHash.h"
 #include "prefs/Preferences.h"
+#include "project/ContentHash.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
 #include "ui/MapDocument.h"
@@ -903,6 +903,8 @@ Result<void> ProjectSession::registerDocument(
   if (documentFor(id) || m_documents.contains(&document))
     return Error{"Map is already open."};
   auto entry = Document{id, {}};
+  entry.connection += document.documentDidChangeNotifier.connect(
+    [this](const auto&...) { emit mapContentsChanged(); });
   entry.connection += document.documentWasLoadedNotifier.connect(
     [this, &document]() { bindDocument(document); });
   entry.connection += document.modificationStateDidChangeNotifier.connect(

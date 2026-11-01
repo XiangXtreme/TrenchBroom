@@ -10,6 +10,7 @@
 
 #include "base/Result.h"
 #include "project/ProjectAsset.h"
+#include "ui/AssetBrowserModel.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -19,6 +20,9 @@
 
 namespace tb::ui
 {
+class ProjectSession;
+void loadBrowserAssetMetadata(
+  std::vector<BrowserAsset>& assets, const ProjectSession& session);
 /** Content/metadata invalidation only; it never changes a project's captured bytes. */
 class AssetLibraryChanges : public QObject
 {
@@ -66,11 +70,7 @@ public:
   /** Whether this source supports catalog edits (favourite, rename, delete). */
   virtual bool canManage() const { return false; }
 
-  struct Metadata
-  {
-    bool favorite = false;
-    std::vector<std::string> tags;
-  };
+  using Metadata = BrowserAssetMetadata;
   virtual Result<Metadata> metadata(const std::string& /*assetId*/)
   {
     return Error{"This asset library is read only."};

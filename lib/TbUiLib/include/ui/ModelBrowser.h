@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <QPointer>
 #include <QWidget>
 
 #include "base/NotifierConnection.h"
@@ -53,6 +54,7 @@ namespace tb::ui
 {
 class AppController;
 class AssetInspector;
+class AssetLibraryWindow;
 class MapDocument;
 class ProjectSession;
 
@@ -73,6 +75,9 @@ private:
   QComboBox* m_libraryCombo = nullptr;
   QComboBox* m_iconSizeCombo = nullptr;
   QToolButton* m_usedButton = nullptr;
+  QToolButton* m_favoritesButton = nullptr;
+  QComboBox* m_tagCombo = nullptr;
+  QPointer<AssetLibraryWindow> m_libraryWindow;
   ProjectResourceAudit m_usage;
   QString m_usageError;
   QLineEdit* m_folderEdit = nullptr;
@@ -136,6 +141,7 @@ public:
   void addViewOption(QWidget* control);
   void bindInspector(AssetInspector& inspector, bool mapActions);
   void setMapActionsEnabled(bool enabled);
+  void revealProjectAsset(const std::string& assetId);
   ~ModelBrowser() override;
 
 signals:
@@ -187,6 +193,8 @@ private:
   void findProjectAssetUses(const QString& projectAssetId);
   void reloadModels();
   void refreshUsage();
+  void refreshMetadataFilters();
+  void showInAssetLibrary(const BrowserAsset& asset);
   void rebuildFolderTree();
 
   void documentWasLoaded();

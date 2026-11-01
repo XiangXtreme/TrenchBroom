@@ -9,12 +9,36 @@
 
 #include "project/AssetLibrary.h"
 #include "ui/AssetLibraryImport.h"
+#include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
 #include <utility>
 
 namespace tb::ui
 {
+void loadBrowserAssetMetadata(
+  std::vector<BrowserAsset>& assets, const ProjectSession& session)
+{
+  const auto connections = session.libraries();
+  if (connections.is_error())
+    return;
+  for (const auto& connection : connections.value())
+  {
+    if (!connection.available)
+      continue;
+    auto source = openLocalAssetLibrary(connection.info.path);
+    if (!source || source->libraryId() != connection.info.id)
+      continue;
+    for (auto& asset : assets)
+    {
+      if (asset.libraryId != source->libraryId() || asset.libraryAssetId.empty())
+        continue;
+      const auto metadata = source->metadata(asset.libraryAssetId);
+      if (metadata.is_success())
+        asset.libraryMetadata = metadata.value();
+    }
+  }
+}
 AssetLibraryChanges& AssetLibraryChanges::instance()
 {
   static auto changes = AssetLibraryChanges{};

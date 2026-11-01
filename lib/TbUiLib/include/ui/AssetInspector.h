@@ -49,6 +49,8 @@ class AssetInspector : public QWidget
   QPushButton* m_capture = nullptr;
   QPushButton* m_update = nullptr;
   QPushButton* m_uses = nullptr;
+  QPushButton* m_showLibrary = nullptr;
+  QPushButton* m_showSnapshot = nullptr;
   QWidget* m_spriteControls = nullptr;
   QSlider* m_spriteFrame = nullptr;
   QPushButton* m_spritePlay = nullptr;
@@ -74,6 +76,7 @@ public:
   void setActions(
     bool apply, bool capture, bool update, bool uses, const QString& target = {});
   const std::optional<inspection::Asset>& asset() const;
+  void setNavigation(bool library, bool snapshot);
 
 signals:
   void assetChanged();
@@ -81,6 +84,8 @@ signals:
   void captureRequested();
   void updateRequested();
   void findUsesRequested();
+  void showLibraryRequested();
+  void showSnapshotRequested();
 
 protected:
   void hideEvent(QHideEvent* event) override;

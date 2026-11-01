@@ -343,6 +343,7 @@ Result<Asset> readBrowserAsset(
           {
             auto loaded = std::move(result).value();
             loaded.resource.projectAssetId = asset.projectAssetId;
+            loaded.resource.projectRevision = asset.projectRevision;
             loaded.resource.projectUpdateAvailable = asset.projectUpdateAvailable;
             return loaded;
           }
@@ -382,6 +383,9 @@ Result<Asset> readBrowserAsset(
     result.resource.revision = entry.revision;
     result.resource.assetId = id;
     result.resource.projectAssetId = id;
+    result.resource.libraryId = entry.library.libraryId;
+    result.resource.libraryAssetId = entry.library.libraryAssetId;
+    result.resource.libraryRevision = entry.library.libraryRevision;
     result.resource.path = entry.publishPath;
     result.resource.type = assetTypeForExtension(entry.publishPath);
     if (entry.type == project::AssetType::Texture)

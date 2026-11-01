@@ -82,6 +82,25 @@ struct BrowserCellData
   std::filesystem::path path;
 };
 
+/** Live library annotations; these never describe or alter captured content. */
+struct BrowserAssetMetadata
+{
+  bool favorite = false;
+  std::vector<std::string> tags;
+  friend bool operator==(const BrowserAssetMetadata&, const BrowserAssetMetadata&) =
+    default;
+};
+
+bool assetSearchMatches(
+  const QString& name,
+  const QString& path,
+  const std::vector<std::string>& tags,
+  const QString& search);
+bool assetMetadataMatches(
+  const std::optional<BrowserAssetMetadata>& metadata,
+  bool favoritesOnly,
+  const QString& tag);
+
 struct BrowserAsset
 {
   BrowserCellType type = BrowserCellType::Folder;
@@ -113,6 +132,7 @@ struct BrowserAsset
   bool projectUpdateAvailable = false;
   // The library asset or its source file is gone.
   bool missing = false;
+  std::optional<BrowserAssetMetadata> libraryMetadata;
 
   BrowserAsset();
   BrowserAsset(BrowserCellType i_type, std::filesystem::path i_path);

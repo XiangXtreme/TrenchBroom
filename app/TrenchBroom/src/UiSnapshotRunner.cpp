@@ -76,6 +76,7 @@
 #include "ui/ActionExecutionContext.h"
 #include "ui/AppController.h"
 #include "ui/AreaMapView.h"
+#include "ui/AssetInspector.h"
 #include "ui/CommandPaletteDialog.h"
 #include "ui/CyclingMapView.h"
 #include "ui/InfoPanel.h"
@@ -136,6 +137,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("command-palette"),
     QStringLiteral("components"),
     QStringLiteral("asset-library"),
+    QStringLiteral("asset-library-project"),
     QStringLiteral("project-empty"),
     QStringLiteral("project-drawer"),
     QStringLiteral("project-pinned"),
@@ -153,7 +155,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
 bool uiSnapshotPageRequiresMap(const QString& page)
 {
   return page != QStringLiteral("map") && page != QStringLiteral("components")
-         && page != QStringLiteral("asset-library")
+         && !page.startsWith(QStringLiteral("asset-library"))
          && !page.startsWith(QStringLiteral("preferences"));
 }
 
@@ -809,6 +811,22 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
                            : UiSnapshotReadinessState::Failed,
       "Output log must meet the drawer tab strip without a blank spacer"};
   }
+  if (targetName == QStringLiteral("asset-library-project"))
+  {
+    auto* usage = targetWidget.findChild<QListWidget*>("AssetLibraryUsage");
+    auto* inspector = targetWidget.findChild<AssetInspector*>();
+    if (
+      !usage || !inspector || !inspector->asset() || !inspector->asset()->resource.skybox)
+      return {
+        UiSnapshotReadinessState::Failed,
+        "Bound library inspector must load its captured sky fixture"};
+    for (int i = 0; i < usage->count(); ++i)
+      if (!usage->item(i)->data(Qt::UserRole).toString().isEmpty())
+        return {UiSnapshotReadinessState::Ready, {}};
+    return {
+      UiSnapshotReadinessState::Failed,
+      "Bound library fixture must resolve its project map references"};
+  }
   if (targetName.startsWith(QStringLiteral("project-")))
   {
     const auto reason = workspaceSnapshotPendingReason(targetWidget, targetName);
@@ -1316,9 +1334,10 @@ int runUiSnapshot(
     targetName = options.page;
     targetWidget->resize(1080, 760);
   }
-  else if (options.page == QStringLiteral("asset-library"))
+  else if (options.page.startsWith(QStringLiteral("asset-library")))
   {
-    assetLibrarySnapshot = createUiAssetLibrarySnapshot();
+    assetLibrarySnapshot = createUiAssetLibrarySnapshot(
+      options.page == QStringLiteral("asset-library-project"));
     if (!assetLibrarySnapshot)
     {
       qCritical() << "Could not build the asset library snapshot fixture";

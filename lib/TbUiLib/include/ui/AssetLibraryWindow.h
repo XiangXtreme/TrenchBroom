@@ -9,7 +9,9 @@
 #include <QString>
 
 #include "project/ProjectAsset.h"
+#include "ui/AssetBrowserModel.h"
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -36,6 +38,7 @@ class AssetInspector;
 class AssetLibraryItemDelegate;
 class AssetLibraryListView;
 class AssetLibrarySource;
+class ProjectSession;
 
 /**
  * The application-wide asset library browser.
@@ -51,6 +54,12 @@ class AssetLibraryWindow : public QDialog
   std::unique_ptr<AssetLibrarySource> m_source;
   std::vector<project::LibraryAsset> m_assets;
   std::set<std::string> m_favorites;
+  std::map<std::string, BrowserAssetMetadata> m_metadata;
+  std::weak_ptr<ProjectSession> m_project;
+  QMetaObject::Connection m_projectConnection;
+  QMetaObject::Connection m_mapConnection;
+  QTimer* m_usageTimer = nullptr;
+  std::optional<std::string> m_projectAssetId;
   std::optional<std::string> m_selectedId;
   QString m_filter = QStringLiteral("all");
   QString m_search;
@@ -78,6 +87,9 @@ class AssetLibraryWindow : public QDialog
   QStringList m_conversionReport;
   std::vector<std::string> m_failedConversions;
   QLineEdit* m_searchEdit = nullptr;
+  QComboBox* m_tagCombo = nullptr;
+  QLabel* m_projectScope = nullptr;
+  QTimer* m_reloadTimer = nullptr;
   AssetLibraryListView* m_categories = nullptr;
   AssetLibraryListView* m_grid = nullptr;
   AssetLibraryItemDelegate* m_delegate = nullptr;
@@ -105,6 +117,9 @@ public:
    */
   AssetLibraryWindow(const QString& folder, bool remember, QWidget* parent = nullptr);
   ~AssetLibraryWindow() override;
+  void setProjectContext(const std::shared_ptr<ProjectSession>& project);
+  Result<void> revealAsset(const std::string& libraryId, const std::string& assetId);
+  std::string libraryId() const;
 
 protected:
   void dragEnterEvent(QDragEnterEvent* event) override;
@@ -140,6 +155,9 @@ private:
   void deleteSelected();
   void applyTags();
   void refreshUsage();
+  void updateProjectActions();
+  void captureSelected();
+  void updateSelected();
   QImage previewImage(const project::LibraryAsset& asset, bool converted, int size) const;
 
   const project::LibraryAsset* selectedAsset() const;

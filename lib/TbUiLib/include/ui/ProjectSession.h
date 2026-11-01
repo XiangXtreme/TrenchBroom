@@ -333,9 +333,12 @@ public:
 signals:
   void runtimeError(const QString& message);
   void contentsChanged();
+  void mapContentsChanged();
   void browserFocusRequested();
   void browserFindUsesRequested(const QString& assetId);
   void browserAssetSelected(const QString& assetId);
+  void browserRevealAssetRequested(const QString& assetId);
+  void browserOpenMapRequested(const QString& mapId);
   void stateChanged();
   /** A capture changed which library revisions the project depends on. */
   void libraryLinksChanged();

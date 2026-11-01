@@ -308,13 +308,25 @@ AssetInspector::AssetInspector(QWidget* parent)
     return result;
   };
   m_apply = button(tr("Apply to selection"));
+  m_apply->setObjectName("AssetInspector_Apply");
   m_capture = button(tr("Add to project"));
+  m_capture->setObjectName("AssetInspector_Capture");
   m_update = button(tr("Update project resource"));
+  m_update->setObjectName("AssetInspector_Update");
   m_uses = button(tr("Find uses in project"));
+  m_uses->setObjectName("AssetInspector_FindUses");
+  m_showLibrary = button(tr("Show in asset library"));
+  m_showLibrary->setObjectName("AssetInspector_ShowLibrary");
+  m_showSnapshot = button(tr("Show project snapshot"));
+  m_showSnapshot->setObjectName("AssetInspector_ShowSnapshot");
   connect(m_apply, &QPushButton::clicked, this, &AssetInspector::applyRequested);
   connect(m_capture, &QPushButton::clicked, this, &AssetInspector::captureRequested);
   connect(m_update, &QPushButton::clicked, this, &AssetInspector::updateRequested);
   connect(m_uses, &QPushButton::clicked, this, &AssetInspector::findUsesRequested);
+  connect(
+    m_showLibrary, &QPushButton::clicked, this, &AssetInspector::showLibraryRequested);
+  connect(
+    m_showSnapshot, &QPushButton::clicked, this, &AssetInspector::showSnapshotRequested);
 
   auto* details = new CollapsibleTitledPanel{tr("Technical details"), false};
   m_details = new QTreeWidget{};
@@ -373,6 +385,7 @@ void AssetInspector::clear()
   m_audioControls->hide();
   m_spriteControls->hide();
   setActions(false, false, false, false);
+  setNavigation(false, false);
   emit assetChanged();
 }
 
@@ -586,6 +599,13 @@ void AssetInspector::setActions(
   m_apply->setToolTip(target);
   m_capture->setToolTip(target);
   m_update->setToolTip(target);
+  m_uses->setToolTip(target);
+}
+
+void AssetInspector::setNavigation(const bool library, const bool snapshot)
+{
+  m_showLibrary->setVisible(library);
+  m_showSnapshot->setVisible(snapshot);
 }
 
 const std::optional<inspection::Asset>& AssetInspector::asset() const

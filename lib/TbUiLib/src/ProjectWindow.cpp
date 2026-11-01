@@ -342,6 +342,16 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
     this,
     [this](const QString& id) { checkResources(id.toStdString()); });
   setCentralWidget(m_tools);
+  connect(
+    m_session.get(),
+    &ProjectSession::browserOpenMapRequested,
+    this,
+    [this](const QString& id) {
+      report(
+        m_appController.mapWindowManager().loadProjectMap(m_session, id.toStdString()));
+      raise();
+      activateWindow();
+    });
   connect(m_search, &QLineEdit::textChanged, this, [this]() { refresh(); });
   connect(m_mapTabs, &QTabBar::currentChanged, this, [this](const int index) {
     if (index < 0)

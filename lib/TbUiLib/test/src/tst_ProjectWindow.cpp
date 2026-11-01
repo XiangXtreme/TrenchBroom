@@ -21,10 +21,12 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPushButton>
 #include <QSaveFile>
 #include <QScopeGuard>
 #include <QScrollBar>
@@ -52,6 +54,7 @@
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Brushes.h"
+#include "mdl/Map_CopyPaste.h"
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/PropertyDefinition.h"
@@ -60,6 +63,10 @@
 #include "ui/ActionExecutionContext.h"
 #include "ui/ActionManager.h"
 #include "ui/AppControllerFixture.h"
+#include "ui/AssetInspector.h"
+#include "ui/AssetLibraryItemDelegate.h"
+#include "ui/AssetLibrarySource.h"
+#include "ui/AssetLibraryWindow.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/CreateEntityTool.h"
 #include "ui/InfoPanel.h"
@@ -988,6 +995,164 @@ TEST_CASE("ProjectWindow")
     CHECK(valueFor("Depends On").isEmpty());
     require(session->save());
     CHECK(alphaDocument->map().modificationCount() == mapChanges);
+  }
+
+  SECTION("library and project browsers share metadata capture and identity navigation")
+  {
+    const auto folder = directory.filePath("shared-library");
+    REQUIRE(QDir{}.mkpath(folder + "/sound"));
+    for (const auto& name : {"clip", "unused"})
+    {
+      auto file = QFile{folder + "/sound/" + name + ".wav"};
+      REQUIRE(file.open(QIODevice::WriteOnly));
+      REQUIRE(file.write("RIFF preview") > 0);
+    }
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Shared library"));
+    require(library->scan());
+    const auto resources = require(library->assets());
+    const auto found =
+      std::ranges::find(resources, "sound/clip.wav", &project::LibraryAsset::virtualPath);
+    REQUIRE(found != resources.end());
+    const auto resource = *found;
+    const auto libraryId = library->info().id;
+    require(session->attachLibrary(pathFromQString(folder)));
+    auto source = openLocalAssetLibrary(pathFromQString(folder));
+    REQUIRE(source);
+    require(source->setFavorite(resource.id, true));
+    require(source->setTags(resource.id, {"Industrial", "Ambience"}));
+    auto libraryWindow = AssetLibraryWindow{folder, false, &window};
+    libraryWindow.setProjectContext(session);
+    require(libraryWindow.revealAsset(libraryId, resource.id));
+    auto* grid = libraryWindow.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* capture = libraryWindow.findChild<QPushButton*>("AssetInspector_Capture");
+    auto* usage = libraryWindow.findChild<QListWidget*>("AssetLibraryUsage");
+    REQUIRE(grid);
+    REQUIRE(capture);
+    REQUIRE(usage);
+    REQUIRE(grid->currentItem());
+    CHECK(libraryWindow.revealAsset("different-library", resource.id).is_error());
+    CHECK(libraryWindow.revealAsset(libraryId, "missing-resource").is_error());
+    CHECK(
+      grid->currentItem()
+        ->data(AssetLibraryItemDelegate::AssetIdRole)
+        .toString()
+        .toStdString()
+      == resource.id);
+    CHECK_FALSE(capture->isHidden());
+    capture->click();
+    const auto snapshot =
+      require(session->projectAssetForLibraryAsset(libraryId, resource.id));
+    REQUIRE(snapshot);
+    auto* libraryInspector = libraryWindow.findChild<AssetInspector*>();
+    REQUIRE(libraryInspector);
+    REQUIRE(libraryInspector->asset());
+    CHECK(libraryInspector->asset()->resource.projectRevision == snapshot->revision);
+    CHECK(capture->isHidden());
+    CHECK_FALSE(alphaDocument->map().modified());
+    require(session->save());
+    const auto before =
+      require(session->store().readAsset(snapshot->id, project::ContentKind::Compatible));
+    (void)mdl::paste(
+      alphaDocument->map(),
+      R"({"classname" "ambient_generic" "origin" "0 0 32" "message" "clip.wav"})");
+    REQUIRE(alphaDocument->map().modified());
+    QTRY_COMPARE(usage->findItems("maps/alpha.map", Qt::MatchContains).size(), 1);
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "message", "unused.wav"));
+    QTRY_VERIFY(usage->findItems("maps/alpha.map", Qt::MatchContains).empty());
+    REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "message", "clip.wav"));
+    QTRY_COMPARE(usage->findItems("maps/alpha.map", Qt::MatchContains).size(), 1);
+    const auto* scope = libraryWindow.findChild<QLabel*>("AssetLibrary_ProjectScope");
+    REQUIRE(scope);
+    CHECK(scope->text().contains(pathAsQString(projectPath)));
+    tabs->setCurrentIndex(1);
+    QApplication::processEvents();
+    emit usage->itemDoubleClicked(
+      usage->findItems("maps/alpha.map", Qt::MatchContains).front());
+    CHECK(&window.activeMapWindow()->document() == alphaDocument);
+    auto* showSnapshot =
+      libraryWindow.findChild<QPushButton*>("AssetInspector_ShowSnapshot");
+    REQUIRE(showSnapshot);
+    CHECK_FALSE(showSnapshot->isHidden());
+    showSnapshot->click();
+    auto* panel = window.findChild<ProjectAssetPanel*>();
+    auto* browser = panel->findChild<ModelBrowser*>();
+    auto* inspected = panel->findChild<AssetInspector*>();
+    REQUIRE(browser);
+    REQUIRE(inspected);
+    REQUIRE(inspected->asset());
+    CHECK(inspected->asset()->resource.projectAssetId == snapshot->id);
+    auto* showLibrary = inspected->findChild<QPushButton*>("AssetInspector_ShowLibrary");
+    REQUIRE(showLibrary);
+    CHECK_FALSE(showLibrary->isHidden());
+    showLibrary->click();
+    auto* linkedWindow = browser->findChild<AssetLibraryWindow*>();
+    REQUIRE(linkedWindow);
+    auto* linkedGrid = linkedWindow->findChild<QListWidget*>("AssetLibraryGrid");
+    REQUIRE(linkedGrid);
+    REQUIRE(linkedGrid->currentItem());
+    CHECK(
+      linkedGrid->currentItem()
+        ->data(AssetLibraryItemDelegate::AssetIdRole)
+        .toString()
+        .toStdString()
+      == resource.id);
+    auto* favoriteFilter = browser->findChild<QToolButton*>("ModelBrowser_Favorites");
+    auto* tags = browser->findChild<QComboBox*>("ModelBrowser_Tag");
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    REQUIRE(favoriteFilter);
+    REQUIRE(tags);
+    REQUIRE(folders);
+    favoriteFilter->setChecked(true);
+    QTRY_VERIFY(tags->findData("Industrial") >= 0);
+    tags->setCurrentIndex(tags->findData("Industrial"));
+    QTRY_COMPARE(folders->findItems("sound", Qt::MatchRecursive).size(), 1);
+    auto* favorite = linkedWindow->findChild<QPushButton*>("AssetLibraryFavoriteButton");
+    REQUIRE(favorite);
+    CHECK(favorite->isChecked());
+    favorite->click();
+    QTRY_VERIFY(folders->findItems("sound", Qt::MatchRecursive).empty());
+    QTRY_VERIFY(
+      !libraryWindow.findChild<QPushButton*>("AssetLibraryFavoriteButton")->isChecked());
+    require(source->setFavorite(resource.id, true));
+    QTRY_COMPARE(folders->findItems("sound", Qt::MatchRecursive).size(), 1);
+    auto* librarySearch = libraryWindow.findChild<QLineEdit*>("AssetLibrarySearch");
+    REQUIRE(librarySearch);
+    librarySearch->setText("ambience");
+    CHECK(grid->count() == 1);
+    require(source->setTags(resource.id, {"Mechanical"}));
+    QTRY_COMPARE(grid->count(), 0);
+    CHECK(
+      require(session->store().findAsset(snapshot->id))->revision == snapshot->revision);
+    CHECK(
+      require(session->store().readAsset(snapshot->id, project::ContentKind::Compatible))
+      == before);
+    require(libraryWindow.revealAsset(libraryId, resource.id));
+    auto replacement = QFile{folder + "/sound/clip.wav"};
+    REQUIRE(replacement.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(replacement.write("RIFF changed source") > 0);
+    replacement.close();
+    require(source->rescan());
+    auto* update = libraryWindow.findChild<QPushButton*>("AssetInspector_Update");
+    REQUIRE(update);
+    QTRY_VERIFY(!update->isHidden());
+    CHECK(
+      require(session->store().readAsset(snapshot->id, project::ContentKind::Compatible))
+      == before);
+    update->click();
+    CHECK(
+      require(session->store().findAsset(snapshot->id))->revision > snapshot->revision);
+    CHECK(
+      libraryInspector->asset()->resource.projectRevision
+      == require(session->store().findAsset(snapshot->id))->revision);
+    CHECK(
+      require(session->store().readAsset(snapshot->id, project::ContentKind::Compatible))
+      != before);
+    libraryWindow.setProjectContext(nullptr);
+    CHECK(
+      libraryWindow.findChild<QPushButton*>("AssetInspector_ShowSnapshot")->isHidden());
+    CHECK(capture->isHidden());
+    require(session->save());
   }
 
   SECTION("library details distinguish unavailable sources from captured snapshots")

@@ -120,6 +120,7 @@ private:
 
 public:
   void setSelectionOnly(bool selectionOnly) { m_selectionOnly = selectionOnly; }
+  bool selectProjectAsset(const std::string& assetId);
   ModelBrowserView(
     AppController& appController, QScrollBar* scrollBar, MapDocument& document);
   ~ModelBrowserView() override;
@@ -205,6 +206,8 @@ signals:
   void selectionCleared();
   void projectAssetSelected(const QString& assetId);
   void assetPreviewRequested(const QString& path);
+  void showInLibraryRequested(const BrowserAsset& asset);
+  void showProjectSnapshotRequested(const QString& assetId);
   void folderActivated(const QString& folderPath);
   void mapActivated(const QString& mapPath);
   void renamePrefabRequested(const QString& prefabPath);

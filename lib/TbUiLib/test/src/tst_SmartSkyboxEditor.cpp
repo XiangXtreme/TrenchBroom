@@ -31,6 +31,7 @@
 #include "ui/CatchConfig.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/SmartAssetPropertyEditor.h"
 #include "ui/SmartPropertyEditorManager.h"
 #include "ui/SmartSkyboxEditor.h"
 
@@ -58,7 +59,7 @@ TEST_CASE("SmartSkyboxEditor")
     CHECK(skyboxBaseAndSuffix("gfx/env/rt.tga") == std::nullopt);
   }
 
-  SECTION("property editor manager leaves worldspawn skyname to default editor")
+  SECTION("property editor manager routes worldspawn skyname to the shared asset editor")
   {
     auto fixture = MapDocumentFixture{};
     auto& document = fixture.create();
@@ -72,7 +73,9 @@ TEST_CASE("SmartSkyboxEditor")
     manager.switchEditor(
       mdl::EntityPropertyKeys::Skyname, std::vector<mdl::EntityNodeBase*>{&worldNode});
     CHECK(qobject_cast<SmartSkyboxEditor*>(stackedLayout->currentWidget()) == nullptr);
-    CHECK(manager.isDefaultEditorActive());
+    CHECK(
+      dynamic_cast<SmartAssetPropertyEditor*>(stackedLayout->currentWidget()) != nullptr);
+    CHECK_FALSE(manager.isDefaultEditorActive());
 
     manager.switchEditor("targetname", std::vector<mdl::EntityNodeBase*>{&worldNode});
     CHECK(manager.isDefaultEditorActive());
@@ -118,8 +121,8 @@ TEST_CASE("SmartSkyboxEditor")
     auto skyboxFiles = std::vector<fs::Entry>{};
     for (const auto* suffix : {"rt", "bk", "lf", "ft", "up", "dn"})
     {
-      skyboxFiles.push_back(fs::FileEntry{
-        "memory_sky" + std::string{suffix} + ".png", imageFile});
+      skyboxFiles.push_back(
+        fs::FileEntry{"memory_sky" + std::string{suffix} + ".png", imageFile});
     }
 
     document.map().gameFileSystem().mount(
@@ -137,8 +140,7 @@ TEST_CASE("SmartSkyboxEditor")
     editor.update({&document.map().worldNode()});
 
     const auto* list = editor.findChild<QListWidget*>("smartSkyboxList");
-    auto* refreshButton =
-      editor.findChild<QAbstractButton*>("smartSkyboxRefreshButton");
+    auto* refreshButton = editor.findChild<QAbstractButton*>("smartSkyboxRefreshButton");
     REQUIRE(list != nullptr);
     REQUIRE(refreshButton != nullptr);
     refreshButton->click();

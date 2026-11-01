@@ -32,6 +32,35 @@
 
 namespace tb::ui
 {
+bool assetSearchMatches(
+  const QString& name,
+  const QString& path,
+  const std::vector<std::string>& tags,
+  const QString& search)
+{
+  const auto query = search.trimmed();
+  if (
+    query.isEmpty() || name.contains(query, Qt::CaseInsensitive)
+    || path.contains(query, Qt::CaseInsensitive))
+    return true;
+  return std::ranges::any_of(tags, [&](const auto& tag) {
+    return QString::fromStdString(tag).contains(query, Qt::CaseInsensitive);
+  });
+}
+
+bool assetMetadataMatches(
+  const std::optional<BrowserAssetMetadata>& metadata,
+  const bool favoritesOnly,
+  const QString& tag)
+{
+  if (!favoritesOnly && tag.isEmpty())
+    return true;
+  if (!metadata || (favoritesOnly && !metadata->favorite))
+    return false;
+  return tag.isEmpty() || std::ranges::any_of(metadata->tags, [&](const auto& value) {
+           return QString::fromStdString(value).compare(tag, Qt::CaseInsensitive) == 0;
+         });
+}
 namespace
 {
 
@@ -106,7 +135,7 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.projectRevision == rhs.projectRevision
          && lhs.projectPublishPath == rhs.projectPublishPath
          && lhs.projectUpdateAvailable == rhs.projectUpdateAvailable
-         && lhs.missing == rhs.missing;
+         && lhs.missing == rhs.missing && lhs.libraryMetadata == rhs.libraryMetadata;
 }
 
 const char* browserSourceName(const BrowserSource source)
@@ -586,8 +615,11 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
                                   : folderPath.lexically_relative(currentFolderAbs);
 
     const auto assetNameMatches =
-      matches(assetPath.filename())
-      || (!asset.projectId.empty() && QString::fromStdString(asset.displayName).contains(trimmedSearchText, Qt::CaseInsensitive))
+      assetSearchMatches(
+        QString::fromStdString(asset.displayName),
+        pathAsGenericQString(assetPath.filename()),
+        asset.libraryMetadata ? asset.libraryMetadata->tags : std::vector<std::string>{},
+        trimmedSearchText)
       || (showSourceMarkers && QObject::tr(browserSourceName(asset.source)).contains(trimmedSearchText, Qt::CaseInsensitive));
 
     if (relFromCurrent.empty() || relFromCurrent == std::filesystem::path{"."})

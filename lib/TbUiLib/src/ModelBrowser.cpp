@@ -75,6 +75,7 @@
 #include "ui/AssetBrowserModel.h"
 #include "ui/AssetInspector.h"
 #include "ui/AssetLibrarySource.h"
+#include "ui/AssetLibraryWindow.h"
 #include "ui/BitmapButton.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/ImageUtils.h"
@@ -494,6 +495,29 @@ void ModelBrowser::createGui(AppController& appController)
     }
   });
   footerLayout->insertWidget(0, m_usedButton);
+  m_favoritesButton = new QToolButton{};
+  m_favoritesButton->setObjectName("ModelBrowser_Favorites");
+  m_favoritesButton->setText(tr("Favourites"));
+  m_favoritesButton->setCheckable(true);
+  m_favoritesButton->setProperty("tbControlRole", "compact");
+  m_favoritesButton->setVisible(bool(m_project));
+  m_tagCombo = new QComboBox{};
+  m_tagCombo->setObjectName("ModelBrowser_Tag");
+  m_tagCombo->setProperty("tbControlRole", "compact");
+  m_tagCombo->addItem(tr("All tags"), QString{});
+  m_tagCombo->setMaximumWidth(160);
+  m_tagCombo->setVisible(bool(m_project));
+  const auto metadataScope = tr(
+    "Live library favourites and tags, including linked project snapshots. Unavailable "
+    "library metadata does not match these filters.");
+  m_favoritesButton->setToolTip(metadataScope);
+  m_tagCombo->setToolTip(metadataScope);
+  footerLayout->insertWidget(1, m_favoritesButton);
+  footerLayout->insertWidget(2, m_tagCombo);
+  connect(
+    m_favoritesButton, &QToolButton::toggled, this, [this]() { applyTypeFilter(); });
+  connect(
+    m_tagCombo, &QComboBox::currentIndexChanged, this, [this]() { applyTypeFilter(); });
   connect(m_usedButton, &QToolButton::toggled, this, [this]() {
     m_usageRefreshTimer->stop();
     refreshUsage();
@@ -664,6 +688,9 @@ void ModelBrowser::bindInspector(AssetInspector& inspector, const bool mapAction
     if (!inspector.asset())
       return;
     const auto& asset = inspector.asset()->resource;
+    inspector.setNavigation(
+      !asset.libraryId.empty() && !asset.libraryAssetId.empty(),
+      asset.source == BrowserSource::AssetLibrary && !asset.projectAssetId.empty());
     const auto canApply =
       mapActions && m_mapActionsEnabled && asset.type == BrowserCellType::Texture
       && (asset.skybox || !m_document->map().selection().allBrushFaces().empty());
@@ -672,7 +699,7 @@ void ModelBrowser::bindInspector(AssetInspector& inspector, const bool mapAction
       m_project && isLibraryAsset(asset) && !asset.missing
         && asset.projectAssetId.empty(),
       m_project && asset.projectUpdateAvailable && !asset.missing,
-      m_project && (!asset.projectAssetId.empty() || !asset.assetId.empty()),
+      m_project && (!asset.projectAssetId.empty() || (asset.source == BrowserSource::Project && !asset.assetId.empty())),
       tr("Project: %1\nMap: %2")
         .arg(
           m_project ? QString::fromStdString(m_project->store().info().name) : tr("None"))
@@ -681,6 +708,14 @@ void ModelBrowser::bindInspector(AssetInspector& inspector, const bool mapAction
                                             : tr("None")));
   };
   connect(&inspector, &AssetInspector::assetChanged, this, refresh);
+  connect(&inspector, &AssetInspector::showLibraryRequested, this, [this, &inspector]() {
+    if (inspector.asset())
+      showInAssetLibrary(inspector.asset()->resource);
+  });
+  connect(&inspector, &AssetInspector::showSnapshotRequested, this, [this, &inspector]() {
+    if (inspector.asset())
+      revealProjectAsset(inspector.asset()->resource.projectAssetId);
+  });
   connect(this, &ModelBrowser::actionContextChanged, &inspector, refresh);
   connect(&inspector, &AssetInspector::captureRequested, this, [this, &inspector]() {
     if (inspector.asset())
@@ -767,6 +802,16 @@ void ModelBrowser::bindInspector(AssetInspector& inspector, const bool mapAction
 
 void ModelBrowser::bindEvents(AppController& appController)
 {
+  connect(
+    m_view,
+    &ModelBrowserView::showInLibraryRequested,
+    this,
+    &ModelBrowser::showInAssetLibrary);
+  connect(
+    m_view,
+    &ModelBrowserView::showProjectSnapshotRequested,
+    this,
+    [this](const QString& id) { revealProjectAsset(id.toStdString()); });
   connect(
     m_view,
     &ModelBrowserView::assetPreviewRequested,
@@ -1746,7 +1791,8 @@ void ModelBrowser::applyTypeFilter()
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(
     browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
-    && !m_usedButton->isChecked());
+    && !m_usedButton->isChecked() && !m_favoritesButton->isChecked()
+    && m_tagCombo->currentData().toString().isEmpty());
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
   if (!m_assetRefreshPending && m_pendingScrollRestore)
@@ -1759,6 +1805,12 @@ void ModelBrowser::applyTypeFilter()
 std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
 {
   auto assets = filterBrowserAssets(m_assets, m_typeFilter);
+  std::erase_if(assets, [&](const auto& asset) {
+    return !assetMetadataMatches(
+      asset.libraryMetadata,
+      m_favoritesButton->isChecked(),
+      m_tagCombo->currentData().toString());
+  });
   if (m_usedButton->isChecked())
   {
     const auto id =
@@ -1770,6 +1822,111 @@ std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
     std::erase_if(
       assets, [&](const auto& asset) { return asset.skybox != *m_skyboxFilter; });
   return assets;
+}
+
+void ModelBrowser::refreshMetadataFilters()
+{
+  const auto selected = m_tagCombo->currentData().toString();
+  const auto blocker = QSignalBlocker{m_tagCombo};
+  auto tags = QStringList{};
+  for (const auto& asset : m_assets)
+    if (asset.libraryMetadata)
+      for (const auto& tag : asset.libraryMetadata->tags)
+        if (!tags.contains(QString::fromStdString(tag), Qt::CaseInsensitive))
+          tags.push_back(QString::fromStdString(tag));
+  tags.sort(Qt::CaseInsensitive);
+  m_tagCombo->clear();
+  m_tagCombo->addItem(tr("All tags"), QString{});
+  for (const auto& tag : tags)
+    m_tagCombo->addItem(tag, tag);
+  // Keep an active filter when a library disappears instead of showing unrelated assets.
+  if (!selected.isEmpty() && m_tagCombo->findData(selected) < 0)
+    m_tagCombo->addItem(selected, selected);
+  m_tagCombo->setCurrentIndex(std::max(0, m_tagCombo->findData(selected)));
+}
+
+void ModelBrowser::revealProjectAsset(const std::string& assetId)
+{
+  if (!m_project || assetId.empty())
+    return;
+  const auto asset = m_project->store().findAsset(assetId);
+  if (asset.is_error() || !asset.value())
+    return;
+  emit m_project->browserFocusRequested();
+  m_sourceCombo->setCurrentIndex(
+    m_sourceCombo->findData(int(BrowserSourceFilter::Project)));
+  if (!m_selectionOnly)
+    m_typeCombo->setCurrentIndex(0);
+  m_usedButton->setChecked(false);
+  m_favoritesButton->setChecked(false);
+  m_tagCombo->setCurrentIndex(0);
+  m_searchBox->clear();
+  markAssetsDirty();
+  ensureAssetsLoaded();
+  const auto found = std::ranges::find(m_assets, assetId, &BrowserAsset::assetId);
+  if (found == m_assets.end())
+    return;
+  setCurrentFolderPath(
+    (found->catalogPath.empty() ? found->path : found->catalogPath).parent_path());
+  m_view->selectProjectAsset(assetId);
+}
+
+void ModelBrowser::showInAssetLibrary(const BrowserAsset& asset)
+{
+  if (!m_project || asset.libraryId.empty() || asset.libraryAssetId.empty())
+    return;
+  const auto connections = m_project->libraries();
+  if (connections.is_error())
+    return;
+  for (const auto& connection : connections.value())
+  {
+    if (connection.info.id != asset.libraryId)
+      continue;
+    if (!connection.available)
+    {
+      QMessageBox::warning(
+        this, tr("Asset library unavailable"), QString::fromStdString(connection.error));
+      return;
+    }
+    auto source = openLocalAssetLibrary(connection.info.path);
+    if (!source || source->libraryId() != asset.libraryId)
+    {
+      QMessageBox::warning(
+        this,
+        tr("Asset library unavailable"),
+        tr("The folder no longer contains the expected library."));
+      return;
+    }
+    const auto created =
+      !m_libraryWindow || m_libraryWindow->libraryId() != asset.libraryId;
+    if (created)
+    {
+      m_libraryWindow =
+        new AssetLibraryWindow(pathAsQString(connection.info.path), false, this);
+      m_libraryWindow->setAttribute(Qt::WA_DeleteOnClose);
+      m_libraryWindow->setProjectContext(m_project);
+    }
+    const auto shown =
+      m_libraryWindow->revealAsset(asset.libraryId, asset.libraryAssetId);
+    if (shown.is_error())
+    {
+      QMessageBox::warning(
+        this,
+        tr("Show in asset library"),
+        QString::fromStdString(std::get<Error>(shown.error()).msg));
+      if (created)
+        m_libraryWindow->close();
+      return;
+    }
+    m_libraryWindow->show();
+    m_libraryWindow->raise();
+    m_libraryWindow->activateWindow();
+    return;
+  }
+  QMessageBox::warning(
+    this,
+    tr("Asset library unavailable"),
+    tr("This project's library connection no longer exists."));
 }
 
 void ModelBrowser::refreshUsage()
@@ -1932,12 +2089,16 @@ void ModelBrowser::reloadModels()
   }
 
   m_assets = std::move(*nextAssets);
+  if (m_project)
+    loadBrowserAssetMetadata(m_assets, *m_project);
+  refreshMetadataFilters();
   m_lastWriteTimes = assetLastWriteTimes(m_assets);
 
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(
     browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
-    && !m_usedButton->isChecked());
+    && !m_usedButton->isChecked() && !m_favoritesButton->isChecked()
+    && m_tagCombo->currentData().toString().isEmpty());
   m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
@@ -1973,7 +2134,9 @@ void ModelBrowser::rebuildFolderTree()
   rootItem->setIcon(0, folderIcon);
   m_folderTreeItems.emplace(std::filesystem::path{}, rootItem);
 
-  if (m_folderPath.empty() && !m_typeFilter && !m_usedButton->isChecked())
+  if (
+    m_folderPath.empty() && !m_typeFilter && !m_usedButton->isChecked()
+    && !m_favoritesButton->isChecked() && m_tagCombo->currentData().toString().isEmpty())
   {
     for (const auto& [type, rootPath] : assetBrowserRoots())
     {
@@ -2156,7 +2319,8 @@ void ModelBrowser::rescanWatchedDirectory()
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(
     browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
-    && !m_usedButton->isChecked());
+    && !m_usedButton->isChecked() && !m_favoritesButton->isChecked()
+    && m_tagCombo->currentData().toString().isEmpty());
   m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
