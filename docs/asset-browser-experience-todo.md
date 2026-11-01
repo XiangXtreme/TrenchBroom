@@ -171,13 +171,29 @@
 `TbUiLibTest` 全量 128 项通过（1 项原生鼠标捕获按既有策略跳过）。Release `TrenchBroom`
 构建、样式治理检查、`clang-cl` 严格编译与 `ci-preflight.ps1` 通过；`asset-library`
 与 `asset-library-project` 在 Light / Dark / Blender × 100% / 150% / 200% 共 18 张
-快照的完整性检查通过并已查看联系表。资产库目录尚不索引预制体（预制体属于工程资源），
-因此本批未新增预制体检查器快照目标。
+快照的完整性检查通过并已查看联系表。预制体随后进入资产库目录（见窄宽度一节之后的
+“预制体进入资产库”），快照夹具已包含一个预制体。
 
 窄宽度验收：新增 `asset-library-narrow` 与 `asset-library-project-narrow` 目标，
 请求 900 × 640 逻辑像素。窗口最终稳定在约 1269 × 640，即三栏布局的**最小可用宽度**；
 18 张（3 主题 × 3 缩放 × 2 目标）完整性检查通过，缩略图、筛选行与检查器在最小宽度下
 以省略号收束而不裁切。像素差异基线仍未配置。
+
+### 续批：预制体进入资产库
+
+资产库原先只索引贴图、模型、精灵、声音与天空，预制体只能留在工程里，团队无法共享
+预制体库。现在 `.tbprefab` 是资产库的一等资源：
+
+| 归属 | 职责 |
+| --- | --- |
+| `AssetLibrary` 扫描 | 识别 `.tbprefab`，记录 `nativeFormat=prefab`、原样内容与原图哈希；原生拷贝，无转换步骤，也不产生缩略图依赖 |
+| `AssetLibraryImport` | 导入时落到 `prefabs/` 子目录，与模型、精灵、声音的路由一致 |
+| `AssetLibraryWindow` | 新增 Prefabs 分类与类型筛选，计数与“全部资源”一致；卡片沿用预制体类型图标 |
+| `AssetInspector` | 库中的预制体走同一套统计与引用检查（无工程时如实说明无法校验） |
+
+验证：`TbProjectLibTest/AssetLibrary` 新增“预制体作为一等资源”用例，覆盖类型、
+虚拟路径、显示名、原生格式、分组与内容往返；`asset-library` 快照夹具加入一个
+预制体后，22 个资源、Prefabs 分类计数为 1。
 
 ### 续批：GoldSrc studio 模型预览
 

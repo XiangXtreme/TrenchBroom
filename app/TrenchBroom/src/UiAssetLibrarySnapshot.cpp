@@ -144,6 +144,19 @@ void createOtherSources(const std::filesystem::path& folder)
   writeText(folder / "sound" / "ric1.wav", "RIFF snapshot fixture sound");
   writeText(folder / "sound" / "ric2.wav", "RIFF snapshot fixture sound");
   writeText(folder / "sound" / "ric3.wav", "RIFF snapshot fixture sound");
+  writeText(
+    folder / "prefabs" / "crate.tbprefab",
+    "{\n"
+    "\"classname\" \"worldspawn\"\n"
+    "{\n"
+    "( 0 0 0 ) ( 64 0 0 ) ( 0 64 0 ) brick01 0 0 0 1 1\n"
+    "( 0 0 64 ) ( 64 0 64 ) ( 0 64 64 ) brick01 0 0 0 1 1\n"
+    "}\n"
+    "}\n"
+    "{\n"
+    "\"classname\" \"cycler\"\n"
+    "\"model\" \"models/barrel.mdl\"\n"
+    "}\n");
 }
 
 /** Converts the first `count` unconverted textures so the fixture shows both states. */

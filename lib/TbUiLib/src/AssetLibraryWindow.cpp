@@ -137,6 +137,7 @@ constexpr std::array kTypeFilters{
   TypeFilter{"sprite", project::AssetType::Sprite},
   TypeFilter{"sound", project::AssetType::Sound},
   TypeFilter{"skybox", project::AssetType::Skybox},
+  TypeFilter{"prefab", project::AssetType::Prefab},
 };
 
 std::optional<project::AssetType> typeForFilter(const QString& filter)
@@ -909,6 +910,7 @@ void AssetLibraryWindow::refreshCategories()
   add(QStringLiteral("sprite"), tr("Sprites"), countOf(project::AssetType::Sprite));
   add(QStringLiteral("sound"), tr("Sounds"), countOf(project::AssetType::Sound));
   add(QStringLiteral("skybox"), tr("Skyboxes"), countOf(project::AssetType::Skybox));
+  add(QStringLiteral("prefab"), tr("Prefabs"), countOf(project::AssetType::Prefab));
 
   addSection(tr("Attention"));
   add(QStringLiteral("pending"), tr("Pending"), pendingCount());
@@ -1379,7 +1381,7 @@ void AssetLibraryWindow::runImport()
     this,
     tr("Import Assets"),
     {},
-    tr("Supported assets (*.png *.jpg *.jpeg *.bmp *.tga *.wad *.mdl *.spr *.wav);;"
+    tr("Supported assets (*.png *.jpg *.jpeg *.bmp *.tga *.wad *.mdl *.spr *.wav *.tbprefab);;"
        "All files (*)"));
   if (files.isEmpty())
     return;

@@ -152,6 +152,29 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->findAsset(wallAsset.id))->id == wallAsset.id);
   }
 
+  SECTION("indexes prefabs as first-class library assets")
+  {
+    const auto text = std::string{
+      "{\n\"classname\" \"worldspawn\"\n{\n"
+      "( 0 0 0 ) ( 64 0 0 ) ( 0 64 0 ) BRICK 0 0 0 1 1\n"
+      "}\n}\n"};
+    const auto bytes = std::vector<std::uint8_t>{text.begin(), text.end()};
+    workspace.write("prefabs/crate.tbprefab", bytes);
+    auto library = require(AssetLibrary::create(workspace.folder, "Prefab library"));
+    const auto scan = require(library->scan());
+    CHECK(scan.added == 1);
+
+    const auto assets = require(library->assets());
+    REQUIRE(assets.size() == 1);
+    const auto& prefab = assets.front();
+    CHECK(prefab.type == AssetType::Prefab);
+    CHECK(prefab.virtualPath == "prefabs/crate.tbprefab");
+    CHECK(prefab.displayName == "crate");
+    CHECK(prefab.nativeFormat == "prefab");
+    CHECK(prefab.group == "prefabs");
+    CHECK(require(library->readContent(prefab.id)) == bytes);
+  }
+
   SECTION("advances only the revision of the changed WAD member")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));

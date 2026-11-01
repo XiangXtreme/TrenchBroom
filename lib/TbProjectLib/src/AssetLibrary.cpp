@@ -99,6 +99,7 @@ enum class SourceFormat
   Model,
   Sprite,
   Sound,
+  Prefab,
   Unknown,
 };
 
@@ -115,6 +116,8 @@ SourceFormat sourceFormatFor(const std::filesystem::path& extension)
     return SourceFormat::Sprite;
   if (ext == ".wav")
     return SourceFormat::Sound;
+  if (ext == ".tbprefab")
+    return SourceFormat::Prefab;
   return SourceFormat::Unknown;
 }
 
@@ -130,6 +133,8 @@ AssetType assetTypeFor(const SourceFormat format)
     return AssetType::Sprite;
   case SourceFormat::Sound:
     return AssetType::Sound;
+  case SourceFormat::Prefab:
+    return AssetType::Prefab;
   case SourceFormat::Wad:
   case SourceFormat::Unknown:
     break;
@@ -149,6 +154,8 @@ const char* nativeFormatFor(const SourceFormat format)
     return "spr";
   case SourceFormat::Sound:
     return "wav";
+  case SourceFormat::Prefab:
+    return "prefab";
   case SourceFormat::Wad:
     return "wad3";
   case SourceFormat::Unknown:
@@ -174,6 +181,8 @@ std::string recipeFor(const SourceFormat format, const std::string& container)
     return R"({"importer":"native-copy","version":1,"nativeFormat":"spr"})";
   case SourceFormat::Sound:
     return R"({"importer":"native-copy","version":1,"nativeFormat":"wav"})";
+  case SourceFormat::Prefab:
+    return R"({"importer":"native-copy","version":1,"nativeFormat":"prefab"})";
   case SourceFormat::Wad:
     return fmt::format(
       R"({{"importer":"wad-member","version":1,"nativeFormat":"wad3-miptex",)"

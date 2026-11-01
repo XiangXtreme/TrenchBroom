@@ -51,6 +51,8 @@ std::filesystem::path librarySubfolderForFile(const std::filesystem::path& file)
     return "sprites";
   if (extension == ".wav")
     return "sound";
+  if (extension == ".tbprefab")
+    return "prefabs";
   return {};
 }
 
