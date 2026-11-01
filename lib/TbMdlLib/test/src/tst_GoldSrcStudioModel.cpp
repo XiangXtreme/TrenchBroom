@@ -11,7 +11,11 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -154,8 +158,8 @@ std::vector<std::uint8_t> makeStudioModel(const float boneAngleZ = 0.0f)
   const auto meshOffset = modelOffset + 2 * sizeof(StudioModel);
   const auto triangleOffset = meshOffset + 2 * sizeof(StudioMesh);
   const auto vertexInfoOffset = triangleOffset + 2 * sizeof(StudioTriVertex);
-  const auto vertexOffset = vertexInfoOffset + 2;
-  const auto totalSize = vertexOffset + 2 * 6;
+  const auto vertexOffset = vertexInfoOffset + 2 * 3;
+  const auto totalSize = vertexOffset + 2 * 36;
 
   auto data = std::vector<std::uint8_t>{};
   auto header = StudioHeader{};
@@ -212,9 +216,9 @@ std::vector<std::uint8_t> makeStudioModel(const float boneAngleZ = 0.0f)
     std::strncpy(model.name, variant == 0 ? "body_a" : "body_b", sizeof(model.name) - 1);
     model.nummesh = 1;
     model.meshindex = int32_t(meshOffset + variant * sizeof(StudioMesh));
-    model.numverts = 1;
-    model.vertinfoindex = int32_t(vertexInfoOffset + variant);
-    model.vertindex = int32_t(vertexOffset + variant * 6);
+    model.numverts = 3;
+    model.vertinfoindex = int32_t(vertexInfoOffset + variant * 3);
+    model.vertindex = int32_t(vertexOffset + variant * 36);
     writeAt(data, modelOffset + variant * sizeof(StudioModel), model);
 
     auto mesh = StudioMesh{};
@@ -224,15 +228,26 @@ std::vector<std::uint8_t> makeStudioModel(const float boneAngleZ = 0.0f)
 
     auto triangle = StudioTriVertex{};
     triangle.vertex[0] = 0;
-    triangle.vertex[1] = 0;
-    triangle.vertex[2] = 0;
+    triangle.vertex[1] = 1;
+    triangle.vertex[2] = 2;
     writeAt(data, triangleOffset + variant * sizeof(StudioTriVertex), triangle);
 
-    const auto bone = static_cast<std::uint8_t>(variant == 0 ? 1 : 0);
-    writeAt(data, vertexInfoOffset + variant, bone);
-
-    const auto x = static_cast<std::int16_t>(variant == 0 ? 1 : 2);
-    writeAt(data, vertexOffset + variant * 6, x);
+    const auto points = std::array<std::array<float, 3>, 3>{
+      std::array<float, 3>{variant == 0 ? 1.0f : 2.0f, 0.0f, 0.0f},
+      std::array<float, 3>{12.0f, 12.0f, 0.0f},
+      std::array<float, 3>{-12.0f, 12.0f, 0.0f}};
+    for (auto vertex = 0; vertex < 3; ++vertex)
+    {
+      writeAt(
+        data,
+        vertexInfoOffset + variant * 3 + std::size_t(vertex),
+        static_cast<std::uint8_t>(variant == 0 ? 1 : 0));
+      writeAt(
+        data,
+        vertexOffset + variant * 36 + std::size_t(vertex) * 12,
+        points[std::size_t(vertex)].data(),
+        12);
+    }
   }
 
   return data;
@@ -308,6 +323,56 @@ TEST_CASE("GoldSrcStudioModel")
     writeAt(empty, 0, header);
     CHECK(buildGoldSrcStudioMesh(empty).is_error());
   }
+}
+
+TEST_CASE("GoldSrcStudioModel real model")
+{
+  // Opt-in: the repository ships no GoldSrc game assets. Point TB_GOLDSRC_MODEL at a
+  // model from an installed game to validate the reader against real data.
+  const auto path = std::getenv("TB_GOLDSRC_MODEL");
+  if (!path || !*path)
+    SKIP("TB_GOLDSRC_MODEL is not set");
+
+  auto stream = std::ifstream{std::filesystem::path{path}, std::ios::binary};
+  REQUIRE(stream);
+  const auto bytes = std::vector<std::uint8_t>{
+    std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+  REQUIRE(isGoldSrcStudioModel(bytes));
+
+  const auto info = readGoldSrcStudioModelInfo(bytes);
+  REQUIRE(info.is_success());
+  const auto& model = info.value();
+  CHECK_FALSE(model.name.empty());
+  CHECK(model.bones > 0);
+  CHECK_FALSE(model.bodyParts.empty());
+  CHECK_FALSE(model.textures.empty());
+  CHECK(model.bounds.size().x() > 1.0f);
+  for (const auto& bodyPart : model.bodyParts)
+    CHECK_FALSE(bodyPart.variants.empty());
+
+  const auto mesh = buildGoldSrcStudioMesh(bytes);
+  if (mesh.is_error())
+  {
+    // Sequence-driven models are refused instead of drawn with a folded rest pose.
+    CHECK(
+      std::get<Error>(mesh.error()).msg.find("sequence animation")
+      != std::string::npos);
+    return;
+  }
+  CHECK(mesh.value().positions.size() % 3 == 0);
+  CHECK_FALSE(mesh.value().triangles.empty());
+
+  // Every body variant must produce geometry of its own, not an empty or shared mesh.
+  auto variants = std::vector<std::size_t>(model.bodyParts.size(), 0);
+  for (auto part = std::size_t{0}; part < model.bodyParts.size(); ++part)
+    for (auto variant = std::size_t{0}; variant < model.bodyParts[part].variants.size();
+         ++variant)
+    {
+      variants[part] = variant;
+      const auto variantMesh = buildGoldSrcStudioMesh(bytes, variants);
+      if (variantMesh.is_success())
+        CHECK_FALSE(variantMesh.value().triangles.empty());
+    }
 }
 
 } // namespace tb::mdl

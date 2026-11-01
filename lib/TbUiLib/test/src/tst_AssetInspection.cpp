@@ -19,7 +19,10 @@
 #include "ui/ModelThumbnail.h"
 #include "ui/QPathUtils.h"
 
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -79,7 +82,7 @@ inspection::Bytes studioModel()
   const auto vertexInfoOffset = triangleOffset + 2 * TriangleSize;
   const auto vertexOffset = vertexInfoOffset + 2 * 3;
 
-  auto data = inspection::Bytes(vertexOffset + 2 * 18, 0);
+  auto data = inspection::Bytes(vertexOffset + 2 * 36, 0);
   const auto put32 = [&](const std::size_t offset, const std::int32_t value) {
     std::memcpy(data.data() + offset, &value, 4);
   };
@@ -137,7 +140,7 @@ inspection::Bytes studioModel()
     put32(model + 76, std::int32_t(meshOffset + std::size_t(variant) * MeshSize));
     put32(model + 80, 3);
     put32(model + 84, std::int32_t(vertexInfoOffset + std::size_t(variant) * 3));
-    put32(model + 88, std::int32_t(vertexOffset + std::size_t(variant) * 18));
+    put32(model + 88, std::int32_t(vertexOffset + std::size_t(variant) * 36));
 
     const auto mesh = meshOffset + std::size_t(variant) * MeshSize;
     put32(mesh, 1);
@@ -148,19 +151,19 @@ inspection::Bytes studioModel()
       triangle.data(),
       sizeof(triangle));
 
-    const auto spread = static_cast<std::int16_t>(variant == 0 ? 12 : 6);
-    const auto points = std::array<std::array<std::int16_t, 3>, 3>{
-      std::array<std::int16_t, 3>{1, 0, 0},
-      std::array<std::int16_t, 3>{spread, spread, 0},
-      std::array<std::int16_t, 3>{static_cast<std::int16_t>(-spread), spread, 0}};
+    const auto spread = variant == 0 ? 12.0f : 6.0f;
+    const auto points = std::array<std::array<float, 3>, 3>{
+      std::array<float, 3>{variant == 0 ? 1.0f : 2.0f, 0.0f, 0.0f},
+      std::array<float, 3>{spread, spread, 0.0f},
+      std::array<float, 3>{-spread, spread, 0.0f}};
     for (auto vertex = std::size_t{0}; vertex < 3; ++vertex)
     {
       data[vertexInfoOffset + std::size_t(variant) * 3 + vertex] =
         std::uint8_t(variant == 0 ? 1 : 0);
       std::memcpy(
-        data.data() + vertexOffset + std::size_t(variant) * 18 + vertex * 6,
+        data.data() + vertexOffset + std::size_t(variant) * 36 + vertex * 12,
         points[vertex].data(),
-        6);
+        12);
     }
   }
   return data;
@@ -328,6 +331,34 @@ TEST_CASE("AssetInspection")
     CHECK(summary->text().contains("published 4 × 4"));
     mode->setCurrentIndex(1);
     CHECK(summary->text().contains("Source"));
+  }
+  SECTION("real GoldSrc studio models render their bind pose")
+  {
+    // Opt-in like the TbMdlLib test: the repository ships no game assets.
+    const auto path = std::getenv("TB_GOLDSRC_MODEL");
+    if (!path || !*path)
+      SKIP("TB_GOLDSRC_MODEL is not set");
+    auto file = std::ifstream{std::filesystem::path{path}, std::ios::binary};
+    REQUIRE(file);
+    const auto bytes = inspection::Bytes{
+      std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    const auto scene = loadGoldSrcStudioPreviewScene(bytes);
+    REQUIRE(scene);
+    REQUIRE(scene->studioModel);
+    CHECK(scene->studioModel->bones > 0);
+    // Models whose render pose comes from a sequence have no decoded bind pose yet; they
+    // must report metadata without inventing geometry.
+    if (scene->frames.empty())
+      return;
+    const auto image = renderModelPreview(scene->frames.front(), 256, 0.55f, 0.38f);
+    REQUIRE_FALSE(image.isNull());
+    auto painted = 0;
+    for (auto y = 0; y < image.height(); ++y)
+      for (auto x = 0; x < image.width(); ++x)
+        painted += image.pixelColor(x, y).alpha() > 0 ? 1 : 0;
+    CHECK(painted > 256);
+    if (const auto out = std::getenv("TB_GOLDSRC_PREVIEW_OUT"); out && *out)
+      CHECK(image.save(QString::fromUtf8(out)));
   }
   SECTION("prefabs report authored volumes and references")
   {

@@ -76,6 +76,12 @@ std::string readFixedString(
   return std::string{text, ::strnlen(text, size)};
 }
 
+struct Header;
+
+/** Smallest box containing every authored vertex of every body variant. */
+std::optional<vm::bbox3f> measureBounds(
+  const Bytes& bytes, const Header& header);
+
 struct Header
 {
   std::string name;
@@ -111,6 +117,51 @@ std::size_t tableAt(
   const auto start = std::size_t(value);
   const auto total = count * entrySize;
   return count > 0 && contains(bytes, start, total) ? start : 0;
+}
+
+std::optional<vm::bbox3f> measureBounds(const Bytes& bytes, const Header& header)
+{
+  auto low = std::optional<vm::vec3f>{};
+  auto high = std::optional<vm::vec3f>{};
+  const auto extend = [&](const vm::vec3f& point) {
+    if (!low || !high)
+    {
+      low = point;
+      high = point;
+      return;
+    }
+    for (auto axis = 0; axis < 3; ++axis)
+    {
+      (*low)[axis] = std::min((*low)[axis], point[axis]);
+      (*high)[axis] = std::max((*high)[axis], point[axis]);
+    }
+  };
+
+  for (auto part = std::size_t{0}; part < header.bodyParts; ++part)
+  {
+    const auto partOffset = header.bodyPartOffset + part * BodyPartSize;
+    const auto variantCount = countAt(bytes, partOffset + 64, MaxVariants);
+    const auto models = tableAt(bytes, partOffset + 72, variantCount, ModelSize);
+    if (variantCount == 0 || models == 0)
+      continue;
+    for (auto variant = std::size_t{0}; variant < variantCount; ++variant)
+    {
+      const auto modelOffset = models + variant * ModelSize;
+      const auto vertexCount = countAt(bytes, modelOffset + 80, MaxVertices);
+      const auto vertexOffset = tableAt(bytes, modelOffset + 88, vertexCount, 12);
+      if (vertexCount == 0 || vertexOffset == 0)
+        continue;
+      for (auto vertex = std::size_t{0}; vertex < vertexCount; ++vertex)
+        extend(
+          {readf32(bytes, vertexOffset + vertex * 12),
+           readf32(bytes, vertexOffset + vertex * 12 + 4),
+           readf32(bytes, vertexOffset + vertex * 12 + 8)});
+    }
+  }
+
+  if (!low || !high)
+    return std::nullopt;
+  return vm::bbox3f{*low, *high};
 }
 
 Result<Header> readHeader(const Bytes& bytes)
@@ -152,6 +203,14 @@ Result<Header> readHeader(const Bytes& bytes)
       std::swap(low[axis], high[axis]);
   }
   header.bounds = vm::bbox3f{low, high};
+  // Engine-authored models sometimes ship a zero render box; the vertex tables still
+  // describe the authored volume, so fall back to them instead of reporting a point.
+  if (header.bounds.size().x() <= 0.0f && header.bounds.size().y() <= 0.0f
+      && header.bounds.size().z() <= 0.0f)
+  {
+    if (const auto measured = measureBounds(bytes, header); measured)
+      header.bounds = *measured;
+  }
   return header;
 }
 
@@ -198,6 +257,7 @@ Transform boneRestTransform(const Bytes& bytes, const std::size_t offset)
 
 vm::vec3f applyTransform(const Transform& transform, const vm::vec3f& point)
 {
+  // HLSDK stores row-major matrices and multiplies row vectors: out = p * R + t.
   const auto& r = transform.rotation;
   return {
     r[0] * point.x() + r[1] * point.y() + r[2] * point.z() + transform.translation[0],
@@ -207,6 +267,8 @@ vm::vec3f applyTransform(const Transform& transform, const vm::vec3f& point)
 
 Transform compose(const Transform& parent, const Transform& child)
 {
+  // A bone's local frame is expressed in its parent's space: rotate by the parent first,
+  // then add the bone's own translation expressed through the parent rotation.
   auto result = Transform{};
   for (auto row = std::size_t{0}; row < 3; ++row)
     for (auto column = std::size_t{0}; column < 3; ++column)
@@ -216,13 +278,13 @@ Transform compose(const Transform& parent, const Transform& child)
         value += parent.rotation[row * 3 + inner] * child.rotation[inner * 3 + column];
       result.rotation[row * 3 + column] = value;
     }
-  result.translation = {
-    parent.rotation[0] * child.translation[0] + parent.rotation[1] * child.translation[1]
-      + parent.rotation[2] * child.translation[2] + parent.translation[0],
-    parent.rotation[3] * child.translation[0] + parent.rotation[4] * child.translation[1]
-      + parent.rotation[5] * child.translation[2] + parent.translation[1],
-    parent.rotation[6] * child.translation[0] + parent.rotation[7] * child.translation[1]
-      + parent.rotation[8] * child.translation[2] + parent.translation[2]};
+  for (auto column = std::size_t{0}; column < 3; ++column)
+  {
+    auto value = parent.translation[column];
+    for (auto inner = std::size_t{0}; inner < 3; ++inner)
+      value += child.translation[inner] * parent.rotation[inner * 3 + column];
+    result.translation[column] = value;
+  }
   return result;
 }
 
@@ -325,6 +387,21 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
 
   const auto bones = readBoneTransforms(bytes, value);
   auto result = GoldSrcStudioMesh{};
+  auto rawLow = std::optional<vm::vec3f>{};
+  auto rawHigh = std::optional<vm::vec3f>{};
+  const auto extendRaw = [&](const vm::vec3f& point) {
+    if (!rawLow || !rawHigh)
+    {
+      rawLow = point;
+      rawHigh = point;
+      return;
+    }
+    for (auto axis = 0; axis < 3; ++axis)
+    {
+      (*rawLow)[axis] = std::min((*rawLow)[axis], point[axis]);
+      (*rawHigh)[axis] = std::max((*rawHigh)[axis], point[axis]);
+    }
+  };
 
   for (auto part = std::size_t{0}; part < value.bodyParts; ++part)
   {
@@ -344,7 +421,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
     const auto meshOffset = tableAt(bytes, modelOffset + 76, meshCount, MeshSize);
     const auto vertexCount = countAt(bytes, modelOffset + 80, MaxVertices);
     const auto vertexInfoOffset = tableAt(bytes, modelOffset + 84, vertexCount, 1);
-    const auto vertexOffset = tableAt(bytes, modelOffset + 88, vertexCount, 6);
+    const auto vertexOffset = tableAt(bytes, modelOffset + 88, vertexCount, 12);
     if (
       meshCount == 0 || meshOffset == 0 || vertexCount == 0 || vertexInfoOffset == 0
       || vertexOffset == 0)
@@ -362,19 +439,31 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
       {
         const auto triangleOffsetBytes = triangleOffset + triangle * TriangleSize;
         const auto base = result.positions.size();
+        auto skipped = false;
         for (auto corner = std::size_t{0}; corner < 3; ++corner)
         {
           const auto vertex = readi16(bytes, triangleOffsetBytes + corner * 2);
+          // Some retail models carry stale indices in a variant's mesh; skip that
+          // triangle instead of discarding the whole model.
           if (vertex < 0 || std::size_t(vertex) >= vertexCount)
-            return Error{"The studio model mesh references a missing vertex."};
+          {
+            skipped = true;
+            break;
+          }
           const auto index = std::size_t(vertex);
           const auto bone = bytes[vertexInfoOffset + index];
           const auto position = vm::vec3f{
-            float(readi16(bytes, vertexOffset + index * 6)),
-            float(readi16(bytes, vertexOffset + index * 6 + 2)),
-            float(readi16(bytes, vertexOffset + index * 6 + 4))};
+            readf32(bytes, vertexOffset + index * 12),
+            readf32(bytes, vertexOffset + index * 12 + 4),
+            readf32(bytes, vertexOffset + index * 12 + 8)};
+          extendRaw(position);
           result.positions.push_back(
             bone < bones.size() ? applyTransform(bones[bone], position) : position);
+        }
+        if (skipped)
+        {
+          result.positions.resize(base);
+          continue;
         }
         result.triangles.push_back({base, base + 1, base + 2});
       }
@@ -383,6 +472,32 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
 
   if (result.triangles.empty())
     return Error{"The studio model has no readable geometry."};
+
+  // Real game models store vertices in bone space and derive the render pose from a
+  // sequence. Without animation decoding the rest values can fold the mesh into itself,
+  // so compare the posed extent with the authored one and refuse to show a wrong shape.
+  // The check only applies to rigged models; small authored fixtures use rest values that
+  // already are the bind pose.
+  if (rawLow && rawHigh && value.bones > 8)
+  {
+    auto posedLow = result.positions.front();
+    auto posedHigh = posedLow;
+    for (const auto& point : result.positions)
+      for (auto axis = 0; axis < 3; ++axis)
+      {
+        posedLow[axis] = std::min(posedLow[axis], point[axis]);
+        posedHigh[axis] = std::max(posedHigh[axis], point[axis]);
+      }
+    for (auto axis = 0; axis < 3; ++axis)
+    {
+      const auto raw = (*rawHigh)[axis] - (*rawLow)[axis];
+      // Flat parts have no extent on one axis; only judge axes the model actually spans.
+      if (raw >= 4.0f && posedHigh[axis] - posedLow[axis] > 1.75f * raw)
+        return Error{
+          "GoldSrc bind pose depends on sequence animation, which is not decoded yet."};
+    }
+  }
+
   return result;
 }
 
