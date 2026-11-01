@@ -144,13 +144,26 @@
 
 ## 6. 第三批：模型、精灵与预制体
 
-- [ ] 模型：共享交互预览，支持旋转、缩放、重置视角、原点/包围盒查看。
+- [x] 模型：共享交互预览，支持旋转、缩放、重置视角、原点/包围盒查看。
 - [ ] 模型：先核实当前 GoldSrc 解码器/渲染器的 Sequence、Body、Skin 支持，再实现
   可用变体选择、动画播放/暂停和相关统计；界面按真实能力启用控件。
 - [ ] 模型：复用独立资源上下文及配套文件解析，覆盖仅依赖变化时的缓存刷新。
 - [x] 精灵：在现有解码基础上增加动画播放、暂停、逐帧、帧数、帧率和透明模式信息。
 - [ ] 预制体：显示尺寸、刷子数、实体数、缺失资源与依赖；复用 MAP 解析和资源审计。
 - [ ] 三类预览在库管理器、Content Browser 和放大预览中遵循相同操作习惯。
+
+### 续批：GoldSrc studio 模型预览
+
+| 归属 | 职责 |
+| --- | --- |
+| `mdl::GoldSrcStudioModel`（TbMdlLib） | 解析 IDST v10 头部、骨骼、BodyPart/Model/Mesh、顶点与内嵌贴图表；按 HLSDK 的静止姿态约定合成骨骼变换并生成绑定姿态网格 |
+| `loadGoldSrcStudioPreviewScene` | 从资源字节直接生成预览场景，不依赖游戏文件系统；同时供格栅缩略图与检查器使用 |
+| `AssetInspector` | 展示绑定姿态，提供 Body 变体下拉、骨骼/序列/皮肤族/内嵌贴图统计，并说明动画与皮肤未解码 |
+
+验证：`GoldSrcStudioModel` 覆盖格式识别、表越界、骨骼父子变换、旋转合成、
+变体切换与越界拒绝；`AssetInspection` 覆盖场景加载与检查器控件/统计。
+关联回归 `ModelBrowserView`、`CatalogModelPreview`、`ProjectWindow`、
+`ProjectSessionAssetLibrary` 等 8 组通过。
 
 ## 7. 交付与验证
 
@@ -192,10 +205,14 @@
 纹理应用和字段确认复用 `PreparedAssetDrop` 的版本检查、冲突及依赖提交，
 地图修改继续调用原生命令。地图撤销只撤回地图编辑，已捕获资源保留在工程中。
 
-模型检查器目前为几何预览，支持旋转、缩放、原点、包围盒及已解码姿态选择。
-当前 GoldSrc 后端只提供各 Sequence 首帧，检查器明确说明 Skin、Body 和连续动画
-不可用；这些完整能力仍未交付。预制体统计、声音分类与自动试听、
-完整类型主题矩阵及真实游戏验收仍待完成。收藏/标签与跨入口定位见下方续批记录。
+模型检查器提供旋转、缩放、重置视角、原点与包围盒，并按真实能力启用控件。
+Quake 系 MDL/MD2/Assimp 等格式仍显示其已解码帧。GoldSrc studio 模型（IDST v10）
+此前完全无法预览：实体模型加载器只识别 Quake MDL v6。现在由
+`mdl::GoldSrcStudioModel` 直接解析 studio 头、骨骼、BodyPart、Model、Mesh 与顶点
+表，按骨骼静止变换合成绑定姿态，并暴露作者制作的 Body 变体；检查器可选择变体、
+查看骨骼数、序列数（含外置动画组）、皮肤族与内嵌贴图名。Sequence 动画、骨骼
+控制器与 Skin 贴图尚未解码，界面明确说明而不提供无效控件。
+预制体统计、声音分类与自动试听、完整类型主题矩阵及真实游戏验收仍待完成。
 
 首轮定向验证：`AssetInspection`、`AssetLibraryImport`、`AssetBrowserModel`、
 `AssetPreviewProvider`、`CatalogModelPreview`、`CatalogAssetDrop`、

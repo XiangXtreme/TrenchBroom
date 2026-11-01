@@ -61,6 +61,7 @@ target_sources(TbMdlLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GameInfo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GameManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GoldSrcMdlScaler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/GoldSrcStudioModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Grid.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Group.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/GroupNode.cpp

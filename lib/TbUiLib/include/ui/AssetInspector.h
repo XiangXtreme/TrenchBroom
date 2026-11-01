@@ -6,11 +6,14 @@
 
 #include <QWidget>
 
+#include "mdl/GoldSrcStudioModel.h"
 #include "ui/AssetInspection.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
 
 #include <optional>
+#include <utility>
+#include <vector>
 
 class QAudioOutput;
 class QBuffer;
@@ -62,9 +65,14 @@ class AssetInspector : public QWidget
   double m_skyPitch = 0;
   QWidget* m_modelControls = nullptr;
   QComboBox* m_modelFrame = nullptr;
+  QComboBox* m_modelBody = nullptr;
+  QLabel* m_modelLimits = nullptr;
   QCheckBox* m_modelBounds = nullptr;
   QCheckBox* m_modelOrigin = nullptr;
   std::optional<ModelPreviewScene> m_model;
+  std::optional<mdl::GoldSrcStudioModelInfo> m_studioModel;
+  std::vector<std::size_t> m_studioVariants;
+  std::vector<std::pair<std::size_t, std::size_t>> m_studioChoices;
   float m_modelYaw = 0.55f;
   float m_modelPitch = 0.38f;
 
@@ -96,5 +104,7 @@ private:
   void showSpriteFrame();
   void showSky();
   void showModel();
+  void configureStudioModel();
+  void rebuildStudioPose();
 };
 } // namespace tb::ui

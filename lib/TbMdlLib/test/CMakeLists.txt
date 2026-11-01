@@ -32,6 +32,7 @@ target_sources(TbMdlLibTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GameFileSystem.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GameManager.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcMdlScaler.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcStudioModel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Grid.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Group.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GroupNode.cpp

@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <fstream>
+#include <iterator>
 #include <vector>
 
 namespace tb::ui
@@ -35,11 +37,44 @@ struct Vec3
 };
 } // namespace
 
+std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
+  const std::vector<std::uint8_t>& bytes)
+{
+  if (!mdl::isGoldSrcStudioModel(bytes))
+    return std::nullopt;
+  auto info = mdl::readGoldSrcStudioModelInfo(bytes);
+  if (info.is_error())
+    return std::nullopt;
+
+  auto scene = ModelPreviewScene{};
+  scene.studioModel = std::move(info).value();
+  if (const auto mesh = mdl::buildGoldSrcStudioMesh(bytes); mesh.is_success())
+  {
+    auto frame = ModelPreviewFrame{};
+    frame.name = "Bind pose";
+    frame.positions = mesh.value().positions;
+    frame.triangles = mesh.value().triangles;
+    scene.frames.push_back(std::move(frame));
+  }
+  return scene;
+}
+
 std::optional<ModelPreviewScene> loadModelPreviewScene(
   const std::filesystem::path& folder,
   const std::filesystem::path& relativePath,
   const bool firstOnly)
 {
+  {
+    auto stream = std::ifstream{folder / relativePath, std::ios::binary};
+    if (stream)
+    {
+      auto bytes = std::vector<std::uint8_t>{
+        std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+      if (auto studio = loadGoldSrcStudioPreviewScene(bytes))
+        return studio;
+    }
+  }
+
   auto files = fs::DiskFileSystem{folder};
   auto logger = NullLogger{};
   const auto loaded = mdl::loadEntityModelSync(
@@ -219,6 +254,8 @@ QImage renderModelThumbnail(
   const int size)
 {
   const auto scene = loadModelPreviewScene(folder, relativePath, true);
-  return scene ? renderModelPreview(scene->frames.front(), size, 0.55f, 0.38f) : QImage{};
+  return scene && !scene->frames.empty()
+           ? renderModelPreview(scene->frames.front(), size, 0.55f, 0.38f)
+           : QImage{};
 }
 } // namespace tb::ui

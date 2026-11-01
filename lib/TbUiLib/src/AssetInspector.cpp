@@ -35,6 +35,7 @@
 #include "ui/QPathUtils.h"
 
 #include <algorithm>
+#include <array>
 #include <climits>
 #include <cmath>
 #include <functional>
@@ -277,7 +278,15 @@ AssetInspector::AssetInspector(QWidget* parent)
   auto* modelLayout = new QVBoxLayout{m_modelControls};
   modelLayout->setContentsMargins(0, 0, 0, 0);
   m_modelFrame = new QComboBox{};
-  m_modelFrame->setAccessibleName(tr("Sequence pose"));
+  m_modelFrame->setAccessibleName(tr("Pose"));
+  m_modelFrame->setObjectName("AssetInspector_ModelPose");
+  m_modelBody = new QComboBox{};
+  m_modelBody->setAccessibleName(tr("Body variant"));
+  m_modelBody->setObjectName("AssetInspector_ModelBody");
+  m_modelBody->hide();
+  auto* modelPoseRow = new QHBoxLayout{};
+  modelPoseRow->addWidget(m_modelFrame, 1);
+  modelPoseRow->addWidget(m_modelBody, 1);
   auto* modelButtons = new QHBoxLayout{};
   m_modelBounds = new QCheckBox{tr("Bounds")};
   m_modelOrigin = new QCheckBox{tr("Origin")};
@@ -285,14 +294,24 @@ AssetInspector::AssetInspector(QWidget* parent)
   modelButtons->addWidget(m_modelBounds);
   modelButtons->addWidget(m_modelOrigin);
   modelButtons->addWidget(modelReset);
-  modelLayout->addWidget(m_modelFrame);
+  modelLayout->addLayout(modelPoseRow);
   modelLayout->addLayout(modelButtons);
-  auto* limits = new QLabel{tr(
-    "Geometry preview · drag to orbit, wheel to zoom.\nGoldSrc sequences show their "
-    "first pose. Skin, Body and continuous animation are unavailable in this preview.")};
-  limits->setWordWrap(true);
-  modelLayout->addWidget(limits);
+  m_modelLimits = new QLabel{};
+  m_modelLimits->setObjectName("AssetInspector_ModelLimits");
+  m_modelLimits->setWordWrap(true);
+  modelLayout->addWidget(m_modelLimits);
   connect(m_modelFrame, &QComboBox::currentIndexChanged, this, [this]() { showModel(); });
+  connect(m_modelBody, &QComboBox::currentIndexChanged, this, [this]() {
+    const auto index = size_t(m_modelBody->currentIndex());
+    if (
+      !m_studioModel || m_modelBody->currentIndex() < 0
+      || index >= m_studioChoices.size())
+      return;
+    const auto [part, variant] = m_studioChoices[index];
+    if (part < m_studioVariants.size())
+      m_studioVariants[part] = variant;
+    rebuildStudioPose();
+  });
   connect(m_modelBounds, &QCheckBox::toggled, this, [this]() { showModel(); });
   connect(m_modelOrigin, &QCheckBox::toggled, this, [this]() { showModel(); });
   connect(modelReset, &QPushButton::clicked, this, [this]() {
@@ -330,6 +349,7 @@ AssetInspector::AssetInspector(QWidget* parent)
 
   auto* details = new CollapsibleTitledPanel{tr("Technical details"), false};
   m_details = new QTreeWidget{};
+  m_details->setObjectName("AssetInspector_Details");
   m_details->setHeaderLabels({tr("Property"), tr("Value")});
   m_details->setRootIsDecorated(false);
   m_details->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
@@ -371,6 +391,15 @@ void AssetInspector::clear()
   m_asset.reset();
   m_sprite.reset();
   m_model.reset();
+  m_studioModel.reset();
+  m_studioVariants.clear();
+  m_studioChoices.clear();
+  if (m_modelBody)
+  {
+    const auto blocker = QSignalBlocker{m_modelBody};
+    m_modelBody->clear();
+    m_modelBody->hide();
+  }
   m_modelControls->hide();
   m_image->orbit = {};
   m_skyMode->hide();
@@ -434,6 +463,17 @@ void AssetInspector::refreshPreview()
   m_spriteControls->setVisible(type == BrowserCellType::Sprite);
   m_modelControls->setVisible(type == BrowserCellType::Model);
   m_sprite.reset();
+  m_studioModel.reset();
+  m_studioVariants.clear();
+  m_studioChoices.clear();
+  {
+    const auto blocker = QSignalBlocker{m_modelBody};
+    m_modelBody->clear();
+  }
+  m_modelBody->hide();
+  m_modelLimits->setText(
+    tr("Geometry preview · drag to orbit, wheel to zoom.\nSkin, body variants and "
+       "continuous animation depend on the resource format."));
   m_skyMode->setVisible(m_asset->resource.skybox);
   m_image->orbit = {};
   if (m_asset->resource.skybox)
@@ -479,6 +519,28 @@ void AssetInspector::refreshPreview()
   }
   else if (type == BrowserCellType::Model)
   {
+    // GoldSrc studio models are read straight from the resource bytes: the entity model
+    // loaders only understand Quake-era formats.
+    if (auto studio = loadGoldSrcStudioPreviewScene(m_asset->compatible))
+    {
+      m_model = std::move(studio);
+      m_studioModel = m_model->studioModel;
+      m_studioVariants.assign(m_model->studioModel->bodyParts.size(), 0);
+      configureStudioModel();
+      const auto blocker = QSignalBlocker{m_modelFrame};
+      m_modelFrame->clear();
+      m_modelFrame->addItem(tr("Bind pose"));
+      m_modelFrame->setCurrentIndex(0);
+      m_modelYaw = 0.55f;
+      m_modelPitch = 0.38f;
+      if (!m_model->frames.empty())
+      {
+        showModel();
+        return;
+      }
+      m_summary->setText(tr("The studio model has no readable bind pose."));
+      return;
+    }
     m_model = loadModelPreviewScene(
       m_asset->resource.absolutePath.parent_path(),
       m_asset->resource.absolutePath.filename());
@@ -532,10 +594,108 @@ void AssetInspector::showModel()
       m_modelBounds->isChecked(),
       m_modelOrigin->isChecked()),
     false);
-  m_summary->setText(tr("%1 vertices · %2 triangles · %3 pose(s)")
-                       .arg(frame.positions.size())
-                       .arg(frame.triangles.size())
-                       .arg(m_model->frames.size()));
+  m_summary->setText(
+    m_studioModel ? tr("%1 vertices · %2 triangles · bind pose · %3 bone(s)")
+                      .arg(frame.positions.size())
+                      .arg(frame.triangles.size())
+                      .arg(m_studioModel->bones)
+                  : tr("%1 vertices · %2 triangles · %3 pose(s)")
+                      .arg(frame.positions.size())
+                      .arg(frame.triangles.size())
+                      .arg(m_model->frames.size()));
+}
+
+void AssetInspector::configureStudioModel()
+{
+  if (!m_studioModel || !m_model)
+    return;
+  const auto& studio = *m_studioModel;
+  m_studioChoices.clear();
+  {
+    const auto blocker = QSignalBlocker{m_modelBody};
+    m_modelBody->clear();
+    for (auto part = std::size_t{0}; part < studio.bodyParts.size(); ++part)
+    {
+      const auto& bodyPart = studio.bodyParts[part];
+      if (bodyPart.variants.size() < 2)
+        continue;
+      const auto partName = bodyPart.name.empty() ? tr("Body %1").arg(part + 1)
+                                                  : QString::fromStdString(bodyPart.name);
+      for (auto variant = std::size_t{0}; variant < bodyPart.variants.size(); ++variant)
+      {
+        m_modelBody->addItem(tr("%1 · %2").arg(
+          partName, QString::fromStdString(bodyPart.variants[variant])));
+        m_studioChoices.emplace_back(part, variant);
+      }
+    }
+  }
+  m_modelBody->setVisible(!m_studioChoices.empty());
+  m_modelLimits->setText(
+    tr("GoldSrc studio model · bind pose from bone rest transforms.\nDrag to orbit, "
+       "wheel to zoom. Animation, skins and bone controllers are not decoded."));
+
+  const auto keys = std::array{
+    tr("Bones"),
+    tr("Sequences"),
+    tr("Body variants"),
+    tr("Skin families"),
+    tr("Embedded textures"),
+    tr("Source bounds")};
+  for (const auto& key : keys)
+    for (auto* item : m_details->findItems(key, Qt::MatchExactly, 0))
+      delete item;
+
+  const auto add = [this](const QString& key, const QString& value) {
+    auto* item = new QTreeWidgetItem{m_details, {key, value}};
+    item->setToolTip(1, value);
+  };
+  auto variants = std::size_t{0};
+  for (const auto& bodyPart : studio.bodyParts)
+    variants += bodyPart.variants.size();
+  add(tr("Bones"), QString::number(qulonglong(studio.bones)));
+  add(
+    tr("Sequences"),
+    studio.sequenceGroups > 1 ? tr("%1 in %2 external groups")
+                                  .arg(qulonglong(studio.sequences))
+                                  .arg(qulonglong(studio.sequenceGroups))
+                              : QString::number(qulonglong(studio.sequences)));
+  add(
+    tr("Body variants"),
+    tr("%1 in %2 part(s)")
+      .arg(qulonglong(variants))
+      .arg(qulonglong(studio.bodyParts.size())));
+  add(tr("Skin families"), QString::number(qulonglong(studio.skinFamilies)));
+  auto textures = QStringList{};
+  for (const auto& texture : studio.textures)
+    textures << QString::fromStdString(texture);
+  add(
+    tr("Embedded textures"),
+    textures.isEmpty() ? tr("None") : textures.join(QStringLiteral(", ")));
+  const auto size = studio.bounds.size();
+  add(
+    tr("Source bounds"),
+    tr("%1 × %2 × %3")
+      .arg(size.x(), 0, 'f', 1)
+      .arg(size.y(), 0, 'f', 1)
+      .arg(size.z(), 0, 'f', 1));
+}
+
+void AssetInspector::rebuildStudioPose()
+{
+  if (!m_asset || !m_studioModel || !m_model)
+    return;
+  const auto mesh = mdl::buildGoldSrcStudioMesh(m_asset->compatible, m_studioVariants);
+  if (mesh.is_error())
+  {
+    m_summary->setText(QString::fromStdString(std::get<Error>(mesh.error()).msg));
+    return;
+  }
+  auto frame = ModelPreviewFrame{};
+  frame.name = "Bind pose";
+  frame.positions = mesh.value().positions;
+  frame.triangles = mesh.value().triangles;
+  m_model->frames.assign(1, std::move(frame));
+  showModel();
 }
 
 void AssetInspector::showSky()

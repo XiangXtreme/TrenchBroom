@@ -5,9 +5,12 @@
 */
 #pragma once
 
+#include "mdl/GoldSrcStudioModel.h"
+
 #include "vm/vec.h"
 
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -26,7 +29,21 @@ struct ModelPreviewFrame
 struct ModelPreviewScene
 {
   std::vector<ModelPreviewFrame> frames;
+  // Set for GoldSrc studio models: the bind pose is the only decoded frame, but the
+  // inspector can offer the authored body variants from this metadata.
+  std::optional<mdl::GoldSrcStudioModelInfo> studioModel;
 };
+
+/**
+ * Loads the bind pose of a GoldSrc studio model.
+ *
+ * The entity model loaders do not understand the GoldSrc studio format, so the asset
+ * browser reads it directly. Animation, skins and bone controllers are not decoded; the
+ * mesh is the authored rest pose. Returns nullopt for other formats or unreadable models.
+ */
+std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
+  const std::vector<std::uint8_t>& bytes);
+
 std::optional<ModelPreviewScene> loadModelPreviewScene(
   const std::filesystem::path& folder,
   const std::filesystem::path& relativePath,

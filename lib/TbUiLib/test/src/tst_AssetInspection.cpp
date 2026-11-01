@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QMediaPlayer>
 #include <QTemporaryDir>
+#include <QTreeWidget>
 
 #include "img/GoldSrcTexture.h"
 #include "project/AssetLibrary.h"
@@ -15,6 +16,7 @@
 #include "ui/AssetInspector.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibrarySource.h"
+#include "ui/ModelThumbnail.h"
 #include "ui/QPathUtils.h"
 
 #include <fstream>
@@ -52,6 +54,100 @@ void append(inspection::Bytes& bytes, const std::uint32_t value)
 {
   for (auto i = 0u; i < 4; ++i)
     bytes.push_back(std::uint8_t(value >> (i * 8)));
+}
+
+/**
+ * Minimal GoldSrc studio model: two bones, one body part with two variants and one
+ * triangle per variant. Variant 1 skips the child bone, so a body switch moves geometry.
+ */
+inspection::Bytes studioModel()
+{
+  constexpr auto Header = std::size_t{244};
+  constexpr auto BoneSize = std::size_t{112};
+  constexpr auto TextureSize = std::size_t{80};
+  constexpr auto BodyPartSize = std::size_t{76};
+  constexpr auto ModelSize = std::size_t{112};
+  constexpr auto MeshSize = std::size_t{20};
+  constexpr auto TriangleSize = std::size_t{8};
+
+  const auto boneOffset = Header;
+  const auto textureOffset = boneOffset + 2 * BoneSize;
+  const auto bodyPartOffset = textureOffset + TextureSize;
+  const auto modelOffset = bodyPartOffset + BodyPartSize;
+  const auto meshOffset = modelOffset + 2 * ModelSize;
+  const auto triangleOffset = meshOffset + 2 * MeshSize;
+  const auto vertexInfoOffset = triangleOffset + 2 * TriangleSize;
+  const auto vertexOffset = vertexInfoOffset + 2;
+
+  auto data = inspection::Bytes(vertexOffset + 12, 0);
+  const auto put32 = [&](const std::size_t offset, const std::int32_t value) {
+    std::memcpy(data.data() + offset, &value, 4);
+  };
+  const auto putFloat = [&](const std::size_t offset, const float value) {
+    std::memcpy(data.data() + offset, &value, 4);
+  };
+  const auto putText =
+    [&](const std::size_t offset, const char* text, const std::size_t size) {
+      auto length = std::size_t{0};
+      while (length + 1 < size && text[length] != '\0')
+        ++length;
+      std::memcpy(data.data() + offset, text, length);
+    };
+
+  put32(0, 0x54534449); // "IDST"
+  put32(4, 10);
+  putText(8, "ui_studio", 64);
+  putFloat(88, -8.0f);
+  putFloat(92, -8.0f);
+  putFloat(96, -8.0f);
+  putFloat(100, 16.0f);
+  putFloat(104, 8.0f);
+  putFloat(108, 8.0f);
+  put32(140, 2); // bones
+  put32(144, std::int32_t(boneOffset));
+  put32(164, 4); // sequences
+  put32(172, 2); // external groups
+  put32(180, 1); // textures
+  put32(184, std::int32_t(textureOffset));
+  put32(192, 1);
+  put32(196, 3); // skin families
+  put32(204, 1); // body parts
+  put32(208, std::int32_t(bodyPartOffset));
+
+  putText(boneOffset, "root", 32);
+  put32(boneOffset + 32, -1);
+  putText(boneOffset + BoneSize, "child", 32);
+  put32(boneOffset + BoneSize + 32, 0);
+  putFloat(boneOffset + BoneSize + 64, 10.0f);
+
+  putText(textureOffset, "brick", 64);
+  put32(textureOffset + 68, 64);
+  put32(textureOffset + 72, 64);
+
+  putText(bodyPartOffset, "body", 64);
+  put32(bodyPartOffset + 64, 2);
+  put32(bodyPartOffset + 68, 0);
+  put32(bodyPartOffset + 72, std::int32_t(modelOffset));
+
+  for (auto variant = 0; variant < 2; ++variant)
+  {
+    const auto model = modelOffset + std::size_t(variant) * ModelSize;
+    putText(model, variant == 0 ? "body_a" : "body_b", 64);
+    put32(model + 72, 1);
+    put32(model + 76, std::int32_t(meshOffset + std::size_t(variant) * MeshSize));
+    put32(model + 80, 1);
+    put32(model + 84, std::int32_t(vertexInfoOffset + std::size_t(variant)));
+    put32(model + 88, std::int32_t(vertexOffset + std::size_t(variant) * 6));
+
+    const auto mesh = meshOffset + std::size_t(variant) * MeshSize;
+    put32(mesh, 1);
+    put32(mesh + 4, std::int32_t(triangleOffset + std::size_t(variant) * TriangleSize));
+
+    data[vertexInfoOffset + std::size_t(variant)] = std::uint8_t(variant == 0 ? 1 : 0);
+    const auto x = std::int16_t{variant == 0 ? 1 : 2};
+    std::memcpy(data.data() + vertexOffset + std::size_t(variant) * 6, &x, 2);
+  }
+  return data;
 }
 } // namespace
 
@@ -136,6 +232,51 @@ TEST_CASE("AssetInspection")
     CHECK(
       second.findChild<QLabel*>("AssetInspector_Status")->text() == "source unavailable");
     CHECK(second.findChild<QMediaPlayer*>()->sourceDevice() == nullptr);
+  }
+  SECTION("GoldSrc studio models preview the bind pose and body variants")
+  {
+    const auto bytes = studioModel();
+    const auto scene = loadGoldSrcStudioPreviewScene(bytes);
+    REQUIRE(scene);
+    REQUIRE(scene->studioModel);
+    CHECK(scene->studioModel->bones == 2);
+    CHECK(scene->studioModel->sequences == 4);
+    CHECK(scene->studioModel->sequenceGroups == 2);
+    CHECK(scene->studioModel->skinFamilies == 3);
+    CHECK(scene->studioModel->textures == std::vector<std::string>{"brick"});
+    REQUIRE(scene->frames.size() == 1);
+    CHECK(scene->frames.front().triangles.size() == 1);
+    CHECK(scene->frames.front().positions.front() == vm::vec3f{11.0f, 0.0f, 0.0f});
+    CHECK_FALSE(loadGoldSrcStudioPreviewScene({1, 2, 3}));
+
+    auto asset = inspection::Asset{};
+    asset.resource.type = BrowserCellType::Model;
+    asset.resource.path = "models/ui_studio.mdl";
+    asset.name = "ui_studio";
+    asset.original = bytes;
+    asset.compatible = bytes;
+    auto inspector = AssetInspector{};
+    inspector.setAsset(asset);
+    auto* body = inspector.findChild<QComboBox*>("AssetInspector_ModelBody");
+    auto* details = inspector.findChild<QTreeWidget*>("AssetInspector_Details");
+    auto* summary = inspector.findChild<QLabel*>("AssetInspector_Summary");
+    REQUIRE(body != nullptr);
+    REQUIRE(details != nullptr);
+    REQUIRE(summary != nullptr);
+    CHECK_FALSE(body->isHidden());
+    CHECK(body->count() == 2);
+    CHECK(body->itemText(0).contains("body_a"));
+    const auto valueFor = [details](const QString& key) {
+      const auto items = details->findItems(key, Qt::MatchExactly, 0);
+      return items.empty() ? QString{} : items.front()->text(1);
+    };
+    CHECK(valueFor("Bones") == "2");
+    CHECK(valueFor("Skin families") == "3");
+    CHECK(valueFor("Embedded textures") == "brick");
+    CHECK(valueFor("Sequences") == "4 in 2 external groups");
+    CHECK(summary->text().contains("bind pose"));
+    body->setCurrentIndex(1);
+    CHECK(summary->text().contains("bind pose"));
   }
   SECTION("WAVE chunks are bounded and sampler loop is optional")
   {
