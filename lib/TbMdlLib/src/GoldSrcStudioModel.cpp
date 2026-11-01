@@ -144,7 +144,7 @@ Result<Header> readHeader(const Bytes& bytes)
 
   auto low = vm::vec3f{readf32(bytes, 88), readf32(bytes, 92), readf32(bytes, 96)};
   auto high = vm::vec3f{readf32(bytes, 100), readf32(bytes, 104), readf32(bytes, 108)};
-  for (auto axis = 0; axis < 3; ++axis)
+  for (auto axis = std::size_t{0}; axis < 3; ++axis)
   {
     if (!std::isfinite(low[axis]) || !std::isfinite(high[axis]))
       return Error{"The studio model bounds are invalid."};
@@ -208,11 +208,11 @@ vm::vec3f applyTransform(const Transform& transform, const vm::vec3f& point)
 Transform compose(const Transform& parent, const Transform& child)
 {
   auto result = Transform{};
-  for (auto row = 0; row < 3; ++row)
-    for (auto column = 0; column < 3; ++column)
+  for (auto row = std::size_t{0}; row < 3; ++row)
+    for (auto column = std::size_t{0}; column < 3; ++column)
     {
       auto value = 0.0f;
-      for (auto inner = 0; inner < 3; ++inner)
+      for (auto inner = std::size_t{0}; inner < 3; ++inner)
         value += parent.rotation[row * 3 + inner] * child.rotation[inner * 3 + column];
       result.rotation[row * 3 + column] = value;
     }
@@ -362,7 +362,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
       {
         const auto triangleOffsetBytes = triangleOffset + triangle * TriangleSize;
         const auto base = result.positions.size();
-        for (auto corner = 0; corner < 3; ++corner)
+        for (auto corner = std::size_t{0}; corner < 3; ++corner)
         {
           const auto vertex = readi16(bytes, triangleOffsetBytes + corner * 2);
           if (vertex < 0 || std::size_t(vertex) >= vertexCount)

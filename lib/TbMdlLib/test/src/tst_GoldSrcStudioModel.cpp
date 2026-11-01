@@ -206,7 +206,7 @@ std::vector<std::uint8_t> makeStudioModel(const float boneAngleZ = 0.0f)
   bodyPart.modelindex = int32_t(modelOffset);
   writeAt(data, bodyPartOffset, bodyPart);
 
-  for (auto variant = 0; variant < 2; ++variant)
+  for (auto variant = std::size_t{0}; variant < 2; ++variant)
   {
     auto model = StudioModel{};
     std::strncpy(model.name, variant == 0 ? "body_a" : "body_b", sizeof(model.name) - 1);

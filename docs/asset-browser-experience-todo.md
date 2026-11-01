@@ -168,6 +168,11 @@
 
 验证：`PrefabAsset` 覆盖体积/引用解析与无 worldspawn 的拒绝；`AssetInspection`
 覆盖预制体统计与检查器控件；`ProjectWindow` 覆盖两个浏览器的循环/单次筛选与真实波形写入。
+`TbUiLibTest` 全量 128 项通过（1 项原生鼠标捕获按既有策略跳过）。Release `TrenchBroom`
+构建、样式治理检查、`clang-cl` 严格编译与 `ci-preflight.ps1` 通过；`asset-library`
+与 `asset-library-project` 在 Light / Dark / Blender × 100% / 150% / 200% 共 18 张
+快照的完整性检查通过并已查看联系表。资产库目录尚不索引预制体（预制体属于工程资源），
+因此本批未新增预制体检查器快照目标；窄宽度与像素基线仍不在本矩阵内。
 
 ### 续批：GoldSrc studio 模型预览
 

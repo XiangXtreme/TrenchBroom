@@ -144,7 +144,7 @@ inspection::Bytes studioModel()
     put32(mesh + 4, std::int32_t(triangleOffset + std::size_t(variant) * TriangleSize));
 
     data[vertexInfoOffset + std::size_t(variant)] = std::uint8_t(variant == 0 ? 1 : 0);
-    const auto x = std::int16_t{variant == 0 ? 1 : 2};
+    const auto x = static_cast<std::int16_t>(variant == 0 ? 1 : 2);
     std::memcpy(data.data() + vertexOffset + std::size_t(variant) * 6, &x, 2);
   }
   return data;
