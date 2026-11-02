@@ -1302,7 +1302,8 @@ QImage AssetLibraryWindow::loadThumbnail(const project::LibraryAsset& asset) con
     return {};
   if (asset.type == project::AssetType::Texture)
   {
-    if (const auto image = inspection::decodeImage(bytes.value()); image.is_success())
+    if (const auto image = inspection::decodeImage(bytes.value(), asset.nativeFormat);
+        image.is_success())
       return image.value();
     return {};
   }

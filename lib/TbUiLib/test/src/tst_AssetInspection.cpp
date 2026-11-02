@@ -24,6 +24,7 @@
 
 #include "img/GoldSrcTexture.h"
 #include "project/AssetLibrary.h"
+#include "project/GoldSrcWad.h"
 #include "ui/AssetInspection.h"
 #include "ui/AssetInspector.h"
 #include "ui/AssetLibraryImport.h"
@@ -33,6 +34,7 @@
 #include "ui/ModelThumbnail.h"
 #include "ui/QPathUtils.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -285,8 +287,71 @@ TEST_CASE("AssetInspection")
     CHECK(color.red() > 180);
     CHECK(color.blue() < 60);
     CHECK(color.alpha() == 255);
+    const auto archive = require(project::readGoldSrcWad(converted.wad));
+    const auto& miptex = archive.textures.front().miptex;
+    CHECK(require(inspection::decodeImage(miptex, "goldsrc-miptex")) == decoded);
+    CHECK(require(inspection::decodeImage(converted.wad, "goldsrc-miptex")) == decoded);
+    CHECK(inspection::decodeImage({1, 2, 3}, "goldsrc-miptex").is_error());
+    CHECK(inspection::decodeImage(
+            inspection::Bytes{miptex.begin(), miptex.end() - 4}, "goldsrc-miptex")
+            .is_error());
+    // A texture name can start with the WAD signature without being an archive.
+    auto named = miptex;
+    std::copy_n("WAD3", 4, named.begin());
+    CHECK(
+      require(inspection::decodeImage(named, "goldsrc-miptex")).size() == decoded.size());
     CHECK(inspection::decodeImage({'W', 'A', 'D', '3'}).is_error());
     CHECK(inspection::decodeImage({1, 2, 3}).is_error());
+  }
+  SECTION("WAD members have library thumbnails and original and compatible previews")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    auto image = img::Image{16, 16, std::vector<unsigned char>(16 * 16 * 4, 255)};
+    for (auto i = size_t{}; i < image.pixels.size(); i += 4)
+    {
+      image.pixels[i + 1] = 0;
+      image.pixels[i + 2] = 0;
+    }
+    const auto converted = require(img::convertGoldSrcTexture(image, "WALL01"));
+    write(folder / "liquids.wad", converted.wad);
+    auto library = require(project::AssetLibrary::create(folder, "Textures"));
+    REQUIRE(library->scan().is_success());
+    const auto entries = require(library->assets());
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries.front().nativeFormat == "goldsrc-miptex");
+    auto source = openLocalAssetLibrary(folder);
+    REQUIRE(source);
+    auto snapshot = require(inspection::readLibraryAsset(*source, entries.front()));
+    CHECK(snapshot.nativeFormat == "goldsrc-miptex");
+    CHECK(
+      require(inspection::decodeImage(snapshot.original, snapshot.nativeFormat))
+        .pixelColor(0, 0)
+      == QColor{Qt::red});
+    auto inspector = AssetInspector{};
+    inspector.setAsset(snapshot);
+    auto* summary = inspector.findChild<QLabel*>("AssetInspector_Summary");
+    REQUIRE(summary);
+    CHECK(summary->text().contains("16 × 16"));
+    inspector.findChild<QComboBox*>("AssetInspector_ContentKind")->setCurrentIndex(1);
+    CHECK(summary->text().contains("16 × 16"));
+    // Captured project members retain the raw original and a complete compatible WAD.
+    snapshot.compatible = converted.wad;
+    inspector.setAsset(snapshot);
+    CHECK(summary->text().contains("16 × 16"));
+    inspector.findChild<QComboBox*>("AssetInspector_ContentKind")->setCurrentIndex(1);
+    CHECK(summary->text().contains("16 × 16"));
+    auto browser = AssetLibraryWindow{temporary.path(), false};
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    REQUIRE(grid);
+    REQUIRE(grid->count() == 1);
+    const auto thumbnail = grid->item(0)
+                             ->data(AssetLibraryItemDelegate::ThumbnailRole)
+                             .value<QPixmap>()
+                             .toImage();
+    REQUIRE_FALSE(thumbnail.isNull());
+    CHECK(thumbnail.pixelColor(0, 0) == QColor{Qt::red});
   }
   SECTION("source snapshots and host selection are independent")
   {

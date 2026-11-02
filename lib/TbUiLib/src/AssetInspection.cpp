@@ -410,8 +410,21 @@ Result<WaveInfo> readWaveInfo(const Bytes& bytes)
   return info;
 }
 
-Result<QImage> decodeImage(const Bytes& bytes)
+Result<QImage> decodeImage(const Bytes& bytes, const std::string_view nativeFormat)
 {
+  // Library WAD members are stored as miptex lumps, without the archive header. Use
+  // the same validated WAD decoder for them; ordinary images are never guessed as miptex.
+  if (
+    nativeFormat == "goldsrc-miptex"
+    && !(
+      bytes.size() >= 4 && std::memcmp(bytes.data(), "WAD3", 4) == 0
+      && project::readGoldSrcWad(bytes).is_success()))
+  {
+    const auto archive = project::buildGoldSrcWad({bytes});
+    if (archive.is_error())
+      return std::get<Error>(archive.error());
+    return decodeImage(archive.value());
+  }
   if (bytes.size() >= 4 && std::memcmp(bytes.data(), "WAD3", 4) == 0)
   {
     const auto archive = project::readGoldSrcWad(bytes);
@@ -493,6 +506,7 @@ Result<Asset> readLibraryAsset(
   result.name = QString::fromStdString(asset.displayName);
   result.source = source.name();
   result.recipe = QString::fromStdString(asset.recipe);
+  result.nativeFormat = asset.nativeFormat;
   result.identity =
     QString::fromStdString(source.libraryId() + "/" + asset.id + "/" + asset.contentHash);
   result.original = std::move(original).value();
@@ -578,6 +592,8 @@ Result<Asset> readBrowserAsset(
     result.original = std::move(original).value();
     result.compatible = std::move(compatible).value();
     result.recipe = QString::fromStdString(entry.conversionRecipe);
+    if (entry.type == project::AssetType::Texture && !entry.library.sourceMember.empty())
+      result.nativeFormat = "goldsrc-miptex";
     result.name = QString::fromStdString(entry.displayName);
     result.identity = QString::fromStdString(
       asset.projectId + "/" + id + "/" + std::to_string(entry.revision));

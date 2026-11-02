@@ -3606,6 +3606,14 @@ Please choose a different file name to export to.</source>
     <context>
         <name>tb::ui::ModelBrowser</name>
         <message>
+            <source>Group by WAD</source>
+            <translation>按 WAD 分组</translation>
+        </message>
+        <message>
+            <source>Show WAD texture members in subfolders of textures.</source>
+            <translation>将 WAD 内的纹理分组显示在 textures 的子文件夹中。</translation>
+        </message>
+        <message>
             <location filename="../../../../lib/TbUiLib/src/ModelBrowser.cpp" line="99" />
             <source>Reload assets</source>
             <translation>重新加载资产</translation>

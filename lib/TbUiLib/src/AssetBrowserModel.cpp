@@ -126,7 +126,8 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.absolutePath == rhs.absolutePath && lhs.displayName == rhs.displayName
          && lhs.lastModified == rhs.lastModified && lhs.projectId == rhs.projectId
          && lhs.assetId == rhs.assetId && lhs.revision == rhs.revision
-         && lhs.catalogPath == rhs.catalogPath && lhs.source == rhs.source
+         && lhs.catalogPath == rhs.catalogPath
+         && lhs.textureCollection == rhs.textureCollection && lhs.source == rhs.source
          && lhs.skybox == rhs.skybox && lhs.libraryId == rhs.libraryId
          && lhs.libraryAssetId == rhs.libraryAssetId
          && lhs.libraryRevision == rhs.libraryRevision
@@ -136,6 +137,26 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.projectPublishPath == rhs.projectPublishPath
          && lhs.projectUpdateAvailable == rhs.projectUpdateAvailable
          && lhs.missing == rhs.missing && lhs.libraryMetadata == rhs.libraryMetadata;
+}
+
+std::filesystem::path browserAssetDisplayPath(
+  const BrowserAsset& asset, const bool groupWadTextures)
+{
+  const auto& path = asset.catalogPath.empty() ? asset.path : asset.catalogPath;
+  if (
+    asset.type != BrowserCellType::Texture || asset.skybox
+    || asset.textureCollection.empty())
+    return path;
+
+  auto folder = std::filesystem::path{"textures"};
+  if (groupWadTextures)
+  {
+    // Containers already below textures keep that hierarchy without a second prefix.
+    folder = *asset.textureCollection.begin() == folder
+               ? asset.textureCollection
+               : folder / asset.textureCollection;
+  }
+  return folder / path.filename();
 }
 
 const char* browserSourceName(const BrowserSource source)

@@ -128,7 +128,40 @@ TEST_CASE("AssetBrowserModel")
     REQUIRE(found.size() == 2);
     CHECK(found.back().cellData.path == map.path);
   }
-  SECTION("library entries group by container and report snapshot state")
+  SECTION("WAD members flatten into textures with optional container groups")
+  {
+    auto wall = BrowserAsset{BrowserCellType::Texture, "custom.wad/WALL01"};
+    wall.textureCollection = "custom.wad";
+    CHECK(
+      browserAssetDisplayPath(wall, false) == std::filesystem::path{"textures/WALL01"});
+    CHECK(
+      browserAssetDisplayPath(wall, true)
+      == std::filesystem::path{"textures/custom.wad/WALL01"});
+    auto other = wall;
+    other.path = "nested/other.wad/WALL01";
+    other.textureCollection = "nested/other.wad";
+    CHECK(
+      browserAssetDisplayPath(other, true)
+      == std::filesystem::path{"textures/nested/other.wad/WALL01"});
+    wall.catalogPath = browserAssetDisplayPath(wall, false);
+    other.catalogPath = browserAssetDisplayPath(other, false);
+    const auto flat = modelBrowserEntries({}, {wall, other}, "textures", {}, false);
+    REQUIRE(flat.size() == 3);
+    CHECK(flat[1].cellData.path != flat[2].cellData.path);
+    CHECK(wall.path == std::filesystem::path{"custom.wad/WALL01"});
+    // A captured member groups by its source WAD, not its generated publish WAD.
+    wall.path = "textures/WALL01.wad";
+    CHECK(
+      browserAssetDisplayPath(wall, true)
+      == std::filesystem::path{"textures/custom.wad/WALL01"});
+    wall.textureCollection = "textures/custom.wad";
+    CHECK(
+      browserAssetDisplayPath(wall, true)
+      == std::filesystem::path{"textures/custom.wad/WALL01"});
+    const auto loose = BrowserAsset{BrowserCellType::Texture, "textures/brick.png"};
+    CHECK(browserAssetDisplayPath(loose, true) == loose.path);
+  }
+  SECTION("library entries report snapshot state")
   {
     auto wall = BrowserAsset{BrowserCellType::Texture, "custom.wad/WALL01"};
     wall.source = BrowserSource::AssetLibrary;

@@ -15,6 +15,8 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace tb::ui
@@ -60,6 +62,7 @@ struct Asset
   QString name;
   QString source;
   QString recipe;
+  std::string nativeFormat;
   QString identity;
   Bytes original;
   Bytes compatible;
@@ -84,7 +87,7 @@ QImage renderSkyView(
   int height = 320);
 
 /** GoldSrc palettes contain RGB triples. Masked miptex index 255 is transparent. */
-Result<QImage> decodeImage(const Bytes& bytes);
+Result<QImage> decodeImage(const Bytes& bytes, std::string_view nativeFormat = {});
 Result<Asset> readLibraryAsset(
   const AssetLibrarySource& source,
   const project::LibraryAsset& asset,

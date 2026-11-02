@@ -38,6 +38,7 @@
 #include <vector>
 
 class QAbstractButton;
+class QCheckBox;
 class QComboBox;
 class QEvent;
 class QFileSystemWatcher;
@@ -76,6 +77,7 @@ private:
   QComboBox* m_libraryCombo = nullptr;
   QComboBox* m_iconSizeCombo = nullptr;
   QComboBox* m_soundCombo = nullptr;
+  QCheckBox* m_groupWadTextures = nullptr;
   inspection::WaveKind m_waveKind = inspection::WaveKind::All;
   mutable std::unordered_map<std::string, std::optional<inspection::WaveInfo>>
     m_waveInfoCache;

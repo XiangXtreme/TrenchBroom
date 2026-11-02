@@ -8,6 +8,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QBuffer>
+#include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
 #include <QDialog>
@@ -69,6 +70,7 @@
 #include "ui/ActionExecutionContext.h"
 #include "ui/ActionManager.h"
 #include "ui/AppControllerFixture.h"
+#include "ui/AssetInspection.h"
 #include "ui/AssetInspector.h"
 #include "ui/AssetLibraryItemDelegate.h"
 #include "ui/AssetLibrarySource.h"
@@ -2005,6 +2007,32 @@ TEST_CASE("ProjectWindow")
     require(session->attachLibrary(pathFromQString(folder)));
     require(session->save());
 
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* groups = browser->findChild<QCheckBox*>("ModelBrowser_GroupWadTextures");
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    auto* assetView = browser->findChild<ModelBrowserView*>();
+    REQUIRE(source);
+    REQUIRE(groups);
+    REQUIRE(folders);
+    REQUIRE(assetView);
+    CHECK_FALSE(groups->isChecked());
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    QTRY_COMPARE(folders->findItems("textures", Qt::MatchRecursive).size(), 1);
+    CHECK(folders->findItems("custom.wad", Qt::MatchRecursive).empty());
+    groups->setChecked(true);
+    QTRY_COMPARE(folders->findItems("custom.wad", Qt::MatchRecursive).size(), 1);
+    CHECK(
+      folders->findItems("custom.wad", Qt::MatchRecursive).front()->parent()->text(0)
+      == "textures");
+    emit assetView->folderActivated("textures/custom.wad");
+    groups->setChecked(false);
+    REQUIRE(folders->currentItem());
+    CHECK(folders->currentItem()->data(0, Qt::UserRole).toString() == "textures");
+    CHECK(folders->findItems("custom.wad", Qt::MatchRecursive).empty());
+
     auto texture = BrowserAsset{BrowserCellType::Texture, {}};
     texture.source = BrowserSource::AssetLibrary;
     texture.libraryId = library->info().id;
@@ -2037,6 +2065,20 @@ TEST_CASE("ProjectWindow")
     REQUIRE(textureAsset != assets.end());
     CHECK(textureAsset->publishPath == "textures/WALL01.wad");
     CHECK(textureAsset->library.libraryAssetId == entries.front().id);
+    auto capturedAsset =
+      BrowserAsset{BrowserCellType::Texture, textureAsset->publishPath};
+    capturedAsset.source = BrowserSource::Project;
+    capturedAsset.projectId = session->store().info().id;
+    capturedAsset.assetId = textureAsset->id;
+    const auto captured =
+      require(inspection::readBrowserAsset(capturedAsset, session.get(), *alphaDocument));
+    CHECK(captured.nativeFormat == "goldsrc-miptex");
+    CHECK(
+      require(inspection::decodeImage(captured.original, captured.nativeFormat)).size()
+      == QSize{16, 16});
+    CHECK(
+      require(inspection::decodeImage(captured.compatible, captured.nativeFormat)).size()
+      == QSize{16, 16});
 
     // Applying a material is one native undo step, so the drop stays reversible.
     REQUIRE(map.canUndoCommand());

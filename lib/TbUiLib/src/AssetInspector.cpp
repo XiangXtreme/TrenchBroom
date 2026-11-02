@@ -698,7 +698,7 @@ void AssetInspector::refreshPreview()
   }
   else
   {
-    const auto decoded = inspection::decodeImage(bytes);
+    const auto decoded = inspection::decodeImage(bytes, m_asset->nativeFormat);
     if (decoded.is_success())
       image = decoded.value();
     else

@@ -19,6 +19,7 @@
 
 #include "ui/ModelBrowser.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -33,6 +34,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSettings>
 #include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -527,6 +529,22 @@ void ModelBrowser::createGui(AppController& appController)
     "Filter sound assets by their WAV sampler loop chunk. Waveforms are read on demand "
     "and cached until the asset revision changes."));
   footerLayout->insertWidget(3, m_soundCombo);
+  m_groupWadTextures = new QCheckBox{tr("Group by WAD")};
+  m_groupWadTextures->setObjectName("ModelBrowser_GroupWadTextures");
+  m_groupWadTextures->setProperty("tbControlRole", "compact");
+  m_groupWadTextures->setToolTip(
+    tr("Show WAD texture members in subfolders of textures."));
+  m_groupWadTextures->setChecked(
+    QSettings{}.value("AssetBrowser/GroupWadTextures", false).toBool());
+  footerLayout->insertWidget(4, m_groupWadTextures);
+  connect(m_groupWadTextures, &QCheckBox::toggled, this, [this](const bool checked) {
+    QSettings{}.setValue("AssetBrowser/GroupWadTextures", checked);
+    // Keep texture navigation useful when a WAD subfolder disappears.
+    if (!m_currentFolderPath.empty() && *m_currentFolderPath.begin() == "textures")
+      m_currentFolderPath = "textures";
+    applyTypeFilter();
+    updateFolderEdit();
+  });
   connect(
     m_favoritesButton, &QToolButton::toggled, this, [this]() { applyTypeFilter(); });
   connect(
@@ -1566,6 +1584,9 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
     entry.revision = asset.revision;
     entry.displayName = asset.displayName;
     entry.catalogPath = pathFromQString(QString::fromStdString(asset.virtualPath));
+    if (asset.type == project::AssetType::Texture && !asset.library.sourceMember.empty())
+      entry.textureCollection =
+        pathFromQString(QString::fromStdString(asset.library.sourceContainer));
     entry.projectAssetId = asset.id;
     entry.projectRevision = asset.revision;
     entry.projectPublishPath = path;
@@ -1619,6 +1640,9 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
     entry.libraryContentHash = asset.contentHash;
     entry.displayName = asset.displayName;
     entry.catalogPath = entry.path;
+    if (asset.type == project::AssetType::Texture && !asset.sourceMember.empty())
+      entry.textureCollection =
+        pathFromQString(QString::fromStdString(asset.sourceContainer));
     entry.missing = asset.missing;
     entry.skybox = asset.type == project::AssetType::Skybox;
     if (const auto captured =
@@ -1845,6 +1869,8 @@ std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
       const auto info = waveInfoFor(asset);
       return !info || !inspection::matchesWaveKind(*info, m_waveKind);
     });
+  for (auto& asset : assets)
+    asset.catalogPath = browserAssetDisplayPath(asset, m_groupWadTextures->isChecked());
   return assets;
 }
 
@@ -1931,7 +1957,7 @@ void ModelBrowser::revealProjectAsset(const std::string& assetId)
   if (found == m_assets.end())
     return;
   setCurrentFolderPath(
-    (found->catalogPath.empty() ? found->path : found->catalogPath).parent_path());
+    browserAssetDisplayPath(*found, m_groupWadTextures->isChecked()).parent_path());
   m_view->selectProjectAsset(assetId);
 }
 
