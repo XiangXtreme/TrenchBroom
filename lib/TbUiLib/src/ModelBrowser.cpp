@@ -784,58 +784,64 @@ void ModelBrowser::bindInspector(AssetInspector& inspector, const bool mapAction
     &inspector, &AssetInspector::applyRequested, this, [this, &inspector, mapActions]() {
       if (!mapActions || !m_mapActionsEnabled || !inspector.asset())
         return;
-      const auto asset = inspector.asset()->resource;
-      if (asset.type != BrowserCellType::Texture)
-        return;
-      auto* target = m_document;
-      const auto faces = target->map().selection().allBrushFaces();
-      if (!asset.skybox && faces.empty())
-        return;
-      auto name = asset.path.stem().string();
-      if (asset.source != BrowserSource::GameFiles)
-      {
-        if (!m_project)
-          return;
-        auto prepared = PreparedAssetDrop::prepare(
-          m_project, catalogAssetDragData(asset, m_project->store().info().id));
-        if (prepared.is_error())
-        {
-          QMessageBox::warning(
-            this,
-            tr("Apply Asset"),
-            QString::fromStdString(std::get<Error>(prepared.error()).msg));
-          return;
-        }
-        auto drop = std::move(prepared).value();
-        for (const auto& conflict : drop->conflicts())
-          if (!confirmCaptureConflict(this, conflict))
-            return;
-        if (
-          m_document != target || !m_mapActionsEnabled
-          || faces != target->map().selection().allBrushFaces())
-          return;
-        drop->resolveConflicts(CaptureConflictChoice::Replace);
-        const auto& payload = drop->nativePayload();
-        name = payload.substr(payload.find(':') + 1);
-        const auto committed = drop->commit();
-        if (committed.is_error())
-        {
-          QMessageBox::warning(
-            this,
-            tr("Apply Asset"),
-            QString::fromStdString(std::get<Error>(committed.error()).msg));
-          return;
-        }
-      }
-      // The same native commands as catalog drops: map Undo reverts the map edit;
-      // the captured resource remains an explicit project snapshot.
-      if (asset.skybox)
-        mdl::setWorldProperty(target->map(), "skyname", name);
-      else
-        mdl::setBrushFaceAttributes(target->map(), faces, {.materialName = name});
-      emit actionContextChanged();
+      applyAssetToMap(inspector.asset()->resource);
     });
   refresh();
+}
+
+void ModelBrowser::applyAssetToMap(BrowserAsset asset)
+{
+  if (
+    !m_mapActionsEnabled || m_selectionOnly || asset.missing
+    || asset.type != BrowserCellType::Texture)
+    return;
+  auto* target = m_document;
+  const auto faces = target->map().selection().allBrushFaces();
+  if (!asset.skybox && faces.empty())
+    return;
+  auto name = asset.skybox ? asset.path.filename().string() : asset.path.stem().string();
+  if (asset.source != BrowserSource::GameFiles)
+  {
+    if (!m_project)
+      return;
+    auto prepared = PreparedAssetDrop::prepare(
+      m_project, catalogAssetDragData(asset, m_project->store().info().id));
+    if (prepared.is_error())
+    {
+      QMessageBox::warning(
+        this,
+        tr("Apply Asset"),
+        QString::fromStdString(std::get<Error>(prepared.error()).msg));
+      return;
+    }
+    auto drop = std::move(prepared).value();
+    for (const auto& conflict : drop->conflicts())
+      if (!confirmCaptureConflict(this, conflict))
+        return;
+    if (
+      m_document != target || !m_mapActionsEnabled
+      || faces != target->map().selection().allBrushFaces())
+      return;
+    drop->resolveConflicts(CaptureConflictChoice::Replace);
+    const auto& payload = drop->nativePayload();
+    name = payload.substr(payload.find(':') + 1);
+    const auto committed = drop->commit();
+    if (committed.is_error())
+    {
+      QMessageBox::warning(
+        this,
+        tr("Apply Asset"),
+        QString::fromStdString(std::get<Error>(committed.error()).msg));
+      return;
+    }
+  }
+  // The same native commands as catalog drops: map Undo reverts the map edit;
+  // the captured resource remains an explicit project snapshot.
+  if (asset.skybox)
+    mdl::setWorldProperty(target->map(), "skyname", name);
+  else
+    mdl::setBrushFaceAttributes(target->map(), faces, {.materialName = name});
+  emit actionContextChanged();
 }
 
 void ModelBrowser::bindEvents(AppController& appController)
@@ -855,6 +861,8 @@ void ModelBrowser::bindEvents(AppController& appController)
     &ModelBrowserView::assetPreviewRequested,
     this,
     [this, &appController](const QString& path) { previewAsset(appController, path); });
+  connect(
+    m_view, &ModelBrowserView::assetApplyRequested, this, &ModelBrowser::applyAssetToMap);
   connect(m_searchBox, &QLineEdit::textChanged, this, [&](const QString& text) {
     if (m_view)
     {

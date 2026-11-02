@@ -104,6 +104,7 @@
 #include <functional>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace tb::ui
 {
@@ -223,6 +224,22 @@ void closeTab(QTabBar& tabs, const int index)
   QApplication::processEvents();
 }
 
+void doubleClickTexture(ModelBrowserView& view)
+{
+  view.setScrollPosition(0);
+  auto position = std::optional<QPoint>{};
+  view.scrollToCell([&](const auto& cell) {
+    if (cell.template itemAs<BrowserCellData>().type == BrowserCellType::Texture)
+    {
+      const auto& bounds = cell.itemBounds();
+      position = QPoint{
+        int(bounds.left() + bounds.width / 2), int(bounds.top() + bounds.height / 2)};
+    }
+    return false;
+  });
+  REQUIRE(position);
+  QTest::mouseDClick(&view, Qt::LeftButton, Qt::NoModifier, *position);
+}
 } // namespace
 
 TEST_CASE("ProjectWindow")
@@ -1903,6 +1920,7 @@ TEST_CASE("ProjectWindow")
 
   SECTION("catalog skybox drops capture the group and set the world sky")
   {
+    const auto doubleClick = GENERATE(false, true);
     const auto folder = directory.filePath("skybox-library");
     REQUIRE(QDir{}.mkdir(folder));
     REQUIRE(QDir{}.mkdir(folder + "/env"));
@@ -1990,19 +2008,32 @@ TEST_CASE("ProjectWindow")
     const auto payload = catalogAssetDragData(texture, session->store().info().id);
     REQUIRE(isCatalogAssetDrag(payload));
 
-    auto* view = alphaWindow->currentMapViewBase();
-    REQUIRE(view != nullptr);
-    auto mime = QMimeData{};
-    mime.setText(payload);
-    const auto position = QPoint{1, 1};
-    auto enter =
-      QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
-    QApplication::sendEvent(view, &enter);
-    REQUIRE(enter.isAccepted());
-    auto drop = QDropEvent{
-      QPointF{position}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
-    QApplication::sendEvent(view, &drop);
-    CHECK(drop.isAccepted());
+    const auto beforeCapture = require(session->store().assets()).size();
+    if (doubleClick)
+    {
+      browser->setMapActionsEnabled(false);
+      doubleClickTexture(*cards);
+      CHECK(!alphaDocument->map().worldNode().entity().property("skyname"));
+      CHECK(require(session->store().assets()).size() == beforeCapture);
+      browser->setMapActionsEnabled(true);
+      doubleClickTexture(*cards);
+    }
+    else
+    {
+      auto* view = alphaWindow->currentMapViewBase();
+      REQUIRE(view != nullptr);
+      auto mime = QMimeData{};
+      mime.setText(payload);
+      const auto position = QPoint{1, 1};
+      auto enter =
+        QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+      QApplication::sendEvent(view, &enter);
+      REQUIRE(enter.isAccepted());
+      auto drop = QDropEvent{
+        QPointF{position}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+      QApplication::sendEvent(view, &drop);
+      CHECK(drop.isAccepted());
+    }
 
     auto& map = alphaDocument->map();
     REQUIRE(map.worldNode().entity().property("skyname"));
@@ -2032,10 +2063,23 @@ TEST_CASE("ProjectWindow")
     REQUIRE(map.canUndoCommand());
     map.undoCommand();
     CHECK(!map.worldNode().entity().property("skyname"));
+    map.redoCommand();
+    REQUIRE(map.worldNode().entity().property("skyname"));
+    CHECK(*map.worldNode().entity().property("skyname") == "desert");
+    map.undoCommand();
+    if (doubleClick)
+    {
+      doubleClickTexture(*cards);
+      REQUIRE(map.worldNode().entity().property("skyname"));
+      CHECK(*map.worldNode().entity().property("skyname") == "desert");
+      CHECK(require(session->store().assets()).size() == assets.size());
+      map.undoCommand();
+    }
   }
 
   SECTION("catalog texture drops capture the dropped revision and set the face material")
   {
+    const auto doubleClick = GENERATE(false, true);
     auto& map = alphaDocument->map();
     const auto points = std::vector<vm::vec3d>{
       {-64, -64, -64},
@@ -2108,21 +2152,39 @@ TEST_CASE("ProjectWindow")
     const auto payload = catalogAssetDragData(texture, session->store().info().id);
     REQUIRE(isCatalogAssetDrag(payload));
 
-    auto* view = alphaWindow->currentMapViewBase();
-    REQUIRE(view != nullptr);
-    auto mime = QMimeData{};
-    mime.setText(payload);
-    // The corner is over the void, so the drop falls back to the face selection.
-    const auto position = QPoint{1, 1};
-    auto enter =
-      QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
-    QApplication::sendEvent(view, &enter);
-    REQUIRE(enter.isAccepted());
-    REQUIRE(view->pickResult().empty());
-    auto drop = QDropEvent{
-      QPointF{position}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
-    QApplication::sendEvent(view, &drop);
-    CHECK(drop.isAccepted());
+    const auto beforeCapture = require(session->store().assets()).size();
+    if (doubleClick)
+    {
+      browser->setMapActionsEnabled(false);
+      doubleClickTexture(*assetView);
+      CHECK(face.face().materialName() == previous);
+      CHECK(require(session->store().assets()).size() == beforeCapture);
+      browser->setMapActionsEnabled(true);
+      mdl::deselectAll(map);
+      doubleClickTexture(*assetView);
+      CHECK(face.face().materialName() == previous);
+      CHECK(require(session->store().assets()).size() == beforeCapture);
+      mdl::selectBrushFaces(map, {face});
+      doubleClickTexture(*assetView);
+    }
+    else
+    {
+      auto* view = alphaWindow->currentMapViewBase();
+      REQUIRE(view != nullptr);
+      auto mime = QMimeData{};
+      mime.setText(payload);
+      // The corner is over the void, so the drop falls back to the face selection.
+      const auto position = QPoint{1, 1};
+      auto enter =
+        QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+      QApplication::sendEvent(view, &enter);
+      REQUIRE(enter.isAccepted());
+      REQUIRE(view->pickResult().empty());
+      auto drop = QDropEvent{
+        QPointF{position}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+      QApplication::sendEvent(view, &drop);
+      CHECK(drop.isAccepted());
+    }
     CHECK(map.modified());
     CHECK(face.face().materialName() == "WALL01");
     const auto assets = require(session->store().assets());
@@ -2151,6 +2213,19 @@ TEST_CASE("ProjectWindow")
     REQUIRE(map.canUndoCommand());
     map.undoCommand();
     CHECK(face.face().materialName() == previous);
+    map.redoCommand();
+    CHECK(face.face().materialName() == "WALL01");
+    map.undoCommand();
+    if (doubleClick)
+    {
+      source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+      QTRY_VERIFY(!assetView->assets().empty());
+      emit assetView->folderActivated("textures");
+      doubleClickTexture(*assetView);
+      CHECK(face.face().materialName() == "WALL01");
+      CHECK(require(session->store().assets()).size() == assets.size());
+      map.undoCommand();
+    }
   }
 
   SECTION("double-clicking a library resource opens a read-only preview without capture")

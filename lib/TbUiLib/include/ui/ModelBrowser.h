@@ -161,6 +161,7 @@ private:
   void showEvent(QShowEvent* event) override;
 
   void previewAsset(AppController& appController, const QString& path);
+  void applyAssetToMap(BrowserAsset asset);
   void createGui(AppController& appController);
   void bindEvents(AppController& appController);
   void connectObservers();

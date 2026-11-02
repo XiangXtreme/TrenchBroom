@@ -208,6 +208,7 @@ signals:
   void selectionCleared();
   void projectAssetSelected(const QString& assetId);
   void assetPreviewRequested(const QString& path);
+  void assetApplyRequested(const BrowserAsset& asset);
   void showInLibraryRequested(const BrowserAsset& asset);
   void showProjectSnapshotRequested(const QString& assetId);
   void folderActivated(const QString& folderPath);

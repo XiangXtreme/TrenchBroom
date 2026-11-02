@@ -745,6 +745,11 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
     {
       emit mapActivated(pathAsGenericQString(item.path));
     }
+    else if (const auto* asset = assetAt(item.path);
+             asset && asset->type == BrowserCellType::Texture && !m_selectionOnly)
+    {
+      emit assetApplyRequested(*asset);
+    }
     else
     {
       emit assetPreviewRequested(pathAsGenericQString(item.path));
