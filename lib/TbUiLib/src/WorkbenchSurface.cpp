@@ -70,7 +70,8 @@ void WorkbenchBorder::paintEvent(QPaintEvent*)
 }
 
 WorkbenchSurface::WorkbenchSurface(
-  const QString& objectName, QWidget* content, const Kind kind)
+  const QString& objectName, QWidget* content, const Kind kind, QWidget* parent)
+  : QWidget{parent}
 {
   setObjectName(objectName);
   setAttribute(Qt::WA_StyledBackground);

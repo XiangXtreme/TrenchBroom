@@ -14,6 +14,7 @@
 
 class QFrame;
 class QComboBox;
+class QCheckBox;
 class QSplitter;
 class QStackedWidget;
 class QToolButton;
@@ -55,6 +56,7 @@ class WorkspaceToolPanel : public QWidget
   QPointer<QWidget> m_restoreFocus;
   QWidget* m_workspace = nullptr;
   QComboBox* m_mode = nullptr;
+  QCheckBox* m_keepOpen = nullptr;
   QWidget* m_contentControls = nullptr;
   QToolButton* m_fold = nullptr;
   std::map<WorkspaceToolId, QToolButton*> m_buttons;

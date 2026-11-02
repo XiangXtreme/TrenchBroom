@@ -37,7 +37,7 @@ namespace tb::ui
 IssueBrowser::IssueBrowser(MapDocument& document, QWidget* parent)
   : TabBookPage{parent}
   , m_document{document}
-  , m_view{new IssueBrowserView{m_document}}
+  , m_view{new IssueBrowserView{m_document, this}}
 {
   auto* sizer = new QVBoxLayout{};
   sizer->setContentsMargins(0, 0, 0, 0);

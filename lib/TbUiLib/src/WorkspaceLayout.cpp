@@ -72,6 +72,8 @@ EditorLayout loadEditorLayout(QSettings& settings, const WorkspaceKind kind)
   if (values.value("version").toInt() != 1)
     return result;
   result.inspectorRatio = ratio(values.value("inspectorRatio"), result.inspectorRatio);
+  if (result.inspectorRatio < 0.28)
+    result.inspectorRatio = EditorLayout{}.inspectorRatio;
   result.infoRatio = ratio(values.value("infoRatio"), result.infoRatio);
   result.inspectorVisible = values.value("inspectorVisible", true).toBool();
   result.infoVisible = values.value("infoVisible", true).toBool();
@@ -89,7 +91,7 @@ void saveEditorLayout(
     key(kind, "Editor"),
     QVariantMap{
       {"version", 1},
-      {"inspectorRatio", ratio(layout.inspectorRatio, 0.28)},
+      {"inspectorRatio", ratio(layout.inspectorRatio, 0.33)},
       {"infoRatio", ratio(layout.infoRatio, 0.25)},
       {"inspectorVisible", layout.inspectorVisible},
       {"infoVisible", layout.infoVisible},
@@ -117,6 +119,7 @@ ToolLayout loadToolLayout(QSettings& settings, const WorkspaceKind kind)
     result.tool = tool;
   result.pinned = values.value("pinned", false).toBool();
   result.expanded = values.value("expanded", false).toBool();
+  result.keepOpen = values.value("keepOpen", false).toBool();
   result.heightRatio = ratio(values.value("heightRatio"), result.heightRatio);
   return result;
 }
@@ -131,6 +134,7 @@ void saveToolLayout(
       {"tool", layout.tool},
       {"expanded", layout.expanded},
       {"pinned", layout.pinned},
+      {"keepOpen", layout.keepOpen},
       {"heightRatio", ratio(layout.heightRatio, 0.4)}});
 }
 } // namespace tb::ui

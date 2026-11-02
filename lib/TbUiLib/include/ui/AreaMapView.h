@@ -86,6 +86,21 @@ public:
   const gl::PerspectiveCamera& perspectiveCamera() const override;
   void toggleMaximizeCurrentView() override;
 
+  enum class FourPaneCenterMode
+  {
+    None,
+    Unified,
+    UnboundLR,
+    UnboundTB
+  };
+
+  FourPaneCenterMode fourPaneCenterMode() const;
+  bool canUnifyCenters() const;
+  bool canUnbindCenters() const;
+  void unifyCenters(double targetCoord = -1.0);
+  void unbindCenters(bool horizontal = true);
+  void showIntersectionMenu(QWidget* junction, const QPoint& globalPosition);
+
 protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
 

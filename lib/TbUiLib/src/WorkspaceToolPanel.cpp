@@ -5,6 +5,7 @@
 #include "ui/WorkspaceToolPanel.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QEvent>
 #include <QFrame>
@@ -150,6 +151,21 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   m_mode->addItems({tr("Overlay"), tr("Push")});
   m_mode->setCurrentIndex(m_layout.pinned ? 1 : 0);
   barLayout->addWidget(m_mode);
+  barLayout->addSpacing(4);
+  m_keepOpen = new QCheckBox{tr("Keep open"), m_bar};
+  m_keepOpen->setObjectName("ProjectToolsKeepOpen");
+  m_keepOpen->setProperty("tbControlRole", "compact");
+  m_keepOpen->setAccessibleName(tr("Keep tool panel open on blur"));
+  m_keepOpen->setToolTip(
+    tr("Keep the overlay open when returning to the map (Ctrl+Shift+Space to toggle)"));
+  m_keepOpen->setChecked(m_layout.keepOpen);
+  m_keepOpen->setEnabled(!m_layout.pinned);
+  connect(m_keepOpen, &QCheckBox::toggled, this, [this](const bool checked) {
+    m_layout.keepOpen = checked;
+    saveLayout();
+  });
+  barLayout->addWidget(m_keepOpen);
+  barLayout->addSpacing(4);
   m_fold = new QToolButton{m_bar};
   m_fold->setObjectName("ProjectToolsClose");
   m_fold->setProperty("tbControlRole", "compact");
@@ -190,6 +206,8 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   connect(m_fold, &QToolButton::clicked, this, &WorkspaceToolPanel::toggle);
   connect(m_mode, &QComboBox::currentIndexChanged, this, [this](const int index) {
     const auto pinned = index == 1;
+    if (m_keepOpen)
+      m_keepOpen->setEnabled(!pinned);
     if (!pinned)
       captureHeight();
     // Reparenting produces intermediate focus changes outside the drawer.
@@ -216,7 +234,8 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   connect(escape, &QShortcut::activated, this, [this]() { setExpanded(false); });
   connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
     if (
-      !m_expanded || m_changingMode || (m_mode->currentIndex() == 1) || !focus
+      !m_expanded || m_changingMode || (m_mode->currentIndex() == 1)
+      || (m_keepOpen && m_keepOpen->isChecked()) || !focus
       || QApplication::activePopupWidget() || QApplication::activeModalWidget())
       return;
     if (
@@ -287,6 +306,7 @@ void WorkspaceToolPanel::saveLayout()
   m_layout.tool = ToolNames.at(m_tool);
   m_layout.expanded = m_expanded;
   m_layout.pinned = (m_mode->currentIndex() == 1);
+  m_layout.keepOpen = m_keepOpen ? m_keepOpen->isChecked() : m_layout.keepOpen;
   auto settings = QSettings{};
   saveToolLayout(settings, m_kind, m_layout);
 }
@@ -297,6 +317,8 @@ void WorkspaceToolPanel::resetLayout()
   m_pendingTool.clear();
   m_mode->setCurrentIndex(0);
   m_layout = ToolLayout{};
+  if (m_keepOpen)
+    m_keepOpen->setChecked(false);
   setExpanded(false);
   saveLayout();
 }
@@ -503,6 +525,8 @@ void WorkspaceToolPanel::updateGeometryForMode()
   const auto updating = QScopedValueRollback{m_updatingGeometry, true};
   m_animation->stop();
   const auto pinned = m_mode->currentIndex() == 1;
+  if (m_keepOpen)
+    m_keepOpen->setEnabled(!pinned);
   // The collapsed strip is always covered by the drawer, including during motion.
   // Keeping this allocation constant prevents overlay mode from resizing the map.
   m_surface->layout()->setContentsMargins(0, 0, 0, !pinned ? collapsedHeight() : 0);

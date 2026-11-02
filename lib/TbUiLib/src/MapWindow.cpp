@@ -220,11 +220,6 @@ MapWindow::MapWindow(
       this,
       &MapWindow::updateTitleDelayed);
 
-  if (!m_embedded)
-  {
-    restoreWidgetGeometry(this);
-    restoreWidgetState(this);
-  }
 
   setAcceptDrops(true);
 
@@ -496,7 +491,10 @@ void MapWindow::createGui()
   setWindowTitle("TrenchBroom");
 
   m_editor = new MapEditorView{m_appController, document()};
-  setCentralWidget(m_editor);
+  if (m_embedded)
+  {
+    setCentralWidget(m_editor);
+  }
 
   // The view owns the workbench widgets; the window borrows them to route its commands.
   m_mapView = m_editor->mapView();
@@ -511,7 +509,6 @@ void MapWindow::createGui()
   m_inspector = m_editor->inspector();
   if (!m_embedded)
   {
-    takeCentralWidget();
     m_tools = new WorkspaceToolPanel{WorkspaceKind::Map, m_editor, m_infoPanel, this};
     m_tools->registerMapEditor(*m_editor);
     m_tools->setMapEditor(m_editor);
@@ -568,7 +565,7 @@ void MapWindow::createStatusBar()
   auto* layout = new QHBoxLayout{statusSurface};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(status, 1);
-  layout->addWidget(m_appController.updater().createUpdateIndicator());
+  layout->addWidget(m_appController.updater().createUpdateIndicator(statusSurface));
   m_tools->addStatusWidget(statusSurface);
 }
 

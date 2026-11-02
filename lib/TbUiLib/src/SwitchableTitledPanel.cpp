@@ -36,10 +36,10 @@ namespace tb::ui
 SwitchableTitledPanel::SwitchableTitledPanel(
   const QString& title, const std::array<QString, 2>& stateTexts, QWidget* parent)
   : QWidget{parent}
-  , m_titleBar{new ClickableTitleBar{title, stateTexts[1]}}
-  , m_divider{new BorderLine{}}
+  , m_titleBar{new ClickableTitleBar{title, stateTexts[1], this}}
+  , m_divider{new BorderLine{BorderLine::Direction::Horizontal, 1, this}}
   , m_stackedLayout{new QStackedLayout{}}
-  , m_panels{{{new QWidget{}, stateTexts[1]}, {new QWidget{}, stateTexts[0]}}}
+  , m_panels{{{new QWidget{this}, stateTexts[1]}, {new QWidget{this}, stateTexts[0]}}}
 {
   m_stackedLayout->addWidget(m_panels[0].panel);
   m_stackedLayout->addWidget(m_panels[1].panel);

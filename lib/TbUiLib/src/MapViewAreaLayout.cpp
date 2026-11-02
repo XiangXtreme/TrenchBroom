@@ -27,6 +27,25 @@ MapViewAreaLayout::~MapViewAreaLayout()
 }
 void MapViewAreaLayout::setAreas(const std::map<QWidget*, QRectF>& rects)
 {
+  auto sameWidgets = (m_items.size() == rects.size());
+  if (sameWidgets)
+  {
+    for (auto* item : m_items)
+    {
+      if (!rects.contains(item->widget()))
+      {
+        sameWidgets = false;
+        break;
+      }
+    }
+  }
+  if (sameWidgets)
+  {
+    m_rects = rects;
+    setGeometry(geometry());
+    return;
+  }
+
   const auto newRects = rects;
   while (auto* item = takeAt(0))
     delete item;
@@ -126,8 +145,10 @@ void MapViewAreaLayout::setGeometry(const QRect& rect)
   {
     if (item->isEmpty())
       continue;
-    item->setGeometry(
-      visible == 1 ? contentsRect() : pixelRect(m_rects.at(item->widget())));
+    const auto target =
+      visible == 1 ? contentsRect() : pixelRect(m_rects.at(item->widget()));
+    if (item->geometry() != target)
+      item->setGeometry(target);
   }
 }
 } // namespace tb::ui

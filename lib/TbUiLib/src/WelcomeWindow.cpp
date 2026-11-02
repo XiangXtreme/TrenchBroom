@@ -19,6 +19,7 @@
 
 #include "ui/WelcomeWindow.h"
 
+#include <QApplication>
 #include <QCloseEvent>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -49,7 +50,8 @@ void WelcomeWindow::createGui()
   setWindowIconTB(this);
   setWindowTitle("Welcome to TrenchBroom");
 
-  m_recentDocumentListBox = new RecentDocumentListBox{m_appController.recentDocuments()};
+  m_recentDocumentListBox =
+    new RecentDocumentListBox{m_appController.recentDocuments(), this};
   m_recentDocumentListBox->setToolTip("Double click on a file to open it");
   m_recentDocumentListBox->setFixedWidth(300);
   m_recentDocumentListBox->setSizePolicy(
@@ -68,10 +70,10 @@ void WelcomeWindow::createGui()
   auto* appPanel = createAppPanel();
 
   innerLayout->addWidget(appPanel, 0, Qt::AlignTop);
-  innerLayout->addWidget(new BorderLine{BorderLine::Direction::Vertical}, 0);
+  innerLayout->addWidget(new BorderLine{BorderLine::Direction::Vertical, 1, this}, 0);
   innerLayout->addWidget(m_recentDocumentListBox, 1);
 
-  auto* container = new QWidget{};
+  auto* container = new QWidget{this};
   auto* outerLayout = new QVBoxLayout{};
   outerLayout->setContentsMargins(QMargins{});
   outerLayout->setSpacing(0);
@@ -87,12 +89,12 @@ void WelcomeWindow::createGui()
 
 QWidget* WelcomeWindow::createAppPanel()
 {
-  auto* appPanel = new QWidget{};
+  auto* appPanel = new QWidget{this};
   auto* infoPanel = new AppInfoPanel{m_appController, appPanel};
 
-  m_createNewDocumentButton = new QPushButton{"New map..."};
+  m_createNewDocumentButton = new QPushButton{"New map...", appPanel};
   m_createNewDocumentButton->setToolTip("Create a new map document");
-  m_openOtherDocumentButton = new QPushButton{"Browse..."};
+  m_openOtherDocumentButton = new QPushButton{"Browse...", appPanel};
   m_openOtherDocumentButton->setToolTip("Open an existing map document");
 
   connect(
@@ -111,13 +113,13 @@ QWidget* WelcomeWindow::createAppPanel()
   buttonLayout->setSpacing(LayoutConstants::WideHMargin);
   buttonLayout->addStretch();
   buttonLayout->addWidget(m_createNewDocumentButton);
-  auto* newProject = new QPushButton{tr("New project...")};
+  auto* newProject = new QPushButton{tr("New project..."), appPanel};
   connect(
     newProject, &QPushButton::clicked, this, [this]() { m_appController.newProject(); });
   buttonLayout->addWidget(newProject);
   // Asset libraries belong to the application, not to a project, so they are reachable
   // before any project exists.
-  auto* assetLibrary = new QPushButton{tr("Asset library...")};
+  auto* assetLibrary = new QPushButton{tr("Asset library..."), appPanel};
   assetLibrary->setToolTip(
     tr("Create, inspect or rescan an asset library without opening a project"));
   connect(assetLibrary, &QPushButton::clicked, this, [this]() {
@@ -166,7 +168,10 @@ void WelcomeWindow::openOtherDocument()
 
 void WelcomeWindow::openDocument(const std::filesystem::path& path)
 {
-  if (!m_appController.openDocument(path))
+  QApplication::setOverrideCursor(Qt::WaitCursor);
+  const auto opened = m_appController.openDocument(path);
+  QApplication::restoreOverrideCursor();
+  if (!opened)
   {
     show();
   }

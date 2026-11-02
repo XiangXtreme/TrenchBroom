@@ -54,7 +54,11 @@ public:
     Panel,
     Workspace
   };
-  WorkbenchSurface(const QString& objectName, QWidget* content, Kind kind = Kind::Panel);
+  WorkbenchSurface(
+    const QString& objectName,
+    QWidget* content,
+    Kind kind = Kind::Panel,
+    QWidget* parent = nullptr);
 };
 
 } // namespace tb::ui

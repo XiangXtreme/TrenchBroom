@@ -204,13 +204,14 @@ AppController::AppController(
   , m_actionManager{std::make_unique<ActionManager>()}
   , m_mcpBridgeServer{std::make_unique<McpBridgeServer>(*this)}
   , m_mcpHttpServer{std::make_unique<McpHttpServer>(*m_mcpBridgeServer)}
-  , m_welcomeWindow{std::make_unique<WelcomeWindow>(*this)}
-  , m_aboutDialog{std::make_unique<AboutDialog>(*this)}
   , m_showProjectWindows{options.showMapWindows}
 {
   using namespace std::chrono_literals;
 
   connectObservers();
+
+  m_welcomeWindow = std::make_unique<WelcomeWindow>(*this);
+  m_aboutDialog = std::make_unique<AboutDialog>(*this);
 
   m_recentDocuments->reload();
   if (options.enableGlResourceProcessing)

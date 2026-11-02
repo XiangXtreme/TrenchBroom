@@ -133,6 +133,7 @@ private:
 
 protected:
   void showEvent(QShowEvent* event) override;
+  void resizeEvent(QResizeEvent* event) override;
 
 signals:
   void infoPanelPageRequested(InfoPanelPage page);

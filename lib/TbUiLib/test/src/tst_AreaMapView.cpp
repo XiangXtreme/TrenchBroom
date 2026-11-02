@@ -287,6 +287,56 @@ TEST_CASE("AreaMapView")
     CHECK(native->camera().position() == position);
   }
 
+  SECTION("four-pane intersection moves boundaries in both directions simultaneously")
+  {
+    container->switchToMapView(MapViewLayout::FourPanes);
+    QApplication::processEvents();
+    layout = window.findChild<AreaMapView*>();
+    REQUIRE(layout);
+    REQUIRE(layout->areas().size() == 4);
+
+    auto* junction = layout->findChild<QWidget*>("MapViewAreaIntersection");
+    REQUIRE(junction);
+    CHECK(junction->cursor().shape() == Qt::SizeAllCursor);
+
+    auto sorted = layout->areas();
+    std::ranges::sort(sorted, {}, [&](auto* area) {
+      const auto p = area->mapTo(layout, QPoint{});
+      return p.y() * layout->width() + p.x();
+    });
+    REQUIRE(sorted.size() == 4);
+    const auto topLeftBounds = layout->areaBounds(sorted[0]);
+
+    const auto start = junction->mapToGlobal(junction->rect().center());
+    const auto sendMouse = [&](const QEvent::Type type, const QPoint global) {
+      auto event = QMouseEvent{
+        type,
+        QPointF{junction->mapFromGlobal(global)},
+        QPointF{global},
+        type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+        type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton,
+        Qt::NoModifier};
+      QApplication::sendEvent(junction, &event);
+    };
+
+    sendMouse(QEvent::MouseButtonPress, start);
+    sendMouse(QEvent::MouseMove, start + QPoint{60, 40});
+    CHECK(layout->areaBounds(sorted[0]).width() > topLeftBounds.width());
+    CHECK(layout->areaBounds(sorted[0]).height() > topLeftBounds.height());
+    QTest::keyClick(junction, Qt::Key_Escape);
+    CHECK(layout->areaBounds(sorted[0]) == topLeftBounds);
+    QApplication::processEvents();
+
+    junction = layout->findChild<QWidget*>("MapViewAreaIntersection");
+    REQUIRE(junction);
+    sendMouse(QEvent::MouseButtonPress, start);
+    sendMouse(QEvent::MouseMove, start + QPoint{40, 30});
+    sendMouse(QEvent::MouseButtonRelease, start + QPoint{40, 30});
+    QApplication::processEvents();
+    CHECK(layout->areaBounds(sorted[0]).width() > topLeftBounds.width());
+    CHECK(layout->areaBounds(sorted[0]).height() > topLeftBounds.height());
+  }
+
   SECTION("corner drag previews, cancels and commits")
   {
     auto* grip = original->findChild<QWidget*>("MapViewAreaGrip");
@@ -352,6 +402,134 @@ TEST_CASE("AreaMapView")
     CHECK(layout->areas().front() == original);
   }
 
+  SECTION("four corner grips support splitting and joining from any corner")
+  {
+    const auto grips = original->findChildren<QWidget*>("MapViewAreaGrip");
+    REQUIRE(grips.size() == 4);
+
+    auto* topLeftGrip = static_cast<QWidget*>(nullptr);
+    auto* topRightGrip = static_cast<QWidget*>(nullptr);
+    auto* bottomLeftGrip = static_cast<QWidget*>(nullptr);
+    auto* bottomRightGrip = static_cast<QWidget*>(nullptr);
+
+    for (auto* g : grips)
+    {
+      if (g->x() == 0 && g->y() == 0)
+        topLeftGrip = g;
+      else if (g->x() > 0 && g->y() == 0)
+        topRightGrip = g;
+      else if (g->x() == 0 && g->y() > 0)
+        bottomLeftGrip = g;
+      else if (g->x() > 0 && g->y() > 0)
+        bottomRightGrip = g;
+    }
+
+    REQUIRE(topLeftGrip);
+    REQUIRE(topRightGrip);
+    REQUIRE(bottomLeftGrip);
+    REQUIRE(bottomRightGrip);
+
+    CHECK(topLeftGrip->pos() == QPoint(0, 0));
+    CHECK(topRightGrip->pos() == QPoint(original->width() - topRightGrip->width(), 0));
+    CHECK(
+      bottomLeftGrip->pos() == QPoint(0, original->height() - bottomLeftGrip->height()));
+    CHECK(
+      bottomRightGrip->pos()
+      == QPoint(
+        original->width() - bottomRightGrip->width(),
+        original->height() - bottomRightGrip->height()));
+
+    auto* preview = layout->findChild<QWidget*>("MapViewAreaPreview");
+    REQUIRE(preview);
+
+    const auto dragFrom = [&](QWidget* grip, const QPoint targetGlobal) {
+      const auto start = grip->mapToGlobal(grip->rect().center());
+      auto press = QMouseEvent{
+        QEvent::MouseButtonPress,
+        QPointF{grip->rect().center()},
+        QPointF{start},
+        Qt::LeftButton,
+        Qt::LeftButton,
+        Qt::NoModifier};
+      QApplication::sendEvent(grip, &press);
+      auto move = QMouseEvent{
+        QEvent::MouseMove,
+        QPointF{grip->mapFromGlobal(targetGlobal)},
+        QPointF{targetGlobal},
+        Qt::NoButton,
+        Qt::LeftButton,
+        Qt::NoModifier};
+      QApplication::sendEvent(grip, &move);
+      auto release = QMouseEvent{
+        QEvent::MouseButtonRelease,
+        QPointF{grip->mapFromGlobal(targetGlobal)},
+        QPointF{targetGlobal},
+        Qt::LeftButton,
+        Qt::NoButton,
+        Qt::NoModifier};
+      QApplication::sendEvent(grip, &release);
+      QApplication::processEvents();
+    };
+
+    // Helper to find grip by corner location
+    const auto findGrip = [&](const bool right, const bool bottom) -> QWidget* {
+      for (auto* g : original->findChildren<QWidget*>("MapViewAreaGrip"))
+      {
+        const auto isRight = g->x() > 0;
+        const auto isBottom = g->y() > 0;
+        if (isRight == right && isBottom == bottom)
+          return g;
+      }
+      return nullptr;
+    };
+
+    // 1. Split horizontally from Top-Left: new view is on the left
+    dragFrom(topLeftGrip, topLeftGrip->mapToGlobal(QPoint(original->width() / 2, 0)));
+    REQUIRE(layout->areas().size() == 2);
+    auto* other =
+      layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
+    CHECK(layout->areaBounds(other).x() < layout->areaBounds(original).x());
+    REQUIRE(layout->joinAreas(original, other));
+    QApplication::processEvents();
+    REQUIRE(layout->areas().size() == 1);
+
+    // 2. Split vertically from Top-Left: new view is on the top
+    topLeftGrip = findGrip(false, false);
+    REQUIRE(topLeftGrip);
+    dragFrom(topLeftGrip, topLeftGrip->mapToGlobal(QPoint(0, original->height() / 2)));
+    REQUIRE(layout->areas().size() == 2);
+    other = layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
+    CHECK(layout->areaBounds(other).y() < layout->areaBounds(original).y());
+    REQUIRE(layout->joinAreas(original, other));
+    QApplication::processEvents();
+    REQUIRE(layout->areas().size() == 1);
+
+    // 3. Split vertically from Bottom-Right: new view is on the bottom
+    bottomRightGrip = findGrip(true, true);
+    REQUIRE(bottomRightGrip);
+    dragFrom(
+      bottomRightGrip, bottomRightGrip->mapToGlobal(QPoint(0, -original->height() / 2)));
+    REQUIRE(layout->areas().size() == 2);
+    other = layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
+    CHECK(layout->areaBounds(other).y() > layout->areaBounds(original).y());
+    REQUIRE(layout->joinAreas(original, other));
+    QApplication::processEvents();
+    REQUIRE(layout->areas().size() == 1);
+
+    // 4. Split horizontally from Bottom-Left: new view is on the left
+    bottomLeftGrip = findGrip(false, true);
+    REQUIRE(bottomLeftGrip);
+    dragFrom(
+      bottomLeftGrip, bottomLeftGrip->mapToGlobal(QPoint(original->width() / 2, 0)));
+    REQUIRE(layout->areas().size() == 2);
+    other = layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
+    CHECK(layout->areaBounds(other).x() < layout->areaBounds(original).x());
+    REQUIRE(layout->joinAreas(original, other));
+    QApplication::processEvents();
+    REQUIRE(layout->areas().size() == 1);
+    CHECK(layout->areas().front() == original);
+  }
+
   SECTION("saved splitter trees migrate and overlapping rectangles are rejected")
   {
     container->switchToMapView(MapViewLayout::TwoPanes);
@@ -406,6 +584,60 @@ TEST_CASE("AreaMapView")
     QSettings{}.setValue("Windows/MapViewAreas/0", R"({"version":1,"root":{"mask":0}})");
     container->switchToMapView(MapViewLayout::OnePane, true);
     CHECK(window.findChild<AreaMapView*>()->areas().size() == 1);
+  }
+
+  SECTION("four panes support unbinding and unifying center points")
+  {
+    container->switchToMapView(MapViewLayout::FourPanes);
+    QApplication::processEvents();
+    layout = window.findChild<AreaMapView*>();
+    REQUIRE(layout != nullptr);
+    REQUIRE(layout->areas().size() == 4);
+
+    CHECK(layout->fourPaneCenterMode() == AreaMapView::FourPaneCenterMode::Unified);
+    CHECK(layout->canUnbindCenters());
+    CHECK_FALSE(layout->canUnifyCenters());
+
+    auto intersections = window.findChildren<QWidget*>("MapViewAreaIntersection");
+    REQUIRE(intersections.size() == 1);
+
+    // Unbind horizontal dividers (left / right move independently)
+    layout->unbindCenters(true);
+    QApplication::processEvents();
+    CHECK(layout->fourPaneCenterMode() == AreaMapView::FourPaneCenterMode::UnboundLR);
+    CHECK(layout->canUnifyCenters());
+
+    intersections = window.findChildren<QWidget*>("MapViewAreaIntersection");
+    REQUIRE(intersections.size() == 2);
+    CHECK(intersections[0]->y() != intersections[1]->y());
+
+    // Unify centers back
+    layout->unifyCenters();
+    QApplication::processEvents();
+    CHECK(layout->fourPaneCenterMode() == AreaMapView::FourPaneCenterMode::Unified);
+    CHECK_FALSE(layout->canUnifyCenters());
+
+    intersections = window.findChildren<QWidget*>("MapViewAreaIntersection");
+    REQUIRE(intersections.size() == 1);
+
+    // Unbind vertical dividers (top / bottom move independently)
+    layout->unbindCenters(false);
+    QApplication::processEvents();
+    CHECK(layout->fourPaneCenterMode() == AreaMapView::FourPaneCenterMode::UnboundTB);
+    CHECK(layout->canUnifyCenters());
+
+    intersections = window.findChildren<QWidget*>("MapViewAreaIntersection");
+    REQUIRE(intersections.size() == 2);
+    CHECK(intersections[0]->x() != intersections[1]->x());
+
+    // Unify centers back
+    layout->unifyCenters();
+    QApplication::processEvents();
+    CHECK(layout->fourPaneCenterMode() == AreaMapView::FourPaneCenterMode::Unified);
+    CHECK_FALSE(layout->canUnifyCenters());
+
+    intersections = window.findChildren<QWidget*>("MapViewAreaIntersection");
+    REQUIRE(intersections.size() == 1);
   }
 }
 } // namespace tb::ui

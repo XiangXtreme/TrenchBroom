@@ -65,34 +65,38 @@ void UpdateIndicator::linkActivated(const QString& uri)
 
 void UpdateIndicator::updateUI(const UpdateControllerState& state)
 {
+  const auto showIfParented = [this]() {
+    if (parentWidget() != nullptr)
+      setVisible(true);
+  };
   std::visit(
     overload(
       [&](const IdleState&) {
-        setVisible(true);
+        showIfParented();
         setText(tr(R"(<a href="upd://checkForUpdates">Check for updates</a>)"));
       },
       [&](const CheckingForUpdatesState&) {
-        setVisible(true);
+        showIfParented();
         setText(tr("Checking for updates..."));
       },
       [&](const UpdateAvailableState&) {
-        setVisible(true);
+        showIfParented();
         setText(tr(R"(<a href="upd://showDialog">Update available</a>)"));
       },
       [&](const UpToDateState&) {
-        setVisible(true);
+        showIfParented();
         setText(tr(R"(Up to date)"));
       },
       [&](const DownloadingUpdateState&) {
-        setVisible(true);
+        showIfParented();
         setText(tr("Downloading update..."));
       },
       [&](const PreparingUpdateState&) {
-        setVisible(true);
+        showIfParented();
         setText(tr("Preparing update..."));
       },
       [&](const UpdatePendingState&) {
-        setVisible(true);
+        showIfParented();
         setText(tr("Update pending"));
       },
       [&](const UpdateErrorState&) {

@@ -73,11 +73,18 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_mapViewSurface = new WorkbenchSurface{
     QStringLiteral("MapWindow_EditorSurface"),
     m_mapView,
-    WorkbenchSurface::Kind::Workspace};
-  m_infoPanelSurface =
-    new WorkbenchSurface{QStringLiteral("MapWindow_InfoPanelSurface"), m_infoPanel};
-  m_inspectorSurface =
-    new WorkbenchSurface{QStringLiteral("MapWindow_InspectorSurface"), m_inspector};
+    WorkbenchSurface::Kind::Workspace,
+    this};
+  m_infoPanelSurface = new WorkbenchSurface{
+    QStringLiteral("MapWindow_InfoPanelSurface"),
+    m_infoPanel,
+    WorkbenchSurface::Kind::Panel,
+    this};
+  m_inspectorSurface = new WorkbenchSurface{
+    QStringLiteral("MapWindow_InspectorSurface"),
+    m_inspector,
+    WorkbenchSurface::Kind::Panel,
+    this};
 
   m_vSplitter->addWidget(m_mapViewSurface);
   m_vSplitter->addWidget(m_infoPanelSurface);
@@ -89,7 +96,7 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_infoPanel->setMinimumSize(100, appController.projectFor(document) ? 100 : 240);
 
   m_vSplitter->setMinimumSize(100, 100);
-  m_inspector->setMinimumSize(350, 100);
+  m_inspector->setMinimumSize(380, 100);
 
   // resize only the map view when the window resizes
   m_vSplitter->setStretchFactor(0, 1);
@@ -97,9 +104,9 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_hSplitter->setStretchFactor(0, 1);
   m_hSplitter->setStretchFactor(1, 0);
 
-  // give most of the space to the map view
-  m_hSplitter->setSizes(QList<int>{1'000'000, 1});
-  m_vSplitter->setSizes(QList<int>{1'000'000, 1});
+  // default proportions give comfortable width to inspector and info panel
+  m_hSplitter->setSizes(QList<int>{670, 330});
+  m_vSplitter->setSizes(QList<int>{750, 250});
 
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(6, 6, 6, 6);
@@ -202,13 +209,17 @@ void MapEditorView::applyLayoutState()
   if (
     !m_layout.legacyHorizontal.isEmpty()
     && m_hSplitter->restoreState(m_layout.legacyHorizontal))
+  {
     m_layout.inspectorRatio = splitRatio(*m_hSplitter, m_layout.inspectorRatio);
+  }
   if (
     !m_layout.legacyVertical.isEmpty()
     && m_vSplitter->restoreState(m_layout.legacyVertical))
     m_layout.infoRatio = splitRatio(*m_vSplitter, m_layout.infoRatio);
   m_layout.legacyHorizontal.clear();
   m_layout.legacyVertical.clear();
+  if (m_layout.inspectorRatio < 0.28)
+    m_layout.inspectorRatio = EditorLayout{}.inspectorRatio;
   setSplitRatio(*m_hSplitter, m_layout.inspectorRatio);
   setSplitRatio(*m_vSplitter, m_layout.infoRatio);
   m_layoutPending = false;
@@ -218,6 +229,19 @@ void MapEditorView::showEvent(QShowEvent* event)
 {
   QWidget::showEvent(event);
   if (m_layoutPending)
+  {
+    layout()->activate();
+    if (m_hSplitter->width() >= 800)
+    {
+      applyLayoutState();
+    }
+  }
+}
+
+void MapEditorView::resizeEvent(QResizeEvent* event)
+{
+  QWidget::resizeEvent(event);
+  if (m_layoutPending && m_hSplitter->width() > 0)
   {
     layout()->activate();
     applyLayoutState();

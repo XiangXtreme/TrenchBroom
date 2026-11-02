@@ -22,7 +22,7 @@ enum class WorkspaceKind
 
 struct EditorLayout
 {
-  double inspectorRatio = 0.28;
+  double inspectorRatio = 0.33;
   double infoRatio = 0.25;
   bool inspectorVisible = true;
   bool infoVisible = true;
@@ -38,6 +38,7 @@ struct ToolLayout
   QString tool = "content-browser";
   bool expanded = false;
   bool pinned = false;
+  bool keepOpen = false;
   double heightRatio = 0.4;
 };
 

@@ -3,6 +3,7 @@
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QMouseEvent>
 #include <QProxyStyle>
@@ -161,6 +162,41 @@ TEST_CASE("WorkspaceToolPanel")
     CHECK_FALSE(tools.isAnimating());
     CHECK(drawer->height() == collapsed);
     CHECK_FALSE(content->isVisible());
+  }
+
+  SECTION("keep open option prevents auto-collapse on focus loss in overlay mode")
+  {
+    style->duration = 0;
+    auto* modeCombo = tools.findChild<QComboBox*>("ProjectToolsMode");
+    auto* keepOpenCheck = tools.findChild<QCheckBox*>("ProjectToolsKeepOpen");
+    REQUIRE(modeCombo);
+    REQUIRE(keepOpenCheck);
+
+    modeCombo->setCurrentIndex(0);
+    CHECK(keepOpenCheck->isEnabled());
+
+    tools.showContent();
+    CHECK(tools.isExpanded());
+
+    keepOpenCheck->setChecked(false);
+    Q_EMIT qApp->focusChanged(nullptr, workspace);
+    QApplication::processEvents();
+    CHECK_FALSE(tools.isExpanded());
+
+    tools.showContent();
+    CHECK(tools.isExpanded());
+    keepOpenCheck->setChecked(true);
+    Q_EMIT qApp->focusChanged(nullptr, workspace);
+    QApplication::processEvents();
+    CHECK(tools.isExpanded());
+
+    tools.toggle();
+    CHECK_FALSE(tools.isExpanded());
+
+    modeCombo->setCurrentIndex(1);
+    CHECK_FALSE(keepOpenCheck->isEnabled());
+    modeCombo->setCurrentIndex(0);
+    CHECK(keepOpenCheck->isEnabled());
   }
 }
 } // namespace tb::ui

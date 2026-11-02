@@ -75,7 +75,7 @@ void DrawShapeToolPage::createGui()
 
   m_extensionPages = new QStackedLayout{};
   for (auto* extensionPage : createDrawShapeToolExtensionPages(
-         m_extensionManager.document(), m_extensionManager.parameters()))
+         m_extensionManager.document(), m_extensionManager.parameters(), this))
   {
     m_notifierConnection += extensionPage->applyParametersNotifier.connect(
       m_extensionManager.applyParametersNotifier);

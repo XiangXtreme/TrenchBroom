@@ -45,8 +45,17 @@ constexpr auto MinimumAreaSize = areaGeometry::SplitMinimum;
 class AreaGrip : public QWidget
 {
 public:
-  explicit AreaGrip(QWidget* parent)
+  enum class Corner
+  {
+    TopRight,
+    TopLeft,
+    BottomLeft,
+    BottomRight
+  };
+
+  AreaGrip(QWidget* parent, const Corner corner)
     : QWidget{parent}
+    , m_corner{corner}
   {
     setObjectName("MapViewAreaGrip");
     setFixedSize(18, 18);
@@ -59,6 +68,8 @@ public:
     setAttribute(Qt::WA_Hover);
   }
 
+  Corner corner() const { return m_corner; }
+
 protected:
   void paintEvent(QPaintEvent*) override
   {
@@ -69,10 +80,65 @@ protected:
       1.5});
     for (auto offset = 4; offset <= 12; offset += 4)
     {
-      painter.drawLine(width() - offset, 2, width() - 2, offset);
+      switch (m_corner)
+      {
+      case Corner::TopRight:
+        painter.drawLine(width() - offset, 2, width() - 2, offset);
+        break;
+      case Corner::TopLeft:
+        painter.drawLine(offset, 2, 2, offset);
+        break;
+      case Corner::BottomLeft:
+        painter.drawLine(2, height() - offset, offset, height() - 2);
+        break;
+      case Corner::BottomRight:
+        painter.drawLine(width() - offset, height() - 2, width() - 2, height() - offset);
+        break;
+      }
     }
   }
+
+private:
+  Corner m_corner;
 };
+
+void positionAreaGrips(CyclingMapView* area)
+{
+  const auto grips =
+    area->findChildren<QWidget*>("MapViewAreaGrip", Qt::FindDirectChildrenOnly);
+  const auto showBottom = area->height() >= 2 * 18;
+  for (auto* widget : grips)
+  {
+    auto* grip = dynamic_cast<AreaGrip*>(widget);
+    if (!grip)
+      continue;
+    auto targetPos = QPoint{};
+    auto targetVisible = true;
+    switch (grip->corner())
+    {
+    case AreaGrip::Corner::TopRight:
+      targetPos = QPoint{area->width() - grip->width(), 0};
+      targetVisible = true;
+      break;
+    case AreaGrip::Corner::TopLeft:
+      targetPos = QPoint{0, 0};
+      targetVisible = true;
+      break;
+    case AreaGrip::Corner::BottomLeft:
+      targetPos = QPoint{0, area->height() - grip->height()};
+      targetVisible = showBottom;
+      break;
+    case AreaGrip::Corner::BottomRight:
+      targetPos = QPoint{area->width() - grip->width(), area->height() - grip->height()};
+      targetVisible = showBottom;
+      break;
+    }
+    if (grip->pos() != targetPos)
+      grip->move(targetPos);
+    if (grip->isVisible() != targetVisible)
+      grip->setVisible(targetVisible);
+  }
+}
 
 class AreaPreview : public QWidget
 {
@@ -98,14 +164,22 @@ protected:
       const auto horizontal = property("splitHorizontal").toBool();
       const auto ratio = property("splitRatio").toDouble();
       const auto position = qRound((horizontal ? width() : height()) * ratio);
+      const auto fromLeft = property("splitFromLeft").toBool();
+      const auto fromTop = property("splitFromTop").toBool();
       if (horizontal)
       {
-        highlight.setLeft(position);
+        if (fromLeft)
+          highlight.setRight(position);
+        else
+          highlight.setLeft(position);
         divider = QLine{position, 0, position, height()};
       }
       else
       {
-        highlight.setBottom(position);
+        if (fromTop)
+          highlight.setBottom(position);
+        else
+          highlight.setTop(position);
         divider = QLine{0, position, width(), position};
       }
     }
@@ -229,13 +303,183 @@ public:
 protected:
   void paintEvent(QPaintEvent*) override
   {
-    auto option = QStyleOption{};
-    option.initFrom(this);
-    option.state.setFlag(QStyle::State_Horizontal, property("axis").toInt() == 0);
-    auto painter = QPainter{this};
-    style()->drawControl(QStyle::CE_Splitter, &option, &painter, this);
+    if (underMouse() || hasFocus())
+    {
+      auto painter = QPainter{this};
+      auto accent = palette().color(QPalette::Accent);
+      accent.setAlpha(120);
+      painter.fillRect(rect(), accent);
+    }
   }
 };
+
+class AreaIntersection : public QWidget
+{
+public:
+  explicit AreaIntersection(QWidget* parent)
+    : QWidget{parent}
+  {
+    setObjectName("MapViewAreaIntersection");
+    setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus);
+    setAttribute(Qt::WA_Hover);
+    setCursor(Qt::SizeAllCursor);
+    setToolTip(
+      AreaMapView::tr("Drag to resize views in both directions. Right-click for center "
+                      "options. Escape restores."));
+  }
+
+protected:
+  void paintEvent(QPaintEvent*) override
+  {
+    auto painter = QPainter{this};
+    painter.setRenderHint(QPainter::Antialiasing);
+    const auto active = underMouse() || hasFocus();
+    const auto center = QPointF{rect().center()};
+    const auto radius = active ? 4.5 : 3.5;
+    painter.setPen(QPen{palette().color(QPalette::Window), 1.5});
+    painter.setBrush(palette().color(active ? QPalette::Accent : QPalette::Mid));
+    painter.drawEllipse(center, radius, radius);
+  }
+};
+
+struct EdgeOffsetResult
+{
+  double offset = 0.0;
+  std::map<int, bool> affected;
+  bool valid = false;
+};
+
+struct FourPaneInfo
+{
+  AreaMapView::FourPaneCenterMode mode = AreaMapView::FourPaneCenterMode::None;
+  int topLeftId = -1;
+  int bottomLeftId = -1;
+  int topRightId = -1;
+  int bottomRightId = -1;
+  double x = 0.5;
+  double y = 0.5;
+  double y_left = 0.5;
+  double y_right = 0.5;
+  double x_top = 0.5;
+  double x_bottom = 0.5;
+};
+
+FourPaneInfo analyzeFourPane(const areaGeometry::Rects& rects)
+{
+  if (rects.size() != 4)
+    return {};
+
+  auto info = FourPaneInfo{};
+  for (const auto& [id, r] : rects)
+  {
+    const auto touchesLeft = r.left() < 0.0001;
+    const auto touchesTop = r.top() < 0.0001;
+    const auto touchesRight = r.right() > 0.9999;
+    const auto touchesBottom = r.bottom() > 0.9999;
+
+    if (touchesLeft && touchesTop)
+      info.topLeftId = id;
+    if (touchesLeft && touchesBottom)
+      info.bottomLeftId = id;
+    if (touchesRight && touchesTop)
+      info.topRightId = id;
+    if (touchesRight && touchesBottom)
+      info.bottomRightId = id;
+  }
+
+  if (
+    info.topLeftId == -1 || info.bottomLeftId == -1 || info.topRightId == -1
+    || info.bottomRightId == -1 || info.topLeftId == info.bottomLeftId
+    || info.topRightId == info.bottomRightId || info.topLeftId == info.topRightId
+    || info.bottomLeftId == info.bottomRightId)
+  {
+    return {};
+  }
+
+  const auto& tl = rects.at(info.topLeftId);
+  const auto& bl = rects.at(info.bottomLeftId);
+  const auto& tr = rects.at(info.topRightId);
+  const auto& br = rects.at(info.bottomRightId);
+
+  info.y_left = tl.bottom();
+  info.y_right = tr.bottom();
+  info.x_top = tl.right();
+  info.x_bottom = bl.right();
+
+  const auto commonVertical = std::abs(tl.right() - bl.right()) < 0.001
+                              && std::abs(tl.right() - tr.left()) < 0.001
+                              && std::abs(bl.right() - br.left()) < 0.001;
+
+  const auto commonHorizontal = std::abs(tl.bottom() - tr.bottom()) < 0.001
+                                && std::abs(tl.bottom() - bl.top()) < 0.001
+                                && std::abs(tr.bottom() - br.top()) < 0.001;
+
+  if (commonVertical && commonHorizontal)
+  {
+    info.mode = AreaMapView::FourPaneCenterMode::Unified;
+    info.x = tl.right();
+    info.y = tl.bottom();
+  }
+  else if (commonVertical)
+  {
+    info.mode = AreaMapView::FourPaneCenterMode::UnboundLR;
+    info.x = tl.right();
+    info.y = (info.y_left + info.y_right) / 2.0;
+  }
+  else if (commonHorizontal)
+  {
+    info.mode = AreaMapView::FourPaneCenterMode::UnboundTB;
+    info.y = tl.bottom();
+    info.x = (info.x_top + info.x_bottom) / 2.0;
+  }
+  return info;
+}
+
+EdgeOffsetResult calculateEdgeOffset(
+  const int axis,
+  const double position,
+  const double start,
+  const double end,
+  const int extent,
+  const int handleWidth,
+  const double deltaPixels,
+  const areaGeometry::Rects& startRects)
+{
+  if (extent <= 0)
+    return {};
+  auto offset = deltaPixels / extent;
+  auto lower = -1.0;
+  auto upper = 1.0;
+  const auto minimum =
+    static_cast<double>(
+      (axis == 0 ? areaGeometry::MinimumWidth : areaGeometry::HeaderHeight) + handleWidth)
+    / extent;
+  auto affected = std::map<int, bool>{};
+  for (const auto& [id, r] : startRects)
+  {
+    const auto low = axis == 0 ? r.left() : r.top();
+    const auto high = axis == 0 ? r.right() : r.bottom();
+    const auto crossLow = axis == 0 ? r.top() : r.left();
+    const auto crossHigh = axis == 0 ? r.bottom() : r.right();
+    if (crossHigh <= start + 0.000001 || crossLow >= end - 0.000001)
+      continue;
+    if (std::abs(high - position) < 0.000001)
+    {
+      affected[id] = false;
+      lower = std::max(lower, low + minimum - position);
+    }
+    if (std::abs(low - position) < 0.000001)
+    {
+      affected[id] = true;
+      upper = std::min(upper, high - minimum - position);
+    }
+  }
+  if (lower > upper)
+    return {};
+  offset = std::clamp(offset, lower, upper);
+  return {offset, std::move(affected), true};
+}
 
 void copyCamera(const gl::Camera& source, gl::Camera& target)
 {
@@ -327,13 +571,22 @@ CyclingMapView* AreaMapView::createArea(const int mask)
       saveLayout();
   });
   addMapView(area);
-  auto* grip = new AreaGrip{area};
-  grip->installEventFilter(this);
+  for (const auto corner :
+       {AreaGrip::Corner::TopRight,
+        AreaGrip::Corner::TopLeft,
+        AreaGrip::Corner::BottomLeft,
+        AreaGrip::Corner::BottomRight})
+  {
+    auto* grip = new AreaGrip{area, corner};
+    grip->installEventFilter(this);
+  }
   area->installEventFilter(this);
   for (auto* view : area->findChildren<MapViewBase*>())
     view->installEventFilter(this);
-  grip->move(area->width() - grip->width(), 0);
-  grip->raise();
+  positionAreaGrips(area);
+  for (auto* grip :
+       area->findChildren<QWidget*>("MapViewAreaGrip", Qt::FindDirectChildrenOnly))
+    grip->raise();
   return area;
 }
 CyclingMapView* AreaMapView::copyArea(CyclingMapView* source)
@@ -421,9 +674,10 @@ void AreaMapView::finishLayoutChange(CyclingMapView* focus)
   m_areaLayout->setGeometry(m_root->rect());
   for (auto* area : areas())
   {
-    auto* grip = area->findChild<QWidget*>("MapViewAreaGrip");
-    grip->move(area->width() - grip->width(), 0);
-    grip->raise();
+    positionAreaGrips(area);
+    for (auto* grip :
+         area->findChildren<QWidget*>("MapViewAreaGrip", Qt::FindDirectChildrenOnly))
+      grip->raise();
   }
   focus->firstMapViewBase()->setFocus();
   scheduleEdges();
@@ -804,6 +1058,36 @@ void AreaMapView::updateEdges()
     edge->raise();
     m_edges.push_back(edge);
   }
+  for (const auto& v : edges)
+  {
+    if (v.axis != 0)
+      continue;
+    for (const auto& h : edges)
+    {
+      if (h.axis != 1)
+        continue;
+      const auto intersects =
+        v.position >= h.start - 0.000001 && v.position <= h.end + 0.000001
+        && h.position >= v.start - 0.000001 && h.position <= v.end + 0.000001;
+      if (!intersects)
+        continue;
+      auto* junction = new AreaIntersection{m_root};
+      junction->setProperty("v_pos", v.position);
+      junction->setProperty("v_start", v.start);
+      junction->setProperty("v_end", v.end);
+      junction->setProperty("h_pos", h.position);
+      junction->setProperty("h_start", h.start);
+      junction->setProperty("h_end", h.end);
+      const auto size = std::max(16, m_areaLayout->handleWidth() + 10);
+      const auto px = qRound(v.position * m_root->width()) - size / 2;
+      const auto py = qRound(h.position * m_root->height()) - size / 2;
+      junction->setGeometry(px, py, size, size);
+      junction->installEventFilter(this);
+      junction->show();
+      junction->raise();
+      m_edges.push_back(junction);
+    }
+  }
   if (m_closedPreview)
     m_closedPreview->raise();
   if (m_preview)
@@ -811,6 +1095,26 @@ void AreaMapView::updateEdges()
 }
 bool AreaMapView::edgeEvent(QWidget* edge, QEvent* event)
 {
+  if (event->type() == QEvent::ContextMenu)
+  {
+    cancelGesture();
+    showIntersectionMenu(edge, static_cast<QContextMenuEvent*>(event)->globalPos());
+    return true;
+  }
+  if (event->type() == QEvent::KeyPress)
+  {
+    const auto key = static_cast<QKeyEvent*>(event)->key();
+    if (key == Qt::Key_Escape)
+    {
+      cancelGesture();
+      return true;
+    }
+    if (!m_edgeGrip && (key == Qt::Key_Menu || key == Qt::Key_Space))
+    {
+      showIntersectionMenu(edge, edge->mapToGlobal(edge->rect().center()));
+      return true;
+    }
+  }
   if (event->type() == QEvent::MouseButtonPress)
   {
     auto* mouse = static_cast<QMouseEvent*>(event);
@@ -833,70 +1137,207 @@ bool AreaMapView::edgeEvent(QWidget* edge, QEvent* event)
     return false;
   if (event->type() == QEvent::MouseMove)
   {
+    const auto delta =
+      static_cast<QMouseEvent*>(event)->globalPosition().toPoint() - m_edgeStart;
+    const auto width = m_areaLayout->handleWidth();
+    if (edge->objectName() == "MapViewAreaIntersection")
+    {
+      const auto v_pos = edge->property("v_pos").toDouble();
+      const auto v_start = edge->property("v_start").toDouble();
+      const auto v_end = edge->property("v_end").toDouble();
+      const auto h_pos = edge->property("h_pos").toDouble();
+      const auto h_start = edge->property("h_start").toDouble();
+      const auto h_end = edge->property("h_end").toDouble();
+
+      const auto resX = calculateEdgeOffset(
+        0, v_pos, v_start, v_end, m_root->width(), width, delta.x(), m_edgeStartRects);
+      const auto resY = calculateEdgeOffset(
+        1, h_pos, h_start, h_end, m_root->height(), width, delta.y(), m_edgeStartRects);
+
+      const auto offsetX = resX.valid ? resX.offset : 0.0;
+      const auto offsetY = resY.valid ? resY.offset : 0.0;
+
+      const auto newJunctionX =
+        qRound((v_pos + offsetX) * m_root->width()) - edge->width() / 2;
+      const auto newJunctionY =
+        qRound((h_pos + offsetY) * m_root->height()) - edge->height() / 2;
+      if (edge->x() == newJunctionX && edge->y() == newJunctionY)
+        return true;
+
+      auto rects = m_edgeStartRects;
+      if (resX.valid)
+      {
+        for (const auto& [id, low] : resX.affected)
+        {
+          auto& r = rects.at(id);
+          if (low)
+            r.setLeft(v_pos + resX.offset);
+          else
+            r.setRight(v_pos + resX.offset);
+        }
+      }
+      if (resY.valid)
+      {
+        for (const auto& [id, low] : resY.affected)
+        {
+          auto& r = rects.at(id);
+          if (low)
+            r.setTop(h_pos + resY.offset);
+          else
+            r.setBottom(h_pos + resY.offset);
+        }
+      }
+      if (areaGeometry::validTiling(rects))
+        setRects(rects);
+
+      for (auto* other : m_edges)
+      {
+        if (other == edge)
+          continue;
+        if (other->objectName() == "MapViewAreaIntersection")
+        {
+          const auto other_v = other->property("v_pos").toDouble();
+          const auto other_h = other->property("h_pos").toDouble();
+          auto newOtherX = other->x();
+          auto newOtherY = other->y();
+          if (std::abs(other_v - v_pos) < 0.000001 && resX.valid)
+            newOtherX =
+              qRound((other_v + offsetX) * m_root->width()) - other->width() / 2;
+          if (std::abs(other_h - h_pos) < 0.000001 && resY.valid)
+            newOtherY =
+              qRound((other_h + offsetY) * m_root->height()) - other->height() / 2;
+          if (other->x() != newOtherX || other->y() != newOtherY)
+            other->move(newOtherX, newOtherY);
+          continue;
+        }
+        const auto otherAxis = other->property("axis").toInt();
+        const auto otherPosition = other->property("position").toDouble();
+        if (otherAxis == 0 && std::abs(otherPosition - v_pos) < 0.000001)
+        {
+          const auto newX = qRound((v_pos + offsetX) * m_root->width()) - width / 2;
+          if (other->x() != newX)
+            other->move(newX, other->y());
+        }
+        else if (otherAxis == 1 && std::abs(otherPosition - h_pos) < 0.000001)
+        {
+          const auto newY = qRound((h_pos + offsetY) * m_root->height()) - width / 2;
+          if (other->y() != newY)
+            other->move(other->x(), newY);
+        }
+        else if (otherAxis == 0)
+        {
+          auto from = other->property("start").toDouble();
+          auto to = other->property("end").toDouble();
+          auto changed = false;
+          if (std::abs(from - h_pos) < 0.000001)
+          {
+            from += offsetY;
+            changed = true;
+          }
+          if (std::abs(to - h_pos) < 0.000001)
+          {
+            to += offsetY;
+            changed = true;
+          }
+          if (changed)
+          {
+            const auto fixed = qRound(otherPosition * m_root->width()) - width / 2;
+            const auto begin = qRound(from * m_root->height());
+            const auto length = qRound(to * m_root->height()) - begin;
+            const auto targetGeom = QRect{fixed, begin, width, length};
+            if (other->geometry() != targetGeom)
+              other->setGeometry(targetGeom);
+          }
+        }
+        else if (otherAxis == 1)
+        {
+          auto from = other->property("start").toDouble();
+          auto to = other->property("end").toDouble();
+          auto changed = false;
+          if (std::abs(from - v_pos) < 0.000001)
+          {
+            from += offsetX;
+            changed = true;
+          }
+          if (std::abs(to - v_pos) < 0.000001)
+          {
+            to += offsetX;
+            changed = true;
+          }
+          if (changed)
+          {
+            const auto fixed = qRound(otherPosition * m_root->height()) - width / 2;
+            const auto begin = qRound(from * m_root->width());
+            const auto length = qRound(to * m_root->width()) - begin;
+            const auto targetGeom = QRect{begin, fixed, length, width};
+            if (other->geometry() != targetGeom)
+              other->setGeometry(targetGeom);
+          }
+        }
+      }
+      edge->move(newJunctionX, newJunctionY);
+      return true;
+    }
+
     const auto axis = edge->property("axis").toInt();
     const auto position = edge->property("position").toDouble();
     const auto start = edge->property("start").toDouble();
     const auto end = edge->property("end").toDouble();
     const auto extent = axis == 0 ? m_root->width() : m_root->height();
-    if (extent <= 0)
+    const auto deltaPixels = static_cast<double>(axis == 0 ? delta.x() : delta.y());
+    const auto res = calculateEdgeOffset(
+      axis, position, start, end, extent, width, deltaPixels, m_edgeStartRects);
+    if (!res.valid)
       return true;
-    const auto delta =
-      static_cast<QMouseEvent*>(event)->globalPosition().toPoint() - m_edgeStart;
-    auto offset = static_cast<double>(axis == 0 ? delta.x() : delta.y()) / extent;
-    auto lower = -1.0;
-    auto upper = 1.0;
-    const auto minimum =
-      static_cast<double>(
-        (axis == 0 ? areaGeometry::MinimumWidth : areaGeometry::HeaderHeight)
-        + m_areaLayout->handleWidth())
-      / extent;
-    auto affected = std::map<int, bool>{};
-    for (const auto& [id, r] : m_edgeStartRects)
-    {
-      const auto low = axis == 0 ? r.left() : r.top();
-      const auto high = axis == 0 ? r.right() : r.bottom();
-      const auto crossLow = axis == 0 ? r.top() : r.left();
-      const auto crossHigh = axis == 0 ? r.bottom() : r.right();
-      if (crossHigh <= start + 0.000001 || crossLow >= end - 0.000001)
-        continue;
-      if (std::abs(high - position) < 0.000001)
-      {
-        affected[id] = false;
-        lower = std::max(lower, low + minimum - position);
-      }
-      if (std::abs(low - position) < 0.000001)
-      {
-        affected[id] = true;
-        upper = std::min(upper, high - minimum - position);
-      }
-    }
-    if (lower > upper)
+    const auto newEdgePos = qRound((position + res.offset) * extent) - width / 2;
+    if ((axis == 0 && edge->x() == newEdgePos) || (axis == 1 && edge->y() == newEdgePos))
       return true;
-    offset = std::clamp(offset, lower, upper);
+
     auto rects = m_edgeStartRects;
-    for (const auto& [id, low] : affected)
+    for (const auto& [id, low] : res.affected)
     {
       auto& r = rects.at(id);
       if (axis == 0)
       {
         if (low)
-          r.setLeft(position + offset);
+          r.setLeft(position + res.offset);
         else
-          r.setRight(position + offset);
+          r.setRight(position + res.offset);
       }
       else
       {
         if (low)
-          r.setTop(position + offset);
+          r.setTop(position + res.offset);
         else
-          r.setBottom(position + offset);
+          r.setBottom(position + res.offset);
       }
     }
     if (areaGeometry::validTiling(rects))
       setRects(rects);
-    const auto width = m_areaLayout->handleWidth();
     for (auto* other : m_edges)
     {
+      if (other == edge)
+        continue;
+      if (other->objectName() == "MapViewAreaIntersection")
+      {
+        const auto v_pos = other->property("v_pos").toDouble();
+        const auto h_pos = other->property("h_pos").toDouble();
+        if (axis == 0 && std::abs(v_pos - position) < 0.000001)
+        {
+          const auto targetX =
+            qRound((v_pos + res.offset) * m_root->width()) - other->width() / 2;
+          if (other->x() != targetX)
+            other->move(targetX, other->y());
+        }
+        else if (axis == 1 && std::abs(h_pos - position) < 0.000001)
+        {
+          const auto targetY =
+            qRound((h_pos + res.offset) * m_root->height()) - other->height() / 2;
+          if (other->y() != targetY)
+            other->move(other->x(), targetY);
+        }
+        continue;
+      }
       const auto otherAxis = other->property("axis").toInt();
       const auto otherPosition = other->property("position").toDouble();
       if (otherAxis == axis || otherPosition < start || otherPosition > end)
@@ -904,21 +1345,22 @@ bool AreaMapView::edgeEvent(QWidget* edge, QEvent* event)
       auto from = other->property("start").toDouble();
       auto to = other->property("end").toDouble();
       if (std::abs(from - position) < 0.000001)
-        from += offset;
+        from += res.offset;
       if (std::abs(to - position) < 0.000001)
-        to += offset;
+        to += res.offset;
       const auto cross = axis == 0 ? m_root->height() : m_root->width();
       const auto fixed = qRound(otherPosition * cross) - width / 2;
       const auto begin = qRound(from * extent);
       const auto length = qRound(to * extent) - begin;
-      other->setGeometry(
-        otherAxis == 0 ? QRect{fixed, begin, width, length}
-                       : QRect{begin, fixed, length, width});
+      const auto targetGeom = otherAxis == 0 ? QRect{fixed, begin, width, length}
+                                             : QRect{begin, fixed, length, width};
+      if (other->geometry() != targetGeom)
+        other->setGeometry(targetGeom);
     }
     if (axis == 0)
-      edge->move(qRound((position + offset) * extent) - width / 2, edge->y());
+      edge->move(newEdgePos, edge->y());
     else
-      edge->move(edge->x(), qRound((position + offset) * extent) - width / 2);
+      edge->move(edge->x(), newEdgePos);
     return true;
   }
   const auto escape = event->type() == QEvent::KeyPress
@@ -1065,6 +1507,14 @@ void AreaMapView::updateGesture(
     ratio = 0.5;
   const auto minimum = static_cast<double>(MinimumAreaSize) / extent;
   m_splitRatio = std::clamp(ratio, minimum, 1 - minimum);
+  const auto* dragGrip = dynamic_cast<AreaGrip*>(m_dragGrip.data());
+  const auto corner = dragGrip ? dragGrip->corner() : AreaGrip::Corner::TopRight;
+  const auto isLeft =
+    corner == AreaGrip::Corner::TopLeft || corner == AreaGrip::Corner::BottomLeft;
+  const auto isTop =
+    corner == AreaGrip::Corner::TopLeft || corner == AreaGrip::Corner::TopRight;
+  m_preview->setProperty("splitFromLeft", isLeft);
+  m_preview->setProperty("splitFromTop", isTop);
   m_preview->setProperty("split", true);
   m_preview->setProperty("splitHorizontal", horizontal);
   m_preview->setProperty("splitRatio", m_splitRatio);
@@ -1082,6 +1532,158 @@ void AreaMapView::updateGesture(
   m_preview->raise();
   m_preview->update();
 }
+AreaMapView::FourPaneCenterMode AreaMapView::fourPaneCenterMode() const
+{
+  return analyzeFourPane(geometryRects()).mode;
+}
+
+bool AreaMapView::canUnifyCenters() const
+{
+  const auto mode = fourPaneCenterMode();
+  return mode == FourPaneCenterMode::UnboundLR || mode == FourPaneCenterMode::UnboundTB;
+}
+
+bool AreaMapView::canUnbindCenters() const
+{
+  return fourPaneCenterMode() != FourPaneCenterMode::None;
+}
+
+void AreaMapView::unifyCenters(const double targetCoord)
+{
+  auto rects = geometryRects();
+  const auto info = analyzeFourPane(rects);
+  if (info.mode == FourPaneCenterMode::None || info.mode == FourPaneCenterMode::Unified)
+    return;
+
+  if (info.mode == FourPaneCenterMode::UnboundLR)
+  {
+    const auto y = targetCoord > 0 ? std::clamp(targetCoord, 0.1, 0.9) : info.y;
+    rects.at(info.topLeftId).setBottom(y);
+    rects.at(info.bottomLeftId).setTop(y);
+    rects.at(info.topRightId).setBottom(y);
+    rects.at(info.bottomRightId).setTop(y);
+  }
+  else if (info.mode == FourPaneCenterMode::UnboundTB)
+  {
+    const auto x = targetCoord > 0 ? std::clamp(targetCoord, 0.1, 0.9) : info.x;
+    rects.at(info.topLeftId).setRight(x);
+    rects.at(info.topRightId).setLeft(x);
+    rects.at(info.bottomLeftId).setRight(x);
+    rects.at(info.bottomRightId).setLeft(x);
+  }
+
+  if (areaGeometry::validTiling(rects))
+  {
+    setRects(rects);
+    scheduleEdges();
+    saveLayout();
+  }
+}
+
+void AreaMapView::unbindCenters(const bool horizontal)
+{
+  auto rects = geometryRects();
+  const auto info = analyzeFourPane(rects);
+  if (info.mode == FourPaneCenterMode::None)
+    return;
+
+  const auto targetX = info.x;
+  const auto targetY = info.y;
+
+  if (horizontal)
+  {
+    rects.at(info.topLeftId).setRight(targetX);
+    rects.at(info.topRightId).setLeft(targetX);
+    rects.at(info.bottomLeftId).setRight(targetX);
+    rects.at(info.bottomRightId).setLeft(targetX);
+
+    const auto offset = std::clamp(40.0 / std::max(1, m_root->height()), 0.04, 0.10);
+    const auto y_left = std::clamp(targetY - offset, 0.1, 0.9);
+    const auto y_right = std::clamp(targetY + offset, 0.1, 0.9);
+
+    rects.at(info.topLeftId).setBottom(y_left);
+    rects.at(info.bottomLeftId).setTop(y_left);
+    rects.at(info.topRightId).setBottom(y_right);
+    rects.at(info.bottomRightId).setTop(y_right);
+  }
+  else
+  {
+    rects.at(info.topLeftId).setBottom(targetY);
+    rects.at(info.bottomLeftId).setTop(targetY);
+    rects.at(info.topRightId).setBottom(targetY);
+    rects.at(info.bottomRightId).setTop(targetY);
+
+    const auto offset = std::clamp(40.0 / std::max(1, m_root->width()), 0.04, 0.10);
+    const auto x_top = std::clamp(targetX - offset, 0.1, 0.9);
+    const auto x_bottom = std::clamp(targetX + offset, 0.1, 0.9);
+
+    rects.at(info.topLeftId).setRight(x_top);
+    rects.at(info.topRightId).setLeft(x_top);
+    rects.at(info.bottomLeftId).setRight(x_bottom);
+    rects.at(info.bottomRightId).setLeft(x_bottom);
+  }
+
+  if (areaGeometry::validTiling(rects))
+  {
+    setRects(rects);
+    scheduleEdges();
+    saveLayout();
+  }
+}
+
+void AreaMapView::showIntersectionMenu(QWidget* junction, const QPoint& globalPosition)
+{
+  const auto rects = geometryRects();
+  const auto info = analyzeFourPane(rects);
+  if (info.mode == FourPaneCenterMode::None)
+    return;
+
+  auto menu = QMenu{this};
+  menu.setObjectName("MapViewIntersectionMenu");
+
+  auto* unifyAction = menu.addAction(tr("Unify View Centers (Move Together)"));
+  unifyAction->setCheckable(true);
+  unifyAction->setChecked(info.mode == FourPaneCenterMode::Unified);
+
+  auto* unbindLRAction =
+    menu.addAction(tr("Unbind Views (Left / Right Move Separately)"));
+  unbindLRAction->setCheckable(true);
+  unbindLRAction->setChecked(info.mode == FourPaneCenterMode::UnboundLR);
+
+  auto* unbindTBAction =
+    menu.addAction(tr("Unbind Views (Top / Bottom Move Separately)"));
+  unbindTBAction->setCheckable(true);
+  unbindTBAction->setChecked(info.mode == FourPaneCenterMode::UnboundTB);
+
+  double targetCoord = -1.0;
+  if (junction)
+  {
+    if (
+      info.mode == FourPaneCenterMode::UnboundLR && junction->property("h_pos").isValid())
+      targetCoord = junction->property("h_pos").toDouble();
+    else if (
+      info.mode == FourPaneCenterMode::UnboundTB && junction->property("v_pos").isValid())
+      targetCoord = junction->property("v_pos").toDouble();
+  }
+
+  auto* selected = menu.exec(globalPosition);
+  if (!selected)
+    return;
+
+  if (selected == unifyAction)
+  {
+    unifyCenters(targetCoord);
+  }
+  else if (selected == unbindLRAction)
+  {
+    unbindCenters(true);
+  }
+  else if (selected == unbindTBAction)
+  {
+    unbindCenters(false);
+  }
+}
+
 void AreaMapView::showAreaMenu(CyclingMapView* area, const QPoint& globalPosition)
 {
   auto menu = QMenu{this};
@@ -1130,24 +1732,22 @@ bool AreaMapView::eventFilter(QObject* watched, QEvent* event)
 {
   if (watched == m_root && event->type() == QEvent::Resize)
     scheduleEdges();
-  if (watched->objectName() == "MapViewAreaEdge")
+  if (
+    watched->objectName() == "MapViewAreaEdge"
+    || watched->objectName() == "MapViewAreaIntersection")
     return edgeEvent(static_cast<QWidget*>(watched), event);
   if (auto* area = qobject_cast<CyclingMapView*>(watched))
   {
     if (event->type() == QEvent::Resize || event->type() == QEvent::Show)
-    {
-      auto* grip = area->findChild<QWidget*>("MapViewAreaGrip");
-      grip->move(area->width() - grip->width(), 0);
-      grip->raise();
-    }
+      positionAreaGrips(area);
     if (event->type() == QEvent::Hide || event->type() == QEvent::Show)
       scheduleEdges();
   }
   if (event->type() == QEvent::Show && qobject_cast<MapViewBase*>(watched))
-    if (
-      auto* grip = static_cast<QWidget*>(watched)->parentWidget()->findChild<QWidget*>(
-        "MapViewAreaGrip"))
-      grip->raise();
+    if (auto* parent = static_cast<QWidget*>(watched)->parentWidget())
+      for (auto* grip :
+           parent->findChildren<QWidget*>("MapViewAreaGrip", Qt::FindDirectChildrenOnly))
+        grip->raise();
   if (watched->objectName() != "MapViewAreaGrip")
     return MultiPaneMapView::eventFilter(watched, event);
   auto* grip = static_cast<QWidget*>(watched);
@@ -1219,6 +1819,13 @@ bool AreaMapView::eventFilter(QObject* watched, QEvent* event)
     const auto target = m_dragTarget;
     const auto commit = hadPreview && m_preview->isVisible();
     const auto axis = m_splitOrientation;
+    const auto* dragGrip = dynamic_cast<AreaGrip*>(m_dragGrip.data());
+    const auto corner = dragGrip ? dragGrip->corner() : AreaGrip::Corner::TopRight;
+    const auto isLeft =
+      corner == AreaGrip::Corner::TopLeft || corner == AreaGrip::Corner::BottomLeft;
+    const auto isTop =
+      corner == AreaGrip::Corner::TopLeft || corner == AreaGrip::Corner::TopRight;
+    const auto newFirst = axis == Qt::Horizontal ? isLeft : isTop;
     const auto ratio = m_splitRatio;
     const auto plan = m_gesturePlan;
     const auto before = geometryRects();
@@ -1233,6 +1840,7 @@ bool AreaMapView::eventFilter(QObject* watched, QEvent* event)
          target,
          axis,
          ratio,
+         newFirst,
          plan,
          before,
          beforeViews,
@@ -1245,7 +1853,7 @@ bool AreaMapView::eventFilter(QObject* watched, QEvent* event)
               applyPlan(plan, source);
           }
           else
-            splitArea(source, axis, ratio, axis == Qt::Vertical);
+            splitArea(source, axis, ratio, newFirst);
         });
     return true;
   }

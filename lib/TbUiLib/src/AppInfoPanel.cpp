@@ -42,19 +42,19 @@ AppInfoPanel::AppInfoPanel(AppController& appController, QWidget* parent)
   : QWidget{parent}
 {
   auto appIconImage = loadPixmap("AppIcon.png");
-  auto* appIcon = new QLabel{};
+  auto* appIcon = new QLabel{this};
   appIcon->setPixmap(appIconImage);
 
-  auto* appName = new QLabel{tr("TrenchBroom")};
+  auto* appName = new QLabel{tr("TrenchBroom"), this};
   setHeaderStyle(appName);
 
-  auto* appLine = new BorderLine{};
-  auto* appClaim = new QLabel{tr("Level Editor")};
+  auto* appLine = new BorderLine{BorderLine::Direction::Horizontal, 1, this};
+  auto* appClaim = new QLabel{tr("Level Editor"), this};
 
-  auto version = new ClickableLabel{tr("Version %1").arg(getBuildVersion())};
-  auto build = new ClickableLabel{tr("Build %1").arg(getBuildIdStr())};
+  auto version = new ClickableLabel{tr("Version %1").arg(getBuildVersion()), this};
+  auto build = new ClickableLabel{tr("Build %1").arg(getBuildIdStr()), this};
   auto qtVersion =
-    new ClickableLabel{tr("Qt %1").arg(QString::fromLocal8Bit(qVersion()))};
+    new ClickableLabel{tr("Qt %1").arg(QString::fromLocal8Bit(qVersion())), this};
 
   setInfoStyle(version);
   setInfoStyle(build);
@@ -70,7 +70,7 @@ AppInfoPanel::AppInfoPanel(AppController& appController, QWidget* parent)
   connect(build, &ClickableLabel::clicked, this, &AppInfoPanel::versionInfoClicked);
   connect(qtVersion, &ClickableLabel::clicked, this, &AppInfoPanel::versionInfoClicked);
 
-  auto* updateIndicator = appController.updater().createUpdateIndicator();
+  auto* updateIndicator = appController.updater().createUpdateIndicator(this);
   setInfoStyle(updateIndicator);
 
   auto* versionLayout = new QHBoxLayout{};
@@ -79,7 +79,7 @@ AppInfoPanel::AppInfoPanel(AppController& appController, QWidget* parent)
   versionLayout->addWidget(version);
   versionLayout->addWidget(updateIndicator);
 
-  auto* versionWidget = new QWidget{};
+  auto* versionWidget = new QWidget{this};
   versionWidget->setLayout(versionLayout);
 
   auto* layout = new QVBoxLayout{};

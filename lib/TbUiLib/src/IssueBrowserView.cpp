@@ -95,7 +95,7 @@ void IssueBrowserView::createGui()
 {
   m_tableModel = new IssueBrowserModel{this};
 
-  m_tableView = new QTableView{};
+  m_tableView = new QTableView{this};
   m_tableView->setObjectName("IssueBrowser_Table");
   m_tableView->setModel(m_tableModel);
   m_tableView->verticalHeader()->setVisible(false);
@@ -106,7 +106,7 @@ void IssueBrowserView::createGui()
 
   fixRowHeightToContents(*m_tableView);
 
-  m_validatingLabel = new QLabel{tr("Validating, please wait...")};
+  m_validatingLabel = new QLabel{tr("Validating, please wait..."), this};
   m_validatingLabel->setAlignment(Qt::AlignCenter);
 
   auto font = m_validatingLabel->font();

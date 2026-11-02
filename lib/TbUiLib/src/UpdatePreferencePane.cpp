@@ -94,7 +94,7 @@ To download and install an available update, click on the link labeled "Update a
     R"(Pre-releases are versions of TrenchBroom that are not yet considered stable. 
 They may contain new features or bug fixes that are not yet part of a stable release.)")};
 
-  auto* updateIndicator = m_appController.updater().createUpdateIndicator();
+  auto* updateIndicator = m_appController.updater().createUpdateIndicator(this);
 
   m_layout = new FormWithSectionsLayout{};
   m_layout->setContentsMargins(

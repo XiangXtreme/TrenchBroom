@@ -77,15 +77,15 @@ void ScaleToolPage::createGui()
   auto* text = new QLabel{tr("Scale objects")};
 
   m_book = new QStackedLayout{};
-  m_sizeTextBox = new QLineEdit{};
-  m_factorsTextBox = new QLineEdit{};
+  m_sizeTextBox = new QLineEdit{this};
+  m_factorsTextBox = new QLineEdit{this};
   m_book->addWidget(m_sizeTextBox);
   m_book->addWidget(m_factorsTextBox);
 
   connect(m_sizeTextBox, &QLineEdit::returnPressed, this, &ScaleToolPage::applyScale);
   connect(m_factorsTextBox, &QLineEdit::returnPressed, this, &ScaleToolPage::applyScale);
 
-  m_scaleFactorsOrSize = new QComboBox{};
+  m_scaleFactorsOrSize = new QComboBox{this};
   m_scaleFactorsOrSize->addItem(tr("to size"));
   m_scaleFactorsOrSize->addItem(tr("by factors"));
 

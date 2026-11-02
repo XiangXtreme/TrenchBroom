@@ -133,6 +133,9 @@ void CyclingMapView::switchToMapView(MapViewBase* mapView)
   m_layout->setCurrentWidget(m_currentMapView);
   m_currentMapView->setFocus();
   updateChrome();
+  m_viewButton->raise();
+  if (m_border)
+    m_border->raise();
   if (previous != viewType())
     emit viewChanged(previous, viewType());
 }
@@ -178,18 +181,18 @@ void CyclingMapView::updateChrome()
   }
   const auto inset =
     std::max(1, style()->pixelMetric(QStyle::PM_LayoutLeftMargin, nullptr, this));
-  const auto available = std::max(0, width() - 2 * inset - 18);
+  constexpr auto GripWidth = 18;
+  const auto available = std::max(0, width() - 2 * inset - 2 * GripWidth);
   m_viewButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
   if (m_viewButton->sizeHint().width() > available)
     m_viewButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-  m_viewButton->move(inset, inset);
+  m_viewButton->move(inset + GripWidth, inset);
   m_viewButton->adjustSize();
-  m_viewButton->setVisible(
-    !window()->isFullScreen() && available >= m_viewButton->sizeHint().width()
-    && height() >= m_viewButton->height() + 2 * inset);
-  m_viewButton->raise();
-  if (m_border)
-    m_border->raise();
+  const auto targetVisible = !window()->isFullScreen()
+                             && available >= m_viewButton->sizeHint().width()
+                             && height() >= m_viewButton->height() + 2 * inset;
+  if (m_viewButton->isVisible() != targetVisible)
+    m_viewButton->setVisible(targetVisible);
 }
 
 void CyclingMapView::resizeEvent(QResizeEvent* event)

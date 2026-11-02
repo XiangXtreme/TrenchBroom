@@ -33,6 +33,7 @@ TEST_CASE("WorkspaceLayout")
     auto tools = ToolLayout{};
     tools.tool = "issues";
     tools.pinned = true;
+    tools.keepOpen = true;
     tools.expanded = false;
     tools.heightRatio = 0.3;
     saveToolLayout(settings, WorkspaceKind::Project, tools);
@@ -48,6 +49,7 @@ TEST_CASE("WorkspaceLayout")
       loadEditorLayout(reopened, WorkspaceKind::Map).inspectorPage == InspectorPage::Map);
     const auto restored = loadToolLayout(reopened, WorkspaceKind::Project);
     CHECK(restored.pinned);
+    CHECK(restored.keepOpen);
     CHECK_FALSE(restored.expanded);
     CHECK(restored.tool == "issues");
     CHECK(restored.heightRatio == 0.3);
