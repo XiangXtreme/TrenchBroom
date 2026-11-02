@@ -463,3 +463,17 @@ gordon.mdl 下摘要显示 `look_idle frame 0`、序列下拉 77 项、帧滑块
 随后启用本机 Half-Life 的 `gordon.mdl`，模型解析与完整 `AssetInspection` 均通过，
 已查看带贴图的人形和检查器截图。Release `TrenchBroom` 构建、样式治理、
 差异空白检查通过；本轮未重跑全主题快照矩阵。
+
+### 续批：删除持久化与预览空间（2026-11-02）
+
+- 资产库的删除原先只移除目录行，源文件仍在，`Rescan` 会按文件重新索引，界面表现为
+  “删掉又回来”。现在 `removeAsset` 先把虚拟路径和来源写入 `.tbassets` 的
+  `removed_assets` 表，`scan` 在资源发现阶段跳过这些条目；重新导入或覆盖同一来源时
+  清除记录，资源恢复可见。目录 schema 升到 v3，旧库打开时自动补表，不需要数据迁移。
+- 删除确认文案明确“源文件保留、后续 Rescan 不会重新加入、重新导入可恢复”，按钮
+  提示说明同一语义。WAD 条目与天空分组仍按各自虚拟路径分别删除，不删除共享源文件。
+- 右栏默认宽度由 320 调整到 400 逻辑像素，共享预览的最小高度提升到 260 像素；检查器
+  位于滚动区，因此窗口最小高度不变，内容较多时滚动查看。
+- 验证：`AssetLibrary` 删除/重扫回归、`ProjectWindow` 新增的“删除后重扫不复活”
+  用例通过；`ModelBrowserView`、`AssetBrowserModel`、`AssetInspection`、
+  `AssetPreviewProvider`、`CatalogAssetDrop`、`PrefabAsset` 等 10 项 UI 定向回归通过。

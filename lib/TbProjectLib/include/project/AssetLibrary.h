@@ -97,8 +97,14 @@ public:
 
   // Removes the asset from the catalog together with its dependency edges. The source
   // file on disk is left alone: a container (a WAD) may hold other assets, and deleting
-  // user files is the caller's decision.
+  // user files is the caller's decision. The removal is remembered, so a later scan does
+  // not silently bring the asset back; importing the source again clears it.
   Result<void> removeAsset(const std::string& assetId);
+
+  // Clears the catalog removals recorded for a source. Importing or replacing a source
+  // calls this so its assets can be indexed again; a group whose virtual path prefixes
+  // the imported file is restored too, so re-importing a skybox face revives its group.
+  Result<void> clearRemovedSource(const std::string& sourceRelPath);
 
   struct AssetMetadata
   {

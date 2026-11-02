@@ -433,6 +433,30 @@ TEST_CASE("AssetLibrary")
     CHECK(grouped->missing);
   }
 
+  SECTION("a removed skybox group returns when one of its faces is imported again")
+  {
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+      workspace.write(
+        std::string{"env/desert"} + face + ".png",
+        std::vector<std::uint8_t>{'P', 'N', 'G', std::uint8_t(face[0])});
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+    const auto assets = require(library->assets());
+    const auto skybox = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.type == AssetType::Skybox; });
+    REQUIRE(skybox != assets.end());
+
+    require(library->removeAsset(skybox->id));
+    require(library->scan());
+    CHECK(require(library->assets(AssetType::Texture)).size() == 6);
+    CHECK(require(library->assets(AssetType::Skybox)).empty());
+
+    // Importing a face clears the group exclusion: the six faces are still on disk.
+    require(library->clearRemovedSource("env/desertdn.png"));
+    require(library->scan());
+    CHECK(require(library->assets(AssetType::Skybox)).size() == 1);
+  }
+
   SECTION("rejects duplicate members and invalid lumps without losing the archive")
   {
     const auto duplicate = test::makeMiptex("WALL01", 16, 16, 5);
@@ -561,7 +585,14 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->assets()).size() == assets.size() - 1);
     CHECK(library->removeAsset(wallId).is_error());
 
-    // The source file stays on disk, so a rescan brings the asset back.
+    // The source file stays on disk, but the removal is remembered so a rescan does not
+    // silently recreate the catalog entry.
+    require(library->scan());
+    CHECK_FALSE(require(library->findAsset(wallId)).has_value());
+    CHECK(require(library->assets()).size() == assets.size() - 1);
+
+    // Importing the source again is the explicit restore.
+    require(library->clearRemovedSource("custom.wad"));
     require(library->scan());
     CHECK(require(library->findAsset(wallId)).has_value());
   }

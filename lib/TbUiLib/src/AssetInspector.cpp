@@ -60,6 +60,9 @@ public:
     setScene(&m_scene);
     m_item = m_scene.addPixmap({});
     setMinimumSize(140, 140);
+    // The inspector is hosted in a scroll area, so a taller preview costs scrolling
+    // rather than making the surrounding window taller.
+    setMinimumHeight(260);
     setDragMode(QGraphicsView::ScrollHandDrag);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     // Fixed scrollbar policy keeps fitInView from causing resize recursion.

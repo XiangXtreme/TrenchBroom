@@ -105,13 +105,25 @@ public:
   Result<std::string> importFile(
     const std::filesystem::path& source, const std::string& relativePath) override
   {
-    return importFileIntoLibrary(m_library->folder(), source, relativePath);
+    auto imported = importFileIntoLibrary(m_library->folder(), source, relativePath);
+    if (imported.is_error())
+      return imported;
+    // Importing a source is an explicit restore: a previously removed asset may return.
+    if (auto cleared = m_library->clearRemovedSource(relativePath); cleared.is_error())
+      return std::get<Error>(cleared.error());
+    return imported;
   }
 
   Result<std::string> replaceFile(
     const std::filesystem::path& source, const std::string& relativePath) override
   {
-    return importFileIntoLibrary(m_library->folder(), source, relativePath, true);
+    auto imported =
+      importFileIntoLibrary(m_library->folder(), source, relativePath, true);
+    if (imported.is_error())
+      return imported;
+    if (auto cleared = m_library->clearRemovedSource(relativePath); cleared.is_error())
+      return std::get<Error>(cleared.error());
+    return imported;
   }
 
   Result<bool> convertAsset(const std::string& assetId) override

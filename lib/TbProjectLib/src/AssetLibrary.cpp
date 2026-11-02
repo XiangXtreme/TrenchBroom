@@ -272,6 +272,7 @@ void discoverFile(
   const std::filesystem::path& folder,
   const std::filesystem::path& file,
   const std::string& libraryId,
+  const std::unordered_set<std::string>& removedVirtualPaths,
   Discovery& discovery,
   std::unordered_set<std::string>& seenIds)
 {
@@ -328,6 +329,8 @@ void discoverFile(
       asset.type = AssetType::Texture;
       asset.displayName = entry.name;
       asset.virtualPath = relativePath + "/" + entry.name;
+      if (removedVirtualPaths.contains(asset.virtualPath))
+        continue;
       asset.group = relativePath;
       asset.sourceRelPath = relativePath;
       asset.sourceMember = entry.name;
@@ -360,6 +363,10 @@ void discoverFile(
   asset.content = bytes;
   asset.size = std::uint64_t(bytes.size());
   asset.contentHash = contentHash(asset.content);
+  // The source stays indexed, but a catalog removal keeps its asset hidden until the
+  // source is imported again.
+  if (removedVirtualPaths.contains(asset.virtualPath))
+    return;
   if (format == SourceFormat::Model)
   {
     // A GoldSrc model embeds its textures; what lives beside it are the separate texture
@@ -383,7 +390,10 @@ void discoverFile(
  * A skybox is a logical asset: the faces stay independently editable textures, and the
  * group only records which six belong together so a capture can pull the whole set.
  */
-void addSkyboxGroups(const std::string& libraryId, Discovery& discovery)
+void addSkyboxGroups(
+  const std::string& libraryId,
+  const std::unordered_set<std::string>& removedVirtualPaths,
+  Discovery& discovery)
 {
   static constexpr std::array<std::string_view, 6> Faces{
     "bk", "rt", "lf", "ft", "up", "dn"};
@@ -424,6 +434,8 @@ void addSkyboxGroups(const std::string& libraryId, Discovery& discovery)
       continue;
     const auto virtualPath =
       (group.folder.empty() ? std::string{} : group.folder + "/") + group.stem;
+    if (removedVirtualPaths.contains(virtualPath))
+      continue;
     auto asset = Discovered{};
     asset.id = stableId(libraryKey(libraryId, virtualPath, {}));
     asset.type = AssetType::Skybox;
@@ -452,7 +464,10 @@ void addSkyboxGroups(const std::string& libraryId, Discovery& discovery)
   }
 }
 
-Discovery discover(const std::filesystem::path& folder, const std::string& libraryId)
+Discovery discover(
+  const std::filesystem::path& folder,
+  const std::string& libraryId,
+  const std::unordered_set<std::string>& removedVirtualPaths)
 {
   auto discovery = Discovery{};
   auto seenIds = std::unordered_set<std::string>{};
@@ -486,9 +501,10 @@ Discovery discover(const std::filesystem::path& folder, const std::string& libra
       continue;
     if (!std::filesystem::is_regular_file(status))
       continue;
-    discoverFile(folder, entry.path(), libraryId, discovery, seenIds);
+    discoverFile(
+      folder, entry.path(), libraryId, removedVirtualPaths, discovery, seenIds);
   }
-  addSkyboxGroups(libraryId, discovery);
+  addSkyboxGroups(libraryId, removedVirtualPaths, discovery);
   std::ranges::sort(discovery.assets, [](const auto& a, const auto& b) {
     return a.virtualPath < b.virtualPath;
   });
@@ -531,7 +547,7 @@ LibraryAsset readAssetRow(const detail::Statement& query)
 }
 
 constexpr auto Schema =
-  "PRAGMA application_id=0x54424153; PRAGMA user_version=2;"
+  "PRAGMA application_id=0x54424153; PRAGMA user_version=3;"
   "CREATE TABLE library(id TEXT PRIMARY KEY,name TEXT NOT NULL,"
   "created_at TEXT NOT NULL,updated_at TEXT NOT NULL);"
   "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
@@ -560,7 +576,10 @@ constexpr auto Schema =
   "dependency_id TEXT NOT NULL REFERENCES assets(id),kind TEXT NOT NULL,"
   "PRIMARY KEY(asset_id,dependency_id,kind),CHECK(asset_id<>dependency_id));"
   "CREATE TABLE asset_meta(asset_id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE "
-  "CASCADE,favorite INTEGER NOT NULL DEFAULT 0,tags TEXT NOT NULL DEFAULT '');";
+  "CASCADE,favorite INTEGER NOT NULL DEFAULT 0,tags TEXT NOT NULL DEFAULT '');"
+  "CREATE TABLE removed_assets(virtual_path TEXT PRIMARY KEY,"
+  "source_rel_path TEXT NOT NULL,removed_at TEXT NOT NULL);"
+  "CREATE INDEX removed_assets_source ON removed_assets(source_rel_path);";
 
 void configure(detail::Database& database)
 {
@@ -670,8 +689,8 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::open(
         db, "SELECT * FROM pragma_application_id(),pragma_user_version()"};
       if (
         !version.next() || version.integer(0) != 0x54424153
-        || (version.integer(1) != 1 && version.integer(1) != 2))
-        throw detail::StoreError{"Not a supported TB asset library (format version 2)."};
+        || (version.integer(1) != 1 && version.integer(1) != 2 && version.integer(1) != 3))
+        throw detail::StoreError{"Not a supported TB asset library (format version 3)."};
     }
     auto info =
       detail::Statement{db, "SELECT id,name,created_at,updated_at FROM library"};
@@ -705,7 +724,17 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::open(
         "CREATE TABLE IF NOT EXISTS asset_meta(asset_id TEXT PRIMARY KEY REFERENCES "
         "assets(id) ON DELETE CASCADE,favorite INTEGER NOT NULL DEFAULT 0,"
         "tags TEXT NOT NULL DEFAULT '')");
-      detail::execute(db, "PRAGMA user_version=2");
+
+      // Version 3 remembers catalog removals so rescans do not bring deleted assets back.
+      detail::execute(
+        db,
+        "CREATE TABLE IF NOT EXISTS removed_assets(virtual_path TEXT PRIMARY KEY,"
+        "source_rel_path TEXT NOT NULL,removed_at TEXT NOT NULL)");
+      detail::execute(
+        db,
+        "CREATE INDEX IF NOT EXISTS removed_assets_source ON "
+        "removed_assets(source_rel_path)");
+      detail::execute(db, "PRAGMA user_version=3");
     }
     // Fail closed on missing tables or columns.
     auto probe = detail::Statement{db, "SELECT id FROM assets LIMIT 1"};
@@ -766,6 +795,15 @@ std::unordered_map<std::string, IndexedAsset> loadIndexedAssets(sqlite3* db)
       query.flag(7) != 0};
     result.emplace(asset.id, std::move(asset));
   }
+  return result;
+}
+
+std::unordered_set<std::string> loadRemovedVirtualPaths(sqlite3* db)
+{
+  auto query = detail::Statement{db, "SELECT virtual_path FROM removed_assets"};
+  auto result = std::unordered_set<std::string>{};
+  while (query.next())
+    result.insert(query.text(0));
   return result;
 }
 
@@ -859,7 +897,8 @@ Result<LibraryScan> AssetLibrary::scan()
 {
   return detail::attempt([&] {
     auto* db = m_impl->database.get();
-    const auto discovery = discover(m_impl->folder, m_impl->info.id);
+    const auto removed = loadRemovedVirtualPaths(db);
+    const auto discovery = discover(m_impl->folder, m_impl->info.id, removed);
     auto result = LibraryScan{};
     result.invalidEntries = discovery.invalid;
     if (!discovery.warnings.empty())
@@ -1382,15 +1421,28 @@ Result<void> AssetLibrary::removeAsset(const std::string& assetId)
     detail::validateAssetId(assetId);
     auto* db = m_impl->database.get();
     auto transaction = detail::Transaction{db};
-    auto exists = detail::Statement{db, "SELECT 1 FROM assets WHERE id=?"};
+    auto exists =
+      detail::Statement{db, "SELECT virtual_path,source_rel_path FROM assets WHERE id=?"};
     exists.bind(1, assetId);
     if (!exists.next())
       throw detail::StoreError{"Library asset not found."};
+    const auto virtualPath = exists.text(0);
+    const auto sourceRelPath = exists.text(1);
+    // Remember the removal before dropping the row: rescanning the folder finds the
+    // source file again, and a catalog entry must not silently come back.
+    auto exclude = detail::Statement{
+      db,
+      "INSERT OR REPLACE INTO removed_assets(virtual_path,source_rel_path,removed_at) "
+      "VALUES(?,?,?)"};
+    exclude.bind(1, virtualPath);
+    exclude.bind(2, sourceRelPath);
+    exclude.bind(3, nowText(db));
+    exclude.run();
 
-    for (const auto* sql : {
-           "DELETE FROM dependencies WHERE asset_id=? OR dependency_id=?",
-           "DELETE FROM asset_revisions WHERE asset_id=?",
-           "DELETE FROM assets WHERE id=?"})
+    for (const auto* sql :
+         {"DELETE FROM dependencies WHERE asset_id=? OR dependency_id=?",
+          "DELETE FROM asset_revisions WHERE asset_id=?",
+          "DELETE FROM assets WHERE id=?"})
     {
       auto statement = detail::Statement{db, sql};
       statement.bind(1, assetId);
@@ -1399,6 +1451,20 @@ Result<void> AssetLibrary::removeAsset(const std::string& assetId)
       statement.run();
     }
     transaction.commit();
+  });
+}
+
+Result<void> AssetLibrary::clearRemovedSource(const std::string& sourceRelPath)
+{
+  return detail::attempt([&] {
+    detail::validatePath(sourceRelPath);
+    auto statement = detail::Statement{
+      m_impl->database.get(),
+      "DELETE FROM removed_assets WHERE source_rel_path=? OR "
+      "substr(?,1,length(virtual_path))=virtual_path"};
+    statement.bind(1, sourceRelPath);
+    statement.bind(2, sourceRelPath);
+    statement.run();
   });
 }
 

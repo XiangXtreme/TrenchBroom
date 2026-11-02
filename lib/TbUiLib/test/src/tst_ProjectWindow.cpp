@@ -1206,6 +1206,49 @@ TEST_CASE("ProjectWindow")
     QTRY_COMPARE(thumbnail().pixelColor(0, 0), QColor{Qt::blue});
   }
 
+  SECTION("deleting a library asset survives a rescan")
+  {
+    const auto folder = directory.filePath("delete-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    const auto path = folder + "/color.png";
+    auto image = QImage{32, 32, QImage::Format_RGB32};
+    image.fill(Qt::red);
+    REQUIRE(image.save(path));
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->scan());
+
+    auto browser = AssetLibraryWindow{folder, false, &window};
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* remove = browser.findChild<QPushButton*>("AssetLibraryDeleteButton");
+    REQUIRE(grid);
+    REQUIRE(remove);
+    QTRY_COMPARE(grid->count(), 1);
+    grid->setCurrentRow(0);
+    QTRY_VERIFY(remove->isEnabled());
+
+    auto timer = QTimer{};
+    QObject::connect(&timer, &QTimer::timeout, [] {
+      for (auto* widget : QApplication::topLevelWidgets())
+        if (auto* message = dynamic_cast<QMessageBox*>(widget);
+            message && message->isVisible())
+          if (auto* yes = message->button(QMessageBox::Yes))
+            yes->click();
+    });
+    timer.start(10);
+    remove->click();
+    timer.stop();
+    QTRY_COMPARE(grid->count(), 0);
+
+    // The source file stays on disk, but rescanning the folder must not resurrect the
+    // catalog entry that the user deleted.
+    auto source = openLocalAssetLibrary(pathFromQString(folder));
+    REQUIRE(source);
+    require(source->rescan());
+    CHECK(require(source->assets()).empty());
+    CHECK(QFile::exists(path));
+  }
+
   SECTION("library and project browsers share metadata capture and identity navigation")
   {
     const auto folder = directory.filePath("shared-library");

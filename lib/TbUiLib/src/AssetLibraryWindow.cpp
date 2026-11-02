@@ -486,6 +486,10 @@ void AssetLibraryWindow::buildUi()
   m_favoriteButton->setObjectName(QStringLiteral("AssetLibraryFavoriteButton"));
   m_renameButton = new QPushButton{tr("Rename…"), actionRow};
   m_deleteButton = new QPushButton{tr("Delete…"), actionRow};
+  m_deleteButton->setObjectName(QStringLiteral("AssetLibraryDeleteButton"));
+  m_deleteButton->setToolTip(
+    tr("Remove this asset from the library. The source file stays on disk, and a later "
+       "rescan will not add it back."));
   m_favoriteButton->setEnabled(false);
   m_renameButton->setEnabled(false);
   m_deleteButton->setEnabled(false);
@@ -579,7 +583,8 @@ void AssetLibraryWindow::buildUi()
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
   splitter->setStretchFactor(2, 0);
-  splitter->setSizes({196, 660, 320});
+  // The inspector holds the shared preview; give it room for a usable 3D render.
+  splitter->setSizes({196, 620, 400});
   layout->addWidget(splitter, 1);
 
   m_footer = new QLabel{this};
@@ -1988,7 +1993,9 @@ void AssetLibraryWindow::deleteSelected()
   const auto answer = QMessageBox::question(
     this,
     tr("Delete Asset"),
-    tr("Remove '%1' from the library catalog?\n\nThe source file is kept.")
+    tr("Remove '%1' from the library?\n\nThe source file is kept and a later rescan "
+       "will not add the asset back. Projects keep their captured copies. Import the "
+       "source again to restore it.")
       .arg(QString::fromStdString(asset->displayName)),
     QMessageBox::Yes | QMessageBox::Cancel);
   if (answer != QMessageBox::Yes)
