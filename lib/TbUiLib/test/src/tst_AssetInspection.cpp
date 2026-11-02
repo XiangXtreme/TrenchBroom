@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QImage>
 #include <QLabel>
+#include <QListView>
 #include <QMediaPlayer>
 #include <QPushButton>
 #include <QSlider>
@@ -20,7 +21,9 @@
 #include "ui/AssetInspection.h"
 #include "ui/AssetInspector.h"
 #include "ui/AssetLibraryImport.h"
+#include "ui/AssetLibraryItemDelegate.h"
 #include "ui/AssetLibrarySource.h"
+#include "ui/AssetLibraryWindow.h"
 #include "ui/ModelThumbnail.h"
 #include "ui/QPathUtils.h"
 
@@ -363,6 +366,17 @@ TEST_CASE("AssetInspection")
     CHECK(sky.resource.skybox);
     for (const auto& face : sky.skyOriginal)
       CHECK_FALSE(face.isNull());
+
+    auto window = AssetLibraryWindow{pathAsQString(folder), false};
+    window.resize(900, 600);
+    window.show();
+    QTest::qWait(200);
+    const auto* grid = window.findChild<QListView*>("AssetLibraryGrid");
+    REQUIRE(grid != nullptr);
+    REQUIRE(grid->model()->rowCount() == 1);
+    const auto pixmap = qvariant_cast<QPixmap>(grid->model()->data(
+      grid->model()->index(0, 0), AssetLibraryItemDelegate::ThumbnailRole));
+    CHECK_FALSE(pixmap.isNull());
   }
 
   SECTION("GoldSrc studio models preview the bind pose and body variants")

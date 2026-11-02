@@ -1215,10 +1215,23 @@ QImage AssetLibraryWindow::thumbnail(const project::LibraryAsset& asset) const
 
 QImage AssetLibraryWindow::loadThumbnail(const project::LibraryAsset& asset) const
 {
-  if (
-    !m_source || asset.type == project::AssetType::Sound
-    || asset.type == project::AssetType::Skybox)
+  if (!m_source || asset.type == project::AssetType::Sound)
     return {};
+
+  if (asset.type == project::AssetType::Skybox)
+  {
+    const auto inspected = inspection::readLibraryAsset(*m_source, asset);
+    if (inspected.is_error())
+      return {};
+    const auto& sky = inspected.value();
+    auto faces = sky.skyOriginal;
+    for (auto i = size_t{}; i < faces.size(); ++i)
+      if (!sky.skyCompatible[i].isNull())
+        faces[i] = sky.skyCompatible[i];
+    if (std::ranges::all_of(faces, [](const auto& face) { return face.isNull(); }))
+      return {};
+    return inspection::renderSkyView(faces, 0.0, 0.0, 256, 256);
+  }
 
   if (asset.type == project::AssetType::Model)
     return renderModelThumbnail(
