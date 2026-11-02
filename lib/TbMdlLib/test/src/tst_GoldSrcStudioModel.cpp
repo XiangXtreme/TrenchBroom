@@ -437,19 +437,24 @@ TEST_CASE("GoldSrcStudioModel")
     writeAt(main, sequenceOffset, "animate", 8);
     writeAt(main, sequenceOffset + 32, 15.0f);
     writeAt(main, sequenceOffset + 56, int32_t{1});
-    writeAt(main, sequenceOffset + 120, int32_t{1});
+    writeAt(main, sequenceOffset + 120, int32_t{2});
     writeAt(main, sequenceOffset + 124, int32_t{76});
     writeAt(main, sequenceOffset + 156, int32_t{1});
     writeAt(main, groupTableOffset + 104 + 32, "group01.mdl", 12);
 
-    auto group = std::vector<std::uint8_t>(104, 0);
+    auto group = std::vector<std::uint8_t>(132, 0);
     writeAt(group, 0, uint32_t{0x51534449}); // "IDSQ"
     writeAt(group, 4, uint32_t{10});
-    // Bone 1 channel 0 points at the run at offset 100 (block + 12).
-    writeAt(group, 76 + 12, uint16_t{12});
-    group[100] = 1; // valid
-    group[101] = 1; // total
-    writeAt(group, 102, int16_t{5});
+    // Blend 0 bone 1 X points at 124 (block 88 + 36); blend 1 bone 1 X at 128
+    // (block 112 + 16). Both runs sit after the two animation tables.
+    writeAt(group, 76 + 12, uint16_t{36});
+    writeAt(group, 100 + 12, uint16_t{16});
+    group[124] = 1; // valid
+    group[125] = 1; // total
+    writeAt(group, 126, int16_t{5});
+    group[128] = 1; // valid
+    group[129] = 1; // total
+    writeAt(group, 130, int16_t{9});
 
     auto groups = std::vector<std::vector<std::uint8_t>>{std::move(group)};
     const auto external = GoldSrcStudioExternalData{nullptr, &groups};
@@ -457,6 +462,7 @@ TEST_CASE("GoldSrcStudioModel")
     REQUIRE(info.is_success());
     REQUIRE(info.value().sequenceList.size() == 1);
     CHECK(info.value().sequenceList.front().group == 1);
+    CHECK(info.value().sequenceList.front().blends == 2);
     REQUIRE(info.value().sequenceGroupFiles.size() == 2);
     CHECK(info.value().sequenceGroupFiles[1] == "group01.mdl");
 
@@ -464,10 +470,60 @@ TEST_CASE("GoldSrcStudioModel")
     REQUIRE(posed.is_success());
     CHECK_THAT(posed.value().positions.front().x(), Catch::Matchers::WithinAbs(16.0f, 0.001));
 
+    const auto secondBlend =
+      buildGoldSrcStudioMesh(main, {}, 0, 0, true, external, 0, 1);
+    REQUIRE(secondBlend.is_success());
+    CHECK_THAT(
+      secondBlend.value().positions.front().x(), Catch::Matchers::WithinAbs(20.0f, 0.001));
+
     // Without the group file the same sequence falls back to the bone rest pose.
     const auto rest = buildGoldSrcStudioMesh(main);
     REQUIRE(rest.is_success());
     CHECK_THAT(rest.value().positions.front().x(), Catch::Matchers::WithinAbs(11.0f, 0.001));
+  }
+
+  SECTION("applies neutral bone controller offsets")
+  {
+    auto main = makeStudioModel();
+    const auto controllerOffset = std::uint32_t(main.size());
+    main.resize(main.size() + 24, 0);
+    auto header = *reinterpret_cast<StudioHeader*>(main.data());
+    header.numbonecontrollers = 1;
+    header.bonecontrollerindex = int32_t(controllerOffset);
+    writeAt(main, 0, header);
+
+    writeAt(main, controllerOffset, int32_t{1}); // bone
+    writeAt(main, controllerOffset + 4, int32_t{0x0010}); // STUDIO_YR
+    writeAt(main, controllerOffset + 8, 0.0f); // start
+    writeAt(main, controllerOffset + 12, 90.0f); // end
+    writeAt(main, controllerOffset + 16, int32_t{0}); // rest
+    writeAt(main, controllerOffset + 20, int32_t{3}); // user controller
+    // Unused bone controller slots are -1 in engine-authored models.
+    for (auto bone = 0; bone < 2; ++bone)
+      for (auto channel = 0; channel < 6; ++channel)
+        writeAt(
+          main,
+          sizeof(StudioHeader) + std::size_t(bone) * sizeof(StudioBone) + 40
+            + std::size_t(channel) * 4,
+          int32_t{-1});
+    // Bone 1 Y rotation uses controller table entry 0.
+    writeAt(
+      main,
+      sizeof(StudioHeader) + sizeof(StudioBone) + 40 + 4 * 4,
+      int32_t{0});
+
+    const auto info = readGoldSrcStudioModelInfo(main);
+    REQUIRE(info.is_success());
+    CHECK(info.value().boneControllers == 1);
+
+    const auto mesh = buildGoldSrcStudioMesh(main);
+    REQUIRE(mesh.is_success());
+    const auto& position = mesh.value().positions.front();
+    const auto angle = 127.0f / 255.0f * 90.0f * 3.14159265f / 180.0f;
+    CHECK_THAT(
+      position.x(), Catch::Matchers::WithinAbs(10.0f + std::cos(angle), 0.01f));
+    CHECK_THAT(
+      std::abs(position.z()), Catch::Matchers::WithinAbs(std::sin(angle), 0.01f));
   }
 
   SECTION("composes bone rotations in the rest pose")

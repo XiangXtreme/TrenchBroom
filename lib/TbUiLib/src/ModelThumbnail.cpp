@@ -114,10 +114,11 @@ std::optional<ModelPreviewFrame> loadGoldSrcStudioFrame(
   const std::vector<std::size_t>& variants,
   const bool decodeTexturePixels,
   const mdl::GoldSrcStudioExternalData& external,
-  const std::size_t skinFamily)
+  const std::size_t skinFamily,
+  const std::size_t blend)
 {
   auto mesh = mdl::buildGoldSrcStudioMesh(
-    bytes, variants, sequence, frame, decodeTexturePixels, external, skinFamily);
+    bytes, variants, sequence, frame, decodeTexturePixels, external, skinFamily, blend);
   if (mesh.is_error() || mesh.value().triangles.empty())
     return std::nullopt;
 

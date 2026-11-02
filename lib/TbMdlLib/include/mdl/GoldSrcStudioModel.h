@@ -26,6 +26,7 @@ struct GoldSrcStudioSequence
   float fps = 0.0f;
   bool looping = false;
   std::size_t frameCount = 0;
+  std::size_t blends = 1;
   // 0 is embedded in the main file; larger values need the matching sequence group.
   std::size_t group = 0;
 };
@@ -64,6 +65,7 @@ struct GoldSrcStudioModelInfo
   std::string name;
   vm::bbox3f bounds;
   std::size_t bones = 0;
+  std::size_t boneControllers = 0;
   std::size_t sequenceGroups = 1;
   std::size_t sequences = 0;
   // True when the texture and skin tables were read from a separate header.
@@ -111,7 +113,8 @@ struct GoldSrcStudioMesh
  *
  * The pose is decoded from the requested sequence, which is how the engine renders a
  * model; frame 0 of the first sequence is therefore the bind pose. Models without
- * sequences fall back to the bone rest values. Bone controllers are not applied. When
+ * sequences fall back to the bone rest values. Bone controllers use the game's neutral
+ * client value 127; blend selects one of the sequence's animation blends. When
  * decodeTexturePixels is false, only texture dimensions and normalized UVs are read so
  * callers can reuse pixels decoded for an earlier frame of the same model.
  */
@@ -122,6 +125,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   std::size_t frame = 0,
   bool decodeTexturePixels = true,
   const GoldSrcStudioExternalData& external = {},
-  std::size_t skinFamily = 0);
+  std::size_t skinFamily = 0,
+  std::size_t blend = 0);
 
 } // namespace tb::mdl

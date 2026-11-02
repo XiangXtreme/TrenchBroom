@@ -491,10 +491,12 @@ gordon.mdl 下摘要显示 `look_idle frame 0`、序列下拉 77 项、帧滑块
   兄弟文件不重复覆盖，替换时同步更新。
 - 检查器显示 `(N loaded)`、`external group` / `external group missing`，并新增
   Skin family 下拉；texture 详情区分内嵌与外置头。
+- 骨骼控制器按游戏客户端的中性值 127 计算旋转/位移偏移，详情显示控制器数量；
+  `numblends > 1` 的序列新增 Blend 下拉，可查看每个动画混合。
 - 同时修正：蒙版贴图 255 索引透明、chrome/additive 贴图的近似渲染、去除动画 run
   的 4096 次硬上限。
 - 验证：合成 T 头、合成 IDSQ 组、真实 `agrunt.mdl`（71 个外置贴图模型之一）、
   `scientist.mdl`（外置组）与 `gordon.mdl` 的 `AssetInspection` 全通过；
   兄弟缩略图路径单独回归。模型库 140 项与 UI 库 128 项全量 CTest 无失败。
-- 仍待处理：骨骼控制器的可调中性值、逐顶点法线的精确 chrome、`numblends > 1`
-  的显式混合选择；工程快照若未捕获 T/组文件，仍只能显示主文件内容。
+- 仍待处理：逐顶点法线的精确 chrome、骨骼控制器滑杆；工程快照若未捕获 T/组文件，
+  仍只能显示主文件内容。

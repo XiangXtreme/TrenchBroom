@@ -72,12 +72,14 @@ class AssetInspector : public QWidget
   QCheckBox* m_modelOrigin = nullptr;
   QWidget* m_studioControls = nullptr;
   QComboBox* m_studioSequence = nullptr;
+  QComboBox* m_studioBlend = nullptr;
   QComboBox* m_studioSkin = nullptr;
   QPushButton* m_studioPlay = nullptr;
   QSlider* m_studioFrame = nullptr;
   QTimer* m_studioTimer = nullptr;
   std::size_t m_studioSequenceIndex = 0;
   std::size_t m_studioFrameIndex = 0;
+  std::size_t m_studioBlendIndex = 0;
   std::size_t m_studioSkinFamily = 0;
   std::optional<ModelPreviewScene> m_model;
   std::optional<mdl::GoldSrcStudioModelInfo> m_studioModel;
@@ -119,6 +121,7 @@ private:
   void showModel();
   void showPrefab();
   void configureStudioModel();
+  void configureStudioBlend();
   void rebuildStudioPose();
   void showStudioFrame();
   void stepStudioAnimation();

@@ -27,6 +27,7 @@ constexpr std::uint32_t StudioVersion = 10;
 constexpr std::size_t HeaderSize = 244;
 constexpr std::size_t SequenceHeaderSize = 76;
 constexpr std::size_t BoneSize = 112;
+constexpr std::size_t BoneControllerSize = 24;
 constexpr std::size_t TextureSize = 80;
 constexpr std::size_t BodyPartSize = 76;
 constexpr std::size_t ModelSize = 112;
@@ -104,6 +105,8 @@ struct Header
   std::string name;
   std::size_t bones = 0;
   std::size_t boneOffset = 0;
+  std::size_t boneControllers = 0;
+  std::size_t boneControllerOffset = 0;
   std::size_t sequences = 0;
   std::size_t sequenceOffset = 0;
   std::size_t sequenceGroups = 1;
@@ -253,6 +256,9 @@ Result<Header> readHeader(const Bytes& bytes)
   header.name = readFixedString(bytes, 8, 64);
   header.bones = countAt(bytes, 140, MaxBones);
   header.boneOffset = tableAt(bytes, 144, header.bones, BoneSize);
+  header.boneControllers = countAt(bytes, 148, 64);
+  header.boneControllerOffset =
+    tableAt(bytes, 152, header.boneControllers, BoneControllerSize);
   header.sequences = countAt(bytes, 164, MaxSequences);
   header.sequenceOffset = tableAt(bytes, 168, header.sequences, SequenceSize);
   header.sequenceGroups = std::max(std::size_t{1}, countAt(bytes, 172, 1024));
@@ -270,6 +276,8 @@ Result<Header> readHeader(const Bytes& bytes)
 
   if (header.bones > 0 && header.boneOffset == 0)
     return Error{"The studio model bone table lies outside the file."};
+  if (header.boneControllers > 0 && header.boneControllerOffset == 0)
+    return Error{"The studio model bone controller table lies outside the file."};
   if (header.textures > 0 && header.textureOffset == 0)
     return Error{"The studio model texture table lies outside the file."};
   if (header.bodyParts > 0 && header.bodyPartOffset == 0)
@@ -362,12 +370,44 @@ Transform transformFromValues(const std::array<float, 6>& values)
   return result;
 }
 
-Transform boneRestTransform(const Bytes& bytes, const std::size_t offset)
+/** Controller offsets for the game's neutral client value (127 for user controllers). */
+std::vector<float> readBoneControllerAdjustments(const Bytes& bytes, const Header& header)
 {
-  auto values = std::array<float, 6>{};
-  for (auto channel = std::size_t{0}; channel < 6; ++channel)
-    values[channel] = readf32(bytes, offset + 64 + channel * 4);
-  return transformFromValues(values);
+  auto adjustments = std::vector<float>(header.boneControllers, 0.0f);
+  for (auto i = std::size_t{0}; i < header.boneControllers; ++i)
+  {
+    const auto offset = header.boneControllerOffset + i * BoneControllerSize;
+    const auto type = readi32(bytes, offset + 4);
+    const auto start = readf32(bytes, offset + 8);
+    const auto end = readf32(bytes, offset + 12);
+    const auto index = readi32(bytes, offset + 20);
+    if (!std::isfinite(start) || !std::isfinite(end))
+      continue;
+
+    const auto neutral = index >= 0 && index <= 3 ? 127.0f : 0.0f;
+    auto value = 0.0f;
+    if ((type & 0x8000) != 0)
+      value = neutral * (360.0f / 256.0f) + start;
+    else
+      value = start + (neutral / 255.0f) * (end - start);
+
+    switch (type & 0x7FFF)
+    {
+    case 0x0008: // STUDIO_XR
+    case 0x0010: // STUDIO_YR
+    case 0x0020: // STUDIO_ZR
+      adjustments[i] = value * 3.14159265358979323846f / 180.0f;
+      break;
+    case 0x0001: // STUDIO_X
+    case 0x0002: // STUDIO_Y
+    case 0x0004: // STUDIO_Z
+      adjustments[i] = value;
+      break;
+    default:
+      break;
+    }
+  }
+  return adjustments;
 }
 
 vm::vec3f applyTransform(const Transform& transform, const vm::vec3f& point)
@@ -450,6 +490,7 @@ std::optional<std::vector<BonePose>> readSequencePose(
   const Header& header,
   const std::size_t sequence,
   const std::size_t frame,
+  const std::size_t blend,
   const GoldSrcStudioExternalData& external)
 {
   if (sequence >= header.sequences || header.sequenceOffset == 0)
@@ -462,7 +503,7 @@ std::optional<std::vector<BonePose>> readSequencePose(
   const auto group = readi32(bytes, offset + 156);
   if (frameCount == 0 || blends == 0 || animIndex <= 0 || group < 0)
     return std::nullopt;
-  if (frame >= frameCount)
+  if (frame >= frameCount || blend >= blends)
     return std::nullopt;
 
   // Group 0 stores its animation table in the main file; every later group has its own
@@ -484,11 +525,12 @@ std::optional<std::vector<BonePose>> readSequencePose(
     animationBytes = &groupBytes;
   }
 
-  const auto animationOffset =
+  const auto animationBase =
     group == 0 ? header.sequenceGroupBase + std::size_t(animIndex)
                : std::size_t(animIndex);
-  if (!contains(*animationBytes, animationOffset, blends * header.bones * AnimationSize))
+  if (!contains(*animationBytes, animationBase, blends * header.bones * AnimationSize))
     return std::nullopt;
+  const auto animationOffset = animationBase + blend * header.bones * AnimationSize;
 
   auto pose = std::vector<BonePose>(header.bones, BonePose{});
   for (auto bone = std::size_t{0}; bone < header.bones; ++bone)
@@ -514,12 +556,31 @@ std::optional<std::vector<BonePose>> readSequencePose(
 }
 
 std::vector<Transform> readBoneTransforms(
-  const Bytes& bytes, const Header& header, const std::optional<std::vector<BonePose>>& pose)
+  const Bytes& bytes,
+  const Header& header,
+  const std::optional<std::vector<BonePose>>& pose,
+  const std::vector<float>& controllerAdjustments)
 {
   auto local = std::vector<Transform>(header.bones, Transform{});
   for (auto i = std::size_t{0}; i < header.bones; ++i)
-    local[i] = pose && i < pose->size() ? transformFromValues((*pose)[i].values)
-                                        : boneRestTransform(bytes, header.boneOffset + i * BoneSize);
+  {
+    const auto boneOffset = header.boneOffset + i * BoneSize;
+    auto values = std::array<float, 6>{};
+    if (pose && i < pose->size())
+      values = (*pose)[i].values;
+    else
+      for (auto channel = std::size_t{0}; channel < 6; ++channel)
+        values[channel] = readf32(bytes, boneOffset + 64 + channel * 4);
+
+    for (auto channel = std::size_t{0}; channel < 6; ++channel)
+    {
+      const auto controller = readi32(bytes, boneOffset + 40 + channel * 4);
+      if (
+        controller >= 0 && std::size_t(controller) < controllerAdjustments.size())
+        values[channel] += controllerAdjustments[std::size_t(controller)];
+    }
+    local[i] = transformFromValues(values);
+  }
 
   auto world = std::vector<Transform>(header.bones, Transform{});
   // Parents precede children in every engine-authored model; resolve in passes so a
@@ -577,6 +638,7 @@ Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
   result.name = value.name;
   result.bounds = value.bounds;
   result.bones = value.bones;
+  result.boneControllers = value.boneControllers;
   result.sequenceGroups = value.sequenceGroups;
   result.sequences = value.sequences;
   result.externalTextures = value.externalTextures;
@@ -601,6 +663,7 @@ Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
     sequence.fps = readf32(bytes, offset + 32);
     sequence.looping = (readi32(bytes, offset + 36) & 1) != 0;
     sequence.frameCount = countAt(bytes, offset + 56, 100000);
+    sequence.blends = std::max<std::size_t>(1, countAt(bytes, offset + 120, 16));
     const auto group = readi32(bytes, offset + 156);
     sequence.group = group > 0 ? std::size_t(group) : std::size_t{0};
     result.sequenceList.push_back(std::move(sequence));
@@ -634,7 +697,8 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   const std::size_t frame,
   const bool decodeTexturePixels,
   const GoldSrcStudioExternalData& external,
-  const std::size_t skinFamily)
+  const std::size_t skinFamily,
+  const std::size_t blend)
 {
   auto header = readHeader(bytes);
   if (header.is_error())
@@ -645,8 +709,9 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   if (value.bodyParts == 0)
     return Error{"The studio model has no body parts."};
 
-  const auto pose = readSequencePose(bytes, value, sequence, frame, external);
-  const auto bones = readBoneTransforms(bytes, value, pose);
+  const auto pose = readSequencePose(bytes, value, sequence, frame, blend, external);
+  const auto adjustments = readBoneControllerAdjustments(bytes, value);
+  const auto bones = readBoneTransforms(bytes, value, pose, adjustments);
   const auto& textureBytes =
     value.externalTextures ? *external.textureHeader : bytes;
   auto textures = decodeTextures(textureBytes, value, decodeTexturePixels);

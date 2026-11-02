@@ -303,6 +303,10 @@ AssetInspector::AssetInspector(QWidget* parent)
   m_studioSequence = new QComboBox{};
   m_studioSequence->setAccessibleName(tr("Sequence"));
   m_studioSequence->setObjectName("AssetInspector_ModelSequence");
+  m_studioBlend = new QComboBox{};
+  m_studioBlend->setAccessibleName(tr("Animation blend"));
+  m_studioBlend->setObjectName("AssetInspector_ModelBlend");
+  m_studioBlend->hide();
   m_studioSkin = new QComboBox{};
   m_studioSkin->setAccessibleName(tr("Skin family"));
   m_studioSkin->setObjectName("AssetInspector_ModelSkin");
@@ -318,6 +322,7 @@ AssetInspector::AssetInspector(QWidget* parent)
   studioTop->addWidget(m_studioSequence, 1);
   studioTop->addWidget(m_studioPlay);
   studioLayout->addLayout(studioTop);
+  studioLayout->addWidget(m_studioBlend);
   studioLayout->addWidget(m_studioSkin);
   studioLayout->addWidget(m_studioFrame);
   auto* modelButtons = new QHBoxLayout{};
@@ -359,7 +364,14 @@ AssetInspector::AssetInspector(QWidget* parent)
     m_studioFrame->setRange(0, int(std::max<std::size_t>(1, frames)) - 1);
     m_studioFrame->setValue(0);
     m_studioFrameIndex = 0;
+    configureStudioBlend();
     showStudioFrame();
+  });
+  connect(m_studioBlend, &QComboBox::currentIndexChanged, this, [this](const int index) {
+    if (index < 0)
+      return;
+    m_studioBlendIndex = std::size_t(index);
+    rebuildStudioPose();
   });
   connect(m_studioSkin, &QComboBox::currentIndexChanged, this, [this](const int index) {
     if (index < 0)
@@ -474,7 +486,14 @@ void AssetInspector::clear()
   m_studioExternal = {};
   m_studioVariants.clear();
   m_studioChoices.clear();
+  m_studioBlendIndex = 0;
   m_studioSkinFamily = 0;
+  if (m_studioBlend)
+  {
+    const auto blocker = QSignalBlocker{m_studioBlend};
+    m_studioBlend->clear();
+    m_studioBlend->hide();
+  }
   if (m_studioSkin)
   {
     const auto blocker = QSignalBlocker{m_studioSkin};
@@ -876,6 +895,7 @@ void AssetInspector::configureStudioModel()
     m_studioFrame->setRange(0, int(frames) - 1);
     m_studioFrame->setValue(0);
   }
+  configureStudioBlend();
 
   m_modelLimits->setText(
     tr("GoldSrc studio model · animation and textures decoded.\n"
@@ -883,6 +903,7 @@ void AssetInspector::configureStudioModel()
 
   const auto keys = std::array{
     tr("Bones"),
+    tr("Bone controllers"),
     tr("Sequences"),
     tr("Body variants"),
     tr("Skin families"),
@@ -900,6 +921,7 @@ void AssetInspector::configureStudioModel()
   for (const auto& bodyPart : studio.bodyParts)
     variants += bodyPart.variants.size();
   add(tr("Bones"), QString::number(qulonglong(studio.bones)));
+  add(tr("Bone controllers"), QString::number(qulonglong(studio.boneControllers)));
   auto loadedGroups = std::size_t{0};
   if (m_studioExternal.sequenceGroups)
     for (const auto& group : *m_studioExternal.sequenceGroups)
@@ -935,6 +957,23 @@ void AssetInspector::configureStudioModel()
       .arg(size.z(), 0, 'f', 1));
 }
 
+void AssetInspector::configureStudioBlend()
+{
+  if (!m_studioBlend)
+    return;
+  const auto blends =
+    m_studioModel && m_studioSequenceIndex < m_studioModel->sequenceList.size()
+      ? m_studioModel->sequenceList[m_studioSequenceIndex].blends
+      : std::size_t{1};
+  const auto blocker = QSignalBlocker{m_studioBlend};
+  m_studioBlend->clear();
+  for (auto blend = std::size_t{0}; blend < blends; ++blend)
+    m_studioBlend->addItem(tr("Blend %1").arg(qulonglong(blend + 1)));
+  m_studioBlend->setCurrentIndex(0);
+  m_studioBlend->setVisible(blends > 1);
+  m_studioBlendIndex = 0;
+}
+
 void AssetInspector::rebuildStudioPose()
 {
   if (!m_asset || !m_studioModel || !m_model)
@@ -947,7 +986,8 @@ void AssetInspector::rebuildStudioPose()
     m_studioVariants,
     !reuseTextures,
     m_studioExternal,
-    m_studioSkinFamily);
+    m_studioSkinFamily,
+    m_studioBlendIndex);
   if (!frame)
   {
     m_studioPlay->setChecked(false);

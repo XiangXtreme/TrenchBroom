@@ -80,7 +80,8 @@ std::optional<ModelPreviewFrame> loadGoldSrcStudioFrame(
   const std::vector<std::size_t>& variants = {},
   bool decodeTexturePixels = true,
   const mdl::GoldSrcStudioExternalData& external = {},
-  std::size_t skinFamily = 0);
+  std::size_t skinFamily = 0,
+  std::size_t blend = 0);
 
 std::optional<ModelPreviewScene> loadModelPreviewScene(
   const std::filesystem::path& folder,

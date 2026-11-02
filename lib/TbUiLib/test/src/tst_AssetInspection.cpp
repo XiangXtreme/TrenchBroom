@@ -319,7 +319,12 @@ TEST_CASE("AssetInspection")
   }
   SECTION("GoldSrc studio models preview the bind pose and body variants")
   {
-    const auto bytes = studioModel();
+    auto bytes = studioModel();
+    auto sequenceOffset = std::uint32_t{};
+    std::memcpy(&sequenceOffset, bytes.data() + 168, sizeof(sequenceOffset));
+    const auto twoBlends = int32_t{2};
+    std::memcpy(
+      bytes.data() + sequenceOffset + 120, &twoBlends, sizeof(twoBlends));
     const auto scene = loadGoldSrcStudioPreviewScene(bytes);
     REQUIRE(scene);
     REQUIRE(scene->studioModel);
@@ -390,10 +395,12 @@ TEST_CASE("AssetInspection")
 
     auto* sequence = inspector.findChild<QComboBox*>("AssetInspector_ModelSequence");
     auto* skin = inspector.findChild<QComboBox*>("AssetInspector_ModelSkin");
+    auto* blend = inspector.findChild<QComboBox*>("AssetInspector_ModelBlend");
     auto* frame = inspector.findChild<QSlider*>("AssetInspector_ModelFrame");
     auto* play = inspector.findChild<QPushButton*>("AssetInspector_ModelPlay");
     REQUIRE(sequence != nullptr);
     REQUIRE(skin != nullptr);
+    REQUIRE(blend != nullptr);
     REQUIRE(frame != nullptr);
     REQUIRE(play != nullptr);
     inspector.show();
@@ -401,6 +408,10 @@ TEST_CASE("AssetInspection")
     CHECK(skin->count() == 3);
     skin->setCurrentIndex(1);
     CHECK(skin->currentIndex() == 1);
+    CHECK_FALSE(blend->isHidden());
+    CHECK(blend->count() == 2);
+    blend->setCurrentIndex(1);
+    CHECK(blend->currentIndex() == 1);
     CHECK_FALSE(sequence->isHidden());
     CHECK(sequence->count() == 4);
     CHECK(frame->maximum() == 1);
