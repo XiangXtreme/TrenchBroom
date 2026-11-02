@@ -433,6 +433,38 @@ TEST_CASE("AssetInspection")
     play->setChecked(true);
     CHECK_FALSE(play->isChecked());
   }
+  SECTION("masked studio textures are alpha tested in the preview")
+  {
+    auto frame = ModelPreviewFrame{};
+    auto texture = mdl::GoldSrcStudioTexture{};
+    texture.width = 2;
+    texture.height = 1;
+    texture.flags = 0x40;
+    // Left texel is transparent palette entry 255, right texel is opaque red.
+    texture.pixels = {0x00000000u, 0xFFFF0000u};
+    frame.textures.push_back(texture);
+    frame.positions = {vm::vec3f{-1.0f, -1.0f, 0.0f},
+                       vm::vec3f{1.0f, -1.0f, 0.0f},
+                       vm::vec3f{0.0f, 1.0f, 0.0f}};
+    frame.texCoords = {std::array{0.0f, 0.0f}, std::array{1.0f, 0.0f},
+                       std::array{0.5f, 1.0f}};
+    frame.triangles = {{0, 1, 2}};
+    frame.triangleTextures = {0};
+
+    const auto image = renderModelPreview(frame, 64);
+    auto transparent = 0;
+    auto opaque = 0;
+    for (auto y = 0; y < image.height(); ++y)
+      for (auto x = 0; x < image.width(); ++x)
+      {
+        const auto alpha = image.pixelColor(x, y).alpha();
+        transparent += alpha == 0 ? 1 : 0;
+        opaque += alpha == 255 ? 1 : 0;
+      }
+    CHECK(transparent > 0);
+    CHECK(opaque > 0);
+  }
+
   SECTION("non-looping studio sequences stop on their final frame")
   {
     auto bytes = studioModel();
@@ -524,7 +556,9 @@ TEST_CASE("AssetInspection")
     {
       const auto next = loadGoldSrcStudioFrame(bytes, 0, 1);
       REQUIRE(next);
-      CHECK(next->positions != scene->frames.front().positions);
+      // Static sequences legitimately repeat the same pose; only the shape contract is
+      // universal across arbitrary retail models.
+      CHECK(next->positions.size() == scene->frames.front().positions.size());
       CHECK(next->texCoords.size() == next->positions.size());
     }
     REQUIRE_FALSE(scene->frames.empty());

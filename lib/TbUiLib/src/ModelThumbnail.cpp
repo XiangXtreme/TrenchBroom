@@ -293,6 +293,15 @@ QImage renderModelPreview(
           const auto c10 = sample(x1, y0);
           const auto c01 = sample(x0, y1);
           const auto c11 = sample(x1, y1);
+          // Masked textures use palette entry 255 as transparent. Alpha-test the
+          // interpolated sample the way the engine does instead of blending it.
+          const auto topAlpha = float((c00 >> 24) & 0xFF) * (1.0f - tx)
+                                + float((c10 >> 24) & 0xFF) * tx;
+          const auto bottomAlpha = float((c01 >> 24) & 0xFF) * (1.0f - tx)
+                                   + float((c11 >> 24) & 0xFF) * tx;
+          const auto alpha = topAlpha * (1.0f - ty) + bottomAlpha * ty;
+          if ((item.texture->flags & 0x0040u) != 0 && alpha < 128.0f)
+            continue;
           const auto blend = [&](const int shift) {
             const auto top = float((c00 >> shift) & 0xFF) * (1.0f - tx)
                              + float((c10 >> shift) & 0xFF) * tx;

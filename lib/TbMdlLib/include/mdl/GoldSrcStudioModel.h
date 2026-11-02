@@ -66,7 +66,9 @@ struct GoldSrcStudioTexture
 {
   std::size_t width = 0;
   std::size_t height = 0;
-  // Row-major 0xAARRGGBB pixels.
+  // GoldSrc texture flags (STUDIO_NF_*); bit 0x40 marks a masked texture.
+  std::uint32_t flags = 0;
+  // Row-major 0xAARRGGBB pixels; a masked texture's palette entry 255 is transparent.
   std::vector<std::uint32_t> pixels;
 };
 

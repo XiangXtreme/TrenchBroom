@@ -343,6 +343,39 @@ TEST_CASE("GoldSrcStudioModel")
     CHECK(buildGoldSrcStudioMesh(bytes).value().positions.front().x() == 11.0f);
   }
 
+  SECTION("decodes masked texture transparency")
+  {
+    auto bytes = makeStudioModel();
+    const auto header = *reinterpret_cast<const StudioHeader*>(bytes.data());
+    const auto textureOffset = std::size_t(header.textureindex);
+    const auto dataOffset = bytes.size();
+    constexpr auto Count = std::size_t{4};
+    bytes.resize(dataOffset + Count + 768, 0);
+    // Two of the four texels use palette entry 255, which is transparent when masked.
+    bytes[dataOffset + 0] = 255;
+    bytes[dataOffset + 1] = 0;
+    bytes[dataOffset + 2] = 255;
+    bytes[dataOffset + 3] = 0;
+    // Palette entry 0 is red, entry 255 is blue.
+    bytes[dataOffset + Count + 0] = 255;
+    bytes[dataOffset + Count + 255 * 3 + 2] = 255;
+    writeAt(bytes, textureOffset + 64, int32_t{0x40});
+    writeAt(bytes, textureOffset + 68, int32_t{2});
+    writeAt(bytes, textureOffset + 72, int32_t{2});
+    writeAt(bytes, textureOffset + 76, int32_t(dataOffset));
+
+    const auto mesh = buildGoldSrcStudioMesh(bytes);
+    REQUIRE(mesh.is_success());
+    REQUIRE(mesh.value().textures.size() == 1);
+    const auto& texture = mesh.value().textures.front();
+    CHECK(texture.flags == 0x40);
+    REQUIRE(texture.pixels.size() == Count);
+    CHECK((texture.pixels[0] >> 24) == 0);
+    CHECK((texture.pixels[2] >> 24) == 0);
+    CHECK((texture.pixels[1] >> 24) == 0xFF);
+    CHECK(((texture.pixels[1] >> 16) & 0xFF) == 0xFF);
+  }
+
   SECTION("composes bone rotations in the rest pose")
   {
     const auto bytes = makeStudioModel(3.14159265f / 2.0f);

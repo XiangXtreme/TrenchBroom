@@ -146,6 +146,7 @@ std::vector<GoldSrcStudioTexture> decodeTextures(
   {
     const auto offset = header.textureOffset + index * TextureSize;
     auto texture = GoldSrcStudioTexture{};
+    const auto flags = readu32(bytes, offset + 64);
     const auto width = readi32(bytes, offset + 68);
     const auto height = readi32(bytes, offset + 72);
     const auto pixels = readi32(bytes, offset + 76);
@@ -157,6 +158,8 @@ std::vector<GoldSrcStudioTexture> decodeTextures(
 
     texture.width = std::size_t(width);
     texture.height = std::size_t(height);
+    texture.flags = flags;
+    const auto masked = (flags & 0x0040u) != 0;
     const auto count = texture.width * texture.height;
     const auto pixelOffset = std::size_t(std::max(0, pixels));
     if (
@@ -172,8 +175,13 @@ std::vector<GoldSrcStudioTexture> decodeTextures(
     remainingBytes -= count * sizeof(std::uint32_t);
     for (auto i = std::size_t{0}; i < count; ++i)
     {
-      const auto entry = std::size_t{bytes[pixelOffset + i]} * 3;
-      texture.pixels[i] = 0xFF000000u | (std::uint32_t{bytes[pixelOffset + count + entry]} << 16)
+      const auto paletteIndex = std::size_t{bytes[pixelOffset + i]};
+      const auto entry = paletteIndex * 3;
+      // Masked textures use the last palette entry as the transparent colour, matching
+      // the engine's indexed texture upload.
+      const auto alpha = masked && paletteIndex == 255 ? 0u : 0xFF000000u;
+      texture.pixels[i] = alpha
+                          | (std::uint32_t{bytes[pixelOffset + count + entry]} << 16)
                           | (std::uint32_t{bytes[pixelOffset + count + entry + 1]} << 8)
                           | std::uint32_t{bytes[pixelOffset + count + entry + 2]};
     }
