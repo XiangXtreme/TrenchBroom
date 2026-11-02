@@ -2149,25 +2149,52 @@ Result<std::filesystem::path> ProjectSession::libraryAssetFile(
     return std::get<Error>(asset.error());
   if (!asset.value())
     return Error{"Asset library resource not found."};
+  return materializeLibraryAsset(*library.value(), *asset.value());
+}
 
-  const auto& entry = *asset.value();
+Result<std::map<std::string, std::filesystem::path>> ProjectSession::libraryAssetFiles(
+  const std::string& libraryId, const std::vector<std::string>& libraryAssetIds)
+{
+  auto library = openLibrary(libraryId);
+  if (library.is_error())
+    return std::get<Error>(library.error());
+
+  // A browser scan asks for every non-texture resource at once, so the catalog is opened
+  // once here instead of once per resource.
+  auto files = std::map<std::string, std::filesystem::path>{};
+  for (const auto& libraryAssetId : libraryAssetIds)
+  {
+    const auto asset = library.value()->findAsset(libraryAssetId);
+    if (asset.is_error() || !asset.value())
+      continue;
+    const auto file = materializeLibraryAsset(*library.value(), *asset.value());
+    if (file.is_success())
+      files.emplace(libraryAssetId, file.value());
+  }
+  return files;
+}
+
+Result<std::filesystem::path> ProjectSession::materializeLibraryAsset(
+  const project::AssetLibrary& library, const project::LibraryAsset& entry) const
+{
+  const auto& libraryId = library.info().id;
   if (entry.type == project::AssetType::Model)
   {
     auto closure = std::map<std::string, project::LibraryAsset>{};
-    auto pending = std::vector<std::string>{libraryAssetId};
+    auto pending = std::vector<std::string>{entry.id};
     while (!pending.empty())
     {
       const auto id = pending.back();
       pending.pop_back();
       if (closure.contains(id))
         continue;
-      const auto current = library.value()->findAsset(id);
+      const auto current = library.findAsset(id);
       if (current.is_error())
         return std::get<Error>(current.error());
       if (!current.value())
         return Error{"Model preview dependency is missing."};
       closure.emplace(id, *current.value());
-      const auto edges = library.value()->dependencies(id);
+      const auto edges = library.dependencies(id);
       if (edges.is_error())
         return std::get<Error>(edges.error());
       for (const auto& edge : edges.value())
@@ -2181,7 +2208,7 @@ Result<std::filesystem::path> ProjectSession::libraryAssetFile(
     const auto digest =
       QCryptographicHash::hash(signature, QCryptographicHash::Sha256).toHex();
     const auto root = pathFromQString(m_workspace.path()) / "library-model-preview"
-                      / libraryId / libraryAssetId / digest.toStdString();
+                      / libraryId / entry.id / digest.toStdString();
     for (const auto& [id, dependency] : closure)
     {
       const auto relative =
@@ -2194,7 +2221,7 @@ Result<std::filesystem::path> ProjectSession::libraryAssetFile(
       const auto destination = root / relative;
       if (QFile::exists(pathAsQString(destination)))
         continue;
-      const auto bytes = library.value()->readContent(id, dependency.revision);
+      const auto bytes = library.readContent(id, dependency.revision);
       if (bytes.is_error())
         return std::get<Error>(bytes.error());
       const auto written = writeBytes(destination, bytes.value());
@@ -2210,12 +2237,12 @@ Result<std::filesystem::path> ProjectSession::libraryAssetFile(
   // The revision is part of the cache path, so a newer library revision can never be
   // previewed from a stale file.
   const auto path = pathFromQString(m_workspace.path()) / "library-preview" / libraryId
-                    / libraryAssetId / std::to_string(entry.revision)
+                    / entry.id / std::to_string(entry.revision)
                     / (entry.displayName + extension);
   if (QFile::exists(pathAsQString(path)))
     return path;
 
-  auto content = library.value()->readContent(libraryAssetId);
+  auto content = library.readContent(entry.id);
   if (content.is_error())
     return std::get<Error>(content.error());
   auto compatible = project::compatibleLibraryContent(entry, content.value());
@@ -2300,6 +2327,9 @@ Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
   // Content can be current while the dependency graph is not: the library may have added
   // or removed a companion the snapshot must follow. That is still an update the user has
   // to see, so it is promoted here instead of hiding behind "up to date".
+  // Every snapshot of one library is reviewed against the same catalog, so the pass opens
+  // each library once instead of once per snapshot.
+  auto opened = std::map<std::string, std::unique_ptr<project::AssetLibrary>>{};
   for (auto& update : updates)
   {
     if (update.state != project::LibraryUpdateState::UpToDate)
@@ -2307,10 +2337,15 @@ Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
     const auto asset = m_store->findAsset(update.projectAssetId);
     if (asset.is_error() || !asset.value())
       continue;
-    auto library = openLibrary(update.link.libraryId);
-    if (library.is_error())
-      continue;
-    const auto current = library.value()->findAsset(update.link.libraryAssetId);
+    auto hit = opened.find(update.link.libraryId);
+    if (hit == opened.end())
+    {
+      auto library = openLibrary(update.link.libraryId);
+      if (library.is_error())
+        continue;
+      hit = opened.emplace(update.link.libraryId, std::move(library).value()).first;
+    }
+    const auto current = hit->second->findAsset(update.link.libraryAssetId);
     if (current.is_error() || !current.value() || current.value()->missing)
       continue;
     const auto needsRefresh = snapshotNeedsRefresh(
@@ -2318,7 +2353,7 @@ Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
       update.link.libraryId,
       update.link.libraryAssetId,
       *asset.value(),
-      *library.value(),
+      *hit->second,
       *current.value());
     if (needsRefresh.is_success() && needsRefresh.value())
       update.state = project::LibraryUpdateState::DependenciesChanged;

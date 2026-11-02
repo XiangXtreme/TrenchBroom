@@ -182,7 +182,8 @@ AssetPreviewMap loadAssetPreviews(
   const std::set<std::filesystem::path>& paths,
   const AssetPreviewPathResolver& resolver)
 {
-  auto previews = AssetPreviewMap{};
+  auto pending = std::vector<const BrowserAsset*>{};
+  auto unresolved = std::vector<BrowserAsset>{};
   for (const auto& asset : assets)
   {
     if (!paths.empty() && !paths.contains(asset.path))
@@ -195,31 +196,70 @@ AssetPreviewMap loadAssetPreviews(
       || asset.type == BrowserCellType::Map)
       continue;
 
-    auto resolved = asset;
+    pending.push_back(&asset);
     if (isLibraryAsset(asset) && asset.absolutePath.empty())
     {
-      auto file = resolver ? resolver(asset)
-                           : Result<std::filesystem::path>{
-                               Error{"No library preview resolver is available."}};
-      if (file.is_error() || !file.value().is_absolute())
+      unresolved.push_back(asset);
+    }
+  }
+
+  // Library resources are resolved in one request: a page of visible cells would
+  // otherwise reopen the library catalog once per cell.
+  auto files = std::map<std::filesystem::path, std::filesystem::path>{};
+  auto fileError = std::string{};
+  if (!unresolved.empty())
+  {
+    if (!resolver)
+    {
+      fileError = "No library preview resolver is available.";
+    }
+    else if (auto resolved = resolver(unresolved); resolved.is_error())
+    {
+      fileError = std::get<Error>(resolved.error()).msg;
+    }
+    else
+    {
+      files = std::move(resolved).value();
+    }
+  }
+
+  auto previews = AssetPreviewMap{};
+  for (const auto* asset : pending)
+  {
+    auto resolved = *asset;
+    if (isLibraryAsset(*asset) && asset->absolutePath.empty())
+    {
+      const auto file = files.find(asset->path);
+      if (file == files.end())
       {
         previews.emplace(
-          asset.path,
+          asset->path,
           AssetPreviewState{
             AssetPreviewStatus::Error,
             std::nullopt,
             {},
-            file.is_error()
-              ? std::get<Error>(file.error()).msg
-              : "The library returned no absolute compatible preview file."});
+            fileError.empty()
+              ? "The library returned no absolute compatible preview file."
+              : fileError});
         continue;
       }
-      resolved.absolutePath = std::move(file).value();
+      if (!file->second.is_absolute())
+      {
+        previews.emplace(
+          asset->path,
+          AssetPreviewState{
+            AssetPreviewStatus::Error,
+            std::nullopt,
+            {},
+            "The library returned no absolute compatible preview file."});
+        continue;
+      }
+      resolved.absolutePath = file->second;
     }
     const auto preview = provider.preview(resolved);
     if (preview.status != AssetPreviewStatus::Unsupported)
     {
-      previews.emplace(asset.path, preview);
+      previews.emplace(asset->path, preview);
     }
   }
   return previews;

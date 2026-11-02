@@ -99,6 +99,9 @@ class ProjectSession : public QObject, public std::enable_shared_from_this<Proje
   Result<std::vector<project::LibraryInfo>> libraryInfos() const;
   Result<std::unique_ptr<project::AssetLibrary>> openLibrary(
     const std::string& libraryId) const;
+  /** Writes one library resource into the session cache and returns its path. */
+  Result<std::filesystem::path> materializeLibraryAsset(
+    const project::AssetLibrary& library, const project::LibraryAsset& asset) const;
   /** Builds the snapshot import for a library asset without writing anything. */
   Result<project::AssetImport> captureImport(
     const project::AssetLibrary& library,
@@ -215,6 +218,15 @@ public:
    */
   Result<std::filesystem::path> libraryAssetFile(
     const std::string& libraryId, const std::string& libraryAssetId);
+  /**
+   * Materializes the browser files of several library resources.
+   *
+   * One catalog handle answers every entry; resolving them one by one would reopen the
+   * SQLite index per asset, which dominates a browser refresh. Resources that cannot be
+   * materialized are left out instead of failing the whole batch.
+   */
+  Result<std::map<std::string, std::filesystem::path>> libraryAssetFiles(
+    const std::string& libraryId, const std::vector<std::string>& libraryAssetIds);
   /** Compares captured snapshots with the libraries; never modifies the project. */
   Result<std::vector<project::LibraryUpdate>> checkLibraryUpdates(bool rescan = false);
   /** Applies selected updates as one project transaction, or none at all. */

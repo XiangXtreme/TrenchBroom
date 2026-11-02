@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -38,6 +39,9 @@ namespace tb::ui
 {
 namespace
 {
+
+/** Session files returned by one preview path resolution. */
+using ResolvedPreviewFiles = std::map<std::filesystem::path, std::filesystem::path>;
 
 void appendI32(std::vector<std::uint8_t>& data, const std::int32_t value)
 {
@@ -235,7 +239,7 @@ TEST_CASE("AssetPreviewProvider")
       provider,
       {asset},
       {asset.path},
-      [&](const BrowserAsset&) -> Result<std::filesystem::path> {
+      [&](const std::vector<BrowserAsset>&) -> Result<ResolvedPreviewFiles> {
         ++calls;
         return Error{"Image conversion failed: invalid palette"};
       });
@@ -248,8 +252,8 @@ TEST_CASE("AssetPreviewProvider")
       provider,
       {asset},
       {asset.path},
-      [](const BrowserAsset&) -> Result<std::filesystem::path> {
-        return std::filesystem::path{};
+      [](const std::vector<BrowserAsset>&) -> Result<ResolvedPreviewFiles> {
+        return ResolvedPreviewFiles{};
       });
     CHECK(empty.at(asset.path).status == AssetPreviewStatus::Error);
     CHECK_FALSE(empty.at(asset.path).error.empty());
@@ -257,8 +261,8 @@ TEST_CASE("AssetPreviewProvider")
       provider,
       {asset},
       {asset.path},
-      [](const BrowserAsset& requested) -> Result<std::filesystem::path> {
-        return requested.path;
+      [](const std::vector<BrowserAsset>& requested) -> Result<ResolvedPreviewFiles> {
+        return ResolvedPreviewFiles{{requested.front().path, requested.front().path}};
       });
     CHECK(relative.at(asset.path).status == AssetPreviewStatus::Error);
     const auto unresolved = loadAssetPreviews(provider, {asset}, {asset.path});
@@ -280,10 +284,11 @@ TEST_CASE("AssetPreviewProvider")
       provider,
       {asset, hidden},
       {asset.path},
-      [&](const BrowserAsset& requested) -> Result<std::filesystem::path> {
+      [&](const std::vector<BrowserAsset>& requested) -> Result<ResolvedPreviewFiles> {
         ++calls;
-        CHECK(requested.path == asset.path);
-        return path;
+        REQUIRE(requested.size() == 1);
+        CHECK(requested.front().path == asset.path);
+        return ResolvedPreviewFiles{{requested.front().path, path}};
       });
     CHECK(calls == 1);
     CHECK(previews.size() == 1);

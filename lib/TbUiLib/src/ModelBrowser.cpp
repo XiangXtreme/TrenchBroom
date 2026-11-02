@@ -448,11 +448,35 @@ void ModelBrowser::createGui(AppController& appController)
   }
   if (m_project)
   {
-    // Library textures get a thumbnail from their compatible content; the file is written
-    // on demand for visible cells so browsing never copies the whole library.
-    m_view->setPreviewPathResolver([project = m_project](const BrowserAsset& asset) {
-      return project->libraryAssetFile(asset.libraryId, asset.libraryAssetId);
-    });
+    // Library textures get a thumbnail from their compatible content; the files are
+    // written on demand for the visible cells so browsing never copies the whole library.
+    // One catalog pass per library serves the whole visible page.
+    m_view->setPreviewPathResolver(
+      [project = m_project](const std::vector<BrowserAsset>& assets) {
+        using ResolvedFiles = std::map<std::filesystem::path, std::filesystem::path>;
+        auto byLibrary = std::map<std::string, std::vector<const BrowserAsset*>>{};
+        for (const auto& asset : assets)
+          if (!asset.libraryId.empty())
+            byLibrary[asset.libraryId].push_back(&asset);
+
+        auto files = ResolvedFiles{};
+        for (const auto& [libraryId, entries] : byLibrary)
+        {
+          auto ids = std::vector<std::string>{};
+          ids.reserve(entries.size());
+          for (const auto* entry : entries)
+            ids.push_back(entry->libraryAssetId);
+
+          auto resolved = project->libraryAssetFiles(libraryId, ids);
+          if (resolved.is_error())
+            return Result<ResolvedFiles>{std::get<Error>(resolved.error())};
+          for (const auto* entry : entries)
+            if (const auto file = resolved.value().find(entry->libraryAssetId);
+                file != resolved.value().end())
+              files.emplace(entry->path, file->second);
+        }
+        return Result<ResolvedFiles>{std::move(files)};
+      });
   }
 
   auto* browserLayout = new QHBoxLayout{};
@@ -1695,17 +1719,31 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
         update != updates.end()
         && (update->state == project::LibraryUpdateState::NewVersion || update->state == project::LibraryUpdateState::DependenciesChanged);
     }
-    if (type != BrowserCellType::Texture)
-    {
-      // Non-texture resources have a real file in the library. Textures stay unresolved
-      // here and get their compatible WAD only when a cell becomes visible, so browsing
-      // never copies the whole library into the cache.
-      if (const auto file = m_project->libraryAssetFile(m_libraryId, asset.id);
-          file.is_success())
-        entry.absolutePath = file.value();
-    }
     assets.push_back(std::move(entry));
   }
+
+  // Non-texture resources have a real file in the library. Textures stay unresolved and
+  // get their compatible WAD only when a cell becomes visible, so browsing never copies
+  // the whole library into the cache. All remaining files are resolved in one catalog
+  // pass; asking for them one at a time would reopen the index per resource.
+  auto fileIds = std::vector<std::string>{};
+  for (const auto& entry : assets)
+    if (entry.type != BrowserCellType::Texture)
+      fileIds.push_back(entry.libraryAssetId);
+
+  if (const auto files = m_project->libraryAssetFiles(m_libraryId, fileIds);
+      files.is_success())
+  {
+    for (auto& entry : assets)
+    {
+      if (entry.libraryAssetId.empty())
+        continue;
+      if (const auto file = files.value().find(entry.libraryAssetId);
+          file != files.value().end())
+        entry.absolutePath = file->second;
+    }
+  }
+
   return assets;
 }
 

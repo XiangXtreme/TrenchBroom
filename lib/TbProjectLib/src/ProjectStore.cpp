@@ -941,8 +941,18 @@ Result<std::vector<std::uint8_t>> ProjectStore::readAsset(
 Result<std::vector<Asset>> ProjectStore::libraryLinkedAssets() const
 {
   return attempt([&] {
-    auto result = queryAssets(m_impl->database.get());
-    std::erase_if(result, [](const auto& asset) { return asset.library.empty(); });
+    // Only library linked assets are wanted here, so the query filters in SQL instead of
+    // materializing every asset and dropping most of them afterwards. The update check
+    // runs on every library scan, where reading the whole asset table dominated it.
+    const auto sql = fmt::format(
+      "SELECT {} FROM revisions r JOIN heads h ON r.asset_id=h.asset_id AND "
+      "r.revision=h.revision WHERE r.library_id IS NOT NULL AND r.library_id <> '' "
+      "ORDER BY r.virtual_path",
+      AssetColumns);
+    auto query = Statement{m_impl->database.get(), sql.c_str()};
+    auto result = std::vector<Asset>{};
+    while (query.next())
+      result.push_back(readAssetRow(query));
     return result;
   });
 }

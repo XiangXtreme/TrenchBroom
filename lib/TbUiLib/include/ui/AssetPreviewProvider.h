@@ -77,8 +77,15 @@ private:
   AssetPreviewState texturePreview(const BrowserAsset& asset) const;
 };
 
+/**
+ * Resolves the session files of library resources whose preview is read from disk.
+ *
+ * A browser page asks for every visible resource at once: resolving them one by one would
+ * reopen the library catalog per cell. The result maps each asset path to its file.
+ */
 using AssetPreviewPathResolver =
-  std::function<Result<std::filesystem::path>(const BrowserAsset&)>;
+  std::function<Result<std::map<std::filesystem::path, std::filesystem::path>>(
+    const std::vector<BrowserAsset>&)>;
 
 using AssetPreviewMap = std::map<std::filesystem::path, AssetPreviewState>;
 
