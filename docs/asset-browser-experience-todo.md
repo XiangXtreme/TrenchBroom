@@ -256,8 +256,8 @@ Quake 系 MDL/MD2/Assimp 等格式仍显示其已解码帧。GoldSrc studio 模�
 此前完全无法预览：实体模型加载器只识别 Quake MDL v6。现在由
 `mdl::GoldSrcStudioModel` 直接解析 studio 头、骨骼、BodyPart、Model、Mesh 与顶点
 表，按骨骼静止变换合成绑定姿态，并暴露作者制作的 Body 变体；检查器可选择变体、
-查看骨骼数、序列数（含外置动画组）、皮肤族与内嵌贴图名。Sequence 动画、骨骼
-控制器与 Skin 贴图尚未解码，界面明确说明而不提供无效控件。
+查看骨骼数、序列数（含外置动画组）、皮肤族与内嵌/外置贴图名。后续续批已支持
+Sequence 动画、外置组与 Skin 贴图；骨骼控制器仍未应用。
 预制体统计、声音分类与自动试听、完整类型主题矩阵及真实游戏验收仍待完成。
 
 首轮定向验证：`AssetInspection`、`AssetLibraryImport`、`AssetBrowserModel`、
@@ -477,3 +477,21 @@ gordon.mdl 下摘要显示 `look_idle frame 0`、序列下拉 77 项、帧滑块
 - 验证：`AssetLibrary` 删除/重扫回归、`ProjectWindow` 新增的“删除后重扫不复活”
   用例通过；`ModelBrowserView`、`AssetBrowserModel`、`AssetInspection`、
   `AssetPreviewProvider`、`CatalogAssetDrop`、`PrefabAsset` 等 10 项 UI 定向回归通过。
+### 续批：外置贴图与动画组（2026-11-02）
+
+- `GoldSrcStudioExternalData` 允许解析器使用主文件之外的字节：`textureHeader` 指向
+  `<stem>T.mdl`，`sequenceGroups` 按组号存放 `<stem>01.mdl`、`<stem>02.mdl` 等。
+  `readGoldSrcStudioModelInfo` 与 `buildGoldSrcStudioMesh` 都接受该参数。
+- 主文件 `textureindex == 0` 时，从外置头合并 texture/skin 表；外置组按 `IDSQ`
+  头校验，组 0 仍应用 `seqgroup.unused2` 基址，组 n 的 `animindex` 相对组文件起点。
+- 文件型预览（游戏目录、资产库、缩略图）由 `loadGoldSrcStudioExternalData` 从模型
+  路径解析兄弟文件；组文件名优先用主文件 seqgroup 表里的名字，缺失时按两位序号回退。
+- 检查器显示 `(N loaded)`、`external group` / `external group missing`，并新增
+  Skin family 下拉；texture 详情区分内嵌与外置头。
+- 同时修正：蒙版贴图 255 索引透明、chrome/additive 贴图的近似渲染、去除动画 run
+  的 4096 次硬上限。
+- 验证：合成 T 头、合成 IDSQ 组、真实 `agrunt.mdl`（71 个外置贴图模型之一）、
+  `scientist.mdl`（外置组）与 `gordon.mdl` 的 `AssetInspection` 全通过；
+  兄弟缩略图路径单独回归。模型库 140 项与 UI 库 128 项全量 CTest 无失败。
+- 仍待处理：骨骼控制器的可调中性值、逐顶点法线的精确 chrome、`numblends > 1`
+  的显式混合选择；工程快照若未捕获 T/组文件，仍只能显示主文件内容。
