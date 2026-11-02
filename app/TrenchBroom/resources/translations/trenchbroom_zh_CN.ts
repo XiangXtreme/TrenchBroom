@@ -3770,7 +3770,105 @@ Create one and import the resources it contains?</source>
             <source>%1 uses in project maps</source>
             <translation>工程地图中有 %1 处引用</translation>
         </message>
-    </context>
+            <message>
+            <source>Search assets…</source>
+            <translation>搜索资源…</translation>
+        </message>
+        <message>
+            <source>Sources</source>
+            <translation>来源</translation>
+        </message>
+        <message>
+            <source>Used in map</source>
+            <translation>当前地图使用</translation>
+        </message>
+        <message>
+            <source>Favourites</source>
+            <translation>收藏</translation>
+        </message>
+        <message>
+            <source>All tags</source>
+            <translation>全部标签</translation>
+        </message>
+        <message>
+            <source>Live library favourites and tags, including linked project snapshots. Unavailable library metadata does not match these filters.</source>
+            <translation>使用资产库中的实时收藏与标签，包括已关联的工程快照。资产库不可用时，这些元数据不参与筛选。</translation>
+        </message>
+        <message>
+            <source>All sounds</source>
+            <translation>全部音效</translation>
+        </message>
+        <message>
+            <source>Looping</source>
+            <translation>循环</translation>
+        </message>
+        <message>
+            <source>One-shot</source>
+            <translation>单次</translation>
+        </message>
+        <message>
+            <source>Filter sound assets by their WAV sampler loop chunk. Waveforms are read on demand and cached until the asset revision changes.</source>
+            <translation>按 WAV 采样器的循环块筛选音效资源。波形按需读取，并缓存到资源修订变化为止。</translation>
+        </message>
+        <message>
+            <source>Thumbnail size</source>
+            <translation>缩略图大小</translation>
+        </message>
+        <message>
+            <source>Select asset for current target</source>
+            <translation>为当前目标选择资源</translation>
+        </message>
+        <message>
+            <source>Target map: %1. The resource is captured only when you confirm.</source>
+            <translation>目标地图：%1。仅在确认后才会捕获该资源。</translation>
+        </message>
+        <message>
+            <source>Project: %1
+Map: %2</source>
+            <translation>工程：%1
+地图：%2</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>无</translation>
+        </message>
+        <message>
+            <source>Apply Asset</source>
+            <translation>应用资源</translation>
+        </message>
+        <message>
+            <source>Asset library unavailable</source>
+            <translation>资产库不可用</translation>
+        </message>
+        <message>
+            <source>The folder no longer contains the expected library.</source>
+            <translation>该文件夹已不包含预期的资产库。</translation>
+        </message>
+        <message>
+            <source>Show in Asset Library</source>
+            <translation>在资产库中显示</translation>
+        </message>
+        <message>
+            <source>This project's library connection no longer exists.</source>
+            <translation>该工程的资产库连接已不存在。</translation>
+        </message>
+        <message>
+            <source>An active project map is required</source>
+            <translation>需要一个已打开的地图工程</translation>
+        </message>
+        <message>
+            <source>Cannot scan current map: %1</source>
+            <translation>无法扫描当前地图：%1</translation>
+        </message>
+        <message>
+            <source>Explicit MAP resource references, including unsaved edits. Captured resources match by identity; game files match by engine path.</source>
+            <translation>仅匹配 MAP 中显式引用的资源，包含未保存的修改。已捕获的资源按标识匹配，游戏文件按引擎路径匹配。</translation>
+        </message>
+        <message>
+            <source>No asset library</source>
+            <translation>无资产库</translation>
+        </message>
+</context>
     <context>
         <name>tb::ui::ModelBrowserView</name>
         <message>
@@ -3845,7 +3943,15 @@ Create one and import the resources it contains?</source>
             <source>Preview file is missing.</source>
             <translation>预览文件缺失。</translation>
         </message>
-    </context>
+            <message>
+            <source>Show in Asset Library</source>
+            <translation>在资产库中显示</translation>
+        </message>
+        <message>
+            <source>Show Project Snapshot</source>
+            <translation>显示工程快照</translation>
+        </message>
+</context>
     <context>
         <name>tb::ui::MousePreferencePane</name>
         <message>

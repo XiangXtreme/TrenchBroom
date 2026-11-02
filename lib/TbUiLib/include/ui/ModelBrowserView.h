@@ -102,6 +102,15 @@ private:
   };
   std::map<std::filesystem::path, SpritePreviewTexture> m_spritePreviewTextures;
   std::vector<GLuint> m_pendingDeletedSpriteTextures;
+  // A source badge marks entries that do not come from the game files. Each glyph is
+  // cached with the color it was drawn in, so a palette change replaces it on the next
+  // frame.
+  struct SourceBadgeTexture
+  {
+    GLuint textureId = 0;
+    QColor color;
+  };
+  std::map<BrowserSource, SourceBadgeTexture> m_sourceBadgeTextures;
   QMediaPlayer* m_soundPlayer = nullptr;
   QAudioOutput* m_soundAudioOutput = nullptr;
   std::filesystem::path m_playingSoundPath;
@@ -111,8 +120,8 @@ private:
   // Game files are browsed through fixed roots; catalog listings only show the folders
   // their own entries imply.
   bool m_includeDefaultRoots = true;
-  // The unified listing holds entries from several sources at once, so each title carries
-  // its source marker.
+  // The unified listing holds entries from several sources at once, so entries that do
+  // not come from the game files carry a source badge instead of a title suffix.
   bool m_showSourceMarkers = false;
   bool m_previewOnly = false;
   bool m_selectionOnly = false;
@@ -188,6 +197,8 @@ private:
     float height,
     render::Transformation& transformation);
   void renderAssetPlaceholders(gl::Gl& gl, Layout& layout, float y, float height);
+  void renderSourceBadges(gl::Gl& gl, Layout& layout, float y, float height);
+  GLuint ensureSourceBadgeTexture(gl::Gl& gl, BrowserSource source, const QColor& color);
   void renderSoundPreviewButtons(gl::Gl& gl, Layout& layout, float y, float height);
   void renderSpritePreviews(gl::Gl& gl, Layout& layout, float y, float height);
 

@@ -225,7 +225,7 @@ TEST_CASE("ModelBrowserView")
       Equals(std::vector<std::string>{"", "prefabs/crate.tbprefab"}));
   }
 
-  SECTION("marks the source of unified listing entries")
+  SECTION("keeps unified listing titles free of the source")
   {
     auto projectAsset = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};
     projectAsset.source = BrowserSource::Project;
@@ -238,17 +238,17 @@ TEST_CASE("ModelBrowserView")
     libraryAsset.libraryAssetId = "lib-crate";
     libraryAsset.displayName = "Crate";
 
+    // The browser draws a badge per source, so the title stays the resource name.
     const auto entries =
-      modelBrowserEntries({}, {projectAsset, libraryAsset}, "models", {}, false, true);
+      modelBrowserEntries({}, {projectAsset, libraryAsset}, "models", {}, false);
     CHECK_THAT(
-      entryTitles(entries),
-      Equals(std::vector<std::string>{"..", "Box [Project]", "Crate [Asset library]"}));
+      entryTitles(entries), Equals(std::vector<std::string>{"..", "Box", "Crate"}));
 
-    // Searching the marker name finds an entry whose display name has no match.
+    // The source name is still searchable even though it is not part of the title.
     const auto found =
-      modelBrowserEntries({}, {projectAsset, libraryAsset}, {}, "library", false, true);
+      modelBrowserEntries({}, {projectAsset, libraryAsset}, {}, "library", false);
     REQUIRE(found.size() == 2u);
-    CHECK(found[1].title == "Crate [Asset library]");
+    CHECK(found[1].title == "Crate");
   }
 
   SECTION("sound preview button bounds stay inside item")

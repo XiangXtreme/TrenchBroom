@@ -584,8 +584,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const std::vector<BrowserAsset>& assets,
   const std::filesystem::path& currentFolderPath,
   const QString& searchText,
-  const bool includeDefaultRoots,
-  const bool showSourceMarkers)
+  const bool includeDefaultRoots)
 {
   const auto trimmedSearchText = searchText.trimmed();
   const auto hasSearch = !trimmedSearchText.isEmpty();
@@ -644,7 +643,10 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
         pathAsGenericQString(assetPath.filename()),
         asset.libraryMetadata ? asset.libraryMetadata->tags : std::vector<std::string>{},
         trimmedSearchText)
-      || (showSourceMarkers && QObject::tr(browserSourceName(asset.source)).contains(trimmedSearchText, Qt::CaseInsensitive));
+      // The source is shown as a badge, so searching its name has to work whether or not
+      // the current listing displays badges.
+      || QObject::tr(browserSourceName(asset.source))
+           .contains(trimmedSearchText, Qt::CaseInsensitive);
 
     if (relFromCurrent.empty() || relFromCurrent == std::filesystem::path{"."})
     {
@@ -720,14 +722,10 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
         ? (currentFolderAbs.empty() ? assetPath
                                     : assetPath.lexically_relative(currentFolderAbs))
         : assetPath.filename();
+    // The title stays the resource name: the browser marks a non-game source with a
+    // badge, so two sources with the same name are told apart without truncating either
+    // title.
     auto title = asset.projectId.empty() ? titlePath.generic_string() : asset.displayName;
-    if (showSourceMarkers)
-    {
-      // The unified listing can hold the same name from more than one source, so the
-      // marker is part of the title instead of a hover-only hint.
-      title += std::string{" ["}
-               + QObject::tr(browserSourceName(asset.source)).toStdString() + "]";
-    }
     entries.push_back({BrowserCellData{asset.type, assetPath}, std::move(title)});
   }
 

@@ -62,6 +62,7 @@
 #include "render/Transformation.h"
 #include "ui/AppController.h"
 #include "ui/AssetInspection.h"
+#include "ui/AssetLibraryGlyphs.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/CatalogModelPreview.h"
 #include "ui/ImageUtils.h"
@@ -390,8 +391,7 @@ void ModelBrowserView::doReloadLayout(Layout& layout)
          m_assets,
          m_currentFolderPath,
          m_searchText,
-         m_includeDefaultRoots,
-         m_showSourceMarkers))
+         m_includeDefaultRoots))
   {
     if (m_previewOnly && entry.cellData.type == BrowserCellType::Folder)
       continue;
@@ -426,6 +426,7 @@ void ModelBrowserView::doRender(
   renderAssetPlaceholders(gl, layout, y, height);
   renderSoundPreviewButtons(gl, layout, y, height);
   renderSpritePreviews(gl, layout, y, height);
+  renderSourceBadges(gl, layout, y, height);
 
   const auto projection =
     vm::ortho_matrix(-1024.0f, 1024.0f, viewLeft, viewTop, viewRight, viewBottom);
@@ -1476,6 +1477,229 @@ void ModelBrowserView::renderSpritePreviews(
       }
     }
   }
+}
+
+namespace
+{
+/** The badge a non-game source is marked with; game files need no marking. */
+std::optional<AssetLibraryGlyph> sourceBadgeGlyph(const BrowserSource source)
+{
+  switch (source)
+  {
+  case BrowserSource::AssetLibrary:
+    return AssetLibraryGlyph::Library;
+  case BrowserSource::Project:
+    return AssetLibraryGlyph::ProjectAsset;
+  case BrowserSource::GameFiles:
+    break;
+  }
+  return std::nullopt;
+}
+
+/**
+ * Chip and glyph color of a source badge.
+ *
+ * The two sources use inverted colors, so the glyph shape stays the primary cue while the
+ * color separates the sources at a glance.
+ */
+std::pair<QColor, QColor> sourceBadgeColors(
+  const BrowserSource source, const QPalette& palette)
+{
+  const auto chip = source == BrowserSource::AssetLibrary
+                      ? palette.color(QPalette::Active, QPalette::Highlight)
+                      : palette.color(QPalette::Active, QPalette::Text);
+  const auto glyph = source == BrowserSource::AssetLibrary
+                       ? palette.color(QPalette::Active, QPalette::HighlightedText)
+                       : palette.color(QPalette::Active, QPalette::Base);
+  return {chip, glyph};
+}
+} // namespace
+
+GLuint ModelBrowserView::ensureSourceBadgeTexture(
+  gl::Gl& gl, const BrowserSource source, const QColor& color)
+{
+  const auto glyph = sourceBadgeGlyph(source);
+  if (!glyph)
+  {
+    return 0;
+  }
+
+  if (const auto it = m_sourceBadgeTextures.find(source);
+      it != m_sourceBadgeTextures.end())
+  {
+    if (it->second.color == color)
+    {
+      return it->second.textureId;
+    }
+    // A theme change alters the badge color; the stale glyph is replaced right here,
+    // while the GL context is current.
+    if (it->second.textureId != 0)
+    {
+      gl.deleteTextures(1, &it->second.textureId);
+    }
+    m_sourceBadgeTextures.erase(it);
+  }
+
+  const auto image = assetLibraryGlyphPixmap(*glyph, color, 16, devicePixelRatioF())
+                       .toImage()
+                       .convertToFormat(QImage::Format_RGBA8888);
+  if (image.isNull())
+  {
+    return 0;
+  }
+
+  auto textureId = GLuint{0};
+  gl.genTextures(1, &textureId);
+  gl.bindTexture(GL_TEXTURE_2D, textureId);
+  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  gl.pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(
+    GL_TEXTURE_2D,
+    0,
+    GL_RGBA,
+    image.width(),
+    image.height(),
+    0,
+    GL_RGBA,
+    GL_UNSIGNED_BYTE,
+    image.constBits());
+  gl.bindTexture(GL_TEXTURE_2D, 0);
+
+  m_sourceBadgeTextures.emplace(source, SourceBadgeTexture{textureId, color});
+  return textureId;
+}
+
+void ModelBrowserView::renderSourceBadges(
+  gl::Gl& gl, Layout& layout, const float y, const float height)
+{
+  if (!m_showSourceMarkers)
+  {
+    return;
+  }
+
+  using ChipVertex = gl::VertexTypes::P2C4::Vertex;
+  using IconVertex = gl::VertexTypes::P2Uv2::Vertex;
+  auto chipVertices = std::vector<ChipVertex>{};
+  auto iconVertices = std::map<GLuint, std::vector<IconVertex>>{};
+
+  const auto badgeSize = 18.0f;
+  const auto badgeInset = 5.0f;
+  const auto glyphSize = 14.0f;
+
+  for (const auto& group : layout.groups())
+  {
+    if (!group.intersectsY(y, height))
+    {
+      continue;
+    }
+    for (const auto& row : group.rows())
+    {
+      if (!row.intersectsY(y, height))
+      {
+        continue;
+      }
+      for (const auto& cell : row.cells())
+      {
+        const auto& item = cellData(cell);
+        if (item.type == BrowserCellType::Folder)
+        {
+          continue;
+        }
+
+        const auto* asset = assetAt(item.path);
+        if (!asset)
+        {
+          continue;
+        }
+        const auto glyph = sourceBadgeGlyph(asset->source);
+        if (!glyph)
+        {
+          continue;
+        }
+
+        const auto [chipColor, glyphColor] = sourceBadgeColors(asset->source, palette());
+        const auto textureId = ensureSourceBadgeTexture(gl, asset->source, glyphColor);
+        if (textureId == 0)
+        {
+          continue;
+        }
+
+        const auto& bounds = cell.itemBounds();
+        const auto left = bounds.left() + badgeInset;
+        const auto top = bounds.top() + badgeInset;
+        const auto right = left + badgeSize;
+        const auto bottom = top + badgeSize;
+        appendRoundedRectVertices(
+          chipVertices,
+          left,
+          top,
+          right,
+          bottom,
+          y,
+          height,
+          fromQColor(chipColor).to<RgbaF>().toVec(),
+          4.0f);
+
+        const auto glyphLeft = left + (badgeSize - glyphSize) / 2.0f;
+        const auto glyphTop = top + (badgeSize - glyphSize) / 2.0f;
+        const auto glyphRight = glyphLeft + glyphSize;
+        const auto glyphBottom = glyphTop + glyphSize;
+
+        auto& vertices = iconVertices[textureId];
+        vertices.emplace_back(
+          vm::vec2f{glyphLeft, height - (glyphTop - y)}, vm::vec2f{0, 0});
+        vertices.emplace_back(
+          vm::vec2f{glyphLeft, height - (glyphBottom - y)}, vm::vec2f{0, 1});
+        vertices.emplace_back(
+          vm::vec2f{glyphRight, height - (glyphBottom - y)}, vm::vec2f{1, 1});
+        vertices.emplace_back(
+          vm::vec2f{glyphRight, height - (glyphTop - y)}, vm::vec2f{1, 0});
+      }
+    }
+  }
+
+  if (!chipVertices.empty())
+  {
+    auto shader =
+      gl::ActiveShader{gl, shaderManager(), gl::Shaders::MaterialBrowserBorderShader};
+    auto vertexArray = gl::VertexArray::move(std::move(chipVertices));
+    vertexArray.prepare(gl, vboManager());
+    gl.disable(GL_CULL_FACE);
+    if (vertexArray.setup(gl, shader.program()))
+    {
+      vertexArray.render(gl, gl::PrimType::Triangles);
+      vertexArray.cleanup(gl, shader.program());
+    }
+    gl.enable(GL_CULL_FACE);
+  }
+
+  if (iconVertices.empty())
+  {
+    return;
+  }
+
+  auto iconShader =
+    gl::ActiveShader{gl, shaderManager(), gl::Shaders::MaterialBrowserShader};
+  iconShader.set("ApplyTinting", false);
+  iconShader.set("Material", 0);
+  iconShader.set("Brightness", 1.0f);
+
+  gl.activeTexture(GL_TEXTURE0);
+  for (auto& [textureId, vertices] : iconVertices)
+  {
+    gl.bindTexture(GL_TEXTURE_2D, textureId);
+    auto vertexArray = gl::VertexArray::move(std::move(vertices));
+    vertexArray.prepare(gl, vboManager());
+    if (vertexArray.setup(gl, iconShader.program()))
+    {
+      vertexArray.render(gl, gl::PrimType::Quads);
+      vertexArray.cleanup(gl, iconShader.program());
+    }
+  }
+  gl.bindTexture(GL_TEXTURE_2D, 0);
 }
 
 void ModelBrowserView::renderAssetCards(

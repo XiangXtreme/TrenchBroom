@@ -238,9 +238,6 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const QString& searchText,
   // Game files are browsed through fixed roots; project and library listings only show
   // the folders their own entries imply.
-  bool includeDefaultRoots = true,
-  // The unified listing marks each entry's source, because the same engine path can be
-  // listed from more than one place.
-  bool showSourceMarkers = false);
+  bool includeDefaultRoots = true);
 
 } // namespace tb::ui

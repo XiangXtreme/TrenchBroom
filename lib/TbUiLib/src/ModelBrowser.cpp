@@ -510,7 +510,7 @@ void ModelBrowser::createGui(AppController& appController)
   footerLayout->addStretch();
   m_usedButton = new QToolButton{};
   m_usedButton->setObjectName("ModelBrowser_UsedInMap");
-  m_usedButton->setText(tr("Current map uses"));
+  m_usedButton->setText(tr("Used in map"));
   m_usedButton->setProperty("tbControlRole", "compact");
   m_usedButton->setCheckable(true);
   m_usedButton->setEnabled(bool(m_project));
@@ -2076,7 +2076,7 @@ void ModelBrowser::showInAssetLibrary(const BrowserAsset& asset)
     {
       QMessageBox::warning(
         this,
-        tr("Show in asset library"),
+        tr("Show in Asset Library"),
         QString::fromStdString(std::get<Error>(shown.error()).msg));
       if (created)
         m_libraryWindow->close();

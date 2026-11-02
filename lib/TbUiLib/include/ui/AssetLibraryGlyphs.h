@@ -44,6 +44,7 @@ enum class AssetLibraryGlyph
   ThumbSmall,
   ThumbLarge,
   Project,
+  ProjectAsset,
   Rename,
   Link,
 };

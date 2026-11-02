@@ -210,6 +210,14 @@ void paintAssetLibraryGlyph(
     painter.drawLine(QPointF{5.5, 8.25}, QPointF{10.5, 8.25});
     break;
   }
+  case AssetLibraryGlyph::ProjectAsset: {
+    // A resource the project owns: a card with content lines, so it cannot be mistaken for
+    // the add-to-project action the Project glyph stands for.
+    painter.drawRoundedRect(QRectF{2, 3, 12, 10.5}, 2, 2);
+    painter.drawLine(QPointF{4.75, 6.9}, QPointF{11.25, 6.9});
+    painter.drawLine(QPointF{4.75, 9.6}, QPointF{9.25, 9.6});
+    break;
+  }
   case AssetLibraryGlyph::Rename: {
     painter.drawLine(QPointF{3, 13}, QPointF{6, 13});
     painter.drawPolygon(QPolygonF{
