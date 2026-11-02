@@ -79,6 +79,8 @@ struct Asset
 };
 
 QImage renderSkyCross(const std::array<QImage, 6>& faces, int side = 160);
+/** Shared compatible skybox thumbnail for the library and content browser. */
+QImage skyThumbnail(const Asset& asset, int side = 256);
 QImage renderSkyView(
   const std::array<QImage, 6>& faces,
   double yaw,

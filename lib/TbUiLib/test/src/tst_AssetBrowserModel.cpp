@@ -161,6 +161,20 @@ TEST_CASE("AssetBrowserModel")
     const auto loose = BrowserAsset{BrowserCellType::Texture, "textures/brick.png"};
     CHECK(browserAssetDisplayPath(loose, true) == loose.path);
   }
+  SECTION("skybox groups have one presentation root independent of engine paths")
+  {
+    auto sky = BrowserAsset{BrowserCellType::Texture, "gfx/env/desert"};
+    sky.skybox = true;
+    CHECK(browserAssetDisplayPath(sky, false) == std::filesystem::path{"skybox/desert"});
+    CHECK(browserAssetDisplayPath(sky, true) == std::filesystem::path{"skybox/desert"});
+    sky.path = "gfx/env/desert.v2";
+    CHECK(
+      browserAssetDisplayPath(sky, false) == std::filesystem::path{"skybox/desert.v2"});
+    auto changed = sky;
+    changed.previewIdentity = "changed-face";
+    CHECK_FALSE(sameBrowserAssetContent(sky, changed));
+    CHECK(sky.path == std::filesystem::path{"gfx/env/desert.v2"});
+  }
   SECTION("library entries report snapshot state")
   {
     auto wall = BrowserAsset{BrowserCellType::Texture, "custom.wad/WALL01"};

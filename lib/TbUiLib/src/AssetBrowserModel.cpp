@@ -128,8 +128,8 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.assetId == rhs.assetId && lhs.revision == rhs.revision
          && lhs.catalogPath == rhs.catalogPath
          && lhs.textureCollection == rhs.textureCollection && lhs.source == rhs.source
-         && lhs.skybox == rhs.skybox && lhs.libraryId == rhs.libraryId
-         && lhs.libraryAssetId == rhs.libraryAssetId
+         && lhs.previewIdentity == rhs.previewIdentity && lhs.skybox == rhs.skybox
+         && lhs.libraryId == rhs.libraryId && lhs.libraryAssetId == rhs.libraryAssetId
          && lhs.libraryRevision == rhs.libraryRevision
          && lhs.libraryContentHash == rhs.libraryContentHash
          && lhs.projectAssetId == rhs.projectAssetId
@@ -143,6 +143,8 @@ std::filesystem::path browserAssetDisplayPath(
   const BrowserAsset& asset, const bool groupWadTextures)
 {
   const auto& path = asset.catalogPath.empty() ? asset.path : asset.catalogPath;
+  if (asset.skybox)
+    return std::filesystem::path{"skybox"} / path.filename();
   if (
     asset.type != BrowserCellType::Texture || asset.skybox
     || asset.textureCollection.empty())
@@ -288,7 +290,8 @@ bool sameBrowserAssetContent(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.path == rhs.path && lhs.absolutePath == rhs.absolutePath
          && lhs.revision == rhs.revision && lhs.libraryRevision == rhs.libraryRevision
          && lhs.projectUpdateAvailable == rhs.projectUpdateAvailable
-         && lhs.missing == rhs.missing && lhs.lastModified == rhs.lastModified;
+         && lhs.previewIdentity == rhs.previewIdentity && lhs.missing == rhs.missing
+         && lhs.lastModified == rhs.lastModified;
 }
 
 std::vector<std::filesystem::path> entityModelAssetPaths(

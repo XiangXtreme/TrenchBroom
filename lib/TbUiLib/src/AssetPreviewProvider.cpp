@@ -25,16 +25,12 @@
 #include "fs/File.h"
 #include "fs/PathInfo.h"
 #include "fs/Reader.h"
-#include "fs/TraversalMode.h"
-#include "fs/WadFileSystem.h"
-#include "gl/Texture.h"
 #include "mdl/GameFileSystem.h"
-#include "mdl/LoadMipTexture.h"
+#include "ui/AssetInspection.h"
 #include "ui/PrefabAsset.h"
 #include "ui/QPathUtils.h"
 
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <set>
 #include <span>
@@ -42,6 +38,19 @@
 
 namespace tb::ui
 {
+AssetPreviewState assetImagePreview(const QImage& image)
+{
+  if (image.isNull())
+    return {AssetPreviewStatus::Error, std::nullopt};
+  const auto rgba = image.convertToFormat(QImage::Format_RGBA8888);
+  return {
+    AssetPreviewStatus::Ready,
+    GoldSrcSpritePreview{
+      size_t(rgba.width()),
+      size_t(rgba.height()),
+      std::vector<std::uint8_t>{
+        rgba.constBits(), rgba.constBits() + rgba.sizeInBytes()}}};
+}
 
 AssetPreviewProvider::AssetPreviewProvider(const mdl::GameFileSystem& gameFileSystem)
   : m_gameFileSystem{gameFileSystem}
@@ -75,39 +84,12 @@ AssetPreviewState AssetPreviewProvider::texturePreview(const BrowserAsset& asset
   const auto file = fs::Disk::openFile(path);
   if (file.is_error())
     return {AssetPreviewStatus::Missing, std::nullopt};
-  auto wad = fs::WadFileSystem{file.value()};
-  if (wad.reload().is_error())
-    return {AssetPreviewStatus::Error, std::nullopt};
-  const auto entries = wad.find({}, fs::TraversalMode::Flat);
-  if (entries.is_error())
-    return {AssetPreviewStatus::Error, std::nullopt};
-  // A WAD collection is represented by its first decodable GoldSrc texture.
-  // Individual textures remain available through the material selector.
-  for (const auto& entry : entries.value())
-  {
-    if (!mdl::isHlMipTexture(entry))
-      continue;
-    const auto lump = wad.openFile(entry);
-    if (lump.is_error())
-      continue;
-    auto reader = lump.value()->reader().buffer();
-    const auto name = entry.stem().string();
-    auto decoded = mdl::loadHlMipTexture(reader, name.starts_with('{'));
-    if (decoded.is_error())
-      continue;
-    const auto& texture = decoded.value();
-    const auto& buffers = texture.buffersIfLoaded();
-    if (buffers.empty())
-      continue;
-    const auto& pixels = buffers.front();
-    return {
-      AssetPreviewStatus::Ready,
-      GoldSrcSpritePreview{
-        texture.width(),
-        texture.height(),
-        std::vector<std::uint8_t>{pixels.data(), pixels.data() + pixels.size()}}};
-  }
-  return {AssetPreviewStatus::Error, std::nullopt};
+  auto reader = file.value()->reader().buffer();
+  const auto bytes = reader.stringView();
+  const auto image =
+    inspection::decodeImage(inspection::Bytes{bytes.begin(), bytes.end()});
+  return image.is_success() ? assetImagePreview(image.value())
+                            : AssetPreviewState{AssetPreviewStatus::Error, std::nullopt};
 }
 
 AssetPreviewState AssetPreviewProvider::spritePreview(const BrowserAsset& asset) const
@@ -191,14 +173,7 @@ AssetPreviewState AssetPreviewProvider::prefabPreview(const BrowserAsset& asset)
     return {AssetPreviewStatus::Error, std::nullopt};
   }
 
-  image = image.convertToFormat(QImage::Format_RGBA8888);
-  auto rgba = std::vector<std::uint8_t>{};
-  rgba.resize(size_t(image.sizeInBytes()));
-  std::memcpy(rgba.data(), image.constBits(), rgba.size());
-
-  return {
-    AssetPreviewStatus::Ready,
-    GoldSrcSpritePreview{size_t(image.width()), size_t(image.height()), std::move(rgba)}};
+  return assetImagePreview(image);
 }
 
 AssetPreviewMap loadAssetPreviews(

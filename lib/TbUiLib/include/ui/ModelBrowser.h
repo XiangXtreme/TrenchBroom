@@ -187,7 +187,8 @@ private:
   std::optional<std::vector<BrowserAsset>> scanProjectAssets() const;
   std::optional<std::vector<BrowserAsset>> scanLibraryAssets() const;
   void setAssetSource(BrowserSourceFilter source);
-  void setTypeFilter(std::optional<BrowserCellType> type);
+  void setTypeFilter(
+    std::optional<BrowserCellType> type, std::optional<bool> skybox = std::nullopt);
   int browsingStateKey() const;
   void saveBrowsingState();
   void restoreBrowsingState();

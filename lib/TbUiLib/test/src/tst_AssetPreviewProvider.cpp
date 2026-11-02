@@ -145,6 +145,20 @@ TEST_CASE("AssetPreviewProvider")
     CHECK(preview.sprite->width == 2u);
     CHECK(preview.sprite->height == 1u);
   }
+  SECTION("loose texture previews use the shared image decoder")
+  {
+    auto image = QImage{16, 16, QImage::Format_RGBA8888};
+    image.fill(QColor{Qt::red});
+    const auto path = env.dir() / "face.png";
+    REQUIRE(image.save(pathAsQString(path)));
+    const auto preview =
+      provider.preview(BrowserAsset{BrowserCellType::Texture, "textures/face.png", path});
+    REQUIRE(preview.status == AssetPreviewStatus::Ready);
+    REQUIRE(preview.sprite);
+    CHECK(preview.sprite->width == 16);
+    CHECK(preview.sprite->rgba.front() == 255);
+    CHECK(preview.sprite->rgba[1] == 0);
+  }
 
   SECTION("invalid SPR returns error")
   {

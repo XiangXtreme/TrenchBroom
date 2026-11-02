@@ -61,6 +61,7 @@
 #include "prefs/Preferences.h"
 #include "render/Transformation.h"
 #include "ui/AppController.h"
+#include "ui/AssetInspection.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/CatalogModelPreview.h"
 #include "ui/ImageUtils.h"
@@ -279,17 +280,8 @@ void ModelBrowserView::setAssets(
     else
       ++it;
   }
-  // A newer library revision keeps the same catalog path, so its stale preview has to be
-  // dropped explicitly instead of waiting for the path to disappear.
-  for (const auto& previous : m_assets)
-  {
-    const auto it = std::ranges::find_if(
-      assets, [&](const auto& asset) { return asset.path == previous.path; });
-    if (it != assets.end() && !sameBrowserAssetContent(*it, previous))
-    {
-      m_assetPreviews.erase(previous.path);
-    }
-  }
+  // Retire CPU previews and their GPU textures together, including revisions which keep
+  // the same path. Erasing the CPU entry first hides the texture from invalidation.
   removeStalePreviews(assets);
   m_assets = std::move(assets);
   if (m_hasSelection && !assetAt(m_selectedPath))
@@ -557,7 +549,16 @@ void ModelBrowserView::loadMissingVisiblePreviews(
         const auto* asset = assetAt(item.path);
         if (asset && asset->skybox)
         {
-          // A skybox group is a manifest of six faces, not an image to decode.
+          if (!m_assetPreviews.contains(item.path))
+          {
+            const auto inspected =
+              inspection::readBrowserAsset(*asset, m_project.get(), *m_document);
+            const auto preview =
+              inspected.is_success()
+                ? assetImagePreview(inspection::skyThumbnail(inspected.value()))
+                : AssetPreviewState{AssetPreviewStatus::Error, std::nullopt};
+            m_assetPreviews.emplace(item.path, preview);
+          }
           continue;
         }
         if (canLoadPreview(item.type) && !m_assetPreviews.contains(item.path))

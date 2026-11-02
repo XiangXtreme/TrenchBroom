@@ -826,36 +826,14 @@ void AssetLibraryWindow::reload()
     return;
   }
   m_assets = assets.value();
-  // Include hidden dependency revisions in model and skybox cache identities. Metadata
-  // changes keep the same keys; bounded caches evict superseded images on demand.
-  auto revisions = std::unordered_map<std::string, std::string>{};
-  const auto allAssets = m_source->allAssets();
-  if (allAssets.is_error())
-    m_thumbnailCache.clear();
+  const auto keys = assetPreviewKeys(*m_source);
+  if (keys.is_success())
+    m_thumbnailKeys = keys.value();
   else
-    for (const auto& asset : allAssets.value())
-      revisions.emplace(
-        asset.id, fmt::format("/{}/{}", asset.revision, asset.contentHash));
-  for (const auto& asset : m_assets)
   {
-    auto key = fmt::format(
-      "{}/{}/{}/{}", m_source->libraryId(), asset.id, asset.revision, asset.contentHash);
-    if (
-      asset.type == project::AssetType::Model || asset.type == project::AssetType::Skybox)
-    {
-      const auto edges = m_source->dependencies(asset.id);
-      if (edges.is_error())
-        m_thumbnailCache.clear();
-      else
-        for (const auto& edge : edges.value())
-        {
-          key += "/" + edge.dependencyId;
-          if (const auto revision = revisions.find(edge.dependencyId);
-              revision != revisions.end())
-            key += revision->second;
-        }
-    }
-    m_thumbnailKeys.emplace(asset.id, QString::fromStdString(key));
+    m_thumbnailCache.clear();
+    for (const auto& asset : m_assets)
+      m_thumbnailKeys.emplace(asset.id, QString::fromStdString(asset.id));
   }
   m_favorites.clear();
   m_metadata.clear();
@@ -1284,14 +1262,7 @@ QImage AssetLibraryWindow::loadThumbnail(const project::LibraryAsset& asset) con
     const auto inspected = inspection::readLibraryAsset(*m_source, asset);
     if (inspected.is_error())
       return {};
-    const auto& sky = inspected.value();
-    auto faces = sky.skyOriginal;
-    for (auto i = size_t{}; i < faces.size(); ++i)
-      if (!sky.skyCompatible[i].isNull())
-        faces[i] = sky.skyCompatible[i];
-    if (std::ranges::all_of(faces, [](const auto& face) { return face.isNull(); }))
-      return {};
-    return inspection::renderSkyView(faces, 0.0, 0.0, 256, 256);
+    return inspection::skyThumbnail(inspected.value());
   }
 
   if (asset.type == project::AssetType::Model)

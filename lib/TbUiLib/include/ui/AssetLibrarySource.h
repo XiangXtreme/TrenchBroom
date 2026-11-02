@@ -14,13 +14,27 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
+namespace tb::project
+{
+class ProjectStore;
+}
+
 namespace tb::ui
 {
 class ProjectSession;
+class AssetLibrarySource;
+/** Both browser hosts hide the faces owned by a logical skybox group. */
+Result<std::vector<project::Asset>> browsableProjectAssets(
+  const project::ProjectStore& store);
+using AssetPreviewKeys = std::map<std::string, QString>;
+/** Content identities include hidden dependency revisions, but exclude annotations. */
+Result<AssetPreviewKeys> assetPreviewKeys(const AssetLibrarySource& source);
+Result<AssetPreviewKeys> assetPreviewKeys(const project::ProjectStore& store);
 void loadBrowserAssetMetadata(
   std::vector<BrowserAsset>& assets, const ProjectSession& session);
 /** Content/metadata invalidation only; it never changes a project's captured bytes. */

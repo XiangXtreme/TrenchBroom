@@ -3606,6 +3606,10 @@ Please choose a different file name to export to.</source>
     <context>
         <name>tb::ui::ModelBrowser</name>
         <message>
+            <source>Skyboxes</source>
+            <translation>天空盒</translation>
+        </message>
+        <message>
             <source>Group by WAD</source>
             <translation>按 WAD 分组</translation>
         </message>

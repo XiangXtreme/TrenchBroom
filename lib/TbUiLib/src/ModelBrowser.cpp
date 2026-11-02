@@ -111,6 +111,7 @@ namespace
 const auto AssetRootPath = std::filesystem::path{};
 const auto DocumentLoadAssetRefreshDelay = 1500;
 constexpr auto PrefabThumbnailMaxSize = 512;
+constexpr auto SkyboxTypeFilter = -2;
 
 std::optional<float> assetIconSizeForComboIndex(QComboBox* combo, const int index)
 {
@@ -395,6 +396,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_typeCombo->addItem(tr("Models"), int(BrowserCellType::Model));
   m_typeCombo->addItem(tr("Sprites"), int(BrowserCellType::Sprite));
   m_typeCombo->addItem(tr("Sounds"), int(BrowserCellType::Sound));
+  m_typeCombo->addItem(tr("Skyboxes"), SkyboxTypeFilter);
   m_typeCombo->addItem(tr("Prefabs"), int(BrowserCellType::Prefab));
 
   m_searchBox = createSearchBox();
@@ -653,9 +655,10 @@ Result<std::optional<std::string>> ModelBrowser::chooseAssetPath(
   auto* browser = new ModelBrowser{app, document, split, session};
   browser->m_selectionOnly = true;
   browser->m_view->setSelectionOnly(true);
-  browser->m_skyboxFilter = skybox;
-  browser->setTypeFilter(type);
-  browser->m_typeCombo->setCurrentIndex(browser->m_typeCombo->findData(int(type)));
+  browser->setTypeFilter(
+    type, type == BrowserCellType::Texture ? std::optional{skybox} : std::nullopt);
+  browser->m_typeCombo->setCurrentIndex(
+    browser->m_typeCombo->findData(skybox ? SkyboxTypeFilter : int(type)));
   browser->m_typeCombo->setEnabled(false);
   browser->m_savePrefabButton->hide();
   auto* inspector = new AssetInspector{split};
@@ -970,7 +973,12 @@ void ModelBrowser::bindEvents(AppController& appController)
     this,
     [&](const int index) {
       const auto value = m_typeCombo->itemData(index).toInt();
-      setTypeFilter(value < 0 ? std::nullopt : std::optional{BrowserCellType(value)});
+      if (value == SkyboxTypeFilter)
+        setTypeFilter(BrowserCellType::Texture, true);
+      else
+        setTypeFilter(
+          value < 0 ? std::nullopt : std::optional{BrowserCellType(value)},
+          value == int(BrowserCellType::Texture) ? std::optional{false} : std::nullopt);
     });
 
   connect(
@@ -1559,9 +1567,10 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
 {
   if (!m_project)
     return std::nullopt;
-  const auto catalog = m_project->store().assets();
+  const auto catalog = browsableProjectAssets(m_project->store());
   if (catalog.is_error())
     return std::nullopt;
+  const auto keys = assetPreviewKeys(m_project->store());
   auto assets = std::vector<BrowserAsset>{};
   for (const auto& asset : catalog.value())
   {
@@ -1584,6 +1593,9 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
     entry.revision = asset.revision;
     entry.displayName = asset.displayName;
     entry.catalogPath = pathFromQString(QString::fromStdString(asset.virtualPath));
+    if (keys.is_success())
+      if (const auto key = keys.value().find(asset.id); key != keys.value().end())
+        entry.previewIdentity = key->second.toStdString();
     if (asset.type == project::AssetType::Texture && !asset.library.sourceMember.empty())
       entry.textureCollection =
         pathFromQString(QString::fromStdString(asset.library.sourceContainer));
@@ -1606,11 +1618,20 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
 {
   if (!m_project || m_libraryId.empty())
     return std::nullopt;
-  auto state = m_project->libraryState(m_libraryId, false);
-  if (state.is_error())
+  const auto connections = m_project->libraries();
+  if (connections.is_error())
     return std::nullopt;
-  if (!state.value().available)
+  const auto connection = std::ranges::find_if(
+    connections.value(), [&](const auto& entry) { return entry.info.id == m_libraryId; });
+  if (connection == connections.value().end() || !connection->available)
     return std::nullopt;
+  const auto source = openLocalAssetLibrary(connection->info.path);
+  if (!source || source->libraryId() != m_libraryId)
+    return std::nullopt;
+  const auto catalog = source->assets();
+  if (catalog.is_error())
+    return std::nullopt;
+  const auto keys = assetPreviewKeys(*source);
 
   // Update state is project state, so it is queried once per scan instead of per entry.
   auto updates = std::vector<project::LibraryUpdate>{};
@@ -1618,7 +1639,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
     updates = std::move(result).value();
 
   auto assets = std::vector<BrowserAsset>{};
-  for (const auto& asset : state.value().assets)
+  for (const auto& asset : catalog.value())
   {
     const auto type = asset.type == project::AssetType::Map ? BrowserCellType::Map
                       : asset.type == project::AssetType::Texture
@@ -1640,6 +1661,9 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
     entry.libraryContentHash = asset.contentHash;
     entry.displayName = asset.displayName;
     entry.catalogPath = entry.path;
+    if (keys.is_success())
+      if (const auto key = keys.value().find(asset.id); key != keys.value().end())
+        entry.previewIdentity = key->second.toStdString();
     if (asset.type == project::AssetType::Texture && !asset.sourceMember.empty())
       entry.textureCollection =
         pathFromQString(QString::fromStdString(asset.sourceContainer));
@@ -1791,14 +1815,16 @@ void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
   scheduleAssetRefresh();
 }
 
-void ModelBrowser::setTypeFilter(const std::optional<BrowserCellType> type)
+void ModelBrowser::setTypeFilter(
+  const std::optional<BrowserCellType> type, const std::optional<bool> skybox)
 {
-  if (m_typeFilter == type)
+  if (m_typeFilter == type && m_skyboxFilter == skybox)
   {
     return;
   }
   saveBrowsingState();
   m_typeFilter = type;
+  m_skyboxFilter = skybox;
   restoreBrowsingState();
   updateFolderEdit();
   applyTypeFilter();
@@ -1806,7 +1832,9 @@ void ModelBrowser::setTypeFilter(const std::optional<BrowserCellType> type)
 
 int ModelBrowser::browsingStateKey() const
 {
-  return int(m_sourceFilter) * 16 + (m_typeFilter ? int(*m_typeFilter) + 1 : 0);
+  // Skyboxes and ordinary textures retain independent folder/search/scroll state.
+  return int(m_sourceFilter) * 16
+    + (m_skyboxFilter.value_or(false) ? 15 : m_typeFilter ? int(*m_typeFilter) + 1 : 0);
 }
 
 void ModelBrowser::saveBrowsingState()

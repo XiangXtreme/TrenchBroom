@@ -30,6 +30,8 @@
 #include <string>
 #include <vector>
 
+class QImage;
+
 namespace tb::mdl
 {
 class GameFileSystem;
@@ -55,6 +57,8 @@ struct AssetPreviewState
 
   friend bool operator==(const AssetPreviewState&, const AssetPreviewState&) = default;
 };
+
+AssetPreviewState assetImagePreview(const QImage& image);
 
 class AssetPreviewProvider
 {

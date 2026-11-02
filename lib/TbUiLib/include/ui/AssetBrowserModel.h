@@ -114,6 +114,7 @@ struct BrowserAsset
   std::filesystem::path catalogPath;
   // Source WAD of a member texture. Presentation grouping never changes asset identity.
   std::filesystem::path textureCollection;
+  std::string previewIdentity;
   // The entry is a skybox group: its content is a manifest of six face textures, not an
   // image, so it must not be previewed or dropped as a single texture.
   bool skybox = false;

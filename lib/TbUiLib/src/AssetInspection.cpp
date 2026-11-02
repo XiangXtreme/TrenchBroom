@@ -410,6 +410,17 @@ Result<WaveInfo> readWaveInfo(const Bytes& bytes)
   return info;
 }
 
+QImage skyThumbnail(const Asset& asset, const int side)
+{
+  auto faces = asset.skyOriginal;
+  for (auto i = size_t{}; i < faces.size(); ++i)
+    if (!asset.skyCompatible[i].isNull())
+      faces[i] = asset.skyCompatible[i];
+  if (std::ranges::all_of(faces, [](const auto& face) { return face.isNull(); }))
+    return {};
+  return renderSkyView(faces, 0.0, 0.0, side, side);
+}
+
 Result<QImage> decodeImage(const Bytes& bytes, const std::string_view nativeFormat)
 {
   // Library WAD members are stored as miptex lumps, without the archive header. Use

@@ -560,6 +560,12 @@ TEST_CASE("AssetInspection")
     CHECK(sky.resource.skybox);
     for (const auto& face : sky.skyOriginal)
       CHECK_FALSE(face.isNull());
+    const auto keys = require(assetPreviewKeys(*source));
+    const auto thumbnail = inspection::skyThumbnail(sky);
+    REQUIRE_FALSE(thumbnail.isNull());
+    CHECK(thumbnail.pixelColor(128, 128) == QColor{Qt::blue});
+    REQUIRE(source->setFavorite(entries.front().id, true).is_success());
+    CHECK(require(assetPreviewKeys(*source)) == keys);
 
     auto window = AssetLibraryWindow{pathAsQString(folder), false};
     window.resize(900, 600);
@@ -571,6 +577,22 @@ TEST_CASE("AssetInspection")
     const auto pixmap = qvariant_cast<QPixmap>(grid->model()->data(
       grid->model()->index(0, 0), AssetLibraryItemDelegate::ThumbnailRole));
     CHECK_FALSE(pixmap.isNull());
+    CHECK(pixmap.toImage() == thumbnail);
+    // Faces change independently of the manifest revision in both browser hosts.
+    for (const auto face : {"bk", "rt", "lf", "ft", "up", "dn"})
+      write(folder / "env" / (std::string{"desert"} + face + ".png"), png(Qt::red));
+    REQUIRE(source->rescan().is_success());
+    CHECK(require(source->assets()).front().revision == entries.front().revision);
+    CHECK(
+      require(assetPreviewKeys(*source)).at(entries.front().id)
+      != keys.at(entries.front().id));
+    QTRY_COMPARE(
+      grid->model()
+        ->data(grid->model()->index(0, 0), AssetLibraryItemDelegate::ThumbnailRole)
+        .value<QPixmap>()
+        .toImage()
+        .pixelColor(128, 128),
+      QColor{Qt::red});
   }
 
   SECTION("GoldSrc studio models preview the bind pose and body variants")

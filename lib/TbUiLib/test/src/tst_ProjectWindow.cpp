@@ -1014,13 +1014,13 @@ TEST_CASE("ProjectWindow")
     source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
     used->setChecked(true);
     QApplication::processEvents();
-    CHECK(folders->findItems("skyboxes", Qt::MatchRecursive).empty());
+    CHECK(folders->findItems("skybox", Qt::MatchRecursive).empty());
     REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "skyname", "live"));
-    QTRY_COMPARE(folders->findItems("skyboxes", Qt::MatchRecursive).size(), 1);
+    QTRY_COMPARE(folders->findItems("skybox", Qt::MatchRecursive).size(), 1);
     tabs->setCurrentIndex(1);
-    QTRY_VERIFY(folders->findItems("skyboxes", Qt::MatchRecursive).empty());
+    QTRY_VERIFY(folders->findItems("skybox", Qt::MatchRecursive).empty());
     tabs->setCurrentIndex(0);
-    QTRY_COMPARE(folders->findItems("skyboxes", Qt::MatchRecursive).size(), 1);
+    QTRY_COMPARE(folders->findItems("skybox", Qt::MatchRecursive).size(), 1);
     require(session->save());
     closeTab(*tabs, 1);
     closeTab(*tabs, 0);
@@ -1934,6 +1934,59 @@ TEST_CASE("ProjectWindow")
     texture.libraryId = library->info().id;
     texture.libraryAssetId = skybox->id;
     texture.libraryRevision = skybox->revision;
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* sourceCombo = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    auto* cards = browser->findChild<ModelBrowserView*>();
+    auto* typeCombo = browser->findChild<QComboBox*>("ModelBrowser_Type");
+    REQUIRE(sourceCombo);
+    REQUIRE(folders);
+    REQUIRE(cards);
+    REQUIRE(typeCombo);
+    sourceCombo->setCurrentIndex(
+      sourceCombo->findData(int(BrowserSourceFilter::AssetLibrary)));
+    QTRY_COMPARE(cards->assets().size(), 1);
+    REQUIRE(cards->assets().front().skybox);
+    CHECK(cards->assets().front().catalogPath == std::filesystem::path{"skybox/desert"});
+    CHECK(folders->findItems("env", Qt::MatchRecursive).empty());
+    const auto skyboxIndex = typeCombo->findText("Skyboxes");
+    REQUIRE(skyboxIndex >= 0);
+    typeCombo->setCurrentIndex(skyboxIndex);
+    CHECK(cards->assets().size() == 1);
+    typeCombo->setCurrentIndex(typeCombo->findData(int(BrowserCellType::Texture)));
+    CHECK(cards->assets().empty());
+    typeCombo->setCurrentIndex(skyboxIndex);
+    REQUIRE(cards->assets().size() == 1);
+    emit cards->folderActivated("skybox");
+    const auto previewIdentity = cards->assets().front().previewIdentity;
+    const auto hasSkyPixels = [&](const bool red) {
+      const auto image = cards->grabFramebuffer();
+      auto pixels = 0;
+      for (auto y = 0; y < image.height(); y += 2)
+        for (auto x = 0; x < image.width(); x += 2)
+        {
+          const auto color = image.pixelColor(x, y);
+          if (
+            red ? color.red() > 200 && color.green() < 40 && color.blue() < 40
+                : color.blue() > color.red() + 32 && color.green() > color.red() + 16)
+            ++pixels;
+        }
+      return pixels > 500;
+    };
+    REQUIRE(QTest::qWaitFor([&]() { return hasSkyPixels(false); }, 3000));
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+    {
+      auto image = QImage{8, 8, QImage::Format_RGBA8888};
+      image.fill(Qt::red);
+      REQUIRE(image.save(folder + "/env/desert" + face + ".png"));
+    }
+    auto source = openLocalAssetLibrary(pathFromQString(folder));
+    REQUIRE(source);
+    require(source->rescan());
+    QTRY_VERIFY(cards->assets().front().previewIdentity != previewIdentity);
+    REQUIRE(QTest::qWaitFor([&]() { return hasSkyPixels(true); }, 3000));
     const auto payload = catalogAssetDragData(texture, session->store().info().id);
     REQUIRE(isCatalogAssetDrag(payload));
 
@@ -1961,6 +2014,20 @@ TEST_CASE("ProjectWindow")
         assets,
         [](const auto& asset) { return asset.type == project::AssetType::Skybox; })
       == 1);
+    const auto browsable = require(browsableProjectAssets(session->store()));
+    CHECK(std::ranges::none_of(browsable, [](const auto& asset) {
+      return asset.type == project::AssetType::Texture;
+    }));
+    sourceCombo->setCurrentIndex(
+      sourceCombo->findData(int(BrowserSourceFilter::Project)));
+    QTRY_VERIFY(std::ranges::any_of(
+      cards->assets(), [](const auto& asset) { return asset.skybox; }));
+    CHECK(std::ranges::none_of(cards->assets(), [](const auto& asset) {
+      return asset.type == BrowserCellType::Texture && !asset.skybox;
+    }));
+    CHECK(folders->findItems("gfx", Qt::MatchRecursive).empty());
+    emit cards->folderActivated("skybox");
+    REQUIRE(QTest::qWaitFor([&]() { return hasSkyPixels(true); }, 3000));
 
     REQUIRE(map.canUndoCommand());
     map.undoCommand();

@@ -9,13 +9,16 @@
 
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcModel.h"
+#include "project/ProjectStore.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -23,6 +26,58 @@ namespace tb::ui
 {
 namespace
 {
+template <typename Asset, typename ReadDependencies>
+std::vector<Asset> browsableAssets(
+  std::vector<Asset> assets, const ReadDependencies& readDependencies)
+{
+  auto hidden = std::unordered_set<std::string>{};
+  for (const auto& asset : assets)
+  {
+    if (asset.type != project::AssetType::Skybox)
+      continue;
+    const auto dependencies = readDependencies(asset.id);
+    if (dependencies.is_success())
+      for (const auto& edge : dependencies.value())
+        if (edge.kind == "skybox-face")
+          hidden.insert(edge.dependencyId);
+  }
+  std::erase_if(assets, [&](const auto& asset) { return hidden.contains(asset.id); });
+  return assets;
+}
+
+template <typename Asset, typename ReadDependencies>
+Result<AssetPreviewKeys> previewKeys(
+  const std::vector<Asset>& assets,
+  const std::string& scope,
+  const ReadDependencies& readDependencies)
+{
+  auto revisions = std::unordered_map<std::string, std::string>{};
+  for (const auto& asset : assets)
+    revisions.emplace(
+      asset.id, "/" + std::to_string(asset.revision) + "/" + asset.contentHash);
+  auto keys = AssetPreviewKeys{};
+  for (const auto& asset : assets)
+  {
+    auto key = scope + "/" + asset.id + revisions.at(asset.id);
+    if (
+      asset.type == project::AssetType::Model || asset.type == project::AssetType::Skybox)
+    {
+      const auto edges = readDependencies(asset.id);
+      if (edges.is_error())
+        return std::get<Error>(edges.error());
+      for (const auto& edge : edges.value())
+      {
+        key += "/" + edge.dependencyId;
+        if (const auto revision = revisions.find(edge.dependencyId);
+            revision != revisions.end())
+          key += revision->second;
+      }
+    }
+    keys.emplace(asset.id, QString::fromStdString(key));
+  }
+  return keys;
+}
+
 /**
  * Copies the texture header and animation group files that live beside a GoldSrc model.
  *
@@ -79,6 +134,36 @@ void importModelSiblings(
 }
 } // namespace
 
+Result<std::vector<project::Asset>> browsableProjectAssets(
+  const project::ProjectStore& store)
+{
+  auto assets = store.assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+  return browsableAssets(
+    std::move(assets).value(), [&](const auto& id) { return store.dependencies(id); });
+}
+
+Result<AssetPreviewKeys> assetPreviewKeys(const AssetLibrarySource& source)
+{
+  const auto assets = source.allAssets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+  return previewKeys(assets.value(), source.libraryId(), [&](const auto& id) {
+    return source.dependencies(id);
+  });
+}
+
+Result<AssetPreviewKeys> assetPreviewKeys(const project::ProjectStore& store)
+{
+  const auto assets = store.assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+  return previewKeys(assets.value(), store.info().id, [&](const auto& id) {
+    return store.dependencies(id);
+  });
+}
+
 void loadBrowserAssetMetadata(
   std::vector<BrowserAsset>& assets, const ProjectSession& session)
 {
@@ -134,27 +219,9 @@ public:
     if (assets.is_error())
       return assets;
 
-    // Skybox faces are catalog entries so the group, project captures and conversion
-    // keep per-face revisions, but showing all six beside the group makes the browser
-    // look like it has seven unrelated textures.
-    auto hidden = std::unordered_set<std::string>{};
-    for (const auto& asset : assets.value())
-    {
-      if (asset.type != project::AssetType::Skybox)
-        continue;
-      const auto dependencies = m_library->dependencies(asset.id);
-      if (dependencies.is_error())
-        continue;
-      for (const auto& edge : dependencies.value())
-        if (edge.kind == "skybox-face")
-          hidden.insert(edge.dependencyId);
-    }
-    auto browsable = std::vector<project::LibraryAsset>{};
-    browsable.reserve(assets.value().size());
-    for (const auto& asset : assets.value())
-      if (!hidden.contains(asset.id))
-        browsable.push_back(asset);
-    return browsable;
+    return browsableAssets(std::move(assets).value(), [&](const auto& id) {
+      return m_library->dependencies(id);
+    });
   }
 
   Result<std::vector<project::LibraryAsset>> allAssets() const override
