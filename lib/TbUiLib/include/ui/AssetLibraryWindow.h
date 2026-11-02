@@ -99,6 +99,7 @@ class AssetLibraryWindow : public QDialog
     m_waveInfoCache;
   // KiB budget; cache only card-sized images, including failed decodes.
   mutable QCache<QString, QImage> m_thumbnailCache{16 * 1024};
+  std::map<std::string, QString> m_thumbnailKeys;
   QLabel* m_projectScope = nullptr;
   QTimer* m_reloadTimer = nullptr;
   AssetLibraryListView* m_categories = nullptr;
@@ -157,6 +158,7 @@ private:
   void retryFailedConversions();
   void stepConvertQueue();
   void cancelConvertQueue();
+  void resetConvertQueue();
   void showOperationReport(
     const QStringList& lines,
     const QStringList& files = {},

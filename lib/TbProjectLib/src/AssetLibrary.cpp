@@ -715,10 +715,12 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::open(
       // Version 2 adds per asset metadata and a user supplied name that survives rescans.
       auto customName = detail::Statement{
         db,
-        "SELECT count(*) FROM pragma_table_info('assets') WHERE name='custom_display_name'"};
+        "SELECT count(*) FROM pragma_table_info('assets') WHERE "
+        "name='custom_display_name'"};
       if (customName.next() && customName.integer(0) == 0)
         detail::execute(
-          db, "ALTER TABLE assets ADD COLUMN custom_display_name TEXT NOT NULL DEFAULT ''");
+          db,
+          "ALTER TABLE assets ADD COLUMN custom_display_name TEXT NOT NULL DEFAULT ''");
       detail::execute(
         db,
         "CREATE TABLE IF NOT EXISTS asset_meta(asset_id TEXT PRIMARY KEY REFERENCES "
@@ -831,8 +833,8 @@ void writeRevisionRow(
   insert.run();
 
   // Libraries keep no history: the newest content replaces every earlier revision.
-  auto prune = detail::Statement{
-    db, "DELETE FROM asset_revisions WHERE asset_id=? AND revision<>?"};
+  auto prune =
+    detail::Statement{db, "DELETE FROM asset_revisions WHERE asset_id=? AND revision<>?"};
   prune.bind(1, assetId);
   prune.bind(2, asset.revision);
   prune.run();
@@ -953,7 +955,8 @@ Result<LibraryScan> AssetLibrary::scan()
           const auto& stored = contentRowFor();
           auto update = detail::Statement{
             db,
-            "UPDATE assets SET type=?,display_name=CASE WHEN custom_display_name<>'' THEN "
+            "UPDATE assets SET type=?,display_name=CASE WHEN custom_display_name<>'' "
+            "THEN "
             "custom_display_name ELSE ? END,virtual_path=?,group_path=?,"
             "source_rel_path=?,source_member=?,native_format=?,identity=?,recipe=?,"
             "revision=?,content_hash=?,content=?,original=?,size=?,dependency_hints=?,"
@@ -1458,12 +1461,29 @@ Result<void> AssetLibrary::clearRemovedSource(const std::string& sourceRelPath)
 {
   return detail::attempt([&] {
     detail::validatePath(sourceRelPath);
+    // Restore this source and, for an actual sky face, its exact logical group.
+    auto skyboxPath = std::string{};
+    const auto path = std::filesystem::path{sourceRelPath};
+    if (sourceFormatFor(path.extension()) == SourceFormat::Image)
+    {
+      const auto stem = path.stem().string();
+      const auto lowerStem = lowered(stem);
+      for (const auto suffix : {"bk", "rt", "lf", "ft", "up", "dn"})
+        if (stem.size() > 2 && lowerStem.ends_with(suffix))
+        {
+          skyboxPath =
+            (path.parent_path() / stem.substr(0, stem.size() - 2)).generic_string();
+          break;
+        }
+    }
     auto statement = detail::Statement{
       m_impl->database.get(),
       "DELETE FROM removed_assets WHERE source_rel_path=? OR "
-      "substr(?,1,length(virtual_path))=virtual_path"};
+      "(?<>'' AND lower(virtual_path)=lower(?) AND source_rel_path=?)"};
     statement.bind(1, sourceRelPath);
-    statement.bind(2, sourceRelPath);
+    statement.bind(2, skyboxPath);
+    statement.bind(3, skyboxPath);
+    statement.bind(4, path.parent_path().generic_string());
     statement.run();
   });
 }
@@ -1489,7 +1509,8 @@ std::vector<std::string> splitTags(const std::string& text)
   while (start <= text.size())
   {
     const auto end = text.find('\n', start);
-    const auto tag = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+    const auto tag =
+      text.substr(start, end == std::string::npos ? std::string::npos : end - start);
     if (!tag.empty())
       tags.push_back(tag);
     if (end == std::string::npos)
@@ -1500,7 +1521,8 @@ std::vector<std::string> splitTags(const std::string& text)
 }
 } // namespace
 
-Result<AssetLibrary::AssetMetadata> AssetLibrary::metadata(const std::string& assetId) const
+Result<AssetLibrary::AssetMetadata> AssetLibrary::metadata(
+  const std::string& assetId) const
 {
   return detail::attempt([&] {
     detail::validateAssetId(assetId);
@@ -1524,7 +1546,8 @@ Result<void> AssetLibrary::setFavorite(const std::string& assetId, const bool fa
       throw detail::StoreError{"Library asset not found."};
     auto statement = detail::Statement{
       db,
-      "INSERT INTO asset_meta(asset_id,favorite) VALUES(?,?) ON CONFLICT(asset_id) DO UPDATE "
+      "INSERT INTO asset_meta(asset_id,favorite) VALUES(?,?) ON CONFLICT(asset_id) DO "
+      "UPDATE "
       "SET favorite=excluded.favorite"};
     statement.bind(1, assetId);
     statement.bind(2, std::uint64_t{favorite ? 1u : 0u});

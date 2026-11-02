@@ -63,8 +63,12 @@ TEST_CASE("PrefabAsset")
       "\"classname\" \"worldspawn\"\n"
       "\"skyname\" \"desert\"\n"
       "{\n"
-      "( 0 0 0 ) ( 64 0 0 ) ( 0 64 0 ) BRICK 0 0 0 1 1\n"
-      "( 0 0 64 ) ( 64 0 64 ) ( 0 64 64 ) BRICK 0 0 0 1 1\n"
+      "( 0 0 0 ) ( 0 1 0 ) ( 0 0 1 ) BRICK 0 0 0 1 1\n"
+      "( 0 0 0 ) ( 0 0 1 ) ( 1 0 0 ) BRICK 0 0 0 1 1\n"
+      "( 0 0 0 ) ( 1 0 0 ) ( 0 1 0 ) BRICK 0 0 0 1 1\n"
+      "( 64 64 64 ) ( 64 65 64 ) ( 65 64 64 ) BRICK 0 0 0 1 1\n"
+      "( 64 64 64 ) ( 65 64 64 ) ( 64 64 65 ) BRICK 0 0 0 1 1\n"
+      "( 64 64 64 ) ( 64 64 65 ) ( 64 65 64 ) BRICK 0 0 0 1 1\n"
       "}\n"
       "}\n"
       "{\n"
@@ -77,7 +81,7 @@ TEST_CASE("PrefabAsset")
     const auto& prefab = contents.value();
     CHECK(prefab.brushes == 1);
     CHECK(prefab.entities == 1);
-    CHECK(prefab.faces == 2);
+    CHECK(prefab.faces == 6);
     CHECK(prefab.materials == std::vector<std::string>{"BRICK"});
     CHECK(prefab.sounds == std::vector<std::string>{"sound/ambience/wind.wav"});
     CHECK(prefab.skies == std::vector<std::string>{"desert"});
@@ -89,6 +93,19 @@ TEST_CASE("PrefabAsset")
     CHECK(thumbnail.size() == QSize{64, 64});
     CHECK(thumbnail.pixelColor(32, 32).alpha() > 0);
     CHECK(renderPrefabThumbnail(PrefabContents{}, 64).isNull());
+  }
+
+  SECTION("incomplete brushes do not invent a footprint from plane points")
+  {
+    const auto contents = readPrefabContents(
+      "{\n\"classname\" \"worldspawn\"\n{\n"
+      "( 0 0 0 ) ( 64 0 0 ) ( 0 64 0 ) BRICK 0 0 0 1 1\n"
+      "}\n}\n");
+    REQUIRE(contents.is_success());
+    CHECK(contents.value().brushes == 1);
+    CHECK(contents.value().faces == 1);
+    CHECK(contents.value().brushBounds.empty());
+    CHECK(renderPrefabThumbnail(contents.value(), 64).isNull());
   }
 
   SECTION("rejects prefab text without a worldspawn entity")

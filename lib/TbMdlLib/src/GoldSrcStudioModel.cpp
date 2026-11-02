@@ -9,8 +9,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <optional>
 #include <cstring>
+#include <optional>
 
 namespace tb::mdl
 {
@@ -21,7 +21,7 @@ using Bytes = std::vector<std::uint8_t>;
 
 // GoldSrc studio format, version 10. Only the tables needed for a preview are read;
 // bone controllers, hit boxes and attachments stay untouched.
-constexpr std::uint32_t StudioIdentifier = 0x54534449; // "IDST"
+constexpr std::uint32_t StudioIdentifier = 0x54534449;   // "IDST"
 constexpr std::uint32_t SequenceIdentifier = 0x51534449; // "IDSQ"
 constexpr std::uint32_t StudioVersion = 10;
 constexpr std::size_t HeaderSize = 244;
@@ -97,8 +97,7 @@ std::vector<GoldSrcStudioTexture> decodeTextures(
   const Bytes& bytes, const Header& header, bool decodePixels);
 
 /** Smallest box containing every authored vertex of every body variant. */
-std::optional<vm::bbox3f> measureBounds(
-  const Bytes& bytes, const Header& header);
+std::optional<vm::bbox3f> measureBounds(const Bytes& bytes, const Header& header);
 
 struct Header
 {
@@ -264,8 +263,8 @@ Result<Header> readHeader(const Bytes& bytes)
   header.sequenceGroups = std::max(std::size_t{1}, countAt(bytes, 172, 1024));
   header.sequenceGroupOffset = tableAt(bytes, 176, header.sequenceGroups, 104);
   if (header.sequenceGroupOffset != 0)
-    header.sequenceGroupBase = std::size_t(
-      std::max(0, readi32(bytes, header.sequenceGroupOffset + 100)));
+    header.sequenceGroupBase =
+      std::size_t(std::max(0, readi32(bytes, header.sequenceGroupOffset + 100)));
   header.textures = countAt(bytes, 180, MaxTextures);
   header.textureOffset = tableAt(bytes, 184, header.textures, TextureSize);
   header.skinReferences = countAt(bytes, 192, 4096);
@@ -284,6 +283,8 @@ Result<Header> readHeader(const Bytes& bytes)
     return Error{"The studio model body part table lies outside the file."};
   if (header.sequences > 0 && header.sequenceOffset == 0)
     return Error{"The studio model sequence table lies outside the file."};
+  if ((header.skinReferences == 0) != (header.skinFamilies == 0))
+    return Error{"The studio model skin table counts are inconsistent."};
   if (
     header.skinReferences > 0
     && !contains(
@@ -302,8 +303,9 @@ Result<Header> readHeader(const Bytes& bytes)
   header.bounds = vm::bbox3f{low, high};
   // Engine-authored models sometimes ship a zero render box; the vertex tables still
   // describe the authored volume, so fall back to them instead of reporting a point.
-  if (header.bounds.size().x() <= 0.0f && header.bounds.size().y() <= 0.0f
-      && header.bounds.size().z() <= 0.0f)
+  if (
+    header.bounds.size().x() <= 0.0f && header.bounds.size().y() <= 0.0f
+    && header.bounds.size().z() <= 0.0f)
   {
     if (const auto measured = measureBounds(bytes, header); measured)
       header.bounds = *measured;
@@ -312,7 +314,8 @@ Result<Header> readHeader(const Bytes& bytes)
 }
 
 /** Replaces the texture and skin tables with the separate texture header when used. */
-Result<void> applyTextureHeader(Header& header, const std::vector<std::uint8_t>* textureBytes)
+Result<void> applyTextureHeader(
+  Header& header, const std::vector<std::uint8_t>* textureBytes)
 {
   if (!textureBytes || textureBytes->empty() || header.textures != 0)
     return {};
@@ -525,9 +528,9 @@ std::optional<std::vector<BonePose>> readSequencePose(
     animationBytes = &groupBytes;
   }
 
-  const auto animationBase =
-    group == 0 ? header.sequenceGroupBase + std::size_t(animIndex)
-               : std::size_t(animIndex);
+  const auto animationBase = group == 0
+                               ? header.sequenceGroupBase + std::size_t(animIndex)
+                               : std::size_t(animIndex);
   if (!contains(*animationBytes, animationBase, blends * header.bones * AnimationSize))
     return std::nullopt;
   const auto animationOffset = animationBase + blend * header.bones * AnimationSize;
@@ -539,7 +542,8 @@ std::optional<std::vector<BonePose>> readSequencePose(
     const auto block = animationOffset + bone * AnimationSize;
     for (auto channel = std::size_t{0}; channel < 6; ++channel)
     {
-      const auto channelOffset = std::size_t{readu16(*animationBytes, block + channel * 2)};
+      const auto channelOffset =
+        std::size_t{readu16(*animationBytes, block + channel * 2)};
       const auto base = readf32(bytes, boneOffset + 64 + channel * 4);
       const auto scale = readf32(bytes, boneOffset + 88 + channel * 4);
       pose[bone].values[channel] = base;
@@ -575,8 +579,7 @@ std::vector<Transform> readBoneTransforms(
     for (auto channel = std::size_t{0}; channel < 6; ++channel)
     {
       const auto controller = readi32(bytes, boneOffset + 40 + channel * 4);
-      if (
-        controller >= 0 && std::size_t(controller) < controllerAdjustments.size())
+      if (controller >= 0 && std::size_t(controller) < controllerAdjustments.size())
         values[channel] += controllerAdjustments[std::size_t(controller)];
     }
     local[i] = transformFromValues(values);
@@ -622,8 +625,7 @@ bool isGoldSrcStudioModel(const std::vector<std::uint8_t>& bytes)
 }
 
 Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
-  const std::vector<std::uint8_t>& bytes,
-  const GoldSrcStudioExternalData& external)
+  const std::vector<std::uint8_t>& bytes, const GoldSrcStudioExternalData& external)
 {
   auto header = readHeader(bytes);
   if (header.is_error())
@@ -631,8 +633,7 @@ Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
   auto value = std::move(header).value();
   if (auto merged = applyTextureHeader(value, external.textureHeader); merged.is_error())
     return std::get<Error>(merged.error());
-  const auto& textureBytes =
-    value.externalTextures ? *external.textureHeader : bytes;
+  const auto& textureBytes = value.externalTextures ? *external.textureHeader : bytes;
 
   auto result = GoldSrcStudioModelInfo{};
   result.name = value.name;
@@ -652,8 +653,8 @@ Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
   result.sequenceGroupFiles.resize(value.sequenceGroups);
   if (value.sequenceGroupOffset != 0)
     for (auto i = std::size_t{0}; i < value.sequenceGroups; ++i)
-      result.sequenceGroupFiles[i] = readFixedString(
-        bytes, value.sequenceGroupOffset + i * 104 + 32, 64);
+      result.sequenceGroupFiles[i] =
+        readFixedString(bytes, value.sequenceGroupOffset + i * 104 + 32, 64);
 
   for (auto i = std::size_t{0}; i < value.sequences; ++i)
   {
@@ -712,8 +713,7 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   const auto pose = readSequencePose(bytes, value, sequence, frame, blend, external);
   const auto adjustments = readBoneControllerAdjustments(bytes, value);
   const auto bones = readBoneTransforms(bytes, value, pose, adjustments);
-  const auto& textureBytes =
-    value.externalTextures ? *external.textureHeader : bytes;
+  const auto& textureBytes = value.externalTextures ? *external.textureHeader : bytes;
   auto textures = decodeTextures(textureBytes, value, decodeTexturePixels);
   auto result = GoldSrcStudioMesh{};
 
@@ -745,9 +745,9 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
     {
       const auto offset = meshOffset + mesh * MeshSize;
       const auto skinReference = readi32(bytes, offset + 8);
-      const auto family =
-        value.skinFamilies == 0 ? std::size_t{0}
-                                : std::min(skinFamily, value.skinFamilies - 1);
+      const auto family = value.skinFamilies == 0
+                            ? std::size_t{0}
+                            : std::min(skinFamily, value.skinFamilies - 1);
       const auto skinIndex = family * value.skinReferences + std::size_t(skinReference);
       const auto textureIndex =
         skinReference >= 0 && std::size_t(skinReference) < value.skinReferences
@@ -758,8 +758,8 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
         continue;
 
       // Each mesh stores runs of triangles: a positive count is a strip, a negative one
-      // a fan, and zero terminates the mesh. Every vertex is four int16 values whose first
-      // entry indexes the model's vertex array.
+      // a fan, and zero terminates the mesh. Every vertex is four int16 values whose
+      // first entry indexes the model's vertex array.
       auto stream = std::size_t(streamOffset);
       auto emitted = std::size_t{0};
       while (emitted < MaxTriangles * 3)

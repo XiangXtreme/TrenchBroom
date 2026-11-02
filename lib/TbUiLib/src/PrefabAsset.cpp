@@ -31,6 +31,8 @@
 #include "fs/File.h"
 #include "fs/PathInfo.h"
 #include "fs/Reader.h"
+#include "mdl/Brush.h"
+#include "mdl/BrushFace.h"
 #include "mdl/EntityProperties.h"
 #include "mdl/MapFormat.h"
 #include "mdl/StandardMapParser.h"
@@ -115,12 +117,14 @@ class PrefabContentsParser : public mdl::StandardMapParser
   bool m_sawWorld = false;
   std::optional<vm::vec3d> m_low;
   std::optional<vm::vec3d> m_high;
-  std::optional<vm::vec3d> m_brushLow;
-  std::optional<vm::vec3d> m_brushHigh;
+  mdl::MapFormat m_format;
+  std::vector<mdl::BrushFace> m_brushFaces;
+  bool m_brushValid = true;
 
 public:
   PrefabContentsParser(const std::string& text, const mdl::MapFormat format)
     : StandardMapParser{text, format, format}
+    , m_format{format}
   {
   }
 
@@ -162,12 +166,6 @@ private:
     }
   }
 
-  void extendBounds(const vm::vec3d& point)
-  {
-    extend(m_low, m_high, point);
-    extend(m_brushLow, m_brushHigh, point);
-  }
-
   void addFace(
     const vm::vec3d& point1,
     const vm::vec3d& point2,
@@ -177,9 +175,11 @@ private:
     ++m_contents.faces;
     if (!material.empty())
       m_contents.materials.push_back(std::move(material));
-    extendBounds(point1);
-    extendBounds(point2);
-    extendBounds(point3);
+    auto face = mdl::BrushFace::create(point1, point2, point3, "", {}, {}, m_format);
+    if (face.is_error())
+      m_brushValid = false;
+    else
+      m_brushFaces.push_back(std::move(face).value());
   }
 
   void onBeginEntity(
@@ -232,13 +232,22 @@ private:
   void onBeginBrush(const FileLocation&, ParserStatus&) override
   {
     ++m_contents.brushes;
-    m_brushLow.reset();
-    m_brushHigh.reset();
+    m_brushFaces.clear();
+    m_brushValid = true;
   }
   void onEndBrush(const FileLocation&, ParserStatus&) override
   {
-    if (m_brushLow && m_brushHigh)
-      m_contents.brushBounds.emplace_back(*m_brushLow, *m_brushHigh);
+    if (!m_brushValid || m_brushFaces.size() < 4)
+      return;
+    // Use the editor's plane intersection and validation, with room for GoldSrc maps.
+    const auto brush =
+      mdl::Brush::create(vm::bbox3d{16777216.0}, std::move(m_brushFaces));
+    if (brush.is_error() || !brush.value().fullySpecified())
+      return;
+    const auto& bounds = brush.value().bounds();
+    m_contents.brushBounds.push_back(bounds);
+    extend(m_low, m_high, bounds.min);
+    extend(m_low, m_high, bounds.max);
   }
   void onStandardBrushFace(
     const FileLocation&,
@@ -314,10 +323,8 @@ QImage renderPrefabThumbnail(const PrefabContents& contents, const int size)
   const auto extentY = bounds.max.y() - bounds.min.y();
   const auto extent = std::max({extentX, extentY, 1.0});
   const auto scale = double(size) * 0.8 / extent;
-  const auto offsetX =
-    (double(size) - extentX * scale) / 2.0 - bounds.min.x() * scale;
-  const auto offsetY =
-    (double(size) - extentY * scale) / 2.0 - bounds.min.y() * scale;
+  const auto offsetX = (double(size) - extentX * scale) / 2.0 - bounds.min.x() * scale;
+  const auto offsetY = (double(size) - extentY * scale) / 2.0 - bounds.min.y() * scale;
 
   auto image = QImage{size, size, QImage::Format_ARGB32_Premultiplied};
   image.fill(Qt::transparent);

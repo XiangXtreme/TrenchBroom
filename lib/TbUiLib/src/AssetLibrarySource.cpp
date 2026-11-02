@@ -13,9 +13,9 @@
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
+#include <array>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <unordered_set>
 #include <utility>
 
@@ -36,20 +36,25 @@ void importModelSiblings(
   const std::string& relativePath,
   const bool overwrite)
 {
+  if (librarySubfolderForFile(source) != "models")
+    return;
   const auto& libraryFolder = library.folder();
   auto stream = std::ifstream{source, std::ios::binary};
   if (!stream)
     return;
-  const auto bytes = std::vector<std::uint8_t>{
-    std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
-  const auto dependencies = project::readGoldSrcModelDependencies(bytes);
+  // Dependency discovery needs only studiohdr_t, regardless of the source's size.
+  auto header = std::array<char, 244>{};
+  if (!stream.read(header.data(), std::streamsize(header.size())))
+    return;
+  const auto dependencies = project::readGoldSrcModelDependencies(
+    std::vector<std::uint8_t>{header.begin(), header.end()});
   if (dependencies.is_error())
     return;
 
   auto names =
     project::modelAnimationGroupNames(relativePath, dependencies.value().sequenceGroups);
-  if (const auto companion =
-        project::modelCompanionName(std::filesystem::path{relativePath}.filename().string());
+  if (const auto companion = project::modelCompanionName(
+        std::filesystem::path{relativePath}.filename().string());
       !companion.empty())
     names.push_back(companion);
 
@@ -67,9 +72,8 @@ void importModelSiblings(
     const auto targetRelative = (relative.parent_path() / file).generic_string();
     if (!overwrite && std::filesystem::exists(libraryFolder / targetRelative, error))
       continue;
-    if (
-      importFileIntoLibrary(libraryFolder, sourcePath, targetRelative, overwrite)
-        .is_success())
+    if (importFileIntoLibrary(libraryFolder, sourcePath, targetRelative, overwrite)
+          .is_success())
       (void)library.clearRemovedSource(targetRelative);
   }
 }

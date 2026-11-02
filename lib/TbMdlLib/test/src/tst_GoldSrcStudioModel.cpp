@@ -17,6 +17,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -278,7 +279,7 @@ TEST_CASE("GoldSrcStudioModel")
     CHECK(model.name == "testmodel");
     CHECK(model.bones == 2);
     CHECK(model.sequences == 0);
-  CHECK(model.sequenceList.empty());
+    CHECK(model.sequenceList.empty());
     CHECK(model.sequenceGroups == 2);
     CHECK(model.skinFamilies == 2);
     CHECK(model.skinReferences == 1);
@@ -468,18 +469,20 @@ TEST_CASE("GoldSrcStudioModel")
 
     const auto posed = buildGoldSrcStudioMesh(main, {}, 0, 0, true, external);
     REQUIRE(posed.is_success());
-    CHECK_THAT(posed.value().positions.front().x(), Catch::Matchers::WithinAbs(16.0f, 0.001));
+    CHECK_THAT(
+      posed.value().positions.front().x(), Catch::Matchers::WithinAbs(16.0f, 0.001));
 
-    const auto secondBlend =
-      buildGoldSrcStudioMesh(main, {}, 0, 0, true, external, 0, 1);
+    const auto secondBlend = buildGoldSrcStudioMesh(main, {}, 0, 0, true, external, 0, 1);
     REQUIRE(secondBlend.is_success());
     CHECK_THAT(
-      secondBlend.value().positions.front().x(), Catch::Matchers::WithinAbs(20.0f, 0.001));
+      secondBlend.value().positions.front().x(),
+      Catch::Matchers::WithinAbs(20.0f, 0.001));
 
     // Without the group file the same sequence falls back to the bone rest pose.
     const auto rest = buildGoldSrcStudioMesh(main);
     REQUIRE(rest.is_success());
-    CHECK_THAT(rest.value().positions.front().x(), Catch::Matchers::WithinAbs(11.0f, 0.001));
+    CHECK_THAT(
+      rest.value().positions.front().x(), Catch::Matchers::WithinAbs(11.0f, 0.001));
   }
 
   SECTION("applies neutral bone controller offsets")
@@ -492,12 +495,12 @@ TEST_CASE("GoldSrcStudioModel")
     header.bonecontrollerindex = int32_t(controllerOffset);
     writeAt(main, 0, header);
 
-    writeAt(main, controllerOffset, int32_t{1}); // bone
+    writeAt(main, controllerOffset, int32_t{1});          // bone
     writeAt(main, controllerOffset + 4, int32_t{0x0010}); // STUDIO_YR
-    writeAt(main, controllerOffset + 8, 0.0f); // start
-    writeAt(main, controllerOffset + 12, 90.0f); // end
-    writeAt(main, controllerOffset + 16, int32_t{0}); // rest
-    writeAt(main, controllerOffset + 20, int32_t{3}); // user controller
+    writeAt(main, controllerOffset + 8, 0.0f);            // start
+    writeAt(main, controllerOffset + 12, 90.0f);          // end
+    writeAt(main, controllerOffset + 16, int32_t{0});     // rest
+    writeAt(main, controllerOffset + 20, int32_t{3});     // user controller
     // Unused bone controller slots are -1 in engine-authored models.
     for (auto bone = 0; bone < 2; ++bone)
       for (auto channel = 0; channel < 6; ++channel)
@@ -507,10 +510,7 @@ TEST_CASE("GoldSrcStudioModel")
             + std::size_t(channel) * 4,
           int32_t{-1});
     // Bone 1 Y rotation uses controller table entry 0.
-    writeAt(
-      main,
-      sizeof(StudioHeader) + sizeof(StudioBone) + 40 + 4 * 4,
-      int32_t{0});
+    writeAt(main, sizeof(StudioHeader) + sizeof(StudioBone) + 40 + 4 * 4, int32_t{0});
 
     const auto info = readGoldSrcStudioModelInfo(main);
     REQUIRE(info.is_success());
@@ -520,8 +520,7 @@ TEST_CASE("GoldSrcStudioModel")
     REQUIRE(mesh.is_success());
     const auto& position = mesh.value().positions.front();
     const auto angle = 127.0f / 255.0f * 90.0f * 3.14159265f / 180.0f;
-    CHECK_THAT(
-      position.x(), Catch::Matchers::WithinAbs(10.0f + std::cos(angle), 0.01f));
+    CHECK_THAT(position.x(), Catch::Matchers::WithinAbs(10.0f + std::cos(angle), 0.01f));
     CHECK_THAT(
       std::abs(position.z()), Catch::Matchers::WithinAbs(std::sin(angle), 0.01f));
   }
@@ -535,6 +534,22 @@ TEST_CASE("GoldSrcStudioModel")
     CHECK_THAT(position.x(), Catch::Matchers::WithinAbs(10.0f, 0.001));
     CHECK_THAT(position.y(), Catch::Matchers::WithinAbs(1.0f, 0.001));
     CHECK_THAT(position.z(), Catch::Matchers::WithinAbs(0.0f, 0.001));
+  }
+
+  SECTION("rejects inconsistent skin tables before reading mesh indices")
+  {
+    for (const auto [references, families] : {std::pair{1, 0}, std::pair{0, 1}})
+    {
+      auto bytes = makeStudioModel();
+      auto header = StudioHeader{};
+      std::memcpy(&header, bytes.data(), sizeof(header));
+      header.numskinref = references;
+      header.numskinfamilies = families;
+      header.skinindex = int32_t(bytes.size());
+      writeAt(bytes, 0, header);
+      CHECK(readGoldSrcStudioModelInfo(bytes).is_error());
+      CHECK(buildGoldSrcStudioMesh(bytes).is_error());
+    }
   }
 
   SECTION("rejects tables outside the file and missing geometry")
@@ -582,8 +597,7 @@ TEST_CASE("GoldSrcStudioModel real model")
   {
     // Sequence-driven models are refused instead of drawn with a folded rest pose.
     CHECK(
-      std::get<Error>(mesh.error()).msg.find("sequence animation")
-      != std::string::npos);
+      std::get<Error>(mesh.error()).msg.find("sequence animation") != std::string::npos);
     return;
   }
   CHECK(mesh.value().positions.size() % 3 == 0);

@@ -65,6 +65,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <vector>
 
 namespace tb::ui
@@ -74,6 +75,26 @@ namespace
 constexpr auto DefaultThumbSide = 112;
 constexpr auto ThumbMinSide = 72;
 constexpr auto ThumbMaxSide = 192;
+
+/** Resolves the thumbnail role on demand, so offscreen cards do not decode assets. */
+class AssetLibraryItem : public QListWidgetItem
+{
+  std::function<QImage()> m_thumbnail;
+
+public:
+  AssetLibraryItem(QListWidget* parent, std::function<QImage()> thumbnail)
+    : QListWidgetItem{parent}
+    , m_thumbnail{std::move(thumbnail)}
+  {
+  }
+
+  QVariant data(const int role) const override
+  {
+    if (role == AssetLibraryItemDelegate::ThumbnailRole)
+      return QPixmap::fromImage(m_thumbnail());
+    return QListWidgetItem::data(role);
+  }
+};
 
 QString sizeText(const std::uint64_t bytes)
 {
@@ -254,7 +275,9 @@ void AssetLibraryWindow::buildUi()
     &AssetLibraryChanges::changed,
     this,
     [this](const QString& id) {
-      if (m_source && id.toStdString() == m_source->libraryId())
+      if (
+        m_source && id.toStdString() == m_source->libraryId()
+        && !m_convertTimer->isActive())
         m_reloadTimer->start(0);
     });
 
@@ -420,8 +443,12 @@ void AssetLibraryWindow::buildUi()
     tr("Re-run conversion only for the assets that failed in the last batch."));
   m_retryButton->hide();
   connect(
-    m_retryButton, &QPushButton::clicked, this, &AssetLibraryWindow::retryFailedConversions);
+    m_retryButton,
+    &QPushButton::clicked,
+    this,
+    &AssetLibraryWindow::retryFailedConversions);
   m_convertTimer = new QTimer{this};
+  m_convertTimer->setObjectName("AssetLibraryConvertTimer");
   m_convertTimer->setInterval(0);
   connect(m_convertTimer, &QTimer::timeout, this, &AssetLibraryWindow::stepConvertQueue);
   connect(
@@ -759,6 +786,10 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
     QMessageBox::critical(this, tr("Asset Library"), error);
     return;
   }
+  resetConvertQueue();
+  m_reloadTimer->stop();
+  m_thumbnailCache.clear();
+  m_waveInfoCache.clear();
   m_source = std::move(source);
   m_selectedId.reset();
   m_filter = QStringLiteral("all");
@@ -769,10 +800,8 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
 
 void AssetLibraryWindow::reload()
 {
-  // Reload is also the dependency/source invalidation boundary. Filtering keeps caches.
-  m_thumbnailCache.clear();
-  m_waveInfoCache.clear();
   m_assets.clear();
+  m_thumbnailKeys.clear();
   if (!m_source)
   {
     m_empty->setText(tr("No library is open.\nUse Change Library… to choose one."));
@@ -797,6 +826,37 @@ void AssetLibraryWindow::reload()
     return;
   }
   m_assets = assets.value();
+  // Include hidden dependency revisions in model and skybox cache identities. Metadata
+  // changes keep the same keys; bounded caches evict superseded images on demand.
+  auto revisions = std::unordered_map<std::string, std::string>{};
+  const auto allAssets = m_source->allAssets();
+  if (allAssets.is_error())
+    m_thumbnailCache.clear();
+  else
+    for (const auto& asset : allAssets.value())
+      revisions.emplace(
+        asset.id, fmt::format("/{}/{}", asset.revision, asset.contentHash));
+  for (const auto& asset : m_assets)
+  {
+    auto key = fmt::format(
+      "{}/{}/{}/{}", m_source->libraryId(), asset.id, asset.revision, asset.contentHash);
+    if (
+      asset.type == project::AssetType::Model || asset.type == project::AssetType::Skybox)
+    {
+      const auto edges = m_source->dependencies(asset.id);
+      if (edges.is_error())
+        m_thumbnailCache.clear();
+      else
+        for (const auto& edge : edges.value())
+        {
+          key += "/" + edge.dependencyId;
+          if (const auto revision = revisions.find(edge.dependencyId);
+              revision != revisions.end())
+            key += revision->second;
+        }
+    }
+    m_thumbnailKeys.emplace(asset.id, QString::fromStdString(key));
+  }
   m_favorites.clear();
   m_metadata.clear();
   const auto tag = m_tagCombo->currentData().toString();
@@ -864,7 +924,9 @@ void AssetLibraryWindow::updateActions()
   const auto hasSource = m_source != nullptr;
   m_importButton->setEnabled(hasSource && m_source->canImport());
   m_rescanButton->setEnabled(hasSource);
-  m_convertButton->setEnabled(hasSource && m_source->canConvert() && pendingCount() > 0);
+  m_convertButton->setEnabled(
+    hasSource && m_source->canConvert() && pendingCount() > 0
+    && !m_convertTimer->isActive());
   m_revealButton->setEnabled(hasSource && m_source->canReveal());
   m_searchEdit->setEnabled(hasSource);
 }
@@ -1034,7 +1096,8 @@ void AssetLibraryWindow::refreshGrid()
           search))
       continue;
 
-    auto* item = new QListWidgetItem{m_grid};
+    auto* item =
+      new AssetLibraryItem{m_grid, [this, asset]() { return thumbnail(asset); }};
     item->setText(displayName);
     item->setData(
       AssetLibraryItemDelegate::AssetIdRole, QString::fromStdString(asset.id));
@@ -1050,11 +1113,6 @@ void AssetLibraryWindow::refreshGrid()
                          typeText(asset.type),
                          sizeText(asset.size)));
 
-    const auto image = thumbnail(asset);
-    if (!image.isNull())
-    {
-      item->setData(AssetLibraryItemDelegate::ThumbnailRole, QPixmap::fromImage(image));
-    }
     ++shown;
   }
 
@@ -1202,7 +1260,10 @@ void AssetLibraryWindow::clearInspector()
 
 QImage AssetLibraryWindow::thumbnail(const project::LibraryAsset& asset) const
 {
-  const auto key = QString::fromStdString(asset.id);
+  const auto found = m_thumbnailKeys.find(asset.id);
+  if (found == m_thumbnailKeys.end())
+    return {};
+  const auto& key = found->second;
   if (const auto* cached = m_thumbnailCache.object(key))
     return *cached;
   auto image = loadThumbnail(asset);
@@ -1361,9 +1422,12 @@ void AssetLibraryWindow::runRescan()
 
 void AssetLibraryWindow::retryFailedConversions()
 {
-  if (!m_source || !m_source->canConvert() || m_retryIds.empty())
+  if (
+    !m_source || !m_source->canConvert() || m_retryIds.empty()
+    || m_convertTimer->isActive())
     return;
 
+  m_reloadTimer->stop();
   m_convertQueue = m_retryIds;
   m_retryIds.clear();
   m_retryButton->hide();
@@ -1376,13 +1440,17 @@ void AssetLibraryWindow::retryFailedConversions()
   m_convertProgress->show();
   m_convertCancel->show();
   m_convertTimer->start();
+  updateActions();
 }
 
 void AssetLibraryWindow::runConvertPending()
 {
-  if (!m_source || !m_source->canConvert())
+  if (!m_source || !m_source->canConvert() || m_convertTimer->isActive())
     return;
+  m_reloadTimer->stop();
   m_convertQueue.clear();
+  m_retryIds.clear();
+  m_retryButton->hide();
   for (const auto& asset : m_assets)
   {
     if (needsConversion(asset))
@@ -1400,6 +1468,7 @@ void AssetLibraryWindow::runConvertPending()
   m_convertProgress->show();
   m_convertCancel->show();
   m_convertTimer->start();
+  updateActions();
 }
 
 void AssetLibraryWindow::stepConvertQueue()
@@ -1437,8 +1506,7 @@ void AssetLibraryWindow::stepConvertQueue()
     if (!m_failedConversions.empty())
     {
       m_retryIds = m_failedConversions;
-      m_retryButton->setText(
-        tr("Retry failed (%1)").arg(qulonglong(m_retryIds.size())));
+      m_retryButton->setText(tr("Retry failed (%1)").arg(qulonglong(m_retryIds.size())));
       m_retryButton->show();
       showOperationReport(m_conversionReport, {}, m_failedConversions);
     }
@@ -1464,6 +1532,19 @@ void AssetLibraryWindow::cancelConvertQueue()
                       .arg(qulonglong(remaining)));
 }
 
+void AssetLibraryWindow::resetConvertQueue()
+{
+  m_convertTimer->stop();
+  m_convertQueue.clear();
+  m_retryIds.clear();
+  m_failedConversions.clear();
+  m_conversionReport.clear();
+  m_convertDone = m_convertFailed = 0;
+  m_convertProgress->hide();
+  m_convertCancel->hide();
+  m_retryButton->hide();
+}
+
 void AssetLibraryWindow::runImport()
 {
   if (!m_source || !m_source->canImport())
@@ -1472,7 +1553,8 @@ void AssetLibraryWindow::runImport()
     this,
     tr("Import Assets"),
     {},
-    tr("Supported assets (*.png *.jpg *.jpeg *.bmp *.tga *.wad *.mdl *.spr *.wav *.tbprefab);;"
+    tr("Supported assets (*.png *.jpg *.jpeg *.bmp *.tga *.wad *.mdl *.spr *.wav "
+       "*.tbprefab);;"
        "All files (*)"));
   if (files.isEmpty())
     return;
@@ -1522,6 +1604,7 @@ void AssetLibraryWindow::showOperationReport(
     m_convertProgress->show();
     m_convertCancel->show();
     m_convertTimer->start();
+    updateActions();
   }
 }
 

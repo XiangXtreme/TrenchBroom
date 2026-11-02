@@ -194,6 +194,28 @@ TEST_CASE("AssetLibraryImport")
     CHECK(std::filesystem::exists(workspace.folder / "models/test01.mdl"));
   }
 
+  SECTION("non-model imports do not discover model siblings from their contents")
+  {
+    auto workspace = Workspace{};
+    auto bytes = std::vector<std::uint8_t>(244, 0);
+    const auto identifier = std::uint32_t{0x54534449};
+    const auto version = std::uint32_t{10};
+    const auto groups = std::uint32_t{2};
+    std::memcpy(bytes.data(), &identifier, sizeof(identifier));
+    std::memcpy(bytes.data() + 4, &version, sizeof(version));
+    std::memcpy(bytes.data() + 172, &groups, sizeof(groups));
+    const auto path = workspace.write("source/test.wav", bytes);
+    workspace.write("source/testT.wav", {1, 2, 3});
+    workspace.write("source/test01.wav", {4, 5, 6});
+    require(project::AssetLibrary::create(workspace.folder, "Test"));
+    const auto source = openLocalAssetLibrary(workspace.folder);
+    REQUIRE(source);
+    require(source->importFile(path, "sound/test.wav"));
+    CHECK(std::filesystem::exists(workspace.folder / "sound/test.wav"));
+    CHECK_FALSE(std::filesystem::exists(workspace.folder / "sound/testT.wav"));
+    CHECK_FALSE(std::filesystem::exists(workspace.folder / "sound/test01.wav"));
+  }
+
   SECTION("masked images get the transparency prefix")
   {
     auto workspace = Workspace{};

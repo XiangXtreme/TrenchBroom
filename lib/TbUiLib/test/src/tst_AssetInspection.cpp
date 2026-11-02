@@ -2,14 +2,20 @@
  Copyright (C) 2026 XiangXtreme
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
+#include <QApplication>
 #include <QBuffer>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialog>
+#include <QFileDialog>
 #include <QImage>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListView>
+#include <QListWidget>
 #include <QMediaPlayer>
 #include <QPushButton>
+#include <QSignalSpy>
 #include <QSlider>
 #include <QTemporaryDir>
 #include <QTest>
@@ -320,6 +326,129 @@ TEST_CASE("AssetInspection")
       second.findChild<QLabel*>("AssetInspector_Status")->text() == "source unavailable");
     CHECK(second.findChild<QMediaPlayer*>()->sourceDevice() == nullptr);
   }
+  SECTION(
+    "library cards load thumbnails on demand and retain them across metadata reloads")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    const auto red = png(Qt::red);
+    for (auto i = 0; i < 80; ++i)
+      write(folder / ("color" + std::to_string(i) + ".png"), red);
+    auto library = require(project::AssetLibrary::create(folder, "Library"));
+    REQUIRE(library->scan().is_success());
+    auto browser = AssetLibraryWindow{temporary.path(), false};
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* search = browser.findChild<QLineEdit*>("AssetLibrarySearch");
+    REQUIRE(grid);
+    REQUIRE(search);
+    REQUIRE(grid->count() == 80);
+    const auto thumbnail = [grid](const int row) {
+      return grid->item(row)
+        ->data(AssetLibraryItemDelegate::ThumbnailRole)
+        .value<QPixmap>()
+        .toImage();
+    };
+    CHECK(thumbnail(0).pixelColor(0, 0) == QColor{Qt::red});
+    const auto entries = require(library->assets());
+    // Update the store without a UI notification. An unrequested card must still read
+    // its first image lazily, while the requested card retains its cached image.
+    const auto blue = png(Qt::blue);
+    for (const auto& entry : entries)
+      write(folder / entry.sourceContainer, blue);
+    REQUIRE(library->scan().is_success());
+    search->setText("color");
+    CHECK(thumbnail(0).pixelColor(0, 0) == QColor{Qt::red});
+    CHECK(thumbnail(79).pixelColor(0, 0) == QColor{Qt::blue});
+
+    auto source = openLocalAssetLibrary(folder);
+    REQUIRE(source);
+    REQUIRE(source->rescan().is_success());
+    QTRY_COMPARE(thumbnail(0).pixelColor(0, 0), QColor{Qt::blue});
+    // Metadata edits preserve content and keep the cached thumbnail valid.
+    const auto id = entries.front().id;
+    REQUIRE(source->setFavorite(id, true).is_success());
+    QTest::qWait(10);
+    CHECK(thumbnail(0).pixelColor(0, 0) == QColor{Qt::blue});
+  }
+
+  SECTION("batch conversion refreshes the library grid once")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    for (const auto* name : {"one.png", "two.png", "three.png"})
+      write(folder / name, png(Qt::red));
+    auto library = require(project::AssetLibrary::create(folder, "Library"));
+    REQUIRE(library->scan().is_success());
+    auto browser = AssetLibraryWindow{temporary.path(), false};
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* convert = browser.findChild<QPushButton*>("AssetLibraryConvert");
+    REQUIRE(grid);
+    REQUIRE(convert);
+    auto resets = QSignalSpy{grid->model(), &QAbstractItemModel::modelReset};
+    convert->click();
+    const auto converted = [&]() {
+      const auto entries = require(library->assets());
+      return std::ranges::all_of(
+        entries, [](const auto& entry) { return entry.nativeFormat == "goldsrc-wad"; });
+    };
+    QTRY_VERIFY(converted());
+    CHECK(resets.count() == 1);
+    CHECK_FALSE(convert->isEnabled());
+  }
+
+  SECTION("switching libraries clears failed conversion retries")
+  {
+    auto first = QTemporaryDir{};
+    auto second = QTemporaryDir{};
+    REQUIRE(first.isValid());
+    REQUIRE(second.isValid());
+    const auto folder = pathFromQString(first.path());
+    for (auto i = 0; i < 20; ++i)
+      write(folder / ("broken" + std::to_string(i) + ".png"), {1, 2, 3});
+    auto library = require(project::AssetLibrary::create(folder, "First"));
+    REQUIRE(library->scan().is_success());
+    auto other =
+      require(project::AssetLibrary::create(pathFromQString(second.path()), "Second"));
+    auto browser = AssetLibraryWindow{first.path(), false};
+    auto* convert = browser.findChild<QPushButton*>("AssetLibraryConvert");
+    auto* retry = browser.findChild<QPushButton*>("AssetLibraryRetryFailed");
+    REQUIRE(convert);
+    REQUIRE(retry);
+    auto closeReport = QTimer{};
+    QObject::connect(&closeReport, &QTimer::timeout, &browser, [&]() {
+      for (auto* dialog : browser.findChildren<QDialog*>())
+        if (dialog->windowTitle() == "Asset operation results")
+          dialog->reject();
+    });
+    closeReport.start(10);
+    convert->click();
+    QTRY_VERIFY(!retry->isHidden());
+    closeReport.stop();
+
+    QTimer::singleShot(0, &browser, [&]() {
+      auto* dialog = browser.findChild<QFileDialog*>();
+      REQUIRE(dialog);
+      dialog->setDirectory(second.path());
+      QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    });
+    auto* change = static_cast<QPushButton*>(nullptr);
+    for (auto* button : browser.findChildren<QPushButton*>())
+      if (button->text() == "Change Library…")
+        change = button;
+    REQUIRE(change);
+    retry->click();
+    auto* timer = browser.findChild<QTimer*>("AssetLibraryConvertTimer");
+    REQUIRE(timer);
+    REQUIRE(timer->isActive());
+    change->click();
+    CHECK_FALSE(timer->isActive());
+    CHECK(browser.libraryId() == other->info().id);
+    CHECK(retry->isHidden());
+    CHECK_FALSE(convert->isEnabled());
+  }
+
   SECTION("library model inspection resolves dependency-backed siblings")
   {
     auto temporary = QTemporaryDir{};
@@ -385,8 +514,7 @@ TEST_CASE("AssetInspection")
     auto sequenceOffset = std::uint32_t{};
     std::memcpy(&sequenceOffset, bytes.data() + 168, sizeof(sequenceOffset));
     const auto twoBlends = int32_t{2};
-    std::memcpy(
-      bytes.data() + sequenceOffset + 120, &twoBlends, sizeof(twoBlends));
+    std::memcpy(bytes.data() + sequenceOffset + 120, &twoBlends, sizeof(twoBlends));
     const auto scene = loadGoldSrcStudioPreviewScene(bytes);
     REQUIRE(scene);
     REQUIRE(scene->studioModel);
@@ -400,8 +528,7 @@ TEST_CASE("AssetInspection")
     CHECK(scene->frames.front().positions.front() == vm::vec3f{11.0f, 0.0f, 0.0f});
     CHECK_FALSE(loadGoldSrcStudioPreviewScene({1, 2, 3}));
 
-    const auto image =
-      renderModelPreview(scene->frames.front(), 64, 0.55f, 0.38f);
+    const auto image = renderModelPreview(scene->frames.front(), 64, 0.55f, 0.38f);
     REQUIRE_FALSE(image.isNull());
     auto painted = 0;
     for (auto y = 0; y < image.height(); ++y)
@@ -522,11 +649,12 @@ TEST_CASE("AssetInspection")
     // Left texel is transparent palette entry 255, right texel is opaque red.
     texture.pixels = {0x00000000u, 0xFFFF0000u};
     frame.textures.push_back(texture);
-    frame.positions = {vm::vec3f{-1.0f, -1.0f, 0.0f},
-                       vm::vec3f{1.0f, -1.0f, 0.0f},
-                       vm::vec3f{0.0f, 1.0f, 0.0f}};
-    frame.texCoords = {std::array{0.0f, 0.0f}, std::array{1.0f, 0.0f},
-                       std::array{0.5f, 1.0f}};
+    frame.positions = {
+      vm::vec3f{-1.0f, -1.0f, 0.0f},
+      vm::vec3f{1.0f, -1.0f, 0.0f},
+      vm::vec3f{0.0f, 1.0f, 0.0f}};
+    frame.texCoords = {
+      std::array{0.0f, 0.0f}, std::array{1.0f, 0.0f}, std::array{0.5f, 1.0f}};
     frame.triangles = {{0, 1, 2}};
     frame.triangleTextures = {0};
 
@@ -553,11 +681,12 @@ TEST_CASE("AssetInspection")
     texture.flags = 0x0008;
     texture.pixels = {0xFF808080u};
     frame.textures.push_back(texture);
-    frame.positions = {vm::vec3f{-1.0f, -1.0f, 0.0f},
-                       vm::vec3f{1.0f, -1.0f, 0.0f},
-                       vm::vec3f{0.0f, 1.0f, 0.0f}};
-    frame.texCoords = {std::array{0.0f, 0.0f}, std::array{1.0f, 0.0f},
-                       std::array{0.5f, 1.0f}};
+    frame.positions = {
+      vm::vec3f{-1.0f, -1.0f, 0.0f},
+      vm::vec3f{1.0f, -1.0f, 0.0f},
+      vm::vec3f{0.0f, 1.0f, 0.0f}};
+    frame.texCoords = {
+      std::array{0.0f, 0.0f}, std::array{1.0f, 0.0f}, std::array{0.5f, 1.0f}};
     frame.triangles = {{0, 1, 2}};
     frame.triangleTextures = {0};
 
@@ -603,11 +732,12 @@ TEST_CASE("AssetInspection")
 
     auto directory = QTemporaryDir{};
     REQUIRE(directory.isValid());
-    const auto write = [](const std::filesystem::path& path, const inspection::Bytes& bytes) {
-      auto stream = std::ofstream{path, std::ios::binary};
-      stream.write(
-        reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-    };
+    const auto write =
+      [](const std::filesystem::path& path, const inspection::Bytes& bytes) {
+        auto stream = std::ofstream{path, std::ios::binary};
+        stream.write(
+          reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+      };
     write(directory.filePath("ui_studio.mdl").toStdString(), main);
     write(directory.filePath("ui_studioT.mdl").toStdString(), textures);
 
@@ -748,7 +878,8 @@ TEST_CASE("AssetInspection")
     }
     if (
       !scene->studioModel->sequenceList.empty()
-      && scene->studioModel->sequenceList.front().frameCount > 1 && !scene->frames.empty())
+      && scene->studioModel->sequenceList.front().frameCount > 1
+      && !scene->frames.empty())
     {
       const auto next = loadGoldSrcStudioFrame(bytes, 0, 1);
       REQUIRE(next);
@@ -759,7 +890,8 @@ TEST_CASE("AssetInspection")
     }
     REQUIRE_FALSE(scene->frames.empty());
     REQUIRE_FALSE(previewScene->frames.empty());
-    const auto image = renderModelPreview(previewScene->frames.front(), 256, 0.55f, 0.38f);
+    const auto image =
+      renderModelPreview(previewScene->frames.front(), 256, 0.55f, 0.38f);
     REQUIRE_FALSE(image.isNull());
     auto painted = 0;
     for (auto y = 0; y < image.height(); ++y)
@@ -804,8 +936,12 @@ TEST_CASE("AssetInspection")
       "\"classname\" \"worldspawn\"\n"
       "\"skyname\" \"desert\"\n"
       "{\n"
-      "( 0 0 0 ) ( 128 0 0 ) ( 0 128 0 ) WALL01 0 0 0 1 1\n"
-      "( 0 0 64 ) ( 128 0 64 ) ( 0 128 64 ) WALL01 0 0 0 1 1\n"
+      "( 0 0 0 ) ( 0 1 0 ) ( 0 0 1 ) WALL01 0 0 0 1 1\n"
+      "( 0 0 0 ) ( 0 0 1 ) ( 1 0 0 ) WALL01 0 0 0 1 1\n"
+      "( 0 0 0 ) ( 1 0 0 ) ( 0 1 0 ) WALL01 0 0 0 1 1\n"
+      "( 128 128 64 ) ( 128 129 64 ) ( 129 128 64 ) WALL01 0 0 0 1 1\n"
+      "( 128 128 64 ) ( 129 128 64 ) ( 128 128 65 ) WALL01 0 0 0 1 1\n"
+      "( 128 128 64 ) ( 128 128 65 ) ( 128 129 64 ) WALL01 0 0 0 1 1\n"
       "}\n"
       "}\n"
       "{\n"
@@ -836,7 +972,7 @@ TEST_CASE("AssetInspection")
     };
     CHECK(valueFor("Brushes") == "1");
     CHECK(valueFor("Entities") == "1");
-    CHECK(valueFor("Faces") == "2");
+    CHECK(valueFor("Faces") == "6");
     CHECK(valueFor("Materials") == "WALL01");
     CHECK(valueFor("Models and sprites") == "models/barrel.mdl");
     CHECK(valueFor("Sky") == "desert");

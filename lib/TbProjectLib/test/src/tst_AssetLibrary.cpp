@@ -451,6 +451,15 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->assets(AssetType::Texture)).size() == 6);
     CHECK(require(library->assets(AssetType::Skybox)).empty());
 
+    // Similar names, non-image suffixes and descendants must not restore this group.
+    for (const auto* unrelated :
+         {"env/deserted.png", "env/desertdn.wav", "env/desert/other.png"})
+    {
+      require(library->clearRemovedSource(unrelated));
+      require(library->scan());
+      CHECK(require(library->assets(AssetType::Skybox)).empty());
+    }
+
     // Importing a face clears the group exclusion: the six faces are still on disk.
     require(library->clearRemovedSource("env/desertdn.png"));
     require(library->scan());
