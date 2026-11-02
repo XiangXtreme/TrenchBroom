@@ -8,14 +8,72 @@
 #include <QObject>
 
 #include "project/AssetLibrary.h"
+#include "project/GoldSrcModel.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <utility>
 
 namespace tb::ui
 {
+namespace
+{
+/**
+ * Copies the texture header and animation group files that live beside a GoldSrc model.
+ *
+ * Importing a lone .mdl used to leave the library with an untextured, bind-pose-only
+ * preview. The engine expects these files to be siblings, so importing the model brings
+ * its siblings along; existing files and non-MDL sources are ignored.
+ */
+void importModelSiblings(
+  project::AssetLibrary& library,
+  const std::filesystem::path& source,
+  const std::string& relativePath,
+  const bool overwrite)
+{
+  const auto& libraryFolder = library.folder();
+  auto stream = std::ifstream{source, std::ios::binary};
+  if (!stream)
+    return;
+  const auto bytes = std::vector<std::uint8_t>{
+    std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+  const auto dependencies = project::readGoldSrcModelDependencies(bytes);
+  if (dependencies.is_error())
+    return;
+
+  auto names =
+    project::modelAnimationGroupNames(relativePath, dependencies.value().sequenceGroups);
+  if (const auto companion =
+        project::modelCompanionName(std::filesystem::path{relativePath}.filename().string());
+      !companion.empty())
+    names.push_back(companion);
+
+  const auto relative = std::filesystem::path{relativePath};
+  const auto sourceFolder = source.parent_path();
+  for (const auto& name : names)
+  {
+    const auto file = std::filesystem::path{name}.filename();
+    if (file.empty())
+      continue;
+    const auto sourcePath = sourceFolder / file;
+    auto error = std::error_code{};
+    if (!std::filesystem::exists(sourcePath, error) || error)
+      continue;
+    const auto targetRelative = (relative.parent_path() / file).generic_string();
+    if (!overwrite && std::filesystem::exists(libraryFolder / targetRelative, error))
+      continue;
+    if (
+      importFileIntoLibrary(libraryFolder, sourcePath, targetRelative, overwrite)
+        .is_success())
+      (void)library.clearRemovedSource(targetRelative);
+  }
+}
+} // namespace
+
 void loadBrowserAssetMetadata(
   std::vector<BrowserAsset>& assets, const ProjectSession& session)
 {
@@ -111,6 +169,7 @@ public:
     // Importing a source is an explicit restore: a previously removed asset may return.
     if (auto cleared = m_library->clearRemovedSource(relativePath); cleared.is_error())
       return std::get<Error>(cleared.error());
+    importModelSiblings(*m_library, source, relativePath, false);
     return imported;
   }
 
@@ -123,6 +182,7 @@ public:
       return imported;
     if (auto cleared = m_library->clearRemovedSource(relativePath); cleared.is_error())
       return std::get<Error>(cleared.error());
+    importModelSiblings(*m_library, source, relativePath, true);
     return imported;
   }
 

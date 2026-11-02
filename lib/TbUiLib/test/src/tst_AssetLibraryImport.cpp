@@ -8,7 +8,9 @@
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
 #include "ui/AssetLibraryImport.h"
+#include "ui/AssetLibrarySource.h"
 
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -166,6 +168,30 @@ TEST_CASE("AssetLibraryImport")
     REQUIRE(archive.textures.size() == 1);
     CHECK(archive.textures.front().name == "wall01");
     CHECK_FALSE(require(convertLibraryImage(*library, asset.id)));
+  }
+
+  SECTION("importing a model brings its texture and animation group siblings")
+  {
+    auto workspace = Workspace{};
+    auto model = std::vector<std::uint8_t>(244, 0);
+    const auto identifier = std::uint32_t{0x54534449}; // "IDST"
+    const auto version = std::uint32_t{10};
+    const auto groups = std::uint32_t{2};
+    std::memcpy(model.data(), &identifier, sizeof(identifier));
+    std::memcpy(model.data() + 4, &version, sizeof(version));
+    std::memcpy(model.data() + 172, &groups, sizeof(groups));
+    const auto modelPath = workspace.write("source/test.mdl", model);
+    workspace.write("source/testT.mdl", {1, 2, 3});
+    workspace.write("source/test01.mdl", {4, 5, 6});
+
+    require(project::AssetLibrary::create(workspace.folder, "Test"));
+    const auto source = openLocalAssetLibrary(workspace.folder);
+    REQUIRE(source);
+    require(source->importFile(modelPath, "models/test.mdl"));
+
+    CHECK(std::filesystem::exists(workspace.folder / "models/test.mdl"));
+    CHECK(std::filesystem::exists(workspace.folder / "models/testT.mdl"));
+    CHECK(std::filesystem::exists(workspace.folder / "models/test01.mdl"));
   }
 
   SECTION("masked images get the transparency prefix")

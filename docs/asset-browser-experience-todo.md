@@ -486,6 +486,9 @@ gordon.mdl 下摘要显示 `look_idle frame 0`、序列下拉 77 项、帧滑块
   头校验，组 0 仍应用 `seqgroup.unused2` 基址，组 n 的 `animindex` 相对组文件起点。
 - 文件型预览（游戏目录、资产库、缩略图）由 `loadGoldSrcStudioExternalData` 从模型
   路径解析兄弟文件；组文件名优先用主文件 seqgroup 表里的名字，缺失时按两位序号回退。
+- 资产库导入或替换模型时，`importModelSiblings` 会按依赖候选一并复制同目录的
+  `<stem>T.mdl` 与 `<stem>NN.mdl`，单独导入一个 `.mdl` 也能得到完整预览；已存在的
+  兄弟文件不重复覆盖，替换时同步更新。
 - 检查器显示 `(N loaded)`、`external group` / `external group missing`，并新增
   Skin family 下拉；texture 详情区分内嵌与外置头。
 - 同时修正：蒙版贴图 255 索引透明、chrome/additive 贴图的近似渲染、去除动画 run
