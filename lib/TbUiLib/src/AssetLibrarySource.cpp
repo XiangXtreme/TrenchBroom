@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <unordered_set>
 #include <utility>
 
 namespace tb::ui
@@ -124,6 +125,35 @@ public:
   bool isAvailable() const override { return true; }
 
   Result<std::vector<project::LibraryAsset>> assets() const override
+  {
+    auto assets = m_library->assets();
+    if (assets.is_error())
+      return assets;
+
+    // Skybox faces are catalog entries so the group, project captures and conversion
+    // keep per-face revisions, but showing all six beside the group makes the browser
+    // look like it has seven unrelated textures.
+    auto hidden = std::unordered_set<std::string>{};
+    for (const auto& asset : assets.value())
+    {
+      if (asset.type != project::AssetType::Skybox)
+        continue;
+      const auto dependencies = m_library->dependencies(asset.id);
+      if (dependencies.is_error())
+        continue;
+      for (const auto& edge : dependencies.value())
+        if (edge.kind == "skybox-face")
+          hidden.insert(edge.dependencyId);
+    }
+    auto browsable = std::vector<project::LibraryAsset>{};
+    browsable.reserve(assets.value().size());
+    for (const auto& asset : assets.value())
+      if (!hidden.contains(asset.id))
+        browsable.push_back(asset);
+    return browsable;
+  }
+
+  Result<std::vector<project::LibraryAsset>> allAssets() const override
   {
     return m_library->assets();
   }

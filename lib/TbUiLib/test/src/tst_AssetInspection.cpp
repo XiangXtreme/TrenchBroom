@@ -341,6 +341,30 @@ TEST_CASE("AssetInspection")
     CHECK_FALSE(asset.studioExternal.textureHeader.empty());
   }
 
+  SECTION("skybox faces stay hidden behind their logical group")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    auto library = require(project::AssetLibrary::create(folder, "Library"));
+    std::filesystem::create_directories(folder / "env");
+    for (const auto face : {"bk", "rt", "lf", "ft", "up", "dn"})
+      write(folder / "env" / (std::string{"desert"} + face + ".png"), png(Qt::blue));
+    REQUIRE(library->scan().is_success());
+
+    const auto source = openLocalAssetLibrary(folder);
+    REQUIRE(source);
+    const auto entries = require(source->assets());
+    REQUIRE(entries.size() == 1);
+    CHECK(entries.front().type == project::AssetType::Skybox);
+    CHECK(require(source->allAssets()).size() == 7);
+
+    const auto sky = require(inspection::readLibraryAsset(*source, entries.front()));
+    CHECK(sky.resource.skybox);
+    for (const auto& face : sky.skyOriginal)
+      CHECK_FALSE(face.isNull());
+  }
+
   SECTION("GoldSrc studio models preview the bind pose and body variants")
   {
     auto bytes = studioModel();

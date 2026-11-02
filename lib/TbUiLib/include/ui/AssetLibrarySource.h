@@ -56,7 +56,10 @@ public:
   virtual bool isAvailable() const = 0;
   virtual QString error() const { return {}; }
 
+  /** Browsable assets; logical groups such as skyboxes may hide their member faces. */
   virtual Result<std::vector<project::LibraryAsset>> assets() const = 0;
+  /** Every indexed asset, including members hidden from the browser. */
+  virtual Result<std::vector<project::LibraryAsset>> allAssets() const { return assets(); }
   virtual Result<std::vector<std::uint8_t>> readOriginal(
     const std::string& assetId) const = 0;
   virtual Result<std::vector<std::uint8_t>> readContent(

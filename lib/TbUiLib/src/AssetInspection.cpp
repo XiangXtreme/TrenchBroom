@@ -242,7 +242,7 @@ void readLibraryStudioExternal(
   Asset& result)
 {
   const auto edges = source.dependencies(asset.id);
-  const auto entries = source.assets();
+  const auto entries = source.allAssets();
   if (edges.is_error() || entries.is_error())
     return;
   for (const auto& edge : edges.value())
@@ -500,7 +500,7 @@ Result<Asset> readLibraryAsset(
   if (result.resource.skybox)
   {
     const auto dependencies = source.dependencies(asset.id);
-    const auto entries = source.assets();
+    const auto entries = source.allAssets();
     if (dependencies.is_success() && entries.is_success())
       for (const auto& edge : dependencies.value())
         if (edge.kind == "skybox-face")
@@ -533,7 +533,7 @@ Result<Asset> readBrowserAsset(
       auto source = openLocalAssetLibrary(connection.info.path);
       if (!source)
         return Error{"The asset library is unavailable."};
-      const auto entries = source->assets();
+      const auto entries = source->allAssets();
       if (entries.is_error())
         return std::get<Error>(entries.error());
       for (const auto& entry : entries.value())
