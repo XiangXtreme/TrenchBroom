@@ -5934,283 +5934,1445 @@ By %2</source>
             </message>
         </context>
         <context>
-        <name>tb::ui::AssetLibraryWindow</name>
+        <name>tb::ui::AssetInspector</name>
         <message>
-            <source>Asset Library</source>
-            <translation>资产库</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="153"/>
+            <source>Compatible result</source>
+            <translation>兼容结果</translation>
+            </message>
         <message>
-            <source>No asset library open</source>
-            <translation>尚未打开资产库</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="153"/>
+            <source>Original source</source>
+            <translation>原始来源</translation>
+            </message>
         <message>
-            <source>Open Folder…</source>
-            <translation>打开文件夹…</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="157"/>
+            <source>Six-face cross</source>
+            <translation>六面十字</translation>
+            </message>
         <message>
-            <source>Rescan</source>
-            <translation>重新扫描</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="157"/>
+            <source>Look around (drag)</source>
+            <translation>环视（拖动）</translation>
+            </message>
         <message>
-            <source>Convert Images…</source>
-            <translation>转换图像…</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="164"/>
+            <source>Fit</source>
+            <translation>适应</translation>
+            </message>
         <message>
-            <source>Library files changed. Click Rescan to review the current files.</source>
-            <translation>资产库文件已更改，请点击“重新扫描”检查当前文件。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="165"/>
+            <source>100%</source>
+            <translation>100%</translation>
+            </message>
         <message>
-            <source>Name</source>
-            <translation>名称</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="185"/>
+            <source>Playback position</source>
+            <translation>播放位置</translation>
+            </message>
         <message>
-            <source>Type</source>
-            <translation>类型</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="187"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="240"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="314"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="387"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="900"/>
+            <source>Play</source>
+            <translation>播放</translation>
+            </message>
         <message>
-            <source>Path</source>
-            <translation>路径</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="188"/>
+            <source>Stop</source>
+            <translation>停止</translation>
+            </message>
         <message>
-            <source>Revision</source>
-            <translation>修订</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="190"/>
+            <source>Preview volume</source>
+            <translation>预览音量</translation>
+            </message>
         <message>
-            <source>Size</source>
-            <translation>大小</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="193"/>
+            <source>Auto-play</source>
+            <translation>自动播放</translation>
+            </message>
         <message>
-            <source>State</source>
-            <translation>状态</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="195"/>
+            <source>Auto-play preview</source>
+            <translation>自动播放预览</translation>
+            </message>
         <message>
-            <source>Create Asset Library</source>
-            <translation>创建资产库</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="197"/>
+            <source>Start playing as soon as a sound is selected in this preview.</source>
+            <translation>选中声音后立即在此预览中播放。</translation>
+            </message>
         <message>
-            <source>'%1' is not an asset library yet.
-
-Create a catalog inside it and import the resources it contains?</source>
-            <translation>“%1”还不是资产库。
-
-是否在此文件夹创建目录索引并导入其中的资源？</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="201"/>
+            <source>Volume</source>
+            <translation>音量</translation>
+            </message>
         <message>
-            <source>Convert Images</source>
-            <translation>转换图像</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="240"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="387"/>
+            <source>Pause</source>
+            <translation>暂停</translation>
+            </message>
         <message>
-            <source>Open an asset library first.</source>
-            <translation>请先打开资产库。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="243"/>
+            <source>Cannot preview: %1</source>
+            <translation>无法预览：%1</translation>
+            </message>
         <message>
-            <source>This library contains no convertible images.</source>
-            <translation>此资产库中没有可转换的图像。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="250"/>
+            <source>Sprite frame</source>
+            <translation>精灵帧</translation>
+            </message>
         <message>
-            <source>Convert %1 image(s) to GoldSrc textures?
-
-The original images stay in the library and each converted texture is stored as a new revision.</source>
-            <translation>将 %1 张图像转换为 GoldSrc 纹理？
-
-原始图像保留在资产库中，每项转换结果将存储为新修订。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="252"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="269"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="474"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1151"/>
+            <source>Play animation</source>
+            <translation>播放动画</translation>
+            </message>
         <message>
-            <source>Converted %1 image(s).</source>
-            <translation>已转换 %1 张图像。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="256"/>
+            <source> fps (single frames)</source>
+            <translation> fps（单帧）</translation>
+            </message>
         <message>
-            <source>%1 image(s) failed.</source>
-            <translation>%1 张图像转换失败。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="257"/>
+            <source>Grouped frames retain their file timing.</source>
+            <translation>分组帧保留文件本身的时序。</translation>
+            </message>
         <message>
-            <source>Conversion cancelled.</source>
-            <translation>已取消转换。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="273"/>
+            <source>Pause animation</source>
+            <translation>暂停动画</translation>
+            </message>
         <message>
-            <source>Open a folder to create or inspect an asset library. A library is a plain folder with its own catalog, independent of any project.</source>
-            <translation>打开文件夹以创建或查看资产库。资产库是带有独立目录索引的普通文件夹，可独立于工程使用。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="290"/>
+            <source>Pose</source>
+            <translation>姿态</translation>
+            </message>
         <message>
-            <source>Missing</source>
-            <translation>缺失</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="293"/>
+            <source>Body variant</source>
+            <translation>身体变体</translation>
+            </message>
         <message>
-            <source>Converted</source>
-            <translation>已转换</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="304"/>
+            <source>Sequence</source>
+            <translation>序列</translation>
+            </message>
         <message>
-            <source>%1 resources in %2 groups%3.</source>
-            <translation>%2 个分组中共 %1 项资源%3。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="307"/>
+            <source>Animation blend</source>
+            <translation>动画混合</translation>
+            </message>
         <message>
-            <source>, %1 missing</source>
-            <translation>，%1 项缺失</translation>
-        </message>
-    </context>
-    <context>
-        <name>tb::ui::ProjectAssetPanel</name>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="311"/>
+            <source>Skin family</source>
+            <translation>皮肤族</translation>
+            </message>
         <message>
-            <source>The project game configuration is unavailable.</source>
-            <translation>工程的游戏配置不可用。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="320"/>
+            <source>Animation frame</source>
+            <translation>动画帧</translation>
+            </message>
         <message>
-            <source>Cannot initialize the asset browser: %1</source>
-            <translation>无法初始化资源浏览器：%1</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="329"/>
+            <source>Bounds</source>
+            <translation>包围盒</translation>
+            </message>
         <message>
-            <source>Asset Details</source>
-            <translation>资源详情</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="330"/>
+            <source>Origin</source>
+            <translation>原点</translation>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="331"/>
+            <source>Reset view</source>
+            <translation>重置视角</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="417"/>
+            <source>Apply to selection</source>
+            <translation>应用到选择</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="419"/>
+            <source>Add to project</source>
+            <translation>添加到工程</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="421"/>
+            <source>Update project resource</source>
+            <translation>更新工程资源</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="423"/>
+            <source>Find uses in project</source>
+            <translation>在工程中查找使用</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="425"/>
+            <source>Show in asset library</source>
+            <translation>在资产库中显示</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="427"/>
+            <source>Show project snapshot</source>
+            <translation>显示工程快照</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="438"/>
+            <source>Technical details</source>
+            <translation>技术详情</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="441"/>
+            <source>Property</source>
+            <translation>属性</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="441"/>
             <source>Value</source>
             <translation>值</translation>
-        </message>
+            </message>
         <message>
-            <source>Selection</source>
-            <translation>选择</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="517"/>
+            <source>Select an asset</source>
+            <translation>选择一个资产</translation>
+            </message>
         <message>
-            <source>Select an asset to inspect its details.</source>
-            <translation>选择资源以查看详情。</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="544"/>
+            <source>Identity</source>
+            <translation>标识</translation>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="545"/>
+            <source>Path</source>
+            <translation>路径</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="546"/>
+            <source>Conversion recipe</source>
+            <translation>转换配方</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="547"/>
+            <source>Original bytes</source>
+            <translation>原始字节</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="548"/>
+            <source>Compatible bytes</source>
+            <translation>兼容字节</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="582"/>
+            <source>Geometry preview · drag to orbit, wheel to zoom.
+Skin, body variants and continuous animation depend on the resource format.</source>
+            <translation>几何预览 · 拖动旋转，滚轮缩放。
+皮肤、身体变体和连续动画取决于资源格式。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="603"/>
+            <source>%1 s · %2 Hz · %3-bit · %4 channel(s)
+%5</source>
+            <translation>%1 秒 · %2 Hz · %3 位 · %4 声道
+%5</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="610"/>
+            <source>Loop: samples %1–%2</source>
+            <translation>循环：样本 %1–%2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="611"/>
+            <source>Plays once</source>
+            <translation>播放一次</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="670"/>
+            <source>Bind pose</source>
+            <translation>绑定姿态</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="679"/>
+            <source>The studio model has no readable bind pose.</source>
+            <translation>该 studio 模型没有可读取的绑定姿态。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="709"/>
+            <source>%1 × %2 · %3</source>
+            <translation>%1 × %2 · %3</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="712"/>
+            <source>RGBA</source>
+            <translation>RGBA</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="712"/>
+            <source>RGB</source>
+            <translation>RGB</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="714"/>
+            <source>The resource could not be decoded.</source>
+            <translation>无法解码该资源。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="739"/>
+            <source>bind pose</source>
+            <translation>绑定姿态</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="744"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="874"/>
+            <source>Sequence %1</source>
+            <translation>序列 %1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="746"/>
+            <source>%1 frame %2</source>
+            <translation>%1 第 %2 帧</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="749"/>
+            <source>%1 vertices · %2 triangles · %3 · %4 bone(s)</source>
+            <translation>%1 个顶点 · %2 个三角形 · %3 · %4 根骨骼</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="754"/>
+            <source>%1 vertices · %2 triangles · %3 pose(s)</source>
+            <translation>%1 个顶点 · %2 个三角形 · %3 个姿态</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="767"/>
+            <source>The prefab could not be read.</source>
+            <translation>无法读取该预制件。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="774"/>
+            <source>%1 brushes · %2 entities · %3 faces
+%4 × %5 × %6 units</source>
+            <translation>%1 个画刷 · %2 个实体 · %3 个面
+%4 × %5 × %6 单位</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="786"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="809"/>
+            <source>Brushes</source>
+            <translation>画刷</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="787"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="810"/>
+            <source>Entities</source>
+            <translation>实体</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="788"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="811"/>
+            <source>Faces</source>
+            <translation>面</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="789"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="813"/>
+            <source>Size</source>
+            <translation>大小</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="790"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="819"/>
+            <source>Materials</source>
+            <translation>材质</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="791"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="820"/>
+            <source>Models and sprites</source>
+            <translation>模型和精灵</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="792"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="821"/>
+            <source>Sounds</source>
+            <translation>声音</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="793"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="822"/>
+            <source>Sky</source>
+            <translation>天空</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="794"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="824"/>
+            <source>Reference check</source>
+            <translation>引用检查</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="814"/>
+            <source>No brush volume</source>
+            <translation>无画刷体积</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="815"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="967"/>
+            <source>%1 × %2 × %3</source>
+            <translation>%1 × %2 × %3</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="826"/>
+            <source>Referenced resources resolve in the current project</source>
+            <translation>引用的资源可在当前工程中解析</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="844"/>
+            <source>Body %1</source>
+            <translation>身体 %1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="848"/>
+            <source>%1 · %2</source>
+            <translation>%1 · %2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="860"/>
+            <source>Skin %1</source>
+            <translation>皮肤 %1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="882"/>
+            <source> · external group</source>
+            <translation> · 外置组</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="883"/>
+            <source> · external group missing</source>
+            <translation> · 外置组缺失</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="886"/>
+            <source>%1 · %2 frames%3</source>
+            <translation>%1 · %2 帧%3</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="914"/>
+            <source>GoldSrc studio model · animation and textures decoded.
+Pick a sequence and frame, or press Play. Drag to orbit, wheel to zoom.</source>
+            <translation>GoldSrc studio 模型 · 动画和贴图已解码。
+选择序列和帧，或按播放。拖动旋转，滚轮缩放。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="918"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="936"/>
+            <source>Bones</source>
+            <translation>骨骼</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="919"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="937"/>
+            <source>Bone controllers</source>
+            <translation>骨骼控制器</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="920"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="943"/>
+            <source>Sequences</source>
+            <translation>序列</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="921"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="951"/>
+            <source>Body variants</source>
+            <translation>身体变体</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="922"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="955"/>
+            <source>Skin families</source>
+            <translation>皮肤族</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="923"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="963"/>
+            <source>Textures</source>
+            <translation>贴图</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="924"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="966"/>
+            <source>Source bounds</source>
+            <translation>源包围盒</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="945"/>
+            <source>%1 in %2 external groups (%3 loaded)</source>
+            <translation>%1，分布在 %2 个外置组中（已加载 %3 个）</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="952"/>
+            <source>%1 in %2 part(s)</source>
+            <translation>%1，分布在 %2 个部件中</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="959"/>
+            <source>None</source>
+            <translation>无</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="962"/>
+            <source> (external header)</source>
+            <translation> （外置头）</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="984"/>
+            <source>Blend %1</source>
+            <translation>混合 %1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1011"/>
+            <source>This sequence lives in an external animation group that is not available next to the model.</source>
+            <translation>该序列位于模型旁不可用的外置动画组中。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1013"/>
+            <source>The studio model has no readable geometry for this frame.</source>
+            <translation>该 studio 模型在此帧没有可读取的几何体。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1080"/>
+            <source>%1 · source %2 × %3 · published %4 × %5 opaque RGB</source>
+            <translation>%1 · 源 %2 × %3 · 发布 %4 × %5 不透明 RGB</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1082"/>
+            <source>Published</source>
+            <translation>已发布</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1082"/>
             <source>Source</source>
             <translation>来源</translation>
-        </message>
+            </message>
         <message>
-            <source>Project</source>
-            <translation>工程</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1108"/>
+            <source>Normal</source>
+            <translation>普通</translation>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1108"/>
+            <source>Additive</source>
+            <translation>叠加</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1108"/>
+            <source>Index alpha</source>
+            <translation>索引透明</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1108"/>
+            <source>Alpha test</source>
+            <translation>Alpha 测试</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="1109"/>
+            <source>%1 × %2 · Frame %3 / %4 · %5</source>
+            <translation>%1 × %2 · 第 %3 / %4 帧 · %5</translation>
+            </message>
+        </context>
+        <context>
+        <name>tb::ui::AssetLibraryWindow</name>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="242"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="741"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="749"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="759"/>
             <source>Asset Library</source>
             <translation>资产库</translation>
-        </message>
+            </message>
         <message>
-            <source>Game Files</source>
-            <translation>游戏文件</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="304"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1342"/>
+            <source>Rescan</source>
+            <translation>重新扫描</translation>
+            </message>
         <message>
-            <source>Name</source>
-            <translation>名称</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="285"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="841"/>
+            <source>No asset library</source>
+            <translation>未打开资产库</translation>
+            </message>
         <message>
-            <source>Catalog Path</source>
-            <translation>目录路径</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="292"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="843"/>
+            <source>No library</source>
+            <translation>无资产库</translation>
+            </message>
         <message>
-            <source>File</source>
-            <translation>文件</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="302"/>
+            <source>Import Files…</source>
+            <translation>导入文件…</translation>
+            </message>
         <message>
-            <source>Library ID</source>
-            <translation>资产库 ID</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="302"/>
+            <source>Copy assets into this library</source>
+            <translation>将资产复制到此资产库</translation>
+            </message>
         <message>
-            <source>Library Asset ID</source>
-            <translation>资产库资源 ID</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="304"/>
+            <source>Re-read the library contents</source>
+            <translation>重新读取资产库内容</translation>
+            </message>
         <message>
-            <source>Library Revision</source>
-            <translation>资产库修订</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="306"/>
+            <source>Convert Pending</source>
+            <translation>转换待处理项</translation>
+            </message>
         <message>
-            <source>Library Content Hash</source>
-            <translation>资产库内容哈希</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="306"/>
+            <source>Convert source textures to GoldSrc miptex</source>
+            <translation>将源贴图转换为 GoldSrc miptex</translation>
+            </message>
         <message>
-            <source>Availability</source>
-            <translation>可用性</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="309"/>
+            <source>Reveal</source>
+            <translation>在文件夹中显示</translation>
+            </message>
         <message>
-            <source>Source missing</source>
-            <translation>源文件缺失</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="309"/>
+            <source>Show the library folder</source>
+            <translation>显示资产库文件夹</translation>
+            </message>
         <message>
-            <source>Available</source>
-            <translation>可用</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="311"/>
+            <source>Change Library…</source>
+            <translation>更改资产库…</translation>
+            </message>
         <message>
-            <source>Project Snapshot</source>
-            <translation>工程快照</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="311"/>
+            <source>Open another asset library</source>
+            <translation>打开另一个资产库</translation>
+            </message>
         <message>
-            <source>Not captured</source>
-            <translation>尚未捕获</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="331"/>
+            <source>Search assets</source>
+            <translation>搜索资产</translation>
+            </message>
         <message>
-            <source>Error</source>
-            <translation>错误</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="397"/>
+            <source>Grid view</source>
+            <translation>网格视图</translation>
+            </message>
         <message>
-            <source>Asset no longer exists</source>
-            <translation>资源已不存在</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="403"/>
+            <source>List view</source>
+            <translation>列表视图</translation>
+            </message>
         <message>
-            <source>Asset ID</source>
-            <translation>资源 ID</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="414"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1558"/>
+            <source>Cancel</source>
+            <translation>取消</translation>
+            </message>
         <message>
-            <source>Virtual Path</source>
-            <translation>虚拟路径</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="416"/>
+            <source>Retry failed</source>
+            <translation>重试失败项</translation>
+            </message>
         <message>
-            <source>Published Path</source>
-            <translation>发布路径</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="420"/>
+            <source>Re-run conversion only for the assets that failed in the last batch.</source>
+            <translation>仅重新转换上一批中失败的资产。</translation>
+            </message>
         <message>
-            <source>Revision</source>
-            <translation>修订</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="477"/>
+            <source>Preview</source>
+            <translation>预览</translation>
+            </message>
         <message>
-            <source>Original Source</source>
-            <translation>原始来源</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="487"/>
+            <source>Rename…</source>
+            <translation>重命名…</translation>
+            </message>
         <message>
-            <source>Content Hash</source>
-            <translation>内容哈希</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="488"/>
+            <source>Delete…</source>
+            <translation>删除…</translation>
+            </message>
         <message>
-            <source>Captured Library</source>
-            <translation>捕获来源库</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="491"/>
+            <source>Remove this asset from the library. The source file stays on disk, and a later rescan will not add it back.</source>
+            <translation>从资产库中移除此资产。源文件仍保留在磁盘上，之后重新扫描也不会将其加回。</translation>
+            </message>
         <message>
-            <source>Captured Revision</source>
-            <translation>捕获修订</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="510"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1932"/>
+            <source>Tags</source>
+            <translation>标签</translation>
+            </message>
         <message>
-            <source>Source Container</source>
-            <translation>源容器</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="513"/>
+            <source>comma separated</source>
+            <translation>用逗号分隔</translation>
+            </message>
         <message>
-            <source>Source Member</source>
-            <translation>源成员</translation>
-        </message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="525"/>
+            <source>Details</source>
+            <translation>详情</translation>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="535"/>
             <source>Dependencies</source>
             <translation>依赖</translation>
-        </message>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="551"/>
+            <source>Used by</source>
+            <translation>被使用于</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="563"/>
+            <source>Saved captures in up to 12 recent projects</source>
+            <translation>保存在最近最多 12 个工程中的捕获</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="569"/>
+            <source>Refresh usage</source>
+            <translation>刷新使用情况</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="570"/>
+            <source>Query the bound project, including current unsaved map edits</source>
+            <translation>查询绑定的工程，包括当前未保存的地图编辑</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="609"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="805"/>
+            <source>All tags</source>
+            <translation>所有标签</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="616"/>
+            <source>All sounds</source>
+            <translation>所有声音</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="617"/>
+            <source>Looping</source>
+            <translation>循环</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="618"/>
+            <source>One-shot</source>
+            <translation>单次</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="621"/>
+            <source>Filter sounds by their WAV sampler loop chunk. Waveforms are read on demand and cached until the library revision changes.</source>
+            <translation>按 WAV 采样器循环块筛选声音。波形按需读取并缓存，直到资产库修订变化。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="663"/>
+            <source>Asset preview</source>
+            <translation>资产预览</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="714"/>
+            <source>Choose Asset Library</source>
+            <translation>选择资产库</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="729"/>
+            <source>'%1' is not an asset library yet.
+
+Create a catalog inside it?</source>
+            <translation>“%1”还不是资产库。
+
+要在其中创建目录吗？</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="778"/>
+            <source>No library is open.
+Use Change Library… to choose one.</source>
+            <translation>尚未打开资产库。
+使用“更改资产库…”选择一个。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="842"/>
+            <source>Choose a folder to browse as an asset library.</source>
+            <translation>选择一个文件夹作为资产库浏览。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="852"/>
+            <source>Remote</source>
+            <translation>远程</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="852"/>
+            <source>Local</source>
+            <translation>本地</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="918"/>
+            <source>Library</source>
+            <translation>资产库</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="919"/>
+            <source>All assets</source>
+            <translation>所有资产</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="920"/>
+            <source>Favourites</source>
+            <translation>收藏</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="926"/>
+            <source>Textures</source>
+            <translation>贴图</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="927"/>
+            <source>Models</source>
+            <translation>模型</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="928"/>
+            <source>Sprites</source>
+            <translation>精灵</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="929"/>
+            <source>Sounds</source>
+            <translation>声音</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="930"/>
+            <source>Skyboxes</source>
+            <translation>天空盒</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="931"/>
+            <source>Prefabs</source>
+            <translation>预制件</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="933"/>
+            <source>Attention</source>
+            <translation>需注意</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="934"/>
+            <source>Pending</source>
+            <translation>待处理</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="935"/>
+            <source>Missing sources</source>
+            <translation>源文件缺失</translation>
+            </message>
+        <message numerus="yes">
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1063"/>
+            <source>%n asset(s)</source>
+            <translation><numerusform>%n 个资产</numerusform></translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1064"/>
+            <source>%1 of %2 assets</source>
+            <translation>%1 / %2 个资产</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1069"/>
+            <source>This library is empty.
+Use Import Files… to add assets.</source>
+            <translation>该资产库为空。
+使用“导入文件…”添加资产。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1070"/>
+            <source>No assets match the current filter.</source>
+            <translation>没有资产匹配当前筛选条件。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1140"/>
+            <source>Missing source</source>
+            <translation>源文件缺失</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1141"/>
+            <source>Pending conversion</source>
+            <translation>待转换</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1142"/>
+            <source>Skybox group</source>
+            <translation>天空盒组</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1143"/>
+            <source>Ready</source>
+            <translation>就绪</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1156"/>
+            <source>Type</source>
+            <translation>类型</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1157"/>
+            <source>Path</source>
+            <translation>路径</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1159"/>
+            <source>Format</source>
+            <translation>格式</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1160"/>
+            <source>Hash</source>
+            <translation>哈希</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1182"/>
             <source>No recorded dependencies</source>
             <translation>没有已记录的依赖</translation>
-        </message>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1193"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1194"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1665"/>
+            <source>No asset selected</source>
+            <translation>未选择资产</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1299"/>
+            <source>%1 assets · %2 pending conversion · %3 missing</source>
+            <translation>%1 个资产 · %2 个待转换 · %3 个缺失</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1306"/>
+            <source> · %1</source>
+            <translation> · %1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1306"/>
+            <source>Remote library</source>
+            <translation>远程资产库</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1306"/>
+            <source>Local library</source>
+            <translation>本地资产库</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1346"/>
+            <source>Rescanned %1 asset(s).</source>
+            <translation>已重新扫描 %1 个资产。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1409"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1635"/>
+            <source>No compatible content was produced.</source>
+            <translation>未生成兼容内容。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1421"/>
+            <source>Converted %1 asset(s)%2.</source>
+            <translation>已转换 %1 个资产%2。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1423"/>
+            <source>, %1 failed</source>
+            <translation>，%1 个失败</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1428"/>
+            <source>Retry failed (%1)</source>
+            <translation>重试失败项（%1）</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1448"/>
+            <source>Cancelled: %1 completed, %2 failed, %3 pending.</source>
+            <translation>已取消：完成 %1 个，失败 %2 个，待处理 %3 个。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1460"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1548"/>
+            <source>Import Assets</source>
+            <translation>导入资产</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1462"/>
+            <source>Supported assets (*.png *.jpg *.jpeg *.bmp *.tga *.wad *.mdl *.spr *.wav *.tbprefab);;All files (*)</source>
+            <translation>支持的资产 (*.png *.jpg *.jpeg *.bmp *.tga *.wad *.mdl *.spr *.wav *.tbprefab);;所有文件 (*)</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1475"/>
+            <source>Asset operation results</source>
+            <translation>资产操作结果</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1485"/>
+            <source>Retry failed imports</source>
+            <translation>重试失败的导入</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1491"/>
+            <source>Retry failed conversions</source>
+            <translation>重试失败的转换</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1536"/>
+            <source>%1: unsupported file type</source>
+            <translation>%1：不支持的文件类型</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1549"/>
+            <source>Some files already exist in the library. Overwrite them?
+
+Choosing No keeps both by adding a suffix.</source>
+            <translation>部分文件已存在于资产库中。要覆盖它们吗？
+
+选择“否”会添加后缀以保留两者。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1557"/>
+            <source>Importing and converting assets</source>
+            <translation>正在导入并转换资产</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1584"/>
+            <source>%1: import failed: %2</source>
+            <translation>%1：导入失败：%2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1593"/>
+            <source>%1: imported as %2</source>
+            <translation>%1：已导入为 %2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1603"/>
+            <source>Index failed: %1</source>
+            <translation>索引失败：%1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1617"/>
+            <source>%1: ready to use</source>
+            <translation>%1：可以使用</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1630"/>
+            <source>%1: imported, conversion failed: %2</source>
+            <translation>%1：已导入，转换失败：%2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1639"/>
+            <source>%1: converted and ready to use</source>
+            <translation>%1：已转换并可以使用</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1645"/>
+            <source>Cancelled: %1 file(s) not imported; %2 conversion(s) pending. Completed imports were kept.</source>
+            <translation>已取消：%1 个文件未导入；%2 个转换待处理。已完成的导入会保留。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1651"/>
+            <source>Imported %1 file(s); converted %2; failed %3.</source>
+            <translation>已导入 %1 个文件；转换 %2 个；失败 %3 个。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1672"/>
+            <source>This library has no catalog identity</source>
+            <translation>该资产库没有目录标识</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1678"/>
+            <source>Project: %1
+%2
+Explicit MAP references, including unsaved edits. Double-click a reference to open its map.</source>
+            <translation>工程：%1
+%2
+显式 MAP 引用，包括未保存的编辑。双击引用可打开其地图。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1686"/>
+            <source>Snapshot lookup failed: %1</source>
+            <translation>快照查找失败：%1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1689"/>
+            <source>Not captured in this project</source>
+            <translation>未捕获到此工程</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1697"/>
+            <source>Usage check failed: %1</source>
+            <translation>使用情况检查失败：%1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1711"/>
+            <source>Scan failed: %1 — %2</source>
+            <translation>扫描失败：%1 — %2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1715"/>
+            <source>%1 : %2 · %3 · %4 · %5</source>
+            <translation>%1 : %2 · %3 · %4 · %5</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1733"/>
+            <source>No matching references found; failed scans leave usage incomplete.</source>
+            <translation>未找到匹配的引用；扫描失败会使使用情况不完整。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1734"/>
+            <source>Captured, with no explicit references in the scanned project maps.</source>
+            <translation>已捕获，但扫描的工程地图中没有显式引用。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1749"/>
+            <source>Saved captures in up to 12 recent projects. Live map references are checked only when opened from a project.</source>
+            <translation>保存在最近最多 12 个工程中的捕获。实时地图引用仅在从工程打开时检查。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1761"/>
+            <source>Unavailable: %1</source>
+            <translation>不可用：%1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1769"/>
+            <source>Cannot check: %1 — %2</source>
+            <translation>无法检查：%1 — %2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1779"/>
+            <source>Captured: %1  ·  %2</source>
+            <translation>已捕获：%1  ·  %2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1787"/>
+            <source>No captures found in readable recent projects; some projects could not be checked.</source>
+            <translation>在可读取的最近工程中未找到捕获；部分工程无法检查。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1789"/>
+            <source>No saved captures found in the checked recent projects.</source>
+            <translation>在已检查的最近工程中未找到已保存的捕获。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1874"/>
+            <source>Target project: %1
+%2</source>
+            <translation>目标工程：%1
+%2</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1896"/>
+            <source>Add to project</source>
+            <translation>添加到工程</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1911"/>
+            <source>Update project resource</source>
+            <translation>更新工程资源</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1944"/>
+            <source>Favourite</source>
+            <translation>收藏</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1967"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1980"/>
+            <source>Rename Asset</source>
+            <translation>重命名资产</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1968"/>
+            <source>Catalog name</source>
+            <translation>目录名称</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1995"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="2008"/>
+            <source>Delete Asset</source>
+            <translation>删除资产</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1996"/>
+            <source>Remove '%1' from the library?
+
+The source file is kept and a later rescan will not add the asset back. Projects keep their captured copies. Import the source again to restore it.</source>
+            <translation>从资产库中移除“%1”？
+
+源文件会保留，之后重新扫描也不会将资产加回。工程会保留其已捕获的副本。重新导入源文件即可恢复。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="382"/>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="1158"/>
+            <source>Size</source>
+            <translation>大小</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="728"/>
+            <source>Create Asset Library</source>
+            <translation>创建资产库</translation>
+            </message>
+        </context>
+        <context>
+        <name>tb::ui::ProjectAssetPanel</name>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="45"/>
+            <source>The project game configuration is unavailable.</source>
+            <translation>工程的游戏配置不可用。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="58"/>
+            <source>Cannot initialize the asset browser: %1</source>
+            <translation>无法初始化资源浏览器：%1</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="82"/>
+            <source>Asset Details</source>
+            <translation>资产详情</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="70"/>
+            <source>Value</source>
+            <translation>值</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="70"/>
+            <source>Property</source>
+            <translation>属性</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="90"/>
+            <source>Project and dependency details</source>
+            <translation>工程与依赖详情</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="103"/>
+            <source>Details</source>
+            <translation>详情</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="104"/>
+            <source>Show asset details</source>
+            <translation>显示资产详情</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="198"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="209"/>
+            <source>Selection</source>
+            <translation>选择</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="198"/>
+            <source>Select an asset to inspect its details.</source>
+            <translation>选择一个资产以查看详情。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="209"/>
+            <source>The selected asset belongs to another project.</source>
+            <translation>所选资产属于另一个工程。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="246"/>
+            <source>Asset no longer exists in library</source>
+            <translation>资产已不在资产库中</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="256"/>
+            <source>Source</source>
+            <translation>来源</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="257"/>
+            <source>Project</source>
+            <translation>工程</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="258"/>
+            <source>Asset Library</source>
+            <translation>资产库</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="259"/>
+            <source>Game Files</source>
+            <translation>游戏文件</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="262"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="305"/>
+            <source>Name</source>
+            <translation>名称</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="264"/>
+            <source>Catalog Path</source>
+            <translation>目录路径</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="267"/>
+            <source>File</source>
+            <translation>文件</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="270"/>
+            <source>Library ID</source>
+            <translation>资产库 ID</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="271"/>
+            <source>Library Asset ID</source>
+            <translation>资产库资产 ID</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="274"/>
+            <source>Library Revision</source>
+            <translation>资产库修订</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="275"/>
+            <source>Library Content Hash</source>
+            <translation>资产库内容哈希</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="278"/>
+            <source>Availability</source>
+            <translation>可用性</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="280"/>
+            <source>Source missing</source>
+            <translation>源文件缺失</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="281"/>
+            <source>Available</source>
+            <translation>可用</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="288"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="301"/>
+            <source>Project Snapshot</source>
+            <translation>工程快照</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="289"/>
+            <source>Cannot determine captured snapshot</source>
+            <translation>无法确定已捕获的快照</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="290"/>
+            <source>Not captured</source>
+            <translation>未捕获</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="225"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="296"/>
+            <source>Error</source>
+            <translation>错误</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="301"/>
+            <source>Asset no longer exists</source>
+            <translation>资产已不存在</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="306"/>
+            <source>Asset ID</source>
+            <translation>资产 ID</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="307"/>
+            <source>Virtual Path</source>
+            <translation>虚拟路径</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="308"/>
+            <source>Published Path</source>
+            <translation>发布路径</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="309"/>
+            <source>Revision</source>
+            <translation>修订</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="310"/>
+            <source>Original Source</source>
+            <translation>原始来源</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="311"/>
+            <source>Content Hash</source>
+            <translation>内容哈希</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="314"/>
+            <source>Captured Library</source>
+            <translation>已捕获的资产库</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="315"/>
+            <source>Captured Revision</source>
+            <translation>已捕获的修订</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="240"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="316"/>
+            <source>Source Container</source>
+            <translation>来源容器</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="241"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="317"/>
+            <source>Source Member</source>
+            <translation>来源成员</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="329"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="331"/>
+            <source>Dependencies</source>
+            <translation>依赖</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="331"/>
+            <source>No recorded dependencies</source>
+            <translation>没有已记录的依赖</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="334"/>
             <source>Depends On</source>
-            <translation>依赖资源</translation>
-        </message>
+            <translation>依赖于</translation>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="339"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="342"/>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="346"/>
             <source>Used By</source>
-            <translation>引用方</translation>
-        </message>
+            <translation>被使用于</translation>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="343"/>
             <source>No recorded uses; use Asset &gt; Find Uses for live map references.</source>
-            <translation>没有已记录的引用；使用“资源 &gt; 查找引用”扫描当前地图引用。</translation>
-        </message>
+            <translation>没有已记录的使用；使用“资产 &gt; 查找使用”查看实时地图引用。</translation>
+            </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/ProjectAssetPanel.cpp" line="252"/>
             <source>Library unavailable</source>
             <translation>资产库不可用</translation>
-        </message>
-    </context>
+            </message>
+        </context>
     <context>
         <name>tb::ui::ProjectLibraryDialog</name>
         <message>
@@ -6955,6 +8117,46 @@ Removing them frees about %3. Current assets and versions are kept.</source>
         <message>
             <source>Extensions</source>
             <translation>扩展</translation>
+        </message>
+        <message>
+            <source>Tool panel mode</source>
+            <translation>工具面板模式</translation>
+        </message>
+        <message>
+            <source>Overlay closes when returning to the map; Push keeps the panel open</source>
+            <translation>覆盖模式返回地图时自动收起；推挤模式保持面板停靠在视口下方</translation>
+        </message>
+        <message>
+            <source>Overlay</source>
+            <translation>覆盖</translation>
+        </message>
+        <message>
+            <source>Push</source>
+            <translation>推挤</translation>
+        </message>
+        <message>
+            <source>Keep open</source>
+            <translation>保持展开</translation>
+        </message>
+        <message>
+            <source>Keep tool panel open on blur</source>
+            <translation>失焦时保持工具面板展开</translation>
+        </message>
+        <message>
+            <source>Keep the overlay open when returning to the map (Ctrl+Shift+Space to toggle)</source>
+            <translation>返回地图时保持覆盖面板展开（使用 Ctrl+Shift+Space 切换）</translation>
+        </message>
+        <message>
+            <source>Collapse tool panel</source>
+            <translation>折叠工具面板</translation>
+        </message>
+        <message>
+            <source>Expand tool panel</source>
+            <translation>展开工具面板</translation>
+        </message>
+        <message>
+            <source>Drag to resize the tool panel</source>
+            <translation>拖动以调整工具面板大小</translation>
         </message>
     </context>
 </TS>
