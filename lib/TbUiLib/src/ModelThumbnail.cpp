@@ -21,9 +21,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <vector>
+
+#include <fmt/format.h>
 
 namespace tb::ui
 {
@@ -37,18 +40,69 @@ struct Vec3
 };
 } // namespace
 
+mdl::GoldSrcStudioExternalData loadGoldSrcStudioExternalData(
+  const std::vector<std::uint8_t>& bytes,
+  const std::filesystem::path& modelPath,
+  GoldSrcStudioExternalFiles& storage)
+{
+  storage = {};
+  if (modelPath.empty())
+    return {};
+
+  const auto folder = modelPath.parent_path();
+  const auto stem = modelPath.stem().string();
+  if (stem.empty())
+    return {};
+
+  const auto readBytes = [](const std::filesystem::path& path) {
+    auto stream = std::ifstream{path, std::ios::binary};
+    if (!stream)
+      return std::vector<std::uint8_t>{};
+    return std::vector<std::uint8_t>{
+      std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+  };
+
+  storage.textureHeader = readBytes(folder / (stem + "T.mdl"));
+
+  auto info = mdl::readGoldSrcStudioModelInfo(bytes);
+  const auto groupCount = info.is_success() ? info.value().sequenceGroups : std::size_t{1};
+  if (groupCount > 1)
+  {
+    storage.sequenceGroups.resize(groupCount - 1);
+    for (auto group = std::size_t{1}; group < groupCount; ++group)
+    {
+      auto name = group < info.value().sequenceGroupFiles.size()
+                    ? info.value().sequenceGroupFiles[group]
+                    : std::string{};
+      std::replace(name.begin(), name.end(), '\\', '/');
+      auto file = std::filesystem::path{name}.filename();
+      if (file.empty())
+        file = fmt::format("{}{:02}.mdl", stem, group);
+      storage.sequenceGroups[group - 1] = readBytes(folder / file);
+    }
+  }
+
+  auto external = mdl::GoldSrcStudioExternalData{};
+  if (!storage.textureHeader.empty())
+    external.textureHeader = &storage.textureHeader;
+  if (!storage.sequenceGroups.empty())
+    external.sequenceGroups = &storage.sequenceGroups;
+  return external;
+}
+
 std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
-  const std::vector<std::uint8_t>& bytes)
+  const std::vector<std::uint8_t>& bytes,
+  const mdl::GoldSrcStudioExternalData& external)
 {
   if (!mdl::isGoldSrcStudioModel(bytes))
     return std::nullopt;
-  auto info = mdl::readGoldSrcStudioModelInfo(bytes);
+  auto info = mdl::readGoldSrcStudioModelInfo(bytes, external);
   if (info.is_error())
     return std::nullopt;
 
   auto scene = ModelPreviewScene{};
   scene.studioModel = std::move(info).value();
-  if (auto frame = loadGoldSrcStudioFrame(bytes, 0, 0); frame)
+  if (auto frame = loadGoldSrcStudioFrame(bytes, 0, 0, {}, true, external); frame)
     scene.frames.push_back(std::move(*frame));
   return scene;
 }
@@ -58,10 +112,12 @@ std::optional<ModelPreviewFrame> loadGoldSrcStudioFrame(
   const std::size_t sequence,
   const std::size_t frame,
   const std::vector<std::size_t>& variants,
-  const bool decodeTexturePixels)
+  const bool decodeTexturePixels,
+  const mdl::GoldSrcStudioExternalData& external,
+  const std::size_t skinFamily)
 {
-  auto mesh =
-    mdl::buildGoldSrcStudioMesh(bytes, variants, sequence, frame, decodeTexturePixels);
+  auto mesh = mdl::buildGoldSrcStudioMesh(
+    bytes, variants, sequence, frame, decodeTexturePixels, external, skinFamily);
   if (mesh.is_error() || mesh.value().triangles.empty())
     return std::nullopt;
 
@@ -87,7 +143,10 @@ std::optional<ModelPreviewScene> loadModelPreviewScene(
     {
       auto bytes = std::vector<std::uint8_t>{
         std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
-      if (auto studio = loadGoldSrcStudioPreviewScene(bytes))
+      auto externalFiles = GoldSrcStudioExternalFiles{};
+      const auto external =
+        loadGoldSrcStudioExternalData(bytes, folder / relativePath, externalFiles);
+      if (auto studio = loadGoldSrcStudioPreviewScene(bytes, external))
         return studio;
     }
   }
@@ -180,6 +239,9 @@ QImage renderModelPreview(
     QColor color;
     float shade = 1.0f;
     float depth = 0.0f;
+    bool chrome = false;
+    float chromeU = 0.5f;
+    float chromeV = 0.5f;
   };
   auto projected = std::vector<Projected>{};
   projected.reserve(triangles.size());
@@ -231,6 +293,29 @@ QImage renderModelPreview(
       int(120 * shade + 30), int(132 * shade + 34), int(146 * shade + 38));
     item.shade = shade;
     item.depth = (a[2] + b[2] + c[2]) / 3.0f;
+    if (texture && (texture->flags & 0x0008u) != 0)
+    {
+      // The engine sphere-maps chrome from the per-vertex normal. The preview has no
+      // vertex normals, so reflect the face normal through the current view instead.
+      const auto& p0 = positions[triangle[0]];
+      const auto& p1 = positions[triangle[1]];
+      const auto& p2 = positions[triangle[2]];
+      const auto e1 = Vec3{p1.x() - p0.x(), p1.y() - p0.y(), p1.z() - p0.z()};
+      const auto e2 = Vec3{p2.x() - p0.x(), p2.y() - p0.y(), p2.z() - p0.z()};
+      auto n = Vec3{
+        e1.y * e2.z - e1.z * e2.y,
+        e1.z * e2.x - e1.x * e2.z,
+        e1.x * e2.y - e1.y * e2.x};
+      const auto nLength = std::max(
+        0.0001f, std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z));
+      n = {n.x / nLength, n.y / nLength, n.z / nLength};
+      const auto vx = n.x * cosYaw - n.y * sinYaw;
+      const auto vz = n.x * sinYaw + n.y * cosYaw;
+      const auto vy = n.z * cosPitch - vz * sinPitch;
+      item.chrome = true;
+      item.chromeU = 0.5f + 0.5f * vx;
+      item.chromeV = 0.5f - 0.5f * vy;
+    }
     projected.push_back(item);
   }
 
@@ -270,8 +355,14 @@ QImage renderModelPreview(
         auto color = item.color;
         if (item.texture)
         {
-          const auto u = w0 * item.uv[0][0] + w1 * item.uv[1][0] + w2 * item.uv[2][0];
-          const auto v = w0 * item.uv[0][1] + w1 * item.uv[1][1] + w2 * item.uv[2][1];
+          const auto u = item.chrome
+                           ? item.chromeU
+                           : w0 * item.uv[0][0] + w1 * item.uv[1][0]
+                               + w2 * item.uv[2][0];
+          const auto v = item.chrome
+                           ? item.chromeV
+                           : w0 * item.uv[0][1] + w1 * item.uv[1][1]
+                               + w2 * item.uv[2][1];
           // Bilinear sampling keeps the small thumbnail readable instead of speckled.
           const auto width = int(item.texture->width);
           const auto height = int(item.texture->height);
@@ -312,7 +403,23 @@ QImage renderModelPreview(
           };
           color = QColor(blend(16), blend(8), blend(0));
         }
-        image.setPixel(x, y, color.rgb());
+        if (item.texture && (item.texture->flags & 0x0020u) != 0)
+        {
+          const auto destination = QColor::fromRgba(image.pixel(x, y));
+          const auto add = [](const int base, const int source) {
+            return std::min(255, base + source);
+          };
+          image.setPixel(
+            x,
+            y,
+            qRgba(
+              add(destination.red(), color.red()),
+              add(destination.green(), color.green()),
+              add(destination.blue(), color.blue()),
+              255));
+        }
+        else
+          image.setPixel(x, y, color.rgb());
       }
   }
 

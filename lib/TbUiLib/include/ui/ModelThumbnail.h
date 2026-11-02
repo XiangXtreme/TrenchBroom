@@ -38,6 +38,23 @@ struct ModelPreviewScene
   std::optional<mdl::GoldSrcStudioModelInfo> studioModel;
 };
 
+/** Owns the optional sibling bytes referenced by GoldSrcStudioExternalData. */
+struct GoldSrcStudioExternalFiles
+{
+  std::vector<std::uint8_t> textureHeader;
+  std::vector<std::vector<std::uint8_t>> sequenceGroups;
+};
+
+/**
+ * Loads the texture header and animation groups that sit beside a studio model.
+ *
+ * The returned view points into storage, which must outlive every frame decoded with it.
+ */
+mdl::GoldSrcStudioExternalData loadGoldSrcStudioExternalData(
+  const std::vector<std::uint8_t>& bytes,
+  const std::filesystem::path& modelPath,
+  GoldSrcStudioExternalFiles& storage);
+
 /**
  * Loads the bind pose of a GoldSrc studio model.
  *
@@ -46,7 +63,8 @@ struct ModelPreviewScene
  * textures. Returns nullopt for other formats or unreadable model metadata.
  */
 std::optional<ModelPreviewScene> loadGoldSrcStudioPreviewScene(
-  const std::vector<std::uint8_t>& bytes);
+  const std::vector<std::uint8_t>& bytes,
+  const mdl::GoldSrcStudioExternalData& external = {});
 
 /**
  * Builds one frame of one sequence, for the inspector's playback controls.
@@ -60,7 +78,9 @@ std::optional<ModelPreviewFrame> loadGoldSrcStudioFrame(
   std::size_t sequence,
   std::size_t frame,
   const std::vector<std::size_t>& variants = {},
-  bool decodeTexturePixels = true);
+  bool decodeTexturePixels = true,
+  const mdl::GoldSrcStudioExternalData& external = {},
+  std::size_t skinFamily = 0);
 
 std::optional<ModelPreviewScene> loadModelPreviewScene(
   const std::filesystem::path& folder,

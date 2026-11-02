@@ -26,6 +26,23 @@ struct GoldSrcStudioSequence
   float fps = 0.0f;
   bool looping = false;
   std::size_t frameCount = 0;
+  // 0 is embedded in the main file; larger values need the matching sequence group.
+  std::size_t group = 0;
+};
+
+/**
+ * Optional sibling files of a GoldSrc studio model.
+ *
+ * GoldSrc splits a model when its textures do not fit: the main file then has
+ * textureindex 0 and the texture and skin tables live in <stem>T.mdl. Animation
+ * groups beyond the embedded group live in <stem>01.mdl, <stem>02.mdl, ... and
+ * their sequence descriptors point at them by index.
+ */
+struct GoldSrcStudioExternalData
+{
+  const std::vector<std::uint8_t>* textureHeader = nullptr;
+  // Index 0 holds sequence group 1, index 1 group 2, and so on.
+  const std::vector<std::vector<std::uint8_t>>* sequenceGroups = nullptr;
 };
 
 /** One body part of a GoldSrc studio model and its selectable variants. */
@@ -49,6 +66,10 @@ struct GoldSrcStudioModelInfo
   std::size_t bones = 0;
   std::size_t sequenceGroups = 1;
   std::size_t sequences = 0;
+  // True when the texture and skin tables were read from a separate header.
+  bool externalTextures = false;
+  // File names from the sequence-group table (group 0 is the main file and empty).
+  std::vector<std::string> sequenceGroupFiles;
   std::vector<GoldSrcStudioSequence> sequenceList;
   std::size_t skinFamilies = 0;
   std::size_t skinReferences = 0;
@@ -59,7 +80,8 @@ struct GoldSrcStudioModelInfo
 bool isGoldSrcStudioModel(const std::vector<std::uint8_t>& bytes);
 
 Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
-  const std::vector<std::uint8_t>& bytes);
+  const std::vector<std::uint8_t>& bytes,
+  const GoldSrcStudioExternalData& external = {});
 
 /** One embedded texture, decoded from the indexed pixels and its 256 colour palette. */
 struct GoldSrcStudioTexture
@@ -89,16 +111,17 @@ struct GoldSrcStudioMesh
  *
  * The pose is decoded from the requested sequence, which is how the engine renders a
  * model; frame 0 of the first sequence is therefore the bind pose. Models without
- * sequences fall back to the bone rest values. Uses the default skin family; bone
- * controllers and external sequence groups are not applied. When decodeTexturePixels
- * is false, only texture dimensions and normalized UVs are read so callers can reuse
- * pixels decoded for an earlier frame of the same model.
+ * sequences fall back to the bone rest values. Bone controllers are not applied. When
+ * decodeTexturePixels is false, only texture dimensions and normalized UVs are read so
+ * callers can reuse pixels decoded for an earlier frame of the same model.
  */
 Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   const std::vector<std::uint8_t>& bytes,
   const std::vector<std::size_t>& variants = {},
   std::size_t sequence = 0,
   std::size_t frame = 0,
-  bool decodeTexturePixels = true);
+  bool decodeTexturePixels = true,
+  const GoldSrcStudioExternalData& external = {},
+  std::size_t skinFamily = 0);
 
 } // namespace tb::mdl

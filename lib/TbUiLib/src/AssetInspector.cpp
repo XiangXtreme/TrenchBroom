@@ -303,6 +303,10 @@ AssetInspector::AssetInspector(QWidget* parent)
   m_studioSequence = new QComboBox{};
   m_studioSequence->setAccessibleName(tr("Sequence"));
   m_studioSequence->setObjectName("AssetInspector_ModelSequence");
+  m_studioSkin = new QComboBox{};
+  m_studioSkin->setAccessibleName(tr("Skin family"));
+  m_studioSkin->setObjectName("AssetInspector_ModelSkin");
+  m_studioSkin->hide();
   m_studioPlay = new QPushButton{tr("Play")};
   m_studioPlay->setObjectName("AssetInspector_ModelPlay");
   m_studioPlay->setProperty("tbControlRole", "compact");
@@ -314,6 +318,7 @@ AssetInspector::AssetInspector(QWidget* parent)
   studioTop->addWidget(m_studioSequence, 1);
   studioTop->addWidget(m_studioPlay);
   studioLayout->addLayout(studioTop);
+  studioLayout->addWidget(m_studioSkin);
   studioLayout->addWidget(m_studioFrame);
   auto* modelButtons = new QHBoxLayout{};
   m_modelBounds = new QCheckBox{tr("Bounds")};
@@ -355,6 +360,12 @@ AssetInspector::AssetInspector(QWidget* parent)
     m_studioFrame->setValue(0);
     m_studioFrameIndex = 0;
     showStudioFrame();
+  });
+  connect(m_studioSkin, &QComboBox::currentIndexChanged, this, [this](const int index) {
+    if (index < 0)
+      return;
+    m_studioSkinFamily = std::size_t(index);
+    rebuildStudioPose();
   });
   connect(m_studioFrame, &QSlider::valueChanged, this, [this](const int value) {
     m_studioFrameIndex = std::size_t(std::max(0, value));
@@ -459,8 +470,17 @@ void AssetInspector::clear()
   m_sprite.reset();
   m_model.reset();
   m_studioModel.reset();
+  m_studioExternalFiles = {};
+  m_studioExternal = {};
   m_studioVariants.clear();
   m_studioChoices.clear();
+  m_studioSkinFamily = 0;
+  if (m_studioSkin)
+  {
+    const auto blocker = QSignalBlocker{m_studioSkin};
+    m_studioSkin->clear();
+    m_studioSkin->hide();
+  }
   m_studioControls->hide();
   if (m_modelBody)
   {
@@ -599,8 +619,15 @@ void AssetInspector::refreshPreview()
   else if (type == BrowserCellType::Model)
   {
     // GoldSrc studio models are read straight from the resource bytes: the entity model
-    // loaders only understand Quake-era formats.
-    if (auto studio = loadGoldSrcStudioPreviewScene(m_asset->compatible))
+    // loaders only understand Quake-era formats. Textures and animation groups may live
+    // in sibling files, which are resolved from the resource's on-disk path.
+    m_studioExternalFiles = {};
+    m_studioExternal = {};
+    if (!m_asset->resource.absolutePath.empty())
+      m_studioExternal = loadGoldSrcStudioExternalData(
+        m_asset->compatible, m_asset->resource.absolutePath, m_studioExternalFiles);
+    if (auto studio =
+          loadGoldSrcStudioPreviewScene(m_asset->compatible, m_studioExternal))
     {
       m_model = std::move(studio);
       m_studioModel = m_model->studioModel;
@@ -795,6 +822,16 @@ void AssetInspector::configureStudioModel()
   m_modelBody->setVisible(!m_studioChoices.empty());
 
   {
+    const auto blocker = QSignalBlocker{m_studioSkin};
+    m_studioSkin->clear();
+    for (auto family = std::size_t{0}; family < studio.skinFamilies; ++family)
+      m_studioSkin->addItem(tr("Skin %1").arg(qulonglong(family + 1)));
+    m_studioSkin->setCurrentIndex(0);
+    m_studioSkin->setVisible(studio.skinFamilies > 1);
+  }
+  m_studioSkinFamily = 0;
+
+  {
     const auto blocker = QSignalBlocker{m_studioSequence};
     m_studioSequence->clear();
     for (auto index = std::size_t{0}; index < studio.sequenceList.size(); ++index)
@@ -803,8 +840,21 @@ void AssetInspector::configureStudioModel()
       auto label = QString::fromStdString(sequence.label);
       if (label.isEmpty())
         label = tr("Sequence %1").arg(index + 1);
+      auto suffix = QString{};
+      if (sequence.group > 0)
+      {
+        const auto available =
+          m_studioExternal.sequenceGroups
+          && sequence.group <= m_studioExternal.sequenceGroups->size()
+          && !(*m_studioExternal.sequenceGroups)[sequence.group - 1].empty();
+        suffix = available ? tr(" · external group")
+                           : tr(" · external group missing");
+      }
       m_studioSequence->addItem(
-        tr("%1 · %2 frames").arg(label).arg(qulonglong(sequence.frameCount)));
+        tr("%1 · %2 frames%3")
+          .arg(label)
+          .arg(qulonglong(sequence.frameCount))
+          .arg(suffix));
     }
   }
   const auto animated = !studio.sequenceList.empty();
@@ -828,7 +878,7 @@ void AssetInspector::configureStudioModel()
   }
 
   m_modelLimits->setText(
-    tr("GoldSrc studio model · animation and embedded textures decoded.\n"
+    tr("GoldSrc studio model · animation and textures decoded.\n"
        "Pick a sequence and frame, or press Play. Drag to orbit, wheel to zoom."));
 
   const auto keys = std::array{
@@ -836,7 +886,7 @@ void AssetInspector::configureStudioModel()
     tr("Sequences"),
     tr("Body variants"),
     tr("Skin families"),
-    tr("Embedded textures"),
+    tr("Textures"),
     tr("Source bounds")};
   for (const auto& key : keys)
     for (auto* item : m_details->findItems(key, Qt::MatchExactly, 0))
@@ -850,12 +900,18 @@ void AssetInspector::configureStudioModel()
   for (const auto& bodyPart : studio.bodyParts)
     variants += bodyPart.variants.size();
   add(tr("Bones"), QString::number(qulonglong(studio.bones)));
+  auto loadedGroups = std::size_t{0};
+  if (m_studioExternal.sequenceGroups)
+    for (const auto& group : *m_studioExternal.sequenceGroups)
+      loadedGroups += group.empty() ? 0 : 1;
   add(
     tr("Sequences"),
-    studio.sequenceGroups > 1 ? tr("%1 in %2 external groups")
-                                  .arg(qulonglong(studio.sequences))
-                                  .arg(qulonglong(studio.sequenceGroups))
-                              : QString::number(qulonglong(studio.sequences)));
+    studio.sequenceGroups > 1
+      ? tr("%1 in %2 external groups (%3 loaded)")
+          .arg(qulonglong(studio.sequences))
+          .arg(qulonglong(studio.sequenceGroups))
+          .arg(qulonglong(loadedGroups))
+      : QString::number(qulonglong(studio.sequences)));
   add(
     tr("Body variants"),
     tr("%1 in %2 part(s)")
@@ -865,9 +921,11 @@ void AssetInspector::configureStudioModel()
   auto textures = QStringList{};
   for (const auto& texture : studio.textures)
     textures << QString::fromStdString(texture);
-  add(
-    tr("Embedded textures"),
-    textures.isEmpty() ? tr("None") : textures.join(QStringLiteral(", ")));
+  auto textureList = textures.isEmpty() ? tr("None")
+                                        : textures.join(QStringLiteral(", "));
+  if (studio.externalTextures)
+    textureList += tr(" (external header)");
+  add(tr("Textures"), textureList);
   const auto size = studio.bounds.size();
   add(
     tr("Source bounds"),
@@ -887,11 +945,19 @@ void AssetInspector::rebuildStudioPose()
     m_studioSequenceIndex,
     m_studioFrameIndex,
     m_studioVariants,
-    !reuseTextures);
+    !reuseTextures,
+    m_studioExternal,
+    m_studioSkinFamily);
   if (!frame)
   {
     m_studioPlay->setChecked(false);
-    m_summary->setText(tr("The studio model has no readable geometry for this frame."));
+    const auto group = m_studioSequenceIndex < m_studioModel->sequenceList.size()
+                         ? m_studioModel->sequenceList[m_studioSequenceIndex].group
+                         : std::size_t{0};
+    m_summary->setText(
+      group > 0 ? tr("This sequence lives in an external animation group that is not "
+                     "available next to the model.")
+                : tr("The studio model has no readable geometry for this frame."));
     return;
   }
   if (reuseTextures)

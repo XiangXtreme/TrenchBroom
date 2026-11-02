@@ -376,6 +376,100 @@ TEST_CASE("GoldSrcStudioModel")
     CHECK(((texture.pixels[1] >> 16) & 0xFF) == 0xFF);
   }
 
+  SECTION("reads textures from a separate texture header")
+  {
+    auto main = makeStudioModel();
+    auto header = *reinterpret_cast<StudioHeader*>(main.data());
+    header.numtextures = 0;
+    header.textureindex = 0;
+    header.numskinref = 0;
+    header.numskinfamilies = 0;
+    header.skinindex = 0;
+    writeAt(main, 0, header);
+
+    auto textures = makeStudioModel();
+    const auto skinOffset = std::uint32_t(textures.size());
+    textures.resize(textures.size() + 2, 0);
+    auto textureHeader = *reinterpret_cast<StudioHeader*>(textures.data());
+    textureHeader.numbones = 0;
+    textureHeader.boneindex = 0;
+    textureHeader.numseq = 0;
+    textureHeader.seqindex = 0;
+    textureHeader.numbodyparts = 0;
+    textureHeader.bodypartindex = 0;
+    textureHeader.numskinref = 1;
+    textureHeader.numskinfamilies = 1;
+    textureHeader.skinindex = int32_t(skinOffset);
+    writeAt(textures, 0, textureHeader);
+
+    const auto external = GoldSrcStudioExternalData{&textures, nullptr};
+    const auto info = readGoldSrcStudioModelInfo(main, external);
+    REQUIRE(info.is_success());
+    CHECK(info.value().textures == std::vector<std::string>{"brick"});
+    CHECK(info.value().externalTextures);
+    CHECK(info.value().skinFamilies == 1);
+    CHECK(info.value().skinReferences == 1);
+
+    const auto mesh = buildGoldSrcStudioMesh(main, {}, 0, 0, true, external);
+    REQUIRE(mesh.is_success());
+    REQUIRE(mesh.value().textures.size() == 1);
+    CHECK(mesh.value().textures.front().width == 64);
+  }
+
+  SECTION("decodes animation from an external sequence group")
+  {
+    auto main = makeStudioModel();
+    const auto sequenceOffset = std::uint32_t(main.size());
+    main.resize(main.size() + 176, 0);
+    const auto groupTableOffset = std::uint32_t(main.size());
+    main.resize(main.size() + 2 * 104, 0);
+
+    auto header = *reinterpret_cast<StudioHeader*>(main.data());
+    header.numseq = 1;
+    header.seqindex = int32_t(sequenceOffset);
+    header.numseqgroups = 2;
+    header.seqgroupindex = int32_t(groupTableOffset);
+    writeAt(main, 0, header);
+
+    // The child bone's X channel is the only animated channel.
+    writeAt(main, sizeof(StudioHeader) + sizeof(StudioBone) + 88, 1.0f);
+
+    writeAt(main, sequenceOffset, "animate", 8);
+    writeAt(main, sequenceOffset + 32, 15.0f);
+    writeAt(main, sequenceOffset + 56, int32_t{1});
+    writeAt(main, sequenceOffset + 120, int32_t{1});
+    writeAt(main, sequenceOffset + 124, int32_t{76});
+    writeAt(main, sequenceOffset + 156, int32_t{1});
+    writeAt(main, groupTableOffset + 104 + 32, "group01.mdl", 12);
+
+    auto group = std::vector<std::uint8_t>(104, 0);
+    writeAt(group, 0, uint32_t{0x51534449}); // "IDSQ"
+    writeAt(group, 4, uint32_t{10});
+    // Bone 1 channel 0 points at the run at offset 100 (block + 12).
+    writeAt(group, 76 + 12, uint16_t{12});
+    group[100] = 1; // valid
+    group[101] = 1; // total
+    writeAt(group, 102, int16_t{5});
+
+    auto groups = std::vector<std::vector<std::uint8_t>>{std::move(group)};
+    const auto external = GoldSrcStudioExternalData{nullptr, &groups};
+    const auto info = readGoldSrcStudioModelInfo(main, external);
+    REQUIRE(info.is_success());
+    REQUIRE(info.value().sequenceList.size() == 1);
+    CHECK(info.value().sequenceList.front().group == 1);
+    REQUIRE(info.value().sequenceGroupFiles.size() == 2);
+    CHECK(info.value().sequenceGroupFiles[1] == "group01.mdl");
+
+    const auto posed = buildGoldSrcStudioMesh(main, {}, 0, 0, true, external);
+    REQUIRE(posed.is_success());
+    CHECK_THAT(posed.value().positions.front().x(), Catch::Matchers::WithinAbs(16.0f, 0.001));
+
+    // Without the group file the same sequence falls back to the bone rest pose.
+    const auto rest = buildGoldSrcStudioMesh(main);
+    REQUIRE(rest.is_success());
+    CHECK_THAT(rest.value().positions.front().x(), Catch::Matchers::WithinAbs(11.0f, 0.001));
+  }
+
   SECTION("composes bone rotations in the rest pose")
   {
     const auto bytes = makeStudioModel(3.14159265f / 2.0f);

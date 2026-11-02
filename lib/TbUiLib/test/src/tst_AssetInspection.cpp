@@ -389,12 +389,18 @@ TEST_CASE("AssetInspection")
     CHECK(body->itemText(0).contains("body_a"));
 
     auto* sequence = inspector.findChild<QComboBox*>("AssetInspector_ModelSequence");
+    auto* skin = inspector.findChild<QComboBox*>("AssetInspector_ModelSkin");
     auto* frame = inspector.findChild<QSlider*>("AssetInspector_ModelFrame");
     auto* play = inspector.findChild<QPushButton*>("AssetInspector_ModelPlay");
     REQUIRE(sequence != nullptr);
+    REQUIRE(skin != nullptr);
     REQUIRE(frame != nullptr);
     REQUIRE(play != nullptr);
     inspector.show();
+    CHECK_FALSE(skin->isHidden());
+    CHECK(skin->count() == 3);
+    skin->setCurrentIndex(1);
+    CHECK(skin->currentIndex() == 1);
     CHECK_FALSE(sequence->isHidden());
     CHECK(sequence->count() == 4);
     CHECK(frame->maximum() == 1);
@@ -410,8 +416,8 @@ TEST_CASE("AssetInspection")
     };
     CHECK(valueFor("Bones") == "2");
     CHECK(valueFor("Skin families") == "3");
-    CHECK(valueFor("Embedded textures") == "brick");
-    CHECK(valueFor("Sequences") == "4 in 2 external groups");
+    CHECK(valueFor("Textures") == "brick");
+    CHECK(valueFor("Sequences") == "4 in 2 external groups (0 loaded)");
     CHECK(summary->text().contains("idle0 frame 1"));
     body->setCurrentIndex(1);
     CHECK(summary->text().contains("idle0 frame 1"));
@@ -463,6 +469,93 @@ TEST_CASE("AssetInspection")
       }
     CHECK(transparent > 0);
     CHECK(opaque > 0);
+  }
+
+  SECTION("chrome and additive texture flags render")
+  {
+    auto frame = ModelPreviewFrame{};
+    auto texture = mdl::GoldSrcStudioTexture{};
+    texture.width = 1;
+    texture.height = 1;
+    texture.flags = 0x0008;
+    texture.pixels = {0xFF808080u};
+    frame.textures.push_back(texture);
+    frame.positions = {vm::vec3f{-1.0f, -1.0f, 0.0f},
+                       vm::vec3f{1.0f, -1.0f, 0.0f},
+                       vm::vec3f{0.0f, 1.0f, 0.0f}};
+    frame.texCoords = {std::array{0.0f, 0.0f}, std::array{1.0f, 0.0f},
+                       std::array{0.5f, 1.0f}};
+    frame.triangles = {{0, 1, 2}};
+    frame.triangleTextures = {0};
+
+    const auto chrome = renderModelPreview(frame, 64);
+    auto chromePainted = 0;
+    for (auto y = 0; y < chrome.height(); ++y)
+      for (auto x = 0; x < chrome.width(); ++x)
+        chromePainted += chrome.pixelColor(x, y).alpha() > 0 ? 1 : 0;
+    CHECK(chromePainted > 0);
+
+    frame.textures.front().flags = 0x0020;
+    const auto additive = renderModelPreview(frame, 64);
+    auto additivePainted = 0;
+    for (auto y = 0; y < additive.height(); ++y)
+      for (auto x = 0; x < additive.width(); ++x)
+        if (const auto color = additive.pixelColor(x, y); color.alpha() > 0)
+        {
+          ++additivePainted;
+          CHECK(color.alpha() == 255);
+        }
+    CHECK(additivePainted > 0);
+  }
+
+  SECTION("model thumbnails resolve a sibling texture header")
+  {
+    auto main = studioModel();
+    const auto zero = int32_t{0};
+    std::memcpy(main.data() + 180, &zero, sizeof(zero)); // numtextures
+    std::memcpy(main.data() + 184, &zero, sizeof(zero)); // textureindex
+    std::memcpy(main.data() + 192, &zero, sizeof(zero)); // numskinref
+    std::memcpy(main.data() + 196, &zero, sizeof(zero)); // numskinfamilies
+    std::memcpy(main.data() + 200, &zero, sizeof(zero)); // skinindex
+
+    auto textures = studioModel();
+    std::memcpy(textures.data() + 140, &zero, sizeof(zero)); // numbones
+    std::memcpy(textures.data() + 144, &zero, sizeof(zero)); // boneindex
+    std::memcpy(textures.data() + 164, &zero, sizeof(zero)); // numseq
+    std::memcpy(textures.data() + 168, &zero, sizeof(zero)); // seqindex
+    std::memcpy(textures.data() + 172, &zero, sizeof(zero)); // numseqgroups
+    std::memcpy(textures.data() + 176, &zero, sizeof(zero)); // seqgroupindex
+    std::memcpy(textures.data() + 204, &zero, sizeof(zero)); // numbodyparts
+    std::memcpy(textures.data() + 208, &zero, sizeof(zero)); // bodypartindex
+
+    auto directory = QTemporaryDir{};
+    REQUIRE(directory.isValid());
+    const auto write = [](const std::filesystem::path& path, const inspection::Bytes& bytes) {
+      auto stream = std::ofstream{path, std::ios::binary};
+      stream.write(
+        reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    };
+    write(directory.filePath("ui_studio.mdl").toStdString(), main);
+    write(directory.filePath("ui_studioT.mdl").toStdString(), textures);
+
+    const auto scene = loadModelPreviewScene(
+      std::filesystem::path{directory.path().toStdString()}, "ui_studio.mdl");
+    REQUIRE(scene);
+    REQUIRE(scene->studioModel);
+    CHECK(scene->studioModel->externalTextures);
+    CHECK(scene->studioModel->textures == std::vector<std::string>{"brick"});
+    REQUIRE_FALSE(scene->frames.empty());
+    REQUIRE_FALSE(scene->frames.front().textures.empty());
+    CHECK_FALSE(scene->frames.front().textures.front().pixels.empty());
+
+    const auto image = renderModelThumbnail(
+      std::filesystem::path{directory.path().toStdString()}, "ui_studio.mdl", 64);
+    REQUIRE_FALSE(image.isNull());
+    auto painted = 0;
+    for (auto y = 0; y < image.height(); ++y)
+      for (auto x = 0; x < image.width(); ++x)
+        painted += image.pixelColor(x, y).alpha() > 0 ? 1 : 0;
+    CHECK(painted > 0);
   }
 
   SECTION("non-looping studio sequences stop on their final frame")
@@ -550,6 +643,36 @@ TEST_CASE("AssetInspection")
     REQUIRE(scene->studioModel);
     CHECK(scene->studioModel->bones > 0);
     CHECK_FALSE(scene->studioModel->sequenceList.empty());
+
+    // When the retail model splits textures or animation into sibling files, resolve them
+    // from the model path exactly as the model browser does.
+    auto externalFiles = GoldSrcStudioExternalFiles{};
+    const auto external =
+      loadGoldSrcStudioExternalData(bytes, std::filesystem::path{path}, externalFiles);
+    auto previewScene = scene;
+    if (!externalFiles.textureHeader.empty())
+    {
+      auto textured = loadGoldSrcStudioPreviewScene(bytes, external);
+      REQUIRE(textured);
+      CHECK_FALSE(textured->studioModel->textures.empty());
+      REQUIRE_FALSE(textured->frames.empty());
+      REQUIRE_FALSE(textured->frames.front().textures.empty());
+      CHECK_FALSE(textured->frames.front().textures.front().pixels.empty());
+      previewScene = std::move(textured);
+    }
+    for (auto index = std::size_t{0}; index < scene->studioModel->sequenceList.size();
+         ++index)
+    {
+      const auto& sequence = scene->studioModel->sequenceList[index];
+      if (
+        sequence.group == 0 || !external.sequenceGroups
+        || sequence.group > external.sequenceGroups->size()
+        || (*external.sequenceGroups)[sequence.group - 1].empty())
+        continue;
+      const auto frame = loadGoldSrcStudioFrame(bytes, index, 0, {}, true, external);
+      CHECK(frame);
+      break;
+    }
     if (
       !scene->studioModel->sequenceList.empty()
       && scene->studioModel->sequenceList.front().frameCount > 1 && !scene->frames.empty())
@@ -562,7 +685,8 @@ TEST_CASE("AssetInspection")
       CHECK(next->texCoords.size() == next->positions.size());
     }
     REQUIRE_FALSE(scene->frames.empty());
-    const auto image = renderModelPreview(scene->frames.front(), 256, 0.55f, 0.38f);
+    REQUIRE_FALSE(previewScene->frames.empty());
+    const auto image = renderModelPreview(previewScene->frames.front(), 256, 0.55f, 0.38f);
     REQUIRE_FALSE(image.isNull());
     auto painted = 0;
     for (auto y = 0; y < image.height(); ++y)

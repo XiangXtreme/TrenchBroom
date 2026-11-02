@@ -19,11 +19,13 @@ namespace
 
 using Bytes = std::vector<std::uint8_t>;
 
-// GoldSrc studio format, version 10. Only the tables needed for a bind-pose preview are
-// read; animation data, bone controllers, hit boxes and attachments stay untouched.
+// GoldSrc studio format, version 10. Only the tables needed for a preview are read;
+// bone controllers, hit boxes and attachments stay untouched.
 constexpr std::uint32_t StudioIdentifier = 0x54534449; // "IDST"
+constexpr std::uint32_t SequenceIdentifier = 0x51534449; // "IDSQ"
 constexpr std::uint32_t StudioVersion = 10;
 constexpr std::size_t HeaderSize = 244;
+constexpr std::size_t SequenceHeaderSize = 76;
 constexpr std::size_t BoneSize = 112;
 constexpr std::size_t TextureSize = 80;
 constexpr std::size_t BodyPartSize = 76;
@@ -105,11 +107,14 @@ struct Header
   std::size_t sequences = 0;
   std::size_t sequenceOffset = 0;
   std::size_t sequenceGroups = 1;
+  std::size_t sequenceGroupOffset = 0;
+  std::size_t sequenceGroupBase = 0;
   std::size_t textures = 0;
   std::size_t textureOffset = 0;
   std::size_t skinReferences = 0;
   std::size_t skinFamilies = 0;
   std::size_t skinOffset = 0;
+  bool externalTextures = false;
   std::size_t bodyParts = 0;
   std::size_t bodyPartOffset = 0;
   vm::bbox3f bounds;
@@ -251,6 +256,10 @@ Result<Header> readHeader(const Bytes& bytes)
   header.sequences = countAt(bytes, 164, MaxSequences);
   header.sequenceOffset = tableAt(bytes, 168, header.sequences, SequenceSize);
   header.sequenceGroups = std::max(std::size_t{1}, countAt(bytes, 172, 1024));
+  header.sequenceGroupOffset = tableAt(bytes, 176, header.sequenceGroups, 104);
+  if (header.sequenceGroupOffset != 0)
+    header.sequenceGroupBase = std::size_t(
+      std::max(0, readi32(bytes, header.sequenceGroupOffset + 100)));
   header.textures = countAt(bytes, 180, MaxTextures);
   header.textureOffset = tableAt(bytes, 184, header.textures, TextureSize);
   header.skinReferences = countAt(bytes, 192, 4096);
@@ -292,6 +301,26 @@ Result<Header> readHeader(const Bytes& bytes)
       header.bounds = *measured;
   }
   return header;
+}
+
+/** Replaces the texture and skin tables with the separate texture header when used. */
+Result<void> applyTextureHeader(Header& header, const std::vector<std::uint8_t>* textureBytes)
+{
+  if (!textureBytes || textureBytes->empty() || header.textures != 0)
+    return {};
+  auto parsed = readHeader(*textureBytes);
+  if (parsed.is_error())
+    return {};
+  const auto& value = parsed.value();
+  if (value.textures == 0 && value.skinReferences == 0)
+    return {};
+  header.textures = value.textures;
+  header.textureOffset = value.textureOffset;
+  header.skinReferences = value.skinReferences;
+  header.skinFamilies = value.skinFamilies;
+  header.skinOffset = value.skinOffset;
+  header.externalTextures = true;
+  return {};
 }
 
 struct Transform
@@ -393,7 +422,7 @@ std::optional<float> readAnimationValue(
 {
   auto position = offset;
   auto remaining = frame;
-  for (auto guard = std::size_t{0}; guard < 4096; ++guard)
+  while (true)
   {
     if (!contains(bytes, position, 2))
       return std::nullopt;
@@ -417,7 +446,11 @@ std::optional<float> readAnimationValue(
 
 /** Decodes the pose of one frame of a sequence, or nothing when the data is unusable. */
 std::optional<std::vector<BonePose>> readSequencePose(
-  const Bytes& bytes, const Header& header, const std::size_t sequence, const std::size_t frame)
+  const Bytes& bytes,
+  const Header& header,
+  const std::size_t sequence,
+  const std::size_t frame,
+  const GoldSrcStudioExternalData& external)
 {
   if (sequence >= header.sequences || header.sequenceOffset == 0)
     return std::nullopt;
@@ -427,15 +460,34 @@ std::optional<std::vector<BonePose>> readSequencePose(
   const auto blends = countAt(bytes, offset + 120, 16);
   const auto animIndex = readi32(bytes, offset + 124);
   const auto group = readi32(bytes, offset + 156);
-  // Only the embedded sequence group is available; external _T.mdl groups live in
-  // another file that the browser does not open.
-  if (frameCount == 0 || blends == 0 || animIndex <= 0 || group != 0)
+  if (frameCount == 0 || blends == 0 || animIndex <= 0 || group < 0)
     return std::nullopt;
   if (frame >= frameCount)
     return std::nullopt;
 
-  const auto animationOffset = std::size_t(animIndex);
-  if (!contains(bytes, animationOffset, blends * header.bones * AnimationSize))
+  // Group 0 stores its animation table in the main file; every later group has its own
+  // file and animindex is relative to that file's start.
+  const auto* animationBytes = &bytes;
+  if (group != 0)
+  {
+    const auto groupIndex = std::size_t(group);
+    if (!external.sequenceGroups || groupIndex > external.sequenceGroups->size())
+      return std::nullopt;
+    const auto& groupBytes = (*external.sequenceGroups)[groupIndex - 1];
+    if (groupBytes.size() < SequenceHeaderSize)
+      return std::nullopt;
+    const auto identifier = readu32(groupBytes, 0);
+    if (
+      (identifier != SequenceIdentifier && identifier != StudioIdentifier)
+      || readu32(groupBytes, 4) != StudioVersion)
+      return std::nullopt;
+    animationBytes = &groupBytes;
+  }
+
+  const auto animationOffset =
+    group == 0 ? header.sequenceGroupBase + std::size_t(animIndex)
+               : std::size_t(animIndex);
+  if (!contains(*animationBytes, animationOffset, blends * header.bones * AnimationSize))
     return std::nullopt;
 
   auto pose = std::vector<BonePose>(header.bones, BonePose{});
@@ -445,13 +497,14 @@ std::optional<std::vector<BonePose>> readSequencePose(
     const auto block = animationOffset + bone * AnimationSize;
     for (auto channel = std::size_t{0}; channel < 6; ++channel)
     {
-      const auto channelOffset = std::size_t{readu16(bytes, block + channel * 2)};
+      const auto channelOffset = std::size_t{readu16(*animationBytes, block + channel * 2)};
       const auto base = readf32(bytes, boneOffset + 64 + channel * 4);
       const auto scale = readf32(bytes, boneOffset + 88 + channel * 4);
       pose[bone].values[channel] = base;
       if (channelOffset != 0)
       {
-        if (const auto value = readAnimationValue(bytes, block + channelOffset, frame);
+        if (const auto value =
+              readAnimationValue(*animationBytes, block + channelOffset, frame);
             value)
           pose[bone].values[channel] = base + scale * *value;
       }
@@ -508,12 +561,17 @@ bool isGoldSrcStudioModel(const std::vector<std::uint8_t>& bytes)
 }
 
 Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
-  const std::vector<std::uint8_t>& bytes)
+  const std::vector<std::uint8_t>& bytes,
+  const GoldSrcStudioExternalData& external)
 {
   auto header = readHeader(bytes);
   if (header.is_error())
     return std::get<Error>(header.error());
-  const auto& value = header.value();
+  auto value = std::move(header).value();
+  if (auto merged = applyTextureHeader(value, external.textureHeader); merged.is_error())
+    return std::get<Error>(merged.error());
+  const auto& textureBytes =
+    value.externalTextures ? *external.textureHeader : bytes;
 
   auto result = GoldSrcStudioModelInfo{};
   result.name = value.name;
@@ -521,12 +579,19 @@ Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
   result.bones = value.bones;
   result.sequenceGroups = value.sequenceGroups;
   result.sequences = value.sequences;
+  result.externalTextures = value.externalTextures;
   result.skinFamilies = value.skinFamilies;
   result.skinReferences = value.skinReferences;
 
   for (auto i = std::size_t{0}; i < value.textures; ++i)
     result.textures.push_back(
-      readFixedString(bytes, value.textureOffset + i * TextureSize, 64));
+      readFixedString(textureBytes, value.textureOffset + i * TextureSize, 64));
+
+  result.sequenceGroupFiles.resize(value.sequenceGroups);
+  if (value.sequenceGroupOffset != 0)
+    for (auto i = std::size_t{0}; i < value.sequenceGroups; ++i)
+      result.sequenceGroupFiles[i] = readFixedString(
+        bytes, value.sequenceGroupOffset + i * 104 + 32, 64);
 
   for (auto i = std::size_t{0}; i < value.sequences; ++i)
   {
@@ -536,6 +601,8 @@ Result<GoldSrcStudioModelInfo> readGoldSrcStudioModelInfo(
     sequence.fps = readf32(bytes, offset + 32);
     sequence.looping = (readi32(bytes, offset + 36) & 1) != 0;
     sequence.frameCount = countAt(bytes, offset + 56, 100000);
+    const auto group = readi32(bytes, offset + 156);
+    sequence.group = group > 0 ? std::size_t(group) : std::size_t{0};
     result.sequenceList.push_back(std::move(sequence));
   }
 
@@ -565,18 +632,24 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
   const std::vector<std::size_t>& variants,
   const std::size_t sequence,
   const std::size_t frame,
-  const bool decodeTexturePixels)
+  const bool decodeTexturePixels,
+  const GoldSrcStudioExternalData& external,
+  const std::size_t skinFamily)
 {
   auto header = readHeader(bytes);
   if (header.is_error())
     return std::get<Error>(header.error());
-  const auto& value = header.value();
+  auto value = std::move(header).value();
+  if (auto merged = applyTextureHeader(value, external.textureHeader); merged.is_error())
+    return std::get<Error>(merged.error());
   if (value.bodyParts == 0)
     return Error{"The studio model has no body parts."};
 
-  const auto pose = readSequencePose(bytes, value, sequence, frame);
+  const auto pose = readSequencePose(bytes, value, sequence, frame, external);
   const auto bones = readBoneTransforms(bytes, value, pose);
-  auto textures = decodeTextures(bytes, value, decodeTexturePixels);
+  const auto& textureBytes =
+    value.externalTextures ? *external.textureHeader : bytes;
+  auto textures = decodeTextures(textureBytes, value, decodeTexturePixels);
   auto result = GoldSrcStudioMesh{};
 
   for (auto part = std::size_t{0}; part < value.bodyParts; ++part)
@@ -607,9 +680,13 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
     {
       const auto offset = meshOffset + mesh * MeshSize;
       const auto skinReference = readi32(bytes, offset + 8);
+      const auto family =
+        value.skinFamilies == 0 ? std::size_t{0}
+                                : std::min(skinFamily, value.skinFamilies - 1);
+      const auto skinIndex = family * value.skinReferences + std::size_t(skinReference);
       const auto textureIndex =
         skinReference >= 0 && std::size_t(skinReference) < value.skinReferences
-          ? std::size_t(readu16(bytes, value.skinOffset + std::size_t(skinReference) * 2))
+          ? std::size_t(readu16(textureBytes, value.skinOffset + skinIndex * 2))
           : std::size_t{0};
       const auto streamOffset = readi32(bytes, offset + 4);
       if (streamOffset < 0 || std::size_t(streamOffset) >= bytes.size())

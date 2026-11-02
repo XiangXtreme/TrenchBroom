@@ -72,13 +72,18 @@ class AssetInspector : public QWidget
   QCheckBox* m_modelOrigin = nullptr;
   QWidget* m_studioControls = nullptr;
   QComboBox* m_studioSequence = nullptr;
+  QComboBox* m_studioSkin = nullptr;
   QPushButton* m_studioPlay = nullptr;
   QSlider* m_studioFrame = nullptr;
   QTimer* m_studioTimer = nullptr;
   std::size_t m_studioSequenceIndex = 0;
   std::size_t m_studioFrameIndex = 0;
+  std::size_t m_studioSkinFamily = 0;
   std::optional<ModelPreviewScene> m_model;
   std::optional<mdl::GoldSrcStudioModelInfo> m_studioModel;
+  // Sibling texture and animation files stay alive for every on-demand frame.
+  GoldSrcStudioExternalFiles m_studioExternalFiles;
+  mdl::GoldSrcStudioExternalData m_studioExternal;
   std::vector<std::size_t> m_studioVariants;
   std::vector<std::pair<std::size_t, std::size_t>> m_studioChoices;
   float m_modelYaw = 0.55f;
