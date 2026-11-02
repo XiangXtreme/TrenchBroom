@@ -317,6 +317,30 @@ TEST_CASE("AssetInspection")
       second.findChild<QLabel*>("AssetInspector_Status")->text() == "source unavailable");
     CHECK(second.findChild<QMediaPlayer*>()->sourceDevice() == nullptr);
   }
+  SECTION("library model inspection resolves dependency-backed siblings")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    auto library = require(project::AssetLibrary::create(folder, "Library"));
+    std::filesystem::create_directories(folder / "models");
+    const auto bytes = studioModel();
+    write(folder / "models/test.mdl", bytes);
+    write(folder / "models/testT.mdl", bytes);
+    REQUIRE(library->scan().is_success());
+
+    const auto entries = require(library->assets());
+    const auto entry = std::ranges::find_if(entries, [](const auto& candidate) {
+      return candidate.sourceContainer == "models/test.mdl";
+    });
+    REQUIRE(entry != entries.end());
+
+    const auto source = openLocalAssetLibrary(folder);
+    REQUIRE(source);
+    const auto asset = require(inspection::readLibraryAsset(*source, *entry));
+    CHECK_FALSE(asset.studioExternal.textureHeader.empty());
+  }
+
   SECTION("GoldSrc studio models preview the bind pose and body variants")
   {
     auto bytes = studioModel();

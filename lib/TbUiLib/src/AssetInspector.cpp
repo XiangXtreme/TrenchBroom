@@ -642,7 +642,20 @@ void AssetInspector::refreshPreview()
     // in sibling files, which are resolved from the resource's on-disk path.
     m_studioExternalFiles = {};
     m_studioExternal = {};
-    if (!m_asset->resource.absolutePath.empty())
+    if (
+      !m_asset->studioExternal.textureHeader.empty()
+      || !m_asset->studioExternal.sequenceGroups.empty())
+    {
+      m_studioExternalFiles.textureHeader = m_asset->studioExternal.textureHeader;
+      m_studioExternalFiles.sequenceGroups = m_asset->studioExternal.sequenceGroups;
+    }
+    if (!m_studioExternalFiles.textureHeader.empty())
+      m_studioExternal.textureHeader = &m_studioExternalFiles.textureHeader;
+    if (!m_studioExternalFiles.sequenceGroups.empty())
+      m_studioExternal.sequenceGroups = &m_studioExternalFiles.sequenceGroups;
+    if (
+      !m_studioExternal.textureHeader && !m_studioExternal.sequenceGroups
+      && !m_asset->resource.absolutePath.empty())
       m_studioExternal = loadGoldSrcStudioExternalData(
         m_asset->compatible, m_asset->resource.absolutePath, m_studioExternalFiles);
     if (auto studio =

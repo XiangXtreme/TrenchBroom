@@ -489,6 +489,8 @@ gordon.mdl 下摘要显示 `look_idle frame 0`、序列下拉 77 项、帧滑块
 - 资产库导入或替换模型时，`importModelSiblings` 会按依赖候选一并复制同目录的
   `<stem>T.mdl` 与 `<stem>NN.mdl`，单独导入一个 `.mdl` 也能得到完整预览；已存在的
   兄弟文件不重复覆盖，替换时同步更新。
+- 工程快照与库资源优先从依赖图读取 `model-companion` / `model-animation` 资产，
+  不要求兄弟文件落在主文件旁边；依赖未捕获或缺失时才回退到磁盘路径。
 - 检查器显示 `(N loaded)`、`external group` / `external group missing`，并新增
   Skin family 下拉；texture 详情区分内嵌与外置头。
 - 骨骼控制器按游戏客户端的中性值 127 计算旋转/位移偏移，详情显示控制器数量；
@@ -498,5 +500,5 @@ gordon.mdl 下摘要显示 `look_idle frame 0`、序列下拉 77 项、帧滑块
 - 验证：合成 T 头、合成 IDSQ 组、真实 `agrunt.mdl`（71 个外置贴图模型之一）、
   `scientist.mdl`（外置组）与 `gordon.mdl` 的 `AssetInspection` 全通过；
   兄弟缩略图路径单独回归。模型库 140 项与 UI 库 128 项全量 CTest 无失败。
-- 仍待处理：逐顶点法线的精确 chrome、骨骼控制器滑杆；工程快照若未捕获 T/组文件，
-  仍只能显示主文件内容。
+- 仍待处理：逐顶点法线的精确 chrome、骨骼控制器滑杆；工程快照若没有捕获
+  `model-companion` / `model-animation` 依赖，仍只能显示主文件内容。

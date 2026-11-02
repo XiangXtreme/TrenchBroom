@@ -46,6 +46,13 @@ enum class WaveKind
 
 bool matchesWaveKind(const WaveInfo& info, WaveKind kind);
 
+/** Optional GoldSrc model bytes resolved from project or library dependencies. */
+struct StudioExternalBytes
+{
+  Bytes textureHeader;
+  std::vector<Bytes> sequenceGroups;
+};
+
 /** A read-only selection snapshot. Each host owns one; no global selection or cache. */
 struct Asset
 {
@@ -60,6 +67,8 @@ struct Asset
   std::array<QImage, 6> skyOriginal;
   std::array<QImage, 6> skyCompatible;
   QStringList diagnostics;
+  // GoldSrc model siblings captured as separate project or library assets.
+  StudioExternalBytes studioExternal;
   // Set for prefabs: authored volumes plus explicit resource references.
   std::optional<PrefabContents> prefab;
   // Reference problems, or a note that they could not be checked without a project.

@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 
 namespace tb::ui::inspection
 {
@@ -183,6 +184,92 @@ void inspectPrefab(Asset& asset, ProjectSession* session)
     asset.prefabIssues << QObject::tr("%1 ambiguous reference(s): %2")
                             .arg(ambiguous.size())
                             .arg(summarize(ambiguous));
+}
+
+/** Sequence group number from a file name such as scientist03.mdl (3), or 0. */
+std::size_t animationGroupNumber(const std::string& path)
+{
+  const auto stem = std::filesystem::path{path}.stem().string();
+  const auto last = stem.find_last_not_of("0123456789");
+  if (last + 1 >= stem.size())
+    return 0;
+  try
+  {
+    const auto group = std::stoul(stem.substr(last + 1));
+    return group <= 1024 ? group : 0;
+  }
+  catch (...)
+  {
+    return 0;
+  }
+}
+
+/** Resolves captured model siblings from the project's dependency graph. */
+void readProjectStudioExternal(
+  ProjectSession& session, const std::string& assetId, Asset& result)
+{
+  const auto edges = session.store().dependencies(assetId);
+  if (edges.is_error())
+    return;
+  for (const auto& edge : edges.value())
+  {
+    if (edge.kind != "model-companion" && edge.kind != "model-animation")
+      continue;
+    auto bytes = session.store().readAsset(edge.dependencyId, project::ContentKind::Original);
+    if (bytes.is_error() || bytes.value().empty())
+      continue;
+    if (edge.kind == "model-companion")
+    {
+      result.studioExternal.textureHeader = std::move(bytes).value();
+      continue;
+    }
+    const auto dependency = session.store().findAsset(edge.dependencyId);
+    if (dependency.is_error() || !dependency.value())
+      continue;
+    const auto group = animationGroupNumber(dependency.value()->publishPath);
+    if (group == 0)
+      continue;
+    if (result.studioExternal.sequenceGroups.size() < group)
+      result.studioExternal.sequenceGroups.resize(group);
+    result.studioExternal.sequenceGroups[group - 1] = std::move(bytes).value();
+  }
+}
+
+/** Resolves model siblings from library dependency assets instead of sibling files. */
+void readLibraryStudioExternal(
+  const AssetLibrarySource& source,
+  const project::LibraryAsset& asset,
+  Asset& result)
+{
+  const auto edges = source.dependencies(asset.id);
+  const auto entries = source.assets();
+  if (edges.is_error() || entries.is_error())
+    return;
+  for (const auto& edge : edges.value())
+  {
+    if (edge.kind != "model-companion" && edge.kind != "model-animation")
+      continue;
+    auto bytes = source.readOriginal(edge.dependencyId);
+    if (bytes.is_error() || bytes.value().empty())
+      continue;
+    if (edge.kind == "model-companion")
+    {
+      result.studioExternal.textureHeader = std::move(bytes).value();
+      continue;
+    }
+    const auto entry = std::ranges::find_if(
+      entries.value(), [&](const auto& candidate) {
+        return candidate.id == edge.dependencyId;
+      });
+    if (entry == entries.value().end())
+      continue;
+    const auto group = animationGroupNumber(entry->virtualPath);
+    if (group == 0)
+      continue;
+    if (result.studioExternal.sequenceGroups.size() < group)
+      result.studioExternal.sequenceGroups.resize(group);
+    result.studioExternal.sequenceGroups[group - 1] = std::move(bytes).value();
+  }
 }
 
 void checkSky(Asset& result)
@@ -424,6 +511,8 @@ Result<Asset> readLibraryAsset(
   }
   if (result.resource.type == BrowserCellType::Prefab)
     inspectPrefab(result, session);
+  if (result.resource.type == BrowserCellType::Model)
+    readLibraryStudioExternal(source, asset, result);
   return result;
 }
 
@@ -521,6 +610,8 @@ Result<Asset> readBrowserAsset(
           }
       checkSky(result);
     }
+    if (result.resource.type == BrowserCellType::Model)
+      readProjectStudioExternal(*session, id, result);
     const auto file = session->assetFile(entry);
     if (file.is_success())
       result.resource.absolutePath = file.value();
