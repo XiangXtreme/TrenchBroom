@@ -44,11 +44,16 @@
 #include <QTreeWidget>
 #include <QtTest/QTest>
 
+#include "el/Expression.h"
+#include "gl/Resource.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityDefinitionManager.h"
+#include "mdl/EntityModel.h"
+#include "mdl/EntityModelManager.h"
+#include "mdl/EntityNode.h"
 #include "mdl/GameManager.h"
 #include "mdl/Grid.h"
 #include "mdl/Map.h"
@@ -56,6 +61,7 @@
 #include "mdl/Map_Brushes.h"
 #include "mdl/Map_CopyPaste.h"
 #include "mdl/Map_Entities.h"
+#include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/PropertyDefinition.h"
 #include "mdl/WorldNode.h"
@@ -1640,6 +1646,79 @@ TEST_CASE("ProjectWindow")
     QApplication::processEvents();
     CHECK(
       QTest::qWaitFor([&]() { return browser->grabFramebuffer() == rendered; }, 3000));
+  }
+
+  SECTION("refreshing asset cards preserves live map model renderers")
+  {
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Model;
+    input.virtualPath = "models/refresh.obj";
+    input.displayName = "Refresh model";
+    const auto obj = std::string{"v 0 0 0\nv 32 0 0\nv 0 32 0\nf 1 2 3\n"};
+    input.original.assign(obj.begin(), obj.end());
+    input.compatible = input.original;
+    (void)require(session->importAsset(input));
+
+    auto& map = alphaDocument->map();
+    map.entityDefinitionManager().setDefinitions(
+      {{"refresh_model",
+        {},
+        {},
+        {},
+        mdl::PointEntityDefinition{
+          vm::bbox3d{16.0},
+          mdl::ModelDefinition{
+            el::ExpressionNode{el::LiteralExpression{el::Value{"models/refresh.obj"}}}},
+          {}}}});
+    auto* entity = new mdl::EntityNode{mdl::Entity{{{"classname", "refresh_model"}}}};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {entity}}});
+    require(session->save());
+    auto& view = alphaWindow->activate3DMapView();
+    REQUIRE(QTest::qWaitFor(
+      [&]() {
+        view.grabFramebuffer();
+        return entity->entity().model() && entity->entity().model()->data()
+               && map.entityModelManager().renderer({"models/refresh.obj"});
+      },
+      3000));
+    REQUIRE_FALSE(view.grabFramebuffer().isNull());
+
+    auto notifications = 0;
+    auto connection = map.nodesDidChangeNotifier.connect([&](const auto& nodes) {
+      if (std::ranges::find(nodes, entity) != nodes.end())
+        ++notifications;
+    });
+    alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
+    auto* type = window.findChild<QComboBox*>("ModelBrowser_Type");
+    REQUIRE(type);
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Texture)));
+    auto* reload = window.findChild<QToolButton*>("ModelBrowser_ReloadButton");
+    REQUIRE(reload);
+    auto resourceId = entity->entity().model()->dataResource().id();
+    for (auto i = 0; i < 5; ++i)
+    {
+      reload->click();
+      // Unchanged project revisions must not retire model resources merely because
+      // the user refreshes the browser, including while viewing only textures.
+      REQUIRE(notifications == i);
+      REQUIRE(entity->entity().model()->dataResource().id() == resourceId);
+      REQUIRE_FALSE(view.grabFramebuffer().isNull());
+
+      map.reloadEntityModels("models/refresh.obj");
+      // Assert notification before repainting: stale model/frame pointers must be
+      // replaced even while their asynchronous replacement is not ready yet.
+      REQUIRE(notifications == i + 1);
+      REQUIRE_FALSE(view.grabFramebuffer().isNull());
+      REQUIRE(QTest::qWaitFor(
+        [&]() {
+          view.grabFramebuffer();
+          return entity->entity().model()->data()
+                 && map.entityModelManager().renderer({"models/refresh.obj"});
+        },
+        3000));
+      resourceId = entity->entity().model()->dataResource().id();
+    }
+    CHECK_FALSE(map.modified());
   }
 
   SECTION("catalog titles render distinct Chinese glyphs")

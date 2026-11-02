@@ -20,6 +20,7 @@
 #include "TestEnvironment.h"
 #include "TestLogger.h"
 #include "base/Logger.h"
+#include "el/Expression.h"
 #include "fs/TestEnvironment.h"
 #include "gl/ResourceManager.h"
 #include "mdl/Brush.h"
@@ -29,6 +30,7 @@
 #include "mdl/CatchConfig.h"
 #include "mdl/EditorContext.h"
 #include "mdl/Entity.h"
+#include "mdl/EntityDefinition.h"
 #include "mdl/EntityDefinitionManager.h"
 #include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
@@ -452,6 +454,63 @@ TEST_CASE("Map")
 
       CHECK_THAT(map.selection().allBrushes(), UnorderedEquals(brushNodes));
     }
+  }
+
+  SECTION("reloadEntityModels")
+  {
+    auto fixture = MapFixture{};
+    auto& map = fixture.create();
+    const auto definition = [](const std::string& name, const std::string& path) {
+      return EntityDefinition{
+        name,
+        {},
+        {},
+        {},
+        PointEntityDefinition{
+          vm::bbox3d{16.0},
+          ModelDefinition{el::ExpressionNode{el::LiteralExpression{el::Value{path}}}},
+          {}}};
+    };
+    map.entityDefinitionManager().setDefinitions(
+      {definition("changed", "changed.mdl"), definition("unchanged", "unchanged.mdl")});
+    auto* changed = new EntityNode{Entity{{{"classname", "changed"}}}};
+    auto* unchanged = new EntityNode{Entity{{{"classname", "unchanged"}}}};
+    auto* group = new GroupNode{Group{"models"}};
+    group->addChild(changed);
+    addNodes(map, {{&parentForNodes(map), {group, unchanged}}});
+    map.markSaved();
+    const auto* oldChanged = changed->entity().model();
+    const auto* oldUnchanged = unchanged->entity().model();
+    REQUIRE(oldChanged);
+    REQUIRE(oldUnchanged);
+
+    auto events = std::vector<std::string>{};
+    auto before = map.nodesWillChangeNotifier.connect([&](const auto& nodes) {
+      CHECK(nodes == std::vector<Node*>{changed});
+      CHECK(changed->entity().model() == oldChanged);
+      events.emplace_back("before");
+    });
+    auto after = map.nodesDidChangeNotifier.connect([&](const auto& nodes) {
+      CHECK(nodes == std::vector<Node*>{changed});
+      CHECK(changed->entity().model() == map.entityModelManager().model("changed.mdl"));
+      CHECK(unchanged->entity().model() == oldUnchanged);
+      events.emplace_back("after");
+    });
+
+    SECTION("an empty refresh keeps cached models and emits no node changes")
+    {
+      map.reloadEntityModels(std::vector<std::filesystem::path>{});
+      CHECK(events.empty());
+      CHECK(changed->entity().model() == oldChanged);
+    }
+    SECTION("affected nested entities notify renderers even when the model is missing")
+    {
+      map.reloadEntityModels("changed.mdl");
+      CHECK(events == std::vector<std::string>{"before", "after"});
+    }
+    CHECK(unchanged->entity().model() == oldUnchanged);
+    CHECK(map.entityModelManager().model("unchanged.mdl") == oldUnchanged);
+    CHECK_FALSE(map.modified());
   }
 
   SECTION("setGamePath reloads model shaders")

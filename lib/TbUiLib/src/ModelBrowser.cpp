@@ -2354,10 +2354,7 @@ void ModelBrowser::rescanWatchedDirectory()
 
   if (!nextAssets)
   {
-    for (const auto& p : entityModelAssetPaths(m_assets))
-    {
-      m_document->map().entityModelManager().invalidateModel(p);
-    }
+    m_document->map().reloadEntityModels(entityModelAssetPaths(m_assets));
     m_assets.clear();
     m_lastWriteTimes.clear();
     m_currentFolderPath.clear();

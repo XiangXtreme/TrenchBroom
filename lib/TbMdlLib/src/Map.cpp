@@ -841,12 +841,30 @@ const GameFileSystem& Map::gameFileSystem() const
 
 void Map::reloadEntityModels(const std::vector<std::filesystem::path>& paths)
 {
+  if (paths.empty())
+  {
+    return;
+  }
+
+  const auto nodes = collectNodesAndDescendants(
+    std::vector<Node*>{m_worldNode.get()}, [&](const EntityNode& node) {
+      const auto spec =
+        safeGetModelSpecification(logger(), node.entity().classname(), [&]() {
+          return node.entity().modelSpecification();
+        });
+      return !spec.path.empty() && std::ranges::find(paths, spec.path) != paths.end();
+    });
+
+  // Renderers cache pointers into the model manager. Notify the affected nodes so
+  // renderers replace those pointers before the next paint, including when the
+  // replacement model is still loading or no longer exists.
+  notifyNodesWillChange(nodes);
+  unsetEntityModels(nodes);
   for (const auto& path : paths)
   {
     entityModelManager().invalidateModel(path);
   }
-  clearEntityModels();
-  setEntityModels();
+  notifyNodesDidChange(nodes);
 }
 
 void Map::reloadEntityModels(const std::filesystem::path& path)
