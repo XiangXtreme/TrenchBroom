@@ -326,6 +326,8 @@ TEST_CASE("ProjectWindow")
   CHECK(alphaWindow->findChildren<QMenuBar*>().empty());
   CHECK(alphaWindow->findChildren<QToolBar*>().empty());
   CHECK(alphaWindow->findAction("Menu/Edit/Undo")->shortcut().isEmpty());
+  // The project window owns the icon that its dialogs and the taskbar entry show.
+  CHECK_FALSE(window.windowIcon().isNull());
 
   SECTION("one project browser survives map switches and closing all map tabs")
   {

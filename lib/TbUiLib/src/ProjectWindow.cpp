@@ -57,6 +57,7 @@
 #include "ui/ProjectSession.h"
 #include "ui/ProjectTextureImport.h"
 #include "ui/QPathUtils.h"
+#include "ui/QStyleUtils.h"
 #include "ui/RecentDocuments.h"
 #include "ui/WorkspaceToolPanel.h"
 
@@ -134,6 +135,7 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
 {
   setAttribute(Qt::WA_DeleteOnClose);
   setObjectName("ProjectWindow");
+  setWindowIconTB(this);
   resize(1280, 900);
   m_commands = std::make_unique<MapCommandSurface>(m_appController, [this]() {
     auto* window = activeMapWindow();
@@ -1356,7 +1358,7 @@ void ProjectWindow::closeEvent(QCloseEvent* event)
     const auto answer = QMessageBox::question(
       this,
       tr("Close Project"),
-      tr("Save project changes?"),
+      tr("The project has been modified. Save the changes before closing?"),
       QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
     if (answer == QMessageBox::Cancel || (answer == QMessageBox::Save && !save()))
     {

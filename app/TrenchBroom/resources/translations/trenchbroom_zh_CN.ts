@@ -8177,8 +8177,8 @@ Removing them frees about %3. Current assets and versions are kept.</source>
             <translation>已移除 %1 个未使用的修订，释放 %2 空间。请保存工程以保留清理结果。</translation>
         </message>
         <message>
-            <source>Save project changes?</source>
-            <translation>保存工程修改？</translation>
+            <source>The project has been modified. Save the changes before closing?</source>
+            <translation>工程已被修改。关闭前是否保存修改？</translation>
         </message>
         <message>
             <source>TB projects (*.tbproj)</source>

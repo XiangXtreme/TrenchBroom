@@ -58,6 +58,7 @@
 #include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+#include "ui/QStyleUtils.h"
 #include "ui/RecentDocuments.h"
 
 #include <fmt/format.h>
@@ -262,6 +263,7 @@ void AssetLibraryWindow::buildUi()
 {
   setWindowTitle(tr("Asset Library"));
   setObjectName(QStringLiteral("AssetLibraryWindow"));
+  setWindowIconTB(this);
   resize(1180, 760);
   m_reloadTimer = new QTimer{this};
   m_reloadTimer->setSingleShot(true);
