@@ -29,6 +29,7 @@
 #include "mdl/EntityNode.h"
 #include "mdl/TagAttribute.h"
 #include "render/BrushRendererArrays.h"
+#include "render/LightmapData.h"
 #include "render/RenderContext.h"
 #include "render/RenderTiming.h"
 
@@ -483,6 +484,13 @@ void BrushRenderer::renderOpaque(RenderContext& renderContext, RenderBatch& rend
     m_goldSrcRendering = renderContext.goldSrcRendering();
     invalidate();
   }
+  // Lightmap coordinates live in the vertex buffer, so a new bake has to be written into
+  // every brush.
+  if (m_lightmapAssembly != renderContext.lightmapAssembly())
+  {
+    m_lightmapAssembly = renderContext.lightmapAssembly();
+    invalidate();
+  }
   if (!m_allBrushes.empty())
   {
     if (!valid())
@@ -506,6 +514,11 @@ void BrushRenderer::renderTransparent(
   if (renderContext.render3D() && m_goldSrcRendering != renderContext.goldSrcRendering())
   {
     m_goldSrcRendering = renderContext.goldSrcRendering();
+    invalidate();
+  }
+  if (m_lightmapAssembly != renderContext.lightmapAssembly())
+  {
+    m_lightmapAssembly = renderContext.lightmapAssembly();
     invalidate();
   }
   if (!m_allBrushes.empty())
@@ -686,6 +699,42 @@ void BrushRenderer::validateBrush(const mdl::BrushNode& brushNode)
     m_vertexArray->getPointerToInsertVerticesAt(cachedVertices.size());
   std::memcpy(dest, cachedVertices.data(), cachedVertices.size() * sizeof(*dest));
   info.vertexHolderKey = vertBlock;
+
+  if (m_lightmapAssembly)
+  {
+    // One luxel spans 16 world units, and the face's rectangle starts at its own first
+    // luxel, so a vertex maps to its luxel offset inside the rectangle shifted to the
+    // rectangle's place in the atlas.
+    constexpr auto LuxelSize = 16.0f;
+    const auto atlasWidth = static_cast<float>(m_lightmapAssembly->width);
+    const auto atlasHeight = static_cast<float>(m_lightmapAssembly->height);
+
+    for (const auto& cachedFace : brushCache.cachedFacesSortedByMaterial())
+    {
+      const auto* block = m_lightmapAssembly->blockFor(*cachedFace.face);
+      if (!block)
+      {
+        continue;
+      }
+
+      const auto& uAxis = block->vecs[0];
+      const auto& vAxis = block->vecs[1];
+      for (auto i = 0u; i < cachedFace.vertexCount; ++i)
+      {
+        auto& vertex = dest[cachedFace.indexOfFirstVertexRelativeToBrush + i];
+        const auto& position = vertex.attr;
+        const auto u = (vm::dot(position, uAxis.xyz()) + uAxis[3]) / LuxelSize;
+        const auto v = (vm::dot(position, vAxis.xyz()) + vAxis[3]) / LuxelSize;
+        vertex.rest.rest.rest.attr = vm::vec2f{
+          (static_cast<float>(block->tile.x()) + u - static_cast<float>(block->mins.x())
+           + 0.5f)
+            / atlasWidth,
+          (static_cast<float>(block->tile.y()) + v - static_cast<float>(block->mins.y())
+           + 0.5f)
+            / atlasHeight};
+      }
+    }
+  }
 
   const auto brushVerticesStartIndex = static_cast<GLuint>(vertBlock->pos);
 

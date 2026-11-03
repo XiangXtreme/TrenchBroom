@@ -251,6 +251,16 @@ void RenderContext::setLightmapAtlas(LightmapAtlas* lightmapAtlas)
   m_lightmapAtlas = lightmapAtlas;
 }
 
+const LightmapAssembly* RenderContext::lightmapAssembly() const
+{
+  return m_lightmapAssembly;
+}
+
+void RenderContext::setLightmapAssembly(const LightmapAssembly* lightmapAssembly)
+{
+  m_lightmapAssembly = lightmapAssembly;
+}
+
 bool RenderContext::showGrid() const
 {
   return m_showGrid;

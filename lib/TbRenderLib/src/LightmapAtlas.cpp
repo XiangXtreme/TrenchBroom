@@ -23,6 +23,8 @@
 #include "gl/Texture.h"
 #include "gl/TextureBuffer.h"
 
+#include <cstring>
+
 namespace tb::render
 {
 
@@ -49,23 +51,80 @@ std::unique_ptr<gl::Texture> makePlaceholderTexture(gl::Gl& gl)
   return texture;
 }
 
+std::unique_ptr<gl::Texture> makeTexture(
+  gl::Gl& gl, const int width, const int height, const std::vector<std::uint8_t>& rgba)
+{
+  auto buffers = gl::TextureBufferList{};
+  buffers.emplace_back(rgba.size());
+  std::memcpy(buffers.front().data(), rgba.data(), rgba.size());
+
+  auto texture = std::make_unique<gl::Texture>(
+    static_cast<size_t>(width), static_cast<size_t>(height),
+    Color{RgbaF{1.0f, 1.0f, 1.0f, 1.0f}}, GL_RGBA, gl::NoEmbeddedDefaults{},
+    std::move(buffers));
+  texture->upload(gl);
+  return texture;
+}
+
 } // namespace
 
 LightmapAtlas::LightmapAtlas() = default;
 LightmapAtlas::~LightmapAtlas() = default;
 
+void LightmapAtlas::setData(
+  const int width, const int height, const std::vector<std::uint8_t>& rgb)
+{
+  const auto expected = static_cast<size_t>(width) * static_cast<size_t>(height) * 3u;
+  if (width <= 0 || height <= 0 || rgb.size() < expected)
+  {
+    return;
+  }
+
+  m_width = width;
+  m_height = height;
+  m_pixels.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u);
+  for (auto i = size_t{0}; i < expected / 3u; ++i)
+  {
+    m_pixels[i * 4 + 0] = rgb[i * 3 + 0];
+    m_pixels[i * 4 + 1] = rgb[i * 3 + 1];
+    m_pixels[i * 4 + 2] = rgb[i * 3 + 2];
+    m_pixels[i * 4 + 3] = 255;
+  }
+
+  // A texture object is immutable once uploaded, so drop it and upload the new data.
+  m_texture.reset();
+}
+
+void LightmapAtlas::clear()
+{
+  m_width = 0;
+  m_height = 0;
+  m_pixels.clear();
+  m_texture.reset();
+}
+
+int LightmapAtlas::width() const
+{
+  return m_width;
+}
+
+int LightmapAtlas::height() const
+{
+  return m_height;
+}
+
 bool LightmapAtlas::activate(gl::Gl& gl)
 {
   if (!m_texture)
   {
-    m_texture = makePlaceholderTexture(gl);
-    m_uploaded = true;
+    m_texture = m_pixels.empty()
+                  ? makePlaceholderTexture(gl)
+                  : makeTexture(gl, m_width, m_height, m_pixels);
   }
 
   if (!m_texture->isReady())
   {
     m_texture->upload(gl);
-    m_uploaded = true;
   }
 
   // The atlas must be sampled without mipmaps and clamped at its borders, otherwise

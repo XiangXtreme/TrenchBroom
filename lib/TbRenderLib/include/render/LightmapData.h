@@ -71,7 +71,8 @@ struct LightmapBlock
 {
   vm::vec2i mins = {}; // first luxel, in the face's lightmap axes
   vm::vec2i size = {};
-  vm::vec2i tile = {}; // pixel origin in the assembled atlas
+  vm::vec2i tile = {};    // pixel origin in the assembled atlas
+  vm::vec4f vecs[2] = {}; // the lightmap axes the block was sampled with
 };
 
 /**

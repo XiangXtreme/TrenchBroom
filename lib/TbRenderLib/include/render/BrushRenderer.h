@@ -54,6 +54,8 @@ class EditorContext;
 namespace render
 {
 
+struct LightmapAssembly;
+
 /**
  * The number of GLuint indices needed to render a fan-triangulated polygon with the
  * given number of vertices.
@@ -210,6 +212,7 @@ private:
   bool m_useReadable2DBrushOutlines = false;
   bool m_skipSkyFaces = false;
   bool m_goldSrcRendering = false;
+  const LightmapAssembly* m_lightmapAssembly = nullptr;
   std::vector<gl::VertexTypes::P3C4::Vertex> m_coloredEdgeVertices;
 
 public:

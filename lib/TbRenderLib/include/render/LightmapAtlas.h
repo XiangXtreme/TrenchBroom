@@ -22,7 +22,9 @@
 #include "base/Macros.h"
 #include "gl/GlUtils.h"
 
+#include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace tb
 {
@@ -47,13 +49,29 @@ class LightmapAtlas
 {
 private:
   std::unique_ptr<gl::Texture> m_texture;
-  bool m_uploaded = false;
+  int m_width = 0;
+  int m_height = 0;
+  std::vector<std::uint8_t> m_pixels; // rgba, rows top down
 
 public:
   LightmapAtlas();
   ~LightmapAtlas();
 
   deleteCopyAndMove(LightmapAtlas);
+
+  /**
+   * Replaces the atlas with baked data. The pixels are rgb8 in row order; alpha is
+   * filled in here so the texture can be sampled without blending surprises.
+   */
+  void setData(int width, int height, const std::vector<std::uint8_t>& rgb);
+
+  /**
+   * Drops the baked data and goes back to the placeholder texel.
+   */
+  void clear();
+
+  int width() const;
+  int height() const;
 
   /**
    * Binds the atlas to the currently active texture unit, uploading the placeholder

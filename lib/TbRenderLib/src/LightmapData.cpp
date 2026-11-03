@@ -305,6 +305,8 @@ std::optional<LightmapBlock> buildFaceLightmap(
   }
 
   auto block = LightmapBlock{};
+  block.vecs[0] = reference->vecs[0];
+  block.vecs[1] = reference->vecs[1];
   block.mins =
     vm::vec2i{static_cast<int>(std::floor(minU)), static_cast<int>(std::floor(minV))};
   const auto maxs =
