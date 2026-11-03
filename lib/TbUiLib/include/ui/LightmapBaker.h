@@ -1,0 +1,96 @@
+/*
+ Copyright (C) 2026 XiangXtreme
+
+ This file is part of TrenchBroom.
+
+ TrenchBroom is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ TrenchBroom is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
+#include "render/LightmapData.h"
+
+#include <QObject>
+
+#include <filesystem>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+
+class QProcess;
+
+namespace tb::mdl
+{
+class Map;
+}
+
+namespace tb::ui
+{
+
+/**
+ * Bakes a lightmap for a map by running the map toolchain in a scratch directory.
+ *
+ * The toolchain runs in its own process: baking takes seconds, and a compiler that
+ * gives up on a malformed map must not take the editor with it.
+ *
+ * The recipe is two calls - compile the map, then export the lightmap with its
+ * manifest - and the result comes back as a bake that can be turned into a lightmap
+ * atlas.
+ */
+class LightmapBaker : public QObject
+{
+  Q_OBJECT
+public:
+  using Callback = std::function<void(
+    std::optional<render::LightmapBake> bake, const std::string& error)>;
+
+  explicit LightmapBaker(QObject* parent = nullptr);
+  ~LightmapBaker() override;
+
+  bool running() const;
+
+  /**
+   * Starts a bake, replacing any bake that is still running. `executable` is the map
+   * toolchain binary; `threadCount` caps how many cores it may use, so that the editor
+   * stays responsive while it works.
+   */
+  void start(
+    const mdl::Map& map,
+    const std::filesystem::path& executable,
+    int threadCount,
+    Callback callback);
+
+  void cancel();
+
+  /**
+   * The output of the last run, for diagnosing a failed bake.
+   */
+  const std::string& output() const;
+
+private:
+  void runStage();
+  void stageFinished(int exitCode, int exitStatus);
+  void finish(std::optional<render::LightmapBake> bake, std::string error);
+
+  std::unique_ptr<QProcess> m_process;
+  std::filesystem::path m_workDir;
+  std::filesystem::path m_executable;
+  std::string m_output;
+  int m_stage = 0;
+  int m_threadCount = 1;
+  Callback m_callback;
+};
+
+} // namespace tb::ui

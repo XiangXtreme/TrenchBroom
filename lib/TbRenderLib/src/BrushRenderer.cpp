@@ -709,11 +709,21 @@ void BrushRenderer::validateBrush(const mdl::BrushNode& brushNode)
     const auto atlasWidth = static_cast<float>(m_lightmapAssembly->width);
     const auto atlasHeight = static_cast<float>(m_lightmapAssembly->height);
 
+    // Faces the bake does not cover point at the unlit texel the assembly keeps for
+    // that purpose.
+    const auto unlitUv =
+      vm::vec2f{0.5f / atlasWidth, 0.5f / atlasHeight};
+
     for (const auto& cachedFace : brushCache.cachedFacesSortedByMaterial())
     {
       const auto* block = m_lightmapAssembly->blockFor(*cachedFace.face);
       if (!block)
       {
+        for (auto i = 0u; i < cachedFace.vertexCount; ++i)
+        {
+          dest[cachedFace.indexOfFirstVertexRelativeToBrush + i].rest.rest.rest.attr =
+            unlitUv;
+        }
         continue;
       }
 

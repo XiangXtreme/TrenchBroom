@@ -440,6 +440,11 @@ void buildLightmapAssembly(
 
   result.pixels.assign(
     static_cast<size_t>(result.width) * static_cast<size_t>(result.height) * 3, 0);
+  // Packing starts one pixel in, so the first texel belongs to no block. Leave it white
+  // and faces the bake does not cover can point at it to stay unlit.
+  result.pixels[0] = 255;
+  result.pixels[1] = 255;
+  result.pixels[2] = 255;
 
   for (const auto& block : pending)
   {

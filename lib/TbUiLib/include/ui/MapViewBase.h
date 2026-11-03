@@ -69,6 +69,7 @@ class MapRenderer;
 class PrimitiveRenderer;
 class RenderBatch;
 class RenderContext;
+struct LightmapAssembly;
 
 enum class RenderMode;
 } // namespace render
@@ -78,6 +79,7 @@ namespace ui
 class Action;
 class AnimationManager;
 class AppController;
+class LightmapBaker;
 class MapDocument;
 class PreparedAssetDrop;
 class MapViewToolBox;
@@ -105,6 +107,9 @@ protected:
 private:
   std::unique_ptr<render::Compass> m_compass;
   std::unique_ptr<render::LightmapAtlas> m_lightmapAtlas;
+  std::unique_ptr<render::LightmapAssembly> m_lightmapAssembly;
+  std::unique_ptr<LightmapBaker> m_lightmapBaker;
+  bool m_lightmapBakePending = false;
   std::unique_ptr<render::PrimitiveRenderer> m_portalFileRenderer;
   bool m_renderingThumbnail = false;
   QTimer* m_materialAnimationTimer = nullptr;
@@ -354,6 +359,11 @@ protected: // RenderView overrides
 private: // implement RenderView interface
   bool shouldRenderFocusIndicator() const override;
   void renderContents(gl::Gl& gl) override;
+
+  /**
+   * Starts a lightmap bake for the current map in the background.
+   */
+  void startLightmapBake();
 
   virtual void preRender();
   virtual render::RenderMode renderMode() = 0;

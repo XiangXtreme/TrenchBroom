@@ -28,6 +28,7 @@
 #include <QMimeData>
 #include <QResizeEvent>
 #include <QShortcut>
+#include <QStandardPaths>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -74,6 +75,7 @@
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "render/Compass.h"
+#include "render/LightmapData.h"
 #include "render/MapRenderer.h"
 #include "render/PrimitiveRenderer.h"
 #include "render/RenderBatch.h"
@@ -88,6 +90,7 @@
 #include "ui/CatalogAssetDrop.h"
 #include "ui/EnableDisableTagCallback.h"
 #include "ui/FlashSelectionAnimation.h"
+#include "ui/LightmapBaker.h"
 #include "ui/MapDocument.h"
 #include "ui/MapViewActivationTracker.h"
 #include "ui/MapViewToolBox.h"
@@ -991,6 +994,60 @@ void MapViewBase::toggleShowLightmap()
   togglePref(Preferences::ShowLightmap);
 }
 
+void MapViewBase::startLightmapBake()
+{
+  auto& logger = m_document.map().logger();
+
+  auto executable = std::filesystem::path{pref(Preferences::LightmapToolPath)};
+  if (executable.empty())
+  {
+    const auto found = QStandardPaths::findExecutable(QStringLiteral("hltools"));
+    if (!found.isEmpty())
+    {
+      executable = std::filesystem::path{found.toStdString()};
+    }
+  }
+  if (executable.empty())
+  {
+    logger.error() << "Cannot bake a lightmap: no map toolchain is configured.";
+    return;
+  }
+
+  if (!m_lightmapBaker)
+  {
+    m_lightmapBaker = std::make_unique<LightmapBaker>(this);
+  }
+
+  m_lightmapBakePending = true;
+  m_lightmapBaker->start(
+    m_document.map(), executable, 8,
+    [this](std::optional<render::LightmapBake> bake, const std::string& error) {
+      m_lightmapBakePending = false;
+      auto& logger = m_document.map().logger();
+      if (!bake)
+      {
+        logger.error() << "Cannot bake a lightmap: " << error;
+        return;
+      }
+
+      auto assembly = std::make_unique<render::LightmapAssembly>();
+      render::buildLightmapAssembly(m_document.map(), *bake, *assembly);
+      if (assembly->blocks.empty())
+      {
+        logger.warn() << "The lightmap bake does not match any face of this map.";
+        return;
+      }
+
+      if (!m_lightmapAtlas)
+      {
+        m_lightmapAtlas = std::make_unique<render::LightmapAtlas>();
+      }
+      m_lightmapAtlas->setData(assembly->width, assembly->height, assembly->pixels);
+      m_lightmapAssembly = std::move(assembly);
+      update();
+    });
+}
+
 void MapViewBase::toggleShowEdges()
 {
   togglePref(Preferences::ShowEdges);
@@ -1167,6 +1224,13 @@ void MapViewBase::renderContents(gl::Gl& gl)
     m_lightmapAtlas = std::make_unique<render::LightmapAtlas>();
   }
   renderContext.setLightmapAtlas(m_lightmapAtlas.get());
+  renderContext.setLightmapAssembly(m_lightmapAssembly.get());
+
+  const auto showLightmap = pref(Preferences::ShowLightmap);
+  if (showLightmap && !m_lightmapAssembly && !m_lightmapBakePending)
+  {
+    startLightmapBake();
+  }
   renderContext.setShowGrid(grid.visible());
   renderContext.setGridSize(grid.actualSize());
   renderContext.setDpiScale(static_cast<float>(window()->devicePixelRatioF()));
