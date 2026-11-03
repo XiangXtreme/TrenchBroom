@@ -9,6 +9,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ActionInfo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Actions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AssetLibraryImport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AutomationAssets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AssetBrowserModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AssetInspection.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AssetPreviewProvider.cpp

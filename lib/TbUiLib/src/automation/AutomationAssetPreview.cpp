@@ -175,6 +175,13 @@ RenderedPreview renderPreview(
   ProjectSession* project, const AutomationAssetSummary& asset, const int size)
 {
   const auto resolvedSize = std::clamp(size, MinPreviewSize, MaxPreviewSize);
+  if (asset.nativeFormat == "material")
+  {
+    return unsupported(
+      "texture",
+      "Game textures are drawn by the material system; apply one to a face to see it.");
+  }
+
   const auto file = resolveAssetFile(project, asset);
   if (file.is_error())
   {

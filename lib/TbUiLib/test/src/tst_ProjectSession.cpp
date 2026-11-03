@@ -857,6 +857,40 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(reopened.front().id == captured.id);
   }
 
+  SECTION("saving an open project map persists assets captured since the last save")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+
+    auto fixture = MapDocumentFixture{};
+    auto& document = fixture.create();
+    const auto source = sandbox.root / "agent.map";
+    requireProject(document.map().saveAs(source));
+
+    auto mapImport = project::AssetImport{};
+    mapImport.type = project::AssetType::Map;
+    mapImport.virtualPath = "maps/agent.map";
+    mapImport.displayName = "Agent";
+    mapImport.original = mapImport.compatible = readProjectFile(source);
+    const auto mapAsset = requireProject(sandbox.session->importAsset(mapImport));
+    requireProject(sandbox.session->registerDocument(document, mapAsset.id));
+    requireProject(sandbox.session->save());
+
+    // The documented agent flow: capture through automation, then save the open map.
+    // Map::save delegates to the project session, so the captured asset is written.
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+    requireProject(document.map().save());
+
+    sandbox.session->unregisterDocument(document);
+    sandbox.session.reset();
+    sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+    CHECK(requireProject(sandbox.session->store().findAsset(captured.id)));
+    const auto found =
+      requireProject(findAutomationProjectAsset(*sandbox.session, captured.id));
+    REQUIRE(found);
+    CHECK(found->publishPath == "textures/WALL01.wad");
+  }
+
   SECTION("publishes a converted image and captures it without reconverting")
   {
     const auto encode = [](QImage picture) {

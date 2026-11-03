@@ -13,6 +13,8 @@
 
 #include "fs/PathMatcher.h"
 #include "fs/TraversalMode.h"
+#include "gl/Material.h"
+#include "gl/MaterialManager.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
 #include "mdl/EntityProperties.h"
@@ -131,9 +133,32 @@ AutomationAssetSummary summaryForGame(const BrowserAsset& asset)
   auto result = AutomationAssetSummary{};
   result.scope = "game";
   result.type = browserTypeName(asset.type);
+  result.assetType = result.type;
   result.path = asset.path.generic_string();
+  result.publishPath = result.path;
   result.absolutePath = asset.absolutePath.generic_string();
   result.displayName = asset.displayName;
+  return result;
+}
+
+/**
+ * Game textures are not files: a face references a material by name, so the name is the
+ * stable identity and also the value to write when applying the asset.
+ */
+AutomationAssetSummary summaryForMaterial(const gl::Material& material)
+{
+  auto result = AutomationAssetSummary{};
+  result.scope = "game";
+  result.id = material.name();
+  result.type = browserTypeName(BrowserCellType::Texture);
+  result.assetType = "texture";
+  result.path = material.name();
+  result.publishPath = material.name();
+  result.absolutePath = material.absolutePath().generic_string();
+  result.displayName = material.name();
+  result.revision = 1;
+  result.group = material.collectionName();
+  result.nativeFormat = "material";
   return result;
 }
 
@@ -257,6 +282,27 @@ std::optional<std::vector<AutomationAssetSummary>> searchAutomationGameAssets(
   {
     result.push_back(summaryForGame(asset));
   }
+
+  // Game textures live in the material manager, not in the model/sprite/sound scan.
+  if (!query.type || *query.type == BrowserCellType::Texture)
+  {
+    for (const auto* material : map.materialManager().materials())
+    {
+      if (!matchesQuery(
+            query.query,
+            {material->name(),
+             material->collectionName(),
+             material->relativePath().generic_string()}))
+      {
+        continue;
+      }
+      result.push_back(summaryForMaterial(*material));
+      if (result.size() >= query.limit)
+      {
+        break;
+      }
+    }
+  }
   return result;
 }
 
@@ -277,6 +323,15 @@ std::optional<AutomationAssetSummary> findAutomationGameAsset(
       || lowerCase(asset.absolutePath.generic_string()) == key)
     {
       return summaryForGame(asset);
+    }
+  }
+
+  // A texture is identified by its material name; faces store exactly this value.
+  for (const auto* material : map.materialManager().materials())
+  {
+    if (lowerCase(material->name()) == key)
+    {
+      return summaryForMaterial(*material);
     }
   }
   return std::nullopt;

@@ -3478,13 +3478,12 @@ py::dict applyAssetToSelection(const std::string& asset, const std::string& scop
     throw std::runtime_error{
       "Capture the library asset into the project first: assets.capture(...)"};
   }
-  if (assetScope == "game" && type != "model" && type != "sprite")
+  const auto assetType = py::cast<std::string>(summary["asset_type"]);
+  if (assetType == "skybox")
   {
-    throw std::runtime_error{
-      "Only game models and sprites can be applied from the game catalog; "
-      "use faces.set_material for textures"};
+    throw std::runtime_error{"A skybox sets the map sky, not a face material"};
   }
-  if (assetScope == "project" && type != "model" && type != "sprite" && type != "texture")
+  if (type != "model" && type != "sprite" && type != "texture")
   {
     throw std::runtime_error{
       "Assets of type '" + type + "' cannot be applied to a selection"};
@@ -3520,7 +3519,12 @@ py::dict applyAssetToSelection(const std::string& asset, const std::string& scop
   }
 
   auto material = std::string{};
-  if (assetScope == "project")
+  if (assetScope == "game")
+  {
+    // Game textures are referenced by material name, which is already the asset path.
+    material = py::cast<std::string>(summary["path"]);
+  }
+  else
   {
     const auto publish = py::cast<std::string>(summary["publish_path"]);
     const auto path = publish.empty() ? py::cast<std::string>(summary["path"]) : publish;

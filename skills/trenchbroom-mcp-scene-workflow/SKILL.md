@@ -87,8 +87,10 @@ action mode and accepts an empty `map_id` only when the project holds one map.
 
 Rules that are easy to miss:
 
-- The game catalog indexes only `.mdl`, `.spr` and `.wav`; game textures are
-  not searchable. Use project or library textures.
+- The game catalog has two sources: a file scan for `.mdl`, `.spr` and `.wav`, and
+  the map's material manager for textures. Game textures are identified by material name
+  (their `path`), can be applied to faces, and report an `unsupported` preview because
+  the material system draws them.
 - `documents.save()` on a project map saves the whole project, because the map
   document delegates saving to the project session.
 - `open_project_map` and `documents.activate` bind the current execution to its

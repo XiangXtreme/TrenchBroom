@@ -30,10 +30,11 @@ judge today's code.
   installed by `ProjectSession::bindDocument`); `documents.open_project_map` leaves the
   current execution bound to its original document; `assets.capture` and
   `assets.import_file` live in memory until a save.
-- Risk: the game catalog indexes only `mdl/spr/wav`
-  (`AutomationAssets::collectAutomationAssets`), so game textures are invisible to
-  `assets.search` and `assets.apply_to_selection` even though the asset browser shows
-  them. The asymmetry is easy to forget when adding asset features.
+- Risk: the game catalog merges two very different sources: a file scan for
+  `mdl/spr/wav` (`AutomationAssets::collectAutomationAssets`) and the material manager
+  for textures. Textures are therefore identified by material name rather than by file,
+  have no preview, and only appear while the map has its material collections loaded. New
+  asset features must keep both sources in mind.
 - Risk: positive paths are covered in C++ (`ProjectSessionAssetLibrary`), but the
   Python/MCP layer only asserts error contracts. `capture -> save -> reopen` has no
   automated test, so a save-handler or staging change can regress it silently.
