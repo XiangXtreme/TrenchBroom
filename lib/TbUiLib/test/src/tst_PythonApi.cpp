@@ -190,6 +190,29 @@ try:
     raise AssertionError("asset search accepted an invalid type")
 except ValueError:
     pass
+game_assets = tb.assets.search(scope="game")
+assert all(asset["scope"] == "game" for asset in game_assets)
+assert all("path" in asset and "type" in asset for asset in game_assets)
+try:
+    tb.assets.search(scope="bogus")
+    raise AssertionError("asset search accepted an invalid scope")
+except ValueError:
+    pass
+try:
+    tb.assets.search(scope="project")
+    raise AssertionError("project asset search worked without a project")
+except RuntimeError:
+    pass
+try:
+    tb.assets.describe("python-api-missing-asset.mdl")
+    raise AssertionError("asset describe found a missing asset")
+except RuntimeError:
+    pass
+try:
+    tb.assets.capture("python-api-missing-asset")
+    raise AssertionError("asset capture worked without a project")
+except RuntimeError:
+    pass
 assert isinstance(tb.actions.list(), list)
 validation = tb.validation.check()
 assert validation["valid"] == (validation["total_count"] == 0)

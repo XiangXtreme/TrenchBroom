@@ -920,6 +920,81 @@ DocumentHandle openVerifiedDocument(const std::string& path)
   return document;
 }
 
+DocumentHandle openProjectMap(
+  const std::string& projectPath, const std::string& mapAssetId)
+{
+  requirePythonActionMode("open");
+  auto& context = requireContext();
+  if (context.appController == nullptr)
+  {
+    throw std::runtime_error{"No application controller in Python execution context"};
+  }
+  const auto path = absolutePathFromPython(projectPath);
+
+  const auto findProject = [&]() -> std::shared_ptr<ProjectSession> {
+    for (const auto& candidate : context.appController->projects())
+    {
+      auto ec = std::error_code{};
+      if (std::filesystem::equivalent(candidate->path(), path, ec) && !ec)
+      {
+        return candidate;
+      }
+    }
+    return {};
+  };
+
+  auto project = findProject();
+  if (!project)
+  {
+    if (!context.appController->openProject(path))
+    {
+      throw std::runtime_error{"Could not open the project: " + projectPath};
+    }
+    project = findProject();
+  }
+  if (!project)
+  {
+    throw std::runtime_error{"The project is not open: " + projectPath};
+  }
+
+  auto resolvedId = mapAssetId;
+  if (resolvedId.empty())
+  {
+    const auto maps = project->store().assets(project::AssetType::Map);
+    if (maps.is_error())
+    {
+      throw std::runtime_error{std::get<Error>(maps.error()).msg};
+    }
+    if (maps.value().size() != 1u)
+    {
+      auto ids = std::string{};
+      for (const auto& asset : maps.value())
+      {
+        ids += (ids.empty() ? "" : ", ") + asset.id;
+      }
+      throw py::value_error{
+        "The project has " + std::to_string(maps.value().size()) + " maps; pass map_id ("
+        + (ids.empty() ? "none" : ids) + ")"};
+    }
+    resolvedId = maps.value().front().id;
+  }
+
+  const auto loaded =
+    context.appController->mapWindowManager().loadProjectMap(project, resolvedId);
+  if (loaded.is_error())
+  {
+    throw std::runtime_error{std::get<Error>(loaded.error()).msg};
+  }
+  auto* document = project->documentFor(resolvedId);
+  if (document == nullptr)
+  {
+    throw std::runtime_error{"The project map could not be loaded: " + resolvedId};
+  }
+  recordCompletedPythonAction("open");
+  return DocumentHandle{
+    document, PythonHandleRegistry::instance().documentGeneration(document)};
+}
+
 DocumentHandle activateDocument(DocumentHandle& document)
 {
   requirePythonActionMode("activate");
@@ -2981,13 +3056,81 @@ std::optional<BrowserCellType> assetTypeFromName(const std::string& type)
   {
     return BrowserCellType::Sound;
   }
+  if (type == "texture")
+  {
+    return BrowserCellType::Texture;
+  }
+  if (type == "prefab")
+  {
+    return BrowserCellType::Prefab;
+  }
+  if (type == "map")
+  {
+    return BrowserCellType::Map;
+  }
   return std::nullopt;
 }
 
-py::list searchAssets(
-  const std::string& query, const py::object& type, const size_t limit)
+std::string lowerCaseAssetScope(std::string value)
 {
-  auto options = AutomationAssetSearchOptions{};
+  std::ranges::transform(value, value.begin(), [](const unsigned char character) {
+    return static_cast<char>(std::tolower(character));
+  });
+  return value;
+}
+
+/**
+ * The project that owns the current document, if any.
+ *
+ * Asset identity is project scoped, so project and library operations must say what they
+ * are acting on instead of silently falling back to the game directory.
+ */
+std::shared_ptr<ProjectSession> currentProjectSession()
+{
+  auto& context = requireContext();
+  if (context.appController == nullptr)
+  {
+    return {};
+  }
+  if (context.document != nullptr)
+  {
+    if (auto project = context.appController->projectFor(*context.document))
+    {
+      return project;
+    }
+  }
+  // The project catalog does not need a map: an agent may inspect a project before
+  // opening one of its maps. Several open projects are ambiguous and require a document.
+  const auto projects = context.appController->projects();
+  return projects.size() == 1u ? projects.front() : std::shared_ptr<ProjectSession>{};
+}
+
+py::dict assetSummaryDict(const AutomationAssetSummary& asset)
+{
+  auto result = py::dict{};
+  result["scope"] = asset.scope;
+  result["id"] = asset.id;
+  result["library_id"] = asset.libraryId;
+  result["type"] = asset.type;
+  result["asset_type"] = asset.assetType;
+  result["path"] = asset.path;
+  result["publish_path"] = asset.publishPath;
+  result["absolute_path"] = asset.absolutePath;
+  result["display_name"] = asset.displayName;
+  result["revision"] = py::int_(asset.revision);
+  result["missing"] = asset.missing;
+  result["group"] = asset.group;
+  result["native_format"] = asset.nativeFormat;
+  return result;
+}
+
+py::list searchAssets(
+  const std::string& query,
+  const py::object& type,
+  const size_t limit,
+  const std::string& scope)
+{
+  auto options = AutomationAssetQuery{};
   options.query = query;
   options.limit = limit;
   if (!type.is_none())
@@ -2996,35 +3139,257 @@ py::list searchAssets(
     options.type = assetTypeFromName(typeName);
     if (!options.type)
     {
-      throw py::value_error{"type must be model, sprite, sound, or None"};
+      throw py::value_error{
+        "type must be model, sprite, sound, texture, prefab, map, or None"};
     }
   }
 
-  auto document = currentDocument();
-  const auto assets = searchAutomationAssets(document.get().map(), options);
-  if (!assets)
+  const auto normalized = lowerCaseAssetScope(scope);
+  if (
+    normalized != "game" && normalized != "project" && normalized != "library"
+    && normalized != "all")
   {
-    throw std::runtime_error{"Could not scan assets"};
+    throw py::value_error{"scope must be game, project, library, or all"};
   }
 
-  auto result = py::list{};
-  for (const auto& asset : *assets)
-  {
-    auto summary = py::dict{};
-    summary["type"] = assetTypeName(asset.type);
-    summary["path"] = asset.path.generic_string();
-    summary["absolute_path"] = asset.absolutePath.generic_string();
-    summary["display_name"] = asset.displayName;
-    if (asset.lastModified)
+  auto summaries = std::vector<AutomationAssetSummary>{};
+  const auto append = [&](const std::vector<AutomationAssetSummary>& items) {
+    for (const auto& item : items)
     {
-      summary["last_modified"] = asset.lastModified->time_since_epoch().count();
+      if (summaries.size() >= options.limit)
+      {
+        return;
+      }
+      summaries.push_back(item);
+    }
+  };
+
+  if (normalized == "game" || normalized == "all")
+  {
+    auto document = currentDocument();
+    auto game = searchAutomationGameAssets(document.get().map(), options);
+    if (!game)
+    {
+      throw std::runtime_error{"Could not scan assets"};
+    }
+    append(*game);
+  }
+  if (normalized == "project" || normalized == "library" || normalized == "all")
+  {
+    auto project = currentProjectSession();
+    if (!project)
+    {
+      if (normalized != "all")
+      {
+        throw std::runtime_error{"The current document has no owning project"};
+      }
     }
     else
     {
-      summary["last_modified"] = py::none();
+      if (normalized != "library")
+      {
+        const auto found = searchAutomationProjectAssets(*project, options);
+        if (found.is_error())
+        {
+          throw std::runtime_error{std::get<Error>(found.error()).msg};
+        }
+        append(found.value());
+      }
+      if (normalized != "project")
+      {
+        const auto found = searchAutomationLibraryAssets(*project, options);
+        if (found.is_error())
+        {
+          throw std::runtime_error{std::get<Error>(found.error()).msg};
+        }
+        append(found.value());
+      }
     }
-    result.append(std::move(summary));
   }
+
+  auto result = py::list{};
+  for (const auto& summary : summaries)
+  {
+    result.append(assetSummaryDict(summary));
+  }
+  return result;
+}
+
+py::dict describeAsset(const std::string& asset, const std::string& scope)
+{
+  const auto normalized = lowerCaseAssetScope(scope);
+  if (
+    normalized != "any" && normalized != "game" && normalized != "project"
+    && normalized != "library")
+  {
+    throw py::value_error{"scope must be any, game, project, or library"};
+  }
+
+  if (normalized == "any" || normalized == "project")
+  {
+    if (auto project = currentProjectSession())
+    {
+      const auto found = findAutomationProjectAsset(*project, asset);
+      if (found.is_error())
+      {
+        throw std::runtime_error{std::get<Error>(found.error()).msg};
+      }
+      if (found.value())
+      {
+        return assetSummaryDict(*found.value());
+      }
+    }
+    else if (normalized == "project")
+    {
+      throw std::runtime_error{"The current document has no owning project"};
+    }
+  }
+  if (normalized == "any" || normalized == "library")
+  {
+    if (auto project = currentProjectSession())
+    {
+      const auto found = findAutomationLibraryAsset(*project, asset);
+      if (found.is_error())
+      {
+        throw std::runtime_error{std::get<Error>(found.error()).msg};
+      }
+      if (found.value())
+      {
+        return assetSummaryDict(*found.value());
+      }
+    }
+    else if (normalized == "library")
+    {
+      throw std::runtime_error{"The current document has no owning project"};
+    }
+  }
+  if (normalized == "any" || normalized == "game")
+  {
+    auto document = currentDocument();
+    const auto found = findAutomationGameAsset(document.get().map(), asset);
+    if (found)
+    {
+      return assetSummaryDict(*found);
+    }
+  }
+
+  throw std::runtime_error{"No asset matches '" + asset + "'"};
+}
+
+py::dict captureAsset(const std::string& libraryAssetId, const std::string& libraryId)
+{
+  requirePythonActionMode("assets.capture");
+  auto project = currentProjectSession();
+  if (!project)
+  {
+    throw std::runtime_error{"The current document has no owning project"};
+  }
+
+  const auto captured =
+    captureAutomationLibraryAsset(*project, libraryId, libraryAssetId);
+  if (captured.is_error())
+  {
+    throw std::runtime_error{std::get<Error>(captured.error()).msg};
+  }
+  recordCompletedPythonAction("assets.capture");
+  return assetSummaryDict(captured.value());
+}
+
+py::dict importAssetFile(
+  const std::string& path, const std::string& name, const std::string& virtualPath)
+{
+  requirePythonActionMode("assets.import");
+  auto project = currentProjectSession();
+  if (!project)
+  {
+    throw std::runtime_error{"The current document has no owning project"};
+  }
+
+  const auto imported =
+    importAutomationAssetFile(*project, absolutePathFromPython(path), name, virtualPath);
+  if (imported.is_error())
+  {
+    throw std::runtime_error{std::get<Error>(imported.error()).msg};
+  }
+  recordCompletedPythonAction("assets.import");
+  return assetSummaryDict(imported.value());
+}
+
+py::dict applyAssetToSelection(const std::string& asset, const std::string& scope)
+{
+  requirePythonActionMode("assets.apply");
+  auto summary = describeAsset(asset, scope);
+
+  const auto assetScope = py::cast<std::string>(summary["scope"]);
+  const auto type = py::cast<std::string>(summary["type"]);
+  if (assetScope == "library")
+  {
+    throw std::runtime_error{
+      "Capture the library asset into the project first: assets.capture(...)"};
+  }
+  if (assetScope == "game" && type != "model" && type != "sprite")
+  {
+    throw std::runtime_error{
+      "Only game models and sprites can be applied from the game catalog; "
+      "use faces.set_material for textures"};
+  }
+  if (assetScope == "project" && type != "model" && type != "sprite" && type != "texture")
+  {
+    throw std::runtime_error{
+      "Assets of type '" + type + "' cannot be applied to a selection"};
+  }
+
+  auto document = currentDocument();
+  auto& map = document.get().map();
+  auto result = py::dict{};
+
+  if (type == "model" || type == "sprite")
+  {
+    if (map.selection().entities.empty())
+    {
+      throw std::runtime_error{"No entities are selected"};
+    }
+    auto path = py::cast<std::string>(summary["path"]);
+    if (assetScope == "project")
+    {
+      const auto publish = py::cast<std::string>(summary["publish_path"]);
+      if (!publish.empty())
+      {
+        path = publish;
+      }
+    }
+    editDocument(document.get(), "Python API Apply Asset", [&](auto& map) {
+      return mdl::setEntityProperty(map, "model", path);
+    });
+    result["kind"] = "entity";
+    result["property"] = "model";
+    result["value"] = path;
+    result["applied"] = py::int_(map.selection().entities.size());
+    return result;
+  }
+
+  auto material = std::string{};
+  if (assetScope == "project")
+  {
+    const auto publish = py::cast<std::string>(summary["publish_path"]);
+    const auto path = publish.empty() ? py::cast<std::string>(summary["path"]) : publish;
+    material = std::filesystem::path{path}.stem().string();
+  }
+  if (material.empty())
+  {
+    throw std::runtime_error{"The asset has no material name"};
+  }
+  const auto faces = map.selection().allBrushFaces();
+  if (faces.empty())
+  {
+    throw std::runtime_error{"No brush faces are selected"};
+  }
+  editDocument(document.get(), "Python API Apply Asset", [&](auto& map) {
+    return automation::setBrushFaceMaterial(map, faces, material);
+  });
+  result["kind"] = "faces";
+  result["material"] = material;
+  result["applied"] = py::int_(faces.size());
   return result;
 }
 
@@ -5723,6 +6088,13 @@ void defineModule(py::module_& module)
     "Open an absolute map path and verify that the active document matches it. Action "
     "mode.");
   documents.def(
+    "open_project_map",
+    openProjectMap,
+    py::arg("project_path"),
+    py::arg("map_id") = "",
+    "Open a map stored in a project and return it. An empty map_id is only accepted "
+    "when the project holds exactly one map. Action mode.");
+  documents.def(
     "activate",
     activateDocument,
     py::arg("document"),
@@ -5977,13 +6349,29 @@ void defineModule(py::module_& module)
                       const bool select) {
     return placeAsset(path, BrowserCellType::Sound, classname, property, origin, select);
   };
-  auto assets = module.def_submodule("assets", "GoldSrc asset placement operations.");
+  auto assets =
+    module.def_submodule("assets", "Asset catalog, capture and placement operations.");
   assets.def(
     "search",
     searchAssets,
     py::arg("query") = "",
     py::arg("type") = py::none(),
-    py::arg("limit") = 50u);
+    py::arg("limit") = 50u,
+    py::arg("scope") = "game");
+  assets.def("describe", describeAsset, py::arg("asset"), py::arg("scope") = "any");
+  assets.def(
+    "capture", captureAsset, py::arg("library_asset_id"), py::arg("library_id") = "");
+  assets.def(
+    "import_file",
+    importAssetFile,
+    py::arg("path"),
+    py::arg("name") = "",
+    py::arg("virtual_path") = "");
+  assets.def(
+    "apply_to_selection",
+    applyAssetToSelection,
+    py::arg("asset"),
+    py::arg("scope") = "any");
   assets.def(
     "place_model",
     placeModel,

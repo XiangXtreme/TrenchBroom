@@ -33,6 +33,7 @@
 #include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationAssets.h"
 
 #include <algorithm>
 #include <fstream>
@@ -736,6 +737,78 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto updates = requireProject(sandbox.session->checkLibraryUpdates());
     REQUIRE(updates.size() == 1);
     CHECK(updates.front().state == project::LibraryUpdateState::LibraryUnavailable);
+  }
+
+  SECTION("automation catalog finds project and library assets by stable identity")
+  {
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, wallLibraryId));
+
+    auto query = AutomationAssetQuery{};
+    query.query = "wall";
+    const auto projectHits =
+      requireProject(searchAutomationProjectAssets(*sandbox.session, query));
+    REQUIRE(projectHits.size() == 1u);
+    CHECK(projectHits.front().scope == "project");
+    CHECK(projectHits.front().id == captured.id);
+    CHECK(projectHits.front().type == "texture");
+    CHECK(projectHits.front().assetType == "texture");
+    CHECK(projectHits.front().path == captured.virtualPath);
+    CHECK(projectHits.front().publishPath == "textures/WALL01.wad");
+    CHECK(projectHits.front().revision == 1u);
+    CHECK_FALSE(projectHits.front().missing);
+
+    const auto libraryHits =
+      requireProject(searchAutomationLibraryAssets(*sandbox.session, query));
+    REQUIRE(libraryHits.size() == 1u);
+    CHECK(libraryHits.front().scope == "library");
+    CHECK(libraryHits.front().id == wallLibraryId);
+    CHECK(libraryHits.front().libraryId == libraryId);
+    CHECK(libraryHits.front().revision == 1u);
+
+    const auto described =
+      requireProject(findAutomationProjectAsset(*sandbox.session, captured.id));
+    REQUIRE(described);
+    CHECK(described->displayName == "WALL01");
+
+    const auto describedByPath =
+      requireProject(findAutomationProjectAsset(*sandbox.session, captured.virtualPath));
+    REQUIRE(describedByPath);
+    CHECK(describedByPath->id == captured.id);
+
+    const auto libraryByQualifiedId = requireProject(
+      findAutomationLibraryAsset(*sandbox.session, libraryId + "/" + wallLibraryId));
+    REQUIRE(libraryByQualifiedId);
+    CHECK(libraryByQualifiedId->libraryId == libraryId);
+
+    // A unique library asset id needs no library argument to be captured.
+    const auto recaptured =
+      requireProject(captureAutomationLibraryAsset(*sandbox.session, {}, wallLibraryId));
+    CHECK(recaptured.id == captured.id);
+
+    // Importing a file reuses the project window's naming and folder rules.
+    const auto importPath = sandbox.root / "extra.mdl";
+    writeFile(importPath, modelWithGroups(0));
+    const auto imported = requireProject(
+      importAutomationAssetFile(*sandbox.session, importPath, "Extra model"));
+    CHECK(imported.scope == "project");
+    CHECK(imported.type == "model");
+    CHECK(imported.displayName == "Extra model");
+    CHECK(imported.publishPath == "models/extra.mdl");
+    CHECK(imported.revision == 1u);
+    const auto stored = requireProject(sandbox.session->store().findAsset(imported.id));
+    REQUIRE(stored);
+    CHECK(stored->virtualPath == "models/extra.mdl");
+
+    // Reopening the saved project must not change what the catalog reports.
+    requireProject(sandbox.session->save());
+    sandbox.session.reset();
+    sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+    const auto reopened =
+      requireProject(searchAutomationProjectAssets(*sandbox.session, query));
+    REQUIRE(reopened.size() == 1u);
+    CHECK(reopened.front().id == captured.id);
   }
 
   SECTION("publishes a converted image and captures it without reconverting")

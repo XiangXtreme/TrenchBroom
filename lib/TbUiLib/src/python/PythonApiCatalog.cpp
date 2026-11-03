@@ -126,6 +126,12 @@ constexpr auto DocumentsSymbols = std::array{
     PythonApiValueType{PythonApiType::Document},
     PythonApiEffect::Action},
   PythonApiSymbol{
+    "open_project_map",
+    Function,
+    "(project_path, map_id='') -> Document",
+    PythonApiValueType{PythonApiType::Document},
+    PythonApiEffect::Action},
+  PythonApiSymbol{
     "activate",
     Function,
     "(document) -> Document",
@@ -361,9 +367,33 @@ constexpr auto AssetsSymbols = std::array{
   PythonApiSymbol{
     "search",
     Function,
-    "(query='', type=None, limit=50) -> list[dict]",
+    "(query='', type=None, limit=50, scope='game') -> list[dict]",
     std::nullopt,
     PythonApiEffect::Read},
+  PythonApiSymbol{
+    "describe",
+    Function,
+    "(asset, scope='any') -> dict",
+    std::nullopt,
+    PythonApiEffect::Read},
+  PythonApiSymbol{
+    "capture",
+    Function,
+    "(library_asset_id, library_id='') -> dict",
+    std::nullopt,
+    PythonApiEffect::Action},
+  PythonApiSymbol{
+    "import_file",
+    Function,
+    "(path, name='', virtual_path='') -> dict",
+    std::nullopt,
+    PythonApiEffect::Action},
+  PythonApiSymbol{
+    "apply_to_selection",
+    Function,
+    "(asset, scope='any') -> dict",
+    std::nullopt,
+    PythonApiEffect::Action},
   PythonApiSymbol{
     "place_model",
     Function,

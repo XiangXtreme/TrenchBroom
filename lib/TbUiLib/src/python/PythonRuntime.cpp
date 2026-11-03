@@ -795,6 +795,8 @@ bool PythonRuntime::ensureInitialized()
   auto* trenchbroomModule = PyImport_ImportModule("trenchbroom");
   if (trenchbroomModule == nullptr)
   {
+    // Losing this message turns a module definition bug into "initialization failed".
+    m_lastError = formatCurrentException();
     PyGILState_Release(gil);
     return false;
   }
