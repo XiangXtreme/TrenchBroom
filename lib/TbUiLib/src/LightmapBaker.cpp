@@ -177,10 +177,14 @@ void LightmapBaker::runStage()
   auto arguments = QStringList{};
   if (m_stage == 0)
   {
+    // RAD discards all-zero lightmaps. Keep dark faces in the preview atlas with
+    // the smallest nonzero luxel value so they do not fall back to full brightness.
     arguments = {
       QStringLiteral("compile"),
       toQString(m_workDir / MapFileName),
       QStringLiteral("-fast"),
+      QStringLiteral("-minlight"),
+      QStringLiteral("1"),
       QStringLiteral("-threads"),
       QString::number(m_threadCount)};
   }
