@@ -221,7 +221,7 @@ void FaceRenderer::render(RenderContext& context)
     auto* const lightmapAtlas =
       context.showLightmap() ? context.lightmapAtlas() : nullptr;
     auto lightmapActive = false;
-    if (lightmapAtlas)
+    if (lightmapAtlas && lightmapAtlas->width() > 0)
     {
       gl.activeTexture(GL_TEXTURE1);
       gl.enable(GL_TEXTURE_2D);

@@ -72,8 +72,7 @@ void main()
     discard;
   }
 
-  // Baked lighting, sampled from the lightmap atlas. An atlas without baked data is
-  // pure white, so this leaves the surface unchanged.
+  // Baked lighting, sampled from the lightmap atlas.
   if (ApplyLightmap)
   {
     gl_FragColor.rgb = min(gl_FragColor.rgb * texture2D(Lightmap, lightmapUv).rgb, vec3(1.0));
@@ -115,6 +114,12 @@ void main()
                      + (1.0 - dimStrength);
 
     gl_FragColor.rgb *= angleDim;
+  }
+
+  if (ApplyLightmap)
+  {
+    const float lightmapDisplayGamma = 1.6;
+    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / lightmapDisplayGamma));
   }
 
   if (ShowFog && EntityRenderMode != 3 && EntityRenderMode != 5)
