@@ -106,6 +106,34 @@ TEST_CASE("AreaMapView")
     CHECK_FALSE(otherButton->isChecked());
   }
 
+  SECTION("3D lightmap quality and bake status appear beside the toggle")
+  {
+    const auto savedQuality = pref(Preferences::LightmapQuality);
+    const auto restoreQuality =
+      qScopeGuard([&] { setPref(Preferences::LightmapQuality, savedQuality); });
+    setPref(Preferences::LightmapQuality, Preferences::LightmapQualityNormal);
+    auto* toggle = original->findChild<QToolButton*>("MapViewLightmapButton");
+    auto* quality = original->findChild<QToolButton*>("MapViewLightmapQualityButton");
+    REQUIRE(toggle);
+    REQUIRE(quality);
+    REQUIRE(quality->menu());
+    REQUIRE(quality->menu()->actions().size() == 3);
+    CHECK_FALSE(quality->isHidden());
+    CHECK(quality->x() > toggle->geometry().right());
+    CHECK(quality->y() == toggle->y());
+    CHECK(quality->text() == "Normal");
+    CHECK(quality->menu()->actions()[1]->isChecked());
+    quality->menu()->actions()[2]->trigger();
+    CHECK(pref(Preferences::LightmapQuality) == Preferences::LightmapQualityUltra);
+    CHECK(quality->text() == "Ultra");
+    emit native->lightmapBakeProgressChanged(true, 65);
+    CHECK(quality->text() == "Ultra · ~1:05");
+    emit native->lightmapBakeProgressChanged(false, -1);
+    CHECK(quality->text() == "Ultra");
+    original->setViewType(CyclingMapView::View_XZ);
+    CHECK(quality->isHidden());
+  }
+
   SECTION("each area can select every view without losing cameras or changing the map")
   {
     auto* button = original->findChild<QToolButton*>("MapViewTypeButton");

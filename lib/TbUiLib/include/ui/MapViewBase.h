@@ -112,7 +112,7 @@ private:
   std::unique_ptr<LightmapBaker> m_lightmapBaker;
   QTimer* m_lightmapBakeTimer = nullptr;
   size_t m_lightmapRevision = std::numeric_limits<size_t>::max();
-  bool m_lightmapBakePending = false;
+  bool m_lightmapBakeSucceeded = false;
   std::unique_ptr<render::PrimitiveRenderer> m_portalFileRenderer;
   bool m_renderingThumbnail = false;
   QTimer* m_materialAnimationTimer = nullptr;
@@ -344,6 +344,9 @@ public: // view filters
   void focusInEvent(QFocusEvent* event) override;
   void focusOutEvent(QFocusEvent* event) override;
 
+signals:
+  void lightmapBakeProgressChanged(bool baking, int remainingSeconds);
+
 public:
   ActionContext::Type actionContext() const;
   virtual ActionContext::Type viewActionContext() const = 0;
@@ -367,6 +370,7 @@ private: // implement RenderView interface
    * Starts a lightmap bake for the current map in the background.
    */
   void startLightmapBake();
+  void cancelLightmapBake();
 
   virtual void preRender();
   virtual render::RenderMode renderMode() = 0;

@@ -58,8 +58,11 @@ private:
   QStackedLayout* m_layout = nullptr;
   QToolButton* m_viewButton = nullptr;
   QToolButton* m_lightmapButton = nullptr;
+  QToolButton* m_lightmapQualityButton = nullptr;
   WorkbenchBorder* m_border = nullptr;
   NotifierConnection m_preferenceConnection;
+  bool m_bakingLightmap = false;
+  int m_lightmapRemainingSeconds = -1;
 
 public:
   CyclingMapView(
@@ -73,6 +76,7 @@ private:
   void createGui(AppController& appController, MapViewToolBox& toolBox, int views);
   void addMapView(MapViewBase* mapView, int type);
   void updateChrome();
+  QString updateLightmapQualityButton();
 
 public:
   void switchToMapView(MapViewBase* mapView);

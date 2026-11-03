@@ -7,6 +7,18 @@
             <source>Toggle lightmap preview</source>
             <translation>开关光照预览</translation>
             </message>
+        <message>
+            <source>Lightmap preview quality</source>
+            <translation>光照预览质量</translation>
+            </message>
+        <message>
+            <source>Lightmap preview quality and estimated time left in the current stage</source>
+            <translation>光照预览质量及当前阶段的预计剩余时间</translation>
+            </message>
+        <message>
+            <source>Baking…</source>
+            <translation>烘焙中…</translation>
+            </message>
         </context>
     <context>
         <name>QLineEdit</name>

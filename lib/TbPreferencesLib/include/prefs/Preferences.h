@@ -437,6 +437,11 @@ inline auto FaceRenderMode =
 
 inline auto ShadeFaces = Preference<bool>{"Map view/Shade faces", true};
 inline auto ShowLightmap = Preference<bool>{"Map view/Show lightmap", false};
+inline constexpr auto LightmapQualityFast = "fast";
+inline constexpr auto LightmapQualityNormal = "normal";
+inline constexpr auto LightmapQualityUltra = "ultra";
+inline auto LightmapQuality =
+  Preference<std::string>{"Lightmap/Preview quality", LightmapQualityNormal};
 inline auto LightmapToolPath =
   Preference<std::filesystem::path>{"Lightmap/Tool path", {}};
 inline auto ShowFog = Preference<bool>{"Map view/Show fog", false};

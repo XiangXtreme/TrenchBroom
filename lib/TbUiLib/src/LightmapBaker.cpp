@@ -20,15 +20,19 @@
 #include "ui/LightmapBaker.h"
 
 #include <QProcess>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 
 #include "mdl/ExportOptions.h"
 #include "mdl/Map.h"
+#include "prefs/Preferences.h"
 #include "ui/LightmapBakeReader.h"
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <limits>
 #include <system_error>
 #include <thread>
 
@@ -71,7 +75,7 @@ LightmapBaker::~LightmapBaker()
 
 bool LightmapBaker::running() const
 {
-  return m_process && m_process->state() != QProcess::NotRunning;
+  return m_stage >= 0;
 }
 
 const std::string& LightmapBaker::output() const
@@ -83,6 +87,7 @@ void LightmapBaker::start(
   const mdl::Map& map,
   const std::filesystem::path& executable,
   const int threadCount,
+  const std::string& quality,
   Callback callback)
 {
   cancel();
@@ -90,7 +95,9 @@ void LightmapBaker::start(
   m_callback = std::move(callback);
   m_executable = executable;
   m_threadCount = clampedThreadCount(threadCount);
+  m_quality = quality;
   m_output.clear();
+  m_progressBuffer.clear();
   m_stage = 0;
 
   // Each bake gets its own directory: two views may bake at the same time, and sharing
@@ -121,14 +128,17 @@ void LightmapBaker::start(
 
   m_process = std::make_unique<QProcess>();
   m_process->setProcessChannelMode(QProcess::MergedChannels);
+  connect(m_process.get(), &QProcess::readyRead, this, &LightmapBaker::readOutput);
   connect(
-    m_process.get(), &QProcess::finished, this,
+    m_process.get(),
+    &QProcess::finished,
+    this,
     [this](const int exitCode, const QProcess::ExitStatus exitStatus) {
       stageFinished(exitCode, static_cast<int>(exitStatus));
     });
   connect(
     m_process.get(), &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
-      if (m_process && m_process->error() == QProcess::FailedToStart)
+      if (running() && m_process->error() == QProcess::FailedToStart)
       {
         finish(std::nullopt, "could not start the map toolchain");
       }
@@ -139,12 +149,48 @@ void LightmapBaker::start(
 
 void LightmapBaker::cancel()
 {
+  m_stage = -1;
+  m_callback = nullptr;
   if (m_process && m_process->state() != QProcess::NotRunning)
   {
     m_process->kill();
     m_process->waitForFinished(3000);
   }
-  m_stage = -1;
+}
+
+void LightmapBaker::readOutput()
+{
+  const auto chunk = m_process->readAll();
+  if (!running())
+    return;
+  m_output += chunk.toStdString();
+  if (m_stage != 0)
+    return;
+
+  // HLTools repaints progress with carriage returns and can split a line across reads.
+  static const auto progressLine = QRegularExpression{
+    R"((?:^|[\r\n])[ \t]*[^\r\n\[]+\[[# ]+\][ \t]+(\d{1,3})%[ \t]+(\d+(?:\.\d+)?)s[ \t])"};
+  m_progressBuffer += chunk;
+  auto matches = progressLine.globalMatch(QString::fromUtf8(m_progressBuffer));
+  auto last = QRegularExpressionMatch{};
+  while (matches.hasNext())
+    last = matches.next();
+
+  if (last.hasMatch())
+  {
+    const auto percent = last.captured(1).toInt();
+    const auto elapsed = last.captured(2).toDouble();
+    const auto seconds =
+      percent > 0 && percent < 100 ? std::ceil(elapsed * (100 - percent) / percent) : 0.0;
+    emit remainingSecondsChanged(
+      seconds > 0 && seconds <= std::numeric_limits<int>::max()
+        ? static_cast<int>(seconds)
+        : -1);
+  }
+
+  const auto lastBreak =
+    std::max(m_progressBuffer.lastIndexOf('\r'), m_progressBuffer.lastIndexOf('\n'));
+  m_progressBuffer.remove(0, lastBreak + 1);
 }
 
 void LightmapBaker::runStage()
@@ -166,6 +212,10 @@ void LightmapBaker::runStage()
       QStringLiteral("1"),
       QStringLiteral("-threads"),
       QString::number(m_threadCount)};
+    if (m_quality == Preferences::LightmapQualityFast)
+      arguments << QStringLiteral("-fast");
+    else if (m_quality == Preferences::LightmapQualityUltra)
+      arguments << QStringLiteral("-extra");
   }
   else
   {
@@ -181,10 +231,6 @@ void LightmapBaker::runStage()
   m_process->setProgram(toQString(m_executable));
   m_process->setArguments(arguments);
   m_process->start();
-  if (!m_process->waitForStarted(10000))
-  {
-    finish(std::nullopt, "could not start the map toolchain");
-  }
 }
 
 void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
@@ -194,7 +240,7 @@ void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
     return;
   }
 
-  m_output += m_process->readAll().toStdString();
+  readOutput();
   if (exitStatus != static_cast<int>(QProcess::NormalExit) || exitCode != 0)
   {
     finish(std::nullopt, m_output.empty() ? "the map toolchain failed" : m_output);
@@ -204,6 +250,7 @@ void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
   if (m_stage == 0)
   {
     m_stage = 1;
+    emit remainingSecondsChanged(-1);
     runStage();
     return;
   }

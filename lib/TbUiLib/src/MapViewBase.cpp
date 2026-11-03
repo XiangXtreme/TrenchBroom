@@ -376,6 +376,19 @@ void MapViewBase::preferenceDidChange(const std::filesystem::path& path)
   {
     fontManager().clearCache();
   }
+  if (path == Preferences::ShowLightmap.path && !pref(Preferences::ShowLightmap))
+  {
+    cancelLightmapBake();
+    if (!m_lightmapBakeSucceeded)
+      m_lightmapRevision = std::numeric_limits<size_t>::max();
+  }
+  if (
+    path == Preferences::LightmapQuality.path
+    || path == Preferences::LightmapToolPath.path)
+  {
+    cancelLightmapBake();
+    m_lightmapRevision = std::numeric_limits<size_t>::max();
+  }
 
   updateActionBindings();
   update();
@@ -997,6 +1010,14 @@ void MapViewBase::toggleShowLightmap()
 
 void MapViewBase::startLightmapBake()
 {
+  if (
+    !pref(Preferences::ShowLightmap)
+    || m_lightmapRevision != m_document.map().modificationCount())
+  {
+    m_lightmapRevision = std::numeric_limits<size_t>::max();
+    update();
+    return;
+  }
   auto& logger = m_document.map().logger();
 
   auto executable = pref(Preferences::LightmapToolPath);
@@ -1017,17 +1038,30 @@ void MapViewBase::startLightmapBake()
   if (!m_lightmapBaker)
   {
     m_lightmapBaker = std::make_unique<LightmapBaker>(this);
+    connect(
+      m_lightmapBaker.get(),
+      &LightmapBaker::remainingSecondsChanged,
+      this,
+      [this](const int seconds) { emit lightmapBakeProgressChanged(true, seconds); });
   }
 
-  m_lightmapBakePending = true;
-  m_lightmapRevision = m_document.map().modificationCount();
   const auto startedAt = std::chrono::steady_clock::now();
   logger.info() << "Baking a lightmap for the view.";
+  emit lightmapBakeProgressChanged(true, -1);
 
   m_lightmapBaker->start(
-    m_document.map(), executable, 8,
-    [this, startedAt](std::optional<render::LightmapBake> bake, const std::string& error) {
-      m_lightmapBakePending = false;
+    m_document.map(),
+    executable,
+    8,
+    pref(Preferences::LightmapQuality),
+    [this, startedAt](
+      std::optional<render::LightmapBake> bake, const std::string& error) {
+      emit lightmapBakeProgressChanged(false, -1);
+      if (m_lightmapRevision != m_document.map().modificationCount())
+      {
+        update();
+        return;
+      }
       auto& logger = m_document.map().logger();
       if (!bake)
       {
@@ -1050,15 +1084,31 @@ void MapViewBase::startLightmapBake()
       const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - startedAt)
                              .count();
-      logger.info() << "Lightmap baked in " << elapsed << " ms: "
-                    << assembly->blocks.size() << " of " << bake->faces.size()
+      logger.info() << "Lightmap baked in " << elapsed
+                    << " ms: " << assembly->blocks.size() << " of " << bake->faces.size()
                     << " faces lit, " << assembly->width << "x" << assembly->height
                     << " atlas.";
 
       m_lightmapAtlas->setData(assembly->width, assembly->height, assembly->pixels);
       m_lightmapAssembly = std::move(assembly);
+      m_lightmapBakeSucceeded = true;
       update();
     });
+}
+
+void MapViewBase::cancelLightmapBake()
+{
+  if (m_lightmapBakeTimer && m_lightmapBakeTimer->isActive())
+  {
+    m_lightmapBakeTimer->stop();
+    m_lightmapRevision = std::numeric_limits<size_t>::max();
+  }
+  if (m_lightmapBaker && m_lightmapBaker->running())
+  {
+    m_lightmapBaker->cancel();
+    m_lightmapRevision = std::numeric_limits<size_t>::max();
+    emit lightmapBakeProgressChanged(false, -1);
+  }
 }
 
 void MapViewBase::toggleShowEdges()
@@ -1239,35 +1289,23 @@ void MapViewBase::renderContents(gl::Gl& gl)
   renderContext.setLightmapAtlas(m_lightmapAtlas.get());
   renderContext.setLightmapAssembly(m_lightmapAssembly.get());
 
-  const auto bakesLightmap = pref(Preferences::ShowLightmap)
-                             && renderMode() == render::RenderMode::Render3D;
-  if (!bakesLightmap)
-  {
-    if (m_lightmapBakeTimer)
-    {
-      m_lightmapBakeTimer->stop();
-    }
-  }
-  else
+  const auto revision = map.modificationCount();
+  if (
+    pref(Preferences::ShowLightmap) && renderMode() == render::RenderMode::Render3D
+    && revision != m_lightmapRevision)
   {
     // Baking takes seconds, so wait for the map to settle before spending them again.
-    const auto revision = m_document.map().modificationCount();
-    if (revision != m_lightmapRevision)
+    cancelLightmapBake();
+    m_lightmapRevision = revision;
+    m_lightmapBakeSucceeded = false;
+    if (!m_lightmapBakeTimer)
     {
-      m_lightmapRevision = revision;
-      if (!m_lightmapBakeTimer)
-      {
-        m_lightmapBakeTimer = new QTimer{this};
-        m_lightmapBakeTimer->setSingleShot(true);
-        connect(m_lightmapBakeTimer, &QTimer::timeout, this, [this]() {
-          if (!m_lightmapBakePending)
-          {
-            startLightmapBake();
-          }
-        });
-      }
-      m_lightmapBakeTimer->start(1500);
+      m_lightmapBakeTimer = new QTimer{this};
+      m_lightmapBakeTimer->setSingleShot(true);
+      connect(
+        m_lightmapBakeTimer, &QTimer::timeout, this, &MapViewBase::startLightmapBake);
     }
+    m_lightmapBakeTimer->start(1500);
   }
   renderContext.setShowGrid(grid.visible());
   renderContext.setGridSize(grid.actualSize());

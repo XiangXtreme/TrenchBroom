@@ -21,6 +21,7 @@
 
 #include "render/LightmapData.h"
 
+#include <QByteArray>
 #include <QObject>
 
 #include <filesystem>
@@ -70,6 +71,7 @@ public:
     const mdl::Map& map,
     const std::filesystem::path& executable,
     int threadCount,
+    const std::string& quality,
     Callback callback);
 
   void cancel();
@@ -79,7 +81,11 @@ public:
    */
   const std::string& output() const;
 
+signals:
+  void remainingSecondsChanged(int seconds);
+
 private:
+  void readOutput();
   void runStage();
   void stageFinished(int exitCode, int exitStatus);
   void finish(std::optional<render::LightmapBake> bake, std::string error);
@@ -87,8 +93,10 @@ private:
   std::unique_ptr<QProcess> m_process;
   std::filesystem::path m_workDir;
   std::filesystem::path m_executable;
+  std::string m_quality;
   std::string m_output;
-  int m_stage = 0;
+  QByteArray m_progressBuffer;
+  int m_stage = -1;
   int m_threadCount = 1;
   Callback m_callback;
 };
