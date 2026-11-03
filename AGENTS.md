@@ -185,6 +185,7 @@
 - Format changes with clang-format. The repository style is defined in /.clang-format.
 - Respect the existing include ordering rules from /.clang-format. In particular, Qt headers must come first.
 - Follow the surrounding file's style and patterns unless there is a clear reason not to.
+- After editing `app/TrenchBroom/resources/translations/*.ts`, regenerate the checked-in `.qm` with Qt's `lrelease` and commit it together with the `.ts`. The application loads the compiled `.qm` from the resource bundle, so a stale `.qm` silently shows English text for new strings.
 
 ## Git History
 - Keep the git history as clean as possible.

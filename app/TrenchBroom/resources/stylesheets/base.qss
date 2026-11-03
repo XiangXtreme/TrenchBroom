@@ -1037,14 +1037,16 @@ QLabel[breadcrumbSeparator="true"] {
   color: @tb-secondary-text;
 }
 
-QWidget#ModelBrowser_FilterPanel,
-QWidget#ModelBrowser_ViewPanel {
+/* Popovers are their own windows, so they paint the full surface with a border instead
+   of relying on a rounded mask that would show the window background in the corners. */
+QWidget#ModelBrowser_FilterPopup,
+QWidget#ModelBrowser_ViewPopup {
   background: @tb-panel-background;
-  border-bottom: 1px solid @tb-border;
+  border: 1px solid @tb-border;
 }
 
-QWidget#ModelBrowser_FilterPanel QLabel,
-QWidget#ModelBrowser_ViewPanel QLabel {
+QWidget#ModelBrowser_FilterPopup QLabel,
+QWidget#ModelBrowser_ViewPopup QLabel {
   color: @tb-secondary-text;
 }
 

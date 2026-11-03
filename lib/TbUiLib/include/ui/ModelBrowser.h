@@ -61,6 +61,7 @@ class AppController;
 class AssetInspector;
 class AssetLibraryWindow;
 class MapDocument;
+class PopupWindow;
 class ProjectSession;
 
 class ModelBrowser : public QWidget
@@ -80,8 +81,8 @@ private:
   QToolButton* m_reloadButton = nullptr;
   QToolButton* m_filterButton = nullptr;
   QToolButton* m_viewButton = nullptr;
-  QWidget* m_filterPanel = nullptr;
-  QWidget* m_viewPanel = nullptr;
+  PopupWindow* m_filterPopup = nullptr;
+  PopupWindow* m_viewPopup = nullptr;
   QWidget* m_metadataFilterRow = nullptr;
   QFormLayout* m_filterLayout = nullptr;
   QLabel* m_resultCount = nullptr;

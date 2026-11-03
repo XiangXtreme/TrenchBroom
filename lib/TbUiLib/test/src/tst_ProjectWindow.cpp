@@ -932,8 +932,8 @@ TEST_CASE("ProjectWindow")
     auto* scope = browser->findChild<QComboBox*>("ModelBrowser_SearchScope");
     auto* filters = browser->findChild<QToolButton*>("ModelBrowser_FiltersButton");
     auto* viewSettings = browser->findChild<QToolButton*>("ModelBrowser_ViewButton");
-    auto* filterPanel = browser->findChild<QWidget*>("ModelBrowser_FilterPanel");
-    auto* viewPanel = browser->findChild<QWidget*>("ModelBrowser_ViewPanel");
+    auto* filterPopup = browser->findChild<QWidget*>("ModelBrowser_FilterPopup");
+    auto* viewPopup = browser->findChild<QWidget*>("ModelBrowser_ViewPopup");
     auto* count = browser->findChild<QLabel*>("ModelBrowser_ResultCount");
     auto* back = browser->findChild<QToolButton*>("ModelBrowser_Back");
     auto* forward = browser->findChild<QToolButton*>("ModelBrowser_Forward");
@@ -941,8 +941,8 @@ TEST_CASE("ProjectWindow")
     REQUIRE(scope);
     REQUIRE(filters);
     REQUIRE(viewSettings);
-    REQUIRE(filterPanel);
-    REQUIRE(viewPanel);
+    REQUIRE(filterPopup);
+    REQUIRE(viewPopup);
     REQUIRE(count);
     REQUIRE(back);
     REQUIRE(forward);
@@ -955,16 +955,18 @@ TEST_CASE("ProjectWindow")
     scope->setCurrentIndex(scope->findData(true));
     CHECK(search->placeholderText().contains(QStringLiteral("all"), Qt::CaseInsensitive));
 
-    // Filters and view settings are different jobs, so they never open together.
-    CHECK(filterPanel->isHidden());
-    CHECK(viewPanel->isHidden());
+    // Filters and view settings are different jobs, so they open as separate popovers
+    // and never overlap.
+    CHECK(filterPopup->isHidden());
+    CHECK(viewPopup->isHidden());
     filters->click();
-    CHECK_FALSE(filterPanel->isHidden());
+    CHECK_FALSE(filterPopup->isHidden());
+    filters->click();
+    CHECK(filterPopup->isHidden());
     viewSettings->click();
-    CHECK(filterPanel->isHidden());
-    CHECK_FALSE(viewPanel->isHidden());
+    CHECK_FALSE(viewPopup->isHidden());
     viewSettings->click();
-    CHECK(viewPanel->isHidden());
+    CHECK(viewPopup->isHidden());
 
     // A listing's size is stated, and history starts empty because the breadcrumb and the
     // folder tree own navigation now.

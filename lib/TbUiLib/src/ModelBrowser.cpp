@@ -87,6 +87,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ModelBrowserView.h"
+#include "ui/PopupWindow.h"
 #include "ui/PrefabAsset.h"
 #include "ui/ProjectCaptureConflictDialog.h"
 #include "ui/ProjectSession.h"
@@ -478,10 +479,7 @@ void ModelBrowser::createGui(AppController& appController)
   auto* controls = new QWidget{};
   controls->setObjectName("ModelBrowser_Controls");
   controls->setAttribute(Qt::WA_StyledBackground);
-  auto* controlsLayout = new QVBoxLayout{controls};
-  controlsLayout->setContentsMargins(0, 0, 0, 0);
-  controlsLayout->setSpacing(0);
-  controlsLayout->addLayout(pathRowLayout);
+  controls->setLayout(pathRowLayout);
 
   m_folderTree = new QTreeWidget{};
   m_folderTree->setObjectName("ModelBrowser_FolderTree");
@@ -585,7 +583,6 @@ void ModelBrowser::createGui(AppController& appController)
   m_tagCombo->setObjectName("ModelBrowser_Tag");
   m_tagCombo->setProperty("tbControlRole", "compact");
   m_tagCombo->addItem(tr("All tags"), QString{});
-  m_tagCombo->setMaximumWidth(160);
   m_tagCombo->setVisible(bool(m_project));
   const auto metadataScope = tr(
     "Live library favourites and tags, including linked project snapshots. Unavailable "
@@ -598,7 +595,6 @@ void ModelBrowser::createGui(AppController& appController)
   m_soundCombo->addItem(tr("All sounds"), int(inspection::WaveKind::All));
   m_soundCombo->addItem(tr("Looping"), int(inspection::WaveKind::Looping));
   m_soundCombo->addItem(tr("One-shot"), int(inspection::WaveKind::OneShot));
-  m_soundCombo->setMaximumWidth(128);
   m_soundCombo->setToolTip(tr(
     "Filter sound assets by their WAV sampler loop chunk. Waveforms are read on demand "
     "and cached until the asset revision changes."));
@@ -632,22 +628,29 @@ void ModelBrowser::createGui(AppController& appController)
   });
 
   // Filters narrow what is listed; grouping and thumbnail size only change the view.
-  // Keeping them apart stops view settings from looking like they change the results,
-  // and keeps type-specific filters out of sight when they cannot apply.
-  auto* filterPanel = new QWidget{};
-  filterPanel->setObjectName("ModelBrowser_FilterPanel");
-  filterPanel->setAttribute(Qt::WA_StyledBackground);
-  auto* filterForm = new QFormLayout{filterPanel};
-  filterForm->setContentsMargins(10, 6, 10, 8);
+  // Both live in popovers so opening them never squeezes the asset grid or turns the
+  // toolbar into a form.
+  m_filterPopup = new PopupWindow{this};
+  m_filterPopup->setObjectName("ModelBrowser_FilterPopup");
+  m_filterPopup->setAttribute(Qt::WA_StyledBackground);
+  auto* filterForm = new QFormLayout{};
+  filterForm->setContentsMargins(12, 10, 12, 12);
   filterForm->setHorizontalSpacing(10);
-  filterForm->setVerticalSpacing(6);
-  filterForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  filterForm->setVerticalSpacing(7);
+  filterForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+  filterForm->setSizeConstraint(QLayout::SetFixedSize);
+  // A popover reads best when every field lines up, so the filter fields share a width.
+  for (auto* combo :
+       {m_sourceCombo, m_typeCombo, m_libraryCombo, m_soundCombo, m_tagCombo})
+  {
+    combo->setMinimumWidth(190);
+  }
   filterForm->addRow(tr("Source"), m_sourceCombo);
   filterForm->addRow(tr("Type"), m_typeCombo);
   filterForm->addRow(tr("Library"), m_libraryCombo);
   filterForm->addRow(tr("Sound"), m_soundCombo);
   filterForm->addRow(tr("Tag"), m_tagCombo);
-  auto* metadataRow = new QWidget{filterPanel};
+  auto* metadataRow = new QWidget{};
   auto* metadataLayout = new QHBoxLayout{metadataRow};
   metadataLayout->setContentsMargins(0, 0, 0, 0);
   metadataLayout->setSpacing(6);
@@ -655,39 +658,55 @@ void ModelBrowser::createGui(AppController& appController)
   metadataLayout->addWidget(m_favoritesButton);
   metadataLayout->addStretch(1);
   filterForm->addRow(metadataRow);
-  filterPanel->hide();
-  m_filterPanel = filterPanel;
+  m_filterPopup->setLayout(filterForm);
   m_filterLayout = filterForm;
   m_metadataFilterRow = metadataRow;
-  controlsLayout->addWidget(filterPanel);
 
-  auto* viewPanel = new QWidget{};
-  viewPanel->setObjectName("ModelBrowser_ViewPanel");
-  viewPanel->setAttribute(Qt::WA_StyledBackground);
-  auto* viewForm = new QFormLayout{viewPanel};
-  viewForm->setContentsMargins(10, 6, 10, 8);
+  m_viewPopup = new PopupWindow{this};
+  m_viewPopup->setObjectName("ModelBrowser_ViewPopup");
+  m_viewPopup->setAttribute(Qt::WA_StyledBackground);
+  auto* viewForm = new QFormLayout{};
+  viewForm->setContentsMargins(12, 10, 12, 12);
   viewForm->setHorizontalSpacing(10);
-  viewForm->setVerticalSpacing(6);
-  viewForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  viewForm->setVerticalSpacing(7);
+  viewForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+  viewForm->setSizeConstraint(QLayout::SetFixedSize);
   viewForm->addRow(tr("Thumbnail size"), m_iconSizeCombo);
   viewForm->addRow(QString{}, m_groupWadTextures);
-  viewPanel->hide();
-  m_viewPanel = viewPanel;
-  controlsLayout->addWidget(viewPanel);
+  m_viewPopup->setLayout(viewForm);
 
   connect(m_filterButton, &QToolButton::toggled, this, [this](const bool shown) {
-    m_filterPanel->setVisible(shown);
-    if (shown)
+    if (!shown)
     {
-      m_viewButton->setChecked(false);
+      m_filterPopup->close();
+      return;
     }
+    m_viewButton->setChecked(false);
+    m_filterPopup->adjustSize();
+    m_filterPopup->positionTouchingWidget(m_filterButton);
+    m_filterPopup->show();
+    m_filterPopup->raise();
   });
   connect(m_viewButton, &QToolButton::toggled, this, [this](const bool shown) {
-    m_viewPanel->setVisible(shown);
-    if (shown)
+    if (!shown)
     {
-      m_filterButton->setChecked(false);
+      m_viewPopup->close();
+      return;
     }
+    m_filterButton->setChecked(false);
+    m_viewPopup->adjustSize();
+    m_viewPopup->positionTouchingWidget(m_viewButton);
+    m_viewPopup->show();
+    m_viewPopup->raise();
+  });
+  connect(m_filterPopup, &PopupWindow::visibilityChanged, this, [this](const bool shown) {
+    // Clicking outside (or on the button itself) closes the popover; the button follows.
+    const auto blocker = QSignalBlocker{m_filterButton};
+    m_filterButton->setChecked(shown);
+  });
+  connect(m_viewPopup, &PopupWindow::visibilityChanged, this, [this](const bool shown) {
+    const auto blocker = QSignalBlocker{m_viewButton};
+    m_viewButton->setChecked(shown);
   });
 
   auto* resultBar = new QWidget{};
@@ -1488,6 +1507,11 @@ void ModelBrowser::updateFilterVisibility()
     // The controls stay in reach when they cannot act right now; disabling them keeps an
     // already active filter explainable instead of hiding it.
     m_filterLayout->setRowVisible(m_metadataFilterRow, bool(m_project));
+  }
+  // A filter change can hide its own row; keep the open popover anchored to its button.
+  if (m_filterPopup && m_filterPopup->isVisible())
+  {
+    m_filterPopup->positionTouchingWidget(m_filterButton);
   }
 }
 
