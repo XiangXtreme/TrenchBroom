@@ -1,8 +1,8 @@
 # MCP Long-Term Refactor Blueprint
 
 > Historical design, superseded for implementation on 2026-09-08 by the
-> [Python migration delivery plan](mcp-python-migration/development.md) and
-> [current governance](mcp-development-governance.md). The body records the earlier
+> [Python migration delivery plan](../mcp-python-migration/development.md) and
+> [current governance](../mcp-development-governance.md). The body records the earlier
 > IR/tool architecture and completed work; its future tasks, compatibility rules
 > and tool lists are not the active backlog. Use the current plan's four-entry
 > Python bridge cutover and final acceptance.

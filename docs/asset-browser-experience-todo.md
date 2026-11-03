@@ -1,6 +1,9 @@
 # Asset Browsers 与 Content Browser 体验增强 TODO
 
 日期：2026-11-01。状态：实施中；复选框表示本清单的交付状态。
+剩余未勾选项都是验收/回归，不是新功能。MCP 侧的资产检索、捕获、应用、预览与联系表
+由 `trenchbroom.assets.*` 提供，其语义与风险见
+[维护风险](custom-feature-maintenance-risks.md) 的“Asset Automation Semantics”。
 
 ## 1. 产品目标与适用范围
 

@@ -1,8 +1,9 @@
 # 资产库与编译链路总纲
 
-状态：2026-10-31 草案（待评审）。范围：资产库、工程捕获、编译输入、hltools 协作。
+状态：2026-10-31 草案。库、工程捕获与编译输入部分已实现；文档结构与
+hltools 协作仍是提案，待评审。范围：资产库、工程捕获、编译输入、hltools 协作。
 本文取代此前分散在 `native-project-usage.md` / `native-project-format-design.md` /
-`project-workspace-acceptance.md` 里关于"库与工程同步"的部分；历史设计仍可查阅，但以本文为准。
+`archive/project-workspace-acceptance.md` 里关于"库与工程同步"的部分；历史设计仍可查阅，但以本文为准。
 
 ## 1. 目标
 

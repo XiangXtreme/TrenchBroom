@@ -73,7 +73,7 @@ Qt 适配通过统一 `ApplicationStyle` 的
 - 算术输入复用 TB 表达式解析器，保留当前字段精度；连选时同步显示完整算式，确认后统一应用结果。
   目前支持上述基础算术，Blender 的幂运算、数学函数、完整 Python 表达式、单位表达式、RNA 默认值重置、
   悬停属性快捷键、驱动器、关键帧和属性右键菜单尚未接入此面板。
-- 普通 Brush 的独立旋转、缩放持久化见 `custom-feature-roadmap.md` 的专有项目格式待办。
+- 普通 Brush 的独立旋转、缩放持久化见 `archive/custom-feature-roadmap.md` 的专有项目格式待办（历史条目）。
 
 ## 验证
 

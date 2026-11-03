@@ -127,7 +127,7 @@ map views, material/model previews, color swatches, curves, and other editor can
 exception must still use theme tokens for surrounding chrome and interaction states.
 
 Temporary compatibility exceptions must carry a removal note in
-`docs/qt-ui-modernization-progress.md`. Permanent exceptions must be named compound
+`docs/archive/qt-ui-modernization-progress.md`. Permanent exceptions must be named compound
 components and covered by a focused snapshot or rendering test.
 
 ## Acceptance
