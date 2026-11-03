@@ -164,9 +164,42 @@ void MiscPreferencePane::createGui()
   prefabDirectoryLayout->addWidget(m_prefabDirectoryEdit, 1);
   prefabDirectoryLayout->addWidget(m_choosePrefabDirectoryButton);
 
+  m_mapToolchainEdit = new QLineEdit{};
+  m_mapToolchainEdit->setObjectName("mapToolchainEdit");
+  m_mapToolchainEdit->setPlaceholderText(tr("None (search PATH)"));
+
+  m_chooseMapToolchainButton = new QPushButton{tr("...")};
+
+  connect(m_mapToolchainEdit, &QLineEdit::editingFinished, this, [this]() {
+    auto& prefs = PreferenceManager::instance();
+    prefs.set(
+      Preferences::LightmapToolPath, pathFromQString(m_mapToolchainEdit->text()));
+  });
+
+  connect(m_chooseMapToolchainButton, &QPushButton::clicked, this, [this]() {
+    auto& prefs = PreferenceManager::instance();
+    const auto pathStr = QFileDialog::getOpenFileName(
+      this, tr("Map toolchain"),
+      pathAsQString(prefs.getPendingValue(Preferences::LightmapToolPath)),
+      tr("Executables (*.exe);;All files (*)"));
+    if (!pathStr.isEmpty())
+    {
+      m_mapToolchainEdit->setText(pathStr);
+      prefs.set(Preferences::LightmapToolPath, pathFromQString(pathStr));
+    }
+  });
+
+  auto* mapToolchainLayout = new QHBoxLayout{};
+  mapToolchainLayout->setContentsMargins(QMargins{});
+  mapToolchainLayout->setSpacing(LayoutConstants::MediumHMargin);
+  mapToolchainLayout->addWidget(m_mapToolchainEdit, 1);
+  mapToolchainLayout->addWidget(m_chooseMapToolchainButton);
+
   auto* toolLayout = new QVBoxLayout{};
   toolLayout->addWidget(new QLabel{tr("Prefab directory")});
   toolLayout->addLayout(prefabDirectoryLayout);
+  toolLayout->addWidget(new QLabel{tr("Map toolchain")});
+  toolLayout->addLayout(mapToolchainLayout);
   toolLayout->addWidget(m_pieMenuSettingsButton);
   toolLayout->addWidget(m_pythonPluginManagerButton);
 
@@ -210,6 +243,7 @@ void MiscPreferencePane::updateControls()
   const auto prefixBlocker = QSignalBlocker{m_prefixWorldspawnOnCopyCheckBox};
   const auto boxSelectionBlocker = QSignalBlocker{m_enable2DBoxSelectionCheckBox};
   const auto prefabDirectoryBlocker = QSignalBlocker{m_prefabDirectoryEdit};
+  const auto mapToolchainBlocker = QSignalBlocker{m_mapToolchainEdit};
 
   const auto& language = pref(Preferences::Language);
   m_englishRadioButton->setChecked(language == Preferences::languageEnglish());
@@ -219,6 +253,8 @@ void MiscPreferencePane::updateControls()
   m_enable2DBoxSelectionCheckBox->setChecked(pref(Preferences::Enable2DBoxSelection));
   m_prefabDirectoryEdit->setText(pathAsQString(
     PreferenceManager::instance().getPendingValue(Preferences::PrefabDirectory)));
+  m_mapToolchainEdit->setText(pathAsQString(
+    PreferenceManager::instance().getPendingValue(Preferences::LightmapToolPath)));
   m_mcpSettingsWidget->updateControls();
 }
 

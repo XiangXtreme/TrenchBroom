@@ -438,7 +438,7 @@ inline auto FaceRenderMode =
 inline auto ShadeFaces = Preference<bool>{"Map view/Shade faces", true};
 inline auto ShowLightmap = Preference<bool>{"Map view/Show lightmap", false};
 inline auto LightmapToolPath =
-  Preference<std::string>{"Lightmap/Tool path", std::string{}};
+  Preference<std::filesystem::path>{"Lightmap/Tool path", {}};
 inline auto ShowFog = Preference<bool>{"Map view/Show fog", false};
 inline auto ShowEdges = Preference<bool>{"Map view/Show edges", true};
 inline auto UseReadable2DBrushOutlines =

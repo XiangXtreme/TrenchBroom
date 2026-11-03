@@ -27,6 +27,8 @@ private:
   QCheckBox* m_enable2DBoxSelectionCheckBox = nullptr;
   QLineEdit* m_prefabDirectoryEdit = nullptr;
   QPushButton* m_choosePrefabDirectoryButton = nullptr;
+  QLineEdit* m_mapToolchainEdit = nullptr;
+  QPushButton* m_chooseMapToolchainButton = nullptr;
   QPushButton* m_pieMenuSettingsButton = nullptr;
   QPushButton* m_pythonPluginManagerButton = nullptr;
   McpSettingsWidget* m_mcpSettingsWidget = nullptr;

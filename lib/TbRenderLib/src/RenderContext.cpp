@@ -233,7 +233,9 @@ void RenderContext::setShowFog(const bool showFog)
 
 bool RenderContext::showLightmap() const
 {
-  return m_showLightmap;
+  // 2D views draw the same faces to orient the user, but they are not the place to judge
+  // lighting, and their flat camera makes the lightmap meaningless.
+  return m_showLightmap && render3D();
 }
 
 void RenderContext::setShowLightmap(const bool showLightmap)

@@ -29,6 +29,7 @@
 #include "ui/ToolBoxConnector.h"
 
 #include <filesystem>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -109,6 +110,8 @@ private:
   std::unique_ptr<render::LightmapAtlas> m_lightmapAtlas;
   std::unique_ptr<render::LightmapAssembly> m_lightmapAssembly;
   std::unique_ptr<LightmapBaker> m_lightmapBaker;
+  QTimer* m_lightmapBakeTimer = nullptr;
+  size_t m_lightmapRevision = std::numeric_limits<size_t>::max();
   bool m_lightmapBakePending = false;
   std::unique_ptr<render::PrimitiveRenderer> m_portalFileRenderer;
   bool m_renderingThumbnail = false;

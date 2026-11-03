@@ -3574,6 +3574,21 @@ Please choose a different file name to export to.</source>
             <source>Prefab directory</source>
             <translation>Prefab 目录</translation>
             </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="201" />
+            <source>Map toolchain</source>
+            <translation>地图工具链</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="169" />
+            <source>None (search PATH)</source>
+            <translation>未设置（从 PATH 查找）</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="184" />
+            <source>Executables (*.exe);;All files (*)</source>
+            <translation>可执行文件 (*.exe);;所有文件 (*)</translation>
+            </message>
         </context>
     <context>
         <name>tb::ui::ModEditor</name>

@@ -116,6 +116,7 @@
 #include "vm/util.h"
 
 #include <algorithm>
+#include <chrono>
 #include <ranges>
 #include <vector>
 
@@ -998,7 +999,7 @@ void MapViewBase::startLightmapBake()
 {
   auto& logger = m_document.map().logger();
 
-  auto executable = std::filesystem::path{pref(Preferences::LightmapToolPath)};
+  auto executable = pref(Preferences::LightmapToolPath);
   if (executable.empty())
   {
     const auto found = QStandardPaths::findExecutable(QStringLiteral("hltools"));
@@ -1019,9 +1020,13 @@ void MapViewBase::startLightmapBake()
   }
 
   m_lightmapBakePending = true;
+  m_lightmapRevision = m_document.map().modificationCount();
+  const auto startedAt = std::chrono::steady_clock::now();
+  logger.info() << "Baking a lightmap for the view.";
+
   m_lightmapBaker->start(
     m_document.map(), executable, 8,
-    [this](std::optional<render::LightmapBake> bake, const std::string& error) {
+    [this, startedAt](std::optional<render::LightmapBake> bake, const std::string& error) {
       m_lightmapBakePending = false;
       auto& logger = m_document.map().logger();
       if (!bake)
@@ -1044,6 +1049,10 @@ void MapViewBase::startLightmapBake()
       }
       m_lightmapAtlas->setData(assembly->width, assembly->height, assembly->pixels);
       m_lightmapAssembly = std::move(assembly);
+      const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - startedAt)
+                             .count();
+      logger.info() << "Lightmap baked in " << elapsed << " ms.";
       update();
     });
 }
@@ -1226,10 +1235,33 @@ void MapViewBase::renderContents(gl::Gl& gl)
   renderContext.setLightmapAtlas(m_lightmapAtlas.get());
   renderContext.setLightmapAssembly(m_lightmapAssembly.get());
 
-  const auto showLightmap = pref(Preferences::ShowLightmap);
-  if (showLightmap && !m_lightmapAssembly && !m_lightmapBakePending)
+  if (!pref(Preferences::ShowLightmap))
   {
-    startLightmapBake();
+    if (m_lightmapBakeTimer)
+    {
+      m_lightmapBakeTimer->stop();
+    }
+  }
+  else
+  {
+    // Baking takes seconds, so wait for the map to settle before spending them again.
+    const auto revision = m_document.map().modificationCount();
+    if (revision != m_lightmapRevision)
+    {
+      m_lightmapRevision = revision;
+      if (!m_lightmapBakeTimer)
+      {
+        m_lightmapBakeTimer = new QTimer{this};
+        m_lightmapBakeTimer->setSingleShot(true);
+        connect(m_lightmapBakeTimer, &QTimer::timeout, this, [this]() {
+          if (!m_lightmapBakePending)
+          {
+            startLightmapBake();
+          }
+        });
+      }
+      m_lightmapBakeTimer->start(1500);
+    }
   }
   renderContext.setShowGrid(grid.visible());
   renderContext.setGridSize(grid.actualSize());
