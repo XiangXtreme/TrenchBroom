@@ -45,9 +45,12 @@ TrenchBroom 是真实地图状态来源。通过有效对象句柄或重新查�
 | --- | --- |
 | `tb.assets.search(query="", type=None, limit=50, scope="game")` | 检索 `game`/`project`/`library`/`all`，返回 id、路径、发布路径、修订与缺失状态。`preview=True` 附带预览（limit ≤ 12）。 |
 | `tb.assets.describe(asset, scope="any")` | 按 id 或虚拟路径精确解析，歧义直接报错。 |
-| `tb.assets.preview(asset, scope="any", size=128)` | 产出 PNG，状态为 `image`/`audio`/`unsupported`/`missing`。 |
+| `tb.assets.preview(asset, scope="any", size=128)` | 产出 PNG，状态为 `image`/`audio`/`unsupported`/`missing`；天空盒渲染成六面视图。 |
 | `tb.assets.sheet(scope="project", limit=24, size=128, columns=6, rows=4)` | 带标签的联系表；超出容量自动续张，每格给出矩形与资产身份。 |
 | `tb.assets.capture(...)` / `import_file(...)` / `apply_to_selection(...)` | 库资源捕获进工程、导入文件、应用到选中面或实体；均需 action 模式。 |
+
+`search`/`sheet` 的 `asset_type` 可进一步收窄（`texture`、`skybox`、`model` 等）：
+天空盒的 `type` 是 `texture`，但 `asset_type` 是 `skybox`。
 
 工程与库资产需要所属工程文档；`documents.open_project_map(project_path, map_id="")`
 以 action 模式打开工程内地图，仅当工程只有一张地图时可省略 id。

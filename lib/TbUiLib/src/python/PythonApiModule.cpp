@@ -3141,11 +3141,13 @@ std::vector<AutomationAssetSummary> collectAssetSummaries(
   const std::string& query,
   const py::object& type,
   const size_t limit,
-  const std::string& scope)
+  const std::string& scope,
+  const std::string& assetType)
 {
   auto options = AutomationAssetQuery{};
   options.query = query;
   options.limit = limit;
+  options.assetType = assetType;
   if (!type.is_none())
   {
     const auto typeName = py::cast<std::string>(type);
@@ -3223,18 +3225,39 @@ std::vector<AutomationAssetSummary> collectAssetSummaries(
   return summaries;
 }
 
+/** Maps an optional precise asset type to the catalog's normalized filter value. */
+std::string assetTypeFilter(const py::object& value)
+{
+  if (value.is_none())
+  {
+    return {};
+  }
+  const auto text = lowerCaseAssetScope(py::cast<std::string>(value));
+  const auto known = std::array{
+    "map", "model", "sound", "sprite", "texture", "material", "skybox", "prefab"};
+  if (std::ranges::find(known, text) == known.end())
+  {
+    throw py::value_error{
+      "asset_type must be model, sprite, sound, texture, material, skybox, prefab, map, "
+      "or None"};
+  }
+  return text;
+}
+
 py::list searchAssets(
   const std::string& query,
   const py::object& type,
   const size_t limit,
   const std::string& scope,
-  const bool preview)
+  const bool preview,
+  const py::object& assetType)
 {
   if (preview && limit > 12u)
   {
     throw py::value_error{"preview=True supports limit <= 12"};
   }
-  const auto summaries = collectAssetSummaries(query, type, limit, scope);
+  const auto summaries =
+    collectAssetSummaries(query, type, limit, scope, assetTypeFilter(assetType));
 
   auto project = preview ? currentProjectSession() : std::shared_ptr<ProjectSession>{};
   const auto previewFolder =
@@ -3261,7 +3284,8 @@ py::dict assetSheet(
   const size_t limit,
   const int size,
   const int columns,
-  const int rows)
+  const int rows,
+  const py::object& assetType)
 {
   if (size < 16 || size > 256)
   {
@@ -3280,7 +3304,8 @@ py::dict assetSheet(
     throw py::value_error{"limit must be between 1 and 96"};
   }
 
-  const auto summaries = collectAssetSummaries(query, type, limit, scope);
+  const auto summaries =
+    collectAssetSummaries(query, type, limit, scope, assetTypeFilter(assetType));
   const auto folder =
     std::filesystem::temp_directory_path() / "trenchbroom-asset-previews";
   const auto sheets = renderAutomationAssetSheets(
@@ -6513,7 +6538,8 @@ void defineModule(py::module_& module)
     py::arg("type") = py::none(),
     py::arg("limit") = 50u,
     py::arg("scope") = "game",
-    py::arg("preview") = false);
+    py::arg("preview") = false,
+    py::arg("asset_type") = py::none());
   assets.def("describe", describeAsset, py::arg("asset"), py::arg("scope") = "any");
   assets.def(
     "preview",
@@ -6530,7 +6556,8 @@ void defineModule(py::module_& module)
     py::arg("limit") = 24,
     py::arg("size") = 128,
     py::arg("columns") = 6,
-    py::arg("rows") = 4);
+    py::arg("rows") = 4,
+    py::arg("asset_type") = py::none());
   assets.def(
     "capture", captureAsset, py::arg("library_asset_id"), py::arg("library_id") = "");
   assets.def(

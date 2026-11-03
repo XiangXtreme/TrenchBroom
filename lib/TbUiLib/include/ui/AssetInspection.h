@@ -96,5 +96,7 @@ Result<Asset> readLibraryAsset(
   ProjectSession* project = nullptr);
 Result<Asset> readBrowserAsset(
   const BrowserAsset& asset, ProjectSession* project, MapDocument& document);
+/** Reads one project asset, including decoded sky faces and model dependencies. */
+Result<Asset> readProjectAsset(ProjectSession& project, const std::string& assetId);
 } // namespace inspection
 } // namespace tb::ui

@@ -115,6 +115,13 @@ std::string projectTypeName(const project::AssetType type)
   return "unknown";
 }
 
+bool matchesAssetType(
+  const AutomationAssetQuery& query, const AutomationAssetSummary& asset)
+{
+  return query.assetType.empty()
+         || lowerCase(query.assetType) == lowerCase(asset.assetType);
+}
+
 bool matchesQuery(
   const std::string& query, std::initializer_list<std::string_view> fields)
 {
@@ -280,7 +287,12 @@ std::optional<std::vector<AutomationAssetSummary>> searchAutomationGameAssets(
   result.reserve(assets->size());
   for (const auto& asset : *assets)
   {
-    result.push_back(summaryForGame(asset));
+    auto summary = summaryForGame(asset);
+    if (!matchesAssetType(query, summary))
+    {
+      continue;
+    }
+    result.push_back(std::move(summary));
   }
 
   // Game textures live in the material manager, not in the model/sprite/sound scan.
@@ -288,15 +300,18 @@ std::optional<std::vector<AutomationAssetSummary>> searchAutomationGameAssets(
   {
     for (const auto* material : map.materialManager().materials())
     {
-      if (!matchesQuery(
-            query.query,
-            {material->name(),
-             material->collectionName(),
-             material->relativePath().generic_string()}))
+      auto summary = summaryForMaterial(*material);
+      if (
+        !matchesAssetType(query, summary)
+        || !matchesQuery(
+          query.query,
+          {material->name(),
+           material->collectionName(),
+           material->relativePath().generic_string()}))
       {
         continue;
       }
-      result.push_back(summaryForMaterial(*material));
+      result.push_back(std::move(summary));
       if (result.size() >= query.limit)
       {
         break;
@@ -365,7 +380,12 @@ Result<std::vector<AutomationAssetSummary>> searchAutomationProjectAssets(
       continue;
     }
 
-    result.push_back(summaryForProject(asset));
+    auto summary = summaryForProject(asset);
+    if (!matchesAssetType(query, summary))
+    {
+      continue;
+    }
+    result.push_back(std::move(summary));
     if (result.size() >= query.limit)
     {
       break;
@@ -415,7 +435,12 @@ Result<std::vector<AutomationAssetSummary>> searchAutomationLibraryAssets(
         continue;
       }
 
-      result.push_back(summaryForLibrary(connection.info.id, asset));
+      auto summary = summaryForLibrary(connection.info.id, asset);
+      if (!matchesAssetType(query, summary))
+      {
+        continue;
+      }
+      result.push_back(std::move(summary));
       if (result.size() >= query.limit)
       {
         return result;

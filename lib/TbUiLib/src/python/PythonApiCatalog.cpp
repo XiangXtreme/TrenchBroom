@@ -367,7 +367,8 @@ constexpr auto AssetsSymbols = std::array{
   PythonApiSymbol{
     "search",
     Function,
-    "(query='', type=None, limit=50, scope='game', preview=False) -> list[dict]",
+    "(query='', type=None, limit=50, scope='game', preview=False, "
+    "asset_type=None) -> list[dict]",
     std::nullopt,
     PythonApiEffect::Read},
   PythonApiSymbol{
@@ -379,8 +380,8 @@ constexpr auto AssetsSymbols = std::array{
   PythonApiSymbol{
     "sheet",
     Function,
-    "(scope='project', query='', type=None, limit=24, size=128, columns=6, rows=4) "
-    "-> dict",
+    "(scope='project', query='', type=None, limit=24, size=128, columns=6, rows=4, "
+    "asset_type=None) -> dict",
     std::nullopt,
     PythonApiEffect::Read},
   PythonApiSymbol{

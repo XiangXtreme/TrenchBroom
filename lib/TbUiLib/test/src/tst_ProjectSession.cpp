@@ -891,6 +891,54 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(found->publishPath == "textures/WALL01.wad");
   }
 
+  SECTION("automation previews skyboxes and filters them apart from textures")
+  {
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+    {
+      sandbox.write(
+        std::string{"env/desert"} + face + ".png", pngBytes(QColor{31, 93, 177}, 16));
+    }
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+
+    auto skyQuery = AutomationAssetQuery{};
+    skyQuery.type = BrowserCellType::Texture;
+    skyQuery.assetType = "skybox";
+    const auto skies =
+      requireProject(searchAutomationLibraryAssets(*sandbox.session, skyQuery));
+    REQUIRE(skies.size() == 1u);
+    CHECK(skies.front().assetType == "skybox");
+
+    // The precise filter separates the group from its six faces.
+    auto textureQuery = AutomationAssetQuery{};
+    textureQuery.type = BrowserCellType::Texture;
+    textureQuery.assetType = "texture";
+    const auto textures =
+      requireProject(searchAutomationLibraryAssets(*sandbox.session, textureQuery));
+    CHECK(std::ranges::none_of(
+      textures, [](const auto& asset) { return asset.assetType == "skybox"; }));
+
+    const auto previewFolder = sandbox.root / "previews";
+    const auto libraryPreview =
+      previewAutomationAsset(sandbox.session.get(), skies.front(), 64, previewFolder);
+    CHECK(libraryPreview.status == "image");
+    CHECK(libraryPreview.source == "skybox");
+    CHECK(libraryPreview.width == 64);
+    CHECK(QFileInfo::exists(pathAsQString(libraryPreview.path)));
+
+    // The captured project skybox renders through the project store as well.
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, skies.front().id));
+    const auto projectSky =
+      requireProject(findAutomationProjectAsset(*sandbox.session, captured.id));
+    REQUIRE(projectSky);
+    CHECK(projectSky->assetType == "skybox");
+    const auto projectPreview =
+      previewAutomationAsset(sandbox.session.get(), *projectSky, 64, previewFolder);
+    CHECK(projectPreview.status == "image");
+    CHECK(projectPreview.source == "skybox");
+  }
+
   SECTION("publishes a converted image and captures it without reconverting")
   {
     const auto encode = [](QImage picture) {

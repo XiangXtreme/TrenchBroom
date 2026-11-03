@@ -67,10 +67,13 @@ path; display names are not unique.
   `game`, `project`, `library` or `all` and returns `scope`, `id`,
   `library_id`, `type`, `asset_type`, `path`, `publish_path`, `revision`
   and `missing`. `preview=True` attaches a preview to each hit (limit 12).
+  `asset_type` narrows further (`texture`, `skybox`, `model`, ...), because a
+  skybox is a texture `type` with a distinct `asset_type`.
 - `tb.assets.describe(asset, scope="any")` resolves one id or path and reports
   ambiguity instead of guessing.
 - `tb.assets.preview(asset, scope="any", size=128)` reports `status` as
   `image`, `audio`, `unsupported` or `missing` with `path` and dimensions.
+  Skyboxes render as one six-face view.
 - `tb.assets.sheet(scope="project", limit=24, size=128, columns=6, rows=4)`
   renders labeled contact sheets. Extra assets continue on further sheets, and
   every cell carries its rectangle and asset identity.

@@ -28,9 +28,11 @@
 #include <QPainter>
 #include <QString>
 
+#include "project/AssetLibrary.h"
 #include "project/ProjectAsset.h"
 #include "project/ProjectStore.h"
 #include "ui/AssetInspection.h"
+#include "ui/AssetLibrarySource.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
 #include "ui/ProjectSession.h"
@@ -38,6 +40,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <utility>
@@ -54,6 +57,8 @@ constexpr auto MinColumns = 1;
 constexpr auto MaxColumns = 10;
 constexpr auto MinRows = 1;
 constexpr auto MaxRows = 8;
+constexpr auto MaxCachedPreviews = 512;
+constexpr auto MaxPreviewAge = std::chrono::hours{24 * 7};
 constexpr auto SheetPadding = 12;
 constexpr auto SheetCaptionHeight = 26;
 constexpr auto SheetLabelHeight = 32;
@@ -95,11 +100,56 @@ std::string digestOf(const std::string& text)
     .toStdString();
 }
 
+/** Keeps the preview cache bounded: drop week-old images, then the oldest surplus. */
+void prunePreviewFolder(const std::filesystem::path& folder)
+{
+  auto ec = std::error_code{};
+  auto entries =
+    std::vector<std::pair<std::filesystem::file_time_type, std::filesystem::path>>{};
+  for (auto it = std::filesystem::directory_iterator{folder, ec};
+       !ec && it != std::filesystem::directory_iterator{};
+       it.increment(ec))
+  {
+    if (!it->is_regular_file(ec))
+    {
+      continue;
+    }
+    entries.emplace_back(it->last_write_time(ec), it->path());
+  }
+  if (ec)
+  {
+    return;
+  }
+
+  const auto now = std::filesystem::file_time_type::clock::now();
+  std::erase_if(entries, [&](const auto& entry) {
+    if (now - entry.first <= MaxPreviewAge)
+    {
+      return false;
+    }
+    auto removeEc = std::error_code{};
+    std::filesystem::remove(entry.second, removeEc);
+    return true;
+  });
+
+  if (entries.size() <= MaxCachedPreviews)
+  {
+    return;
+  }
+  std::ranges::sort(entries, {}, [](const auto& entry) { return entry.first; });
+  for (auto index = std::size_t{}; index < entries.size() - MaxCachedPreviews; ++index)
+  {
+    auto removeEc = std::error_code{};
+    std::filesystem::remove(entries[index].second, removeEc);
+  }
+}
+
 Result<std::filesystem::path> writePng(
   const QImage& image, const std::filesystem::path& folder, const std::string& key)
 {
   auto ec = std::error_code{};
   std::filesystem::create_directories(folder, ec);
+  prunePreviewFolder(folder);
   const auto path = folder / (digestOf(key).substr(0, 20) + ".png");
   if (!image.save(pathAsQString(path), "PNG"))
   {
@@ -171,6 +221,43 @@ Result<std::filesystem::path> resolveAssetFile(
   return std::filesystem::path{asset.absolutePath};
 }
 
+/** Reads one library asset through the same inspection path the library UI uses. */
+Result<inspection::Asset> readLibraryInspectionAsset(
+  ProjectSession& project, const std::string& libraryId, const std::string& assetId)
+{
+  const auto connections = project.libraries();
+  if (connections.is_error())
+  {
+    return std::get<Error>(connections.error());
+  }
+  for (const auto& connection : connections.value())
+  {
+    if (connection.info.id != libraryId)
+    {
+      continue;
+    }
+    auto source = openLocalAssetLibrary(connection.info.path);
+    if (!source)
+    {
+      return Error{"The asset library is unavailable."};
+    }
+    const auto entries = source->allAssets();
+    if (entries.is_error())
+    {
+      return std::get<Error>(entries.error());
+    }
+    for (const auto& entry : entries.value())
+    {
+      if (entry.id == assetId)
+      {
+        return inspection::readLibraryAsset(*source, entry, &project);
+      }
+    }
+    return Error{"The library no longer contains this asset."};
+  }
+  return Error{"The library is not attached to this project."};
+}
+
 RenderedPreview renderPreview(
   ProjectSession* project, const AutomationAssetSummary& asset, const int size)
 {
@@ -180,6 +267,27 @@ RenderedPreview renderPreview(
     return unsupported(
       "texture",
       "Game textures are drawn by the material system; apply one to a face to see it.");
+  }
+
+  if (asset.assetType == "skybox")
+  {
+    if (project == nullptr)
+    {
+      return missing("skybox", "The current document has no owning project.");
+    }
+    auto inspected = asset.scope == "project"
+                       ? inspection::readProjectAsset(*project, asset.id)
+                       : readLibraryInspectionAsset(*project, asset.libraryId, asset.id);
+    if (inspected.is_error())
+    {
+      return unsupported("skybox", std::get<Error>(inspected.error()).msg);
+    }
+    const auto image = inspection::skyThumbnail(inspected.value(), resolvedSize);
+    if (image.isNull())
+    {
+      return unsupported("skybox", "The skybox faces cannot be read.");
+    }
+    return imagePreview(fitPreview(image, resolvedSize), "skybox");
   }
 
   const auto file = resolveAssetFile(project, asset);
@@ -254,13 +362,6 @@ RenderedPreview renderPreview(
         QImage::Format_RGBA8888}
         .copy();
     return imagePreview(fitPreview(image, resolvedSize), "sprite");
-  }
-
-  if (asset.nativeFormat == "skybox")
-  {
-    return unsupported(
-      "skybox",
-      "A skybox needs all six faces; compare them in the asset library instead.");
   }
 
   const auto bytes = readFileBytes(file.value());

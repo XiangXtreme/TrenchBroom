@@ -70,6 +70,8 @@ struct AutomationAssetQuery
 {
   std::string query;
   std::optional<BrowserCellType> type;
+  /** Precise asset type filter ("texture", "skybox", "model", ...); empty matches all. */
+  std::string assetType;
   std::size_t limit = 50u;
 };
 

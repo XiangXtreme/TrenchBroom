@@ -199,6 +199,11 @@ try:
 except ValueError:
     pass
 try:
+    tb.assets.search(asset_type="bogus")
+    raise AssertionError("asset search accepted an invalid asset type")
+except ValueError:
+    pass
+try:
     tb.assets.search(scope="project")
     raise AssertionError("project asset search worked without a project")
 except RuntimeError:

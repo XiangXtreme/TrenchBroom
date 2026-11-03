@@ -215,7 +215,8 @@ void readProjectStudioExternal(
   {
     if (edge.kind != "model-companion" && edge.kind != "model-animation")
       continue;
-    auto bytes = session.store().readAsset(edge.dependencyId, project::ContentKind::Original);
+    auto bytes =
+      session.store().readAsset(edge.dependencyId, project::ContentKind::Original);
     if (bytes.is_error() || bytes.value().empty())
       continue;
     if (edge.kind == "model-companion")
@@ -237,9 +238,7 @@ void readProjectStudioExternal(
 
 /** Resolves model siblings from library dependency assets instead of sibling files. */
 void readLibraryStudioExternal(
-  const AssetLibrarySource& source,
-  const project::LibraryAsset& asset,
-  Asset& result)
+  const AssetLibrarySource& source, const project::LibraryAsset& asset, Asset& result)
 {
   const auto edges = source.dependencies(asset.id);
   const auto entries = source.allAssets();
@@ -257,10 +256,9 @@ void readLibraryStudioExternal(
       result.studioExternal.textureHeader = std::move(bytes).value();
       continue;
     }
-    const auto entry = std::ranges::find_if(
-      entries.value(), [&](const auto& candidate) {
-        return candidate.id == edge.dependencyId;
-      });
+    const auto entry = std::ranges::find_if(entries.value(), [&](const auto& candidate) {
+      return candidate.id == edge.dependencyId;
+    });
     if (entry == entries.value().end())
       continue;
     const auto group = animationGroupNumber(entry->virtualPath);
@@ -541,6 +539,97 @@ Result<Asset> readLibraryAsset(
   return result;
 }
 
+Result<Asset> readProjectAsset(ProjectSession& session, const std::string& assetId)
+{
+  auto result = Asset{};
+  const auto stored = session.store().findAsset(assetId);
+  if (stored.is_error())
+  {
+    return std::get<Error>(stored.error());
+  }
+  if (!stored.value())
+  {
+    return Error{"The project resource no longer exists."};
+  }
+  const auto& entry = *stored.value();
+  auto original = session.store().readAsset(assetId, project::ContentKind::Original);
+  auto compatible = session.store().readAsset(assetId, project::ContentKind::Compatible);
+  if (original.is_error())
+  {
+    return std::get<Error>(original.error());
+  }
+  if (compatible.is_error())
+  {
+    return std::get<Error>(compatible.error());
+  }
+
+  result.source = QObject::tr(browserSourceName(BrowserSource::Project));
+  result.original = std::move(original).value();
+  result.compatible = std::move(compatible).value();
+  result.recipe = QString::fromStdString(entry.conversionRecipe);
+  if (entry.type == project::AssetType::Texture && !entry.library.sourceMember.empty())
+  {
+    result.nativeFormat = "goldsrc-miptex";
+  }
+  result.name = QString::fromStdString(entry.displayName);
+  result.identity = QString::fromStdString(
+    session.store().info().id + "/" + assetId + "/" + std::to_string(entry.revision));
+  result.resource.source = BrowserSource::Project;
+  result.resource.projectId = session.store().info().id;
+  result.resource.assetId = assetId;
+  result.resource.projectAssetId = assetId;
+  result.resource.displayName = entry.displayName;
+  result.resource.revision = entry.revision;
+  result.resource.libraryId = entry.library.libraryId;
+  result.resource.libraryAssetId = entry.library.libraryAssetId;
+  result.resource.libraryRevision = entry.library.libraryRevision;
+  result.resource.path = entry.publishPath;
+  result.resource.type = assetTypeForExtension(entry.publishPath);
+  if (entry.type == project::AssetType::Texture)
+  {
+    result.resource.type = BrowserCellType::Texture;
+  }
+  result.resource.skybox = entry.type == project::AssetType::Skybox;
+  if (result.resource.skybox)
+  {
+    result.resource.type = BrowserCellType::Texture;
+    const auto dependencies = session.store().dependencies(assetId);
+    if (dependencies.is_success())
+    {
+      for (const auto& edge : dependencies.value())
+      {
+        if (edge.kind != "skybox-face")
+        {
+          continue;
+        }
+        const auto face = session.store().findAsset(edge.dependencyId);
+        if (face.is_success() && face.value())
+        {
+          addSkyFace(
+            result,
+            face.value()->sourceName,
+            session.store().readAsset(edge.dependencyId, project::ContentKind::Original));
+        }
+      }
+    }
+    checkSky(result);
+  }
+  if (result.resource.type == BrowserCellType::Model)
+  {
+    readProjectStudioExternal(session, assetId, result);
+  }
+  const auto file = session.assetFile(entry);
+  if (file.is_success())
+  {
+    result.resource.absolutePath = file.value();
+  }
+  if (result.resource.type == BrowserCellType::Prefab)
+  {
+    inspectPrefab(result, &session);
+  }
+  return result;
+}
+
 Result<Asset> readBrowserAsset(
   const BrowserAsset& asset, ProjectSession* session, MapDocument& document)
 {
@@ -588,87 +677,32 @@ Result<Asset> readBrowserAsset(
     if (!session || asset.projectId != session->store().info().id)
       return Error{"The resource belongs to another project."};
     const auto id = asset.projectAssetId.empty() ? asset.assetId : asset.projectAssetId;
-    const auto stored = session->store().findAsset(id);
-    if (stored.is_error())
-      return std::get<Error>(stored.error());
-    if (!stored.value())
-      return Error{"The project resource no longer exists."};
-    const auto& entry = *stored.value();
-    auto original = session->store().readAsset(id, project::ContentKind::Original);
-    auto compatible = session->store().readAsset(id, project::ContentKind::Compatible);
-    if (original.is_error())
-      return std::get<Error>(original.error());
-    if (compatible.is_error())
-      return std::get<Error>(compatible.error());
-    result.original = std::move(original).value();
-    result.compatible = std::move(compatible).value();
-    result.recipe = QString::fromStdString(entry.conversionRecipe);
-    if (entry.type == project::AssetType::Texture && !entry.library.sourceMember.empty())
-      result.nativeFormat = "goldsrc-miptex";
-    result.name = QString::fromStdString(entry.displayName);
-    result.identity = QString::fromStdString(
-      asset.projectId + "/" + id + "/" + std::to_string(entry.revision));
-    result.resource.revision = entry.revision;
-    result.resource.assetId = id;
-    result.resource.projectAssetId = id;
-    result.resource.libraryId = entry.library.libraryId;
-    result.resource.libraryAssetId = entry.library.libraryAssetId;
-    result.resource.libraryRevision = entry.library.libraryRevision;
-    result.resource.path = entry.publishPath;
-    result.resource.type = assetTypeForExtension(entry.publishPath);
-    if (entry.type == project::AssetType::Texture)
-      result.resource.type = BrowserCellType::Texture;
-    result.resource.skybox = entry.type == project::AssetType::Skybox;
-    if (result.resource.skybox)
-    {
-      result.resource.type = BrowserCellType::Texture;
-      const auto dependencies = session->store().dependencies(id);
-      if (dependencies.is_success())
-        for (const auto& edge : dependencies.value())
-          if (edge.kind == "skybox-face")
-          {
-            const auto face = session->store().findAsset(edge.dependencyId);
-            if (face.is_success() && face.value())
-              addSkyFace(
-                result,
-                face.value()->sourceName,
-                session->store().readAsset(
-                  edge.dependencyId, project::ContentKind::Original));
-          }
-      checkSky(result);
-    }
-    if (result.resource.type == BrowserCellType::Model)
-      readProjectStudioExternal(*session, id, result);
-    const auto file = session->assetFile(entry);
-    if (file.is_success())
-      result.resource.absolutePath = file.value();
+    return readProjectAsset(*session, id);
+  }
+  const auto path = asset.absolutePath.empty() ? asset.path : asset.absolutePath;
+  if (path.is_absolute())
+  {
+    auto file = QFile{pathAsQString(path)};
+    if (!file.open(QIODevice::ReadOnly))
+      return Error{file.errorString().toStdString()};
+    const auto bytes = file.readAll();
+    if (file.error() != QFileDevice::NoError)
+      return Error{file.errorString().toStdString()};
+    result.original.assign(bytes.begin(), bytes.end());
   }
   else
   {
-    const auto path = asset.absolutePath.empty() ? asset.path : asset.absolutePath;
-    if (path.is_absolute())
-    {
-      auto file = QFile{pathAsQString(path)};
-      if (!file.open(QIODevice::ReadOnly))
-        return Error{file.errorString().toStdString()};
-      const auto bytes = file.readAll();
-      if (file.error() != QFileDevice::NoError)
-        return Error{file.errorString().toStdString()};
-      result.original.assign(bytes.begin(), bytes.end());
-    }
-    else
-    {
-      const auto file = document.map().gameFileSystem().openFile(path);
-      if (file.is_error())
-        return std::get<Error>(file.error());
-      auto reader = file.value()->reader().buffer();
-      const auto bytes = reader.stringView();
-      result.original.assign(bytes.begin(), bytes.end());
-    }
-    result.compatible = result.original;
-    result.identity = pathAsQString(path) + "/"
-                      + QString::fromStdString(project::contentHash(result.original));
+    const auto file = document.map().gameFileSystem().openFile(path);
+    if (file.is_error())
+      return std::get<Error>(file.error());
+    auto reader = file.value()->reader().buffer();
+    const auto bytes = reader.stringView();
+    result.original.assign(bytes.begin(), bytes.end());
   }
+  result.compatible = result.original;
+  result.identity = pathAsQString(path) + "/"
+                    + QString::fromStdString(project::contentHash(result.original));
+
   if (result.resource.type == BrowserCellType::Prefab)
     inspectPrefab(result, session);
   return result;
