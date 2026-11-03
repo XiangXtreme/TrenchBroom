@@ -127,9 +127,8 @@ bool LightmapAtlas::activate(gl::Gl& gl)
     m_texture->upload(gl);
   }
 
-  // The atlas must be sampled without mipmaps and clamped at its borders, otherwise
-  // neighbouring faces bleed into each other.
-  return m_texture->activate(gl, GL_NEAREST, GL_NEAREST);
+  // Blend adjacent luxels at the base level. Mipmaps could mix separate face tiles.
+  return m_texture->activate(gl, GL_LINEAR, GL_LINEAR);
 }
 
 void LightmapAtlas::deactivate(gl::Gl& gl)
