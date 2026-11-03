@@ -808,6 +808,31 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(libraryPreview.status == "image");
     CHECK(libraryPreview.width > 0);
 
+    // A contact sheet lays the same previews out with labels and a cell mapping.
+    const auto sheetSet = renderAutomationAssetSheets(
+      sandbox.session.get(),
+      {projectHits.front(), libraryHits.front()},
+      48,
+      2,
+      1,
+      previewFolder);
+    CHECK(sheetSet.count == 2u);
+    CHECK(sheetSet.columns == 2);
+    CHECK(sheetSet.rows == 1);
+    REQUIRE(sheetSet.sheets.size() == 1u);
+    const auto& sheet = sheetSet.sheets.front();
+    CHECK(sheet.cells.size() == 2u);
+    CHECK(sheet.cells.front().index == 0u);
+    CHECK(sheet.cells.front().scope == "project");
+    CHECK(sheet.cells.back().index == 1u);
+    CHECK(sheet.cells.back().scope == "library");
+    CHECK(sheet.cells.back().x == 12 + 48 + 12);
+    CHECK(sheet.width == 12 + 2 * (48 + 12));
+    CHECK(QFileInfo::exists(pathAsQString(sheet.path)));
+    const auto sheetImage = QImage{pathAsQString(sheet.path)};
+    CHECK(sheetImage.width() == sheet.width);
+    CHECK(sheetImage.height() == sheet.height);
+
     // Importing a file reuses the project window's naming and folder rules.
     const auto importPath = sandbox.root / "extra.mdl";
     writeFile(importPath, modelWithGroups(0));

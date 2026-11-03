@@ -377,6 +377,13 @@ constexpr auto AssetsSymbols = std::array{
     std::nullopt,
     PythonApiEffect::Read},
   PythonApiSymbol{
+    "sheet",
+    Function,
+    "(scope='project', query='', type=None, limit=24, size=128, columns=6, rows=4) "
+    "-> dict",
+    std::nullopt,
+    PythonApiEffect::Read},
+  PythonApiSymbol{
     "describe",
     Function,
     "(asset, scope='any') -> dict",

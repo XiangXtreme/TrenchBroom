@@ -3137,17 +3137,12 @@ py::dict assetPreviewDict(const AutomationAssetPreview& preview)
   return result;
 }
 
-py::list searchAssets(
+std::vector<AutomationAssetSummary> collectAssetSummaries(
   const std::string& query,
   const py::object& type,
   const size_t limit,
-  const std::string& scope,
-  const bool preview)
+  const std::string& scope)
 {
-  if (preview && limit > 12u)
-  {
-    throw py::value_error{"preview=True supports limit <= 12"};
-  }
   auto options = AutomationAssetQuery{};
   options.query = query;
   options.limit = limit;
@@ -3225,6 +3220,22 @@ py::list searchAssets(
     }
   }
 
+  return summaries;
+}
+
+py::list searchAssets(
+  const std::string& query,
+  const py::object& type,
+  const size_t limit,
+  const std::string& scope,
+  const bool preview)
+{
+  if (preview && limit > 12u)
+  {
+    throw py::value_error{"preview=True supports limit <= 12"};
+  }
+  const auto summaries = collectAssetSummaries(query, type, limit, scope);
+
   auto project = preview ? currentProjectSession() : std::shared_ptr<ProjectSession>{};
   const auto previewFolder =
     std::filesystem::temp_directory_path() / "trenchbroom-asset-previews";
@@ -3240,6 +3251,74 @@ py::list searchAssets(
     }
     result.append(std::move(item));
   }
+  return result;
+}
+
+py::dict assetSheet(
+  const std::string& scope,
+  const std::string& query,
+  const py::object& type,
+  const size_t limit,
+  const int size,
+  const int columns,
+  const int rows)
+{
+  if (size < 16 || size > 256)
+  {
+    throw py::value_error{"size must be between 16 and 256"};
+  }
+  if (columns < 1 || columns > 10)
+  {
+    throw py::value_error{"columns must be between 1 and 10"};
+  }
+  if (rows < 1 || rows > 8)
+  {
+    throw py::value_error{"rows must be between 1 and 8"};
+  }
+  if (limit < 1 || limit > 96)
+  {
+    throw py::value_error{"limit must be between 1 and 96"};
+  }
+
+  const auto summaries = collectAssetSummaries(query, type, limit, scope);
+  const auto folder =
+    std::filesystem::temp_directory_path() / "trenchbroom-asset-previews";
+  const auto sheets = renderAutomationAssetSheets(
+    currentProjectSession().get(), summaries, size, columns, rows, folder);
+
+  auto result = py::dict{};
+  result["count"] = py::int_(sheets.count);
+  result["columns"] = sheets.columns;
+  result["rows"] = sheets.rows;
+  auto sheetList = py::list{};
+  for (const auto& sheet : sheets.sheets)
+  {
+    auto item = py::dict{};
+    item["path"] = sheet.path;
+    item["width"] = sheet.width;
+    item["height"] = sheet.height;
+    item["first_index"] = py::int_(sheet.firstIndex);
+    auto cells = py::list{};
+    for (const auto& cell : sheet.cells)
+    {
+      auto entry = py::dict{};
+      entry["index"] = py::int_(cell.index);
+      entry["scope"] = cell.scope;
+      entry["id"] = cell.id;
+      entry["display_name"] = cell.displayName;
+      entry["type"] = cell.type;
+      entry["status"] = cell.status;
+      entry["message"] = cell.message;
+      entry["x"] = cell.x;
+      entry["y"] = cell.y;
+      entry["width"] = cell.width;
+      entry["height"] = cell.height;
+      cells.append(std::move(entry));
+    }
+    item["cells"] = std::move(cells);
+    sheetList.append(std::move(item));
+  }
+  result["sheets"] = std::move(sheetList);
   return result;
 }
 
@@ -3317,9 +3396,9 @@ py::dict describeAsset(const std::string& asset, const std::string& scope)
 
 py::dict previewAsset(const std::string& asset, const std::string& scope, const int size)
 {
-  if (size < 16 || size > 1024)
+  if (size < 16 || size > 256)
   {
-    throw py::value_error{"size must be between 16 and 1024"};
+    throw py::value_error{"size must be between 16 and 256"};
   }
   const auto normalized = lowerCaseAssetScope(scope);
   if (
@@ -6438,6 +6517,16 @@ void defineModule(py::module_& module)
     py::arg("asset"),
     py::arg("scope") = "any",
     py::arg("size") = 128);
+  assets.def(
+    "sheet",
+    assetSheet,
+    py::arg("scope") = "project",
+    py::arg("query") = "",
+    py::arg("type") = py::none(),
+    py::arg("limit") = 24,
+    py::arg("size") = 128,
+    py::arg("columns") = 6,
+    py::arg("rows") = 4);
   assets.def(
     "capture", captureAsset, py::arg("library_asset_id"), py::arg("library_id") = "");
   assets.def(

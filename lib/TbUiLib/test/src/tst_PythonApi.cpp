@@ -228,6 +228,21 @@ try:
     raise AssertionError("asset search preview accepted a large limit")
 except ValueError:
     pass
+try:
+    tb.assets.sheet(scope="project")
+    raise AssertionError("asset sheet worked without a project")
+except RuntimeError:
+    pass
+try:
+    tb.assets.sheet(size=8)
+    raise AssertionError("asset sheet accepted an invalid size")
+except ValueError:
+    pass
+try:
+    tb.assets.sheet(columns=99)
+    raise AssertionError("asset sheet accepted too many columns")
+except ValueError:
+    pass
 assert isinstance(tb.actions.list(), list)
 validation = tb.validation.check()
 assert validation["valid"] == (validation["total_count"] == 0)
