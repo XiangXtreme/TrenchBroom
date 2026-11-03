@@ -207,27 +207,30 @@ void CyclingMapView::updateChrome()
   const auto spacing =
     std::max(1, style()->pixelMetric(QStyle::PM_LayoutHorizontalSpacing, nullptr, this));
   constexpr auto GripWidth = 18;
-  const auto left = inset + GripWidth;
-  const auto available = width() - 2 * left;
+  const auto cornerInset = GripWidth + inset;
+  const auto availableWidth = width() - 2 * cornerInset;
+  const auto availableHeight = height() - cornerInset - inset;
   const auto is3D = viewType() == View_3D;
   const auto lightmapSize = m_lightmapButton->sizeHint();
   const auto lightmapWidth = is3D ? spacing + lightmapSize.width() : 0;
   m_viewButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-  if (m_viewButton->sizeHint().width() + lightmapWidth > available)
+  if (m_viewButton->sizeHint().width() + lightmapWidth > availableWidth)
     m_viewButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
   const auto viewSize = m_viewButton->sizeHint();
-  const auto showSelector = !window()->isFullScreen() && available >= viewSize.width()
-                            && height() >= viewSize.height() + 2 * inset;
+  const auto showSelector = !window()->isFullScreen()
+                            && availableWidth >= viewSize.width()
+                            && availableHeight >= viewSize.height();
   const auto showLightmap = showSelector && is3D
-                            && available >= viewSize.width() + lightmapWidth
-                            && height() >= lightmapSize.height() + 2 * inset;
+                            && availableWidth >= viewSize.width() + lightmapWidth
+                            && availableHeight >= lightmapSize.height();
   const auto rowHeight =
     showLightmap ? std::max(viewSize.height(), lightmapSize.height()) : viewSize.height();
-  m_viewButton->resize(viewSize);
-  m_viewButton->move(left, inset + (rowHeight - viewSize.height()) / 2);
-  m_lightmapButton->resize(lightmapSize);
-  m_lightmapButton->move(
-    left + viewSize.width() + spacing, inset + (rowHeight - lightmapSize.height()) / 2);
+  m_viewButton->setGeometry(cornerInset, cornerInset, viewSize.width(), rowHeight);
+  m_lightmapButton->setGeometry(
+    cornerInset + viewSize.width() + spacing,
+    cornerInset,
+    lightmapSize.width(),
+    rowHeight);
   m_viewButton->setVisible(showSelector);
   m_lightmapButton->setVisible(showLightmap);
 }

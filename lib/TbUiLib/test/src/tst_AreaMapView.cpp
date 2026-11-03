@@ -30,7 +30,6 @@
 #include "ui/SwitchableMapViewContainer.h"
 
 #include <algorithm>
-#include <cstdlib>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -85,9 +84,10 @@ TEST_CASE("AreaMapView")
     REQUIRE(button);
     CHECK_FALSE(button->isHidden());
     CHECK_FALSE(button->isChecked());
+    CHECK(selector->x() == selector->y());
     CHECK(button->x() > selector->geometry().right());
-    CHECK(
-      std::abs(button->geometry().center().y() - selector->geometry().center().y()) <= 1);
+    CHECK(button->y() == selector->y());
+    CHECK(button->height() == selector->height());
 
     REQUIRE(layout->splitArea(original, Qt::Horizontal));
     auto* second = layout->areas().back();
