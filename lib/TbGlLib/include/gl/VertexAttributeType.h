@@ -234,12 +234,58 @@ public:
   deleteCopyAndMove(GLVertexAttributeUvCoord0);
 };
 
+/**
+ * Vertex UV coordinate (1) attribute types. Uses the second texture coordinate
+ * unit, which the face shader reads as gl_MultiTexCoord1; it carries the
+ * lightmap sample position for brush faces.
+ *
+ * @tparam D the vertex component type
+ * @tparam S the number of components
+ */
+template <GLenum D, size_t S>
+class GLVertexAttributeUvCoord1
+{
+public:
+  using ComponentType = typename GLType<D>::Type;
+  using ElementType = vm::vec<ComponentType, S>;
+  static const size_t Size = sizeof(ElementType);
+
+  static void setup(
+    Gl& gl,
+    ShaderProgram& /* program */,
+    const size_t /* index */,
+    const size_t stride,
+    const size_t offset)
+  {
+    gl.clientActiveTexture(GL_TEXTURE1);
+    gl.enableClientState(GL_TEXTURE_COORD_ARRAY);
+    gl.texCoordPointer(
+      static_cast<GLint>(S),
+      D,
+      static_cast<GLsizei>(stride),
+      reinterpret_cast<GLvoid*>(offset));
+  }
+
+  static void cleanup(Gl& gl, ShaderProgram& /* program */, const size_t /* index */)
+  {
+    gl.clientActiveTexture(GL_TEXTURE1);
+    gl.disableClientState(GL_TEXTURE_COORD_ARRAY);
+    // Leave unit 0 selected for the code that follows.
+    gl.clientActiveTexture(GL_TEXTURE0);
+  }
+
+  // Non-instantiable
+  GLVertexAttributeUvCoord1() = delete;
+  deleteCopyAndMove(GLVertexAttributeUvCoord1);
+};
+
 namespace VertexAttributeTypes
 {
 using P2 = GLVertexAttributePosition<GL_FLOAT, 2>;
 using P3 = GLVertexAttributePosition<GL_FLOAT, 3>;
 using N = GLVertexAttributeNormal<GL_FLOAT, 3>;
 using Uv02 = GLVertexAttributeUvCoord0<GL_FLOAT, 2>;
+using Uv12 = GLVertexAttributeUvCoord1<GL_FLOAT, 2>;
 using C4 = GLVertexAttributeColor<GL_FLOAT, 4>;
 } // namespace VertexAttributeTypes
 

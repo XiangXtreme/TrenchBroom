@@ -27,6 +27,7 @@ varying vec4 modelCoordinates;
 varying vec3 modelNormal;
 varying vec4 faceColor;
 varying vec3 viewVector;
+varying vec2 lightmapUv;
 
 void main(void)
 {
@@ -37,4 +38,6 @@ void main(void)
   modelNormal = gl_Normal;
   faceColor = Color;
   viewVector = CameraPosition - gl_Vertex.xyz;
+  // Lightmap sample position, interpolated across the face.
+  lightmapUv = gl_MultiTexCoord1.st;
 }

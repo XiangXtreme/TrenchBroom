@@ -436,6 +436,7 @@ inline auto FaceRenderMode =
   Preference<std::string>{"Map view/Face render mode", FaceRenderModeTextured};
 
 inline auto ShadeFaces = Preference<bool>{"Map view/Shade faces", true};
+inline auto ShowLightmap = Preference<bool>{"Map view/Show lightmap", false};
 inline auto ShowFog = Preference<bool>{"Map view/Show fog", false};
 inline auto ShowEdges = Preference<bool>{"Map view/Show edges", true};
 inline auto UseReadable2DBrushOutlines =

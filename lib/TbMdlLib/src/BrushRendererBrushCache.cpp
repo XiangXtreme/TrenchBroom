@@ -100,7 +100,11 @@ void BrushRendererBrushCache::validateVertexCache(const mdl::BrushNode& brushNod
         (vm::vec2f{float(vm::dot(position, uAxis)), float(vm::dot(position, vAxis))}
          + uvAttributes.offset)
         / textureSize;
-      m_cachedVertices.emplace_back(vm::vec3f{position}, normal, uv);
+      // The lightmap sample position is supplied by the renderer, which owns the
+      // atlas; until then the vertex points at the middle of the atlas so that a
+      // placeholder texture samples uniformly.
+      m_cachedVertices.emplace_back(
+        vm::vec3f{position}, normal, uv, vm::vec2f{0.5f, 0.5f});
     }
 
     // face cache

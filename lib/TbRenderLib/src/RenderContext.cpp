@@ -231,6 +231,26 @@ void RenderContext::setShowFog(const bool showFog)
   m_showFog = showFog;
 }
 
+bool RenderContext::showLightmap() const
+{
+  return m_showLightmap;
+}
+
+void RenderContext::setShowLightmap(const bool showLightmap)
+{
+  m_showLightmap = showLightmap;
+}
+
+LightmapAtlas* RenderContext::lightmapAtlas() const
+{
+  return m_lightmapAtlas;
+}
+
+void RenderContext::setLightmapAtlas(LightmapAtlas* lightmapAtlas)
+{
+  m_lightmapAtlas = lightmapAtlas;
+}
+
 bool RenderContext::showGrid() const
 {
   return m_showGrid;

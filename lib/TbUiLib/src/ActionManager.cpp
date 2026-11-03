@@ -794,6 +794,14 @@ void ActionManager::createViewActions()
     [](const auto& context) { return context.hasDocument(); },
   });
   addAction(Action{
+    std::filesystem::path{"Controls/Map view/View Filter > Show lightmap"},
+    "Toggle Show Lightmap",
+    ActionContext::Any,
+    KeySequence{},
+    [](auto& context) { context.mapView().toggleShowLightmap(); },
+    [](const auto& context) { return context.hasDocument(); },
+  });
+  addAction(Action{
     std::filesystem::path{"Controls/Map view/View Filter > Use fog"},
     "Toggle Show Fog",
     ActionContext::Any,

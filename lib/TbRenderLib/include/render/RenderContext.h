@@ -44,6 +44,8 @@ enum class RenderMode
   Render2D
 };
 
+class LightmapAtlas;
+
 class RenderContext
 {
 private:
@@ -81,6 +83,8 @@ private:
   bool m_showPointEntityBounds = true;
 
   bool m_showFog = false;
+  bool m_showLightmap = false;
+  LightmapAtlas* m_lightmapAtlas = nullptr;
   bool m_goldSrcRendering = false;
   bool m_animationRequested = false;
   double m_animationTime = 0.0;
@@ -158,6 +162,19 @@ public:
 
   bool showFog() const;
   void setShowFog(bool showFog);
+
+  /**
+   * Whether brush faces are lit by the lightmap atlas.
+   */
+  bool showLightmap() const;
+  void setShowLightmap(bool showLightmap);
+
+  /**
+   * The atlas brush faces sample their lightmap from; may be null, in which case faces
+   * render unlit.
+   */
+  LightmapAtlas* lightmapAtlas() const;
+  void setLightmapAtlas(LightmapAtlas* lightmapAtlas);
 
   bool showGrid() const;
   void setShowGrid(bool showGrid);

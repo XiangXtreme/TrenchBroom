@@ -533,6 +533,7 @@ QWidget* ViewEditor::createRendererPanel(QWidget* parent)
 
   m_shadeFacesCheckBox = new QCheckBox{tr("Shade faces")};
   m_showFogCheckBox = new QCheckBox{tr("Use fog")};
+  m_showLightmapCheckBox = new QCheckBox{tr("Show lightmap")};
   m_showEdgesCheckBox = new QCheckBox{tr("Show edges")};
   m_showFPSCheckBox = new QCheckBox{tr("Show FPS")};
   m_showSkyCheckBox = new QCheckBox{tr("Show 3D sky")};
@@ -570,6 +571,11 @@ QWidget* ViewEditor::createRendererPanel(QWidget* parent)
     &ViewEditor::shadeFacesChanged);
   connect(
     m_showFogCheckBox, &QAbstractButton::clicked, this, &ViewEditor::showFogChanged);
+  connect(
+    m_showLightmapCheckBox,
+    &QAbstractButton::clicked,
+    this,
+    &ViewEditor::showLightmapChanged);
   connect(
     m_showEdgesCheckBox, &QAbstractButton::clicked, this, &ViewEditor::showEdgesChanged);
   connect(
@@ -615,6 +621,7 @@ QWidget* ViewEditor::createRendererPanel(QWidget* parent)
 
   layout->addWidget(m_shadeFacesCheckBox);
   layout->addWidget(m_showFogCheckBox);
+  layout->addWidget(m_showLightmapCheckBox);
   layout->addWidget(m_showEdgesCheckBox);
   layout->addWidget(m_showFPSCheckBox);
   layout->addWidget(m_showSkyCheckBox);
@@ -688,6 +695,7 @@ void ViewEditor::refreshRendererPanel()
     true);
   m_shadeFacesCheckBox->setChecked(pref(Preferences::ShadeFaces));
   m_showFogCheckBox->setChecked(pref(Preferences::ShowFog));
+  m_showLightmapCheckBox->setChecked(pref(Preferences::ShowLightmap));
   m_showEdgesCheckBox->setChecked(pref(Preferences::ShowEdges));
   m_showFPSCheckBox->setChecked(pref(Preferences::ShowFPS));
   m_showSkyCheckBox->setChecked(pref(Preferences::ShowSky));
@@ -784,6 +792,11 @@ void ViewEditor::shadeFacesChanged(const bool checked)
 void ViewEditor::showFogChanged(const bool checked)
 {
   setPref(Preferences::ShowFog, checked);
+}
+
+void ViewEditor::showLightmapChanged(const bool checked)
+{
+  setPref(Preferences::ShowLightmap, checked);
 }
 
 void ViewEditor::showEdgesChanged(const bool checked)

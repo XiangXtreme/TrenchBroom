@@ -20,6 +20,7 @@
 #pragma once
 
 #include "base/NotifierConnection.h"
+#include "render/LightmapAtlas.h"
 #include "ui/ActionContext.h"
 #include "ui/CameraLinkHelper.h"
 #include "ui/MapDocumentActionCache.h"
@@ -103,6 +104,7 @@ protected:
 
 private:
   std::unique_ptr<render::Compass> m_compass;
+  std::unique_ptr<render::LightmapAtlas> m_lightmapAtlas;
   std::unique_ptr<render::PrimitiveRenderer> m_portalFileRenderer;
   bool m_renderingThumbnail = false;
   QTimer* m_materialAnimationTimer = nullptr;
@@ -323,6 +325,7 @@ public: // view filters
   void hideFaces();
   void toggleShadeFaces();
   void toggleShowFog();
+  void toggleShowLightmap();
   void toggleShowEdges();
   void showAllEntityLinks();
   void showTransitivelySelectedEntityLinks();

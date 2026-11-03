@@ -102,6 +102,7 @@ private:
   QButtonGroup* m_renderModeRadioGroup = nullptr;
   QCheckBox* m_shadeFacesCheckBox = nullptr;
   QCheckBox* m_showFogCheckBox = nullptr;
+  QCheckBox* m_showLightmapCheckBox = nullptr;
   QCheckBox* m_showEdgesCheckBox = nullptr;
   QCheckBox* m_showFPSCheckBox = nullptr;
   QCheckBox* m_showSkyCheckBox = nullptr;
@@ -156,6 +157,7 @@ private:
   void faceRenderModeChanged(int id);
   void shadeFacesChanged(bool checked);
   void showFogChanged(bool checked);
+  void showLightmapChanged(bool checked);
   void showEdgesChanged(bool checked);
   void showFPSChanged(bool checked);
   void showSkyChanged(bool checked);

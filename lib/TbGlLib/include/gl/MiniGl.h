@@ -281,6 +281,9 @@ using GLsizeiptr = std::intptr_t;
 #ifndef GL_TEXTURE0
 #define GL_TEXTURE0 0x84C0
 #endif
+#ifndef GL_TEXTURE1
+#define GL_TEXTURE1 0x84C1
+#endif
 #ifndef GL_TEXTURE_2D
 #define GL_TEXTURE_2D 0x0DE1
 #endif

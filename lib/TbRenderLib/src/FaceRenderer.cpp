@@ -30,6 +30,7 @@
 #include "gl/Texture.h"
 #include "prefs/Preferences.h"
 #include "render/BrushRendererArrays.h"
+#include "render/LightmapAtlas.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/RenderTiming.h"
@@ -213,6 +214,23 @@ void FaceRenderer::render(RenderContext& context)
     shader.set("CameraPosition", context.camera().position());
     shader.set("ShadeFaces", shadeFaces);
     shader.set("ShowFog", showFog);
+
+    // Lightmap sampling. The atlas gets its own texture unit so that the face material
+    // keeps unit 0; the vertex attribute carrying the sample position lives on the
+    // second texture coordinate array.
+    auto* const lightmapAtlas =
+      context.showLightmap() ? context.lightmapAtlas() : nullptr;
+    auto lightmapActive = false;
+    if (lightmapAtlas)
+    {
+      gl.activeTexture(GL_TEXTURE1);
+      gl.enable(GL_TEXTURE_2D);
+      lightmapActive = lightmapAtlas->activate(gl);
+      gl.activeTexture(GL_TEXTURE0);
+    }
+    shader.set("ApplyLightmap", lightmapActive);
+    shader.set("Lightmap", 1);
+
     shader.set("Alpha", m_alpha);
     shader.set("TexCoordOffset", vm::vec2f{});
     shader.set("EnableMasked", false);
@@ -264,6 +282,14 @@ void FaceRenderer::render(RenderContext& context)
 
     shader.set("EntityRenderMode", 0);
     shader.set("TexCoordOffset", vm::vec2f{});
+
+    if (lightmapActive)
+    {
+      gl.activeTexture(GL_TEXTURE1);
+      lightmapAtlas->deactivate(gl);
+      gl.disable(GL_TEXTURE_2D);
+      gl.activeTexture(GL_TEXTURE0);
+    }
 
     m_vertexArray->cleanup(gl, shader.program());
   }

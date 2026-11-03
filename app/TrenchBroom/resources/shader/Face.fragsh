@@ -31,6 +31,8 @@ uniform float GridSize;
 uniform float GridAlpha;
 uniform bool ShadeFaces;
 uniform bool ShowFog;
+uniform bool ApplyLightmap;
+uniform sampler2D Lightmap;
 uniform int EntityRenderMode;
 uniform float EntityAlpha;
 uniform vec3 EntityColor;
@@ -39,6 +41,7 @@ varying vec4 modelCoordinates;
 varying vec3 modelNormal;
 varying vec4 faceColor;
 varying vec3 viewVector;
+varying vec2 lightmapUv;
 
 float grid(
   vec3 coords, vec3 normal, float gridSize, float minGridSize, float lineWidthFactor);
@@ -67,6 +70,13 @@ void main()
       || (EntityRenderMode == 4 && gl_FragColor.a <= 0.25))
   {
     discard;
+  }
+
+  // Baked lighting, sampled from the lightmap atlas. An atlas without baked data is
+  // pure white, so this leaves the surface unchanged.
+  if (ApplyLightmap)
+  {
+    gl_FragColor.rgb = min(gl_FragColor.rgb * texture2D(Lightmap, lightmapUv).rgb, vec3(1.0));
   }
 
   gl_FragColor = vec4(vec3(Brightness / 2.0 * gl_FragColor), gl_FragColor.a);

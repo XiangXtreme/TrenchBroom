@@ -461,6 +461,9 @@ void PatchRenderer::renderMesh(
   shader.set("CameraPosition", context.camera().position());
   shader.set("ShadeFaces", shadeFaces);
   shader.set("ShowFog", showFog);
+  // Patches carry a single texture coordinate set, so they are never lit by a lightmap.
+  shader.set("ApplyLightmap", false);
+  shader.set("Lightmap", 1);
   shader.set("Alpha", 1.0f);
   shader.set("EnableMasked", false);
   shader.set("AlphaFuncCompare", size_t{0});

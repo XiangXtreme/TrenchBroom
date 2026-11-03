@@ -5010,6 +5010,11 @@ They may contain new features or bug fixes that are not yet part of a stable rel
             <translation>使用雾效</translation>
             </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/ViewEditor.cpp" line="536" />
+            <source>Show lightmap</source>
+            <translation>显示光照贴图</translation>
+            </message>
+        <message>
             <location filename="../../../../lib/TbUiLib/src/ViewEditor.cpp" line="488" />
             <source>Show edges</source>
             <translation>显示边线</translation>

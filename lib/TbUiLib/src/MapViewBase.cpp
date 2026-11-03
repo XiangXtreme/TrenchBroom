@@ -986,6 +986,11 @@ void MapViewBase::toggleShowFog()
   togglePref(Preferences::ShowFog);
 }
 
+void MapViewBase::toggleShowLightmap()
+{
+  togglePref(Preferences::ShowLightmap);
+}
+
 void MapViewBase::toggleShowEdges()
 {
   togglePref(Preferences::ShowEdges);
@@ -1156,6 +1161,12 @@ void MapViewBase::renderContents(gl::Gl& gl)
   renderContext.setShowBrushEntityBounds(pref(Preferences::ShowBrushEntityBounds));
   renderContext.setShowPointEntityBounds(pref(Preferences::ShowPointEntityBounds));
   renderContext.setShowFog(pref(Preferences::ShowFog));
+  renderContext.setShowLightmap(pref(Preferences::ShowLightmap));
+  if (!m_lightmapAtlas)
+  {
+    m_lightmapAtlas = std::make_unique<render::LightmapAtlas>();
+  }
+  renderContext.setLightmapAtlas(m_lightmapAtlas.get());
   renderContext.setShowGrid(grid.visible());
   renderContext.setGridSize(grid.actualSize());
   renderContext.setDpiScale(static_cast<float>(window()->devicePixelRatioF()));
