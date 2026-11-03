@@ -31,6 +31,7 @@
 
 #include "kd/path_hash.h"
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -42,7 +43,9 @@ class QCheckBox;
 class QComboBox;
 class QEvent;
 class QFileSystemWatcher;
+class QFormLayout;
 class QHBoxLayout;
+class QLabel;
 class QLineEdit;
 class QScrollBar;
 class QShowEvent;
@@ -70,8 +73,19 @@ private:
   QStackedWidget* m_pathStack = nullptr;
   QWidget* m_breadcrumbBar = nullptr;
   QHBoxLayout* m_breadcrumbLayout = nullptr;
+  QHBoxLayout* m_toolbarLayout = nullptr;
+  QToolButton* m_backButton = nullptr;
+  QToolButton* m_forwardButton = nullptr;
   QToolButton* m_savePrefabButton = nullptr;
   QToolButton* m_reloadButton = nullptr;
+  QToolButton* m_filterButton = nullptr;
+  QToolButton* m_viewButton = nullptr;
+  QWidget* m_filterPanel = nullptr;
+  QWidget* m_viewPanel = nullptr;
+  QWidget* m_metadataFilterRow = nullptr;
+  QFormLayout* m_filterLayout = nullptr;
+  QLabel* m_resultCount = nullptr;
+  QComboBox* m_searchScopeCombo = nullptr;
   QComboBox* m_sourceCombo = nullptr;
   QComboBox* m_typeCombo = nullptr;
   QComboBox* m_libraryCombo = nullptr;
@@ -116,6 +130,12 @@ private:
 
   std::filesystem::path m_folderPath;
   std::filesystem::path m_currentFolderPath;
+  // Folder navigation history behind the back and forward buttons. The breadcrumb and
+  // the folder tree replace the old ".." card, so returning to a folder needs its own
+  // affordance.
+  std::vector<std::filesystem::path> m_folderHistory;
+  std::ptrdiff_t m_folderHistoryIndex = -1;
+  bool m_navigatingHistory = false;
   std::vector<BrowserAsset> m_assets;
   AssetWriteTimes m_lastWriteTimes;
   std::unordered_map<std::filesystem::path, QTreeWidgetItem*, kdl::path_hash>
@@ -168,6 +188,15 @@ private:
   void connectMapObservers();
 
   void rebuildBreadcrumbBar();
+  bool searchAllAssets() const;
+  void updateSearchPlaceholder();
+  void refreshResultCount();
+  bool includeDefaultRootsForListing() const;
+  void updateFilterVisibility();
+  void updateFilterSummary();
+  void recordFolderHistory();
+  void updateHistoryButtons();
+  void navigateHistory(int offset);
   void showPathEditor();
   void showBreadcrumbBar();
   void updateFolderEdit();

@@ -88,24 +88,22 @@ TEST_CASE("ModelBrowserView")
       Equals(std::vector<std::string>{"crates", "monsters", "models/barrel.mdl"}));
   }
 
-  SECTION("shows parent entry and children inside a folder")
+  SECTION("shows children inside a folder without a parent card")
   {
+    // The breadcrumb and the folder tree navigate upwards, so the grid holds only the
+    // folder's own entries.
     const auto entries = modelBrowserEntries(root, assets, "crates", {});
 
     CHECK_THAT(
       entryTypes(entries),
-      Equals(std::vector<BrowserCellType>{
-        BrowserCellType::Folder,
-        BrowserCellType::Model,
-        BrowserCellType::Model,
-      }));
+      Equals(
+        std::vector<BrowserCellType>{BrowserCellType::Model, BrowserCellType::Model}));
     CHECK_THAT(
-      entryTitles(entries),
-      Equals(std::vector<std::string>{"..", "metal.mdl", "wood.mdl"}));
+      entryTitles(entries), Equals(std::vector<std::string>{"metal.mdl", "wood.mdl"}));
     CHECK_THAT(
       entryPaths(entries),
-      Equals(std::vector<std::string>{
-        "", "models/crates/metal.mdl", "models/crates/wood.mdl"}));
+      Equals(
+        std::vector<std::string>{"models/crates/metal.mdl", "models/crates/wood.mdl"}));
   }
 
   SECTION("search includes matching nested models and their containing folders")
@@ -195,13 +193,10 @@ TEST_CASE("ModelBrowserView")
     const auto entries = modelBrowserEntries(unifiedRoot, unifiedAssets, "sprites", {});
 
     CHECK_THAT(
-      entryTypes(entries),
-      Equals(
-        std::vector<BrowserCellType>{BrowserCellType::Folder, BrowserCellType::Sprite}));
+      entryTypes(entries), Equals(std::vector<BrowserCellType>{BrowserCellType::Sprite}));
+    CHECK_THAT(entryTitles(entries), Equals(std::vector<std::string>{"glow01.spr"}));
     CHECK_THAT(
-      entryTitles(entries), Equals(std::vector<std::string>{"..", "glow01.spr"}));
-    CHECK_THAT(
-      entryPaths(entries), Equals(std::vector<std::string>{"", "sprites/glow01.spr"}));
+      entryPaths(entries), Equals(std::vector<std::string>{"sprites/glow01.spr"}));
   }
 
   SECTION("shows prefab assets inside the unified prefab folder")
@@ -215,14 +210,10 @@ TEST_CASE("ModelBrowserView")
     const auto entries = modelBrowserEntries(unifiedRoot, unifiedAssets, "prefabs", {});
 
     CHECK_THAT(
-      entryTypes(entries),
-      Equals(
-        std::vector<BrowserCellType>{BrowserCellType::Folder, BrowserCellType::Prefab}));
+      entryTypes(entries), Equals(std::vector<BrowserCellType>{BrowserCellType::Prefab}));
+    CHECK_THAT(entryTitles(entries), Equals(std::vector<std::string>{"crate.tbprefab"}));
     CHECK_THAT(
-      entryTitles(entries), Equals(std::vector<std::string>{"..", "crate.tbprefab"}));
-    CHECK_THAT(
-      entryPaths(entries),
-      Equals(std::vector<std::string>{"", "prefabs/crate.tbprefab"}));
+      entryPaths(entries), Equals(std::vector<std::string>{"prefabs/crate.tbprefab"}));
   }
 
   SECTION("keeps unified listing titles free of the source")
@@ -241,14 +232,29 @@ TEST_CASE("ModelBrowserView")
     // The browser draws a badge per source, so the title stays the resource name.
     const auto entries =
       modelBrowserEntries({}, {projectAsset, libraryAsset}, "models", {}, false);
-    CHECK_THAT(
-      entryTitles(entries), Equals(std::vector<std::string>{"..", "Box", "Crate"}));
+    CHECK_THAT(entryTitles(entries), Equals(std::vector<std::string>{"Box", "Crate"}));
 
     // The source name is still searchable even though it is not part of the title.
     const auto found =
       modelBrowserEntries({}, {projectAsset, libraryAsset}, {}, "library", false);
     REQUIRE(found.size() == 2u);
     CHECK(found[1].title == "Crate");
+  }
+
+  SECTION("a whole-listing search ignores the folder being browsed")
+  {
+    // The default scope only searches below the current folder.
+    CHECK(modelBrowserEntries(root, assets, "crates", "ogre").empty());
+
+    // The whole-listing scope finds the match from any folder and keeps the path in the
+    // title so the result is placeable.
+    const auto global = modelBrowserEntries(root, assets, "crates", "ogre", true, true);
+    CHECK_THAT(
+      entryTitles(global),
+      Equals(std::vector<std::string>{"monsters", "monsters/ogre.mdl"}));
+    CHECK_THAT(
+      entryPaths(global),
+      Equals(std::vector<std::string>{"monsters", "models/monsters/ogre.mdl"}));
   }
 
   SECTION("sound preview button bounds stay inside item")

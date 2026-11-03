@@ -4,7 +4,7 @@
 
 The **Assets** tab in the bottom info panel provides one browser for game assets and reusable prefabs. For enabled GoldSrc mods it presents the `models`, `sprites`, and `sound` roots together with a user `prefabs` root. The browser recognizes `.mdl`, `.spr`, `.wav`, and `.tbprefab` files.
 
-Use the folder tree or breadcrumb row to navigate, and type in the path row when you need to enter a folder directly. The search field filters the current asset set. The thumbnail menu supports 50% through 300% sizes, and the reload button rescans enabled game and mod paths. Changes in watched asset directories are picked up automatically.
+Use the folder tree, the breadcrumb row, or the back and forward arrows to navigate; double-click the breadcrumb row to type a folder path directly. The search field states its scope: **This folder** searches inside the current folder, while **All assets** searches the whole listing. **Filters** holds the source, type, library, sound, tag, and map filters and only shows the ones that can apply to the current folder; **View** holds the thumbnail size and WAD grouping. The reload button rescans enabled game and mod paths, and changes in watched asset directories are picked up automatically.
 
 Model cells render their model preview, sprite cells render the first supported sprite frame, and selected sound cells expose a play/stop control when the platform can decode the file. A placeholder and the asset tooltip still identify files whose preview cannot be rendered.
 

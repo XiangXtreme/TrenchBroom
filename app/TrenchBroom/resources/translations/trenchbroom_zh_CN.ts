@@ -3868,6 +3868,82 @@ Map: %2</source>
             <source>No asset library</source>
             <translation>无资产库</translation>
         </message>
+        <message>
+            <source>Back</source>
+            <translation>后退</translation>
+        </message>
+        <message>
+            <source>Forward</source>
+            <translation>前进</translation>
+        </message>
+        <message>
+            <source>Search scope</source>
+            <translation>搜索范围</translation>
+        </message>
+        <message>
+            <source>This folder</source>
+            <translation>当前文件夹</translation>
+        </message>
+        <message>
+            <source>All assets</source>
+            <translation>全部资源</translation>
+        </message>
+        <message>
+            <source>Search this folder…</source>
+            <translation>搜索当前文件夹…</translation>
+        </message>
+        <message>
+            <source>Search all assets…</source>
+            <translation>搜索全部资源…</translation>
+        </message>
+        <message>
+            <source>Filters</source>
+            <translation>筛选</translation>
+        </message>
+        <message>
+            <source>Filters · %1</source>
+            <translation>筛选 · %1</translation>
+        </message>
+        <message>
+            <source>Choose which assets are listed</source>
+            <translation>选择要列出的资源</translation>
+        </message>
+        <message>
+            <source>View</source>
+            <translation>视图</translation>
+        </message>
+        <message>
+            <source>Thumbnail size and grouping</source>
+            <translation>缩略图大小与分组</translation>
+        </message>
+        <message>
+            <source>Source</source>
+            <translation>来源</translation>
+        </message>
+        <message>
+            <source>Type</source>
+            <translation>类型</translation>
+        </message>
+        <message>
+            <source>Library</source>
+            <translation>资产库</translation>
+        </message>
+        <message>
+            <source>Sound</source>
+            <translation>音效</translation>
+        </message>
+        <message>
+            <source>Tag</source>
+            <translation>标签</translation>
+        </message>
+        <message>
+            <source>1 item</source>
+            <translation>1 项</translation>
+        </message>
+        <message>
+            <source>%1 items</source>
+            <translation>%1 项</translation>
+        </message>
 </context>
     <context>
         <name>tb::ui::ModelBrowserView</name>
@@ -6267,6 +6343,11 @@ By %2</source>
             <translation>标识</translation>
             </message>
         <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="544"/>
+            <source>Type</source>
+            <translation>类型</translation>
+            </message>
+        <message>
             <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="545"/>
             <source>Path</source>
             <translation>路径</translation>
@@ -8275,6 +8356,44 @@ Removing them frees about %3. Current assets and versions are kept.</source>
         <message>
             <source>Drag to resize the tool panel</source>
             <translation>拖动以调整工具面板大小</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::AssetTypes</name>
+        <message>
+            <source>Folder</source>
+            <translation>文件夹</translation>
+        </message>
+        <message>
+            <source>Model</source>
+            <translation>模型</translation>
+        </message>
+        <message>
+            <source>Sprite</source>
+            <translation>精灵</translation>
+        </message>
+        <message>
+            <source>Sound</source>
+            <translation>声音</translation>
+        </message>
+        <message>
+            <source>Prefab</source>
+            <translation>预制件</translation>
+        </message>
+        <message>
+            <source>Map</source>
+            <translation>地图</translation>
+        </message>
+        <message>
+            <source>Texture</source>
+            <translation>纹理</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::MapStatus</name>
+        <message>
+            <source>No active map</source>
+            <translation>无活动地图</translation>
         </message>
     </context>
 </TS>

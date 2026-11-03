@@ -87,6 +87,7 @@ private:
   std::vector<BrowserAsset> m_assets;
   std::filesystem::path m_currentFolderPath;
   QString m_searchText;
+  bool m_searchAllAssets = false;
 
   NotifierConnection m_notifierConnection;
   QImage m_folderIconImage;
@@ -141,6 +142,8 @@ public:
   const std::vector<BrowserAsset>& assets() const { return m_assets; }
   void setCurrentFolderPath(std::filesystem::path currentFolderPath);
   void setSearchText(QString searchText);
+  /** Widens the active search from the current folder to the whole listing. */
+  void setSearchAllAssets(bool searchAllAssets);
   void setIncludeDefaultRoots(bool includeDefaultRoots);
   void setShowSourceMarkers(bool showSourceMarkers);
   void setPreviewOnly(bool previewOnly);
@@ -189,6 +192,7 @@ private:
     gl::Gl& gl, const std::filesystem::path& path, const GoldSrcSpritePreview& preview);
 
   void renderAssetCards(gl::Gl& gl, Layout& layout, float y, float height);
+  void renderPreviewBackgrounds(gl::Gl& gl, Layout& layout, float y, float height);
   void renderFolders(gl::Gl& gl, Layout& layout, float y, float height);
   void renderModels(
     gl::Gl& gl,

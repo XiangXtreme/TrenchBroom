@@ -541,8 +541,9 @@ void AssetInspector::setAsset(Result<inspection::Asset> asset)
     auto* item = new QTreeWidgetItem{m_details, {key, value}};
     item->setToolTip(1, value);
   };
-  add(tr("Identity"), m_asset->identity);
+  add(tr("Type"), browserCellTypeDisplayName(m_asset->resource.type));
   add(tr("Path"), pathAsQString(m_asset->resource.path));
+  add(tr("Identity"), m_asset->identity);
   add(tr("Conversion recipe"), m_asset->recipe);
   add(tr("Original bytes"), QString::number(qulonglong(m_asset->original.size())));
   add(tr("Compatible bytes"), QString::number(qulonglong(m_asset->compatible.size())));

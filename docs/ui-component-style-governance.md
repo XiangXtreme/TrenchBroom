@@ -67,6 +67,10 @@ remain related to the default control.
   document command.
 - `outlined`: an icon command whose persistent boundary communicates a mode or selectable
   tool outside a toolbar. It is not a general-purpose way to make one button look stronger.
+- `chip`: a labelled command with an icon used inside a toolbar when the word is part of
+  understanding the control, for example a filter or view disclosure whose popover has no
+  other label. The persistent border and 8 px horizontal padding keep the icon and label
+  legible; height and state treatment stay those of the standard command.
 
 - `overlay`: a control above an image or OpenGL canvas. An opaque themed surface
   keeps its label legible independently of the rendered content; persistent borders

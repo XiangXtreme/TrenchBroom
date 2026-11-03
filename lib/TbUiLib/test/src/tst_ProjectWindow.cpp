@@ -921,6 +921,58 @@ TEST_CASE("ProjectWindow")
     CHECK(search->text() == "all resources");
   }
 
+
+  SECTION(
+    "content browser states the search scope and keeps filters apart from view settings")
+  {
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
+    auto* scope = browser->findChild<QComboBox*>("ModelBrowser_SearchScope");
+    auto* filters = browser->findChild<QToolButton*>("ModelBrowser_FiltersButton");
+    auto* viewSettings = browser->findChild<QToolButton*>("ModelBrowser_ViewButton");
+    auto* filterPanel = browser->findChild<QWidget*>("ModelBrowser_FilterPanel");
+    auto* viewPanel = browser->findChild<QWidget*>("ModelBrowser_ViewPanel");
+    auto* count = browser->findChild<QLabel*>("ModelBrowser_ResultCount");
+    auto* back = browser->findChild<QToolButton*>("ModelBrowser_Back");
+    auto* forward = browser->findChild<QToolButton*>("ModelBrowser_Forward");
+    REQUIRE(search);
+    REQUIRE(scope);
+    REQUIRE(filters);
+    REQUIRE(viewSettings);
+    REQUIRE(filterPanel);
+    REQUIRE(viewPanel);
+    REQUIRE(count);
+    REQUIRE(back);
+    REQUIRE(forward);
+
+    // The scope is readable before anything is typed, and switching it restates the
+    // placeholder instead of leaving the old promise in place.
+    CHECK_FALSE(scope->currentData().toBool());
+    CHECK(
+      search->placeholderText().contains(QStringLiteral("folder"), Qt::CaseInsensitive));
+    scope->setCurrentIndex(scope->findData(true));
+    CHECK(search->placeholderText().contains(QStringLiteral("all"), Qt::CaseInsensitive));
+
+    // Filters and view settings are different jobs, so they never open together.
+    CHECK(filterPanel->isHidden());
+    CHECK(viewPanel->isHidden());
+    filters->click();
+    CHECK_FALSE(filterPanel->isHidden());
+    viewSettings->click();
+    CHECK(filterPanel->isHidden());
+    CHECK_FALSE(viewPanel->isHidden());
+    viewSettings->click();
+    CHECK(viewPanel->isHidden());
+
+    // A listing's size is stated, and history starts empty because the breadcrumb and the
+    // folder tree own navigation now.
+    CHECK_FALSE(count->text().isEmpty());
+    CHECK_FALSE(back->isEnabled());
+    CHECK_FALSE(forward->isEnabled());
+  }
+
   SECTION("content browser restores folder and scrolling after a type or map switch")
   {
     for (auto i = 0; i < 60; ++i)

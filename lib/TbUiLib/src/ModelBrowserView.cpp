@@ -84,6 +84,7 @@
 #include "vm/vec.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <ranges>
 #include <set>
@@ -359,6 +360,18 @@ void ModelBrowserView::setSearchText(QString searchText)
   update();
 }
 
+void ModelBrowserView::setSearchAllAssets(const bool searchAllAssets)
+{
+  if (m_searchAllAssets == searchAllAssets)
+  {
+    return;
+  }
+
+  m_searchAllAssets = searchAllAssets;
+  invalidate();
+  update();
+}
+
 void ModelBrowserView::resourcesWereProcessed(const std::vector<mdl::ResourceId>&)
 {
   stopSoundPreview();
@@ -391,7 +404,8 @@ void ModelBrowserView::doReloadLayout(Layout& layout)
          m_assets,
          m_currentFolderPath,
          m_searchText,
-         m_includeDefaultRoots))
+         m_includeDefaultRoots,
+         m_searchAllAssets))
   {
     if (m_previewOnly && entry.cellData.type == BrowserCellType::Folder)
       continue;
@@ -422,6 +436,7 @@ void ModelBrowserView::doRender(
     vm::view_matrix(vm::vec3f{0, 0, -1}, vm::vec3f{0, 1, 0})
       * vm::translation_matrix(vm::vec3f{0.0f, 0.0f, 0.1f})};
   renderAssetCards(gl, layout, y, height);
+  renderPreviewBackgrounds(gl, layout, y, height);
   renderFolders(gl, layout, y, height);
   renderAssetPlaceholders(gl, layout, y, height);
   renderSoundPreviewButtons(gl, layout, y, height);
@@ -1766,6 +1781,96 @@ void ModelBrowserView::renderAssetCards(
   gl.enable(GL_CULL_FACE);
 }
 
+void ModelBrowserView::renderPreviewBackgrounds(
+  gl::Gl& gl, Layout& layout, const float y, const float height)
+{
+  using Vertex = gl::VertexTypes::P2C4::Vertex;
+
+  const auto evenColor = fromQColor(palette().color(QPalette::Base)).to<RgbaF>().toVec();
+  const auto oddColor =
+    fromQColor(palette().color(QPalette::AlternateBase)).to<RgbaF>().toVec();
+
+  // A checkerboard says "this preview is transparent" without making the image itself
+  // unreadable. It is only drawn below image previews; models, maps and sounds keep the
+  // plain card surface.
+  constexpr auto CheckerSize = 9.0f;
+  constexpr auto Inset = 3.0f;
+
+  auto vertices = std::vector<Vertex>{};
+  for (const auto& group : layout.groups())
+  {
+    if (!group.intersectsY(y, height))
+    {
+      continue;
+    }
+
+    for (const auto& row : group.rows())
+    {
+      if (!row.intersectsY(y, height))
+      {
+        continue;
+      }
+
+      for (const auto& cell : row.cells())
+      {
+        if (!canRenderImagePreview(cellData(cell).type))
+        {
+          continue;
+        }
+
+        const auto& bounds = cell.itemBounds();
+        const auto left = bounds.left() + Inset;
+        const auto top = bounds.top() + Inset;
+        const auto right = bounds.right() - Inset;
+        const auto bottom = bounds.bottom() - Inset;
+        if (right <= left || bottom <= top)
+        {
+          continue;
+        }
+
+        const auto columns = size_t(std::ceil((right - left) / CheckerSize));
+        const auto rows = size_t(std::ceil((bottom - top) / CheckerSize));
+        for (auto rowIndex = size_t{0}; rowIndex < rows; ++rowIndex)
+        {
+          for (auto columnIndex = size_t{0}; columnIndex < columns; ++columnIndex)
+          {
+            const auto squareLeft = left + float(columnIndex) * CheckerSize;
+            const auto squareTop = top + float(rowIndex) * CheckerSize;
+            const auto squareRight = std::min(squareLeft + CheckerSize, right);
+            const auto squareBottom = std::min(squareTop + CheckerSize, bottom);
+            const auto& color =
+              ((rowIndex + columnIndex) % 2 == 0) ? evenColor : oddColor;
+            vertices.emplace_back(vm::vec2f{squareLeft, height - (squareTop - y)}, color);
+            vertices.emplace_back(
+              vm::vec2f{squareLeft, height - (squareBottom - y)}, color);
+            vertices.emplace_back(
+              vm::vec2f{squareRight, height - (squareBottom - y)}, color);
+            vertices.emplace_back(
+              vm::vec2f{squareRight, height - (squareTop - y)}, color);
+          }
+        }
+      }
+    }
+  }
+
+  if (vertices.empty())
+  {
+    return;
+  }
+
+  auto shader =
+    gl::ActiveShader{gl, shaderManager(), gl::Shaders::MaterialBrowserBorderShader};
+  auto vertexArray = gl::VertexArray::move(std::move(vertices));
+  vertexArray.prepare(gl, vboManager());
+  gl.disable(GL_CULL_FACE);
+  if (vertexArray.setup(gl, shader.program()))
+  {
+    vertexArray.render(gl, gl::PrimType::Quads);
+    vertexArray.cleanup(gl, shader.program());
+  }
+  gl.enable(GL_CULL_FACE);
+}
+
 void ModelBrowserView::renderFolders(
   gl::Gl& gl, Layout& layout, const float y, const float height)
 {
@@ -2034,6 +2139,12 @@ QString ModelBrowserView::tooltip(const Cell& cell)
   }
   if (const auto* asset = assetAt(item.path))
   {
+    // The type and the source explain the card's bottom marker and source badge, so
+    // neither has to be guessed from a colour.
+    auto text = QString{"%1\n%2 · %3"}
+                  .arg(QString::fromStdString(item.path.generic_string()))
+                  .arg(browserCellTypeDisplayName(asset->type))
+                  .arg(QObject::tr(browserSourceName(asset->source)));
     auto status = browserAssetStatus(*asset);
     if (const auto* preview = assetPreview(item.path); preview)
     {
@@ -2046,11 +2157,9 @@ QString ModelBrowserView::tooltip(const Cell& cell)
     }
     if (!status.isEmpty())
     {
-      return QString{"%1\n%2 — %3"}
-        .arg(QString::fromStdString(item.path.generic_string()))
-        .arg(QObject::tr(browserSourceName(asset->source)))
-        .arg(status);
+      text += QString{"\n"} + status;
     }
+    return text;
   }
   return QString::fromStdString(item.path.generic_string());
 }

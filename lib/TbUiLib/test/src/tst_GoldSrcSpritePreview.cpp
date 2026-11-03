@@ -172,6 +172,19 @@ TEST_CASE("GoldSrcSpritePreview")
     CHECK(preview->rgba[7] == 0u);
   }
 
+  SECTION("uses brightness as alpha and keys index 255 for additive sprites")
+  {
+    const auto data = makeSingleFrameSprite(AlphaType::Additive, 2, 1, {1, 255});
+
+    const auto preview = loadGoldSrcSpritePreview(data);
+
+    REQUIRE(preview.has_value());
+    // Index 1 is rgb(1, 254, 2), so the additive contribution is its brightness; index
+    // 255 is the GoldSrc colour key and stays fully transparent.
+    CHECK(preview->rgba[3] == 86u);
+    CHECK(preview->rgba[7] == 0u);
+  }
+
   SECTION("decodes first frame in a group")
   {
     auto data = std::vector<std::uint8_t>{};

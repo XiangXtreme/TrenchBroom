@@ -19,6 +19,7 @@
 
 #include "ui/AssetBrowserModel.h"
 
+#include <QCoreApplication>
 #include <QObject>
 
 #include "base/Macros.h"
@@ -173,6 +174,33 @@ const char* browserSourceName(const BrowserSource source)
     return "Asset library";
   }
   return "Unknown";
+}
+
+const char* browserCellTypeName(const BrowserCellType type)
+{
+  switch (type)
+  {
+  case BrowserCellType::Folder:
+    return "Folder";
+  case BrowserCellType::Model:
+    return "Model";
+  case BrowserCellType::Sprite:
+    return "Sprite";
+  case BrowserCellType::Sound:
+    return "Sound";
+  case BrowserCellType::Prefab:
+    return "Prefab";
+  case BrowserCellType::Map:
+    return "Map";
+  case BrowserCellType::Texture:
+    return "Texture";
+  }
+  return "Unknown";
+}
+
+QString browserCellTypeDisplayName(const BrowserCellType type)
+{
+  return QCoreApplication::translate("tb::ui::AssetTypes", browserCellTypeName(type));
 }
 
 bool browserFilterIncludesSource(
@@ -584,7 +612,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const std::vector<BrowserAsset>& assets,
   const std::filesystem::path& currentFolderPath,
   const QString& searchText,
-  const bool includeDefaultRoots)
+  const bool includeDefaultRoots,
+  const bool searchAllAssets)
 {
   const auto trimmedSearchText = searchText.trimmed();
   const auto hasSearch = !trimmedSearchText.isEmpty();
@@ -595,6 +624,13 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
 
   auto normalizedCurrentFolderPath = currentFolderPath.lexically_normal();
   if (normalizedCurrentFolderPath == std::filesystem::path{"."})
+  {
+    normalizedCurrentFolderPath.clear();
+  }
+
+  // A search that claims to cover the whole listing must not be limited to the folder the
+  // user happens to be in.
+  if (hasSearch && searchAllAssets)
   {
     normalizedCurrentFolderPath.clear();
   }
@@ -698,15 +734,9 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
     return a.path.filename().generic_string() < b.path.filename().generic_string();
   });
 
+  // The breadcrumb and the folder tree navigate upwards; a ".." card would only repeat
+  // that operation while consuming a grid slot next to the assets.
   auto entries = std::vector<ModelBrowserEntry>{};
-  if (!normalizedCurrentFolderPath.empty())
-  {
-    entries.push_back(
-      {BrowserCellData{
-         BrowserCellType::Folder, normalizedCurrentFolderPath.parent_path()},
-       ".."});
-  }
-
   for (const auto& folderRelPath : folderChildren)
   {
     entries.push_back(

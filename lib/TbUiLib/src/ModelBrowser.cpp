@@ -25,6 +25,7 @@
 #include <QDialogButtonBox>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QImage>
 #include <QInputDialog>
@@ -262,6 +263,8 @@ ModelBrowser::ModelBrowser(
   bindEvents(appController);
   connectObservers();
   updateFolderEdit();
+  // The initial folder is the first history entry, so leaving it can be undone.
+  recordFolderHistory();
   if (m_project)
   {
     connect(
@@ -399,31 +402,86 @@ void ModelBrowser::createGui(AppController& appController)
   m_typeCombo->addItem(tr("Skyboxes"), SkyboxTypeFilter);
   m_typeCombo->addItem(tr("Prefabs"), int(BrowserCellType::Prefab));
 
+  m_backButton = new QToolButton{};
+  m_backButton->setObjectName("ModelBrowser_Back");
+  m_backButton->setText(QString::fromUtf8("←"));
+  m_backButton->setToolTip(tr("Back"));
+  m_backButton->setAutoRaise(true);
+  m_backButton->setProperty("tbControlRole", "compact");
+  m_backButton->setFixedSize(QSize{24, 24});
+  m_backButton->setEnabled(false);
+
+  m_forwardButton = new QToolButton{};
+  m_forwardButton->setObjectName("ModelBrowser_Forward");
+  m_forwardButton->setText(QString::fromUtf8("→"));
+  m_forwardButton->setToolTip(tr("Forward"));
+  m_forwardButton->setAutoRaise(true);
+  m_forwardButton->setProperty("tbControlRole", "compact");
+  m_forwardButton->setFixedSize(QSize{24, 24});
+  m_forwardButton->setEnabled(false);
+
   m_searchBox = createSearchBox();
   m_searchBox->setObjectName("ModelBrowser_Search");
-  m_searchBox->setPlaceholderText(tr("Search assets…"));
   m_searchBox->setProperty("tbControlRole", "compact");
   m_searchBox->setMinimumWidth(140);
   m_searchBox->setMaximumWidth(320);
-  for (auto* combo : {m_sourceCombo, m_typeCombo, m_libraryCombo, m_iconSizeCombo})
+
+  // The search scope has to be visible before the user types: text alone cannot say
+  // whether a search covers the current folder or the whole listing.
+  m_searchScopeCombo = new QComboBox{};
+  m_searchScopeCombo->setObjectName("ModelBrowser_SearchScope");
+  m_searchScopeCombo->setToolTip(tr("Search scope"));
+  m_searchScopeCombo->addItem(tr("This folder"), false);
+  m_searchScopeCombo->addItem(tr("All assets"), true);
+  m_searchScopeCombo->setMinimumWidth(104);
+  updateSearchPlaceholder();
+
+  for (auto* combo :
+       {m_sourceCombo, m_typeCombo, m_libraryCombo, m_iconSizeCombo, m_searchScopeCombo})
+  {
     combo->setProperty("tbControlRole", "compact");
+  }
+
+  m_filterButton = new QToolButton{};
+  m_filterButton->setObjectName("ModelBrowser_FiltersButton");
+  m_filterButton->setText(tr("Filters"));
+  m_filterButton->setIcon(loadSVGIcon(std::filesystem::path{"Filter.svg"}));
+  m_filterButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  m_filterButton->setToolTip(tr("Choose which assets are listed"));
+  m_filterButton->setCheckable(true);
+  m_filterButton->setProperty("tbControlRole", "chip");
+
+  m_viewButton = new QToolButton{};
+  m_viewButton->setObjectName("ModelBrowser_ViewButton");
+  m_viewButton->setText(tr("View"));
+  m_viewButton->setIcon(loadSVGIcon(std::filesystem::path{"ViewGrid.svg"}));
+  m_viewButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  m_viewButton->setToolTip(tr("Thumbnail size and grouping"));
+  m_viewButton->setCheckable(true);
+  m_viewButton->setProperty("tbControlRole", "chip");
 
   auto* pathRowLayout = new QHBoxLayout{};
   pathRowLayout->setContentsMargins(8, 3, 8, 3);
   pathRowLayout->setSpacing(6);
+  pathRowLayout->addWidget(m_backButton);
+  pathRowLayout->addWidget(m_forwardButton);
   pathRowLayout->addWidget(m_savePrefabButton);
   pathRowLayout->addWidget(m_reloadButton);
   pathRowLayout->addWidget(m_pathStack, 1);
   pathRowLayout->addWidget(m_searchBox, 1);
-  pathRowLayout->addWidget(m_sourceCombo);
-  pathRowLayout->addWidget(m_typeCombo);
-  pathRowLayout->addWidget(m_libraryCombo);
+  pathRowLayout->addWidget(m_searchScopeCombo);
+  pathRowLayout->addWidget(m_filterButton);
+  pathRowLayout->addWidget(m_viewButton);
+  m_toolbarLayout = pathRowLayout;
   m_libraryCombo->setMaximumWidth(200);
 
   auto* controls = new QWidget{};
   controls->setObjectName("ModelBrowser_Controls");
   controls->setAttribute(Qt::WA_StyledBackground);
-  controls->setLayout(pathRowLayout);
+  auto* controlsLayout = new QVBoxLayout{controls};
+  controlsLayout->setContentsMargins(0, 0, 0, 0);
+  controlsLayout->setSpacing(0);
+  controlsLayout->addLayout(pathRowLayout);
 
   m_folderTree = new QTreeWidget{};
   m_folderTree->setObjectName("ModelBrowser_FolderTree");
@@ -501,13 +559,6 @@ void ModelBrowser::createGui(AppController& appController)
   sourcesLayout->addWidget(sourcesTitle);
   sourcesLayout->addWidget(m_folderTree, 1);
 
-  auto* footer = new QWidget{};
-  footer->setObjectName("ModelBrowser_ViewOptions");
-  footer->setAttribute(Qt::WA_StyledBackground);
-  auto* footerLayout = new QHBoxLayout{footer};
-  footerLayout->setContentsMargins(8, 3, 8, 3);
-  footerLayout->setSpacing(6);
-  footerLayout->addStretch();
   m_usedButton = new QToolButton{};
   m_usedButton->setObjectName("ModelBrowser_UsedInMap");
   m_usedButton->setText(tr("Used in map"));
@@ -524,7 +575,6 @@ void ModelBrowser::createGui(AppController& appController)
       applyTypeFilter();
     }
   });
-  footerLayout->insertWidget(0, m_usedButton);
   m_favoritesButton = new QToolButton{};
   m_favoritesButton->setObjectName("ModelBrowser_Favorites");
   m_favoritesButton->setText(tr("Favourites"));
@@ -542,8 +592,6 @@ void ModelBrowser::createGui(AppController& appController)
     "library metadata does not match these filters.");
   m_favoritesButton->setToolTip(metadataScope);
   m_tagCombo->setToolTip(metadataScope);
-  footerLayout->insertWidget(1, m_favoritesButton);
-  footerLayout->insertWidget(2, m_tagCombo);
   m_soundCombo = new QComboBox{};
   m_soundCombo->setObjectName("ModelBrowser_SoundKind");
   m_soundCombo->setProperty("tbControlRole", "compact");
@@ -554,7 +602,6 @@ void ModelBrowser::createGui(AppController& appController)
   m_soundCombo->setToolTip(tr(
     "Filter sound assets by their WAV sampler loop chunk. Waveforms are read on demand "
     "and cached until the asset revision changes."));
-  footerLayout->insertWidget(3, m_soundCombo);
   m_groupWadTextures = new QCheckBox{tr("Group by WAD")};
   m_groupWadTextures->setObjectName("ModelBrowser_GroupWadTextures");
   m_groupWadTextures->setProperty("tbControlRole", "compact");
@@ -562,7 +609,6 @@ void ModelBrowser::createGui(AppController& appController)
     tr("Show WAD texture members in subfolders of textures."));
   m_groupWadTextures->setChecked(
     QSettings{}.value("AssetBrowser/GroupWadTextures", false).toBool());
-  footerLayout->insertWidget(4, m_groupWadTextures);
   connect(m_groupWadTextures, &QCheckBox::toggled, this, [this](const bool checked) {
     QSettings{}.setValue("AssetBrowser/GroupWadTextures", checked);
     // Keep texture navigation useful when a WAD subfolder disappears.
@@ -584,16 +630,84 @@ void ModelBrowser::createGui(AppController& appController)
     refreshUsage();
     applyTypeFilter();
   });
-  footerLayout->addWidget(new QLabel{tr("Thumbnail size")});
-  footerLayout->addWidget(m_iconSizeCombo);
+
+  // Filters narrow what is listed; grouping and thumbnail size only change the view.
+  // Keeping them apart stops view settings from looking like they change the results,
+  // and keeps type-specific filters out of sight when they cannot apply.
+  auto* filterPanel = new QWidget{};
+  filterPanel->setObjectName("ModelBrowser_FilterPanel");
+  filterPanel->setAttribute(Qt::WA_StyledBackground);
+  auto* filterForm = new QFormLayout{filterPanel};
+  filterForm->setContentsMargins(10, 6, 10, 8);
+  filterForm->setHorizontalSpacing(10);
+  filterForm->setVerticalSpacing(6);
+  filterForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  filterForm->addRow(tr("Source"), m_sourceCombo);
+  filterForm->addRow(tr("Type"), m_typeCombo);
+  filterForm->addRow(tr("Library"), m_libraryCombo);
+  filterForm->addRow(tr("Sound"), m_soundCombo);
+  filterForm->addRow(tr("Tag"), m_tagCombo);
+  auto* metadataRow = new QWidget{filterPanel};
+  auto* metadataLayout = new QHBoxLayout{metadataRow};
+  metadataLayout->setContentsMargins(0, 0, 0, 0);
+  metadataLayout->setSpacing(6);
+  metadataLayout->addWidget(m_usedButton);
+  metadataLayout->addWidget(m_favoritesButton);
+  metadataLayout->addStretch(1);
+  filterForm->addRow(metadataRow);
+  filterPanel->hide();
+  m_filterPanel = filterPanel;
+  m_filterLayout = filterForm;
+  m_metadataFilterRow = metadataRow;
+  controlsLayout->addWidget(filterPanel);
+
+  auto* viewPanel = new QWidget{};
+  viewPanel->setObjectName("ModelBrowser_ViewPanel");
+  viewPanel->setAttribute(Qt::WA_StyledBackground);
+  auto* viewForm = new QFormLayout{viewPanel};
+  viewForm->setContentsMargins(10, 6, 10, 8);
+  viewForm->setHorizontalSpacing(10);
+  viewForm->setVerticalSpacing(6);
+  viewForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  viewForm->addRow(tr("Thumbnail size"), m_iconSizeCombo);
+  viewForm->addRow(QString{}, m_groupWadTextures);
+  viewPanel->hide();
+  m_viewPanel = viewPanel;
+  controlsLayout->addWidget(viewPanel);
+
+  connect(m_filterButton, &QToolButton::toggled, this, [this](const bool shown) {
+    m_filterPanel->setVisible(shown);
+    if (shown)
+    {
+      m_viewButton->setChecked(false);
+    }
+  });
+  connect(m_viewButton, &QToolButton::toggled, this, [this](const bool shown) {
+    m_viewPanel->setVisible(shown);
+    if (shown)
+    {
+      m_filterButton->setChecked(false);
+    }
+  });
+
+  auto* resultBar = new QWidget{};
+  resultBar->setObjectName("ModelBrowser_ResultBar");
+  resultBar->setAttribute(Qt::WA_StyledBackground);
+  auto* resultLayout = new QHBoxLayout{resultBar};
+  resultLayout->setContentsMargins(10, 4, 8, 4);
+  resultLayout->setSpacing(6);
+  m_resultCount = new QLabel{};
+  m_resultCount->setObjectName("ModelBrowser_ResultCount");
+  resultLayout->addWidget(m_resultCount);
+  resultLayout->addStretch(1);
 
   auto* assets = new QWidget{};
   auto* assetsLayout = new QVBoxLayout{assets};
   assetsLayout->setContentsMargins(0, 0, 0, 0);
   assetsLayout->setSpacing(0);
   assetsLayout->addWidget(controls);
+  assetsLayout->addWidget(resultBar);
   assetsLayout->addWidget(browser, 1);
-  assetsLayout->addWidget(footer);
 
   auto* splitter = new QSplitter{Qt::Horizontal};
   splitter->setObjectName("ModelBrowser_Splitter");
@@ -617,9 +731,12 @@ void ModelBrowser::createGui(AppController& appController)
 
 void ModelBrowser::addViewOption(QWidget* control)
 {
-  auto* footer = findChild<QWidget*>("ModelBrowser_ViewOptions");
-  auto* layout = qobject_cast<QHBoxLayout*>(footer->layout());
-  layout->insertWidget(0, control);
+  if (!m_toolbarLayout || !control)
+  {
+    return;
+  }
+  // Host panels contribute their own view toggles next to the shared view settings.
+  m_toolbarLayout->addWidget(control);
 }
 
 void ModelBrowser::previewAsset(AppController&, const QString& path)
@@ -887,12 +1004,29 @@ void ModelBrowser::bindEvents(AppController& appController)
     [this, &appController](const QString& path) { previewAsset(appController, path); });
   connect(
     m_view, &ModelBrowserView::assetApplyRequested, this, &ModelBrowser::applyAssetToMap);
-  connect(m_searchBox, &QLineEdit::textChanged, this, [&](const QString& text) {
+  connect(m_searchBox, &QLineEdit::textChanged, this, [this](const QString& text) {
     if (m_view)
     {
       m_view->setSearchText(text);
     }
+    refreshResultCount();
   });
+
+  connect(
+    m_searchScopeCombo,
+    QOverload<int>::of(&QComboBox::currentIndexChanged),
+    this,
+    [this](const int) {
+      if (m_view)
+      {
+        m_view->setSearchAllAssets(searchAllAssets());
+      }
+      updateSearchPlaceholder();
+      refreshResultCount();
+    });
+
+  connect(m_backButton, &QToolButton::clicked, this, [this]() { navigateHistory(-1); });
+  connect(m_forwardButton, &QToolButton::clicked, this, [this]() { navigateHistory(1); });
 
   connect(m_folderEdit, &QLineEdit::editingFinished, this, [&]() {
     if (!m_folderEdit->isModified())
@@ -1188,7 +1322,7 @@ void ModelBrowser::rebuildBreadcrumbBar()
 
   const auto addSeparator = [&]() {
     auto* sep = new QLabel{QString::fromUtf8("›")};
-    sep->setEnabled(false);
+    sep->setProperty("breadcrumbSeparator", true);
     m_breadcrumbLayout->addWidget(sep, 0);
   };
 
@@ -1197,13 +1331,20 @@ void ModelBrowser::rebuildBreadcrumbBar()
     auto* button = new QToolButton{};
     button->setAutoRaise(true);
     button->setText(title);
+    button->setProperty("tbControlRole", "compact");
     connect(button, &QToolButton::clicked, this, [this, folderPath]() {
       setCurrentFolderPath(folderPath);
     });
     m_breadcrumbLayout->addWidget(button, 0);
   };
 
-  addCrumb(tr("All"), std::filesystem::path{});
+  // The root crumb names the listing the paths are relative to, so "sprites" reads as
+  // assets/sprites instead of looking like a top-level folder.
+  const auto rootTitle =
+    m_folderPath.filename().empty()
+      ? QStringLiteral("assets")
+      : QString::fromStdString(m_folderPath.filename().generic_string());
+  addCrumb(rootTitle, std::filesystem::path{});
 
   auto accumulated = std::filesystem::path{};
   for (const auto& part : m_currentFolderPath)
@@ -1260,6 +1401,177 @@ void ModelBrowser::updateFolderEdit()
   {
     return;
   }
+}
+
+bool ModelBrowser::searchAllAssets() const
+{
+  return m_searchScopeCombo && m_searchScopeCombo->currentData().toBool();
+}
+
+void ModelBrowser::updateSearchPlaceholder()
+{
+  if (!m_searchBox)
+  {
+    return;
+  }
+  // The placeholder states the active scope, so the box never implies a wider or
+  // narrower search than it performs.
+  m_searchBox->setPlaceholderText(
+    searchAllAssets() ? tr("Search all assets…") : tr("Search this folder…"));
+}
+
+bool ModelBrowser::includeDefaultRootsForListing() const
+{
+  return browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles)
+         && !m_typeFilter && !m_usedButton->isChecked() && !m_favoritesButton->isChecked()
+         && m_tagCombo->currentData().toString().isEmpty();
+}
+
+void ModelBrowser::refreshResultCount()
+{
+  if (!m_resultCount || !m_view)
+  {
+    return;
+  }
+
+  const auto entries = modelBrowserEntries(
+    m_folderPath,
+    m_view->assets(),
+    m_currentFolderPath,
+    m_searchBox ? m_searchBox->text() : QString{},
+    includeDefaultRootsForListing(),
+    searchAllAssets());
+  // Folders are listed next to assets, so the count describes everything on screen
+  // instead of claiming an empty folder when only subfolders are shown.
+  const auto count = entries.size();
+  m_resultCount->setText(
+    count == 1 ? tr("1 item") : tr("%1 items").arg(qulonglong(count)));
+}
+
+void ModelBrowser::updateFilterVisibility()
+{
+  if (!m_filterLayout || !m_view)
+  {
+    return;
+  }
+
+  // A filter that cannot change the assets below the current folder only raises the
+  // question of what it filters, so each one is kept for the types it can apply to.
+  const auto currentFolderAbs =
+    m_folderPath.empty() ? m_currentFolderPath : (m_folderPath / m_currentFolderPath);
+  const auto assets = m_view->assets();
+  const auto hasType = [&](const BrowserCellType type) {
+    return std::ranges::any_of(assets, [&](const BrowserAsset& asset) {
+      if (asset.type != type)
+      {
+        return false;
+      }
+      if (currentFolderAbs.empty())
+      {
+        return true;
+      }
+      const auto& assetPath = asset.catalogPath.empty() ? asset.path : asset.catalogPath;
+      return kdl::path_has_prefix(assetPath.parent_path(), currentFolderAbs);
+    });
+  };
+
+  m_filterLayout->setRowVisible(m_sourceCombo, m_sourceCombo->count() > 1);
+  m_filterLayout->setRowVisible(
+    m_libraryCombo,
+    browserFilterIncludesSource(m_sourceFilter, BrowserSource::AssetLibrary));
+  m_filterLayout->setRowVisible(
+    m_soundCombo,
+    hasType(BrowserCellType::Sound) || m_waveKind != inspection::WaveKind::All);
+  m_filterLayout->setRowVisible(m_tagCombo, m_tagCombo->count() > 1);
+  if (m_metadataFilterRow)
+  {
+    // The controls stay in reach when they cannot act right now; disabling them keeps an
+    // already active filter explainable instead of hiding it.
+    m_filterLayout->setRowVisible(m_metadataFilterRow, bool(m_project));
+  }
+}
+
+void ModelBrowser::updateFilterSummary()
+{
+  if (!m_filterButton)
+  {
+    return;
+  }
+
+  auto active = 0;
+  // A single-source browser is not filtering; the axis only exists on the unified
+  // listing, which is also when the control is shown.
+  if (
+    m_sourceCombo && m_sourceCombo->count() > 1
+    && m_sourceFilter != BrowserSourceFilter::All)
+  {
+    ++active;
+  }
+  if (m_typeFilter)
+  {
+    ++active;
+  }
+  if (m_waveKind != inspection::WaveKind::All)
+  {
+    ++active;
+  }
+  if (m_usedButton && m_usedButton->isChecked())
+  {
+    ++active;
+  }
+  if (m_favoritesButton && m_favoritesButton->isChecked())
+  {
+    ++active;
+  }
+  if (m_tagCombo && !m_tagCombo->currentData().toString().isEmpty())
+  {
+    ++active;
+  }
+  m_filterButton->setText(active > 0 ? tr("Filters · %1").arg(active) : tr("Filters"));
+}
+
+void ModelBrowser::recordFolderHistory()
+{
+  if (m_navigatingHistory)
+  {
+    return;
+  }
+
+  // Navigating somewhere new drops the forward branch, like a browser history.
+  m_folderHistory.resize(size_t(m_folderHistoryIndex + 1));
+  if (m_folderHistory.empty() || m_folderHistory.back() != m_currentFolderPath)
+  {
+    m_folderHistory.push_back(m_currentFolderPath);
+    m_folderHistoryIndex = std::ptrdiff_t(m_folderHistory.size()) - 1;
+  }
+  updateHistoryButtons();
+}
+
+void ModelBrowser::updateHistoryButtons()
+{
+  if (!m_backButton || !m_forwardButton)
+  {
+    return;
+  }
+
+  m_backButton->setEnabled(m_folderHistoryIndex > 0);
+  m_forwardButton->setEnabled(
+    m_folderHistoryIndex + 1 < std::ptrdiff_t(m_folderHistory.size()));
+}
+
+void ModelBrowser::navigateHistory(const int offset)
+{
+  const auto target = m_folderHistoryIndex + offset;
+  if (target < 0 || target >= std::ptrdiff_t(m_folderHistory.size()))
+  {
+    return;
+  }
+
+  m_folderHistoryIndex = target;
+  m_navigatingHistory = true;
+  setCurrentFolderPath(m_folderHistory[size_t(target)]);
+  m_navigatingHistory = false;
+  updateHistoryButtons();
 }
 
 void ModelBrowser::updateSavePrefabButton()
@@ -1505,6 +1817,9 @@ void ModelBrowser::setFolderPath(std::filesystem::path folderPath)
 
   m_folderPath = std::move(folderPath);
   m_currentFolderPath.clear();
+  m_folderHistory.clear();
+  m_folderHistoryIndex = -1;
+  recordFolderHistory();
   updateFolderEdit();
 
   markAssetsDirty();
@@ -1524,6 +1839,7 @@ void ModelBrowser::setCurrentFolderPath(std::filesystem::path currentFolderPath)
   }
 
   m_currentFolderPath = std::move(currentFolderPath);
+  recordFolderHistory();
   if (m_view)
   {
     m_view->setCurrentFolderPath(m_currentFolderPath);
@@ -1542,6 +1858,8 @@ void ModelBrowser::setCurrentFolderPath(std::filesystem::path currentFolderPath)
   }
 
   updateFolderEdit();
+  refreshResultCount();
+  updateFilterVisibility();
 }
 
 void ModelBrowser::markAssetsDirty()
@@ -1854,6 +2172,10 @@ void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
   m_folderPath.clear();
   m_currentFolderPath.clear();
   restoreBrowsingState();
+  // Another source is another listing; folders from the previous one are not reachable.
+  m_folderHistory.clear();
+  m_folderHistoryIndex = -1;
+  recordFolderHistory();
   updateFolderEdit();
   refreshLibraryChoices();
   updateSourceControls();
@@ -1904,17 +2226,18 @@ void ModelBrowser::restoreBrowsingState()
 void ModelBrowser::applyTypeFilter()
 {
   rebuildFolderTree();
-  m_view->setIncludeDefaultRoots(
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
-    && !m_usedButton->isChecked() && !m_favoritesButton->isChecked()
-    && m_tagCombo->currentData().toString().isEmpty());
+  m_view->setIncludeDefaultRoots(includeDefaultRootsForListing());
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
+  m_view->setSearchAllAssets(searchAllAssets());
   if (!m_assetRefreshPending && m_pendingScrollRestore)
   {
     m_view->setScrollPosition(*m_pendingScrollRestore);
     m_pendingScrollRestore.reset();
   }
+  refreshResultCount();
+  updateFilterVisibility();
+  updateFilterSummary();
 }
 
 std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
@@ -2249,6 +2572,9 @@ void ModelBrowser::reloadModels()
     rebuildFolderTree();
     m_view->setAssets(m_folderPath, {});
     m_view->setCurrentFolderPath(m_currentFolderPath);
+    refreshResultCount();
+    updateFilterVisibility();
+    updateFilterSummary();
     return;
   }
 
@@ -2259,15 +2585,16 @@ void ModelBrowser::reloadModels()
   m_lastWriteTimes = assetLastWriteTimes(m_assets);
 
   rebuildFolderTree();
-  m_view->setIncludeDefaultRoots(
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
-    && !m_usedButton->isChecked() && !m_favoritesButton->isChecked()
-    && m_tagCombo->currentData().toString().isEmpty());
+  m_view->setIncludeDefaultRoots(includeDefaultRootsForListing());
   m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
+  m_view->setSearchAllAssets(searchAllAssets());
   m_view->setScrollPosition(scroll);
   m_pendingScrollRestore.reset();
+  refreshResultCount();
+  updateFilterVisibility();
+  updateFilterSummary();
 }
 
 void ModelBrowser::rebuildFolderTree()
@@ -2478,13 +2805,13 @@ void ModelBrowser::rescanWatchedDirectory()
   m_assets = std::move(*nextAssets);
   m_lastWriteTimes = std::move(newLastWriteTimes);
   rebuildFolderTree();
-  m_view->setIncludeDefaultRoots(
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles) && !m_typeFilter
-    && !m_usedButton->isChecked() && !m_favoritesButton->isChecked()
-    && m_tagCombo->currentData().toString().isEmpty());
+  m_view->setIncludeDefaultRoots(includeDefaultRootsForListing());
   m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
+  refreshResultCount();
+  updateFilterVisibility();
+  updateFilterSummary();
 }
 
 } // namespace tb::ui

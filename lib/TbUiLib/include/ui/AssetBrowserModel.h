@@ -169,6 +169,12 @@ BrowserCellType assetTypeForExtension(const std::filesystem::path& path);
 
 const char* browserSourceName(BrowserSource source);
 
+/** Display name of an asset type for filters, tooltips and the inspector. */
+const char* browserCellTypeName(BrowserCellType type);
+
+/** Translated display name of an asset type, shared by every browser surface. */
+QString browserCellTypeDisplayName(BrowserCellType type);
+
 std::filesystem::path browserAssetDisplayPath(
   const BrowserAsset& asset, bool groupWadTextures);
 
@@ -231,6 +237,12 @@ std::vector<std::filesystem::path> changedAssetPaths(
   const std::vector<BrowserAsset>& oldAssets,
   const std::vector<BrowserAsset>& newAssets);
 
+/**
+ * The entries the browser shows for one folder and search.
+ *
+ * A search normally matches below the current folder. `searchAllAssets` widens it to the
+ * whole listing, which is what the search scope selector advertises.
+ */
 std::vector<ModelBrowserEntry> modelBrowserEntries(
   const std::filesystem::path& rootFolderPath,
   const std::vector<BrowserAsset>& assets,
@@ -238,6 +250,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const QString& searchText,
   // Game files are browsed through fixed roots; project and library listings only show
   // the folders their own entries imply.
-  bool includeDefaultRoots = true);
+  bool includeDefaultRoots = true,
+  bool searchAllAssets = false);
 
 } // namespace tb::ui

@@ -99,7 +99,7 @@ TEST_CASE("AssetBrowserModel")
     CHECK_FALSE(before == after);
     CHECK(changedAssetPaths({}, {}, {before}, {after}).empty());
     const auto entries = modelBrowserEntries({}, {after}, "Favorites", {});
-    REQUIRE(entries.size() == 2);
+    REQUIRE(entries.size() == 1);
     CHECK(entries.back().cellData.path == before.path);
     after = before;
     after.projectId = "another-project";
@@ -119,11 +119,11 @@ TEST_CASE("AssetBrowserModel")
     texture.catalogPath = "Industrial/Brick.wad";
     texture.displayName = "Red brick";
     const auto entries = modelBrowserEntries({}, {map, texture}, "Industrial", {});
-    REQUIRE(entries.size() == 3);
-    CHECK(entries[1].cellData.type == BrowserCellType::Map);
-    CHECK(entries[1].cellData.path == map.path);
-    CHECK(entries[2].cellData.type == BrowserCellType::Texture);
-    CHECK(entries[2].title == "Red brick");
+    REQUIRE(entries.size() == 2);
+    CHECK(entries[0].cellData.type == BrowserCellType::Map);
+    CHECK(entries[0].cellData.path == map.path);
+    CHECK(entries[1].cellData.type == BrowserCellType::Texture);
+    CHECK(entries[1].title == "Red brick");
     const auto found = modelBrowserEntries({}, {map, texture}, {}, "Factory");
     REQUIRE(found.size() == 2);
     CHECK(found.back().cellData.path == map.path);
@@ -146,8 +146,8 @@ TEST_CASE("AssetBrowserModel")
     wall.catalogPath = browserAssetDisplayPath(wall, false);
     other.catalogPath = browserAssetDisplayPath(other, false);
     const auto flat = modelBrowserEntries({}, {wall, other}, "textures", {}, false);
-    REQUIRE(flat.size() == 3);
-    CHECK(flat[1].cellData.path != flat[2].cellData.path);
+    REQUIRE(flat.size() == 2);
+    CHECK(flat[0].cellData.path != flat[1].cellData.path);
     CHECK(wall.path == std::filesystem::path{"custom.wad/WALL01"});
     // A captured member groups by its source WAD, not its generated publish WAD.
     wall.path = "textures/WALL01.wad";
@@ -203,9 +203,9 @@ TEST_CASE("AssetBrowserModel")
     CHECK(grouped.front().cellData.path == std::filesystem::path{"custom.wad"});
 
     const auto inside = modelBrowserEntries({}, {wall, floor}, "custom.wad", {}, false);
-    REQUIRE(inside.size() == 3); // ".." plus both members
-    CHECK(inside[1].title == "FLOOR01");
-    CHECK(inside[2].title == "WALL01");
+    REQUIRE(inside.size() == 2);
+    CHECK(inside[0].title == "FLOOR01");
+    CHECK(inside[1].title == "WALL01");
 
     // Marking the entry as captured reports the project revision and the update badge.
     wall.projectAssetId = "project-asset";

@@ -348,6 +348,16 @@ QToolButton[tbControlRole="outlined"] {
   border-color: @tb-border;
 }
 
+/* A labelled control that sits next to fields: outlined like a field, but with room for
+   an icon and a word. */
+QToolButton[tbControlRole="chip"] {
+  background: transparent;
+  border: 1px solid @tb-border;
+  border-radius: 5px;
+  min-height: 22px;
+  padding: 0 8px;
+}
+
 /* Solid surface keeps controls readable above map grids and rendered images. */
 QToolButton[tbControlRole="overlay"] {
   background: @tb-elevated-background;
@@ -1007,6 +1017,44 @@ QToolButton[browserFilterToggle="true"]:checked {
 QWidget#ModelBrowser_BreadcrumbBar {
   background: transparent;
   border: none;
+}
+
+/* Path crumbs are navigation targets, so they stay at full text contrast; only the
+   separators recede. */
+QWidget#ModelBrowser_BreadcrumbBar QToolButton {
+  color: @tb-text;
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+QWidget#ModelBrowser_BreadcrumbBar QToolButton:hover,
+QWidget#ModelBrowser_BreadcrumbBar QToolButton:focus {
+  background: @tb-hover-background;
+  border-radius: 4px;
+}
+
+QLabel[breadcrumbSeparator="true"] {
+  color: @tb-secondary-text;
+}
+
+QWidget#ModelBrowser_FilterPanel,
+QWidget#ModelBrowser_ViewPanel {
+  background: @tb-panel-background;
+  border-bottom: 1px solid @tb-border;
+}
+
+QWidget#ModelBrowser_FilterPanel QLabel,
+QWidget#ModelBrowser_ViewPanel QLabel {
+  color: @tb-secondary-text;
+}
+
+QWidget#ModelBrowser_ResultBar {
+  background: @tb-panel-background;
+  border-bottom: 1px solid @tb-border;
+}
+
+QLabel#ModelBrowser_ResultCount {
+  color: @tb-secondary-text;
 }
 
 QTreeWidget#ModelBrowser_FolderTree {
@@ -1687,15 +1735,6 @@ QWidget#ProjectAssetDetailsSurface > QLabel[regionAnchor="true"] {
   padding: 0 10px;
   background: @tb-panel-background;
   border-bottom: 1px solid @tb-border;
-}
-
-QWidget#ModelBrowser_ViewOptions {
-  background: @tb-sidebar-background;
-  border-top: 1px solid @tb-border;
-}
-
-QWidget#ModelBrowser_ViewOptions QLabel {
-  color: @tb-secondary-text;
 }
 
 QTreeWidget#ProjectAssetDetails {

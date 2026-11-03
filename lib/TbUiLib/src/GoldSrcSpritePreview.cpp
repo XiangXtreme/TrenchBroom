@@ -195,8 +195,20 @@ std::optional<GoldSrcSpritePreview> decodeFrame(
     case SpriteAlphaType::IndexAlpha:
       rgba[outOffset + 3u] = (*pixels)[i];
       break;
-    case SpriteAlphaType::Normal:
     case SpriteAlphaType::Additive:
+      // An additive sprite carries no alpha of its own: it contributes its brightness, so
+      // a black background has to fade out instead of showing as a black card. Palette
+      // index 255 is the classic GoldSrc colour key, and painting its fill colour would
+      // show the key colour as if it were part of the artwork.
+      rgba[outOffset + 3u] =
+        (*pixels)[i] == 255u
+          ? 0u
+          : std::uint8_t(
+              (std::uint32_t(rgba[outOffset]) + std::uint32_t(rgba[outOffset + 1u])
+               + std::uint32_t(rgba[outOffset + 2u]) + 1u)
+              / 3u);
+      break;
+    case SpriteAlphaType::Normal:
       rgba[outOffset + 3u] = 255u;
       break;
     }

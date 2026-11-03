@@ -246,6 +246,24 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
     makeControlRow(
       {toolButton, checkedToolButton, outlinedToolButton, disabledToolButton}));
 
+  // A labelled command keeps a persistent boundary when the word is what explains it,
+  // for example a filter or view disclosure in a browser toolbar.
+  auto* chipButton = new QToolButton{};
+  chipButton->setText(QStringLiteral("Filters"));
+  chipButton->setIcon(result->style()->standardIcon(QStyle::SP_FileDialogListView));
+  chipButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  chipButton->setProperty("tbControlRole", "chip");
+  auto* checkedChipButton = new QToolButton{};
+  checkedChipButton->setText(QStringLiteral("View"));
+  checkedChipButton->setIcon(
+    result->style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+  checkedChipButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  checkedChipButton->setProperty("tbControlRole", "chip");
+  checkedChipButton->setCheckable(true);
+  checkedChipButton->setChecked(true);
+  actionLayout->addRow(
+    QStringLiteral("Labelled"), makeControlRow({chipButton, checkedChipButton}));
+
   auto* navigation = new QToolButton{};
   navigation->setText(QStringLiteral("Inspector"));
   navigation->setProperty("tbControlRole", "navigation");
