@@ -403,24 +403,27 @@ std::optional<LightmapBlock> buildFaceLightmap(
     });
   }
 
-  // A narrow BSP fragment can cross a luxel without containing its center. Fill
-  // uncovered samples after checking every record for center coverage.
-  for (const auto* record : group)
+  // Fill missing coverage for narrow fragments first. Then keep the surrounding
+  // baked samples used by bilinear filtering along a BSP polygon's edges.
+  for (const auto minOffset : {0.0f, -1.0f})
   {
-    if (record->poly.size() < 3 || !overlapsFace(*record, face))
+    for (const auto* record : group)
     {
-      continue;
-    }
+      if (record->poly.size() < 3 || !overlapsFace(*record, face))
+      {
+        continue;
+      }
 
-    const auto polygon = bakedPolygon(*record);
-    copySamples(*record, [&](const float u, const float v) {
-      const auto cell = vm::polygon3f{
-        {u, v, 0.0f},
-        {u + 1.0f, v, 0.0f},
-        {u + 1.0f, v + 1.0f, 0.0f},
-        {u, v + 1.0f, 0.0f}};
-      return vm::polygons_overlap(cell, polygon, vm::vec3f{0.0f, 0.0f, 1.0f});
-    });
+      const auto polygon = bakedPolygon(*record);
+      copySamples(*record, [&](const float u, const float v) {
+        const auto cell = vm::polygon3f{
+          {u + minOffset, v + minOffset, 0.0f},
+          {u + 1.0f, v + minOffset, 0.0f},
+          {u + 1.0f, v + 1.0f, 0.0f},
+          {u + minOffset, v + 1.0f, 0.0f}};
+        return vm::polygons_overlap(cell, polygon, vm::vec3f{0.0f, 0.0f, 1.0f});
+      });
+    }
   }
 
   if (std::ranges::none_of(valid, [](const bool value) { return value; }))

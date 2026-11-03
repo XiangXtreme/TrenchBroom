@@ -162,7 +162,6 @@ void LightmapBaker::runStage()
     arguments = {
       QStringLiteral("compile"),
       toQString(m_workDir / MapFileName),
-      QStringLiteral("-fast"),
       QStringLiteral("-minlight"),
       QStringLiteral("1"),
       QStringLiteral("-threads"),

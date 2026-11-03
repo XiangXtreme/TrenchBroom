@@ -238,6 +238,23 @@ TEST_CASE("buildFaceLightmap")
     CHECK(pixelAt(pixels, block->size, 0, 0, 1) == 4);
   }
 
+  SECTION("preserves the samples used to filter a diagonal edge")
+  {
+    auto bake = makeBake(8, 8);
+    bake.faces.push_back(
+      makeRecord({0, 0}, {3, 3}, {2, 1}, {{0.0f, 0.0f}, {2.0f, 0.0f}, {0.0f, 2.0f}}));
+    auto face = makeFace(32.0f);
+    face.outline.erase(face.outline.begin() + 2);
+
+    auto pixels = std::vector<std::uint8_t>{};
+    const auto block = buildFaceLightmap(face, bake, pixels);
+
+    REQUIRE(block.has_value());
+    // At (0.5, 1.5), the filter uses (1, 2) even though it lies outside the triangle.
+    CHECK(pixelAt(pixels, block->size, 1, 2, 0) == 4);
+    CHECK(pixelAt(pixels, block->size, 1, 2, 1) == 4);
+  }
+
   SECTION("returns nothing when no record shares the plane")
   {
     auto bake = makeBake(8, 8);
