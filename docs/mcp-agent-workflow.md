@@ -36,6 +36,29 @@ TrenchBroom 是真实地图状态来源。通过有效对象句柄或重新查�
 尺寸、网格、材质和实体定义依据当前游戏配置确定。材质名称不证明资源加载成功；
 截图可读不证明几何、BSP 或游戏碰撞正确。只报告实际检查过的事实。
 
+## 资产工作流
+
+资产目录是公开 Python API，不是 MCP 工具，用 `tb_api(query="assets")` 发现。
+资产身份是 `scope` + `id` 或虚拟路径，显示名不唯一。
+
+| 调用 | 用途 |
+| --- | --- |
+| `tb.assets.search(query="", type=None, limit=50, scope="game")` | 检索 `game`/`project`/`library`/`all`，返回 id、路径、发布路径、修订与缺失状态。`preview=True` 附带预览（limit ≤ 12）。 |
+| `tb.assets.describe(asset, scope="any")` | 按 id 或虚拟路径精确解析，歧义直接报错。 |
+| `tb.assets.preview(asset, scope="any", size=128)` | 产出 PNG，状态为 `image`/`audio`/`unsupported`/`missing`。 |
+| `tb.assets.sheet(scope="project", limit=24, size=128, columns=6, rows=4)` | 带标签的联系表；超出容量自动续张，每格给出矩形与资产身份。 |
+| `tb.assets.capture(...)` / `import_file(...)` / `apply_to_selection(...)` | 库资源捕获进工程、导入文件、应用到选中面或实体；均需 action 模式。 |
+
+工程与库资产需要所属工程文档；`documents.open_project_map(project_path, map_id="")`
+以 action 模式打开工程内地图，仅当工程只有一张地图时可省略 id。
+
+三条容易误判的规则：
+
+- 游戏目录只索引 `.mdl`/`.spr`/`.wav`，游戏自带贴图不可检索；贴图走工程或库。
+- 在工程地图上调用 `documents.save()` 会保存整个工程（地图文档把保存委托给工程会话）。
+- `open_project_map` 与 `documents.activate` 一样让当前执行绑定原文档；打开后的工程
+  目录要在下一次执行里读取。
+
 ## 失败处理
 
 - 目标不匹配或句柄失效：刷新文档/对象，再检查输入。

@@ -57,6 +57,43 @@ does not extend the MCP catalog.
    evidence when it helps; a screenshot does not prove map validity, BSP
    compilation, collision, or gameplay.
 
+## Assets
+
+The asset catalog is public Python API, not an MCP tool. Discover it with
+`tb_api(query="assets")`. Identify an asset by `scope` plus `id` or virtual
+path; display names are not unique.
+
+- `tb.assets.search(query="", type=None, limit=50, scope="game")` accepts
+  `game`, `project`, `library` or `all` and returns `scope`, `id`,
+  `library_id`, `type`, `asset_type`, `path`, `publish_path`, `revision`
+  and `missing`. `preview=True` attaches a preview to each hit (limit 12).
+- `tb.assets.describe(asset, scope="any")` resolves one id or path and reports
+  ambiguity instead of guessing.
+- `tb.assets.preview(asset, scope="any", size=128)` reports `status` as
+  `image`, `audio`, `unsupported` or `missing` with `path` and dimensions.
+- `tb.assets.sheet(scope="project", limit=24, size=128, columns=6, rows=4)`
+  renders labeled contact sheets. Extra assets continue on further sheets, and
+  every cell carries its rectangle and asset identity.
+- `tb.assets.capture(library_asset_id, library_id="")` copies a library
+  revision into the project; `tb.assets.import_file(path, name="",
+  virtual_path="")` imports a file with the project window's folder rules;
+  `tb.assets.apply_to_selection(asset, scope="any")` assigns a project texture
+  to the selected faces or a model/sprite to the selected entities. These three
+  require action mode.
+
+Project and library access needs an owning project document.
+`documents.open_project_map(project_path, map_id="")` opens a stored map in
+action mode and accepts an empty `map_id` only when the project holds one map.
+
+Rules that are easy to miss:
+
+- The game catalog indexes only `.mdl`, `.spr` and `.wav`; game textures are
+  not searchable. Use project or library textures.
+- `documents.save()` on a project map saves the whole project, because the map
+  document delegates saving to the project session.
+- `open_project_map` and `documents.activate` bind the current execution to its
+  original document. Read the opened project's catalog in a later execution.
+
 ## Problem Triage
 
 `tb_inspect(view="problems")` defaults to a compact summary with counts by type.
