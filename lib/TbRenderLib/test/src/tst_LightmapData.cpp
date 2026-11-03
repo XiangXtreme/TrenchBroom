@@ -169,6 +169,27 @@ TEST_CASE("buildFaceLightmap")
     }
   }
 
+  SECTION("chooses an overlapping record when the center was clipped away")
+  {
+    auto bake = makeBake(8, 8);
+    auto unrelated = makeRecord(
+      {4, 0}, {2, 3}, {0, 0}, {{4.0f, 0.0f}, {5.0f, 0.0f}, {5.0f, 3.0f}, {4.0f, 3.0f}});
+    unrelated.vecs[0][3] = 16.0f;
+    bake.faces.push_back(std::move(unrelated));
+    bake.faces.push_back(makeRecord(
+      {0, 0},
+      {2, 3},
+      {4, 1},
+      {{0.0f, 0.0f}, {0.75f, 0.0f}, {0.75f, 2.0f}, {0.0f, 2.0f}}));
+
+    auto pixels = std::vector<std::uint8_t>{};
+    const auto block = buildFaceLightmap(makeFace(32.0f), bake, pixels);
+
+    REQUIRE(block.has_value());
+    CHECK(block->vecs[0][3] == 0.0f);
+    CHECK(pixelAt(pixels, block->size, 0, 0, 0) == 5);
+  }
+
   SECTION("returns nothing when no record shares the plane")
   {
     auto bake = makeBake(8, 8);

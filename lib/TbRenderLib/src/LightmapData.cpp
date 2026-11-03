@@ -32,6 +32,8 @@
 
 #include "kd/overload.h"
 
+#include "vm/intersection.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -109,6 +111,29 @@ bool containsPoint(const std::vector<vm::vec2f>& poly, const float u, const floa
     }
   }
   return inside;
+}
+
+bool overlapsFace(const LightmapFaceRecord& record, const FaceLightmapInput& face)
+{
+  auto outline = std::vector<vm::vec3f>{};
+  outline.reserve(face.outline.size());
+  for (const auto& point : face.outline)
+  {
+    const auto coord = luxelCoord(point, record.vecs);
+    outline.emplace_back(coord.x(), coord.y(), 0.0f);
+  }
+
+  auto bakedOutline = std::vector<vm::vec3f>{};
+  bakedOutline.reserve(record.poly.size());
+  for (const auto& coord : record.poly)
+  {
+    bakedOutline.emplace_back(coord.x(), coord.y(), 0.0f);
+  }
+
+  return vm::polygons_overlap(
+    vm::polygon3f{std::move(outline)},
+    vm::polygon3f{std::move(bakedOutline)},
+    vm::vec3f{0.0f, 0.0f, 1.0f});
 }
 
 /**
@@ -262,8 +287,8 @@ std::optional<LightmapBlock> buildFaceLightmap(
     return std::nullopt;
   }
 
-  // Faces sharing a plane can still use unrelated lightmap axes, and therefore unrelated
-  // luxel lattices. Take the axes of the record that covers the face's center.
+  // Prefer the record at the center. The BSP can clip that part of the brush face away,
+  // so fall back to a record that overlaps the remaining surface.
   auto centroid = vm::vec3f{};
   for (const auto& point : face.outline)
   {
@@ -271,7 +296,7 @@ std::optional<LightmapBlock> buildFaceLightmap(
   }
   centroid = centroid / static_cast<float>(face.outline.size());
 
-  const auto* reference = candidates.front();
+  const LightmapFaceRecord* reference = nullptr;
   for (const auto* candidate : candidates)
   {
     const auto coord = luxelCoord(centroid, candidate->vecs);
@@ -280,6 +305,18 @@ std::optional<LightmapBlock> buildFaceLightmap(
       reference = candidate;
       break;
     }
+  }
+
+  if (!reference)
+  {
+    const auto overlapping = std::ranges::find_if(candidates, [&](const auto* candidate) {
+      return candidate->poly.size() >= 3 && overlapsFace(*candidate, face);
+    });
+    if (overlapping == candidates.end())
+    {
+      return std::nullopt;
+    }
+    reference = *overlapping;
   }
 
   auto group = std::vector<const LightmapFaceRecord*>{};
