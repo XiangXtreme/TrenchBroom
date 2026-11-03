@@ -216,6 +216,28 @@ TEST_CASE("buildFaceLightmap")
     CHECK(pixelAt(pixels, block->size, 1, 0, 0) == 5);
   }
 
+  SECTION("fills a sub-luxel strip alongside a record with center samples")
+  {
+    auto bake = makeBake(8, 8);
+    bake.faces.push_back(makeRecord(
+      {0, 0},
+      {7, 2},
+      {0, 0},
+      {{0.0f, 0.0f}, {6.0f, 0.0f}, {6.0f, 0.25f}, {0.0f, 0.25f}}));
+    bake.faces.push_back(makeRecord(
+      {0, 0},
+      {2, 7},
+      {0, 3},
+      {{0.0f, 0.25f}, {1.0f, 0.25f}, {1.0f, 6.0f}, {0.0f, 6.0f}}));
+
+    auto pixels = std::vector<std::uint8_t>{};
+    const auto block = buildFaceLightmap(makeFace(96.0f), bake, pixels);
+
+    REQUIRE(block.has_value());
+    CHECK(pixelAt(pixels, block->size, 4, 0, 0) == 5);
+    CHECK(pixelAt(pixels, block->size, 0, 0, 1) == 4);
+  }
+
   SECTION("returns nothing when no record shares the plane")
   {
     auto bake = makeBake(8, 8);

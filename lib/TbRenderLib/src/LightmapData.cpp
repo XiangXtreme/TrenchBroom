@@ -403,31 +403,29 @@ std::optional<LightmapBlock> buildFaceLightmap(
     });
   }
 
+  // A narrow BSP fragment can cross a luxel without containing its center. Fill
+  // uncovered samples after checking every record for center coverage.
+  for (const auto* record : group)
+  {
+    if (record->poly.size() < 3 || !overlapsFace(*record, face))
+    {
+      continue;
+    }
+
+    const auto polygon = bakedPolygon(*record);
+    copySamples(*record, [&](const float u, const float v) {
+      const auto cell = vm::polygon3f{
+        {u, v, 0.0f},
+        {u + 1.0f, v, 0.0f},
+        {u + 1.0f, v + 1.0f, 0.0f},
+        {u, v + 1.0f, 0.0f}};
+      return vm::polygons_overlap(cell, polygon, vm::vec3f{0.0f, 0.0f, 1.0f});
+    });
+  }
+
   if (std::ranges::none_of(valid, [](const bool value) { return value; }))
   {
-    // A narrow face can cross a luxel without containing its center.
-    for (const auto* record : group)
-    {
-      if (record->poly.size() < 3 || !overlapsFace(*record, face))
-      {
-        continue;
-      }
-
-      const auto polygon = bakedPolygon(*record);
-      copySamples(*record, [&](const float u, const float v) {
-        const auto cell = vm::polygon3f{
-          {u, v, 0.0f},
-          {u + 1.0f, v, 0.0f},
-          {u + 1.0f, v + 1.0f, 0.0f},
-          {u, v + 1.0f, 0.0f}};
-        return vm::polygons_overlap(cell, polygon, vm::vec3f{0.0f, 0.0f, 1.0f});
-      });
-    }
-
-    if (std::ranges::none_of(valid, [](const bool value) { return value; }))
-    {
-      return std::nullopt;
-    }
+    return std::nullopt;
   }
 
   bleed(pixels, valid, block.size.x(), block.size.y());
