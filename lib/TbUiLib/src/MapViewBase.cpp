@@ -1047,12 +1047,16 @@ void MapViewBase::startLightmapBake()
       {
         m_lightmapAtlas = std::make_unique<render::LightmapAtlas>();
       }
-      m_lightmapAtlas->setData(assembly->width, assembly->height, assembly->pixels);
-      m_lightmapAssembly = std::move(assembly);
       const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - startedAt)
                              .count();
-      logger.info() << "Lightmap baked in " << elapsed << " ms.";
+      logger.info() << "Lightmap baked in " << elapsed << " ms: "
+                    << assembly->blocks.size() << " of " << bake->faces.size()
+                    << " faces lit, " << assembly->width << "x" << assembly->height
+                    << " atlas.";
+
+      m_lightmapAtlas->setData(assembly->width, assembly->height, assembly->pixels);
+      m_lightmapAssembly = std::move(assembly);
       update();
     });
 }
