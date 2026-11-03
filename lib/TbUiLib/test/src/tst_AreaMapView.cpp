@@ -30,6 +30,7 @@
 #include "ui/SwitchableMapViewContainer.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -71,6 +72,39 @@ TEST_CASE("AreaMapView")
   auto* native = original->firstMapViewBase();
   native->camera().moveTo(vm::vec3f{128, 256, 512});
   const auto position = native->camera().position();
+
+  SECTION("3D lightmap buttons follow the shared preview setting")
+  {
+    const auto savedSetting = pref(Preferences::ShowLightmap);
+    const auto restoreSetting =
+      qScopeGuard([&] { setPref(Preferences::ShowLightmap, savedSetting); });
+    setPref(Preferences::ShowLightmap, false);
+    auto* selector = original->findChild<QToolButton*>("MapViewTypeButton");
+    auto* button = original->findChild<QToolButton*>("MapViewLightmapButton");
+    REQUIRE(selector);
+    REQUIRE(button);
+    CHECK_FALSE(button->isHidden());
+    CHECK_FALSE(button->isChecked());
+    CHECK(button->x() > selector->geometry().right());
+    CHECK(
+      std::abs(button->geometry().center().y() - selector->geometry().center().y()) <= 1);
+
+    REQUIRE(layout->splitArea(original, Qt::Horizontal));
+    auto* second = layout->areas().back();
+    REQUIRE(second != original);
+    auto* otherButton = second->findChild<QToolButton*>("MapViewLightmapButton");
+    REQUIRE(otherButton);
+    second->setViewType(CyclingMapView::View_XZ);
+    CHECK(otherButton->isHidden());
+    button->click();
+    CHECK(pref(Preferences::ShowLightmap));
+    second->setViewType(CyclingMapView::View_3D);
+    CHECK_FALSE(otherButton->isHidden());
+    CHECK(otherButton->isChecked());
+    setPref(Preferences::ShowLightmap, false);
+    CHECK_FALSE(button->isChecked());
+    CHECK_FALSE(otherButton->isChecked());
+  }
 
   SECTION("each area can select every view without losing cameras or changing the map")
   {

@@ -367,6 +367,11 @@ QToolButton[tbControlRole="overlay"] {
   padding: 2px 6px;
 }
 
+QToolButton[tbControlRole="overlay"]::menu-indicator {
+  subcontrol-origin: border;
+  subcontrol-position: right center;
+}
+
 QToolButton[tbControlRole="outlined"]:hover,
 QToolButton[tbControlRole="outlined"]:focus,
 QToolButton[tbControlRole="overlay"]:hover,

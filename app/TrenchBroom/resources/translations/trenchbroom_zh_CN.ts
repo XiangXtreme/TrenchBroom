@@ -2,6 +2,13 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_CN">
     <context>
+        <name>tb::ui::CyclingMapView</name>
+        <message>
+            <source>Toggle lightmap preview</source>
+            <translation>开关光照预览</translation>
+            </message>
+        </context>
+    <context>
         <name>QLineEdit</name>
         <message>
             <location filename="../../../../lib/TbUiLib/src/SearchBox.cpp" line="33" />

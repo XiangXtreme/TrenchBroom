@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "base/NotifierConnection.h"
 #include "ui/CameraLinkHelper.h"
 #include "ui/MapViewContainer.h"
 
@@ -56,7 +57,9 @@ private:
 
   QStackedLayout* m_layout = nullptr;
   QToolButton* m_viewButton = nullptr;
+  QToolButton* m_lightmapButton = nullptr;
   WorkbenchBorder* m_border = nullptr;
+  NotifierConnection m_preferenceConnection;
 
 public:
   CyclingMapView(

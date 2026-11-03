@@ -28,7 +28,9 @@
 #include <QStyle>
 #include <QToolButton>
 
+#include "base/PreferenceManager.h"
 #include "gl/Camera.h"
+#include "prefs/Preferences.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView2D.h"
@@ -107,6 +109,26 @@ void CyclingMapView::createGui(
     });
   }
   m_viewButton->setMenu(menu);
+
+  m_lightmapButton = new QToolButton{this};
+  m_lightmapButton->setObjectName("MapViewLightmapButton");
+  m_lightmapButton->setProperty("tbControlRole", "overlay");
+  m_lightmapButton->setIcon(loadSVGIcon("LightmapPreview.svg"));
+  m_lightmapButton->setAccessibleName(tr("Toggle lightmap preview"));
+  m_lightmapButton->setToolTip(m_lightmapButton->accessibleName());
+  m_lightmapButton->setFocusPolicy(Qt::StrongFocus);
+  m_lightmapButton->setCheckable(true);
+  m_lightmapButton->setChecked(pref(Preferences::ShowLightmap));
+  connect(m_lightmapButton, &QToolButton::clicked, this, [](const bool checked) {
+    setPref(Preferences::ShowLightmap, checked);
+  });
+  m_preferenceConnection +=
+    PreferenceManager::instance().preferenceDidChangeNotifier.connect(
+      [this](const auto& path) {
+        if (path == Preferences::ShowLightmap.path)
+          m_lightmapButton->setChecked(pref(Preferences::ShowLightmap));
+      });
+
   m_border = new WorkbenchBorder{this, true};
   for (const auto type : m_viewTypes)
     if (views & type)
@@ -134,6 +156,7 @@ void CyclingMapView::switchToMapView(MapViewBase* mapView)
   m_currentMapView->setFocus();
   updateChrome();
   m_viewButton->raise();
+  m_lightmapButton->raise();
   if (m_border)
     m_border->raise();
   if (previous != viewType())
@@ -180,19 +203,33 @@ void CyclingMapView::updateChrome()
     m_viewButton->setProperty("viewType", viewType());
   }
   const auto inset =
-    std::max(1, style()->pixelMetric(QStyle::PM_LayoutLeftMargin, nullptr, this));
+    std::max(1, style()->pixelMetric(QStyle::PM_LayoutLeftMargin, nullptr, this) / 2);
+  const auto spacing =
+    std::max(1, style()->pixelMetric(QStyle::PM_LayoutHorizontalSpacing, nullptr, this));
   constexpr auto GripWidth = 18;
-  const auto available = std::max(0, width() - 2 * inset - 2 * GripWidth);
+  const auto left = inset + GripWidth;
+  const auto available = width() - 2 * left;
+  const auto is3D = viewType() == View_3D;
+  const auto lightmapSize = m_lightmapButton->sizeHint();
+  const auto lightmapWidth = is3D ? spacing + lightmapSize.width() : 0;
   m_viewButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-  if (m_viewButton->sizeHint().width() > available)
+  if (m_viewButton->sizeHint().width() + lightmapWidth > available)
     m_viewButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-  m_viewButton->move(inset + GripWidth, inset);
-  m_viewButton->adjustSize();
-  const auto targetVisible = !window()->isFullScreen()
-                             && available >= m_viewButton->sizeHint().width()
-                             && height() >= m_viewButton->height() + 2 * inset;
-  if (m_viewButton->isVisible() != targetVisible)
-    m_viewButton->setVisible(targetVisible);
+  const auto viewSize = m_viewButton->sizeHint();
+  const auto showSelector = !window()->isFullScreen() && available >= viewSize.width()
+                            && height() >= viewSize.height() + 2 * inset;
+  const auto showLightmap = showSelector && is3D
+                            && available >= viewSize.width() + lightmapWidth
+                            && height() >= lightmapSize.height() + 2 * inset;
+  const auto rowHeight =
+    showLightmap ? std::max(viewSize.height(), lightmapSize.height()) : viewSize.height();
+  m_viewButton->resize(viewSize);
+  m_viewButton->move(left, inset + (rowHeight - viewSize.height()) / 2);
+  m_lightmapButton->resize(lightmapSize);
+  m_lightmapButton->move(
+    left + viewSize.width() + spacing, inset + (rowHeight - lightmapSize.height()) / 2);
+  m_viewButton->setVisible(showSelector);
+  m_lightmapButton->setVisible(showLightmap);
 }
 
 void CyclingMapView::resizeEvent(QResizeEvent* event)
