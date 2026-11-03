@@ -72,6 +72,7 @@
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationActions.h"
+#include "ui/automation/AutomationAssetPreview.h"
 #include "ui/automation/AutomationAssets.h"
 #include "ui/automation/AutomationBrushes.h"
 #include "ui/automation/AutomationDocuments.h"
@@ -3124,12 +3125,29 @@ py::dict assetSummaryDict(const AutomationAssetSummary& asset)
   return result;
 }
 
+py::dict assetPreviewDict(const AutomationAssetPreview& preview)
+{
+  auto result = py::dict{};
+  result["status"] = preview.status;
+  result["path"] = preview.path;
+  result["width"] = preview.width;
+  result["height"] = preview.height;
+  result["source"] = preview.source;
+  result["message"] = preview.message;
+  return result;
+}
+
 py::list searchAssets(
   const std::string& query,
   const py::object& type,
   const size_t limit,
-  const std::string& scope)
+  const std::string& scope,
+  const bool preview)
 {
+  if (preview && limit > 12u)
+  {
+    throw py::value_error{"preview=True supports limit <= 12"};
+  }
   auto options = AutomationAssetQuery{};
   options.query = query;
   options.limit = limit;
@@ -3207,24 +3225,27 @@ py::list searchAssets(
     }
   }
 
+  auto project = preview ? currentProjectSession() : std::shared_ptr<ProjectSession>{};
+  const auto previewFolder =
+    std::filesystem::temp_directory_path() / "trenchbroom-asset-previews";
+
   auto result = py::list{};
   for (const auto& summary : summaries)
   {
-    result.append(assetSummaryDict(summary));
+    auto item = assetSummaryDict(summary);
+    if (preview)
+    {
+      item["preview"] = assetPreviewDict(
+        previewAutomationAsset(project.get(), summary, 128, previewFolder));
+    }
+    result.append(std::move(item));
   }
   return result;
 }
 
-py::dict describeAsset(const std::string& asset, const std::string& scope)
+std::optional<AutomationAssetSummary> resolveAssetSummary(
+  const std::string& asset, const std::string& normalized)
 {
-  const auto normalized = lowerCaseAssetScope(scope);
-  if (
-    normalized != "any" && normalized != "game" && normalized != "project"
-    && normalized != "library")
-  {
-    throw py::value_error{"scope must be any, game, project, or library"};
-  }
-
   if (normalized == "any" || normalized == "project")
   {
     if (auto project = currentProjectSession())
@@ -3236,7 +3257,7 @@ py::dict describeAsset(const std::string& asset, const std::string& scope)
       }
       if (found.value())
       {
-        return assetSummaryDict(*found.value());
+        return found.value();
       }
     }
     else if (normalized == "project")
@@ -3255,7 +3276,7 @@ py::dict describeAsset(const std::string& asset, const std::string& scope)
       }
       if (found.value())
       {
-        return assetSummaryDict(*found.value());
+        return found.value();
       }
     }
     else if (normalized == "library")
@@ -3269,11 +3290,62 @@ py::dict describeAsset(const std::string& asset, const std::string& scope)
     const auto found = findAutomationGameAsset(document.get().map(), asset);
     if (found)
     {
-      return assetSummaryDict(*found);
+      return found;
     }
   }
 
-  throw std::runtime_error{"No asset matches '" + asset + "'"};
+  return std::nullopt;
+}
+
+py::dict describeAsset(const std::string& asset, const std::string& scope)
+{
+  const auto normalized = lowerCaseAssetScope(scope);
+  if (
+    normalized != "any" && normalized != "game" && normalized != "project"
+    && normalized != "library")
+  {
+    throw py::value_error{"scope must be any, game, project, or library"};
+  }
+
+  const auto summary = resolveAssetSummary(asset, normalized);
+  if (!summary)
+  {
+    throw std::runtime_error{"No asset matches '" + asset + "'"};
+  }
+  return assetSummaryDict(*summary);
+}
+
+py::dict previewAsset(const std::string& asset, const std::string& scope, const int size)
+{
+  if (size < 16 || size > 1024)
+  {
+    throw py::value_error{"size must be between 16 and 1024"};
+  }
+  const auto normalized = lowerCaseAssetScope(scope);
+  if (
+    normalized != "any" && normalized != "game" && normalized != "project"
+    && normalized != "library")
+  {
+    throw py::value_error{"scope must be any, game, project, or library"};
+  }
+
+  const auto summary = resolveAssetSummary(asset, normalized);
+  if (!summary)
+  {
+    throw std::runtime_error{"No asset matches '" + asset + "'"};
+  }
+
+  const auto folder =
+    std::filesystem::temp_directory_path() / "trenchbroom-asset-previews";
+  auto result = py::dict{};
+  result["scope"] = summary->scope;
+  result["id"] = summary->id;
+  result["type"] = summary->type;
+  result["asset_type"] = summary->assetType;
+  result["display_name"] = summary->displayName;
+  result["preview"] = assetPreviewDict(
+    previewAutomationAsset(currentProjectSession().get(), *summary, size, folder));
+  return result;
 }
 
 py::dict captureAsset(const std::string& libraryAssetId, const std::string& libraryId)
@@ -6357,8 +6429,15 @@ void defineModule(py::module_& module)
     py::arg("query") = "",
     py::arg("type") = py::none(),
     py::arg("limit") = 50u,
-    py::arg("scope") = "game");
+    py::arg("scope") = "game",
+    py::arg("preview") = false);
   assets.def("describe", describeAsset, py::arg("asset"), py::arg("scope") = "any");
+  assets.def(
+    "preview",
+    previewAsset,
+    py::arg("asset"),
+    py::arg("scope") = "any",
+    py::arg("size") = 128);
   assets.def(
     "capture", captureAsset, py::arg("library_asset_id"), py::arg("library_id") = "");
   assets.def(

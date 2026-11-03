@@ -213,6 +213,21 @@ try:
     raise AssertionError("asset capture worked without a project")
 except RuntimeError:
     pass
+try:
+    tb.assets.preview("python-api-missing-asset.mdl")
+    raise AssertionError("asset preview found a missing asset")
+except RuntimeError:
+    pass
+try:
+    tb.assets.preview("python-api-missing-asset.mdl", size=8)
+    raise AssertionError("asset preview accepted an invalid size")
+except ValueError:
+    pass
+try:
+    tb.assets.search(scope="game", preview=True, limit=50)
+    raise AssertionError("asset search preview accepted a large limit")
+except ValueError:
+    pass
 assert isinstance(tb.actions.list(), list)
 validation = tb.validation.check()
 assert validation["valid"] == (validation["total_count"] == 0)

@@ -5,6 +5,7 @@
 #include <QBuffer>
 #include <QColor>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QTemporaryDir>
 #include <QTextEdit>
@@ -33,6 +34,7 @@
 #include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+#include "ui/automation/AutomationAssetPreview.h"
 #include "ui/automation/AutomationAssets.h"
 
 #include <algorithm>
@@ -786,6 +788,25 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto recaptured =
       requireProject(captureAutomationLibraryAsset(*sandbox.session, {}, wallLibraryId));
     CHECK(recaptured.id == captured.id);
+
+    // Previewing a texture writes a PNG that a browser or an agent can open.
+    const auto previewFolder = sandbox.root / "previews";
+    const auto preview = previewAutomationAsset(
+      sandbox.session.get(), projectHits.front(), 64, previewFolder);
+    CHECK(preview.status == "image");
+    CHECK(preview.source == "texture");
+    CHECK(preview.width > 0);
+    CHECK(preview.height > 0);
+    CHECK(QFileInfo::exists(pathAsQString(preview.path)));
+    const auto previewImage = QImage{pathAsQString(preview.path)};
+    CHECK(previewImage.width() == preview.width);
+    CHECK(previewImage.height() == preview.height);
+
+    // Library assets preview from the session cache without capturing them.
+    const auto libraryPreview = previewAutomationAsset(
+      sandbox.session.get(), libraryHits.front(), 64, previewFolder);
+    CHECK(libraryPreview.status == "image");
+    CHECK(libraryPreview.width > 0);
 
     // Importing a file reuses the project window's naming and folder rules.
     const auto importPath = sandbox.root / "extra.mdl";

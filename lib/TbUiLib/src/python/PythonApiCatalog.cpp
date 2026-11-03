@@ -367,7 +367,13 @@ constexpr auto AssetsSymbols = std::array{
   PythonApiSymbol{
     "search",
     Function,
-    "(query='', type=None, limit=50, scope='game') -> list[dict]",
+    "(query='', type=None, limit=50, scope='game', preview=False) -> list[dict]",
+    std::nullopt,
+    PythonApiEffect::Read},
+  PythonApiSymbol{
+    "preview",
+    Function,
+    "(asset, scope='any', size=128) -> dict",
     std::nullopt,
     PythonApiEffect::Read},
   PythonApiSymbol{
