@@ -21,6 +21,7 @@
 #include <QPainter>
 #include <QPointer>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QTimer>
@@ -140,7 +141,22 @@ AssetInspector::AssetInspector(QWidget* parent)
   : QWidget{parent}
 {
   setObjectName("AssetInspector");
-  auto* layout = new QVBoxLayout{this};
+  // The inspector is docked, split and occasionally squeezed into a short panel. Without
+  // a scroller its layout runs out of height, overlaps its own rows and paints the
+  // preview over the controls. Scrolling keeps every control reachable at any panel size.
+  auto* outerLayout = new QVBoxLayout{this};
+  outerLayout->setContentsMargins(0, 0, 0, 0);
+  auto* scroll = new QScrollArea{this};
+  scroll->setObjectName("AssetInspector_Scroll");
+  scroll->setWidgetResizable(true);
+  scroll->setFrameShape(QFrame::NoFrame);
+  scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  // Let the hosting surface show through instead of painting a scroll-area background.
+  scroll->viewport()->setAutoFillBackground(false);
+  outerLayout->addWidget(scroll);
+  auto* content = new QWidget{};
+  scroll->setWidget(content);
+  auto* layout = new QVBoxLayout{content};
   layout->setContentsMargins(4, 4, 4, 4);
   m_name = new QLabel{};
   m_name->setWordWrap(true);

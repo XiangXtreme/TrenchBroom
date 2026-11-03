@@ -15,6 +15,7 @@
 #include <QListWidget>
 #include <QMediaPlayer>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalSpy>
 #include <QSlider>
 #include <QTemporaryDir>
@@ -711,6 +712,21 @@ TEST_CASE("AssetInspection")
     play->setChecked(true);
     sequence->setCurrentIndex(1);
     CHECK_FALSE(play->isChecked());
+
+    // A short, narrow details panel scrolls its content instead of letting the layout
+    // run out of height, which used to paint the preview over the controls.
+    inspector.setFixedSize(420, 320);
+    QApplication::processEvents();
+    auto* scroll = inspector.findChild<QScrollArea*>("AssetInspector_Scroll");
+    auto* preview = inspector.findChild<QWidget*>("AssetInspector_Image");
+    REQUIRE(scroll != nullptr);
+    REQUIRE(scroll->widget() != nullptr);
+    REQUIRE(preview != nullptr);
+    const auto contentY = [content = scroll->widget()](QWidget* widget) {
+      return widget->mapTo(content, QPoint{0, 0}).y();
+    };
+    CHECK(contentY(sequence) >= contentY(preview) + preview->height());
+    CHECK(scroll->widget()->height() > scroll->viewport()->height());
 
     // Hiding, clearing and selecting another resource must stop the studio timer.
     play->setChecked(true);

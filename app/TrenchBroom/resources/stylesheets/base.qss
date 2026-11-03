@@ -1739,6 +1739,11 @@ QWidget#ProjectAssetDetailsSurface > QLabel[regionAnchor="true"] {
   border-bottom: 1px solid @tb-border;
 }
 
+QScrollArea#AssetInspector_Scroll {
+  background: transparent;
+  border: none;
+}
+
 QTreeWidget#ProjectAssetDetails {
   background: @tb-sidebar-background;
   border: none;
