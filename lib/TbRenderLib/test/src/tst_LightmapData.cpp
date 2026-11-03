@@ -190,6 +190,32 @@ TEST_CASE("buildFaceLightmap")
     CHECK(pixelAt(pixels, block->size, 0, 0, 0) == 5);
   }
 
+  SECTION("keeps baked samples for a half-luxel strip split across BSP faces")
+  {
+    auto bake = makeBake(8, 8);
+    bake.faces.push_back(makeRecord(
+      {0, 0},
+      {2, 2},
+      {0, 0},
+      {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 0.5f}, {0.0f, 0.5f}}));
+    bake.faces.push_back(makeRecord(
+      {1, 0},
+      {2, 2},
+      {4, 0},
+      {{1.0f, 0.0f}, {2.0f, 0.0f}, {2.0f, 0.5f}, {1.0f, 0.5f}}));
+
+    auto face = makeFace(32.0f);
+    face.outline = {
+      {0.0f, 0.0f, 0.0f}, {32.0f, 0.0f, 0.0f}, {32.0f, 8.0f, 0.0f}, {0.0f, 8.0f, 0.0f}};
+
+    auto pixels = std::vector<std::uint8_t>{};
+    const auto block = buildFaceLightmap(face, bake, pixels);
+
+    REQUIRE(block.has_value());
+    CHECK(pixelAt(pixels, block->size, 0, 0, 0) == 1);
+    CHECK(pixelAt(pixels, block->size, 1, 0, 0) == 5);
+  }
+
   SECTION("returns nothing when no record shares the plane")
   {
     auto bake = makeBake(8, 8);

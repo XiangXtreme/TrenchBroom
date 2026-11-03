@@ -113,6 +113,17 @@ bool containsPoint(const std::vector<vm::vec2f>& poly, const float u, const floa
   return inside;
 }
 
+vm::polygon3f bakedPolygon(const LightmapFaceRecord& record)
+{
+  auto outline = std::vector<vm::vec3f>{};
+  outline.reserve(record.poly.size());
+  for (const auto& coord : record.poly)
+  {
+    outline.emplace_back(coord.x(), coord.y(), 0.0f);
+  }
+  return vm::polygon3f{std::move(outline)};
+}
+
 bool overlapsFace(const LightmapFaceRecord& record, const FaceLightmapInput& face)
 {
   auto outline = std::vector<vm::vec3f>{};
@@ -123,16 +134,9 @@ bool overlapsFace(const LightmapFaceRecord& record, const FaceLightmapInput& fac
     outline.emplace_back(coord.x(), coord.y(), 0.0f);
   }
 
-  auto bakedOutline = std::vector<vm::vec3f>{};
-  bakedOutline.reserve(record.poly.size());
-  for (const auto& coord : record.poly)
-  {
-    bakedOutline.emplace_back(coord.x(), coord.y(), 0.0f);
-  }
-
   return vm::polygons_overlap(
     vm::polygon3f{std::move(outline)},
-    vm::polygon3f{std::move(bakedOutline)},
+    bakedPolygon(record),
     vm::vec3f{0.0f, 0.0f, 1.0f});
 }
 
@@ -359,38 +363,25 @@ std::optional<LightmapBlock> buildFaceLightmap(
   pixels.assign(luxelCount * 3, 0);
   auto valid = std::vector<bool>(luxelCount, false);
 
-  for (const auto* record : group)
-  {
-    for (auto y = 0; y < block.size.y(); ++y)
+  const auto copySamples = [&](const LightmapFaceRecord& record, const auto& coversLuxel) {
+    const auto start = vm::max(block.mins, record.mins);
+    const auto end = vm::min(block.mins + block.size, record.mins + record.size);
+    for (auto y = start.y(); y < end.y(); ++y)
     {
-      for (auto x = 0; x < block.size.x(); ++x)
+      for (auto x = start.x(); x < end.x(); ++x)
       {
-        const auto index = static_cast<size_t>(y) * static_cast<size_t>(block.size.x())
-                           + static_cast<size_t>(x);
-        if (valid[index])
-        {
-          continue;
-        }
-
-        const auto luxelU = static_cast<float>(block.mins.x() + x) + 0.5f;
-        const auto luxelV = static_cast<float>(block.mins.y() + y) + 0.5f;
-        if (!containsPoint(record->poly, luxelU, luxelV))
-        {
-          continue;
-        }
-
-        const auto sourceX = block.mins.x() + x - record->mins.x();
-        const auto sourceY = block.mins.y() + y - record->mins.y();
-        if (
-          sourceX < 0 || sourceY < 0 || sourceX >= record->size.x()
-          || sourceY >= record->size.y())
+        const auto index = static_cast<size_t>(y - block.mins.y())
+                             * static_cast<size_t>(block.size.x())
+                           + static_cast<size_t>(x - block.mins.x());
+        if (valid[index] || !coversLuxel(static_cast<float>(x), static_cast<float>(y)))
         {
           continue;
         }
 
         const auto source =
-          (static_cast<size_t>(record->tile.y() + sourceY) * static_cast<size_t>(bake.width)
-           + static_cast<size_t>(record->tile.x() + sourceX))
+          (static_cast<size_t>(record.tile.y() + y - record.mins.y())
+             * static_cast<size_t>(bake.width)
+           + static_cast<size_t>(record.tile.x() + x - record.mins.x()))
           * 3;
         if (source + 2 >= bake.pixels.size())
         {
@@ -403,11 +394,40 @@ std::optional<LightmapBlock> buildFaceLightmap(
         valid[index] = true;
       }
     }
+  };
+
+  for (const auto* record : group)
+  {
+    copySamples(*record, [&](const float u, const float v) {
+      return containsPoint(record->poly, u + 0.5f, v + 0.5f);
+    });
   }
 
-  if (std::none_of(valid.begin(), valid.end(), [](const bool value) { return value; }))
+  if (std::ranges::none_of(valid, [](const bool value) { return value; }))
   {
-    return std::nullopt;
+    // A narrow face can cross a luxel without containing its center.
+    for (const auto* record : group)
+    {
+      if (record->poly.size() < 3 || !overlapsFace(*record, face))
+      {
+        continue;
+      }
+
+      const auto polygon = bakedPolygon(*record);
+      copySamples(*record, [&](const float u, const float v) {
+        const auto cell = vm::polygon3f{
+          {u, v, 0.0f},
+          {u + 1.0f, v, 0.0f},
+          {u + 1.0f, v + 1.0f, 0.0f},
+          {u, v + 1.0f, 0.0f}};
+        return vm::polygons_overlap(cell, polygon, vm::vec3f{0.0f, 0.0f, 1.0f});
+      });
+    }
+
+    if (std::ranges::none_of(valid, [](const bool value) { return value; }))
+    {
+      return std::nullopt;
+    }
   }
 
   bleed(pixels, valid, block.size.x(), block.size.y());
