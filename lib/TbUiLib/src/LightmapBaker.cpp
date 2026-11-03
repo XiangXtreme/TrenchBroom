@@ -23,16 +23,12 @@
 #include <QString>
 #include <QStringList>
 
+#include "mdl/ExportOptions.h"
 #include "mdl/Map.h"
-#include "mdl/NodeWriter.h"
 #include "ui/LightmapBakeReader.h"
-
-#include "kd/task_manager.h"
 
 #include <algorithm>
 #include <atomic>
-#include <fstream>
-#include <sstream>
 #include <system_error>
 #include <thread>
 
@@ -52,28 +48,6 @@ constexpr auto ManifestFileName = "lightmap.json";
 QString toQString(const std::filesystem::path& path)
 {
   return QString::fromStdString(path.string());
-}
-
-/**
- * Serializes the map as it is now, so that the bake matches what the viewport shows
- * instead of whatever is on disk.
- */
-bool writeMap(const mdl::Map& map, const std::filesystem::path& path, std::string& error)
-{
-  auto stream = std::ostringstream{};
-  auto taskManager = kdl::task_manager{};
-  auto writer = mdl::NodeWriter{map.worldNode(), stream};
-  writer.writeMap(taskManager);
-
-  const auto text = stream.str();
-  auto file = std::ofstream{path, std::ios::binary};
-  if (!file)
-  {
-    error = "could not write the temporary map";
-    return false;
-  }
-  file.write(text.data(), static_cast<std::streamsize>(text.size()));
-  return file.good();
 }
 
 int clampedThreadCount(const int threadCount)
@@ -119,7 +93,6 @@ void LightmapBaker::start(
   m_output.clear();
   m_stage = 0;
 
-  auto error = std::string{};
   // Each bake gets its own directory: two views may bake at the same time, and sharing
   // one directory would have them overwrite each other's output.
   m_workDir = std::filesystem::temp_directory_path() / "tb-lightmap"
@@ -133,9 +106,16 @@ void LightmapBaker::start(
     return;
   }
 
-  if (!writeMap(map, m_workDir / MapFileName, error))
+  // Use the live map and the same layer filtering as a normal compile export.
+  const auto exported = map.exportAs(mdl::MapExportOptions{
+    m_workDir / MapFileName,
+    false,
+    std::nullopt,
+    std::nullopt,
+  });
+  if (exported.is_error())
   {
-    finish(std::nullopt, error);
+    finish(std::nullopt, std::get<Error>(exported.error()).msg);
     return;
   }
 
