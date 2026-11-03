@@ -160,24 +160,26 @@ CSG 会把 TB 的一个大面切成多个 `dface`，所以不能 1:1 对应。TB
 - 单队列 + 可取消：取消通过 `QProcess::kill` + 删除临时目录；不依赖 `hltools` 的取消命令。
 - 临时目录：`<临时目录>/tb-lightmap/<文档 hash>/`，进程退出与文档关闭时清理。
 
-### 4.5 `hltools` 侧需要新增的 manifest（契约草案）
+### 4.5 manifest 契约
+
+`hltools lightmap <map.bsp> <atlas.bmp> -manifest <atlas.json>` 已实现，输出形如：
 
 ```json
 {
-  "atlas": { "file": "atlas.png", "width": 1024, "height": 2526, "padding": 1 },
+  "atlas": { "width": 1024, "height": 2368, "faces": 15638, "tiles": 15638 },
   "faces": [
     {
-      "index": 1234,
-      "plane": { "normal": [0.0, 0.0, 1.0], "dist": 96.0 },
-      "side": 0,
+      "face": 1234,
+      "plane": [0, 0, 1],
+      "dist": -128,
+      "vecs": [[1, 0, 0, 0], [0, 1, 0, 0]],
       "texinfo": 42,
-      "vecs": [[0.0, -1.0, 0.0, -112.0], [0.0, 0.0, -1.0, 32.0]],
-      "mins": [-7, -2],
-      "size": [15, 5],
-      "tile": { "x": 128, "y": 64 },
-      "lightofs": 12345,
+      "mins": [16, 175],
+      "size": [10, 3],
+      "tile": [49, 221],
+      "lightofs": 259779,
       "styles": [0, 255, 255, 255],
-      "poly": [[-7.0, -2.0], [7.5, -2.0], [7.5, 2.5], [-7.0, 2.5]]
+      "poly": [[16.4375, 175.562], [24.4375, 175.562], [24.4375, 178.562]]
     }
   ]
 }
@@ -186,6 +188,7 @@ CSG 会把 TB 的一个大面切成多个 `dface`，所以不能 1:1 对应。TB
 - `poly` 用 **luxel 单位**（已按 vecs 投影并 /16），TB 做点在多边形内判断时不需要再做任何换算。
 - `lightofs == -1` 或 `styles[0] == 255` 表示该面不受光，TB 直接用 1.0。
 - 只导出 style 0（GoldSrc 的 4 个 style 引擎会混合，编辑器预览不需要）。
+- 平面已按 `side` 翻转，`vecs` 是该面实际使用的光贴图轴；同一平面上不同 `vecs` 的记录属于互不相干的 luxel 格。
 
 ## 5. 分阶段实施
 
