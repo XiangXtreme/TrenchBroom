@@ -1235,7 +1235,9 @@ void MapViewBase::renderContents(gl::Gl& gl)
   renderContext.setLightmapAtlas(m_lightmapAtlas.get());
   renderContext.setLightmapAssembly(m_lightmapAssembly.get());
 
-  if (!pref(Preferences::ShowLightmap))
+  const auto bakesLightmap = pref(Preferences::ShowLightmap)
+                             && renderMode() == render::RenderMode::Render3D;
+  if (!bakesLightmap)
   {
     if (m_lightmapBakeTimer)
     {

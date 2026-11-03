@@ -30,6 +30,7 @@
 #include "kd/task_manager.h"
 
 #include <algorithm>
+#include <atomic>
 #include <fstream>
 #include <sstream>
 #include <system_error>
@@ -40,6 +41,8 @@ namespace tb::ui
 
 namespace
 {
+
+std::atomic<int> nextBakeId = 0;
 
 constexpr auto MapFileName = "lightmap.map";
 constexpr auto BspFileName = "lightmap.bsp";
@@ -117,7 +120,10 @@ void LightmapBaker::start(
   m_stage = 0;
 
   auto error = std::string{};
-  m_workDir = std::filesystem::temp_directory_path() / "tb-lightmap";
+  // Each bake gets its own directory: two views may bake at the same time, and sharing
+  // one directory would have them overwrite each other's output.
+  m_workDir = std::filesystem::temp_directory_path() / "tb-lightmap"
+              / ("bake-" + std::to_string(++nextBakeId));
   auto ec = std::error_code{};
   std::filesystem::remove_all(m_workDir, ec);
   std::filesystem::create_directories(m_workDir, ec);
