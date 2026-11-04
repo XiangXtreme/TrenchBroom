@@ -218,8 +218,6 @@ void MapEditorView::applyLayoutState()
     m_layout.infoRatio = splitRatio(*m_vSplitter, m_layout.infoRatio);
   m_layout.legacyHorizontal.clear();
   m_layout.legacyVertical.clear();
-  if (m_layout.inspectorRatio < 0.28)
-    m_layout.inspectorRatio = EditorLayout{}.inspectorRatio;
   setSplitRatio(*m_hSplitter, m_layout.inspectorRatio);
   setSplitRatio(*m_vSplitter, m_layout.infoRatio);
   m_layoutPending = false;

@@ -72,8 +72,6 @@ EditorLayout loadEditorLayout(QSettings& settings, const WorkspaceKind kind)
   if (values.value("version").toInt() != 1)
     return result;
   result.inspectorRatio = ratio(values.value("inspectorRatio"), result.inspectorRatio);
-  if (result.inspectorRatio < 0.28)
-    result.inspectorRatio = EditorLayout{}.inspectorRatio;
   result.infoRatio = ratio(values.value("infoRatio"), result.infoRatio);
   result.inspectorVisible = values.value("inspectorVisible", true).toBool();
   result.infoVisible = values.value("infoVisible", true).toBool();

@@ -28,7 +28,7 @@ TEST_CASE("WorkspaceLayout")
     editor.inspectorVisible = false;
     editor.inspectorPage = InspectorPage::Outliner;
     editor.infoPage = InfoPanelPage::PythonConsole;
-    editor.inspectorRatio = 0.35;
+    editor.inspectorRatio = 0.25;
     saveEditorLayout(settings, WorkspaceKind::Project, editor);
     auto tools = ToolLayout{};
     tools.tool = "issues";
@@ -43,7 +43,7 @@ TEST_CASE("WorkspaceLayout")
     CHECK_FALSE(project.inspectorVisible);
     CHECK(project.inspectorPage == InspectorPage::Outliner);
     CHECK(project.infoPage == InfoPanelPage::PythonConsole);
-    CHECK(project.inspectorRatio == 0.35);
+    CHECK(project.inspectorRatio == 0.25);
     CHECK(loadEditorLayout(reopened, WorkspaceKind::Map).inspectorVisible);
     CHECK(
       loadEditorLayout(reopened, WorkspaceKind::Map).inspectorPage == InspectorPage::Map);
