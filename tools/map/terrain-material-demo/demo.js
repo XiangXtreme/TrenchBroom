@@ -134,7 +134,7 @@
     const index = surface ? surface.material : variant.cells[cell];
     const tex = variant.textures[index];
     const kind = surface?.kind === "junction" ? "三材质交汇"
-      : surface?.kind === "fit" ? "UV 退化处烘焙"
+      : surface?.kind === "fit" ? "UV 超限处烘焙"
       : surface?.kind === "patch" ? "合并面烘焙"
       : surface?.kind === "pair" ? "可复用过渡"
       : index < (variant.baseCount ?? 2) ? "平铺底纹"
@@ -359,7 +359,7 @@
       root.querySelector(".geometry").textContent =
         `地形 ${columns * worldBlockSize} × ${rows * worldBlockSize} 单位 · ${variant.cells.length} 个顶面 · MAP 共 ${faceCount} 个 Brush 面`;
       root.querySelector(".tile-size").textContent = variant.grid
-        ? `合并块 ${variant.mergedPatchFaces} 个 · 三材质交汇 ${variant.junctionFaces} 面 · UV 退化处烘焙 ${variant.fitFaces} 面`
+        ? `合并块 ${variant.mergedPatchFaces} 个 · 三材质交汇 ${variant.junctionFaces} 面 · UV 超限处烘焙 ${variant.fitFaces} 面`
         : variant.faces
         ? `过渡带沿 Y 轴宽 ${(variant.transitionWidth * worldBlockSize / core).toFixed(1)} 单位 · 过渡贴图 ${variant.textures[2].size} × ${variant.textures[2].size} px`
         : `单块 ${worldBlockSize} × ${worldBlockSize} 单位 · 过渡贴图 ${tileSize} × ${tileSize} px（有效区 ${core} × ${core}）`;

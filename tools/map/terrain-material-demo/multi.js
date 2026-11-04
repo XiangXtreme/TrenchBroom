@@ -13,6 +13,20 @@ globalThis.TerrainMulti = (() => {
   const palette = new Uint8Array(768);
   const ramp = [];
   let nextColor = 0;
+
+  function usableTransitionUv(vx, vy) {
+    // Singular values measure texel density in the most compressed and
+    // stretched directions, including shear between the U and V axes.
+    const [ux, uy] = sharedU;
+    const trace = ux * ux + uy * uy + vx * vx + vy * vy;
+    const determinant = ux * vy - uy * vx;
+    const largestSquared = (trace + Math.sqrt(Math.max(0, trace * trace
+      - 4 * determinant * determinant))) / 2;
+    const smallestSquared = determinant * determinant / largestSquared;
+    return smallestSquared >= 0.65 ** 2 && largestSquared <= 1.65 ** 2
+      && largestSquared <= 4 * smallestSquared;
+  }
+
   for (let dirt = 0; dirt <= weightSteps; dirt++) {
     ramp[dirt] = nextColor;
     for (let rock = 0; rock <= weightSteps - dirt; rock++) {
@@ -181,7 +195,7 @@ globalThis.TerrainMulti = (() => {
         const [v0, v1, v2] = corners.map((corner) => lowV + corner[b] * (highV - lowV));
         const vx = (half ? v1 - v2 : v1 - v0) / step;
         const vy = (half ? v2 - v0 : v2 - v1) / step;
-        if (Math.abs(sharedU[0] * vy - sharedU[1] * vx) < 0.02) return { kind: "fit" };
+        if (!usableTransitionUv(vx, vy)) return { kind: "fit" };
         const x = cell % across * step, y = Math.floor(cell / across) * step;
         return { kind: "pair", key: a * names.length + b, v: [vx, vy, v0 - vx * x - vy * y] };
       });
