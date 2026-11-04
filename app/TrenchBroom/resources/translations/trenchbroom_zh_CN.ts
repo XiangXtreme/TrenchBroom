@@ -5569,6 +5569,10 @@ By %2</source>
     <context>
         <name>tb::ui::Inspector</name>
         <message>
+            <source>Terrain</source>
+            <translation>地形</translation>
+        </message>
+        <message>
             <location filename="../../../../lib/TbUiLib/src/Inspector.cpp" line="111" />
             <source>Map Inspector</source>
             <translation>地图检查器</translation>
@@ -8436,6 +8440,73 @@ Removing them frees about %3. Current assets and versions are kept.</source>
         <message>
             <source>No active map</source>
             <translation>无活动地图</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::TerrainInspector</name>
+        <message>
+            <source>Grass</source>
+            <translation>草地</translation>
+        </message>
+        <message>
+            <source>Dirt</source>
+            <translation>泥土</translation>
+        </message>
+        <message>
+            <source>Rock</source>
+            <translation>岩石</translation>
+        </message>
+        <message>
+            <source> units</source>
+            <translation> 单位</translation>
+        </message>
+        <message>
+            <source>Create Terrain Region</source>
+            <translation>创建地形区域</translation>
+        </message>
+        <message>
+            <source>Paint Terrain</source>
+            <translation>涂刷地形</translation>
+        </message>
+        <message>
+            <source>Generate MAP and WAD…</source>
+            <translation>生成 MAP 和 WAD…</translation>
+        </message>
+        <message>
+            <source>Material</source>
+            <translation>材质</translation>
+        </message>
+        <message>
+            <source>Brush radius</source>
+            <translation>笔刷半径</translation>
+        </message>
+        <message>
+            <source>Select a brush group to create a terrain region.</source>
+            <translation>选择一个 Brush 组来创建地形区域。</translation>
+        </message>
+        <message>
+            <source>Open a Half-Life Valve 220 map in a project to edit terrain.</source>
+            <translation>请在工程中打开 Half-Life 的 Valve 220 地图来编辑地形。</translation>
+        </message>
+        <message>
+            <source>%1 · %2 source top faces</source>
+            <translation>%1 · %2 个源顶面</translation>
+        </message>
+        <message>
+            <source>Could not create the terrain region.</source>
+            <translation>无法创建地形区域。</translation>
+        </message>
+        <message>
+            <source>Could not save the terrain stroke.</source>
+            <translation>无法保存地形笔划。</translation>
+        </message>
+        <message>
+            <source>Export Terrain Compile Snapshot</source>
+            <translation>导出地形编译快照</translation>
+        </message>
+        <message>
+            <source>Exported %1 terrain top faces · %2 WAD textures · %3 MB</source>
+            <translation>已导出 %1 个地形顶面 · %2 张 WAD 纹理 · %3 MB</translation>
         </message>
     </context>
 </TS>

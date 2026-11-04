@@ -117,7 +117,9 @@ globalThis.TerrainBake = (() => {
     const bytes = new Uint8Array(directory + textures.length * 32);
     const view = new DataView(bytes.buffer);
     const u32 = (at, value) => view.setUint32(at, value, true);
-    const ascii = (at, value) => bytes.set(new TextEncoder().encode(value), at);
+    const ascii = (at, value) => {
+      for (let i = 0; i < value.length; i++) bytes[at + i] = value.charCodeAt(i);
+    };
     ascii(0, "WAD3");
     u32(4, textures.length);
     u32(8, directory);
@@ -157,7 +159,7 @@ globalThis.TerrainBake = (() => {
         return bytes.subarray(start, start + (size >> level) * (height >> level));
       });
       const colors = levels[3].byteOffset + levels[3].byteLength + 2;
-      return { ...texture, size, height, levels, colors: bytes.subarray(colors, colors + 768) };
+      return Object.assign({}, texture, { size, height, levels, colors: bytes.subarray(colors, colors + 768) });
     });
   }
 
@@ -212,7 +214,7 @@ globalThis.TerrainBake = (() => {
             levels: raster(size, at, originX, originY) });
         }
         originalCells.push(original.length);
-        original.push({ ...shared[match.texture], name: "tm_u" + original.length });
+        original.push(Object.assign({}, shared[match.texture], { name: "tm_u" + original.length }));
         sharedCells.push(match.texture);
       }
     }
@@ -268,11 +270,11 @@ globalThis.TerrainBake = (() => {
     const transition = { name: "tm_grass_dirt", size: period,
       levels: raster(period, (_, y) =>
         Math.round(255 * smooth(clamp((y + 0.5 - grassEdge) / transitionWidth, 0, 1)))) };
-    const original = { ...bake(weights).original, id: "terrain_bend_baked" };
+    const original = Object.assign(bake(weights).original, { id: "terrain_bend_baked" });
     const shared = wadVariant("terrain_bend_strip", [...bases, transition],
       faces.map((face) => face.material));
-    return { original, shared: { ...shared, faces, segmentWidth, transitionWidth,
-      bandCount: materials.length } };
+    return { original, shared: Object.assign(shared, { faces, segmentWidth, transitionWidth,
+      bandCount: materials.length }) };
   }
 
   function makeMap(variant, { terrainTop = (x) => x / 16 } = {}) {

@@ -37,6 +37,7 @@
 #include "ui/SyncHeightEventFilter.h"
 #include "ui/TabBar.h"
 #include "ui/TabBook.h"
+#include "ui/TerrainInspector.h"
 #include "ui/outliner/OutlinerInspector.h"
 
 #include <array>
@@ -54,12 +55,14 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
   m_faceInspector = new FaceInspector{appController, document};
   m_outlinerInspector = new OutlinerInspector{document};
   m_pluginInspector = new PluginInspector{};
+  m_terrainInspector = new TerrainInspector{appController, document};
 
   m_tabBook->addPage(m_mapInspector, "Map");
   m_tabBook->addPage(m_entityInspector, "Entity");
   m_tabBook->addPage(m_faceInspector, "Face");
   m_tabBook->addPage(m_outlinerInspector, "Outliner");
   m_tabBook->addPage(m_pluginInspector, "Plugin");
+  m_tabBook->addPage(m_terrainInspector, "Terrain");
 
   auto* legacyTabBar = m_tabBook->tabBar();
   legacyTabBar->setObjectName("Inspector_LegacyTabBar");
@@ -136,6 +139,12 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
     tr("Plugins"),
     "Inspector_NavigationPlugin",
     "InspectorPlugin.svg");
+  addNavigationButton(
+    InspectorPage::Terrain,
+    tr("Terrain"),
+    tr("Terrain"),
+    "Inspector_NavigationTerrain",
+    "InspectorTerrain.svg");
   navigationLayout->addStretch(1);
   navigationRail->setLayout(navigationLayout);
 
@@ -194,8 +203,8 @@ void Inspector::updateNavigation(const int page)
     return;
   }
 
-  const auto titles =
-    std::array{tr("Map"), tr("Entity"), tr("Face"), tr("Outliner"), tr("Plugins")};
+  const auto titles = std::array{
+    tr("Map"), tr("Entity"), tr("Face"), tr("Outliner"), tr("Plugins"), tr("Terrain")};
   m_pageTitle->setText(titles.at(static_cast<size_t>(page)).toUpper());
   m_navigationButtons.at(static_cast<size_t>(page))->setChecked(true);
 }

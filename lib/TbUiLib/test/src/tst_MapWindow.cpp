@@ -861,6 +861,7 @@ TEST_CASE("MapWindow")
     auto* faceButton = window.findChild<QToolButton*>("Inspector_NavigationFace");
     auto* outlinerButton = window.findChild<QToolButton*>("Inspector_NavigationOutliner");
     auto* pluginButton = window.findChild<QToolButton*>("Inspector_NavigationPlugin");
+    auto* terrainButton = window.findChild<QToolButton*>("Inspector_NavigationTerrain");
 
     REQUIRE(navigationRail != nullptr);
     REQUIRE(pageTitle != nullptr);
@@ -870,6 +871,7 @@ TEST_CASE("MapWindow")
     REQUIRE(faceButton != nullptr);
     REQUIRE(outlinerButton != nullptr);
     REQUIRE(pluginButton != nullptr);
+    REQUIRE(terrainButton != nullptr);
     auto* surface = window.findChild<QWidget*>("MapWindow_InspectorSurface");
     auto* tabBook = window.findChild<QWidget*>("Inspector_TabBook");
     REQUIRE(surface);
@@ -900,8 +902,14 @@ TEST_CASE("MapWindow")
     CHECK_FALSE(faceButton->icon().isNull());
     CHECK_FALSE(outlinerButton->icon().isNull());
     CHECK_FALSE(pluginButton->icon().isNull());
+    CHECK_FALSE(terrainButton->icon().isNull());
     for (const auto* button :
-         {mapButton, entityButton, faceButton, outlinerButton, pluginButton})
+         {mapButton,
+          entityButton,
+          faceButton,
+          outlinerButton,
+          pluginButton,
+          terrainButton})
     {
       const auto iconImage = button->icon().pixmap(QSize{20, 20}).toImage();
       CHECK(iconImage.deviceIndependentSize() == QSizeF{20, 20});
@@ -933,6 +941,11 @@ TEST_CASE("MapWindow")
     CHECK(pluginButton->isChecked());
     CHECK_FALSE(faceButton->isChecked());
     CHECK(pageTitle->text() == "PLUGINS");
+    checkSingleNavigation();
+    QTest::mouseClick(terrainButton, Qt::LeftButton);
+    CHECK(terrainButton->isChecked());
+    CHECK_FALSE(pluginButton->isChecked());
+    CHECK(pageTitle->text() == "TERRAIN");
     checkSingleNavigation();
     window.switchToInspectorPage(InspectorPage::Map);
     CHECK(mapButton->isChecked());

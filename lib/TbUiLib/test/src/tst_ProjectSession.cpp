@@ -16,16 +16,30 @@
 #include "gl/PerspectiveCamera.h"
 #include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
+#include "mdl/BrushBuilder.h"
+#include "mdl/BrushNode.h"
 #include "mdl/CompilationProfile.h"
+#include "mdl/EditorContext.h"
 #include "mdl/GameFileSystem.h"
+#include "mdl/GroupNode.h"
+#include "mdl/LayerNode.h"
 #include "mdl/Map.h"
+#include "mdl/MapFormat.h"
 #include "mdl/MapHeader.h"
+#include "mdl/Map_CopyPaste.h"
 #include "mdl/Map_Entities.h"
+#include "mdl/Map_Groups.h"
+#include "mdl/Map_Nodes.h"
+#include "mdl/Map_Selection.h"
+#include "mdl/NodeContents.h"
+#include "mdl/PasteType.h"
+#include "mdl/WorldNode.h"
 #include "project/AssetLibrary.h"
 #include "project/ContentHash.h"
 #include "project/GoldSrcWad.h"
 #include "project/LibrarySync.h"
 #include "ui/CatalogAssetDrop.h"
+#include "ui/ClipTool.h"
 #include "ui/CompilationContext.h"
 #include "ui/CompilationRunner.h"
 #include "ui/CompilationVariables.h"
@@ -34,6 +48,7 @@
 #include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainRegion.h"
 #include "ui/automation/AutomationAssetPreview.h"
 #include "ui/automation/AutomationAssets.h"
 
@@ -695,6 +710,169 @@ TEST_CASE("ProjectSession")
     CHECK(
       session->renamePublishPath(combinedAsset.id, "textures/COMBINED2.wad").is_error());
   }
+}
+
+TEST_CASE("Project terrain paint survives clipping and compile snapshots")
+{
+  auto temporary = QTemporaryDir{};
+  REQUIRE(temporary.isValid());
+  const auto root = pathFromQString(temporary.path());
+  const auto path = root / "terrain.tbproj";
+  auto session = requireProject(ProjectSession::create(path, "Terrain", "Half-Life"));
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  config.gameInfo.gameConfig.name = "Half-Life";
+  auto& document = fixture.create(config);
+  auto& map = document.map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* ramp = new mdl::BrushNode{requireProject(builder.createBrush(
+    std::vector<vm::vec3d>{
+      {0, 0, 0},
+      {0, -640, 0},
+      {1280, 0, 80},
+      {1280, -640, 80},
+      {0, 0, -64},
+      {0, -640, -64},
+      {1280, 0, -64},
+      {1280, -640, -64}},
+    "terrainbase"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {ramp}}});
+  mdl::selectNodes(map, {ramp});
+  auto* group = mdl::groupSelectedNodes(map, "Slope");
+  REQUIRE(group);
+  const auto groupId = group->persistentId();
+  auto region = requireProject(createTerrainRegion(*group));
+  for (auto x = 390; x <= 624; x += 6)
+  {
+    region.paint(vm::vec2d{double(x), 266 + (x - 390) / 4.0}, 45, 1);
+    region.paint(vm::vec2d{double(x), 218.0}, 30, 2);
+  }
+  const auto painted = region.encode();
+  auto content = group->group();
+  content.setTerrainPaint(painted);
+  REQUIRE(mdl::updateNodeContents(
+    map, "Paint Terrain", {{group, mdl::NodeContents{std::move(content)}}}));
+  map.undoCommand();
+  CHECK(group->group().terrainPaint().empty());
+  map.redoCommand();
+  CHECK(group->group().terrainPaint() == painted);
+
+  mdl::openGroup(map, *group);
+  mdl::selectNodes(map, {ramp});
+  auto clip = ClipTool{document};
+  REQUIRE(clip.activate());
+  clip.addPoint(vm::vec3d{640, 0, 40}, {});
+  clip.addPoint(vm::vec3d{640, -640, 40}, {});
+  clip.addPoint(vm::vec3d{640, -640, -32}, {});
+  REQUIRE(clip.canClip());
+  clip.toggleSide();
+  clip.performClip();
+  clip.deactivate();
+  REQUIRE(group->childCount() == 2);
+  CHECK(group->group().terrainPaint() == painted);
+  REQUIRE(requireProject(terrainSurfaces(*group, region)).size() == 2);
+  map.undoCommand();
+  CHECK(group->childCount() == 1);
+  CHECK(group->group().terrainPaint() == painted);
+  map.redoCommand();
+  CHECK(group->childCount() == 2);
+  CHECK(group->persistentId() == groupId);
+  const auto upper = std::ranges::find_if(group->children(), [](const auto* child) {
+    return child->logicalBounds().min.x() >= 640;
+  });
+  REQUIRE(upper != group->children().end());
+  mdl::deselectAll(map);
+  mdl::selectNodes(map, {*upper});
+  auto flatten = ClipTool{document};
+  REQUIRE(flatten.activate());
+  flatten.addPoint(vm::vec3d{640, 0, 40}, {});
+  flatten.addPoint(vm::vec3d{1280, -640, 40}, {});
+  flatten.addPoint(vm::vec3d{640, -640, 40}, {});
+  REQUIRE(flatten.canClip());
+  flatten.performClip();
+  flatten.deactivate();
+  CHECK(group->childCount() == 2);
+  CHECK(group->logicalBounds().max.z() == 40);
+  CHECK(group->group().terrainPaint() == painted);
+  map.undoCommand();
+  CHECK(group->logicalBounds().max.z() == 80);
+  map.redoCommand();
+  CHECK(group->logicalBounds().max.z() == 40);
+  mdl::closeGroup(map);
+
+  auto walls = std::vector<mdl::Node*>{};
+  for (const auto& bounds :
+       {vm::bbox3d{{-32, -672, -64}, {0, 32, 224}},
+        vm::bbox3d{{1280, -672, -64}, {1312, 32, 224}},
+        vm::bbox3d{{0, -672, -64}, {1280, -640, 224}},
+        vm::bbox3d{{0, 0, -64}, {1280, 32, 224}},
+        vm::bbox3d{{-32, -672, 224}, {1312, 32, 256}}})
+    walls.push_back(
+      new mdl::BrushNode{requireProject(builder.createCuboid(bounds, "terrainbase"))});
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), std::move(walls)}});
+  REQUIRE(mdl::paste(map, R"(
+    { "classname" "info_player_start" "origin" "64 -300 48" "angle" "0" }
+    { "classname" "info_player_deathmatch" "origin" "1160 -420 112" "angle" "180" }
+    { "classname" "light" "origin" "160 -320 190" "_light" "255 240 215 420" }
+    { "classname" "light" "origin" "560 -320 190" "_light" "255 240 215 420" }
+    { "classname" "light" "origin" "960 -320 190" "_light" "255 240 215 420" }
+  )") == mdl::PasteType::Node);
+
+  const auto source = root / "source.map";
+  requireProject(map.saveTo(source));
+  auto input = project::AssetImport{};
+  input.type = project::AssetType::Map;
+  input.virtualPath = "maps/terrain.map";
+  input.displayName = "Terrain";
+  input.original = readProjectFile(source);
+  input.compatible = input.original;
+  const auto asset = requireProject(session->importAsset(input));
+  auto texture = project::AssetImport{};
+  texture.type = project::AssetType::Texture;
+  texture.virtualPath = "textures/terrainbase.wad";
+  texture.displayName = "Terrain base";
+  texture.compatible =
+    requireProject(project::buildGoldSrcWad({miptexFor("terrainbase", 16, 128)}));
+  texture.original = texture.compatible;
+  requireProject(session->importAsset(texture));
+  requireProject(session->registerDocument(document, asset.id));
+  requireProject(session->save());
+  requireProject(session->exportCompileSnapshot(asset.id, root / "live"));
+  CHECK(group->childCount() == 2);
+  CHECK(group->group().terrainPaint() == painted);
+  session->unregisterDocument(document);
+  session.reset();
+
+  session = requireProject(ProjectSession::open(path));
+  const auto saved = requireProject(session->prepareMap(asset.id));
+  auto reopened = MapDocumentFixture{};
+  auto& loaded = reopened.load(saved, config);
+  const auto& children = loaded.map().worldNode().defaultLayer()->children();
+  const auto savedNode = std::ranges::find_if(children, [](const auto* child) {
+    return dynamic_cast<const mdl::GroupNode*>(child) != nullptr;
+  });
+  REQUIRE(savedNode != children.end());
+  auto* savedGroup = static_cast<mdl::GroupNode*>(*savedNode);
+  REQUIRE(savedGroup);
+  CHECK(savedGroup->persistentId() == groupId);
+  CHECK(savedGroup->group().terrainPaint() == painted);
+  CHECK(savedGroup->childCount() == 2);
+
+  requireProject(session->exportCompileSnapshot(asset.id, root / "reopened"));
+  const auto compiledMap = readProjectFile(root / "live/map.map");
+  const auto wad = readProjectFile(root / "live/textures.wad");
+  CHECK(compiledMap == readProjectFile(root / "reopened/map.map"));
+  CHECK(wad == readProjectFile(root / "reopened/textures.wad"));
+  const auto mapText = std::string{compiledMap.begin(), compiledMap.end()};
+  CHECK(mapText.find("_tb_terrain_paint") == std::string::npos);
+  CHECK(mapText.find("\"mapversion\" \"220\"") != std::string::npos);
+  CHECK(mapText.find("tbt0_") != std::string::npos);
+  const auto archive = requireProject(project::readGoldSrcWad(wad));
+  CHECK(std::ranges::any_of(archive.textures, [](const auto& entry) {
+    return entry.valid && entry.name.starts_with("tbt0_") && entry.width > 64;
+  }));
 }
 
 TEST_CASE("ProjectSessionAssetLibrary")

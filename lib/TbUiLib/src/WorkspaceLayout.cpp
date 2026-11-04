@@ -29,7 +29,8 @@ double ratio(const QVariant& value, const double fallback)
                                                                        : fallback;
 }
 
-const auto InspectorPages = QStringList{"map", "entity", "face", "outliner", "plugin"};
+const auto InspectorPages =
+  QStringList{"map", "entity", "face", "outliner", "plugin", "terrain"};
 const auto InfoPages = QStringList{"output-log", "python-console", "issues", "assets"};
 
 int pageIndex(const QStringList& pages, const QVariant& value)

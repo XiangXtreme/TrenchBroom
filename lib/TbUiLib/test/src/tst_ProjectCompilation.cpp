@@ -3,24 +3,42 @@
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
 #include <QApplication>
+#include <QComboBox>
 #include <QFile>
+#include <QPushButton>
 #include <QTemporaryDir>
+#include <QToolButton>
 #include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
 
 #include "gl/PerspectiveCamera.h"
+#include "mdl/BrushBuilder.h"
+#include "mdl/BrushFace.h"
+#include "mdl/BrushNode.h"
+#include "mdl/EditorContext.h"
+#include "mdl/GroupNode.h"
+#include "mdl/HitAdapter.h"
+#include "mdl/HitFilter.h"
+#include "mdl/LayerNode.h"
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Entities.h"
+#include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
+#include "mdl/Map_Picking.h"
 #include "mdl/Map_Selection.h"
+#include "mdl/PickResult.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/CompilationDialog.h"
+#include "ui/Inspector.h"
 #include "ui/MapDocument.h"
+#include "ui/MapView3D.h"
+#include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainInspector.h"
 
 #include <algorithm>
 #include <string>
@@ -138,6 +156,90 @@ ProjectWindow* findProjectWindow(const std::filesystem::path& path)
 }
 
 } // namespace
+
+TEST_CASE("Project terrain panel paints a picked brush")
+{
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("terrain-panel.tbproj"));
+  require(ProjectSession::create(path, "Terrain Panel", "Half-Life"));
+  auto fixture = AppControllerFixture{[](const auto& writeGameConfig) {
+    auto config = std::string{GameConfig};
+    config.replace(config.find(GameName), GameName.size(), "Half-Life");
+    writeGameConfig("Half-Life", config, std::nullopt, std::nullopt);
+  }};
+  auto& app = fixture.appController();
+  REQUIRE(app.openProject(path));
+  auto* project = findProjectWindow(path);
+  REQUIRE(project);
+  require(app.mapWindowManager().createProjectMap(
+    project->session(), "Terrain", mdl::MapFormat::Valve));
+  auto* window = app.mapWindowManager().topMapWindow();
+  REQUIRE(window);
+  auto& map = window->document().map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* brush = new mdl::BrushNode{
+    require(builder.createCuboid(vm::bbox3d{{-128, -128, -64}, {128, 128, 0}}, "grass"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {brush}}});
+  mdl::selectNodes(map, {brush});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+  auto* navigation = window->findChild<QToolButton*>("Inspector_NavigationTerrain");
+  REQUIRE(navigation);
+  project->resize(1200, 820);
+  project->show();
+  window->switchToInspectorPage(InspectorPage::Terrain);
+  navigation->click();
+  auto* panel = window->findChild<TerrainInspector*>();
+  REQUIRE(panel);
+  const auto controls = panel->findChildren<QPushButton*>();
+  const auto button = [&](const QString& text) {
+    const auto found = std::ranges::find_if(
+      controls, [&](const auto* candidate) { return candidate->text() == text; });
+    REQUIRE(found != controls.end());
+    return *found;
+  };
+  REQUIRE(button("Create Terrain Region")->isEnabled());
+  button("Create Terrain Region")->click();
+  const auto initial = group->group().terrainPaint();
+  REQUIRE_FALSE(initial.empty());
+  auto* material = panel->findChild<QComboBox*>();
+  REQUIRE(material);
+  material->setCurrentIndex(1);
+  button("Paint Terrain")->click();
+  QApplication::processEvents();
+  REQUIRE(panel->painting());
+  auto* view = window->currentOrFirstVisible3DMapView();
+  REQUIRE(view);
+  auto& camera = static_cast<MapViewBase&>(*view).camera();
+  camera.setViewport({0, 0, view->width(), view->height()});
+  camera.moveTo(vm::vec3f{0, 0, 256});
+  camera.lookAt(vm::vec3f{0, 0, 0}, vm::vec3f{0, 1, 0});
+  const auto center = view->rect().center();
+  auto pick = mdl::PickResult::byDistance();
+  mdl::pick(map, vm::ray3d{camera.pickRay(float(center.x()), float(center.y()))}, pick);
+  const auto face =
+    mdl::hitToFaceHandle(pick.first(mdl::HitFilters::type(mdl::BrushNode::BrushHitType)));
+  REQUIRE(face);
+  REQUIRE(&face->node() == brush);
+  REQUIRE(face->face().normal().z() > 0);
+  // The first left click activates a viewport after working in the inspector.
+  QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, center);
+  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, center);
+  REQUIRE(panel->stroking());
+  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, center);
+  const auto painted = group->group().terrainPaint();
+  REQUIRE(painted != initial);
+  map.undoCommand();
+  const auto restored = group->group().terrainPaint() == initial;
+  CHECK(restored);
+  map.redoCommand();
+  const auto repainted = group->group().terrainPaint() == painted;
+  CHECK(repainted);
+  window->closeDocument(true);
+}
 
 TEST_CASE("ProjectCompilation")
 {

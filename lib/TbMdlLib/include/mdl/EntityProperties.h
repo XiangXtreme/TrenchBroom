@@ -50,6 +50,7 @@ inline const std::string TbEntityDefinitions = TbPrefix + "def";
 inline const std::string TbGroup = TbPrefix + "group";
 inline const std::string TbGroupId = TbPrefix + "id";
 inline const std::string TbGroupName = TbPrefix + "name";
+inline const std::string TbTerrainPaint = TbPrefix + "terrain_paint";
 inline const std::string TbGroupTransformation = TbPrefix + "transformation";
 inline const std::string TbGroupType = TbPrefix + "type";
 inline const std::string TbLayer = TbPrefix + "layer";

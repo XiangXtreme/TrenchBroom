@@ -17,7 +17,7 @@ include(cmake/dependencies/tinyxml2.cmake)
 
 # Find Qt and OpenGL
 find_package(OpenGL REQUIRED)
-find_package(Qt6 COMPONENTS Core Widgets OpenGL OpenGLWidgets Network Svg Test Multimedia Concurrent REQUIRED)
+find_package(Qt6 COMPONENTS Core Widgets OpenGL OpenGLWidgets Network Svg Test Multimedia Concurrent Qml REQUIRED)
 
 if(DEFINED Qt6_DIR)
   get_filename_component(TB_QT_LIBRARY_DIR "${Qt6_DIR}/../.." ABSOLUTE)

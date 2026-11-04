@@ -168,7 +168,7 @@ globalThis.TerrainMulti = (() => {
     }
   }
 
-  function bake(weights) {
+  function bake(weights, includeOriginal = true) {
     const vertices = weights.map((vertex) => {
       const active = vertex.map((value) => value >= 0.05 ? value : 0);
       const sum = active.reduce((a, b) => a + b);
@@ -196,6 +196,7 @@ globalThis.TerrainMulti = (() => {
     const activeMaterials = (corners) => names.map((_, k) => k)
       .filter((k) => corners.some((vertex) => vertex[k] > 0));
     const bakedTextures = [...bases], bakedCells = [];
+    let mixedTiles = 0;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < columns; col++) {
         const cellsPerTile = core / step;
@@ -205,8 +206,11 @@ globalThis.TerrainMulti = (() => {
             corners.push(vertices[(row * cellsPerTile + dy) * stride + col * cellsPerTile + dx]);
         }
         const active = activeMaterials(corners);
-        bakedCells.push(active.length === 1 ? active[0] : bakedTextures.length);
-        if (active.length > 1) bakedTextures.push(tile(row * columns + col, "tm_b"));
+        if (includeOriginal) {
+          bakedCells.push(active.length === 1 ? active[0] : bakedTextures.length);
+          if (active.length > 1) bakedTextures.push(tile(row * columns + col, "tm_b"));
+        }
+        if (active.length > 1) mixedTiles++;
       }
     }
 
@@ -260,13 +264,13 @@ globalThis.TerrainMulti = (() => {
         const cells = [cell, cell + 1, cell + across, cell + across + 1];
         const mixed = cells.filter((index) => mixes[index]);
         if (mixed.length < 2) continue;
-        const kinds = mixed.flatMap((index) => mixes[index].map(({ kind }) => kind));
-        const kind = kinds.includes("junction") ? "junction" : kinds.includes("fit") ? "fit" : "patch";
+        const has = (kind) => mixed.some((index) => mixes[index].some((mix) => mix.kind === kind));
+        const kind = has("junction") ? "junction" : has("fit") ? "fit" : "patch";
         if (kind !== "patch" || mixed.length >= 3)
           candidates.push({ row, col, cells, count: mixed.length, kind });
       }
     }
-    const extraPatches = Math.min(16, Math.floor((bakedTextures.length - bases.length) / 2));
+    const extraPatches = Math.min(16, Math.floor(mixedTiles / 2));
     let addedPatches = 0;
     candidates.sort((a, b) => b.count - a.count);
     for (const { row, col, cells, kind } of candidates) {
@@ -319,13 +323,15 @@ globalThis.TerrainMulti = (() => {
     }
     const patchCount = patches.size, atlasCount = Math.ceil(patchCount / atlasCapacity);
     packPatches([...patches.values()], textures);
-    const original = wadVariant("terrain_multi_baked", bakedTextures, bakedCells);
+    const original = includeOriginal
+      ? Object.assign(wadVariant("terrain_multi_baked", bakedTextures, bakedCells), { baseCount: bases.length })
+      : undefined;
     const shared = wadVariant("terrain_multi_uv", textures, faces.map((face) => face.material));
-    return { original: { ...original, baseCount: bases.length },
-      shared: { ...shared, baseCount: bases.length, faces, patchCount, atlasCount, mergedPatchFaces,
+    return { original,
+      shared: Object.assign(shared, { baseCount: bases.length, faces, patchCount, atlasCount, mergedPatchFaces,
         junctionFaces: faces.filter(({ kind }) => kind === "junction").length,
         fitFaces: faces.filter(({ kind }) => kind === "fit").length,
-        grid, gridStep: step } };
+        grid, gridStep: step }) };
   }
 
   return { initialWeights, paint, bake };

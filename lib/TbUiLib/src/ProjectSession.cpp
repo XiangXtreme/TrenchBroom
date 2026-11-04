@@ -28,6 +28,7 @@
 #include "ui/ProjectReference.h"
 #include "ui/ProjectResourceAudit.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainExport.h"
 #include "ui/python/PythonHandleRegistry.h"
 
 #include <fmt/ranges.h>
@@ -719,6 +720,24 @@ Result<void> ProjectSession::exportCompileSnapshot(
     }
   }
 
+  auto baked = bakeTerrainSnapshot(contents.value());
+  if (baked.is_error())
+    return std::get<Error>(baked.error());
+  auto terrain = std::move(baked).value();
+  if (terrain)
+  {
+    metadata.push_back(fmt::format("terrain topFaces={}", terrain->topFaces));
+    for (auto& [name, miptex] : terrain->textures)
+    {
+      if (std::ranges::any_of(miptexByName, [&](const auto& item) {
+            return normalizedTextureName(item.first) == name;
+          }))
+        return Error{
+          "Generated terrain texture conflicts with a project texture: " + name};
+      miptexByName.emplace(name, std::move(miptex));
+    }
+  }
+
   auto entries = std::vector<std::vector<std::uint8_t>>{};
   entries.reserve(miptexByName.size());
   for (auto& [name, miptex] : miptexByName)
@@ -750,7 +769,8 @@ Result<void> ProjectSession::exportCompileSnapshot(
     return std::vector<std::uint8_t>{value.begin(), value.end()};
   };
 
-  if (const auto result = write(folder / mapFileName, contents.value());
+  if (const auto result =
+        write(folder / mapFileName, terrain ? terrain->map : contents.value());
       result.is_error())
     return result;
   if (const auto result = write(folder / "textures.wad", wad.value()); result.is_error())

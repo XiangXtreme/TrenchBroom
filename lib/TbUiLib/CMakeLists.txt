@@ -118,6 +118,10 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/InfoPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/InputEvent.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Inspector.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainExport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainInspector.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainRegion.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/terrain_baker.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/IssueBrowser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/IssueBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/KeySequenceEdit.cpp
@@ -416,6 +420,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView2D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView3D.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TerrainInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewActivationTracker.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewBar.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewBase.h
@@ -575,6 +580,7 @@ target_link_libraries(TbUiLib
     Python3::Python
     Qt6::Multimedia
     Qt6::Concurrent
+    Qt6::Qml
     ctre::ctre
     Qt6::Svg
     TbVersionLib

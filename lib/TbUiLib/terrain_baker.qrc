@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/terrain">
+        <file alias="bake.js">../../tools/map/terrain-material-demo/bake.js</file>
+        <file alias="multi.js">../../tools/map/terrain-material-demo/multi.js</file>
+    </qresource>
+</RCC>

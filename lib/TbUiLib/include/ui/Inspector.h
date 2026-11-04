@@ -38,6 +38,7 @@ class OutlinerInspector;
 class PluginInspector;
 class SyncHeightEventFilter;
 class TabBook;
+class TerrainInspector;
 
 enum class InspectorPage
 {
@@ -45,7 +46,8 @@ enum class InspectorPage
   Entity = 1,
   Face = 2,
   Outliner = 3,
-  Plugin = 4
+  Plugin = 4,
+  Terrain = 5
 };
 
 class Inspector : public QWidget
@@ -58,6 +60,7 @@ private:
   FaceInspector* m_faceInspector = nullptr;
   OutlinerInspector* m_outlinerInspector = nullptr;
   PluginInspector* m_pluginInspector = nullptr;
+  TerrainInspector* m_terrainInspector = nullptr;
 
   QLabel* m_pageTitle = nullptr;
   std::vector<QToolButton*> m_navigationButtons;

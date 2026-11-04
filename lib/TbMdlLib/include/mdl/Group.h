@@ -35,8 +35,9 @@ private:
   std::string m_name;
 
   vm::mat4x4d m_transformation;
+  std::string m_terrainPaint;
 
-  kdl_reflect_decl(Group, m_name, m_transformation);
+  kdl_reflect_decl(Group, m_name, m_transformation, m_terrainPaint);
 
 public:
   explicit Group(std::string name);
@@ -47,6 +48,9 @@ public:
   const vm::mat4x4d& transformation() const;
   void setTransformation(const vm::mat4x4d& transformation);
   void transform(const vm::mat4x4d& transformation);
+
+  const std::string& terrainPaint() const;
+  void setTerrainPaint(std::string paint);
 };
 
 } // namespace tb::mdl

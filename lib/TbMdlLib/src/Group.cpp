@@ -58,4 +58,14 @@ void Group::transform(const vm::mat4x4d& transformation)
   m_transformation = transformation * m_transformation;
 }
 
+const std::string& Group::terrainPaint() const
+{
+  return m_terrainPaint;
+}
+
+void Group::setTerrainPaint(std::string paint)
+{
+  m_terrainPaint = std::move(paint);
+}
+
 } // namespace tb::mdl

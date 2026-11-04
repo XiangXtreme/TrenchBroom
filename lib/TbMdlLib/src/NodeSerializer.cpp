@@ -389,6 +389,18 @@ std::vector<EntityProperty> NodeSerializer::groupProperties(const GroupNode& gro
 
   const auto& linkId = groupNode.linkId();
   result.emplace_back(EntityPropertyKeys::TbLinkId, kdl::str_to_string(linkId));
+  if (!m_exporting)
+  {
+    constexpr auto ChunkSize = size_t{900};
+    const auto& paint = groupNode.group().terrainPaint();
+    for (auto start = size_t{0}; start < paint.size(); start += ChunkSize)
+    {
+      const auto key = start == 0 ? EntityPropertyKeys::TbTerrainPaint
+                                  : EntityPropertyKeys::TbTerrainPaint
+                                      + std::to_string(start / ChunkSize);
+      result.emplace_back(key, paint.substr(start, ChunkSize));
+    }
+  }
 
   // write transformation matrix in column major format
   const auto& transformation = groupNode.group().transformation();

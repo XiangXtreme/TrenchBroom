@@ -55,7 +55,7 @@ To avoid re-downloading dependencies across build directories, set the `CPM_SOUR
 
 ### Qt
 
-TrenchBroom depends on Qt version 6.10. It might work with later versions, but earlier versions will definitely not work. The easiest way to install a specific version of Qt for your platform is the official installer, which requires you to create an account. Follow [these instructions](https://doc.qt.io/qt-6/qt-online-installation.html) to download and and run the Qt installer. Then, install the latest version of Qt 6.10 for your platform.
+TrenchBroom depends on Qt version 6.10, including Qt Qml for the terrain texture baker. It might work with later versions, but earlier versions will definitely not work. The easiest way to install a specific version of Qt for your platform is the official installer, which requires you to create an account. Follow [these instructions](https://doc.qt.io/qt-6/qt-online-installation.html) to download and and run the Qt installer. Then, install the latest version of Qt 6.10 for your platform.
 
 Note the path where Qt was installed. For example, on Windows the default installation path would look like `C:\Qt\6.10.3\`. We will refer to this path later on as `<QT_INSTALL_DIR>`.
 

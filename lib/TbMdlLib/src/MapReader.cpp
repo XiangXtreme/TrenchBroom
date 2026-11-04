@@ -515,6 +515,21 @@ CreateNodeResult createGroupNode(const MapReader::EntityInfo& entityInfo)
   }
 
   auto group = Group{name};
+  auto terrainPaint = findEntityPropertyOrDefault(
+    entityInfo.properties, EntityPropertyKeys::TbTerrainPaint);
+  if (!terrainPaint.empty())
+  {
+    for (auto index = 1;; ++index)
+    {
+      const auto chunk = findEntityPropertyOrDefault(
+        entityInfo.properties,
+        EntityPropertyKeys::TbTerrainPaint + std::to_string(index));
+      if (chunk.empty())
+        break;
+      terrainPaint += chunk;
+    }
+    group.setTerrainPaint(std::move(terrainPaint));
+  }
   if (transformation)
   {
     group.setTransformation(*transformation);
