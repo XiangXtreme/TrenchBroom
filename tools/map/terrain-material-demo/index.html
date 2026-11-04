@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>地形材质实验台 · GoldSrc</title>
+<link rel="stylesheet" href="style.css">
+<script defer src="bake.js"></script>
+<script defer src="demo.js"></script>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow"><span></span> GOLDSRC / MATERIAL LAB</p>
+      <h1>地形材质实验台</h1>
+      <p class="intro">在任一预览上刷草或泥，观察相同笔迹如何落进两套 WAD3。两边使用相同的纹素密度、调色板和四级 mip。</p>
+    </header>
+
+    <section class="toolbar" aria-label="绘制和预览设置">
+      <div class="control">
+        <span class="label">工具</span>
+        <div class="segmented" id="tools">
+          <button type="button" data-tool="inspect" aria-pressed="true">查看</button>
+          <button type="button" data-tool="dirt" aria-pressed="false">刷泥</button>
+          <button type="button" data-tool="grass" aria-pressed="false">刷草</button>
+        </div>
+      </div>
+      <label class="control radius"><span class="label">笔刷半径 <output id="radius-value">44</output></span>
+        <input id="radius" type="range" min="8" max="100" value="44">
+      </label>
+      <div class="control">
+        <span class="label">预览 MIP</span>
+        <div class="segmented" id="mips">
+          <button type="button" data-mip="0" aria-pressed="true">0</button>
+          <button type="button" data-mip="1" aria-pressed="false">1</button>
+          <button type="button" data-mip="2" aria-pressed="false">2</button>
+          <button type="button" data-mip="3" aria-pressed="false">3</button>
+        </div>
+      </div>
+      <label class="grid-toggle"><input id="grid" type="checkbox" checked> 分块边界</label>
+      <button id="reset" type="button">重置样图</button>
+    </section>
+
+    <div class="summary">
+      <div><span class="label">WAD 体积差</span><strong id="savings"></strong></div>
+      <p id="status" role="status"></p>
+      <span class="legend"><i></i> 复用块</span>
+    </div>
+
+    <section class="comparisons" aria-label="两种烘焙方式">
+      <article class="panel" id="original">
+        <div class="panel-heading">
+          <div><p class="label">01 / BASELINE</p><h2>独有烘焙</h2></div>
+          <strong class="bytes"></strong>
+        </div>
+        <canvas class="terrain" aria-label="独有烘焙地形预览"></canvas>
+        <p class="stats"></p>
+        <div class="inspection"><p class="label">同位置放大</p><canvas class="detail" aria-label="独有烘焙局部"></canvas><p class="tile-info"></p></div>
+        <div class="exports"><button data-file="map">下载 MAP</button><button data-file="wad">下载 WAD3</button></div>
+      </article>
+      <article class="panel shared" id="shared">
+        <div class="panel-heading">
+          <div><p class="label">02 / REUSE</p><h2>共享过渡纹理</h2></div>
+          <strong class="bytes"></strong>
+        </div>
+        <canvas class="terrain" aria-label="共享过渡纹理地形预览"></canvas>
+        <p class="stats"></p>
+        <div class="inspection"><p class="label">同位置放大</p><canvas class="detail" aria-label="共享纹理局部"></canvas><p class="tile-info"></p></div>
+        <div class="exports"><button data-file="map">下载 MAP</button><button data-file="wad">下载 WAD3</button></div>
+      </article>
+    </section>
+
+    <footer>预览读取导出的 WAD3 像素。复用要求完整的权重块和边缘采样一致。实际过滤和光照在 CS 1.6 客户端检查。</footer>
+  </main>
+</body>
+</html>
