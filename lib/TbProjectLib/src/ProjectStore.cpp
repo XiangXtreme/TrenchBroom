@@ -962,13 +962,29 @@ Result<std::optional<TerrainCompile>> ProjectStore::terrainCompile(
     query.bind(1, id);
     if (!query.next())
       return std::nullopt;
-    return TerrainCompile{
+    auto result = TerrainCompile{
       query.integer(0),
       query.integer(1),
       query.integer(2),
       query.bytes(3),
       query.bytes(4),
-      query.text(5)};
+      query.text(5),
+      {}};
+    auto table = Statement{
+      m_impl->database.get(),
+      "SELECT 1 FROM sqlite_master WHERE type='table' "
+      "AND name='terrain_compile_dependencies'"};
+    if (table.next())
+    {
+      auto dependencies = Statement{
+        m_impl->database.get(),
+        "SELECT dependency_id FROM terrain_compile_dependencies "
+        "WHERE asset_id=? ORDER BY dependency_id"};
+      dependencies.bind(1, id);
+      while (dependencies.next())
+        result.dependencies.push_back(dependencies.text(0));
+    }
+    return result;
   });
 }
 
@@ -996,6 +1012,37 @@ Result<void> ProjectStore::setTerrainCompile(
         "error TEXT NOT NULL);"
         "PRAGMA user_version=4;");
     }
+    // These auxiliary records and triggers are deliberately compatible with version 4
+    // readers. External compilers see a missing cache, never a stale terrain result.
+    execute(
+      db,
+      "CREATE TABLE IF NOT EXISTS terrain_compile_dependencies("
+      "asset_id TEXT NOT NULL REFERENCES terrain_compile(asset_id) ON DELETE CASCADE,"
+      "dependency_id TEXT NOT NULL,PRIMARY KEY(asset_id,dependency_id));"
+      "CREATE INDEX IF NOT EXISTS terrain_compile_dependency_id "
+      "ON terrain_compile_dependencies(dependency_id);"
+      "CREATE TRIGGER IF NOT EXISTS terrain_head_insert AFTER INSERT ON heads BEGIN "
+      "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+      "terrain_compile_dependencies WHERE dependency_id=NEW.asset_id); END;"
+      "CREATE TRIGGER IF NOT EXISTS terrain_head_update AFTER UPDATE ON heads "
+      "WHEN OLD.revision<>NEW.revision BEGIN "
+      "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+      "terrain_compile_dependencies WHERE dependency_id=OLD.asset_id); END;"
+      "CREATE TRIGGER IF NOT EXISTS terrain_head_delete AFTER DELETE ON heads BEGIN "
+      "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+      "terrain_compile_dependencies WHERE dependency_id=OLD.asset_id); END;"
+      "CREATE TRIGGER IF NOT EXISTS terrain_dependency_insert AFTER INSERT ON "
+      "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+      "(SELECT asset_id FROM terrain_compile_dependencies "
+      "WHERE dependency_id=NEW.asset_id); END;"
+      "CREATE TRIGGER IF NOT EXISTS terrain_dependency_delete AFTER DELETE ON "
+      "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+      "(SELECT asset_id FROM terrain_compile_dependencies "
+      "WHERE dependency_id=OLD.asset_id); END;"
+      "CREATE TRIGGER IF NOT EXISTS terrain_dependency_update AFTER UPDATE ON "
+      "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+      "(SELECT asset_id FROM terrain_compile_dependencies "
+      "WHERE dependency_id=OLD.asset_id OR dependency_id=NEW.asset_id); END;");
     auto write = Statement{
       db,
       "INSERT INTO terrain_compile"
@@ -1012,6 +1059,22 @@ Result<void> ProjectStore::setTerrainCompile(
     write.bind(6, data.wad);
     write.bind(7, data.error);
     write.run();
+    auto remove =
+      Statement{db, "DELETE FROM terrain_compile_dependencies WHERE asset_id=?"};
+    remove.bind(1, id);
+    remove.run();
+    auto insert = Statement{
+      db,
+      "INSERT OR IGNORE INTO terrain_compile_dependencies(asset_id,dependency_id) "
+      "VALUES(?,?)"};
+    for (const auto& dependency : data.dependencies)
+    {
+      validateText(dependency, "terrain dependency ID");
+      insert.bind(1, id);
+      insert.bind(2, dependency);
+      insert.run();
+      insert.reset();
+    }
     transaction.commit();
     m_impl->schemaVersion = 4;
   });

@@ -107,7 +107,7 @@ TEST_CASE("ProjectStore")
     CHECK_FALSE(require(store->terrainCompile(asset.id)));
 
     auto data =
-      TerrainCompile{asset.revision, 1, 12, {'m', 'a', 'p'}, {'w', 'a', 'd'}, {}};
+      TerrainCompile{asset.revision, 1, 12, {'m', 'a', 'p'}, {'w', 'a', 'd'}, {}, {}};
     require(store->setTerrainCompile(asset.id, data));
     CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 4);
     const auto restored = require(store->terrainCompile(asset.id));
@@ -123,13 +123,44 @@ TEST_CASE("ProjectStore")
     REQUIRE(updated.revision != asset.revision);
     CHECK(store->setTerrainCompile(asset.id, data).is_error());
     CHECK(require(store->terrainCompile(asset.id))->sourceRevision == asset.revision);
-    data = TerrainCompile{updated.revision, 1, 0, {}, {}, "invalid terrain"};
+    data = TerrainCompile{updated.revision, 1, 0, {}, {}, "invalid terrain", {}};
     require(store->setTerrainCompile(asset.id, data));
     store.reset();
     store = require(ProjectStore::open(workspace.path));
     CHECK(require(store->terrainCompile(asset.id))->error == "invalid terrain");
     require(store->removeAsset(asset.id));
     CHECK_FALSE(require(store->terrainCompile(asset.id)));
+  }
+
+  SECTION("invalidates terrain caches when captured dependencies change")
+  {
+    auto store = require(ProjectStore::create(workspace.path, "Terrain", "Half-Life"));
+    const auto terrainMap = require(store->importAsset(map("maps/terrain.map")));
+    const auto otherMap = require(store->importAsset(map("maps/other.map")));
+    const auto source = texture("textures/source");
+    const auto sourceAsset = require(store->importAsset(source));
+    auto materialInput = texture("materials/terrain");
+    materialInput.type = AssetType::Material;
+    const auto material = require(store->importAsset(materialInput));
+    auto data = TerrainCompile{terrainMap.revision, 3, 1, {'m'}, {'w'}, {}, {}};
+    data.dependencies = {material.id, sourceAsset.id};
+    require(store->setTerrainCompile(terrainMap.id, data));
+    const auto unrelated = TerrainCompile{otherMap.revision, 3, 1, {'m'}, {'w'}, {}, {}};
+    require(store->setTerrainCompile(otherMap.id, unrelated));
+    const auto loaded = require(store->terrainCompile(terrainMap.id));
+    REQUIRE(loaded);
+    CHECK(loaded->dependencies.size() == 2);
+
+    auto changed = source;
+    changed.compatible.push_back(42);
+    require(store->replaceAsset(sourceAsset.id, changed));
+    CHECK_FALSE(require(store->terrainCompile(terrainMap.id)));
+    CHECK(require(store->terrainCompile(otherMap.id)));
+
+    require(store->setTerrainCompile(terrainMap.id, data));
+    require(store->addDependency(material.id, sourceAsset.id, "terrain-slot-0"));
+    CHECK_FALSE(require(store->terrainCompile(terrainMap.id)));
+    CHECK(require(store->terrainCompile(otherMap.id)));
   }
 
   SECTION("creates a portable Unicode project and persists embedded content")

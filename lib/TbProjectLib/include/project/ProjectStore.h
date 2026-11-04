@@ -50,6 +50,8 @@ struct TerrainCompile
   std::vector<std::uint8_t> map;
   std::vector<std::uint8_t> wad;
   std::string error;
+  // Asset identities used by the bake; changing one invalidates the saved result.
+  std::vector<std::string> dependencies = {};
 };
 
 /**
