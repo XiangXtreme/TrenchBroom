@@ -64,6 +64,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationTaskListBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationVariables.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CommandPaletteDialog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/CreateTerrainMaterialDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Console.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ControlPointToolPage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ContainerBar.cpp
@@ -120,8 +121,9 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Inspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainExport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainInspector.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainMaterial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainRegion.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/terrain_baker.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainBaker.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/IssueBrowser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/IssueBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/KeySequenceEdit.cpp
@@ -341,6 +343,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationTaskListBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationVariables.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CommandPaletteDialog.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CreateTerrainMaterialDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/Console.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ControlPointToolPage.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ContainerBar.h

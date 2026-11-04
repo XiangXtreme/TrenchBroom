@@ -93,7 +93,7 @@ QString statusText(const int status)
 /** Sidebar glyph for a filter key; unknown keys fall back to the library stack. */
 AssetLibraryGlyph glyphForFilter(const QString& filter)
 {
-  if (filter == QStringLiteral("texture"))
+  if (filter == QStringLiteral("texture") || filter == QStringLiteral("material"))
     return AssetLibraryGlyph::Texture;
   if (filter == QStringLiteral("model"))
     return AssetLibraryGlyph::Model;
@@ -568,7 +568,7 @@ QColor assetLibraryKindColor(const int kind, const QPalette& palette)
   hue = std::fmod(hue + offset, 1.0);
   const auto saturation = std::clamp(double(accent.hsvSaturationF()), 0.38, 0.92);
   const auto value = std::clamp(double(accent.valueF()), 0.45, 0.96);
-  return QColor::fromHsvF(qreal(hue), qreal(saturation), qreal(value));
+  return QColor::fromHsvF(float(hue), float(saturation), float(value));
 }
 
 } // namespace tb::ui

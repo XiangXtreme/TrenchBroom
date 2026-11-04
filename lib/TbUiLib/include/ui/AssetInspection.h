@@ -67,6 +67,8 @@ struct Asset
   QString identity;
   Bytes original;
   Bytes compatible;
+  // Current texture dependencies rendered as a three-slot terrain blend.
+  QImage terrainPreview;
   // Same face order as SkyRenderer and Sky.fragsh: rt, bk, lf, ft, up, dn.
   std::array<QImage, 6> skyOriginal;
   std::array<QImage, 6> skyCompatible;

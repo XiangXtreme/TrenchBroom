@@ -38,11 +38,23 @@ struct TerrainRegion
 
   vm::vec2d origin;
   std::array<Weight, (Columns + 1) * (Rows + 1)> weights;
+  std::string materialAssetId;
+  // A negative limit leaves the corresponding per-region budget unlimited.
+  int maxAddedFaces = -1;
+  int maxWadKiB = -1;
+  // Zero disables the width limit; density is relative to the default patch.
+  int minFaceWidth = 0;
+  int patchDensityPercent = 100;
 
-  explicit TerrainRegion(vm::vec2d origin);
+  explicit TerrainRegion(vm::vec2d origin, std::string materialAssetId = {});
   vm::vec2d project(const vm::vec3d& local) const;
   vm::vec3d unproject(const QPointF& pixel, double z = 0) const;
-  void paint(const vm::vec2d& point, double radius, size_t material);
+  void paint(
+    const vm::vec2d& point,
+    double radius,
+    size_t material,
+    double strength = 1.0,
+    double hardness = 0.35);
   const Weight& weight(int col, int row) const;
   std::string encode() const;
   static Result<TerrainRegion> decode(std::string_view text);

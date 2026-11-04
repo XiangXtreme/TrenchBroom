@@ -8,6 +8,7 @@
 
 #include "project/ProjectAsset.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -120,6 +121,23 @@ public:
   // Gives the asset a catalog name that a rescan keeps. The engine texture name is
   // separate: it lives in the converted miptex and only changes by converting again.
   Result<LibraryAsset> setDisplayName(const std::string& assetId, const std::string& name);
+
+  struct TerrainMaterialSlot
+  {
+    std::string name;
+    // Stable library asset ID, not a texture name (which can be ambiguous).
+    std::string texture;
+  };
+
+  struct TerrainMaterialDefinition
+  {
+    std::string name;
+    std::string folder; // Optional, e.g. "materials"
+    std::array<TerrainMaterialSlot, 3> materialSlots;
+  };
+
+  Result<LibraryAsset> createTerrainMaterial(
+    const TerrainMaterialDefinition& def, std::vector<std::uint8_t> compatible = {});
 
 private:
   class Impl;

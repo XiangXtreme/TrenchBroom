@@ -34,6 +34,12 @@ std::string pathText(const std::filesystem::path& path)
   return {reinterpret_cast<const char*>(text.data()), text.size()};
 }
 
+std::filesystem::path pathFromText(const std::string_view text)
+{
+  return std::filesystem::path{
+    std::u8string{reinterpret_cast<const char8_t*>(text.data()), text.size()}};
+}
+
 std::string lowered(std::string value)
 {
   std::ranges::transform(
@@ -100,6 +106,7 @@ enum class SourceFormat
   Sprite,
   Sound,
   Prefab,
+  Material,
   Unknown,
 };
 
@@ -118,6 +125,8 @@ SourceFormat sourceFormatFor(const std::filesystem::path& extension)
     return SourceFormat::Sound;
   if (ext == ".tbprefab")
     return SourceFormat::Prefab;
+  if (ext == ".tbmat")
+    return SourceFormat::Material;
   return SourceFormat::Unknown;
 }
 
@@ -135,6 +144,8 @@ AssetType assetTypeFor(const SourceFormat format)
     return AssetType::Sound;
   case SourceFormat::Prefab:
     return AssetType::Prefab;
+  case SourceFormat::Material:
+    return AssetType::Material;
   case SourceFormat::Wad:
   case SourceFormat::Unknown:
     break;
@@ -156,6 +167,8 @@ const char* nativeFormatFor(const SourceFormat format)
     return "wav";
   case SourceFormat::Prefab:
     return "prefab";
+  case SourceFormat::Material:
+    return "goldsrc-terrain-material";
   case SourceFormat::Wad:
     return "wad3";
   case SourceFormat::Unknown:
@@ -183,6 +196,8 @@ std::string recipeFor(const SourceFormat format, const std::string& container)
     return R"({"importer":"native-copy","version":1,"nativeFormat":"wav"})";
   case SourceFormat::Prefab:
     return R"({"importer":"native-copy","version":1,"nativeFormat":"prefab"})";
+  case SourceFormat::Material:
+    return R"({"importer":"terrain-material","version":1,"nativeFormat":"goldsrc-terrain-material"})";
   case SourceFormat::Wad:
     return fmt::format(
       R"({{"importer":"wad-member","version":1,"nativeFormat":"wad3-miptex",)"
@@ -351,13 +366,13 @@ void discoverFile(
   if (!seenIds.insert(asset.id).second)
     return;
   asset.type = assetTypeFor(format);
-  asset.displayName = file.stem().string();
+  asset.displayName = pathText(file.stem());
   if (asset.displayName.empty())
-    asset.displayName = file.filename().string();
+    asset.displayName = pathText(file.filename());
   asset.virtualPath = relativePath;
   asset.group = parentFolder(relativePath);
   asset.sourceRelPath = relativePath;
-  asset.identity = lowered(file.filename().string());
+  asset.identity = lowered(pathText(file.filename()));
   asset.nativeFormat = nativeFormatFor(format);
   asset.recipe = recipeFor(format, relativePath);
   asset.content = bytes;
@@ -367,6 +382,40 @@ void discoverFile(
   // source is imported again.
   if (removedVirtualPaths.contains(asset.virtualPath))
     return;
+  if (format == SourceFormat::Material)
+  {
+    const auto contentText = std::string_view{
+      reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+    // Extract "texture" fields from slots
+    auto pos = size_t{0};
+    auto slotIdx = 0;
+    while (slotIdx < 3 && (pos = contentText.find("\"texture\"", pos)) != std::string_view::npos)
+    {
+      pos += 9;
+      const auto colon = contentText.find(':', pos);
+      if (colon == std::string_view::npos)
+        break;
+      const auto quoteStart = contentText.find('"', colon + 1);
+      if (quoteStart == std::string_view::npos)
+        break;
+      const auto quoteEnd = contentText.find('"', quoteStart + 1);
+      if (quoteEnd == std::string_view::npos)
+        break;
+      const auto texName = contentText.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+      if (!texName.empty())
+      {
+        const auto texture = std::string{texName};
+        // New material recipes store the exact library asset ID. Older recipes used
+        // texture names; retain their existing resolution behavior when rescanning.
+        asset.hints.push_back(fmt::format(
+          "terrain-slot-{}:{}",
+          slotIdx,
+          detail::validAssetId(texture) ? "@" + texture : modelDependencyKey(texture)));
+      }
+      pos = quoteEnd + 1;
+      ++slotIdx;
+    }
+  }
   if (format == SourceFormat::Model)
   {
     // A GoldSrc model embeds its textures; what lives beside it are the separate texture
@@ -376,7 +425,7 @@ void discoverFile(
       for (const auto& group :
            modelAnimationGroupNames(relativePath, model.value().sequenceGroups))
         asset.hints.push_back("model-animation:" + modelDependencyKey(group));
-    if (const auto companion = modelCompanionName(file.filename().string());
+    if (const auto companion = modelCompanionName(pathText(file.filename()));
         !companion.empty())
       asset.hints.push_back("model-companion:" + modelDependencyKey(companion));
   }
@@ -492,7 +541,7 @@ Discovery discover(
     if (std::filesystem::is_directory(status))
     {
       // The catalog itself and hidden folders are not library content.
-      const auto name = entry.path().filename().string();
+      const auto name = pathText(entry.path().filename());
       if (name.starts_with('.'))
         iterator.disable_recursion_pending();
       continue;
@@ -850,17 +899,24 @@ void writeRevisionRow(
 void resolveDependencies(sqlite3* db)
 {
   auto keys = std::unordered_map<std::string, std::string>{};
+  auto textureIds = std::unordered_set<std::string>{};
   {
     auto query =
-      detail::Statement{db, "SELECT id,identity FROM assets ORDER BY virtual_path"};
+      detail::Statement{db, "SELECT id,identity,type FROM assets ORDER BY virtual_path"};
     while (query.next())
+    {
       keys.emplace(modelDependencyKey(query.text(1)), query.text(0));
+      if (query.text(2) == "texture")
+        textureIds.insert(query.text(0));
+    }
   }
 
   detail::execute(
     db,
     "DELETE FROM dependencies WHERE kind IN "
-    "('model-skin','model-companion','model-animation','skybox-face')");
+    "('model-skin','model-companion','model-animation','skybox-face',"
+    "'material-slot-0','material-slot-1','material-slot-2',"
+    "'terrain-slot-0','terrain-slot-1','terrain-slot-2')");
 
   auto hints = detail::Statement{
     db, "SELECT id,dependency_hints FROM assets WHERE dependency_hints<>''"};
@@ -881,12 +937,23 @@ void resolveDependencies(sqlite3* db)
       const auto colon = line.find(':');
       if (colon == std::string::npos)
         continue;
-      const auto target = keys.find(line.substr(colon + 1));
-      if (target == keys.end() || target->second == assetId)
+      const auto key = line.substr(colon + 1);
+      auto targetId = std::string{};
+      if (key.starts_with('@'))
+      {
+        targetId = key.substr(1);
+        if (!textureIds.contains(targetId))
+          continue;
+      }
+      else if (const auto target = keys.find(key); target != keys.end())
+      {
+        targetId = target->second;
+      }
+      if (targetId.empty() || targetId == assetId)
         continue;
       insert.reset();
       insert.bind(1, assetId);
-      insert.bind(2, target->second);
+      insert.bind(2, targetId);
       insert.bind(3, line.substr(0, colon));
       insert.run();
     }
@@ -1638,4 +1705,106 @@ Result<std::vector<AssetDependency>> AssetLibrary::dependents(
   });
 }
 
+
+Result<LibraryAsset> AssetLibrary::createTerrainMaterial(
+  const TerrainMaterialDefinition& def, std::vector<std::uint8_t> compatible)
+{
+  return detail::attempt([&]() -> LibraryAsset {
+    detail::validatePath(def.name);
+    if (def.name.find('/') != std::string::npos)
+      throw detail::StoreError{"Material name must be a single file name."};
+    for (size_t i = 0; i < 3; ++i)
+    {
+      const auto& id = def.materialSlots[i].texture;
+      detail::validateAssetId(id);
+      const auto texture = findAsset(id);
+      if (texture.is_error())
+        throw detail::StoreError{std::get<Error>(texture.error()).msg};
+      if (
+        !texture.value() || texture.value()->missing
+        || texture.value()->type != AssetType::Texture)
+        throw detail::StoreError{
+          fmt::format("Terrain material slot {} requires an available texture.", i)};
+    }
+
+    const auto subfolder = def.folder.empty() ? std::string{"materials"} : def.folder;
+    detail::validatePath(subfolder, true);
+    const auto targetDir = m_impl->folder / pathFromText(subfolder);
+    auto ec = std::error_code{};
+    std::filesystem::create_directories(targetDir, ec);
+    if (ec)
+      throw detail::StoreError{"Cannot create material directory."};
+
+    const auto fileName = def.name + ".tbmat";
+    const auto filePath = targetDir / pathFromText(fileName);
+    // Reserve the path exclusively so a duplicate name never truncates user data.
+    auto newFile = detail::NewFile{filePath};
+
+    auto json = fmt::format(
+      "{{\n"
+      "  \"format\": \"goldsrc-terrain-material\",\n"
+      "  \"version\": 1,\n"
+      "  \"name\": {},\n"
+      "  \"slots\": [\n"
+      "    {{\"name\": {}, \"texture\": {}}},\n"
+      "    {{\"name\": {}, \"texture\": {}}},\n"
+      "    {{\"name\": {}, \"texture\": {}}}\n"
+      "  ]\n"
+      "}}\n",
+      jsonQuote(def.name),
+      jsonQuote(def.materialSlots[0].name.empty() ? "Grass" : def.materialSlots[0].name),
+      jsonQuote(def.materialSlots[0].texture),
+      jsonQuote(def.materialSlots[1].name.empty() ? "Dirt" : def.materialSlots[1].name),
+      jsonQuote(def.materialSlots[1].texture),
+      jsonQuote(def.materialSlots[2].name.empty() ? "Rock" : def.materialSlots[2].name),
+      jsonQuote(def.materialSlots[2].texture));
+
+    auto file = std::ofstream{filePath, std::ios::binary};
+    if (!file)
+      throw detail::StoreError{"Cannot write material file."};
+    file << json;
+    file.close();
+    if (!file)
+      throw detail::StoreError{"Cannot write material file."};
+
+    const auto scanResult = scan();
+    if (scanResult.is_error())
+      throw detail::StoreError{std::get<Error>(scanResult.error()).msg};
+
+    const auto virtualPath = subfolder + "/" + fileName;
+    auto* db = m_impl->database.get();
+    auto asset = [&]() {
+      const auto querySql =
+        fmt::format("SELECT {} FROM assets a WHERE a.virtual_path=?", AssetColumns);
+      auto query = detail::Statement{db, querySql.c_str()};
+      query.bind(1, virtualPath);
+      if (!query.next())
+        throw detail::StoreError{"Failed to locate created material in catalog."};
+      return readAssetRow(query);
+    }();
+    if (!compatible.empty())
+    {
+      auto transaction = detail::Transaction{db};
+      const auto content = detail::storeContent(db, compatible);
+      asset.size = static_cast<std::uint64_t>(compatible.size());
+      auto update =
+        detail::Statement{db, "UPDATE assets SET content=?,size=? WHERE id=?"};
+      update.bind(1, content);
+      update.bind(2, asset.size);
+      update.bind(3, asset.id);
+      update.run();
+      auto revision = detail::Statement{
+        db,
+        "UPDATE asset_revisions SET content=?,size=? WHERE asset_id=? AND revision=?"};
+      revision.bind(1, content);
+      revision.bind(2, asset.size);
+      revision.bind(3, asset.id);
+      revision.bind(4, asset.revision);
+      revision.run();
+      transaction.commit();
+    }
+    newFile.keep();
+    return asset;
+  });
+}
 } // namespace tb::project

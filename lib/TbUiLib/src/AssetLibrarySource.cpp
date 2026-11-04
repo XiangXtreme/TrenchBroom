@@ -60,14 +60,15 @@ Result<AssetPreviewKeys> previewKeys(
   {
     auto key = scope + "/" + asset.id + revisions.at(asset.id);
     if (
-      asset.type == project::AssetType::Model || asset.type == project::AssetType::Skybox)
+      asset.type == project::AssetType::Model || asset.type == project::AssetType::Skybox
+      || asset.type == project::AssetType::Material)
     {
       const auto edges = readDependencies(asset.id);
       if (edges.is_error())
         return std::get<Error>(edges.error());
       for (const auto& edge : edges.value())
       {
-        key += "/" + edge.dependencyId;
+        key += "/" + edge.kind + "/" + edge.dependencyId;
         if (const auto revision = revisions.find(edge.dependencyId);
             revision != revisions.end())
           key += revision->second;
@@ -334,6 +335,16 @@ public:
     const std::string& assetId, const std::vector<std::string>& tags) override
   {
     auto result = m_library->setTags(assetId, tags);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
+  }
+
+  Result<project::LibraryAsset> createTerrainMaterial(
+    const project::AssetLibrary::TerrainMaterialDefinition& def,
+    std::vector<std::uint8_t> compatible) override
+  {
+    auto result = m_library->createTerrainMaterial(def, std::move(compatible));
     if (result.is_success())
       emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
     return result;

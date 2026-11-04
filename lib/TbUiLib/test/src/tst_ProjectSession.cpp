@@ -38,6 +38,7 @@
 #include "project/ContentHash.h"
 #include "project/GoldSrcWad.h"
 #include "project/LibrarySync.h"
+#include "ui/AssetInspection.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/ClipTool.h"
 #include "ui/CompilationContext.h"
@@ -48,6 +49,8 @@
 #include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainExport.h"
+#include "ui/TerrainMaterial.h"
 #include "ui/TerrainRegion.h"
 #include "ui/automation/AutomationAssetPreview.h"
 #include "ui/automation/AutomationAssets.h"
@@ -921,6 +924,314 @@ TEST_CASE("Project terrain paint survives clipping and compile snapshots")
   CHECK(session->exportCompileSnapshot(asset.id, root / "broken").is_error());
 }
 
+TEST_CASE("Project terrain bakes captured material and invalidates changed textures")
+{
+  auto sandbox = LibrarySandbox{};
+  const auto coloredMiptex = [](const std::string& name, const QColor color) {
+    auto pixels = std::vector<unsigned char>(64 * 64 * 4);
+    for (auto i = size_t{0}; i < pixels.size(); i += 4)
+    {
+      pixels[i] = static_cast<unsigned char>(color.red());
+      pixels[i + 1] = static_cast<unsigned char>(color.green());
+      pixels[i + 2] = static_cast<unsigned char>(color.blue());
+      pixels[i + 3] = 255;
+    }
+    const auto converted =
+      requireProject(img::convertGoldSrcTexture({64, 64, pixels}, name));
+    return requireProject(project::readGoldSrcWad(converted.wad)).textures.front().miptex;
+  };
+  sandbox.writeWad(
+    {coloredMiptex("RED", Qt::red),
+     coloredMiptex("GREEN", Qt::green),
+     coloredMiptex("BLUE", Qt::blue)});
+  sandbox.createLibrary();
+  auto library = requireProject(project::AssetLibrary::open(sandbox.libraryFolder));
+  const auto libraryId = library->info().id;
+  const auto assets = requireProject(library->assets());
+  auto definition = project::AssetLibrary::TerrainMaterialDefinition{};
+  definition.name = "colored";
+  definition.folder = "materials";
+  definition.materialSlots = {
+    {{"Red", libraryAssetNamed(assets, "RED").id},
+     {"Green", libraryAssetNamed(assets, "GREEN").id},
+     {"Blue", libraryAssetNamed(assets, "BLUE").id}}};
+  auto libraryImages = std::array<QImage, 3>{};
+  for (auto slot = size_t{0}; slot < libraryImages.size(); ++slot)
+    libraryImages[slot] = requireProject(inspection::decodeImage(
+      requireProject(library->readContent(definition.materialSlots[slot].texture)),
+      "goldsrc-miptex"));
+  const auto package =
+    encodeTerrainMaterialPackage(requireProject(prepareTerrainMaterial(libraryImages)));
+  REQUIRE_FALSE(package.empty());
+  const auto material =
+    requireProject(library->createTerrainMaterial(definition, package));
+  CHECK(requireProject(library->readContent(material.id)) == package);
+  requireProject(library->scan());
+  CHECK(requireProject(library->readContent(material.id)) == package);
+  requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+  const auto captured =
+    requireProject(sandbox.session->captureLibraryAsset(libraryId, material.id));
+  const auto inspected =
+    requireProject(inspection::readProjectAsset(*sandbox.session, captured.id));
+  CHECK_FALSE(inspected.terrainPreview.isNull());
+  CHECK(
+    requireProject(
+      sandbox.session->store().readAsset(captured.id, project::ContentKind::Compatible))
+    == package);
+  auto capturedImages =
+    requireProject(loadTerrainMaterialImages(sandbox.session->store(), captured.id));
+  CHECK(decodeTerrainMaterialPackage(
+          package, requireProject(normalizeTerrainMaterialImages(capturedImages)))
+          .has_value());
+  const auto dependencies =
+    requireProject(sandbox.session->store().dependencies(captured.id));
+  REQUIRE(dependencies.size() == 3);
+  library.reset();
+  std::filesystem::remove_all(sandbox.libraryFolder);
+
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  config.gameInfo.gameConfig.name = "Half-Life";
+  auto& document = fixture.create(config);
+  auto& map = document.map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* brush = new mdl::BrushNode{requireProject(
+    builder.createCuboid(vm::bbox3d{{-128, -128, -64}, {128, 128, 0}}, "RED"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {brush}}});
+  mdl::selectNodes(map, {brush});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+  // Keep the generated terrain in a sealed room so the fixture can also be
+  // compiled by external GoldSrc tools for end-to-end acceptance.
+  auto walls = std::vector<mdl::Node*>{};
+  for (const auto& bounds :
+       {vm::bbox3d{{-144, -144, -64}, {-128, 144, 160}},
+        vm::bbox3d{{128, -144, -64}, {144, 144, 160}},
+        vm::bbox3d{{-128, -144, -64}, {128, -128, 160}},
+        vm::bbox3d{{-128, 128, -64}, {128, 144, 160}},
+        vm::bbox3d{{-144, -144, 160}, {144, 144, 176}}})
+    walls.push_back(
+      new mdl::BrushNode{requireProject(builder.createCuboid(bounds, "RED"))});
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), std::move(walls)}});
+  REQUIRE(mdl::paste(map, R"(
+    { "classname" "info_player_start" "origin" "0 0 48" }
+    { "classname" "info_player_deathmatch" "origin" "32 0 48" }
+    { "classname" "light" "origin" "0 0 128" "_light" "255 255 255 400" }
+  )") == mdl::PasteType::Node);
+  auto region = requireProject(createTerrainRegion(*group));
+  region.materialAssetId = captured.id;
+  region.paint(vm::vec2d{96, 96}, 60, 1);
+  region.paint(vm::vec2d{145, 96}, 35, 2);
+  auto content = group->group();
+  content.setTerrainPaint(region.encode());
+  REQUIRE(mdl::updateNodeContents(
+    map, "Bind terrain material", {{group, mdl::NodeContents{std::move(content)}}}));
+  const auto source = sandbox.root / "terrain.map";
+  requireProject(map.saveTo(source));
+  const auto estimate =
+    requireProject(estimateTerrainGroup(*group, &sandbox.session->store()));
+  CHECK(estimate.sourceFaces == 1);
+  CHECK(estimate.generatedFaces > estimate.sourceFaces);
+  CHECK(estimate.cuts.size() == estimate.generatedFaces);
+  CHECK(std::ranges::any_of(
+    estimate.cuts, [](const auto& cut) { return cut.kind == TerrainFaceKind::Local; }));
+  const auto snapshot = requireProject(
+    bakeTerrainSnapshot(readProjectFile(source), &sandbox.session->store()));
+  REQUIRE(snapshot);
+  CHECK(snapshot->topFaces == estimate.generatedFaces);
+  auto textureLumps = std::vector<std::vector<std::uint8_t>>{};
+  for (const auto& [name, bytes] : snapshot->textures)
+    textureLumps.push_back(bytes);
+  CHECK(
+    requireProject(project::buildGoldSrcWad(textureLumps)).size() == estimate.wadBytes);
+
+  const auto saveSettings = [&](const TerrainRegion& settings) {
+    auto updated = group->group();
+    updated.setTerrainPaint(settings.encode());
+    REQUIRE(mdl::updateNodeContents(
+      map, "Change terrain budget", {{group, mdl::NodeContents{std::move(updated)}}}));
+    requireProject(map.saveTo(source));
+  };
+  const auto saveBudget = [&](const int faces, const int wad) {
+    auto limited = region;
+    limited.maxAddedFaces = faces;
+    limited.maxWadKiB = wad;
+    saveSettings(limited);
+  };
+  saveBudget(0, -1);
+  const auto faceLimited =
+    bakeTerrainSnapshot(readProjectFile(source), &sandbox.session->store());
+  REQUIRE(faceLimited.is_error());
+  CHECK(
+    std::get<Error>(faceLimited.error()).msg.find("extra top faces")
+    != std::string::npos);
+  saveBudget(-1, 0);
+  const auto wadLimited =
+    bakeTerrainSnapshot(readProjectFile(source), &sandbox.session->store());
+  REQUIRE(wadLimited.is_error());
+  CHECK(std::get<Error>(wadLimited.error()).msg.find("Terrain WAD") != std::string::npos);
+  saveBudget(-1, -1);
+
+  CHECK(estimate.narrowestFaceWidth > 0);
+  auto narrow = region;
+  narrow.minFaceWidth = 256;
+  saveSettings(narrow);
+  const auto narrowEstimate =
+    requireProject(estimateTerrainGroup(*group, &sandbox.session->store()));
+  CHECK(narrowEstimate.facesBelowMinWidth > 0);
+  CHECK(
+    size_t(std::ranges::count_if(
+      narrowEstimate.cuts, [](const auto& cut) { return cut.belowMinWidth; }))
+    == narrowEstimate.facesBelowMinWidth);
+  CHECK(narrowEstimate.narrowestFaceWidth == estimate.narrowestFaceWidth);
+  const auto widthLimited =
+    bakeTerrainSnapshot(readProjectFile(source), &sandbox.session->store());
+  REQUIRE(widthLimited.is_error());
+  CHECK(
+    std::get<Error>(widthLimited.error()).msg.find("below the minimum")
+    != std::string::npos);
+
+  auto wadSizes = std::array<size_t, 3>{};
+  const auto densities = std::array{50, 100, 200};
+  for (auto i = size_t{0}; i < densities.size(); ++i)
+  {
+    auto dense = region;
+    dense.patchDensityPercent = densities[i];
+    saveSettings(dense);
+    const auto densityEstimate =
+      requireProject(estimateTerrainGroup(*group, &sandbox.session->store()));
+    const auto densitySnapshot = requireProject(
+      bakeTerrainSnapshot(readProjectFile(source), &sandbox.session->store()));
+    REQUIRE(densitySnapshot);
+    CHECK(densityEstimate.generatedFaces == estimate.generatedFaces);
+    CHECK(densitySnapshot->topFaces == densityEstimate.generatedFaces);
+    auto lumps = std::vector<std::vector<std::uint8_t>>{};
+    for (const auto& [name, bytes] : densitySnapshot->textures)
+      lumps.push_back(bytes);
+    CHECK(
+      requireProject(project::buildGoldSrcWad(lumps)).size() == densityEstimate.wadBytes);
+    wadSizes[i] = densityEstimate.wadBytes;
+  }
+  CHECK(wadSizes[0] < wadSizes[1]);
+  CHECK(wadSizes[1] < wadSizes[2]);
+  saveSettings(region);
+  auto input = project::AssetImport{};
+  input.type = project::AssetType::Map;
+  input.virtualPath = "maps/terrain.map";
+  input.displayName = "Terrain";
+  input.original = readProjectFile(source);
+  input.compatible = input.original;
+  const auto mapAsset = requireProject(sandbox.session->importAsset(input));
+  const auto audit = requireProject(auditGoldSrcProjectResources(*sandbox.session));
+  CHECK(std::ranges::any_of(audit.uses, [&](const auto& use) {
+    return use.mapId == mapAsset.id && use.status == ProjectResourceStatus::Embedded
+           && std::ranges::find(use.assetIds, captured.id) != use.assetIds.end();
+  }));
+  CHECK(sandbox.session->removeAsset(captured.id).is_error());
+
+  requireProject(sandbox.session->save());
+  const auto cached =
+    requireProject(sandbox.session->store().terrainCompile(mapAsset.id));
+  REQUIRE(cached);
+  INFO(cached->error);
+  REQUIRE(cached->error.empty());
+  CHECK(cached->dependencies.size() == 4);
+  if (const auto output = qEnvironmentVariable("TB_TERRAIN_ACCEPTANCE_PROJECT");
+      !output.isEmpty())
+    requireProject(sandbox.session->saveCopy(pathFromQString(output)));
+  const auto archive = requireProject(project::readGoldSrcWad(cached->wad));
+  auto red = false;
+  auto green = false;
+  auto blue = false;
+  for (const auto& entry : archive.textures)
+  {
+    const auto single = requireProject(project::buildGoldSrcWad({entry.miptex}));
+    const auto image = requireProject(inspection::decodeImage(single));
+    for (auto y = 0; y < image.height(); y += 4)
+      for (auto x = 0; x < image.width(); x += 4)
+      {
+        const auto color = image.pixelColor(x, y);
+        red |= color.red() > 180 && color.green() < 80 && color.blue() < 80;
+        green |= color.green() > 180 && color.red() < 80 && color.blue() < 80;
+        blue |= color.blue() > 180 && color.red() < 80 && color.green() < 80;
+      }
+  }
+  CHECK(red);
+  CHECK(green);
+  CHECK(blue);
+
+  const auto slot0 = std::ranges::find_if(
+    dependencies, [](const auto& dep) { return dep.kind == "terrain-slot-0"; });
+  REQUIRE(slot0 != dependencies.end());
+  const auto texture =
+    requireProject(sandbox.session->store().findAsset(slot0->dependencyId));
+  REQUIRE(texture);
+  auto replacement = project::AssetImport{};
+  replacement.type = project::AssetType::Texture;
+  replacement.virtualPath = texture->virtualPath;
+  replacement.displayName = texture->displayName;
+  replacement.compatible =
+    requireProject(project::buildGoldSrcWad({coloredMiptex("RED", QColor{255, 255, 0})}));
+  replacement.original = replacement.compatible;
+  requireProject(sandbox.session->replaceAsset(texture->id, replacement));
+  capturedImages = requireProject(loadTerrainMaterialImages(sandbox.session->store(), captured.id));
+  CHECK_FALSE(decodeTerrainMaterialPackage(
+    package, requireProject(normalizeTerrainMaterialImages(capturedImages))).has_value());
+  CHECK(requireProject(loadTerrainMaterial(sandbox.session->store(), captured.id))
+          .images[0].pixelColor(0, 0) == QColor{255, 255, 0});
+  CHECK_FALSE(requireProject(sandbox.session->store().terrainCompile(mapAsset.id)));
+  CHECK(requireProject(sandbox.session->terrainCompileNeedsSave(mapAsset.id)));
+  requireProject(sandbox.session->save());
+  const auto rebuilt =
+    requireProject(sandbox.session->store().terrainCompile(mapAsset.id));
+  REQUIRE(rebuilt);
+  INFO(rebuilt->error);
+  REQUIRE(rebuilt->error.empty());
+  CHECK(rebuilt->wad != cached->wad);
+  sandbox.session.reset();
+  sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
+  CHECK_FALSE(requireProject(sandbox.session->terrainCompileNeedsSave(mapAsset.id)));
+  requireProject(
+    sandbox.session->exportCompileSnapshot(mapAsset.id, sandbox.root / "export"));
+}
+
+TEST_CASE("Terrain material normalizes textures and validates input")
+{
+  auto images = std::array<QImage, 3>{
+    QImage{64, 64, QImage::Format_RGBA8888},
+    QImage{128, 128, QImage::Format_RGBA8888},
+    QImage{256, 256, QImage::Format_RGBA8888}};
+  images[0].fill(Qt::red);
+  images[0].setPixelColor(0, 0, Qt::yellow);
+  images[1].fill(Qt::green);
+  images[2].fill(Qt::blue);
+  const auto material = requireProject(prepareTerrainMaterial(images));
+  CHECK(material.images[0].size() == QSize{128, 128});
+  CHECK(material.images[0].pixelColor(0, 0) == Qt::yellow);
+  CHECK(material.images[0].pixelColor(64, 64) == Qt::yellow);
+  CHECK(material.images[2].pixelColor(10, 10) == Qt::blue);
+  auto package = encodeTerrainMaterialPackage(material);
+  REQUIRE_FALSE(package.empty());
+  const auto restored = decodeTerrainMaterialPackage(package, material.images);
+  REQUIRE(restored);
+  CHECK(restored->palette == material.palette);
+  CHECK(restored->images == material.images);
+  auto changed = material.images;
+  changed[1].setPixelColor(0, 0, Qt::red);
+  CHECK_FALSE(decodeTerrainMaterialPackage(package, changed));
+  package.back() ^= 1;
+  CHECK_FALSE(decodeTerrainMaterialPackage(package, material.images));
+  package.pop_back();
+  CHECK_FALSE(decodeTerrainMaterialPackage(package, material.images));
+  images[0] = QImage{32, 32, QImage::Format_RGBA8888};
+  CHECK(prepareTerrainMaterial(images).is_error());
+  images[0] = QImage{64, 64, QImage::Format_RGBA8888};
+  images[0].fill(Qt::transparent);
+  CHECK(prepareTerrainMaterial(images).is_error());
+}
+
 TEST_CASE("ProjectSessionAssetLibrary")
 {
   auto sandbox = LibrarySandbox{};
@@ -1764,6 +2075,54 @@ TEST_CASE("ProjectSessionAssetLibrary")
       > 0);
   }
 
+  SECTION("captures a terrain material along with its dependent textures closure")
+  {
+    const auto grass = miptexFor("GRASS", 16, 200);
+    const auto dirt = miptexFor("DIRT", 16, 150);
+    const auto rock = miptexFor("ROCK", 16, 100);
+    sandbox.writeWad({grass, dirt, rock}, "terrain_textures.wad");
+    sandbox.rescanLibrary();
+
+    auto library = requireProject(project::AssetLibrary::open(sandbox.libraryFolder));
+    auto def = project::AssetLibrary::TerrainMaterialDefinition{};
+    def.name = "alpine_blend";
+    def.folder = "materials";
+    const auto textures = requireProject(library->assets());
+    def.materialSlots[0] = {"Grass", libraryAssetNamed(textures, "GRASS").id};
+    def.materialSlots[1] = {"Dirt", libraryAssetNamed(textures, "DIRT").id};
+    def.materialSlots[2] = {"Rock", libraryAssetNamed(textures, "ROCK").id};
+    const auto matLibAsset = requireProject(library->createTerrainMaterial(def));
+
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, matLibAsset.id));
+    CHECK(captured.type == project::AssetType::Material);
+    CHECK(captured.publishPath == "materials/alpine_blend.tbmat");
+
+    const auto dependencies =
+      requireProject(sandbox.session->store().dependencies(captured.id));
+    REQUIRE(dependencies.size() == 3);
+
+    auto kinds = std::vector<std::string>{};
+    for (const auto& dep : dependencies)
+    {
+      kinds.push_back(dep.kind);
+      const auto textureAsset =
+        requireProject(sandbox.session->store().findAsset(dep.dependencyId));
+      REQUIRE(textureAsset);
+      CHECK(textureAsset->type == project::AssetType::Texture);
+    }
+    std::ranges::sort(kinds);
+    CHECK(
+      kinds
+      == std::vector<std::string>{
+        "terrain-slot-0", "terrain-slot-1", "terrain-slot-2"});
+
+    const auto file = requireProject(sandbox.session->assetFile(captured));
+    CHECK(std::filesystem::exists(file));
+    CHECK(file.filename() == "alpine_blend.tbmat");
+  }
+
   SECTION("a dependency the library added after capture reports an update")
   {
     sandbox.write("models/crate.mdl", modelWithGroups(2));
@@ -2465,5 +2824,96 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(sandbox.session->captureLibraryAsset(libraryId, second->id).is_error());
     CHECK(requireProject(sandbox.session->store().assets()).size() == 1);
   }
+}
+
+TEST_CASE("Project terrain region encodes and decodes material asset binding")
+{
+  auto region = TerrainRegion{vm::vec2d{100.0, 200.0}};
+  region.paint(vm::vec2d{50.0, 50.0}, 40.0, 1);
+
+  SECTION("version 1 format encodes without material and decodes cleanly")
+  {
+    const auto encodedV1 = region.encode();
+    CHECK(encodedV1.starts_with("1 100 200 "));
+    const auto decodedV1 = requireProject(TerrainRegion::decode(encodedV1));
+    CHECK(decodedV1.origin.x() == 100.0);
+    CHECK(decodedV1.origin.y() == 200.0);
+    CHECK(decodedV1.materialAssetId.empty());
+    CHECK(decodedV1.weight(0, 0) == region.weight(0, 0));
+  }
+
+  SECTION("version 2 format encodes with material and restores cleanly")
+  {
+    region.materialAssetId = "mat_alpine_grass";
+    const auto encodedV2 = region.encode();
+    CHECK(encodedV2.starts_with("2 100 200 mat_alpine_grass "));
+    const auto decodedV2 = requireProject(TerrainRegion::decode(encodedV2));
+    CHECK(decodedV2.origin.x() == 100.0);
+    CHECK(decodedV2.origin.y() == 200.0);
+    CHECK(decodedV2.materialAssetId == "mat_alpine_grass");
+    CHECK(decodedV2.weight(0, 0) == region.weight(0, 0));
+  }
+
+  SECTION("version 2 format with placeholder dash restores as empty material")
+  {
+    const auto encodedV2 = region.encode();
+    auto modified = encodedV2;
+    const auto v1Prefix = std::string{"1 100 200 "};
+    REQUIRE(modified.starts_with(v1Prefix));
+    modified = "2 100 200 - " + modified.substr(v1Prefix.size());
+    const auto decoded = requireProject(TerrainRegion::decode(modified));
+    CHECK(decoded.materialAssetId.empty());
+  }
+
+  SECTION("version 3 persists optional per-region budgets")
+  {
+    region.maxAddedFaces = 32;
+    region.maxWadKiB = 256;
+    const auto encoded = region.encode();
+    CHECK(encoded.starts_with("3 100 200 - 32 256 "));
+    const auto restored = requireProject(TerrainRegion::decode(encoded));
+    CHECK(restored.materialAssetId.empty());
+    CHECK(restored.maxAddedFaces == 32);
+    CHECK(restored.maxWadKiB == 256);
+    region.materialAssetId = "mat_alpine_grass";
+    const auto material = requireProject(TerrainRegion::decode(region.encode()));
+    CHECK(material.materialAssetId == region.materialAssetId);
+    CHECK(material.maxAddedFaces == 32);
+    CHECK(TerrainRegion::decode("3 100 200 - -2 256 x").is_error());
+  }
+
+  SECTION("version 4 persists minimum width and patch density")
+  {
+    region.minFaceWidth = 16;
+    region.patchDensityPercent = 200;
+    region.maxWadKiB = 256;
+    const auto encoded = region.encode();
+    CHECK(encoded.starts_with("4 100 200 - -1 256 16 200 "));
+    const auto restored = requireProject(TerrainRegion::decode(encoded));
+    CHECK(restored.minFaceWidth == 16);
+    CHECK(restored.patchDensityPercent == 200);
+    CHECK(restored.maxWadKiB == 256);
+    CHECK(TerrainRegion::decode("4 100 200 - -1 -1 0 75 x").is_error());
+    CHECK(TerrainRegion::decode("4 100 200 - -1 -1 -1 100 x").is_error());
+  }
+
+  SECTION("malformed terrain region strings report error")
+  {
+    CHECK(TerrainRegion::decode("").is_error());
+    CHECK(TerrainRegion::decode("invalid").is_error());
+    CHECK(TerrainRegion::decode("3 100 200 hex").is_error());
+  }
+}
+
+TEST_CASE("Terrain brush applies strength and hardness")
+{
+  auto soft = TerrainRegion{vm::vec2d{0, 0}};
+  auto hard = TerrainRegion{vm::vec2d{0, 0}};
+  soft.paint(vm::vec2d{48, 48}, 48, 1, 0.5, 0.0);
+  hard.paint(vm::vec2d{48, 48}, 48, 1, 0.5, 1.0);
+  CHECK(soft.weight(2, 2)[1] == 0.5);
+  CHECK(hard.weight(2, 2)[1] == 0.5);
+  CHECK(hard.weight(3, 2)[1] > soft.weight(3, 2)[1]);
+  CHECK(soft.weight(2, 2)[0] + soft.weight(2, 2)[1] + soft.weight(2, 2)[2] == 1.0);
 }
 } // namespace tb::ui

@@ -22,8 +22,9 @@
 
 namespace tb::ui
 {
-TerrainRegion::TerrainRegion(const vm::vec2d origin_)
+TerrainRegion::TerrainRegion(const vm::vec2d origin_, std::string materialAssetId_)
   : origin{origin_}
+  , materialAssetId{std::move(materialAssetId_)}
 {
   weights.fill({1, 0, 0});
 }
@@ -40,8 +41,14 @@ vm::vec3d TerrainRegion::unproject(const QPointF& pixel, const double z) const
 }
 
 void TerrainRegion::paint(
-  const vm::vec2d& point, const double radius, const size_t material)
+  const vm::vec2d& point,
+  const double radius,
+  const size_t material,
+  const double strength,
+  const double hardness)
 {
+  if (radius <= 0 || material >= 3)
+    return;
   const auto left = std::max(0, int(std::ceil((point.x() - radius) / Step)));
   const auto right = std::min(Columns, int(std::floor((point.x() + radius) / Step)));
   const auto top = std::max(0, int(std::ceil((point.y() - radius) / Step)));
@@ -51,11 +58,12 @@ void TerrainRegion::paint(
     for (auto col = left; col <= right; ++col)
     {
       const auto distance = vm::length(point - vm::vec2d{col * Step, row * Step});
-      const auto t = std::clamp((radius - distance) / (radius * 0.65), 0.0, 1.0);
-      const auto strength = t * t * (3 - 2 * t);
+      const auto edge = radius * std::max(1e-6, 1.0 - std::clamp(hardness, 0.0, 1.0));
+      const auto t = std::clamp((radius - distance) / edge, 0.0, 1.0);
+      const auto amount = std::clamp(strength, 0.0, 1.0) * t * t * (3 - 2 * t);
       auto& w = weights[size_t(row * (Columns + 1) + col)];
       for (auto k = size_t{0}; k < w.size(); ++k)
-        w[k] = w[k] * (1 - strength) + (k == material ? strength : 0);
+        w[k] = w[k] * (1 - amount) + (k == material ? amount : 0);
     }
   }
 }
@@ -79,8 +87,29 @@ std::string TerrainRegion::encode() const
   }
   auto output = std::ostringstream{};
   output.imbue(std::locale::classic());
-  output << "1 " << std::setprecision(17) << origin.x() << ' ' << origin.y() << ' '
-         << pixels.toHex().toStdString();
+  if (minFaceWidth > 0 || patchDensityPercent != 100)
+  {
+    output << "4 " << std::setprecision(17) << origin.x() << ' ' << origin.y() << ' '
+           << (materialAssetId.empty() ? "-" : materialAssetId) << ' ' << maxAddedFaces
+           << ' ' << maxWadKiB << ' ' << minFaceWidth << ' ' << patchDensityPercent << ' '
+           << pixels.toHex().toStdString();
+  }
+  else if (maxAddedFaces >= 0 || maxWadKiB >= 0)
+  {
+    output << "3 " << std::setprecision(17) << origin.x() << ' ' << origin.y() << ' '
+           << (materialAssetId.empty() ? "-" : materialAssetId) << ' ' << maxAddedFaces
+           << ' ' << maxWadKiB << ' ' << pixels.toHex().toStdString();
+  }
+  else if (materialAssetId.empty())
+  {
+    output << "1 " << std::setprecision(17) << origin.x() << ' ' << origin.y() << ' '
+           << pixels.toHex().toStdString();
+  }
+  else
+  {
+    output << "2 " << std::setprecision(17) << origin.x() << ' ' << origin.y() << ' '
+           << materialAssetId << ' ' << pixels.toHex().toStdString();
+  }
   return output.str();
 }
 
@@ -91,12 +120,45 @@ Result<TerrainRegion> TerrainRegion::decode(const std::string_view text)
   auto version = 0;
   auto x = 0.0;
   auto y = 0.0;
+  auto materialAssetId = std::string{};
+  auto maxAddedFaces = -1;
+  auto maxWadKiB = -1;
+  auto minFaceWidth = 0;
+  auto patchDensityPercent = 100;
   auto hex = std::string{};
   auto extra = std::string{};
+  if (!(input >> version >> x >> y))
+    return Error{"Invalid terrain region data."};
+
+  if (version == 1)
+  {
+    if (!(input >> hex) || (input >> extra))
+      return Error{"Invalid terrain region data."};
+  }
+  else if (version == 2 || version == 3 || version == 4)
+  {
+    if (!(input >> materialAssetId))
+      return Error{"Invalid terrain region data."};
+    if (
+      version >= 3
+      && (!(input >> maxAddedFaces >> maxWadKiB) || maxAddedFaces < -1 || maxAddedFaces > 100000 || maxWadKiB < -1 || maxWadKiB > 1048576))
+      return Error{"Invalid terrain budget."};
+    if (
+      version == 4
+      && (!(input >> minFaceWidth >> patchDensityPercent) || minFaceWidth < 0 || minFaceWidth > 1280 || (patchDensityPercent != 50 && patchDensityPercent != 100 && patchDensityPercent != 200)))
+      return Error{"Invalid terrain width or patch density."};
+    if (!(input >> hex) || (input >> extra))
+      return Error{"Invalid terrain region data."};
+    if (materialAssetId == "-")
+      materialAssetId.clear();
+  }
+  else
+  {
+    return Error{"Invalid terrain region data."};
+  }
+
   auto result = TerrainRegion{vm::vec2d{0, 0}};
-  if (
-    !(input >> version >> x >> y >> hex) || (input >> extra) || version != 1
-    || !std::isfinite(x) || !std::isfinite(y) || hex.size() != result.weights.size() * 4)
+  if (!std::isfinite(x) || !std::isfinite(y) || hex.size() != result.weights.size() * 4)
   {
     return Error{"Invalid terrain region data."};
   }
@@ -104,6 +166,11 @@ Result<TerrainRegion> TerrainRegion::decode(const std::string_view text)
   if (size_t(pixels.size()) != result.weights.size() * 2)
     return Error{"Invalid terrain paint weights."};
   result.origin = vm::vec2d{x, y};
+  result.materialAssetId = std::move(materialAssetId);
+  result.maxAddedFaces = maxAddedFaces;
+  result.maxWadKiB = maxWadKiB;
+  result.minFaceWidth = minFaceWidth;
+  result.patchDensityPercent = patchDensityPercent;
   for (auto i = size_t{0}; i < result.weights.size(); ++i)
   {
     const auto dirt = static_cast<unsigned char>(pixels[qsizetype(i * 2)]);

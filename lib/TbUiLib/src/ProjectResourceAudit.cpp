@@ -14,6 +14,7 @@
 #include "mdl/StandardMapParser.h"
 #include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
+#include "ui/TerrainRegion.h"
 
 #include <optional>
 #include <sstream>
@@ -46,6 +47,8 @@ enum class ReferenceKind
 {
   File,
   Texture,
+  TerrainMaterial,
+  InvalidTerrain,
   Unsupported
 };
 struct Reference
@@ -87,6 +90,30 @@ private:
   {
     m_classname = mdl::findEntityPropertyOrDefault(properties, "classname");
     m_hasWorld |= m_classname == "worldspawn";
+    auto terrainPaint = mdl::findEntityPropertyOrDefault(
+      properties, mdl::EntityPropertyKeys::TbTerrainPaint);
+    if (!terrainPaint.empty())
+    {
+      // Serialized group properties are split into 900-byte chunks.
+      for (auto index = 1;; ++index)
+      {
+        const auto chunk = mdl::findEntityPropertyOrDefault(
+          properties, mdl::EntityPropertyKeys::TbTerrainPaint + std::to_string(index));
+        if (chunk.empty())
+          break;
+        terrainPaint += chunk;
+      }
+      const auto region = TerrainRegion::decode(terrainPaint);
+      const auto where = m_classname + "." + mdl::EntityPropertyKeys::TbTerrainPaint;
+      if (region.is_error())
+        m_references.push_back({location.line, where, {}, ReferenceKind::InvalidTerrain});
+      else if (!region.value().materialAssetId.empty())
+        m_references.push_back(
+          {location.line,
+           where,
+           region.value().materialAssetId,
+           ReferenceKind::TerrainMaterial});
+    }
     for (const auto& property : properties)
     {
       const auto& key = property.key();
@@ -254,7 +281,25 @@ Result<ProjectResourceAudit> auditGoldSrcProjectResources(
         ProjectResourceStatus::Missing,
         {},
         {}};
-      if (reference.kind == ReferenceKind::Unsupported)
+      if (reference.kind == ReferenceKind::InvalidTerrain)
+      {
+        use.status = ProjectResourceStatus::ScanError;
+        use.detail = "The terrain material reference could not be read.";
+      }
+      else if (reference.kind == ReferenceKind::TerrainMaterial)
+      {
+        const auto asset = session.store().findAsset(reference.value);
+        if (asset.is_error())
+          return std::get<Error>(asset.error());
+        if (asset.value() && asset.value()->type == project::AssetType::Material)
+        {
+          use.status = ProjectResourceStatus::Embedded;
+          use.assetIds.push_back(asset.value()->id);
+        }
+        else
+          use.detail = "The terrain material is missing from this project.";
+      }
+      else if (reference.kind == ReferenceKind::Unsupported)
       {
         use.status = ProjectResourceStatus::Unsupported;
         use.detail = "Sentence/decal lookup requires a separate resource catalog.";

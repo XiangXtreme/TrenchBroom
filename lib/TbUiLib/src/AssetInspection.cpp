@@ -19,6 +19,7 @@
 #include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainMaterial.h"
 
 #include <algorithm>
 #include <cmath>
@@ -498,10 +499,12 @@ Result<Asset> readLibraryAsset(
   if (compatible.is_error())
     return std::get<Error>(compatible.error());
   auto result = Asset{};
-  result.resource.type = asset.type == project::AssetType::Skybox
-                           ? BrowserCellType::Texture
-                           : assetTypeForExtension(pathFromQString(
-                               QString::fromStdString(asset.sourceContainer)));
+  result.resource.type =
+    (asset.type == project::AssetType::Skybox || asset.type == project::AssetType::Texture
+     || asset.type == project::AssetType::Material)
+      ? BrowserCellType::Texture
+      : assetTypeForExtension(
+          pathFromQString(QString::fromStdString(asset.sourceContainer)));
   result.resource.skybox = asset.type == project::AssetType::Skybox;
   result.resource.source = BrowserSource::AssetLibrary;
   result.resource.libraryId = source.libraryId();
@@ -521,6 +524,38 @@ Result<Asset> readLibraryAsset(
     QString::fromStdString(source.libraryId() + "/" + asset.id + "/" + asset.contentHash);
   result.original = std::move(original).value();
   result.compatible = std::move(compatible).value();
+  if (asset.type == project::AssetType::Material)
+  {
+    const auto dependencies = source.dependencies(asset.id);
+    const auto entries = source.allAssets();
+    if (dependencies.is_success() && entries.is_success())
+    {
+      auto images = std::array<QImage, 3>{};
+      for (const auto& edge : dependencies.value())
+      {
+        const auto slot = edge.kind == "terrain-slot-0"   ? 0
+                          : edge.kind == "terrain-slot-1" ? 1
+                          : edge.kind == "terrain-slot-2" ? 2
+                                                          : -1;
+        if (slot < 0)
+          continue;
+        const auto texture =
+          std::ranges::find_if(entries.value(), [&](const auto& entry) {
+            return entry.id == edge.dependencyId
+                   && entry.type == project::AssetType::Texture;
+          });
+        if (texture == entries.value().end() || texture->missing)
+          continue;
+        const auto content = source.readContent(texture->id);
+        if (content.is_error())
+          continue;
+        const auto image = decodeImage(content.value(), texture->nativeFormat);
+        if (image.is_success())
+          images[size_t(slot)] = image.value();
+      }
+      result.terrainPreview = renderTerrainMaterialPreview(std::move(images));
+    }
+  }
   if (result.resource.skybox)
   {
     const auto dependencies = source.dependencies(asset.id);
@@ -586,11 +621,19 @@ Result<Asset> readProjectAsset(ProjectSession& session, const std::string& asset
   result.resource.libraryRevision = entry.library.libraryRevision;
   result.resource.path = entry.publishPath;
   result.resource.type = assetTypeForExtension(entry.publishPath);
-  if (entry.type == project::AssetType::Texture)
+  if (
+    entry.type == project::AssetType::Texture
+    || entry.type == project::AssetType::Material)
   {
     result.resource.type = BrowserCellType::Texture;
   }
   result.resource.skybox = entry.type == project::AssetType::Skybox;
+  if (entry.type == project::AssetType::Material)
+  {
+    const auto images = loadTerrainMaterialImages(session.store(), assetId);
+    if (images.is_success())
+      result.terrainPreview = renderTerrainMaterialPreview(images.value());
+  }
   if (result.resource.skybox)
   {
     result.resource.type = BrowserCellType::Texture;

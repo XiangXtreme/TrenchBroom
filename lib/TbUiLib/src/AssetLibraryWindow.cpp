@@ -6,6 +6,7 @@
 #include "ui/AssetLibraryWindow.h"
 
 #include <QAbstractItemView>
+#include <QAction>
 #include <QColor>
 #include <QComboBox>
 #include <QDesktopServices>
@@ -25,6 +26,7 @@
 #include <QListWidgetItem>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPainter>
 #include <QPixmap>
 #include <QProgressBar>
 #include <QProgressDialog>
@@ -43,6 +45,7 @@
 
 #include "base/PreferenceManager.h"
 #include "img/DecodeImage.h"
+#include "img/GoldSrcTexture.h"
 #include "prefs/Preferences.h"
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
@@ -52,6 +55,7 @@
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryItemDelegate.h"
 #include "ui/AssetLibrarySource.h"
+#include "ui/CreateTerrainMaterialDialog.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
 #include "ui/ProjectCaptureConflictDialog.h"
@@ -60,10 +64,13 @@
 #include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
 #include "ui/RecentDocuments.h"
+#include "ui/TerrainMaterial.h"
 
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -155,6 +162,7 @@ struct TypeFilter
 
 constexpr std::array kTypeFilters{
   TypeFilter{"texture", project::AssetType::Texture},
+  TypeFilter{"material", project::AssetType::Material},
   TypeFilter{"model", project::AssetType::Model},
   TypeFilter{"sprite", project::AssetType::Sprite},
   TypeFilter{"sound", project::AssetType::Sound},
@@ -325,6 +333,9 @@ void AssetLibraryWindow::buildUi()
 
   m_importButton =
     createActionButton(header, tr("Import Files…"), tr("Copy assets into this library"));
+  m_createMaterialButton = createActionButton(
+    header, tr("New Material…"), tr("Create a composite terrain material"));
+  m_createMaterialButton->setObjectName(QStringLiteral("AssetLibraryCreateMaterial"));
   m_rescanButton =
     createActionButton(header, tr("Rescan"), tr("Re-read the library contents"));
   m_convertButton = createActionButton(
@@ -337,6 +348,8 @@ void AssetLibraryWindow::buildUi()
 
   m_importButton->setIcon(
     assetLibraryGlyphIcon(AssetLibraryGlyph::Import, textColor, 15));
+  m_createMaterialButton->setIcon(
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Texture, textColor, 15));
   m_rescanButton->setIcon(
     assetLibraryGlyphIcon(AssetLibraryGlyph::Rescan, textColor, 15));
   m_convertButton->setIcon(
@@ -361,6 +374,7 @@ void AssetLibraryWindow::buildUi()
     QLineEdit::LeadingPosition);
 
   headerLayout->addWidget(m_importButton);
+  headerLayout->addWidget(m_createMaterialButton);
   headerLayout->addWidget(m_rescanButton);
   headerLayout->addWidget(m_convertButton);
   headerLayout->addWidget(m_revealButton);
@@ -474,7 +488,14 @@ void AssetLibraryWindow::buildUi()
   m_grid = new AssetLibraryListView{center};
   m_grid->setObjectName(QStringLiteral("AssetLibraryGrid"));
   m_grid->setFrameShape(QFrame::NoFrame);
-  m_grid->setSelectionMode(QAbstractItemView::SingleSelection);
+  m_grid->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  m_grid->setContextMenuPolicy(Qt::ActionsContextMenu);
+  m_createMaterialFromSelection =
+    new QAction{tr("Create Terrain Material from Selected Textures…"), m_grid};
+  m_createMaterialFromSelection->setObjectName(
+    QStringLiteral("AssetLibrary_CreateMaterialFromSelection"));
+  m_createMaterialFromSelection->setEnabled(false);
+  m_grid->addAction(m_createMaterialFromSelection);
   m_grid->setViewMode(QListView::IconMode);
   m_grid->setResizeMode(QListView::Adjust);
   m_grid->setMovement(QListView::Static);
@@ -624,6 +645,19 @@ void AssetLibraryWindow::buildUi()
   connect(
     m_changeButton, &QPushButton::clicked, this, &AssetLibraryWindow::chooseLibrary);
   connect(m_importButton, &QPushButton::clicked, this, &AssetLibraryWindow::runImport);
+  connect(
+    m_createMaterialButton,
+    &QPushButton::clicked,
+    this,
+    &AssetLibraryWindow::runCreateTerrainMaterial);
+  connect(
+    m_createMaterialFromSelection,
+    &QAction::triggered,
+    this,
+    &AssetLibraryWindow::runCreateTerrainMaterial);
+  connect(m_grid, &QListWidget::itemSelectionChanged, this, [this] {
+    m_createMaterialFromSelection->setEnabled(selectedTextures().has_value());
+  });
   connect(m_rescanButton, &QPushButton::clicked, this, &AssetLibraryWindow::runRescan);
   connect(
     m_convertButton, &QPushButton::clicked, this, &AssetLibraryWindow::runConvertPending);
@@ -903,6 +937,7 @@ void AssetLibraryWindow::updateActions()
 {
   const auto hasSource = m_source != nullptr;
   m_importButton->setEnabled(hasSource && m_source->canImport());
+  m_createMaterialButton->setEnabled(hasSource && m_source->canManage());
   m_rescanButton->setEnabled(hasSource);
   m_convertButton->setEnabled(
     hasSource && m_source->canConvert() && pendingCount() > 0
@@ -966,6 +1001,7 @@ void AssetLibraryWindow::refreshCategories()
     }));
   };
   add(QStringLiteral("texture"), tr("Textures"), countOf(project::AssetType::Texture));
+  add(QStringLiteral("material"), tr("Materials"), countOf(project::AssetType::Material));
   add(QStringLiteral("model"), tr("Models"), countOf(project::AssetType::Model));
   add(QStringLiteral("sprite"), tr("Sprites"), countOf(project::AssetType::Sprite));
   add(QStringLiteral("sound"), tr("Sounds"), countOf(project::AssetType::Sound));
@@ -1038,6 +1074,7 @@ void AssetLibraryWindow::refreshGrid()
   {
     m_grid->hide();
     m_countLabel->clear();
+    m_createMaterialFromSelection->setEnabled(false);
     return;
   }
 
@@ -1140,6 +1177,7 @@ void AssetLibraryWindow::refreshGrid()
       current->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString();
   else
     m_selectedId.reset();
+  m_createMaterialFromSelection->setEnabled(selectedTextures().has_value());
   showAsset(selectedAsset());
 }
 
@@ -1270,6 +1308,38 @@ QImage AssetLibraryWindow::loadThumbnail(const project::LibraryAsset& asset) con
   if (asset.type == project::AssetType::Model)
     return renderModelThumbnail(
       pathFromQString(m_source->location()), asset.sourceContainer, 256);
+  if (asset.type == project::AssetType::Material)
+  {
+    const auto edges = m_source->dependencies(asset.id);
+    if (edges.is_success())
+    {
+      auto s0 = QImage{}, s1 = QImage{}, s2 = QImage{};
+      for (const auto& edge : edges.value())
+      {
+        const auto texture = std::ranges::find_if(m_assets, [&](const auto& candidate) {
+          return candidate.id == edge.dependencyId;
+        });
+        if (texture == m_assets.end())
+          continue;
+        auto slotBytes = m_source->readContent(edge.dependencyId);
+        if (slotBytes.is_error())
+          continue;
+        auto decoded = inspection::decodeImage(slotBytes.value(), texture->nativeFormat);
+        if (decoded.is_error())
+          continue;
+        if (edge.kind == "terrain-slot-0")
+          s0 = decoded.value();
+        else if (edge.kind == "terrain-slot-1")
+          s1 = decoded.value();
+        else if (edge.kind == "terrain-slot-2")
+          s2 = decoded.value();
+      }
+      if (!s0.isNull() && !s1.isNull() && !s2.isNull())
+        return renderTerrainMaterialPreview(
+          {std::move(s0), std::move(s1), std::move(s2)});
+    }
+    return {};
+  }
   const auto bytes = m_source->readContent(asset.id);
   if (bytes.is_error())
     return {};
@@ -1533,6 +1603,157 @@ void AssetLibraryWindow::runImport()
   if (files.isEmpty())
     return;
   importFiles(files);
+}
+
+std::optional<std::array<std::string, 3>> AssetLibraryWindow::selectedTextures() const
+{
+  if (!m_source || !m_source->canManage())
+    return std::nullopt;
+  auto items = m_grid->selectedItems();
+  if (items.size() != 3)
+    return std::nullopt;
+  std::ranges::sort(items, [this](const auto* left, const auto* right) {
+    return m_grid->row(left) < m_grid->row(right);
+  });
+  auto result = std::array<std::string, 3>{};
+  for (auto slot = size_t{0}; slot < result.size(); ++slot)
+  {
+    const auto id = items.at(qsizetype(slot))
+                      ->data(AssetLibraryItemDelegate::AssetIdRole)
+                      .toString()
+                      .toStdString();
+    const auto asset = std::ranges::find_if(
+      m_assets, [&](const auto& candidate) { return candidate.id == id; });
+    if (
+      asset == m_assets.end() || asset->missing
+      || asset->type != project::AssetType::Texture)
+      return std::nullopt;
+    result[slot] = id;
+  }
+  return result;
+}
+
+void AssetLibraryWindow::runCreateTerrainMaterial()
+{
+  if (!m_source || !m_source->canManage())
+    return;
+  auto textures = std::vector<project::LibraryAsset>{};
+  for (const auto& asset : m_assets)
+  {
+    if (asset.type == project::AssetType::Texture)
+      textures.push_back(asset);
+  }
+  auto dialog = CreateTerrainMaterialDialog{textures, this};
+  if (const auto selected = selectedTextures())
+    dialog.setSelectedTextures(*selected);
+  auto def = project::AssetLibrary::TerrainMaterialDefinition{};
+  auto package = std::vector<std::uint8_t>{};
+  while (true)
+  {
+    if (dialog.exec() != QDialog::Accepted)
+      return;
+    def = dialog.definition();
+    auto images = std::array<QImage, 3>{};
+    auto input = std::array<std::vector<std::uint8_t>, 3>{};
+    auto convert = std::array<bool, 3>{};
+    auto problem = QString{};
+    for (auto slot = size_t{0}; slot < images.size(); ++slot)
+    {
+      const auto& id = def.materialSlots[slot].texture;
+      const auto asset =
+        std::ranges::find_if(textures, [&](const auto& item) { return item.id == id; });
+      if (asset == textures.end())
+      {
+        problem = tr("A selected texture is no longer available.");
+        break;
+      }
+      auto bytes = m_source->readContent(id);
+      if (bytes.is_error())
+      {
+        problem = QString::fromStdString(std::get<Error>(bytes.error()).msg);
+        break;
+      }
+      auto image = inspection::decodeImage(bytes.value(), asset->nativeFormat);
+      if (image.is_error())
+      {
+        problem = QString::fromStdString(std::get<Error>(image.error()).msg);
+        break;
+      }
+      images[slot] = std::move(image).value();
+      input[slot] = std::move(bytes).value();
+      convert[slot] = asset->nativeFormat == "image";
+    }
+    if (problem.isEmpty())
+    {
+      const auto validation = normalizeTerrainMaterialImages(images);
+      if (validation.is_error())
+        problem = QString::fromStdString(std::get<Error>(validation.error()).msg);
+    }
+    // A project captures ordinary images as GoldSrc textures. Generate the package
+    // from those same pixels, so a project can verify it against its own snapshots.
+    for (auto slot = size_t{0}; problem.isEmpty() && slot < images.size(); ++slot)
+    {
+      if (!convert[slot])
+        continue;
+      const auto decoded = img::decodeImage(input[slot].data(), input[slot].size());
+      if (decoded.is_error())
+      {
+        problem = QString::fromStdString(std::get<Error>(decoded.error()).msg);
+        break;
+      }
+      const auto texture = img::convertGoldSrcTexture(decoded.value(), "terrain_source");
+      if (texture.is_error())
+      {
+        problem = QString::fromStdString(std::get<Error>(texture.error()).msg);
+        break;
+      }
+      auto image = inspection::decodeImage(texture.value().wad);
+      if (image.is_error())
+      {
+        problem = QString::fromStdString(std::get<Error>(image.error()).msg);
+        break;
+      }
+      images[slot] = std::move(image).value();
+    }
+    if (problem.isEmpty())
+    {
+      const auto material = prepareTerrainMaterial(std::move(images));
+      if (material.is_error())
+        problem = QString::fromStdString(std::get<Error>(material.error()).msg);
+      else
+        package = encodeTerrainMaterialPackage(material.value());
+      if (problem.isEmpty() && package.empty())
+        problem = tr("Cannot create the terrain material package.");
+    }
+    if (problem.isEmpty())
+      break;
+    QMessageBox::warning(this, tr("Create Material"), problem);
+  }
+  const auto created = m_source->createTerrainMaterial(def, std::move(package));
+  if (created.is_error())
+  {
+    QMessageBox::warning(
+      this,
+      tr("Create Material"),
+      QString::fromStdString(std::get<Error>(created.error()).msg));
+    return;
+  }
+  reload();
+  m_filter = QStringLiteral("material");
+  refreshCategories();
+  refreshGrid();
+  m_selectedId = created.value().id;
+  for (auto row = 0; row < m_grid->count(); ++row)
+  {
+    if (auto* item = m_grid->item(row);
+        item->data(AssetLibraryItemDelegate::AssetIdRole).toString()
+        == QString::fromStdString(*m_selectedId))
+    {
+      m_grid->setCurrentRow(row);
+      break;
+    }
+  }
+  updateStatus();
 }
 
 void AssetLibraryWindow::showOperationReport(

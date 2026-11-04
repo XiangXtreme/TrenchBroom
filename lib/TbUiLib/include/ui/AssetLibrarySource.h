@@ -9,6 +9,7 @@
 #include <QString>
 
 #include "base/Result.h"
+#include "project/AssetLibrary.h"
 #include "project/ProjectAsset.h"
 #include "ui/AssetBrowserModel.h"
 
@@ -127,6 +128,12 @@ public:
     const std::filesystem::path&, const std::string&)
   {
     return Error{"This asset library does not support replacing source files."};
+  }
+  virtual Result<project::LibraryAsset> createTerrainMaterial(
+    const project::AssetLibrary::TerrainMaterialDefinition& /*def*/,
+    std::vector<std::uint8_t> /*compatible*/ = {})
+  {
+    return Error{"This asset library is read only."};
   }
 };
 

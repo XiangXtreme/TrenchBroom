@@ -2,11 +2,13 @@
  Copyright (C) 2026 XiangXtreme
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
+#include <QAction>
 #include <QApplication>
 #include <QBuffer>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QImage>
 #include <QLabel>
@@ -23,6 +25,7 @@
 #include <QTimer>
 #include <QTreeWidget>
 
+#include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
@@ -32,8 +35,10 @@
 #include "ui/AssetLibraryItemDelegate.h"
 #include "ui/AssetLibrarySource.h"
 #include "ui/AssetLibraryWindow.h"
+#include "ui/CreateTerrainMaterialDialog.h"
 #include "ui/ModelThumbnail.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainMaterial.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -60,9 +65,9 @@ void write(const std::filesystem::path& path, const inspection::Bytes& bytes)
   file.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
   REQUIRE(file.good());
 }
-inspection::Bytes png(const QColor color)
+inspection::Bytes png(const QColor color, const int side = 16)
 {
-  auto image = QImage{16, 16, QImage::Format_RGBA8888};
+  auto image = QImage{side, side, QImage::Format_RGBA8888};
   image.fill(color);
   auto buffer = QBuffer{};
   REQUIRE(buffer.open(QIODevice::WriteOnly));
@@ -1104,6 +1109,120 @@ TEST_CASE("AssetInspection")
     CHECK_FALSE(info.loop);
     bytes.pop_back();
     CHECK(inspection::readWaveInfo(bytes).is_error());
+  }
+
+  SECTION("CreateTerrainMaterialDialog validates and constructs material definitions")
+  {
+    auto tex1 = project::LibraryAsset{};
+    tex1.id = "tex1_id";
+    tex1.displayName = "GRASS01";
+    tex1.sourceMember = "GRASS01";
+    tex1.type = project::AssetType::Texture;
+
+    auto tex2 = project::LibraryAsset{};
+    tex2.id = "tex2_id";
+    tex2.displayName = "DIRT01";
+    tex2.sourceMember = "DIRT01";
+    tex2.type = project::AssetType::Texture;
+
+    auto tex3 = project::LibraryAsset{};
+    tex3.id = "tex3_id";
+    tex3.displayName = "ROCK01";
+    tex3.sourceMember = "ROCK01";
+    tex3.type = project::AssetType::Texture;
+
+    auto dialog = CreateTerrainMaterialDialog{{tex1, tex2, tex3}};
+    auto* nameEdit = dialog.findChild<QLineEdit*>("MaterialNameEdit");
+    REQUIRE(nameEdit != nullptr);
+    auto* buttonBox = dialog.findChild<QDialogButtonBox*>("MaterialDialogButtons");
+    REQUIRE(buttonBox != nullptr);
+
+    CHECK_FALSE(buttonBox->button(QDialogButtonBox::Ok)->isEnabled());
+
+    nameEdit->setText("rocky_grass");
+    CHECK(buttonBox->button(QDialogButtonBox::Ok)->isEnabled());
+
+    const auto def = dialog.definition();
+    CHECK(def.name == "rocky_grass");
+    CHECK(def.folder == "materials");
+    CHECK(def.materialSlots[0].name == "Grass");
+    CHECK(def.materialSlots[0].texture == "tex1_id");
+    CHECK(def.materialSlots[1].name == "Dirt");
+    CHECK(def.materialSlots[1].texture == "tex2_id");
+    CHECK(def.materialSlots[2].name == "Rock");
+    CHECK(def.materialSlots[2].texture == "tex3_id");
+    dialog.setSelectedTextures({"tex3_id", "tex1_id", "tex2_id"});
+    const auto selected = dialog.definition();
+    CHECK(selected.materialSlots[0].texture == "tex3_id");
+    CHECK(selected.materialSlots[1].texture == "tex1_id");
+    CHECK(selected.materialSlots[2].texture == "tex2_id");
+  }
+
+  SECTION("three selected textures create a reusable terrain material package")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    const auto colors = std::array{
+      QColor{Qt::red}, QColor{Qt::green}, QColor{Qt::blue}, QColor{Qt::yellow}};
+    for (auto i = size_t{0}; i < colors.size(); ++i)
+      write(folder / ("texture" + std::to_string(i) + ".png"), png(colors[i], 64));
+    auto library = require(project::AssetLibrary::create(folder, "Textures"));
+    REQUIRE(library->scan().is_success());
+    auto browser = AssetLibraryWindow{temporary.path(), false};
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    REQUIRE(grid);
+    REQUIRE(grid->count() == 4);
+    auto* action = grid->findChild<QAction*>("AssetLibrary_CreateMaterialFromSelection");
+    REQUIRE(action);
+    grid->clearSelection();
+    for (auto row = 1; row < 4; ++row)
+      grid->item(row)->setSelected(true);
+    REQUIRE(action->isEnabled());
+    auto selectedIds = std::array<std::string, 3>{};
+    for (auto slot = size_t{0}; slot < selectedIds.size(); ++slot)
+      selectedIds[slot] = grid->item(int(slot) + 1)
+                            ->data(AssetLibraryItemDelegate::AssetIdRole)
+                            .toString()
+                            .toStdString();
+    auto chosen = std::array<std::string, 3>{};
+    QTimer::singleShot(0, &browser, [&] {
+      if (auto* dialog = browser.findChild<CreateTerrainMaterialDialog*>())
+      {
+        const auto def = dialog->definition();
+        for (auto slot = size_t{0}; slot < chosen.size(); ++slot)
+          chosen[slot] = def.materialSlots[slot].texture;
+        dialog->findChild<QLineEdit*>("MaterialNameEdit")->setText("selected");
+        dialog->accept();
+      }
+    });
+    action->trigger();
+    CHECK(chosen == selectedIds);
+    const auto materials = require(library->assets(project::AssetType::Material));
+    REQUIRE(materials.size() == 1);
+    auto source = openLocalAssetLibrary(folder);
+    REQUIRE(source);
+    auto inspected = require(inspection::readLibraryAsset(*source, materials.front()));
+    REQUIRE_FALSE(inspected.terrainPreview.isNull());
+    auto inspector = AssetInspector{};
+    inspector.setAsset(inspected);
+    const auto* summary = inspector.findChild<QLabel*>("AssetInspector_Summary");
+    REQUIRE(summary);
+    CHECK(summary->text().contains("128 × 128"));
+    const auto package = require(library->readContent(materials.front().id));
+    auto capturedImages = std::array<QImage, 3>{};
+    for (auto slot = size_t{0}; slot < selectedIds.size(); ++slot)
+    {
+      const auto raw = require(library->readContent(selectedIds[slot]));
+      const auto image = require(img::decodeImage(raw.data(), raw.size()));
+      const auto converted = require(img::convertGoldSrcTexture(image, "captured"));
+      capturedImages[slot] = require(inspection::decodeImage(converted.wad));
+    }
+    CHECK(decodeTerrainMaterialPackage(
+            package, require(normalizeTerrainMaterialImages(capturedImages)))
+            .has_value());
+    REQUIRE(library->scan().is_success());
+    CHECK(require(library->readContent(materials.front().id)) == package);
   }
 }
 } // namespace tb::ui

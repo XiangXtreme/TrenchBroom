@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -631,6 +632,75 @@ TEST_CASE("AssetLibrary")
     CHECK(library->setDisplayName("missing", "x").is_error());
     CHECK(library->setFavorite("missing", true).is_error());
     CHECK(library->setTags("missing", {"x"}).is_error());
+  }
+
+  SECTION("creates and resolves dependencies for terrain materials")
+  {
+    const auto grass = test::makeMiptex("GRASS", 16, 16, 1);
+    const auto dirt = test::makeMiptex("DIRT", 16, 16, 2);
+    const auto rock = test::makeMiptex("ROCK", 16, 16, 3);
+    workspace.write("nature.wad", require(buildGoldSrcWad({grass, dirt, rock})));
+
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+    const auto initialAssets = require(library->assets());
+    const auto grassId = findByMember(initialAssets, "GRASS").id;
+    const auto dirtId = findByMember(initialAssets, "DIRT").id;
+    const auto rockId = findByMember(initialAssets, "ROCK").id;
+
+    auto def = AssetLibrary::TerrainMaterialDefinition{};
+    def.name = "cliff_blend";
+    def.folder = "materials";
+    def.materialSlots[0] = {"Grass", grassId};
+    def.materialSlots[1] = {"Dirt", dirtId};
+    def.materialSlots[2] = {"Rock", rockId};
+
+    const auto matAsset = require(library->createTerrainMaterial(def));
+    CHECK(matAsset.type == AssetType::Material);
+    CHECK(matAsset.displayName == "cliff_blend");
+    CHECK(matAsset.virtualPath == "materials/cliff_blend.tbmat");
+    CHECK(matAsset.nativeFormat == "goldsrc-terrain-material");
+
+    const auto deps = require(library->dependencies(matAsset.id));
+    REQUIRE(deps.size() == 3);
+
+    auto depMap = std::map<std::string, std::string>{};
+    for (const auto& dep : deps)
+      depMap[dep.kind] = dep.dependencyId;
+
+    CHECK(depMap["terrain-slot-0"] == grassId);
+    CHECK(depMap["terrain-slot-1"] == dirtId);
+    CHECK(depMap["terrain-slot-2"] == rockId);
+
+    const auto dependents = require(library->dependents(grassId));
+    REQUIRE(dependents.size() == 1);
+    CHECK(dependents.front().assetId == matAsset.id);
+
+    const auto content = require(library->readContent(matAsset.id));
+    const auto contentStr =
+      std::string(reinterpret_cast<const char*>(content.data()), content.size());
+    CHECK(contentStr.find("\"goldsrc-terrain-material\"") != std::string::npos);
+    CHECK(contentStr.find("\"cliff_blend\"") != std::string::npos);
+    CHECK(contentStr.find(grassId) != std::string::npos);
+    // A duplicate name must not replace an existing user source file.
+    CHECK(library->createTerrainMaterial(def).is_error());
+    CHECK(require(library->readContent(matAsset.id)) == content);
+    require(library->scan());
+    CHECK(require(library->dependencies(matAsset.id)) == deps);
+
+    def.folder = "材质";
+    def.name = "山坡";
+    const auto unicodeMaterial = require(library->createTerrainMaterial(def));
+    CHECK(unicodeMaterial.virtualPath == "材质/山坡.tbmat");
+    CHECK(unicodeMaterial.displayName == "山坡");
+    CHECK(require(library->dependencies(unicodeMaterial.id)).size() == 3);
+
+    def.folder = "materials";
+    def.name = "invalid_slot";
+    def.materialSlots[0].texture = "missing";
+    CHECK(library->createTerrainMaterial(def).is_error());
+    def.name = "../outside";
+    CHECK(library->createTerrainMaterial(def).is_error());
   }
 }
 

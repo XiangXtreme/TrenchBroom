@@ -418,6 +418,22 @@ Result<void> ProjectSession::removeAsset(const std::string& id)
 {
   if (documentFor(id))
     return Error{"Close this map before removing it."};
+  const auto asset = m_store->findAsset(id);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (asset.value() && asset.value()->type == project::AssetType::Material)
+  {
+    const auto audit = auditGoldSrcProjectResources(*this);
+    if (audit.is_error())
+      return std::get<Error>(audit.error());
+    for (const auto& use : audit.value().uses)
+    {
+      if (std::ranges::find(use.assetIds, id) != use.assetIds.end())
+        return Error{"Terrain material is referenced by a project map."};
+      if (!use.mapId.empty() && use.status == ProjectResourceStatus::ScanError)
+        return Error{"Cannot verify terrain material references in a project map."};
+    }
+  }
   return m_store->removeAsset(id) | kdl::transform([&]() { changed(); });
 }
 Result<void> ProjectSession::exportCompileSnapshot(
@@ -760,7 +776,7 @@ Result<void> ProjectSession::exportCompileSnapshot(
         return std::optional<TerrainSnapshot>{std::move(terrain)};
       }
     }
-    return bakeTerrainSnapshot(contents.value());
+    return bakeTerrainSnapshot(contents.value(), m_store.get());
   }();
   if (baked.is_error())
     return std::get<Error>(baked.error());
@@ -1091,8 +1107,8 @@ Result<void> ProjectSession::updateTerrainCompiles()
     const auto source = m_store->readAsset(asset.id, project::ContentKind::Compatible);
     if (source.is_error())
       return std::get<Error>(source.error());
-    auto baked = bakeTerrainSnapshot(source.value());
     auto data = project::TerrainCompile{};
+    auto baked = bakeTerrainSnapshot(source.value(), m_store.get(), &data.dependencies);
     data.sourceRevision = asset.revision;
     data.generatorVersion = TerrainGeneratorVersion;
     if (baked.is_error())

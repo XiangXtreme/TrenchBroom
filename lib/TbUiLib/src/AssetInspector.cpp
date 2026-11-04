@@ -569,7 +569,8 @@ void AssetInspector::setAsset(Result<inspection::Asset> asset)
   }
   m_mode->setEnabled(
     m_asset->resource.skybox
-    || (m_asset->original != m_asset->compatible && m_asset->resource.type != BrowserCellType::Model));
+    || (m_asset->terrainPreview.isNull() && m_asset->original != m_asset->compatible
+        && m_asset->resource.type != BrowserCellType::Model));
   refreshPreview();
   emit assetChanged();
 }
@@ -712,6 +713,10 @@ void AssetInspector::refreshPreview()
       showModel();
       return;
     }
+  }
+  else if (!m_asset->terrainPreview.isNull())
+  {
+    image = m_asset->terrainPreview;
   }
   else
   {

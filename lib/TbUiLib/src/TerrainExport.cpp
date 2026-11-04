@@ -4,9 +4,6 @@
  */
 #include "ui/TerrainExport.h"
 
-#include <QFile>
-#include <QJSEngine>
-
 #include "base/Logger.h"
 #include "base/SimpleParserStatus.h"
 #include "mdl/BrushFace.h"
@@ -18,6 +15,9 @@
 #include "mdl/WorldNode.h"
 #include "mdl/WorldReader.h"
 #include "project/GoldSrcWad.h"
+#include "project/ProjectStore.h"
+#include "ui/TerrainBaker.h"
+#include "ui/TerrainMaterial.h"
 #include "ui/TerrainRegion.h"
 
 #include "kd/task_manager.h"
@@ -26,101 +26,79 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <string_view>
-
-static void initTerrainResources()
-{
-  Q_INIT_RESOURCE(terrain_baker);
-}
 
 namespace tb::ui
 {
 namespace
 {
-struct BakeFace
+Result<TerrainBake> runBaker(
+  const TerrainRegion& region, const project::ProjectStore* store)
 {
-  QPolygonF polygon;
-  vm::vec3d u;
-  vm::vec3d v;
-  size_t material;
+  if (region.materialAssetId.empty())
+    return runTerrainBaker(region);
+  if (!store)
+    return Error{"The terrain material requires an open project."};
+  auto material = loadTerrainMaterial(*store, region.materialAssetId);
+  if (material.is_error())
+    return std::get<Error>(material.error());
+  return runTerrainBaker(region, &material.value());
+}
+
+size_t terrainWadBytes(const TerrainBake& plan, const std::vector<bool>& used)
+{
+  auto bytes = size_t{12}; // WAD header
+  for (auto i = size_t{0}; i < used.size(); ++i)
+    if (used[i])
+      bytes += 32 + plan.textures[i].miptex.size(); // directory entry and lump
+  return bytes;
+}
+
+struct FaceWidth
+{
+  double width;
+  vm::vec2d center;
 };
 
-struct TerrainBake
+FaceWidth faceWidth(
+  const QPolygonF& polygon, const TerrainRegion& region, const vm::mat4x4d& transform)
 {
-  std::vector<BakeFace> faces;
-  std::vector<project::WadTextureEntry> textures;
-};
-
-Result<TerrainBake> runBaker(const TerrainRegion& region)
-{
-  static const auto initialized = [] {
-    initTerrainResources();
-    return true;
-  }();
-  (void)initialized;
-  auto js = QJSEngine{};
-  js.evaluate(QStringLiteral("var globalThis = this;"));
-  for (const auto* name : {":/terrain/bake.js", ":/terrain/multi.js"})
+  auto points = std::vector<vm::vec2d>{};
+  points.reserve(size_t(polygon.size()));
+  for (const auto& point : polygon)
   {
-    auto file = QFile{QString::fromLatin1(name)};
-    if (!file.open(QIODevice::ReadOnly))
-      return Error{"Cannot open the built-in terrain baker."};
-    const auto result = js.evaluate(QString::fromUtf8(file.readAll()), file.fileName());
-    if (result.isError())
-      return Error{result.toString().toStdString()};
+    const auto world = transform * region.unproject(point);
+    points.emplace_back(world.x(), world.y());
   }
-  auto weights = js.newArray(uint(region.weights.size()));
-  for (auto i = size_t{0}; i < region.weights.size(); ++i)
-  {
-    auto vertex = js.newArray(3);
-    for (auto k = uint{0}; k < 3; ++k)
-      vertex.setProperty(k, region.weights[i][k]);
-    weights.setProperty(uint(i), vertex);
-  }
-  js.globalObject().setProperty(QStringLiteral("terrainWeights"), weights);
-  const auto result =
-    js.evaluate(QStringLiteral("TerrainMulti.bake(terrainWeights, false).shared"));
-  if (result.isError())
-    return Error{result.toString().toStdString()};
+  if (points.size() > 1 && vm::is_equal(points.front(), points.back(), 1e-9))
+    points.pop_back();
+  auto center = vm::vec2d{};
+  for (const auto& point : points)
+    center = center + point;
+  center = center / double(points.size());
 
-  const auto bytes = result.property(QStringLiteral("wad"))
-                       .property(QStringLiteral("buffer"))
-                       .toVariant()
-                       .toByteArray();
-  const auto* begin = reinterpret_cast<const std::uint8_t*>(bytes.constData());
-  auto wad = project::readGoldSrcWad({begin, begin + bytes.size()});
-  if (wad.is_error())
-    return std::get<Error>(wad.error());
-
-  const auto faces = result.property(QStringLiteral("faces"));
-  auto plan = TerrainBake{{}, std::move(wad).value().textures};
-  const auto count = faces.property(QStringLiteral("length")).toUInt();
-  plan.faces.reserve(count);
-  const auto uv = [](const QJSValue& row) {
-    return vm::vec3d{
-      row.property(0u).toNumber(),
-      row.property(1u).toNumber(),
-      row.property(2u).toNumber()};
-  };
-  for (auto i = uint{0}; i < count; ++i)
+  // The clipped top face is convex. Its minimum horizontal width occurs along
+  // a supporting line parallel to one of its edges.
+  auto width = std::numeric_limits<double>::infinity();
+  for (auto i = size_t{0}; i < points.size(); ++i)
   {
-    const auto face = faces.property(i);
-    const auto points = face.property(QStringLiteral("points"));
-    auto polygon = QPolygonF{};
-    for (auto j = uint{0}; j < points.property(QStringLiteral("length")).toUInt(); ++j)
+    const auto edge = points[(i + 1) % points.size()] - points[i];
+    const auto length = vm::length(edge);
+    if (length <= 1e-9)
+      continue;
+    auto widest = 0.0;
+    for (const auto& point : points)
     {
-      const auto p = points.property(j);
-      polygon.append(QPointF{p.property(0u).toNumber(), p.property(1u).toNumber()});
+      const auto delta = point - points[i];
+      widest =
+        std::max(widest, std::abs(edge.x() * delta.y() - edge.y() * delta.x()) / length);
     }
-    plan.faces.push_back(
-      {std::move(polygon),
-       uv(face.property(QStringLiteral("u"))),
-       uv(face.property(QStringLiteral("v"))),
-       face.property(QStringLiteral("material")).toUInt()});
+    width = std::min(width, widest);
   }
-  return plan;
+  return {width, center};
 }
 
 Result<std::unique_ptr<mdl::Node>> makePiece(
@@ -198,7 +176,8 @@ Result<void> bakeGroup(
   mdl::GroupNode& group,
   const vm::bbox3d& bounds,
   TerrainSnapshot& snapshot,
-  const size_t groupNumber)
+  const size_t groupNumber,
+  const project::ProjectStore* store)
 {
   const auto region = TerrainRegion::decode(group.group().terrainPaint());
   if (region.is_error())
@@ -206,7 +185,7 @@ Result<void> bakeGroup(
   const auto surfaces = terrainSurfaces(group, region.value());
   if (surfaces.is_error())
     return std::get<Error>(surfaces.error());
-  auto bake = runBaker(region.value());
+  auto bake = runBaker(region.value(), store);
   if (bake.is_error())
     return std::get<Error>(bake.error());
   auto plan = std::move(bake).value();
@@ -219,9 +198,24 @@ Result<void> bakeGroup(
     auto coverage = 0.0;
     for (const auto& face : plan.faces)
     {
-      const auto area = terrainArea(surface.outline.intersected(face.polygon));
+      const auto clipped = surface.outline.intersected(face.polygon);
+      const auto area = terrainArea(clipped);
       if (area <= 1e-7)
         continue;
+      if (face.material >= used.size())
+        return Error{"Terrain generated an invalid texture reference."};
+      if (region.value().minFaceWidth > 0)
+      {
+        const auto metrics = faceWidth(clipped, region.value(), transform);
+        if (metrics.width + 1e-5 < region.value().minFaceWidth)
+          return Error{fmt::format(
+            "Terrain top face near ({:.1f}, {:.1f}) is {:.1f} units wide, below the "
+            "minimum of {}.",
+            metrics.center.x(),
+            metrics.center.y(),
+            metrics.width,
+            region.value().minFaceWidth)};
+      }
       const auto name = fmt::format("tbt{:x}_{:x}", groupNumber, face.material);
       auto piece =
         makePiece(surface, face, region.value(), transform, inverse, bounds, name);
@@ -234,6 +228,22 @@ Result<void> bakeGroup(
     if (std::abs(coverage - terrainArea(surface.outline)) > 1e-4)
       return Error{"The terrain bake did not cover a source brush."};
   }
+  const auto addedFaces = pieces.size() > surfaces.value().size()
+                            ? pieces.size() - surfaces.value().size()
+                            : size_t{0};
+  if (
+    region.value().maxAddedFaces >= 0
+    && addedFaces > size_t(region.value().maxAddedFaces))
+    return Error{fmt::format(
+      "Terrain generates {} extra top faces, exceeding the limit of {}.",
+      addedFaces,
+      region.value().maxAddedFaces)};
+  const auto wadBytes = terrainWadBytes(plan, used);
+  if (region.value().maxWadKiB >= 0 && wadBytes > size_t(region.value().maxWadKiB) * 1024)
+    return Error{fmt::format(
+      "Terrain WAD requires {} bytes, exceeding the limit of {} KiB.",
+      wadBytes,
+      region.value().maxWadKiB)};
   for (auto i = size_t{0}; i < used.size(); ++i)
   {
     if (!used[i])
@@ -255,9 +265,68 @@ Result<void> bakeGroup(
 }
 } // namespace
 
-Result<std::optional<TerrainSnapshot>> bakeTerrainSnapshot(
-  const std::vector<std::uint8_t>& source)
+Result<TerrainEstimate> estimateTerrainGroup(
+  const mdl::GroupNode& group, const project::ProjectStore* store)
 {
+  const auto region = TerrainRegion::decode(group.group().terrainPaint());
+  if (region.is_error())
+    return std::get<Error>(region.error());
+  const auto surfaces = terrainSurfaces(group, region.value());
+  if (surfaces.is_error())
+    return std::get<Error>(surfaces.error());
+  const auto bake = runBaker(region.value(), store);
+  if (bake.is_error())
+    return std::get<Error>(bake.error());
+  auto result = TerrainEstimate{};
+  result.sourceFaces = surfaces.value().size();
+  auto used = std::vector<bool>(bake.value().textures.size());
+  for (auto surfaceIndex = size_t{0}; surfaceIndex < surfaces.value().size();
+       ++surfaceIndex)
+  {
+    const auto& surface = surfaces.value()[surfaceIndex];
+    auto coverage = 0.0;
+    for (const auto& face : bake.value().faces)
+    {
+      const auto clipped = surface.outline.intersected(face.polygon);
+      const auto area = terrainArea(clipped);
+      if (area <= 1e-7)
+        continue;
+      if (face.material >= used.size())
+        return Error{"Terrain generated an invalid texture reference."};
+      const auto metrics =
+        faceWidth(clipped, region.value(), group.group().transformation());
+      if (result.generatedFaces == 0 || metrics.width < result.narrowestFaceWidth)
+      {
+        result.narrowestFaceWidth = metrics.width;
+        result.narrowestFaceX = metrics.center.x();
+        result.narrowestFaceY = metrics.center.y();
+      }
+      if (metrics.width + 1e-5 < region.value().minFaceWidth)
+        ++result.facesBelowMinWidth;
+      result.cuts.push_back(
+        {surfaceIndex,
+         clipped,
+         face.kind,
+         metrics.width + 1e-5 < region.value().minFaceWidth});
+      coverage += area;
+      ++result.generatedFaces;
+      used[face.material] = true;
+    }
+    if (std::abs(coverage - terrainArea(surface.outline)) > 1e-4)
+      return Error{"The terrain bake did not cover a source brush."};
+  }
+  result.textures = size_t(std::count(used.begin(), used.end(), true));
+  result.wadBytes = terrainWadBytes(bake.value(), used);
+  return result;
+}
+
+Result<std::optional<TerrainSnapshot>> bakeTerrainSnapshot(
+  const std::vector<std::uint8_t>& source,
+  const project::ProjectStore* store,
+  std::vector<std::string>* dependencies)
+{
+  if (dependencies)
+    dependencies->clear();
   const auto text =
     std::string_view{reinterpret_cast<const char*>(source.data()), source.size()};
   if (text.find("\"_tb_terrain_paint\"") == std::string_view::npos)
@@ -284,10 +353,30 @@ Result<std::optional<TerrainSnapshot>> bakeTerrainSnapshot(
   collect(collect, world);
   if (groups.empty())
     return std::optional<TerrainSnapshot>{};
+  if (store && dependencies)
+  {
+    for (const auto* group : groups)
+    {
+      const auto region = TerrainRegion::decode(group->group().terrainPaint());
+      if (region.is_error() || region.value().materialAssetId.empty())
+        continue;
+      const auto& id = region.value().materialAssetId;
+      dependencies->push_back(id);
+      const auto edges = store->dependencies(id);
+      if (edges.is_error())
+        return std::get<Error>(edges.error());
+      for (const auto& edge : edges.value())
+        if (edge.kind.starts_with("terrain-slot-"))
+          dependencies->push_back(edge.dependencyId);
+    }
+    std::ranges::sort(*dependencies);
+    dependencies->erase(
+      std::unique(dependencies->begin(), dependencies->end()), dependencies->end());
+  }
   auto snapshot = TerrainSnapshot{};
   for (auto i = size_t{0}; i < groups.size(); ++i)
   {
-    const auto result = bakeGroup(*groups[i], bounds, snapshot, i);
+    const auto result = bakeGroup(*groups[i], bounds, snapshot, i, store);
     if (result.is_error())
       return Error{fmt::format(
         "Terrain group '{}': {}",

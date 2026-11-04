@@ -1,6 +1,6 @@
 # Documentation Index
 
-Updated 2026-11-03. This index is the entry point for deciding what to trust.
+Updated 2026-11-04. This index is the entry point for deciding what to trust.
 
 - **Rules** are binding; read them before changing that area.
 - **Current design and plans** are the basis for development decisions today.
@@ -23,7 +23,7 @@ Updated 2026-11-03. This index is the entry point for deciding what to trust.
 | [Asset browser experience todo](asset-browser-experience-todo.md) | Browser/inspector/sound/sky behaviour and acceptance. | In progress; only acceptance items remain open. |
 | [Native project format design](native-project-format-design.md) | `.tbproj` container, revisions, snapshots, publishing. | Implemented core; future targets still valid. |
 | [Native project usage](native-project-usage.md) | User-facing trial instructions for projects and libraries. | Current. |
-| [GoldSrc terrain material design](terrain-material-authoring-design.md) | Project terrain panel, painting, source Brush editing and generated compile output. | Design with a runnable clipping example. |
+| [GoldSrc terrain material design](terrain-material-authoring-design.md) | Asset library `Material` synthesis, project capture, terrain panel painting, and C++ compile baking. | MVP implemented; library/project material pipeline in progress. |
 | [Project workspace implementation](project-workspace-implementation.md) | Engineering handoff for project/library/capture/compile. | Current; not every proposal is done. |
 | [Workspace UI architecture](workspace-ui-architecture.md) | Panel ownership, command targets, layout persistence. | Active design; staged migration. |
 | [MCP architecture](mcp-python-migration/architecture.md) | Transport, discovery, execution and editing boundaries. | Current. |

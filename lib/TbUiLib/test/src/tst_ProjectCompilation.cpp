@@ -3,15 +3,19 @@
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QFile>
+#include <QLabel>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
 
 #include "gl/PerspectiveCamera.h"
+#include "img/GoldSrcTexture.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
@@ -28,6 +32,7 @@
 #include "mdl/Map_Picking.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/PickResult.h"
+#include "project/ProjectStore.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/CompilationDialog.h"
 #include "ui/Inspector.h"
@@ -172,6 +177,30 @@ TEST_CASE("Project terrain panel paints a picked brush")
   REQUIRE(app.openProject(path));
   auto* project = findProjectWindow(path);
   REQUIRE(project);
+  const auto converted = require(img::convertGoldSrcTexture(
+    {64, 64, std::vector<unsigned char>(64 * 64 * 4, 255)}, "terrain_slot"));
+  auto textureInput = project::AssetImport{};
+  textureInput.type = project::AssetType::Texture;
+  textureInput.virtualPath = "textures/terrain_slot.wad";
+  textureInput.displayName = "Terrain texture";
+  textureInput.original = textureInput.compatible = converted.wad;
+  const auto texture = require(project->session()->importAsset(textureInput));
+  const auto json =
+    std::string{R"({"format":"goldsrc-terrain-material","version":1,"slots":[)"
+                R"({"name":"Moss"},{"name":"Sand"},{"name":"Stone"}]})"};
+  auto materialInput = project::AssetImport{};
+  materialInput.type = project::AssetType::Material;
+  materialInput.virtualPath = "materials/test.tbmat";
+  materialInput.displayName = "Test blend";
+  materialInput.original.assign(json.begin(), json.end());
+  materialInput.compatible = materialInput.original;
+  const auto capturedMaterial = require(project->session()->importAsset(materialInput));
+  {
+    auto store = require(project::ProjectStore::open(project->session()->store().path()));
+    for (auto slot = 0; slot < 3; ++slot)
+      require(store->addDependency(
+        capturedMaterial.id, texture.id, "terrain-slot-" + std::to_string(slot)));
+  }
   require(app.mapWindowManager().createProjectMap(
     project->session(), "Terrain", mdl::MapFormat::Valve));
   auto* window = app.mapWindowManager().topMapWindow();
@@ -203,10 +232,64 @@ TEST_CASE("Project terrain panel paints a picked brush")
   };
   REQUIRE(button("Create Terrain Region")->isEnabled());
   button("Create Terrain Region")->click();
+  auto* terrainMaterial =
+    panel->findChild<QComboBox*>("TerrainInspector_TerrainMaterial");
+  REQUIRE(terrainMaterial);
+  const auto materialIndex =
+    terrainMaterial->findData(QString::fromStdString(capturedMaterial.id));
+  REQUIRE(materialIndex > 0);
+  terrainMaterial->setCurrentIndex(materialIndex);
+  CHECK(
+    require(TerrainRegion::decode(group->group().terrainPaint())).materialAssetId
+    == capturedMaterial.id);
+  CHECK(panel->findChild<QSpinBox*>("TerrainInspector_Strength"));
+  CHECK(panel->findChild<QSpinBox*>("TerrainInspector_Hardness"));
+  auto* faceBudget = panel->findChild<QSpinBox*>("TerrainInspector_FaceBudget");
+  auto* wadBudget = panel->findChild<QSpinBox*>("TerrainInspector_WadBudget");
+  auto* minWidth = panel->findChild<QSpinBox*>("TerrainInspector_MinFaceWidth");
+  auto* density = panel->findChild<QComboBox*>("TerrainInspector_PatchDensity");
+  REQUIRE(faceBudget);
+  REQUIRE(wadBudget);
+  REQUIRE(minWidth);
+  REQUIRE(density);
+  faceBudget->setValue(20);
+  wadBudget->setValue(128);
+  minWidth->setValue(12);
+  density->setCurrentIndex(density->findData(200));
+  CHECK(
+    require(TerrainRegion::decode(group->group().terrainPaint())).maxAddedFaces == 20);
+  CHECK(require(TerrainRegion::decode(group->group().terrainPaint())).maxWadKiB == 128);
+  CHECK(require(TerrainRegion::decode(group->group().terrainPaint())).minFaceWidth == 12);
+  CHECK(
+    require(TerrainRegion::decode(group->group().terrainPaint())).patchDensityPercent
+    == 200);
+  button("Analyze Terrain")->click();
+  const auto* estimate = panel->findChild<QLabel*>("TerrainInspector_Estimate");
+  auto* showCuts = panel->findChild<QCheckBox*>("TerrainInspector_ShowCuts");
+  REQUIRE(estimate);
+  REQUIRE(showCuts);
+  CHECK(estimate->text().contains("WAD:"));
+  CHECK(estimate->text().contains("Narrowest top face:"));
+  CHECK(estimate->text().contains("Base:"));
+  CHECK(showCuts->isEnabled());
+  CHECK(showCuts->isChecked());
+  wadBudget->setValue(0);
+  CHECK_FALSE(showCuts->isEnabled());
+  CHECK_FALSE(showCuts->isChecked());
+  button("Analyze Terrain")->click();
+  CHECK(estimate->text().contains("exceeds the configured limit"));
+  faceBudget->setValue(-1);
+  wadBudget->setValue(-1);
+  minWidth->setValue(0);
+  density->setCurrentIndex(density->findData(100));
   const auto initial = group->group().terrainPaint();
   REQUIRE_FALSE(initial.empty());
-  auto* material = panel->findChild<QComboBox*>();
+  auto* material = panel->findChild<QComboBox*>("TerrainInspector_SlotSelect");
+  if (!material)
+    material = panel->findChild<QComboBox*>();
   REQUIRE(material);
+  CHECK(material->itemText(0).contains("Moss"));
+  CHECK(material->itemText(1).contains("Terrain texture"));
   material->setCurrentIndex(1);
   button("Paint Terrain")->click();
   QApplication::processEvents();
@@ -232,6 +315,15 @@ TEST_CASE("Project terrain panel paints a picked brush")
   QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, center);
   const auto painted = group->group().terrainPaint();
   REQUIRE(painted != initial);
+  CHECK(material->currentIndex() == 1);
+  button("Analyze Terrain")->click();
+  REQUIRE(showCuts->isChecked());
+  const auto withCuts = view->grabFramebuffer();
+  REQUIRE_FALSE(withCuts.isNull());
+  showCuts->setChecked(false);
+  const auto withoutCuts = view->grabFramebuffer();
+  REQUIRE_FALSE(withoutCuts.isNull());
+  CHECK(withCuts != withoutCuts);
   map.undoCommand();
   const auto restored = group->group().terrainPaint() == initial;
   CHECK(restored);

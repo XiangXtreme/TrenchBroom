@@ -6732,6 +6732,13 @@ Pick a sequence and frame, or press Play. Drag to orbit, wheel to zoom.</source>
         </context>
         <context>
         <name>tb::ui::AssetLibraryWindow</name>
+        <message><source>Create Terrain Material from Selected Textures…</source><translation>用选中的贴图创建地形材质…</translation></message>
+        <message><source>Cannot create the terrain material package.</source><translation>无法创建地形材质包。</translation></message>
+        <message><source>New Material…</source><translation>新建材质…</translation></message>
+        <message><source>Create a composite terrain material</source><translation>创建混合地形材质</translation></message>
+        <message><source>Materials</source><translation>材质</translation></message>
+        <message><source>Create Material</source><translation>创建材质</translation></message>
+        <message><source>A selected texture is no longer available.</source><translation>所选贴图已不可用。</translation></message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="242"/>
             <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="741"/>
@@ -8444,6 +8451,56 @@ Removing them frees about %3. Current assets and versions are kept.</source>
     </context>
     <context>
         <name>tb::ui::TerrainInspector</name>
+        <message><source>
+Base: %1 · Shared: %2 · Local: %3</source><translation>
+底材：%1 · 共享过渡：%2 · 局部烘焙：%3</translation></message>
+        <message><source>Show terrain cuts</source><translation>显示地形切分</translation></message>
+        <message><source>Base: cyan; shared transition: yellow; local patch: purple; below minimum width: red.</source><translation>底材：青色；共享过渡：黄色；局部烘焙：紫色；小于最小宽度：红色。</translation></message>
+        <message><source>Off</source><translation>关闭</translation></message>
+        <message><source>Minimum horizontal width of every generated top face.</source><translation>每个生成顶面在水平面上的最小宽度。</translation></message>
+        <message><source>Resolution of locally baked terrain patches.</source><translation>局部烘焙地形块的分辨率。</translation></message>
+        <message><source>Minimum top face width</source><translation>顶面最小宽度</translation></message>
+        <message><source>Local patch density</source><translation>局部烘焙密度</translation></message>
+        <message><source>
+Narrowest top face: %1 units near (%2, %3)</source><translation>
+最窄顶面：%1 单位，位于 (%2, %3) 附近</translation></message>
+        <message><source>
+%1 top faces are below the configured minimum width.</source><translation>
+%1 个顶面小于设定的最小宽度。</translation></message>
+        <message><source>Unlimited</source><translation>不限</translation></message>
+        <message><source> KiB</source><translation> KiB</translation></message>
+        <message><source>Maximum WAD size for this terrain region only.</source><translation>仅限制此地形区域生成的 WAD 大小。</translation></message>
+        <message><source>Analyze Terrain</source><translation>分析地形</translation></message>
+        <message><source>Extra top face limit</source><translation>新增顶面上限</translation></message>
+        <message><source>Terrain WAD limit</source><translation>地形 WAD 上限</translation></message>
+        <message><source>Change Terrain Budget</source><translation>更改地形预算</translation></message>
+        <message><source>Could not save the terrain budget.</source><translation>无法保存地形预算。</translation></message>
+        <message><source>Analyze to preview generated terrain statistics.</source><translation>点击分析以预览生成的地形统计。</translation></message>
+        <message><source>
+Extra top faces exceed the configured limit.</source><translation>
+新增顶面超出设定上限。</translation></message>
+        <message><source>
+Terrain WAD exceeds the configured limit.</source><translation>
+地形 WAD 超出设定上限。</translation></message>
+        <message><source>Source: %1 · Generated: %2 · Added: %3
+Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生成：%2 · 新增：%3
+地形贴图：%4 · WAD：%5 KiB</translation></message>
+        <message><source>Slot 0: Grass</source><translation>槽位 0：草地</translation></message>
+        <message><source>Slot 1: Dirt</source><translation>槽位 1：泥土</translation></message>
+        <message><source>Slot 2: Rock</source><translation>槽位 2：岩石</translation></message>
+        <message><source>Slot 0</source><translation>槽位 0</translation></message>
+        <message><source>Slot 1</source><translation>槽位 1</translation></message>
+        <message><source>Slot 2</source><translation>槽位 2</translation></message>
+        <message><source>Slot %1</source><translation>槽位 %1</translation></message>
+        <message><source>Asset Library…</source><translation>资产库…</translation></message>
+        <message><source>Terrain Material</source><translation>地形材质</translation></message>
+        <message><source>Paint Slot</source><translation>涂刷槽位</translation></message>
+        <message><source>Brush strength</source><translation>笔刷强度</translation></message>
+        <message><source>Brush hardness</source><translation>笔刷硬度</translation></message>
+        <message><source>Change Terrain Material</source><translation>更改地形材质</translation></message>
+        <message><source>(Default 3-Blend)</source><translation>（默认三材质混合）</translation></message>
+        <message><source>Missing material (%1)</source><translation>材质缺失（%1）</translation></message>
+        <message><source>The bound terrain material or one of its textures is missing or invalid.</source><translation>绑定的地形材质或其贴图缺失或无效。</translation></message>
         <message>
             <source>Grass</source>
             <translation>草地</translation>
@@ -8508,5 +8565,18 @@ Removing them frees about %3. Current assets and versions are kept.</source>
             <source>Exported %1 terrain top faces · %2 WAD textures · %3 MB</source>
             <translation>已导出 %1 个地形顶面 · %2 张 WAD 纹理 · %3 MB</translation>
         </message>
+    </context>
+    <context>
+        <name>tb::ui::CreateTerrainMaterialDialog</name>
+        <message><source>Create Terrain Material</source><translation>创建地形材质</translation></message>
+        <message><source>e.g. alpine_blend</source><translation>例如 alpine_blend</translation></message>
+        <message><source>Material Name:</source><translation>材质名称：</translation></message>
+        <message><source>Texture Slots</source><translation>贴图槽位</translation></message>
+        <message><source>%1 — %2</source><translation>%1 — %2</translation></message>
+        <message><source>Grass</source><translation>草地</translation></message>
+        <message><source>Dirt</source><translation>泥土</translation></message>
+        <message><source>Rock</source><translation>岩石</translation></message>
+        <message><source>Use opaque square textures of 64, 128, or 256 pixels. 64-pixel textures are tiled and 256-pixel textures are resampled to a 128-pixel period.</source><translation>请选择 64、128 或 256 像素的不透明正方形贴图。64 像素贴图会平铺，256 像素贴图会重采样，统一为 128 像素的纹理周期。</translation></message>
+        <message><source>Create</source><translation>创建</translation></message>
     </context>
 </TS>

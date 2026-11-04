@@ -13,6 +13,7 @@
 #include "ui/AssetBrowserModel.h"
 #include "ui/AssetInspection.h"
 
+#include <array>
 #include <map>
 #include <memory>
 #include <optional>
@@ -22,6 +23,7 @@
 #include <vector>
 
 class QComboBox;
+class QAction;
 class QDragEnterEvent;
 class QDropEvent;
 class QFormLayout;
@@ -74,6 +76,8 @@ class AssetLibraryWindow : public QDialog
   QLabel* m_libraryChip = nullptr;
   QPushButton* m_changeButton = nullptr;
   QPushButton* m_importButton = nullptr;
+  QPushButton* m_createMaterialButton = nullptr;
+  QAction* m_createMaterialFromSelection = nullptr;
   QPushButton* m_rescanButton = nullptr;
   QPushButton* m_convertButton = nullptr;
   QPushButton* m_revealButton = nullptr;
@@ -152,6 +156,8 @@ private:
   void updateActions();
   void applyViewMode();
   void runImport();
+  void runCreateTerrainMaterial();
+  std::optional<std::array<std::string, 3>> selectedTextures() const;
   void importFiles(const QStringList& files);
   void runRescan();
   void runConvertPending();
