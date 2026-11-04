@@ -9,6 +9,7 @@
 #include "base/Result.h"
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,8 @@ namespace tb::project
  * writer rebuilds a WAD from such entries, which is how a captured texture becomes a
  * single-texture WAD that TrenchBroom and hltools can mount.
  */
-struct WadTextureEntry
+template <typename MiptexBytes>
+struct BasicWadTextureEntry
 {
   // Trimmed name as recorded in the WAD directory. GoldSrc names are at most 15
   // characters and are compared case insensitively by the engine.
@@ -32,18 +34,23 @@ struct WadTextureEntry
   std::uint32_t width = 0;
   std::uint32_t height = 0;
   // Complete miptex lump, byte for byte as stored in the archive.
-  std::vector<std::uint8_t> miptex;
+  MiptexBytes miptex;
   // False when the lump could not be interpreted as a miptex. The bytes are still
   // preserved so a damaged archive can be diagnosed without losing data.
   bool valid = false;
   std::string problem;
 };
 
-struct WadArchive
+template <typename MiptexBytes>
+struct BasicWadArchive
 {
   std::string signature;
-  std::vector<WadTextureEntry> textures;
+  std::vector<BasicWadTextureEntry<MiptexBytes>> textures;
 };
+
+using WadTextureEntry = BasicWadTextureEntry<std::vector<std::uint8_t>>;
+using WadArchive = BasicWadArchive<std::vector<std::uint8_t>>;
+using WadArchiveView = BasicWadArchive<std::span<const std::uint8_t>>;
 
 // True when the payload starts with a WAD2/WAD3 signature.
 bool isGoldSrcWad(const std::vector<std::uint8_t>& bytes);
@@ -57,6 +64,9 @@ bool isGoldSrcWad(const std::vector<std::uint8_t>& bytes);
  * does not block access to the rest.
  */
 Result<WadArchive> readGoldSrcWad(const std::vector<std::uint8_t>& bytes);
+
+// Parses the same metadata in directory order. Texture data borrows from bytes.
+Result<WadArchiveView> readGoldSrcWadView(std::span<const std::uint8_t> bytes);
 
 /**
  * Builds a WAD3 archive from complete miptex lumps.

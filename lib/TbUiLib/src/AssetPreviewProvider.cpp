@@ -86,8 +86,8 @@ AssetPreviewState AssetPreviewProvider::texturePreview(const BrowserAsset& asset
     return {AssetPreviewStatus::Missing, std::nullopt};
   auto reader = file.value()->reader().buffer();
   const auto bytes = reader.stringView();
-  const auto image =
-    inspection::decodeImage(inspection::Bytes{bytes.begin(), bytes.end()});
+  const auto image = inspection::decodeImage(
+    std::span{reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()});
   return image.is_success() ? assetImagePreview(image.value())
                             : AssetPreviewState{AssetPreviewStatus::Error, std::nullopt};
 }

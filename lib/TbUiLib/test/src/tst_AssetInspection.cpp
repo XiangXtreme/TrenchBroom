@@ -292,7 +292,8 @@ TEST_CASE("AssetInspection")
     const auto& miptex = archive.textures.front().miptex;
     CHECK(require(inspection::decodeImage(miptex, "goldsrc-miptex")) == decoded);
     CHECK(require(inspection::decodeImage(converted.wad, "goldsrc-miptex")) == decoded);
-    CHECK(inspection::decodeImage({1, 2, 3}, "goldsrc-miptex").is_error());
+    CHECK(
+      inspection::decodeImage(inspection::Bytes{1, 2, 3}, "goldsrc-miptex").is_error());
     CHECK(inspection::decodeImage(
             inspection::Bytes{miptex.begin(), miptex.end() - 4}, "goldsrc-miptex")
             .is_error());
@@ -301,8 +302,8 @@ TEST_CASE("AssetInspection")
     std::copy_n("WAD3", 4, named.begin());
     CHECK(
       require(inspection::decodeImage(named, "goldsrc-miptex")).size() == decoded.size());
-    CHECK(inspection::decodeImage({'W', 'A', 'D', '3'}).is_error());
-    CHECK(inspection::decodeImage({1, 2, 3}).is_error());
+    CHECK(inspection::decodeImage(inspection::Bytes{'W', 'A', 'D', '3'}).is_error());
+    CHECK(inspection::decodeImage(inspection::Bytes{1, 2, 3}).is_error());
   }
   SECTION("WAD members have library thumbnails and original and compatible previews")
   {

@@ -62,6 +62,12 @@ TEST_CASE("GoldSrcWad")
     CHECK(archive.textures[1].valid);
     CHECK(archive.textures[1].miptex == floor);
     CHECK(goldSrcMiptexName(wall) == "WALL01");
+
+    const auto view = require(readGoldSrcWadView(bytes));
+    REQUIRE(view.textures.size() == 2);
+    CHECK(view.textures[0].name == archive.textures[0].name);
+    CHECK(view.textures[0].miptex.data() == bytes.data() + 12);
+    CHECK(view.textures[1].miptex.data() == bytes.data() + 12 + wall.size());
   }
 
   SECTION("rebuilds byte identical archives for identical input")

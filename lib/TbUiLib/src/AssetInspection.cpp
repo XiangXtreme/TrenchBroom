@@ -29,7 +29,7 @@ namespace tb::ui::inspection
 {
 namespace
 {
-std::uint32_t u32(const Bytes& bytes, const size_t offset)
+std::uint32_t u32(const std::span<const std::uint8_t> bytes, const size_t offset)
 {
   if (offset > bytes.size() || bytes.size() - offset < 4)
     return 0;
@@ -419,58 +419,59 @@ QImage skyThumbnail(const Asset& asset, const int side)
   return renderSkyView(faces, 0.0, 0.0, side, side);
 }
 
-Result<QImage> decodeImage(const Bytes& bytes, const std::string_view nativeFormat)
+Result<QImage> decodeImage(
+  const std::span<const std::uint8_t> bytes, const std::string_view nativeFormat)
 {
   // Library WAD members are stored as miptex lumps, without the archive header. Use
   // the same validated WAD decoder for them; ordinary images are never guessed as miptex.
-  if (
-    nativeFormat == "goldsrc-miptex"
-    && !(
-      bytes.size() >= 4 && std::memcmp(bytes.data(), "WAD3", 4) == 0
-      && project::readGoldSrcWad(bytes).is_success()))
+  const auto isWad = bytes.size() >= 4 && std::memcmp(bytes.data(), "WAD3", 4) == 0;
+  if (isWad)
   {
-    const auto archive = project::buildGoldSrcWad({bytes});
-    if (archive.is_error())
-      return std::get<Error>(archive.error());
-    return decodeImage(archive.value());
-  }
-  if (bytes.size() >= 4 && std::memcmp(bytes.data(), "WAD3", 4) == 0)
-  {
-    const auto archive = project::readGoldSrcWad(bytes);
-    if (archive.is_error())
-      return std::get<Error>(archive.error());
-    for (const auto& entry : archive.value().textures)
+    const auto archive = project::readGoldSrcWadView(bytes);
+    if (archive.is_success())
     {
-      if (!entry.valid)
-        continue;
-      const auto& lump = entry.miptex;
-      const auto width = u32(lump, 16), height = u32(lump, 20);
-      if (!width || !height || width > 4096 || height > 4096)
-        continue;
-      const auto count = size_t(width) * height;
-      const auto pixels = size_t(u32(lump, 24));
-      const auto palette = size_t(u32(lump, 36)) + count / 64 + 2;
-      if (
-        pixels > lump.size() || count > lump.size() - pixels || palette > lump.size()
-        || 768 > lump.size() - palette)
-        continue;
-      auto image = QImage{int(width), int(height), QImage::Format_RGBA8888};
-      for (auto y = 0u; y < height; ++y)
+      for (const auto& entry : archive.value().textures)
       {
-        auto* row = image.scanLine(int(y));
-        for (auto x = 0u; x < width; ++x)
+        if (!entry.valid)
+          continue;
+        const auto& lump = entry.miptex;
+        const auto width = u32(lump, 16), height = u32(lump, 20);
+        if (!width || !height || width > 4096 || height > 4096)
+          continue;
+        const auto count = size_t(width) * height;
+        const auto pixels = size_t(u32(lump, 24));
+        const auto palette = size_t(u32(lump, 36)) + count / 64 + 2;
+        if (
+          pixels > lump.size() || count > lump.size() - pixels || palette > lump.size()
+          || 768 > lump.size() - palette)
+          continue;
+        auto image = QImage{int(width), int(height), QImage::Format_RGBA8888};
+        for (auto y = 0u; y < height; ++y)
         {
-          const auto index = lump[pixels + size_t(y) * width + x];
-          const auto color = palette + size_t(index) * 3;
-          row[x * 4] = lump[color];
-          row[x * 4 + 1] = lump[color + 1];
-          row[x * 4 + 2] = lump[color + 2];
-          row[x * 4 + 3] = entry.name.starts_with('{') && index == 255 ? 0 : 255;
+          auto* row = image.scanLine(int(y));
+          for (auto x = 0u; x < width; ++x)
+          {
+            const auto index = lump[pixels + size_t(y) * width + x];
+            const auto color = palette + size_t(index) * 3;
+            row[x * 4] = lump[color];
+            row[x * 4 + 1] = lump[color + 1];
+            row[x * 4 + 2] = lump[color + 2];
+            row[x * 4 + 3] = entry.name.starts_with('{') && index == 255 ? 0 : 255;
+          }
         }
+        return image;
       }
-      return image;
+      return Error{"The WAD contains no readable texture."};
     }
-    return Error{"The WAD contains no readable texture."};
+    // A raw miptex may itself have a name starting with WAD3.
+    if (nativeFormat != "goldsrc-miptex")
+      return std::get<Error>(archive.error());
+  }
+  if (nativeFormat == "goldsrc-miptex")
+  {
+    const auto wrapped = project::buildGoldSrcWad({Bytes{bytes.begin(), bytes.end()}});
+    return wrapped.is_success() ? decodeImage(wrapped.value())
+                                : Result<QImage>{std::get<Error>(wrapped.error())};
   }
   const auto decoded = img::decodeImage(bytes.data(), bytes.size());
   if (decoded.is_error())

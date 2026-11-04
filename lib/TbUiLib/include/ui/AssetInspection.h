@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -89,7 +90,8 @@ QImage renderSkyView(
   int height = 320);
 
 /** GoldSrc palettes contain RGB triples. Masked miptex index 255 is transparent. */
-Result<QImage> decodeImage(const Bytes& bytes, std::string_view nativeFormat = {});
+Result<QImage> decodeImage(
+  std::span<const std::uint8_t> bytes, std::string_view nativeFormat = {});
 Result<Asset> readLibraryAsset(
   const AssetLibrarySource& source,
   const project::LibraryAsset& asset,

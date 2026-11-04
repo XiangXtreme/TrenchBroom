@@ -23,7 +23,7 @@ constexpr std::size_t MiptexHeaderSize = 40;
 constexpr std::size_t MiptexNameSize = 16;
 constexpr std::size_t PaletteSize = 2 + 256 * 3;
 
-std::uint32_t readU32(const std::vector<std::uint8_t>& bytes, const std::size_t offset)
+std::uint32_t readU32(const std::span<const std::uint8_t> bytes, const std::size_t offset)
 {
   return std::uint32_t{bytes[offset]} | (std::uint32_t{bytes[offset + 1]} << 8)
          | (std::uint32_t{bytes[offset + 2]} << 16)
@@ -52,7 +52,8 @@ void appendName(std::vector<std::uint8_t>& bytes, std::string_view name)
 }
 
 // Interprets a miptex lump far enough to trust its dimensions and mip offsets.
-void inspectMiptex(WadTextureEntry& entry)
+template <typename MiptexBytes>
+void inspectMiptex(BasicWadTextureEntry<MiptexBytes>& entry)
 {
   const auto& lump = entry.miptex;
   if (lump.size() < MiptexHeaderSize)
@@ -103,9 +104,7 @@ void inspectMiptex(WadTextureEntry& entry)
   entry.valid = true;
 }
 
-} // namespace
-
-bool isGoldSrcWad(const std::vector<std::uint8_t>& bytes)
+bool hasWadMagic(const std::span<const std::uint8_t> bytes)
 {
   if (bytes.size() < 4)
     return false;
@@ -114,17 +113,13 @@ bool isGoldSrcWad(const std::vector<std::uint8_t>& bytes)
   return magic == "WAD3" || magic == "WAD2";
 }
 
-std::string goldSrcMiptexName(const std::vector<std::uint8_t>& miptex)
-{
-  return miptex.size() < MiptexNameSize ? std::string{}
-                                        : readName(miptex.data(), MiptexNameSize);
-}
-
-Result<WadArchive> readGoldSrcWad(const std::vector<std::uint8_t>& bytes)
+template <typename Archive, typename ReadLump>
+Result<Archive> readWad(
+  const std::span<const std::uint8_t> bytes, const ReadLump& readLump)
 {
   if (bytes.size() < WadHeaderSize)
     return Error{"WAD header is truncated."};
-  if (!isGoldSrcWad(bytes))
+  if (!hasWadMagic(bytes))
     return Error{"Not a GoldSrc WAD archive."};
   const auto count = readU32(bytes, 4);
   const auto directory = std::size_t{readU32(bytes, 8)};
@@ -133,8 +128,7 @@ Result<WadArchive> readGoldSrcWad(const std::vector<std::uint8_t>& bytes)
     || count > (bytes.size() - directory) / WadDirectoryEntrySize)
     return Error{fmt::format("WAD directory is out of range ({} entries).", count)};
 
-  auto archive =
-    WadArchive{std::string{reinterpret_cast<const char*>(bytes.data()), 4}, {}};
+  auto archive = Archive{std::string{reinterpret_cast<const char*>(bytes.data()), 4}, {}};
   archive.textures.reserve(count);
   for (std::uint32_t index = 0; index < count; ++index)
   {
@@ -143,7 +137,7 @@ Result<WadArchive> readGoldSrcWad(const std::vector<std::uint8_t>& bytes)
     const auto diskSize = std::size_t{readU32(bytes, base + 4)};
     const auto uncompressedSize = std::size_t{readU32(bytes, base + 8)};
     const auto compression = bytes[base + 13];
-    auto entry = WadTextureEntry{};
+    auto entry = typename decltype(archive.textures)::value_type{};
     entry.name = readName(bytes.data() + base + 16, MiptexNameSize);
     // WAD3 texture lumps carry 'C'; other lump types (palettes, qpics) are not
     // textures and are skipped without failing the archive.
@@ -165,15 +159,38 @@ Result<WadArchive> readGoldSrcWad(const std::vector<std::uint8_t>& bytes)
     }
     else
     {
-      entry.miptex.assign(
-        bytes.begin() + std::ptrdiff_t(filePosition),
-        bytes.begin() + std::ptrdiff_t(filePosition + diskSize));
+      entry.miptex = readLump(bytes.subspan(filePosition, diskSize));
     }
     if (entry.problem.empty())
       inspectMiptex(entry);
     archive.textures.push_back(std::move(entry));
   }
   return archive;
+}
+
+} // namespace
+
+bool isGoldSrcWad(const std::vector<std::uint8_t>& bytes)
+{
+  return hasWadMagic(bytes);
+}
+
+std::string goldSrcMiptexName(const std::vector<std::uint8_t>& miptex)
+{
+  return miptex.size() < MiptexNameSize ? std::string{}
+                                        : readName(miptex.data(), MiptexNameSize);
+}
+
+Result<WadArchive> readGoldSrcWad(const std::vector<std::uint8_t>& bytes)
+{
+  return readWad<WadArchive>(bytes, [](const auto lump) {
+    return std::vector<std::uint8_t>{lump.begin(), lump.end()};
+  });
+}
+
+Result<WadArchiveView> readGoldSrcWadView(const std::span<const std::uint8_t> bytes)
+{
+  return readWad<WadArchiveView>(bytes, [](const auto lump) { return lump; });
 }
 
 Result<std::vector<std::uint8_t>> buildGoldSrcWad(
