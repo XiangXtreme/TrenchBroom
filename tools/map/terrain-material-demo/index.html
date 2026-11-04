@@ -5,20 +5,22 @@
 <title>地形材质实验台 · GoldSrc</title>
 <link rel="stylesheet" href="style.css">
 <script defer src="bake.js"></script>
+<script defer src="multi.js"></script>
 <script defer src="demo.js"></script>
 <body>
   <main>
     <header>
       <p class="eyebrow"><span></span> GOLDSRC / MATERIAL LAB</p>
       <h1>地形材质实验台</h1>
-      <p class="intro">自由涂刷用来比较分块纹理复用，S 弯样图用来比较分块烘焙与三材质过渡带。两边可同步放大并切换四级 mip。</p>
+      <p class="intro">在任一面板刷草、泥或岩，比较同一笔迹的分块烘焙与自动 UV。两边可同步放大并切换四级 mip。</p>
     </header>
 
     <section class="toolbar" aria-label="绘制和预览设置">
       <div class="control">
         <span class="label">样图</span>
         <div class="segmented" id="scenes">
-          <button type="button" data-scene="paint" aria-pressed="true">自由涂刷</button>
+          <button type="button" data-scene="multi" aria-pressed="true">草泥岩涂刷</button>
+          <button type="button" data-scene="paint" aria-pressed="false">分块复用</button>
           <button type="button" data-scene="bend" aria-pressed="false">S 弯对比</button>
         </div>
       </div>
@@ -28,6 +30,7 @@
           <button type="button" data-tool="inspect" aria-pressed="true">查看</button>
           <button type="button" data-tool="dirt" aria-pressed="false">刷泥</button>
           <button type="button" data-tool="grass" aria-pressed="false">刷草</button>
+          <button type="button" data-tool="rock" aria-pressed="false">刷岩</button>
         </div>
       </div>
       <label class="control radius"><span class="label">笔刷半径 <output id="radius-value">44</output></span>
@@ -49,7 +52,7 @@
     <div class="summary">
       <div><span class="label">WAD 体积差</span><strong id="savings"></strong></div>
       <p id="status" role="status"></p>
-      <span class="legend"><i></i> 复用块</span>
+      <span class="legend"><i></i> <span></span></span>
     </div>
 
     <section class="comparisons" aria-label="两种烘焙方式">

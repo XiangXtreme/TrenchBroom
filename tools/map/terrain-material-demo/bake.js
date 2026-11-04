@@ -122,7 +122,7 @@ globalThis.TerrainBake = (() => {
     u32(4, textures.length);
     u32(8, directory);
     let offset = 12;
-    textures.forEach(({ name, size, levels }, index) => {
+    textures.forEach(({ name, size, levels, colors = palette }, index) => {
       ascii(offset, name);
       u32(offset + 16, size);
       u32(offset + 20, size);
@@ -133,7 +133,7 @@ globalThis.TerrainBake = (() => {
         mipOffset += level.length;
       });
       view.setUint16(offset + mipOffset, 256, true);
-      bytes.set(palette, offset + mipOffset + 2);
+      bytes.set(colors, offset + mipOffset + 2);
       const entry = directory + index * 32;
       u32(entry, offset);
       u32(entry + 4, lumpSizes[index]);
@@ -282,15 +282,21 @@ globalThis.TerrainBake = (() => {
       [point(a), point(b), point(c), texture, "[ " + s.join(" ") + " ]",
         "[ " + t.join(" ") + " ]", 0, factor, factor].join(" ");
     const prism = (corners, bottom, top, texture, s, t, factor = 1) => {
-      const [a, b, c, d] = corners.map(([x, y]) => [x, y, top(x)]);
+      const vertices = corners.map(([x, y]) => [x, y, top(x)]);
+      const [a, b, c] = vertices;
       const lower = ([x, y]) => [x, y, bottom];
       const side = (p, q) => {
         const axis = p[0] === q[0] ? [0, 1, 0, 0] : [1, 0, 0, 0];
         return face(p, q, lower(q), "tm_grass", axis, [0, 0, -1, 0]);
       };
-      return ["{", face(d, c, b, texture, s, t, factor),
-        face(lower(b), lower(c), lower(d), "tm_grass", [1, 0, 0, 0], [0, -1, 0, 0]),
-        side(d, a), side(a, b), side(b, c), side(c, d), "}"].join("\n");
+      const d = vertices.at(-1);
+      // Keep the existing quad winding and use the corresponding triangle winding.
+      const topFace = vertices.length === 4 ? [d, c, b] : [c, b, a];
+      const bottomFace = vertices.length === 4 ? [b, c, d] : [a, b, c];
+      return ["{", face(...topFace, texture, s, t, factor),
+        face(...bottomFace.map(lower), "tm_grass", [1, 0, 0, 0], [0, -1, 0, 0]),
+        ...vertices.map((q, i) => side(vertices[(i + vertices.length - 1) % vertices.length], q)),
+        "}"].join("\n");
     };
     const brush = (x0, y0, x1, y1, bottom, top, texture, shift = [0, 0]) =>
       prism([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], bottom, top, texture,
@@ -307,7 +313,8 @@ globalThis.TerrainBake = (() => {
     } else {
       variant.cells.forEach((index, cell) => {
         const col = cell % columns, row = Math.floor(cell / columns);
-        const shift = index < 2 ? [0, 0] : [gutter - col * core, gutter - row * core];
+        const shift = index < (variant.baseCount ?? 2) ? [0, 0]
+          : [gutter - col * core, gutter - row * core];
         lines.push(brush(col * span, -(row + 1) * span, (col + 1) * span, -row * span,
           -64, (x) => x / 16, variant.textures[index].name, shift));
       });
@@ -331,5 +338,5 @@ globalThis.TerrainBake = (() => {
   }
 
   return { columns, rows, core, gutter, width, height, worldBlockSize,
-    initialWeights, paint, bake, bakeBend, makeMap };
+    period, clamp, smooth, noise, valueNoise, wadVariant, initialWeights, paint, bake, bakeBend, makeMap };
 })();

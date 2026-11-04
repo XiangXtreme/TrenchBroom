@@ -23,8 +23,9 @@ h1 { margin: 9px 0; font-size: clamp(32px, 4vw, 52px); letter-spacing: -.04em; }
 .control { display: grid; gap: 5px; }
 .segmented { display: flex; gap: 3px; }
 button { border: 1px solid var(--line); border-radius: 5px; padding: 7px 12px; font: inherit; color: inherit; background: #272e26; cursor: pointer; }
-button:enabled:hover { background: #364334; }
+button:enabled:hover:not([aria-pressed="true"]) { background: #364334; }
 button:disabled { opacity: .5; cursor: default; }
+.legend .junction { background: #ffbd73; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 button[aria-pressed="true"] { color: #152013; background: var(--accent); border-color: var(--accent); font-weight: 650; }
 input { accent-color: var(--accent); }

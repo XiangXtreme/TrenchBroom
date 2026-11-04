@@ -3,6 +3,7 @@
 (() => {
   const { columns, rows, core, gutter, width, height, worldBlockSize,
     initialWeights, paint, bake, bakeBend, makeMap } = globalThis.TerrainBake;
+  const multi = globalThis.TerrainMulti;
   const find = (id) => document.getElementById(id);
   const radius = find("radius");
   const formatMB = (bytes) => (bytes / 1_000_000).toFixed(3) + " MB";
@@ -19,8 +20,9 @@
     return { id, root, canvas, detail, image: document.createElement("canvas") };
   });
   let weights = initialWeights();
+  let multiWeights = multi.initialWeights();
   let results, bendResults;
-  let scene = "paint";
+  let scene = "multi";
   let tool = "inspect", level = 0;
   let position = { x: 4 * core, y: 191 };
   let stroke, queuedBake, frame;
@@ -28,6 +30,7 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
   function surfaceAt(variant, x, y) {
+    if (variant.faceAt) return variant.faceAt(x, y);
     const segment = Math.floor(x / variant.segmentWidth);
     const fraction = x / variant.segmentWidth - segment;
     for (let band = 0; band < variant.bandCount; band++) {
@@ -46,8 +49,7 @@
   }
 
   function renderStrip(image, variant, step) {
-    const side = variant.textures[0].size / step;
-    const coordinate = ([a, b, offset], x, y) => {
+    const coordinate = ([a, b, offset], x, y, side) => {
       const texel = Math.floor((a * x + b * y + offset) / step);
       return ((texel % side) + side) % side;
     };
@@ -55,9 +57,10 @@
       for (let x = 0; x < image.width; x++) {
         const px = (x + 0.5) * step, py = (y + 0.5) * step;
         const surface = surfaceAt(variant, px, py);
-        const index = coordinate(surface.v, px, py) * side + coordinate(surface.u, px, py);
-        writePixel(image, (y * image.width + x) * 4,
-          variant.textures[surface.material], level, index);
+        const texture = variant.textures[surface.material], side = texture.size / step;
+        const index = coordinate(surface.v, px, py, side) * side
+          + coordinate(surface.u, px, py, side);
+        writePixel(image, (y * image.width + x) * 4, texture, level, index);
       }
     }
   }
@@ -79,7 +82,7 @@
       const startX = (cell % columns) * side, startY = Math.floor(cell / columns) * side;
       for (let y = 0; y < side; y++) {
         for (let x = 0; x < side; x++) {
-          const source = index < 2
+          const source = index < (variant.baseCount ?? 2)
             ? ((startY + y) % tileSide) * tileSide + (startX + x) % tileSide
             : (y + gutter / step) * tileSide + x + gutter / step;
           const output = ((startY + y) * image.width + startX + x) * 4;
@@ -90,10 +93,12 @@
     ctx.putImageData(image, 0, 0);
   }
 
-  function drawEdges(ctx, variant, projectX, projectY) {
+  function drawEdges(ctx, variant, projectX, projectY, kind) {
     ctx.beginPath();
     if (variant.faces) {
-      for (const { points } of variant.faces) {
+      for (const face of variant.faces) {
+        if (kind && face.kind !== kind) continue;
+        const { points } = face;
         ctx.moveTo(projectX(points[0][0]), projectY(points[0][1]));
         for (const [x, y] of points.slice(1)) ctx.lineTo(projectX(x), projectY(y));
         ctx.closePath();
@@ -121,6 +126,10 @@
       ctx.strokeStyle = "#fff6d648";
       ctx.lineWidth = 1;
       drawEdges(ctx, variant, (x) => x + 0.5, (y) => y + 0.5);
+      if (variant.junctionFaces) {
+        ctx.strokeStyle = "#ffbd73";
+        drawEdges(ctx, variant, (x) => x + 0.5, (y) => y + 0.5, "junction");
+      }
       ctx.fillStyle = "#c8ed8a";
       if (scene === "paint") variant.cells.forEach((index, cell) => {
         if (index >= 2 && panel.counts[index] > 1)
@@ -149,13 +158,23 @@
       0, 0, detail.width, detail.height);
     if (find("grid").checked) {
       zoom.strokeStyle = "#fff6d67a";
-      drawEdges(zoom, variant, (x) => (x - cropX) * detail.width / cropWidth + 0.5,
-        (y) => (y - cropY) * detail.height / cropHeight + 0.5);
+      const projectX = (x) => (x - cropX) * detail.width / cropWidth + 0.5;
+      const projectY = (y) => (y - cropY) * detail.height / cropHeight + 0.5;
+      drawEdges(zoom, variant, projectX, projectY);
+      if (variant.junctionFaces) {
+        zoom.strokeStyle = "#ffbd73";
+        drawEdges(zoom, variant, projectX, projectY, "junction");
+      }
     }
     const cell = Math.floor(y / core) * columns + Math.floor(x / core);
-    const index = variant.faces ? surfaceAt(variant, x, y).material : variant.cells[cell];
+    const surface = variant.faces && surfaceAt(variant, x, y);
+    const index = surface ? surface.material : variant.cells[cell];
     const tex = variant.textures[index];
-    const kind = index < 2 ? "平铺底纹" : panel.counts[index] > 1 ? "共享过渡" : "独有过渡";
+    const kind = surface?.kind === "junction" ? "三材质交汇"
+      : surface?.kind === "fit" ? "UV 退化处烘焙"
+      : surface?.kind === "pair" ? "可复用过渡"
+      : index < (variant.baseCount ?? 2) ? "平铺底纹"
+      : panel.counts[index] > 1 ? "共享过渡" : "独有过渡";
     panel.root.querySelector(".tile-info").textContent =
       tex.name + " · " + kind + " · " + panel.counts[index] + " 个面引用 · "
       + (tex.size >> level) + " × " + (tex.size >> level) + " px";
@@ -171,11 +190,14 @@
   function rebake() {
     clearTimeout(queuedBake);
     queuedBake = undefined;
-    results = scene === "bend" ? (bendResults ??= bakeBend()) : bake(weights);
+    results = scene === "multi" ? multi.bake(multiWeights)
+      : scene === "bend" ? (bendResults ??= bakeBend()) : bake(weights);
     const base = results.original.wad.length, shared = results.shared.wad.length;
     find("savings").textContent = formatMB(base - shared) + "（" +
       ((1 - shared / base) * 100).toFixed(1) + "%）";
-    status.textContent = scene === "bend"
+    status.textContent = scene === "multi"
+      ? "两边共用笔迹。右侧复用两材质过渡贴图，交汇处用橙色面边界标出。"
+      : scene === "bend"
       ? "同一条 S 弯。左侧按网格烘焙，右侧按草泥边界切面并沿路铺过渡纹理。"
       : "两版共用同一笔迹，权重和底纹相位一致的过渡块可以复用。";
     for (const panel of panels) {
@@ -183,10 +205,13 @@
       panel.counts = new Uint16Array(variant.textures.length);
       for (const index of variant.cells) panel.counts[index]++;
       panel.root.querySelector(".bytes").textContent = formatMB(variant.wad.length);
+      const baseCount = variant.baseCount ?? 2;
       panel.root.querySelector(".stats").textContent = variant.textures.length + " 张 WAD 纹理 · "
-        + (variant.textures.length - 2) + " 张过渡纹理";
+        + (variant.textures.length - baseCount - (variant.patchCount ?? 0)) + " 张过渡纹理"
+        + (variant.faceAt ? " · " + variant.patchCount + " 张局部烘焙" : "");
       renderWad(panel);
     }
+    renderGeometry();
     scheduleOverlay();
   }
 
@@ -199,12 +224,15 @@
     };
     if (stroke === event.pointerId) {
       const brushRadius = Number(radius.value);
-      const target = tool === "dirt" ? 255 : 0;
+      const target = ["grass", "dirt", "rock"].indexOf(tool);
       const dx = position.x - previous.x, dy = position.y - previous.y;
       const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / (brushRadius / 4)));
-      for (let i = 1; i <= steps; i++)
-        paint(weights, previous.x + dx * i / steps, previous.y + dy * i / steps, brushRadius, target);
-      if (!queuedBake) queuedBake = setTimeout(rebake, 100);
+      for (let i = 1; i <= steps; i++) {
+        const x = previous.x + dx * i / steps, y = previous.y + dy * i / steps;
+        if (scene === "multi") multi.paint(multiWeights, x, y, brushRadius, target);
+        else paint(weights, x, y, brushRadius, target === 1 ? 255 : 0);
+      }
+      if (!queuedBake) queuedBake = setTimeout(rebake, scene === "multi" ? 180 : 100);
     }
     scheduleOverlay();
   }
@@ -248,7 +276,7 @@
   function segment(id, onChange) {
     const group = find(id);
     group.addEventListener("click", (event) => {
-      if (event.target.tagName !== "BUTTON") return;
+      if (event.target.tagName !== "BUTTON" || (id !== "mips" && stroke !== undefined)) return;
       group.querySelector('[aria-pressed="true"]').setAttribute("aria-pressed", "false");
       event.target.setAttribute("aria-pressed", "true");
       onChange(event.target.dataset);
@@ -256,29 +284,42 @@
     });
   }
 
-  segment("tools", (data) => { if (scene === "paint") tool = data.tool; });
+  segment("tools", (data) => { if (scene !== "bend") tool = data.tool; });
   segment("mips", (data) => { level = Number(data.mip); panels.forEach(renderWad); });
-  segment("scenes", (data) => {
-    scene = data.scene;
+  function changeScene(nextScene) {
+    scene = nextScene;
     const bend = scene === "bend";
+    const multiple = scene === "multi";
+    if (!multiple && tool === "rock") tool = "inspect";
     for (const button of find("tools").querySelectorAll("[data-tool]")) {
       button.disabled = bend && button.dataset.tool !== "inspect";
+      button.hidden = button.dataset.tool === "rock" && !multiple;
       button.setAttribute("aria-pressed", String(button.dataset.tool === (bend ? "inspect" : tool)));
     }
     radius.disabled = bend;
+    radius.min = multiple ? 28 : 8;
+    find("radius-value").value = radius.value;
     find("reset").disabled = bend;
-    document.querySelector(".legend").hidden = bend;
-    find("shared").querySelector("h2").textContent = bend ? "三材质过渡带" : "共享过渡纹理";
-    position = { x: 4 * core, y: bend ? 228 : 191 };
+    const legend = document.querySelector(".legend");
+    legend.hidden = bend;
+    legend.querySelector("i").classList.toggle("junction", multiple);
+    legend.querySelector("span").textContent = multiple ? "三材质交汇" : "复用块";
+    find("shared").querySelector("h2").textContent = multiple ? "自动 UV + 局部烘焙"
+      : bend ? "三材质过渡带" : "共享过渡纹理";
+    position = multiple ? { x: 515, y: 186 } : { x: 4 * core, y: bend ? 228 : 191 };
     rebake();
-    renderGeometry();
-  });
+  }
+  segment("scenes", (data) => changeScene(data.scene));
   radius.addEventListener("input", () => {
     find("radius-value").value = radius.value;
     scheduleOverlay();
   });
   find("grid").addEventListener("change", scheduleOverlay);
-  find("reset").addEventListener("click", () => { weights = initialWeights(); rebake(); });
+  find("reset").addEventListener("click", () => {
+    if (scene === "multi") multiWeights = multi.initialWeights();
+    else weights = initialWeights();
+    rebake();
+  });
 
   function renderGeometry() {
     for (const { id, root } of panels) {
@@ -291,11 +332,12 @@
       bsp.textContent = `BSP 实测 ${formatMB(measurement.bytes)} · ${measurement.faces} 个面`;
       root.querySelector(".geometry").textContent =
         `地形 ${columns * worldBlockSize} × ${rows * worldBlockSize} 单位 · ${variant.cells.length} 个顶面 · MAP 共 ${faceCount} 个 Brush 面`;
-      root.querySelector(".tile-size").textContent = variant.faces
+      root.querySelector(".tile-size").textContent = variant.faceAt
+        ? `三材质交汇 ${variant.junctionFaces} 面 · UV 退化处烘焙 ${variant.fitFaces} 面`
+        : variant.faces
         ? `过渡带沿 Y 轴宽 ${(variant.transitionWidth * worldBlockSize / core).toFixed(1)} 单位 · 过渡贴图 ${variant.textures[2].size} × ${variant.textures[2].size} px`
         : `单块 ${worldBlockSize} × ${worldBlockSize} 单位 · 过渡贴图 ${tileSize} × ${tileSize} px（有效区 ${core} × ${core}）`;
     }
   }
-  rebake();
-  renderGeometry();
+  changeScene(scene);
 })();
