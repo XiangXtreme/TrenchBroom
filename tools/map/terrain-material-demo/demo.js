@@ -135,6 +135,7 @@
     const tex = variant.textures[index];
     const kind = surface?.kind === "junction" ? "三材质交汇"
       : surface?.kind === "fit" ? "UV 退化处烘焙"
+      : surface?.kind === "patch" ? "合并面烘焙"
       : surface?.kind === "pair" ? "可复用过渡"
       : index < (variant.baseCount ?? 2) ? "平铺底纹"
       : panel.counts[index] > 1 ? "共享过渡" : "独有过渡";
@@ -159,7 +160,7 @@
     find("savings").textContent = formatMB(base - shared) + "（" +
       ((1 - shared / base) * 100).toFixed(1) + "%）";
     status.textContent = scene === "multi"
-      ? "两边共用笔迹。右侧复用两材质过渡贴图，交汇处用橙色面边界标出。"
+      ? "右侧复用两材质过渡贴图，在切割密集处合并面。开启面边界可查看橙色交汇区。"
       : scene === "bend"
       ? "同一条 S 弯。左侧按网格烘焙，右侧按草泥边界切面并沿路铺过渡纹理。"
       : "两版共用同一笔迹，权重和底纹相位一致的过渡块可以复用。";
@@ -358,7 +359,7 @@
       root.querySelector(".geometry").textContent =
         `地形 ${columns * worldBlockSize} × ${rows * worldBlockSize} 单位 · ${variant.cells.length} 个顶面 · MAP 共 ${faceCount} 个 Brush 面`;
       root.querySelector(".tile-size").textContent = variant.grid
-        ? `三材质交汇 ${variant.junctionFaces} 面 · UV 退化处烘焙 ${variant.fitFaces} 面`
+        ? `合并块 ${variant.mergedPatchFaces} 个 · 三材质交汇 ${variant.junctionFaces} 面 · UV 退化处烘焙 ${variant.fitFaces} 面`
         : variant.faces
         ? `过渡带沿 Y 轴宽 ${(variant.transitionWidth * worldBlockSize / core).toFixed(1)} 单位 · 过渡贴图 ${variant.textures[2].size} × ${variant.textures[2].size} px`
         : `单块 ${worldBlockSize} × ${worldBlockSize} 单位 · 过渡贴图 ${tileSize} × ${tileSize} px（有效区 ${core} × ${core}）`;

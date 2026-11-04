@@ -169,12 +169,68 @@ globalThis.TerrainMulti = (() => {
       const active = activeMaterials(quad);
       return active.length === 1 ? active[0] : -1;
     });
-    let junctionFaces = 0, fitFaces = 0, patchCount = 0;
+    const triangles = [[0, 1, 2], [0, 2, 3]];
+    const mixes = quads.map((quad, cell) => {
+      if (pure[cell] >= 0) return null;
+      return triangles.map((triangle, half) => {
+        const corners = triangle.map((index) => quad[index]);
+        const active = activeMaterials(corners);
+        if (active.length === 1) return { kind: "base", material: active[0] };
+        if (active.length === 3) return { kind: "junction" };
+        const [a, b] = active;
+        const [v0, v1, v2] = corners.map((corner) => lowV + corner[b] * (highV - lowV));
+        const vx = (half ? v1 - v2 : v1 - v0) / step;
+        const vy = (half ? v2 - v0 : v2 - v1) / step;
+        if (Math.abs(sharedU[0] * vy - sharedU[1] * vx) < 0.02) return { kind: "fit" };
+        const x = cell % across * step, y = Math.floor(cell / across) * step;
+        return { kind: "pair", key: a * names.length + b, v: [vx, vy, v0 - vx * x - vy * y] };
+      });
+    });
+    let patchCount = 0, mergedPatchFaces = 0;
     function add(points, u, v, material, kind) {
       const face = { points, u, v, material, kind };
       faces.push(face);
       return face;
     }
+    function patch(points, x, y, kind) {
+      const key = `patch:${x}:${y}`;
+      if (!textureIndices.has(key)) {
+        textureIndices.set(key, textures.length);
+        textures.push(texture("tm_p" + patchCount++, sample,
+          x - patchGutter, y - patchGutter, patchCore + 2 * patchGutter));
+      }
+      return add(points, [1, 0, patchGutter - x], [0, 1, patchGutter - y],
+        textureIndices.get(key), kind);
+    }
+    const rect = (x, y, right, bottom) => [[x, y], [right, y], [right, bottom], [x, bottom]];
+
+    // Merge busy blocks already paying for a patch first. Spend a limited number
+    // of extra 64px textures on two-material blocks with the most cuts.
+    const candidates = [];
+    for (let row = 0; row < down; row += 2) {
+      for (let col = 0; col < across; col += 2) {
+        const cell = row * across + col;
+        const cells = [cell, cell + 1, cell + across, cell + across + 1];
+        const mixed = cells.filter((index) => mixes[index]);
+        if (mixed.length < 2) continue;
+        const kinds = mixed.flatMap((index) => mixes[index].map(({ kind }) => kind));
+        const kind = kinds.includes("junction") ? "junction" : kinds.includes("fit") ? "fit" : "patch";
+        if (kind !== "patch" || mixed.length >= 3)
+          candidates.push({ row, col, cells, count: mixed.length, kind });
+      }
+    }
+    const extraPatches = Math.min(16, Math.floor((bakedTextures.length - bases.length) / 2));
+    let addedPatches = 0;
+    candidates.sort((a, b) => b.count - a.count);
+    for (const { row, col, cells, kind } of candidates) {
+      if (kind === "patch" && addedPatches >= extraPatches) continue;
+      if (kind === "patch") addedPatches++;
+      const x = col * step, y = row * step;
+      const surface = patch(rect(x, y, x + patchCore, y + patchCore), x, y, kind);
+      for (const cell of cells) grid[cell] = [surface];
+      mergedPatchFaces++;
+    }
+
     for (let row = 0; row < down; row++) {
       for (let col = 0; col < across; col++) {
         const cell = row * across + col, x = col * step, y = row * step;
@@ -189,54 +245,37 @@ globalThis.TerrainMulti = (() => {
             h++;
           }
           const right = x + w * step, bottom = y + h * step;
-          const face = add([[x, y], [right, y], [right, bottom], [x, bottom]],
+          const face = add(rect(x, y, right, bottom),
             worldU, worldV, pure[cell], "base");
           for (let dy = 0; dy < h; dy++) grid.fill([face],
             cell + dy * across, cell + dy * across + w);
           continue;
         }
-        const points = [[x, y], [x + step, y], [x + step, y + step], [x, y + step]];
-        grid[cell] = [[0, 1, 2], [0, 2, 3]].map((triangle, half) => {
-          const corners = triangle.map((index) => quads[cell][index]);
-          const polygon = triangle.map((index) => points[index]);
-          const active = activeMaterials(corners);
-          if (active.length === 1) return add(polygon, worldU, worldV, active[0], "base");
-          if (active.length === 2) {
-            const [a, b] = active;
-            const [v0, v1, v2] = corners.map((corner) => lowV + corner[b] * (highV - lowV));
-            const vx = (half ? v1 - v2 : v1 - v0) / step;
-            const vy = (half ? v2 - v0 : v2 - v1) / step;
-            const determinant = sharedU[0] * vy - sharedU[1] * vx;
-            if (Math.abs(determinant) >= 0.02) {
-              const key = a * names.length + b;
-              if (!textureIndices.has(key)) {
-                textureIndices.set(key, textures.length);
-                textures.push(pairs.get(key));
-              }
-              return add(polygon, sharedU, [vx, vy, v0 - vx * x - vy * y],
-                textureIndices.get(key), "pair");
-            }
-          }
-          const patchX = Math.floor(x / patchCore) * patchCore;
-          const patchY = Math.floor(y / patchCore) * patchCore;
-          const key = `patch:${patchX}:${patchY}`;
+        const points = rect(x, y, x + step, y + step);
+        const [first, second] = mixes[cell];
+        function surface(polygon, { kind, material, key, v }) {
+          if (kind === "base") return add(polygon, worldU, worldV, material, kind);
+          if (kind !== "pair") return patch(polygon,
+            Math.floor(x / patchCore) * patchCore, Math.floor(y / patchCore) * patchCore, kind);
           if (!textureIndices.has(key)) {
             textureIndices.set(key, textures.length);
-            textures.push(texture("tm_p" + patchCount++, sample,
-              patchX - patchGutter, patchY - patchGutter, patchCore + 2 * patchGutter));
+            textures.push(pairs.get(key));
           }
-          const kind = active.length === 3 ? "junction" : "fit";
-          if (kind === "junction") junctionFaces++;
-          else fitFaces++;
-          return add(polygon, [1, 0, patchGutter - patchX], [0, 1, patchGutter - patchY],
-            textureIndices.get(key), kind);
-        });
+          return add(polygon, sharedU, v, textureIndices.get(key), kind);
+        }
+        const samePair = first.kind === "pair" && second.kind === "pair"
+          && first.key === second.key && first.v.every((value, i) => Math.abs(value - second.v[i]) < 1e-8);
+        const samePatch = first.kind === second.kind && (first.kind === "junction" || first.kind === "fit");
+        grid[cell] = samePair || samePatch ? [surface(points, first)]
+          : triangles.map((triangle, half) => surface(triangle.map((index) => points[index]), mixes[cell][half]));
       }
     }
     const original = wadVariant("terrain_multi_baked", bakedTextures, bakedCells);
     const shared = wadVariant("terrain_multi_uv", textures, faces.map((face) => face.material));
     return { original: { ...original, baseCount: bases.length },
-      shared: { ...shared, baseCount: bases.length, faces, junctionFaces, fitFaces, patchCount,
+      shared: { ...shared, baseCount: bases.length, faces, patchCount, mergedPatchFaces,
+        junctionFaces: faces.filter(({ kind }) => kind === "junction").length,
+        fitFaces: faces.filter(({ kind }) => kind === "fit").length,
         grid, gridStep: step } };
   }
 
