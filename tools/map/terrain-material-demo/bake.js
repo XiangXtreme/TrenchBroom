@@ -164,6 +164,11 @@ globalThis.TerrainBake = (() => {
     name: index ? "tm_dirt" : "tm_grass", size: period, levels: raster(period, () => weight),
   }));
 
+  function wadVariant(id, textures, cells) {
+    const wad = encodeWad(textures);
+    return { id, wad, textures: decodeWad(wad, textures), cells };
+  }
+
   function bake(weights) {
     const size = core + 2 * gutter;
     const sample = (x, y) =>
@@ -210,14 +215,63 @@ globalThis.TerrainBake = (() => {
         sharedCells.push(match.texture);
       }
     }
-    const variant = (id, textures, cells) => {
-      const wad = encodeWad(textures);
-      return { id, wad, textures: decodeWad(wad, textures), cells };
-    };
     return {
-      original: variant("terrain_unique", original, originalCells),
-      shared: variant("terrain_shared", shared, sharedCells),
+      original: wadVariant("terrain_unique", original, originalCells),
+      shared: wadVariant("terrain_shared", shared, sharedCells),
     };
+  }
+
+  function bakeBend() {
+    const segmentWidth = 48;
+    const grassEdge = 48, dirtEdge = 80;
+    const transitionWidth = dirtEdge - grassEdge;
+    const inner = period / 2, outer = inner + transitionWidth;
+    const materials = [0, 2, 1, 2, 0];
+    const boundaries = ({ center }) => [0, center - outer, center - inner,
+      center + inner, center + outer, height];
+    const weightAtDistance = (distance) =>
+      Math.round(255 * smooth(clamp((outer - distance) / (outer - inner), 0, 1)));
+    const sections = Array.from({ length: width / segmentWidth + 1 }, (_, index) => {
+      const x = index * segmentWidth;
+      const center = height / 2 + 3 * Math.round(31 * Math.sin(x / width * 2 * Math.PI));
+      return { x, center };
+    });
+    const weights = new Uint8Array(width * height);
+    const faces = [];
+    let distance = 0;
+    for (let i = 0; i < sections.length - 1; i++) {
+      const left = sections[i], right = sections[i + 1];
+      const slope = (right.center - left.center) / segmentWidth;
+      const uScale = Math.hypot(1, slope);
+      const centerOffset = left.center - slope * left.x;
+      const a = boundaries(left), b = boundaries(right);
+      for (let band = 0; band < materials.length; band++) {
+        const sign = band < 3 ? 1 : -1;
+        // The dirt spans one repeat, so both strips meet it at the same V phase.
+        const vCenter = band < 2 ? dirtEdge - inner : dirtEdge + inner;
+        faces.push({
+          points: [[left.x, a[band]], [right.x, b[band]],
+            [right.x, b[band + 1]], [left.x, a[band + 1]]],
+          u: [uScale, 0, distance - left.x * uScale],
+          v: [-slope * sign, sign, vCenter - centerOffset * sign],
+          material: materials[band],
+        });
+      }
+      for (let x = left.x; x < right.x; x++) {
+        const center = slope * (x + 0.5) + centerOffset;
+        for (let y = 0; y < height; y++)
+          weights[y * width + x] = weightAtDistance(Math.abs(y + 0.5 - center));
+      }
+      distance += segmentWidth * uScale;
+    }
+    const transition = { name: "tm_grass_dirt", size: period,
+      levels: raster(period, (_, y) =>
+        Math.round(255 * smooth(clamp((y + 0.5 - grassEdge) / transitionWidth, 0, 1)))) };
+    const original = { ...bake(weights).original, id: "terrain_bend_baked" };
+    const shared = wadVariant("terrain_bend_strip", [...bases, transition],
+      faces.map((face) => face.material));
+    return { original, shared: { ...shared, faces, segmentWidth, transitionWidth,
+      bandCount: materials.length } };
   }
 
   function makeMap(variant) {
@@ -227,24 +281,37 @@ globalThis.TerrainBake = (() => {
     const face = (a, b, c, texture, s, t, factor = 1) =>
       [point(a), point(b), point(c), texture, "[ " + s.join(" ") + " ]",
         "[ " + t.join(" ") + " ]", 0, factor, factor].join(" ");
-    const brush = (x0, y0, x1, y1, bottom, top, texture, shift = [0, 0]) => {
-      const a = [x0, y0, top(x0)], b = [x1, y0, top(x1)];
-      const c = [x1, y1, top(x1)], d = [x0, y1, top(x0)];
+    const prism = (corners, bottom, top, texture, s, t, factor = 1) => {
+      const [a, b, c, d] = corners.map(([x, y]) => [x, y, top(x)]);
       const lower = ([x, y]) => [x, y, bottom];
-      const side = (p, q, axis) => face(p, q, lower(q), "tm_grass", axis, [0, 0, -1, 0]);
-      return ["{", face(d, c, b, texture, [1, 0, 0, shift[0]], [0, -1, 0, shift[1]], scale),
+      const side = (p, q) => {
+        const axis = p[0] === q[0] ? [0, 1, 0, 0] : [1, 0, 0, 0];
+        return face(p, q, lower(q), "tm_grass", axis, [0, 0, -1, 0]);
+      };
+      return ["{", face(d, c, b, texture, s, t, factor),
         face(lower(b), lower(c), lower(d), "tm_grass", [1, 0, 0, 0], [0, -1, 0, 0]),
-        side(d, a, [0, 1, 0, 0]), side(a, b, [1, 0, 0, 0]),
-        side(b, c, [0, 1, 0, 0]), side(c, d, [1, 0, 0, 0]), "}"].join("\n");
+        side(d, a), side(a, b), side(b, c), side(c, d), "}"].join("\n");
     };
+    const brush = (x0, y0, x1, y1, bottom, top, texture, shift = [0, 0]) =>
+      prism([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], bottom, top, texture,
+        [1, 0, 0, shift[0]], [0, -1, 0, shift[1]], scale);
     const lines = ["// Game: Half-Life", "// Format: Valve", "{", '"classname" "worldspawn"',
       '"mapversion" "220"', '"wad" "' + variant.id + '.wad"'];
-    variant.cells.forEach((index, cell) => {
-      const col = cell % columns, row = Math.floor(cell / columns);
-      const shift = index < 2 ? [0, 0] : [gutter - col * core, gutter - row * core];
-      lines.push(brush(col * span, -(row + 1) * span, (col + 1) * span, -row * span,
-        -64, (x) => x / 16, variant.textures[index].name, shift));
-    });
+    if (variant.faces) {
+      for (const surface of variant.faces) {
+        const corners = surface.points.map(([x, y]) => [x * scale, -y * scale]).reverse();
+        const axis = ([x, y, offset]) => [x / scale, -y / scale, 0, offset];
+        lines.push(prism(corners, -64, (x) => x / 16, variant.textures[surface.material].name,
+          axis(surface.u), axis(surface.v)));
+      }
+    } else {
+      variant.cells.forEach((index, cell) => {
+        const col = cell % columns, row = Math.floor(cell / columns);
+        const shift = index < 2 ? [0, 0] : [gutter - col * core, gutter - row * core];
+        lines.push(brush(col * span, -(row + 1) * span, (col + 1) * span, -row * span,
+          -64, (x) => x / 16, variant.textures[index].name, shift));
+      });
+    }
     const box = (x0, y0, x1, y1, bottom, top) =>
       brush(x0, y0, x1, y1, bottom, () => top, "tm_grass");
     lines.push(box(-32, -mapHeight - 32, 0, 32, -64, 224));
@@ -264,5 +331,5 @@ globalThis.TerrainBake = (() => {
   }
 
   return { columns, rows, core, gutter, width, height, worldBlockSize,
-    initialWeights, paint, bake, makeMap };
+    initialWeights, paint, bake, bakeBend, makeMap };
 })();

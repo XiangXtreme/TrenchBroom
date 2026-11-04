@@ -11,10 +11,17 @@
     <header>
       <p class="eyebrow"><span></span> GOLDSRC / MATERIAL LAB</p>
       <h1>地形材质实验台</h1>
-      <p class="intro">在任一预览上刷草或泥，观察相同笔迹如何落进两套 WAD3。两边使用相同的纹素密度、调色板和四级 mip。</p>
+      <p class="intro">自由涂刷用来比较分块纹理复用，S 弯样图用来比较分块烘焙与三材质过渡带。两边可同步放大并切换四级 mip。</p>
     </header>
 
     <section class="toolbar" aria-label="绘制和预览设置">
+      <div class="control">
+        <span class="label">样图</span>
+        <div class="segmented" id="scenes">
+          <button type="button" data-scene="paint" aria-pressed="true">自由涂刷</button>
+          <button type="button" data-scene="bend" aria-pressed="false">S 弯对比</button>
+        </div>
+      </div>
       <div class="control">
         <span class="label">工具</span>
         <div class="segmented" id="tools">
@@ -35,7 +42,7 @@
           <button type="button" data-mip="3" aria-pressed="false">3</button>
         </div>
       </div>
-      <label class="grid-toggle"><input id="grid" type="checkbox" checked> 分块边界</label>
+      <label class="grid-toggle"><input id="grid" type="checkbox" checked> 面边界</label>
       <button id="reset" type="button">重置样图</button>
     </section>
 
@@ -55,6 +62,7 @@
         <p class="stats"></p>
         <p class="stats geometry"></p>
         <p class="stats tile-size"></p>
+        <p class="stats bsp" hidden></p>
         <div class="inspection"><p class="label">同位置放大</p><canvas class="detail" aria-label="独有烘焙局部"></canvas><p class="tile-info"></p></div>
         <div class="exports"><button data-file="map">下载 MAP</button><button data-file="wad">下载 WAD3</button></div>
       </article>
@@ -67,12 +75,13 @@
         <p class="stats"></p>
         <p class="stats geometry"></p>
         <p class="stats tile-size"></p>
+        <p class="stats bsp" hidden></p>
         <div class="inspection"><p class="label">同位置放大</p><canvas class="detail" aria-label="共享纹理局部"></canvas><p class="tile-info"></p></div>
         <div class="exports"><button data-file="map">下载 MAP</button><button data-file="wad">下载 WAD3</button></div>
       </article>
     </section>
 
-    <footer>预览读取导出的 WAD3 像素。复用要求完整的权重块和底纹相位一致。实际过滤和光照在 CS 1.6 客户端检查。</footer>
+    <footer>预览读取导出的 WAD3 像素。实际过滤和光照在 CS 1.6 客户端检查。</footer>
   </main>
 </body>
 </html>
