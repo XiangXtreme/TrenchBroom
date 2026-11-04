@@ -63,12 +63,16 @@
   ```powershell
   & scripts\ci-preflight.ps1
   ```
-  It checks patch whitespace, verifies the exact CI Qt package metadata exists for Windows/Linux/macOS, reports local/CI Qt compatibility, strict-compiles changed C/C++ translation units with `clang-cl` conversion warnings treated as errors, and builds/runs the affected library tests. The Qt availability check sends small HEAD requests to the official repository; the preflight otherwise reuses the existing `build-release-codex` Ninja graph and does not clean the build tree or download dependencies.
+  It checks patch whitespace, verifies the exact CI Qt package metadata exists for Windows/Linux/macOS (cached locally for 24h under `build-release-codex\codex-logs\ci-qt-package-cache.txt` unless `.github/actions/setup-common/action.yml` changed or `-Full` is passed), reports local/CI Qt compatibility, builds affected targets, strict-compiles changed C/C++ translation units in parallel with `clang-cl` conversion warnings treated as errors, and runs the affected CTest cases.
+- By default, `ci-preflight.ps1` scopes its diff intelligently so local unpushed history on `main` does not trigger a full-repo rebuild:
+  - When the working tree or index has uncommitted changes, `BaseRef` defaults to `HEAD` (checking only in-progress changes).
+  - When the working tree is clean on a short-lived feature branch (`1..15` commits ahead of local `main`), `BaseRef` defaults to `main`; otherwise it defaults to `HEAD^` (checking the latest commit).
+  - For affected library test directories, preflight automatically narrows `ctest -R` to the `TEST_CASE`s in changed `tst_*.cpp` files and test files referencing changed source/header stems (up to 30 cases). Pass `-AllTests` to run the entire library test suite, or `-TestFilter <regex>` to target a custom CTest regex.
 - For broad CMake, shared infrastructure, compiler, Qt, or CI changes, run the full local matrix instead:
   ```powershell
   & scripts\ci-preflight.ps1 -Full
   ```
-  Use `-BaseRef <ref>` or `-Paths @('path1', 'path2')` only to narrow an intentional investigation; do not skip checks in the final push preflight without recording why.
+  Pass `-BaseRef <ref>` (for example `-BaseRef origin/main` or `-BaseRef HEAD~3`) or `-Paths @('path1', 'path2')` to override the default file scope; do not skip checks in the final push preflight without recording why.
 - Local preflight defaults to 4 build jobs and 2 concurrent CTest cases (individual cases may spawn child probes). Use `-BuildJobs <n>` / `-TestJobs <n>` to change those caps; `-ShowTestWindows` forces serial tests. The background window policy applies before builds as well as tests, including Catch discovery. Do not run separate native-window tests or another build concurrently with preflight. Native desktop validation must be intentional and kept separate from routine background verification.
 - `TbUiLibTest` runs with background windows by default, including direct runs and CTest. The test-only window policy preserves Qt visibility, layout, events and rendering while preventing QWidget windows and popups from appearing on the desktop. It also uses Qt dialogs instead of native system dialogs. Preflight enforces this default even when the calling shell has `TB_TEST_SHOW_WINDOWS=1`. Use `-ShowTestWindows` only for intentional desktop validation. For a focused native-window check, set `$env:TB_TEST_SHOW_WINDOWS = '1'`, run the relevant CTest filter, and restore the variable afterward. Background tests do not establish native focus, activation, mouse capture or system-dialog behavior; new tests for those paths must be explicitly validated on the desktop.
 - For deterministic UI theme acceptance, run the checked-in snapshot matrix:

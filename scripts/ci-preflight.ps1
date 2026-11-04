@@ -8,6 +8,8 @@ param(
   [int] $BuildJobs = 4,
   [ValidateRange(1, 256)]
   [int] $TestJobs = 2,
+  [string] $TestFilter = "",
+  [switch] $AllTests,
   [switch] $Full,
   [switch] $ShowTestWindows,
   [switch] $SkipStrictCompile,
@@ -38,7 +40,32 @@ function Invoke-GitCheck {
 }
 
 function Get-DefaultBaseRef {
-  foreach ($candidate in @("origin/main", "main", "HEAD^")) {
+  # When the working tree or index has uncommitted changes, scope preflight by
+  # default to those in-progress changes rather than re-checking historical commits.
+  $statusLines = @(& git status --porcelain --untracked-files=normal 2>$null)
+  if ($LASTEXITCODE -eq 0 -and $statusLines.Count -gt 0) {
+    & git rev-parse --verify --quiet "HEAD^{commit}" *> $null
+    if ($LASTEXITCODE -eq 0) {
+      return "HEAD"
+    }
+  }
+
+  # On a short-lived feature branch off local 'main', compare against 'main'.
+  & git rev-parse --verify --quiet "main^{commit}" *> $null
+  if ($LASTEXITCODE -eq 0) {
+    & git merge-base --is-ancestor main HEAD *> $null
+    if ($LASTEXITCODE -eq 0) {
+      $aheadText = (& git rev-list --count main..HEAD 2>$null)
+      $aheadCount = 0
+      if ($LASTEXITCODE -eq 0 -and [int]::TryParse("$aheadText".Trim(), [ref] $aheadCount)) {
+        if ($aheadCount -ge 1 -and $aheadCount -le 15) {
+          return "main"
+        }
+      }
+    }
+  }
+
+  foreach ($candidate in @("HEAD^", "main", "origin/main")) {
     & git rev-parse --verify --quiet "$candidate^{commit}" *> $null
     if ($LASTEXITCODE -eq 0) {
       return $candidate
@@ -99,10 +126,27 @@ function Test-VersionMatchesSpec {
 }
 
 function Assert-CiQtPackagesAvailable {
-  param([string] $Version)
+  param(
+    [string] $Version,
+    [string] $CacheFilePath = "",
+    [bool] $ForceNetworkCheck = $false
+  )
 
   if ($Version -notmatch '^\d+\.\d+\.\d+$') {
     throw "CI Qt version must be exact so package availability can be checked: $Version"
+  }
+
+  if (-not $ForceNetworkCheck -and -not [string]::IsNullOrWhiteSpace($CacheFilePath) -and (Test-Path $CacheFilePath)) {
+    try {
+      $cacheItem = Get-Item $CacheFilePath -ErrorAction Stop
+      $cachedVersion = (Get-Content -Raw -Path $CacheFilePath -ErrorAction Stop).Trim()
+      if ($cachedVersion -eq $Version -and ((Get-Date) - $cacheItem.LastWriteTime).TotalHours -lt 24) {
+        Write-Host "CI Qt packages: $Version metadata available (cached <24h)"
+        return
+      }
+    } catch {
+      # Ignore cache read issues and fall back to live network verification.
+    }
   }
 
   $versionDirectory = "qt6_$($Version.Replace('.', ''))"
@@ -122,13 +166,24 @@ function Assert-CiQtPackagesAvailable {
       throw "CI Qt $Version package metadata returned HTTP $($response.StatusCode) for $platform"
     }
   }
+
+  if (-not [string]::IsNullOrWhiteSpace($CacheFilePath)) {
+    try {
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $CacheFilePath) | Out-Null
+      Set-Content -Path $CacheFilePath -Value $Version -NoNewline
+    } catch {
+      # Non-fatal if cache cannot be written.
+    }
+  }
   Write-Host "CI Qt packages: $Version metadata available for Windows, Linux, and macOS"
 }
 
 function Assert-QtVersionCompatibleWithCi {
   param(
     [string] $RepositoryRoot,
-    [string] $QtBinaryDirectory
+    [string] $QtBinaryDirectory,
+    [string] $BuildDirectory,
+    [bool] $ForceNetworkCheck = $false
   )
 
   $actionPath = Join-Path $RepositoryRoot ".github\actions\setup-common\action.yml"
@@ -137,7 +192,8 @@ function Assert-QtVersionCompatibleWithCi {
     throw "Could not read the CI Qt version from $actionPath"
   }
   $ciVersion = $versionLine.Matches[0].Groups[1].Value
-  Assert-CiQtPackagesAvailable $ciVersion
+  $cachePath = Join-Path $BuildDirectory "codex-logs\ci-qt-package-cache.txt"
+  Assert-CiQtPackagesAvailable $ciVersion $cachePath $ForceNetworkCheck
 
   $qmake = Join-Path $QtBinaryDirectory "qmake.exe"
   if (-not (Test-Path $qmake)) {
@@ -238,6 +294,93 @@ function Get-AffectedBuildPlan {
   }
 }
 
+function Get-FocusedTestFilterForDirectory {
+  param(
+    [string] $RepositoryRoot,
+    [string] $TestDirectory,
+    [string[]] $ChangedFiles
+  )
+
+  $relativeTestDir = (ConvertTo-RepoPath ([System.IO.Path]::GetRelativePath($RepositoryRoot, $TestDirectory)))
+  if ($relativeTestDir -notmatch '^(lib/[^/]+)/') {
+    return $null
+  }
+  $libraryPrefix = $Matches[1]
+  $libraryChanges = @($ChangedFiles | Where-Object { $_ -like "$libraryPrefix/*" })
+  if ($libraryChanges.Count -eq 0) {
+    return $null
+  }
+
+  # If only CMake or non-C++ files changed in the library without any C/C++ source/header
+  # or test changes, do not narrow to a subset.
+  $codeChanges = @($libraryChanges | Where-Object { $_ -match '\.(c|cc|cpp|cxx|h|hpp|hxx|inl)$' })
+  if ($codeChanges.Count -eq 0) {
+    return $null
+  }
+
+  $affectedTestFiles = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+  $stems = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+
+  foreach ($file in $codeChanges) {
+    $fullPath = Join-Path $RepositoryRoot ($file.Replace('/', '\'))
+    if ($file -like "$relativeTestDir/*" -and (Test-Path $fullPath)) {
+      [void] $affectedTestFiles.Add((Resolve-Path $fullPath).Path)
+    } else {
+      $stem = [System.IO.Path]::GetFileNameWithoutExtension($file)
+      if ($stem -match '^tst_(.+)$') {
+        $stem = $Matches[1]
+      }
+      if (-not [string]::IsNullOrWhiteSpace($stem)) {
+        [void] $stems.Add($stem)
+      }
+    }
+  }
+
+  $allTestSources = @(Get-ChildItem -Path $TestDirectory -Filter "*.cpp" -File -Recurse -ErrorAction SilentlyContinue)
+  if ($stems.Count -gt 0 -and $allTestSources.Count -gt 0) {
+    foreach ($testSource in $allTestSources) {
+      $testBaseName = [System.IO.Path]::GetFileNameWithoutExtension($testSource.Name)
+      if ($testBaseName -match '^tst_(.+)$' -and $stems.Contains($Matches[1])) {
+        [void] $affectedTestFiles.Add($testSource.FullName)
+      }
+    }
+
+    $stemPattern = '\b(' + (($stems | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\b'
+    foreach ($matchInfo in (Select-String -Path $allTestSources.FullName -Pattern $stemPattern -ErrorAction SilentlyContinue)) {
+      [void] $affectedTestFiles.Add($matchInfo.Path)
+    }
+  }
+
+  if ($affectedTestFiles.Count -eq 0) {
+    return $null
+  }
+
+  $testCases = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal)
+  foreach ($testFile in $affectedTestFiles) {
+    $content = Get-Content -Raw -Path $testFile -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrWhiteSpace($content)) {
+      continue
+    }
+    foreach ($m in [regex]::Matches($content, '(?m)^\s*TEST_CASE\(\s*"([^"]+)"')) {
+      [void] $testCases.Add($m.Groups[1].Value)
+    }
+  }
+
+  if ($testCases.Count -eq 0 -or $testCases.Count -gt 30) {
+    return $null
+  }
+
+  $escapedCases = @($testCases | Sort-Object | ForEach-Object { [regex]::Escape($_) })
+  return [PSCustomObject]@{
+    Regex = '^(' + ($escapedCases -join '|') + ')(: .*)?$'
+    CaseCount = $testCases.Count
+    FileCount = $affectedTestFiles.Count
+  }
+}
+
 function ConvertTo-StrictClangCommand {
   param(
     [string] $Command,
@@ -276,7 +419,8 @@ function Invoke-StrictCompile {
     [System.Management.Automation.PathInfo] $ResolvedBuildDirectory,
     [string] $RepositoryRoot,
     [string[]] $ChangedFiles,
-    [string] $ClangCompiler
+    [string] $ClangCompiler,
+    [int] $MaxJobs = 4
   )
 
   $sourceFiles = @(
@@ -297,27 +441,102 @@ function Invoke-StrictCompile {
     throw "Could not read Ninja compile commands from $($ResolvedBuildDirectory.Path)"
   }
 
-  Write-Host "Strict compile: $($sourceFiles.Count) changed translation unit(s)"
-  Push-Location $ResolvedBuildDirectory.Path
+  # Index compile commands in a single pass for O(1) lookup per changed source file.
+  $commandBySource = [System.Collections.Generic.Dictionary[string, string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($line in $commands) {
+    if ($line -match '(?:-c|/c)\s+"?([^"]+)"?\s*$') {
+      $normalizedSource = $Matches[1].Trim().Replace('/', '\')
+      $commandBySource[$normalizedSource] = $line
+    }
+  }
+
+  $workItems = [System.Collections.Generic.List[PSCustomObject]]::new()
+  foreach ($sourceFile in $sourceFiles) {
+    $normalizedFile = $sourceFile.Replace('/', '\')
+    $command = $null
+    if (-not $commandBySource.TryGetValue($normalizedFile, [ref] $command)) {
+      throw "No Ninja compile command found for $sourceFile. Build the affected target once and retry."
+    }
+    $strictCommand = ConvertTo-StrictClangCommand $command $ClangCompiler
+    $workItems.Add([PSCustomObject]@{
+      SourceFile = $sourceFile
+      FileName = [System.IO.Path]::GetFileName($sourceFile)
+      StrictCommand = $strictCommand
+    })
+  }
+
+  $effectiveConcurrency = [Math]::Max(1, [Math]::Min($MaxJobs, $workItems.Count))
+  Write-Host "Strict compile: $($workItems.Count) changed translation unit(s) (jobs=$effectiveConcurrency)"
+
+  $running = [System.Collections.Generic.List[PSCustomObject]]::new()
+  $nextIndex = 0
   try {
-    foreach ($sourceFile in $sourceFiles) {
-      $pathAlternatives = @($sourceFile, $sourceFile.Replace('\', '/'))
-      $pathPattern = ($pathAlternatives | ForEach-Object { [regex]::Escape($_) }) -join '|'
-      $compilePattern = '(?i)(?:-c|/c)\s+"?(?:' + $pathPattern + ')"?\s*$'
-      $command = $commands | Where-Object { $_ -match $compilePattern } | Select-Object -Last 1
-      if (-not $command) {
-        throw "No Ninja compile command found for $sourceFile. Build the affected target once and retry."
+    while ($nextIndex -lt $workItems.Count -or $running.Count -gt 0) {
+      while ($nextIndex -lt $workItems.Count -and $running.Count -lt $effectiveConcurrency) {
+        $item = $workItems[$nextIndex]
+        $nextIndex++
+
+        Write-Host "  clang-cl $($item.FileName)"
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = "cmd.exe"
+        $psi.Arguments = "/d /s /c `"$($item.StrictCommand) 2>&1`""
+        $psi.WorkingDirectory = $ResolvedBuildDirectory.Path
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $false
+        $psi.CreateNoWindow = $true
+
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $psi
+        [void] $process.Start()
+        $outputTask = $process.StandardOutput.ReadToEndAsync()
+
+        $running.Add([PSCustomObject]@{
+          Item = $item
+          Process = $process
+          OutputTask = $outputTask
+        })
       }
 
-      Write-Host "  clang-cl $([System.IO.Path]::GetFileName($sourceFile))"
-      $strictCommand = ConvertTo-StrictClangCommand $command $ClangCompiler
-      & cmd.exe /d /s /c $strictCommand
-      if ($LASTEXITCODE -ne 0) {
-        throw "Strict compile failed for $sourceFile"
+      $completedIndex = -1
+      for ($i = 0; $i -lt $running.Count; $i++) {
+        if ($running[$i].Process.HasExited) {
+          $completedIndex = $i
+          break
+        }
+      }
+
+      if ($completedIndex -lt 0) {
+        [void] $running[0].Process.WaitForExit(100)
+        continue
+      }
+
+      $completed = $running[$completedIndex]
+      $running.RemoveAt($completedIndex)
+      $completed.Process.WaitForExit()
+      $output = $completed.OutputTask.GetAwaiter().GetResult()
+      $exitCode = $completed.Process.ExitCode
+      $completed.Process.Dispose()
+
+      if (-not [string]::IsNullOrWhiteSpace($output)) {
+        Write-Host $output.TrimEnd()
+      }
+      if ($exitCode -ne 0) {
+        throw "Strict compile failed for $($completed.Item.SourceFile)"
       }
     }
   } finally {
-    Pop-Location
+    foreach ($active in $running) {
+      try {
+        if (-not $active.Process.HasExited) {
+          $active.Process.Kill()
+        }
+      } catch {
+      } finally {
+        $active.Process.Dispose()
+      }
+    }
   }
 }
 
@@ -391,22 +610,14 @@ try {
 
   $changedFiles = @(Get-ChangedFiles $effectiveBaseRef $Paths)
   Write-Host "Changed files considered: $($changedFiles.Count)"
-  if ($changedFiles.Count -eq 0) {
+  if ($changedFiles.Count -eq 0 -and -not $Full) {
     Write-Host "Nothing to check."
     exit 0
   }
 
   if (-not $SkipQtVersionCheck) {
-    Assert-QtVersionCompatibleWithCi $repositoryRoot $QtBin
-  }
-
-  if (-not $SkipStrictCompile) {
-    $clangCompiler = if ([string]::IsNullOrWhiteSpace($ClangCl)) {
-      (Get-Command clang-cl.exe -ErrorAction Stop).Source
-    } else {
-      (Resolve-Path $ClangCl -ErrorAction Stop).Path
-    }
-    Invoke-StrictCompile $resolvedBuildDir $repositoryRoot $changedFiles $clangCompiler
+    $forceQtNetworkCheck = [bool] $Full -or ($changedFiles -contains ".github/actions/setup-common/action.yml")
+    Assert-QtVersionCompatibleWithCi $repositoryRoot $QtBin $resolvedBuildDir.Path $forceQtNetworkCheck
   }
 
   $plan = Get-AffectedBuildPlan $repositoryRoot $changedFiles $Full
@@ -418,6 +629,15 @@ try {
     foreach ($target in $plan.BuildTargets) {
       Invoke-FilteredBuild $repositoryRoot $resolvedBuildDir.Path $target $QtBin $BuildJobs
     }
+  }
+
+  if (-not $SkipStrictCompile) {
+    $clangCompiler = if ([string]::IsNullOrWhiteSpace($ClangCl)) {
+      (Get-Command clang-cl.exe -ErrorAction Stop).Source
+    } else {
+      (Resolve-Path $ClangCl -ErrorAction Stop).Path
+    }
+    Invoke-StrictCompile $resolvedBuildDir $repositoryRoot $changedFiles $clangCompiler $BuildJobs
   }
 
   if ($SkipTests) {
@@ -433,8 +653,29 @@ try {
       $relativeTestDirectory = [System.IO.Path]::GetRelativePath(
         $repositoryRoot, $testDirectory)
       $buildTestDirectory = Join-Path $resolvedBuildDir.Path $relativeTestDirectory
-      Write-Host "==> Test $relativeTestDirectory"
-      & ctest --test-dir $buildTestDirectory --parallel $effectiveTestJobs --output-on-failure
+
+      $ctestArgs = @(
+        "--test-dir", $buildTestDirectory,
+        "--parallel", $effectiveTestJobs,
+        "--output-on-failure"
+      )
+
+      if (-not [string]::IsNullOrWhiteSpace($TestFilter)) {
+        Write-Host "==> Test $relativeTestDirectory (filter: $TestFilter)"
+        $ctestArgs += @("-R", $TestFilter)
+      } elseif (-not $Full -and -not $AllTests) {
+        $focusedFilter = Get-FocusedTestFilterForDirectory $repositoryRoot $testDirectory $changedFiles
+        if ($null -ne $focusedFilter) {
+          Write-Host "==> Test $relativeTestDirectory ($($focusedFilter.CaseCount) focused case(s) from $($focusedFilter.FileCount) test file(s); pass -AllTests for full suite)"
+          $ctestArgs += @("-R", $focusedFilter.Regex)
+        } else {
+          Write-Host "==> Test $relativeTestDirectory (full suite)"
+        }
+      } else {
+        Write-Host "==> Test $relativeTestDirectory (full suite)"
+      }
+
+      & ctest @ctestArgs
       if ($LASTEXITCODE -ne 0) {
         throw "CTest failed in $buildTestDirectory"
       }
