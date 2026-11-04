@@ -41,6 +41,7 @@
 #include "ui/ExtrudeTool.h"
 #include "ui/FaceTool.h"
 #include "ui/InputState.h"
+#include "ui/LightmapPreview.h"
 #include "ui/MapDocument.h"
 #include "ui/MoveObjectsTool.h"
 #include "ui/PathTool.h"
@@ -63,6 +64,7 @@ namespace tb::ui
 
 MapViewToolBox::MapViewToolBox(MapDocument& document, QStackedLayout* bookCtrl)
   : m_document{document}
+  , m_lightmapPreview{std::make_unique<LightmapPreview>(document)}
   , m_selectMode{pref(Preferences::Default2DSelectMode)}
 {
   createTools(bookCtrl);
@@ -88,6 +90,11 @@ ActionExecutionContext MapViewToolBox::actionContext(
 {
   return m_actionContextFactory ? m_actionContextFactory(view)
                                 : ActionExecutionContext{app, nullptr, nullptr};
+}
+
+LightmapPreview& MapViewToolBox::lightmapPreview()
+{
+  return *m_lightmapPreview;
 }
 
 bool MapViewToolBox::selectMode() const

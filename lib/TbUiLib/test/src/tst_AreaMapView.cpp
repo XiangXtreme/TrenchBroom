@@ -9,6 +9,7 @@
 #include <QMouseEvent>
 #include <QScopeGuard>
 #include <QSettings>
+#include <QTemporaryDir>
 #include <QToolButton>
 #include <QtTest/QTest>
 
@@ -23,10 +24,14 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/AreaMapView.h"
 #include "ui/CyclingMapView.h"
+#include "ui/LightmapBaker.h"
+#include "ui/LightmapPreview.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
+#include "ui/QPathUtils.h"
 #include "ui/SwitchableMapViewContainer.h"
 
 #include <algorithm>
@@ -126,12 +131,73 @@ TEST_CASE("AreaMapView")
     quality->menu()->actions()[2]->trigger();
     CHECK(pref(Preferences::LightmapQuality) == Preferences::LightmapQualityUltra);
     CHECK(quality->text() == "Ultra");
-    emit native->lightmapBakeProgressChanged(true, 65);
+    REQUIRE(layout->splitArea(original, Qt::Horizontal));
+    auto* second = layout->areas().back();
+    second->setViewType(CyclingMapView::View_3D);
+    auto* otherQuality = second->findChild<QToolButton*>("MapViewLightmapQualityButton");
+    REQUIRE(otherQuality);
+    auto& preview = window.toolBox().lightmapPreview();
+    emit preview.progressChanged(true, 65);
     CHECK(quality->text() == "Ultra · ~1:05");
-    emit native->lightmapBakeProgressChanged(false, -1);
+    CHECK(otherQuality->text() == quality->text());
+    emit preview.progressChanged(false, -1);
     CHECK(quality->text() == "Ultra");
+    CHECK(otherQuality->text() == "Ultra");
     original->setViewType(CyclingMapView::View_XZ);
     CHECK(quality->isHidden());
+  }
+
+  SECTION("undo and a different edit invalidate a bake even without a paint")
+  {
+    const auto savedSetting = pref(Preferences::ShowLightmap);
+    const auto restoreSetting =
+      qScopeGuard([&] { setPref(Preferences::ShowLightmap, savedSetting); });
+    setPref(Preferences::ShowLightmap, true);
+
+    auto& map = document->map();
+    map.incModificationCount(1);
+    const auto editedCount = map.modificationCount();
+    auto& preview = window.toolBox().lightmapPreview();
+    auto changes = 0;
+    const auto connection =
+      QObject::connect(&preview, &LightmapPreview::changed, &window, [&] { ++changes; });
+    map.decModificationCount(1);
+    map.incModificationCount(1);
+    CHECK(map.modificationCount() == editedCount);
+    CHECK(changes == 2);
+    QObject::disconnect(connection);
+  }
+
+  SECTION("a cancelled compiler cannot complete a replacement bake")
+  {
+    auto cancelledCallbacks = 0;
+    auto replacementError = std::string{};
+    auto baker = LightmapBaker{};
+    auto temp = QTemporaryDir{};
+    REQUIRE(temp.isValid());
+
+    // Use a guaranteed executable. Its compiler arguments are irrelevant because
+    // cancellation happens before the event loop can deliver the result.
+    baker.start(
+      document->map(),
+      pathFromQString(QCoreApplication::applicationFilePath()),
+      1,
+      Preferences::LightmapQualityNormal,
+      [&](auto, const auto&) { ++cancelledCallbacks; });
+    REQUIRE(baker.running());
+    baker.cancel();
+    CHECK_FALSE(baker.running());
+
+    baker.start(
+      document->map(),
+      pathFromQString(temp.filePath("missing-toolchain")),
+      1,
+      Preferences::LightmapQualityNormal,
+      [&](auto, const auto& error) { replacementError = error; });
+    REQUIRE(QTest::qWaitFor([&] { return !replacementError.empty(); }, 3000));
+    CHECK(replacementError == "could not start the map toolchain");
+    CHECK_FALSE(baker.running());
+    CHECK(cancelledCallbacks == 0);
   }
 
   SECTION("each area can select every view without losing cameras or changing the map")

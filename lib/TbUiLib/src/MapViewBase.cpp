@@ -28,7 +28,6 @@
 #include <QMimeData>
 #include <QResizeEvent>
 #include <QShortcut>
-#include <QStandardPaths>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -75,7 +74,6 @@
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "render/Compass.h"
-#include "render/LightmapData.h"
 #include "render/MapRenderer.h"
 #include "render/PrimitiveRenderer.h"
 #include "render/RenderBatch.h"
@@ -90,7 +88,7 @@
 #include "ui/CatalogAssetDrop.h"
 #include "ui/EnableDisableTagCallback.h"
 #include "ui/FlashSelectionAnimation.h"
-#include "ui/LightmapBaker.h"
+#include "ui/LightmapPreview.h"
 #include "ui/MapDocument.h"
 #include "ui/MapViewActivationTracker.h"
 #include "ui/MapViewToolBox.h"
@@ -116,7 +114,6 @@
 #include "vm/util.h"
 
 #include <algorithm>
-#include <chrono>
 #include <ranges>
 #include <vector>
 
@@ -155,6 +152,8 @@ MapViewBase::MapViewBase(
       update();
     }
   });
+  connect(
+    &toolBox.lightmapPreview(), &LightmapPreview::changed, this, [this] { update(); });
   setToolBox(toolBox);
   bindEvents();
   connectObservers();
@@ -376,20 +375,6 @@ void MapViewBase::preferenceDidChange(const std::filesystem::path& path)
   {
     fontManager().clearCache();
   }
-  if (path == Preferences::ShowLightmap.path && !pref(Preferences::ShowLightmap))
-  {
-    cancelLightmapBake();
-    if (!m_lightmapBakeSucceeded)
-      m_lightmapRevision = std::numeric_limits<size_t>::max();
-  }
-  if (
-    path == Preferences::LightmapQuality.path
-    || path == Preferences::LightmapToolPath.path)
-  {
-    cancelLightmapBake();
-    m_lightmapRevision = std::numeric_limits<size_t>::max();
-  }
-
   updateActionBindings();
   update();
 }
@@ -1008,109 +993,6 @@ void MapViewBase::toggleShowLightmap()
   togglePref(Preferences::ShowLightmap);
 }
 
-void MapViewBase::startLightmapBake()
-{
-  if (
-    !pref(Preferences::ShowLightmap)
-    || m_lightmapRevision != m_document.map().modificationCount())
-  {
-    m_lightmapRevision = std::numeric_limits<size_t>::max();
-    update();
-    return;
-  }
-  auto& logger = m_document.map().logger();
-
-  auto executable = pref(Preferences::LightmapToolPath);
-  if (executable.empty())
-  {
-    const auto found = QStandardPaths::findExecutable(QStringLiteral("hltools"));
-    if (!found.isEmpty())
-    {
-      executable = std::filesystem::path{found.toStdString()};
-    }
-  }
-  if (executable.empty())
-  {
-    logger.error() << "Cannot bake a lightmap: no map toolchain is configured.";
-    return;
-  }
-
-  if (!m_lightmapBaker)
-  {
-    m_lightmapBaker = std::make_unique<LightmapBaker>(this);
-    connect(
-      m_lightmapBaker.get(),
-      &LightmapBaker::remainingSecondsChanged,
-      this,
-      [this](const int seconds) { emit lightmapBakeProgressChanged(true, seconds); });
-  }
-
-  const auto startedAt = std::chrono::steady_clock::now();
-  logger.info() << "Baking a lightmap for the view.";
-  emit lightmapBakeProgressChanged(true, -1);
-
-  m_lightmapBaker->start(
-    m_document.map(),
-    executable,
-    8,
-    pref(Preferences::LightmapQuality),
-    [this, startedAt](
-      std::optional<render::LightmapBake> bake, const std::string& error) {
-      emit lightmapBakeProgressChanged(false, -1);
-      if (m_lightmapRevision != m_document.map().modificationCount())
-      {
-        update();
-        return;
-      }
-      auto& logger = m_document.map().logger();
-      if (!bake)
-      {
-        logger.error() << "Cannot bake a lightmap: " << error;
-        return;
-      }
-
-      auto assembly = std::make_unique<render::LightmapAssembly>();
-      render::buildLightmapAssembly(m_document.map(), *bake, *assembly);
-      if (assembly->blocks.empty())
-      {
-        logger.warn() << "The lightmap bake does not match any face of this map.";
-        return;
-      }
-
-      if (!m_lightmapAtlas)
-      {
-        m_lightmapAtlas = std::make_unique<render::LightmapAtlas>();
-      }
-      const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             std::chrono::steady_clock::now() - startedAt)
-                             .count();
-      logger.info() << "Lightmap baked in " << elapsed
-                    << " ms: " << assembly->blocks.size() << " of " << bake->faces.size()
-                    << " faces lit, " << assembly->width << "x" << assembly->height
-                    << " atlas.";
-
-      m_lightmapAtlas->setData(assembly->width, assembly->height, assembly->pixels);
-      m_lightmapAssembly = std::move(assembly);
-      m_lightmapBakeSucceeded = true;
-      update();
-    });
-}
-
-void MapViewBase::cancelLightmapBake()
-{
-  if (m_lightmapBakeTimer && m_lightmapBakeTimer->isActive())
-  {
-    m_lightmapBakeTimer->stop();
-    m_lightmapRevision = std::numeric_limits<size_t>::max();
-  }
-  if (m_lightmapBaker && m_lightmapBaker->running())
-  {
-    m_lightmapBaker->cancel();
-    m_lightmapRevision = std::numeric_limits<size_t>::max();
-    emit lightmapBakeProgressChanged(false, -1);
-  }
-}
-
 void MapViewBase::toggleShowEdges()
 {
   togglePref(Preferences::ShowEdges);
@@ -1281,32 +1163,7 @@ void MapViewBase::renderContents(gl::Gl& gl)
   renderContext.setShowBrushEntityBounds(pref(Preferences::ShowBrushEntityBounds));
   renderContext.setShowPointEntityBounds(pref(Preferences::ShowPointEntityBounds));
   renderContext.setShowFog(pref(Preferences::ShowFog));
-  renderContext.setShowLightmap(pref(Preferences::ShowLightmap));
-  if (!m_lightmapAtlas)
-  {
-    m_lightmapAtlas = std::make_unique<render::LightmapAtlas>();
-  }
-  renderContext.setLightmapAtlas(m_lightmapAtlas.get());
-  renderContext.setLightmapAssembly(m_lightmapAssembly.get());
-
-  const auto revision = map.modificationCount();
-  if (
-    pref(Preferences::ShowLightmap) && renderMode() == render::RenderMode::Render3D
-    && revision != m_lightmapRevision)
-  {
-    // Baking takes seconds, so wait for the map to settle before spending them again.
-    cancelLightmapBake();
-    m_lightmapRevision = revision;
-    m_lightmapBakeSucceeded = false;
-    if (!m_lightmapBakeTimer)
-    {
-      m_lightmapBakeTimer = new QTimer{this};
-      m_lightmapBakeTimer->setSingleShot(true);
-      connect(
-        m_lightmapBakeTimer, &QTimer::timeout, this, &MapViewBase::startLightmapBake);
-    }
-    m_lightmapBakeTimer->start(1500);
-  }
+  m_toolBox.lightmapPreview().configure(renderContext);
   renderContext.setShowGrid(grid.visible());
   renderContext.setGridSize(grid.actualSize());
   renderContext.setDpiScale(static_cast<float>(window()->devicePixelRatioF()));

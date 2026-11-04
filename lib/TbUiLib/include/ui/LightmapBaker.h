@@ -31,6 +31,7 @@
 #include <string>
 
 class QProcess;
+class QTemporaryDir;
 
 namespace tb::mdl
 {
@@ -91,7 +92,7 @@ private:
   void finish(std::optional<render::LightmapBake> bake, std::string error);
 
   std::unique_ptr<QProcess> m_process;
-  std::filesystem::path m_workDir;
+  std::shared_ptr<QTemporaryDir> m_workDir;
   std::filesystem::path m_executable;
   std::string m_quality;
   std::string m_output;

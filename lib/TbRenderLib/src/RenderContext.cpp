@@ -253,14 +253,15 @@ void RenderContext::setLightmapAtlas(LightmapAtlas* lightmapAtlas)
   m_lightmapAtlas = lightmapAtlas;
 }
 
-const LightmapAssembly* RenderContext::lightmapAssembly() const
+const std::shared_ptr<const LightmapAssembly>& RenderContext::lightmapAssembly() const
 {
   return m_lightmapAssembly;
 }
 
-void RenderContext::setLightmapAssembly(const LightmapAssembly* lightmapAssembly)
+void RenderContext::setLightmapAssembly(
+  std::shared_ptr<const LightmapAssembly> lightmapAssembly)
 {
-  m_lightmapAssembly = lightmapAssembly;
+  m_lightmapAssembly = std::move(lightmapAssembly);
 }
 
 bool RenderContext::showGrid() const

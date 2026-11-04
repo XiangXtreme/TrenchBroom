@@ -17,15 +17,25 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "mdl/BrushFace.h"
+#include "mdl/BrushNode.h"
+#include "mdl/LayerNode.h"
+#include "mdl/Map.h"
+#include "mdl/MapFixture.h"
+#include "mdl/Map_Layers.h"
+#include "mdl/Map_Nodes.h"
+#include "mdl/TestFactory.h"
+#include "mdl/WorldNode.h"
 #include "render/LightmapData.h"
 
 #include "vm/plane.h"
 #include "vm/vec.h"
 
-#include <catch2/catch_test_macros.hpp>
-
+#include <algorithm>
 #include <cstdint>
 #include <vector>
+
+#include <catch2/catch_test_macros.hpp>
 
 namespace tb::render
 {
@@ -292,6 +302,38 @@ TEST_CASE("buildLightmapAssembly")
 
     // the rectangles must not overlap, so their tiles differ
     CHECK(assembly.blocks[0].second.tile != assembly.blocks[1].second.tile);
+  }
+
+  SECTION("ignores excluded faces even when they overlap a baked face")
+  {
+    auto fixture = mdl::MapFixture{};
+    auto& map = fixture.create();
+    auto* included = mdl::createBrushNode(map);
+    auto* excluded = mdl::createBrushNode(map);
+    auto* excludedLayer = mdl::createLayer(map, "Excluded");
+    mdl::addNodes(
+      map, {{map.worldNode().defaultLayer(), {included}}, {excludedLayer, {excluded}}});
+    mdl::setOmitLayerFromExport(map, excludedLayer, true);
+
+    const auto isTop = [](const auto& face) {
+      return face.boundary().normal == vm::vec3d{0.0, 0.0, 1.0};
+    };
+    const auto& includedTop = *std::ranges::find_if(included->brush().faces(), isTop);
+    const auto& excludedTop = *std::ranges::find_if(excluded->brush().faces(), isTop);
+    auto bake = makeBake(40, 40);
+    auto record = makeRecord(
+      {-16, -16},
+      {33, 33},
+      {0, 0},
+      {{-16.0f, -16.0f}, {16.0f, -16.0f}, {16.0f, 16.0f}, {-16.0f, 16.0f}});
+    record.dist = static_cast<float>(includedTop.boundary().distance);
+    bake.faces.push_back(std::move(record));
+
+    auto assembly = LightmapAssembly{};
+    buildLightmapAssembly(map, bake, assembly);
+    REQUIRE(assembly.blockFor(includedTop) != nullptr);
+    CHECK(assembly.blockFor(excludedTop) == nullptr);
+    CHECK(assembly.blocks.size() == 1u);
   }
 
   SECTION("stays empty without baked data")

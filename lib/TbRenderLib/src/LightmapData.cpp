@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <functional>
 #include <limits>
 
 namespace tb::render
@@ -124,7 +125,10 @@ vm::polygon3f bakedPolygon(const LightmapFaceRecord& record)
   return vm::polygon3f{std::move(outline)};
 }
 
-bool overlapsFace(const LightmapFaceRecord& record, const FaceLightmapInput& face)
+bool overlapsFace(
+  const LightmapFaceRecord& record,
+  const FaceLightmapInput& face,
+  const vm::polygon3f& polygon)
 {
   auto outline = std::vector<vm::vec3f>{};
   outline.reserve(face.outline.size());
@@ -135,9 +139,7 @@ bool overlapsFace(const LightmapFaceRecord& record, const FaceLightmapInput& fac
   }
 
   return vm::polygons_overlap(
-    vm::polygon3f{std::move(outline)},
-    bakedPolygon(record),
-    vm::vec3f{0.0f, 0.0f, 1.0f});
+    vm::polygon3f{std::move(outline)}, polygon, vm::vec3f{0.0f, 0.0f, 1.0f});
 }
 
 /**
@@ -213,6 +215,10 @@ std::vector<FaceLightmapInput> collectBrushFaces(mdl::Map& map)
         }
       },
       [&](mdl::LayerNode& n) {
+        if (n.layer().omitFromExport())
+        {
+          return;
+        }
         for (auto* child : n.children())
         {
           self(self, *child);
@@ -254,14 +260,12 @@ std::vector<FaceLightmapInput> collectBrushFaces(mdl::Map& map)
 
 const LightmapBlock* LightmapAssembly::blockFor(const mdl::BrushFace& face) const
 {
-  for (const auto& [blockFace, block] : blocks)
-  {
-    if (blockFace == &face)
-    {
-      return &block;
-    }
-  }
-  return nullptr;
+  const auto it = std::ranges::lower_bound(
+    blocks,
+    &face,
+    std::less<const mdl::BrushFace*>{},
+    &decltype(blocks)::value_type::first);
+  return it != blocks.end() && it->first == &face ? &it->second : nullptr;
 }
 
 std::optional<LightmapBlock> buildFaceLightmap(
@@ -314,7 +318,8 @@ std::optional<LightmapBlock> buildFaceLightmap(
   if (!reference)
   {
     const auto overlapping = std::ranges::find_if(candidates, [&](const auto* candidate) {
-      return candidate->poly.size() >= 3 && overlapsFace(*candidate, face);
+      return candidate->poly.size() >= 3
+             && overlapsFace(*candidate, face, bakedPolygon(*candidate));
     });
     if (overlapping == candidates.end())
     {
@@ -405,16 +410,23 @@ std::optional<LightmapBlock> buildFaceLightmap(
 
   // Fill missing coverage for narrow fragments first. Then keep the surrounding
   // baked samples used by bilinear filtering along a BSP polygon's edges.
+  auto overlapping = std::vector<std::pair<const LightmapFaceRecord*, vm::polygon3f>>{};
+  for (const auto* record : group)
+  {
+    if (record->poly.size() >= 3)
+    {
+      auto polygon = bakedPolygon(*record);
+      if (overlapsFace(*record, face, polygon))
+      {
+        overlapping.emplace_back(record, std::move(polygon));
+      }
+    }
+  }
+
   for (const auto minOffset : {0.0f, -1.0f})
   {
-    for (const auto* record : group)
+    for (const auto& [record, polygon] : overlapping)
     {
-      if (record->poly.size() < 3 || !overlapsFace(*record, face))
-      {
-        continue;
-      }
-
-      const auto polygon = bakedPolygon(*record);
       copySamples(*record, [&](const float u, const float v) {
         const auto cell = vm::polygon3f{
           {u + minOffset, v + minOffset, 0.0f},
@@ -522,6 +534,11 @@ void buildLightmapAssembly(
     }
     result.blocks.emplace_back(block.face, block.block);
   }
+
+  std::ranges::sort(
+    result.blocks,
+    std::less<const mdl::BrushFace*>{},
+    &decltype(result.blocks)::value_type::first);
 }
 
 void buildLightmapAssembly(

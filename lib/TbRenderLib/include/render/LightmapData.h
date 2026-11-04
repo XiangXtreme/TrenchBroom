@@ -83,6 +83,7 @@ struct LightmapAssembly
   int width = 0;
   int height = 0;
   std::vector<std::uint8_t> pixels; // rgb8, rows top down
+  // Sorted by face address for lookup during vertex construction.
   std::vector<std::pair<const mdl::BrushFace*, LightmapBlock>> blocks;
 
   const LightmapBlock* blockFor(const mdl::BrushFace& face) const;
@@ -124,7 +125,7 @@ void buildLightmapAssembly(
   LightmapAssembly& result);
 
 /**
- * Collects every brush face of the map and builds an assembly for it.
+ * Collects brush faces from exportable layers and builds an assembly for them.
  */
 void buildLightmapAssembly(
   const mdl::Map& map, const LightmapBake& bake, LightmapAssembly& result);

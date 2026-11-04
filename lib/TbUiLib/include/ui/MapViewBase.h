@@ -20,7 +20,6 @@
 #pragma once
 
 #include "base/NotifierConnection.h"
-#include "render/LightmapAtlas.h"
 #include "ui/ActionContext.h"
 #include "ui/CameraLinkHelper.h"
 #include "ui/MapDocumentActionCache.h"
@@ -29,7 +28,6 @@
 #include "ui/ToolBoxConnector.h"
 
 #include <filesystem>
-#include <limits>
 #include <utility>
 #include <vector>
 
@@ -70,7 +68,6 @@ class MapRenderer;
 class PrimitiveRenderer;
 class RenderBatch;
 class RenderContext;
-struct LightmapAssembly;
 
 enum class RenderMode;
 } // namespace render
@@ -80,7 +77,6 @@ namespace ui
 class Action;
 class AnimationManager;
 class AppController;
-class LightmapBaker;
 class MapDocument;
 class PreparedAssetDrop;
 class MapViewToolBox;
@@ -107,12 +103,6 @@ protected:
 
 private:
   std::unique_ptr<render::Compass> m_compass;
-  std::unique_ptr<render::LightmapAtlas> m_lightmapAtlas;
-  std::unique_ptr<render::LightmapAssembly> m_lightmapAssembly;
-  std::unique_ptr<LightmapBaker> m_lightmapBaker;
-  QTimer* m_lightmapBakeTimer = nullptr;
-  size_t m_lightmapRevision = std::numeric_limits<size_t>::max();
-  bool m_lightmapBakeSucceeded = false;
   std::unique_ptr<render::PrimitiveRenderer> m_portalFileRenderer;
   bool m_renderingThumbnail = false;
   QTimer* m_materialAnimationTimer = nullptr;
@@ -344,9 +334,6 @@ public: // view filters
   void focusInEvent(QFocusEvent* event) override;
   void focusOutEvent(QFocusEvent* event) override;
 
-signals:
-  void lightmapBakeProgressChanged(bool baking, int remainingSeconds);
-
 public:
   ActionContext::Type actionContext() const;
   virtual ActionContext::Type viewActionContext() const = 0;
@@ -365,12 +352,6 @@ protected: // RenderView overrides
 private: // implement RenderView interface
   bool shouldRenderFocusIndicator() const override;
   void renderContents(gl::Gl& gl) override;
-
-  /**
-   * Starts a lightmap bake for the current map in the background.
-   */
-  void startLightmapBake();
-  void cancelLightmapBake();
 
   virtual void preRender();
   virtual render::RenderMode renderMode() = 0;

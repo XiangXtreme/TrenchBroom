@@ -25,6 +25,8 @@
 
 #include "vm/bbox.h"
 
+#include <memory>
+
 namespace tb
 {
 namespace gl
@@ -86,7 +88,7 @@ private:
   bool m_showFog = false;
   bool m_showLightmap = false;
   LightmapAtlas* m_lightmapAtlas = nullptr;
-  const LightmapAssembly* m_lightmapAssembly = nullptr;
+  std::shared_ptr<const LightmapAssembly> m_lightmapAssembly;
   bool m_goldSrcRendering = false;
   bool m_animationRequested = false;
   double m_animationTime = 0.0;
@@ -182,8 +184,8 @@ public:
    * The lightmap rectangle of every brush face; may be null, in which case faces carry
    * no lightmap coordinates.
    */
-  const LightmapAssembly* lightmapAssembly() const;
-  void setLightmapAssembly(const LightmapAssembly* lightmapAssembly);
+  const std::shared_ptr<const LightmapAssembly>& lightmapAssembly() const;
+  void setLightmapAssembly(std::shared_ptr<const LightmapAssembly> lightmapAssembly);
 
   bool showGrid() const;
   void setShowGrid(bool showGrid);

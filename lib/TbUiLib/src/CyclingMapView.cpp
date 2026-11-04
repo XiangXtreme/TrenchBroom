@@ -32,10 +32,12 @@
 #include "gl/Camera.h"
 #include "prefs/Preferences.h"
 #include "ui/ImageUtils.h"
+#include "ui/LightmapPreview.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewActivationTracker.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/WorkbenchSurface.h"
 
 #include "kd/contracts.h"
@@ -147,9 +149,12 @@ void CyclingMapView::createGui(
   addQuality(QStringLiteral("Normal"), Preferences::LightmapQualityNormal);
   addQuality(QStringLiteral("Ultra"), Preferences::LightmapQualityUltra);
   m_lightmapQualityButton->setMenu(qualityMenu);
+  auto& preview = toolBox.lightmapPreview();
+  m_bakingLightmap = preview.baking();
+  m_lightmapRemainingSeconds = preview.remainingSeconds();
   connect(
-    mapViewForType(View_3D),
-    &MapViewBase::lightmapBakeProgressChanged,
+    &preview,
+    &LightmapPreview::progressChanged,
     this,
     [this](const bool baking, const int seconds) {
       if (m_bakingLightmap != baking || m_lightmapRemainingSeconds != seconds)

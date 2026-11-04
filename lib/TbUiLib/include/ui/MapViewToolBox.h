@@ -47,6 +47,7 @@ class ChamferTool;
 class AssembleBrushTool;
 class CreateEntityTool;
 class DrawShapeTool;
+class LightmapPreview;
 class MapDocument;
 class MoveObjectsTool;
 class ExtrudeTool;
@@ -65,6 +66,7 @@ class MapViewToolBox : public ToolBox
 {
 private:
   MapDocument& m_document;
+  std::unique_ptr<LightmapPreview> m_lightmapPreview;
   std::function<ActionExecutionContext(MapViewBase*)> m_actionContextFactory;
   bool m_selectMode;
   QStackedLayout* m_bookCtrl = nullptr;
@@ -106,6 +108,8 @@ public:
   void setActionContextFactory(
     std::function<ActionExecutionContext(MapViewBase*)> factory);
   ActionExecutionContext actionContext(AppController& app, MapViewBase* view) const;
+
+  LightmapPreview& lightmapPreview();
 
 public: // tools
   bool selectMode() const;

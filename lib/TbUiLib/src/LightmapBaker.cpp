@@ -19,21 +19,23 @@
 
 #include "ui/LightmapBaker.h"
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QString>
 #include <QStringList>
+#include <QTemporaryDir>
 
 #include "mdl/ExportOptions.h"
 #include "mdl/Map.h"
 #include "prefs/Preferences.h"
 #include "ui/LightmapBakeReader.h"
+#include "ui/QPathUtils.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <limits>
-#include <system_error>
 #include <thread>
 
 namespace tb::ui
@@ -42,17 +44,10 @@ namespace tb::ui
 namespace
 {
 
-std::atomic<int> nextBakeId = 0;
-
 constexpr auto MapFileName = "lightmap.map";
 constexpr auto BspFileName = "lightmap.bsp";
 constexpr auto AtlasFileName = "lightmap.bmp";
 constexpr auto ManifestFileName = "lightmap.json";
-
-QString toQString(const std::filesystem::path& path)
-{
-  return QString::fromStdString(path.string());
-}
 
 int clampedThreadCount(const int threadCount)
 {
@@ -100,14 +95,9 @@ void LightmapBaker::start(
   m_progressBuffer.clear();
   m_stage = 0;
 
-  // Each bake gets its own directory: two views may bake at the same time, and sharing
-  // one directory would have them overwrite each other's output.
-  m_workDir = std::filesystem::temp_directory_path() / "tb-lightmap"
-              / ("bake-" + std::to_string(++nextBakeId));
-  auto ec = std::error_code{};
-  std::filesystem::remove_all(m_workDir, ec);
-  std::filesystem::create_directories(m_workDir, ec);
-  if (!std::filesystem::exists(m_workDir))
+  m_workDir = std::make_shared<QTemporaryDir>(
+    QDir::temp().filePath(QStringLiteral("tb-lightmap-XXXXXX")));
+  if (!m_workDir->isValid())
   {
     finish(std::nullopt, "could not create the lightmap scratch directory");
     return;
@@ -115,7 +105,7 @@ void LightmapBaker::start(
 
   // Use the live map and the same layer filtering as a normal compile export.
   const auto exported = map.exportAs(mdl::MapExportOptions{
-    m_workDir / MapFileName,
+    pathFromQString(m_workDir->filePath(MapFileName)),
     false,
     std::nullopt,
     std::nullopt,
@@ -151,10 +141,29 @@ void LightmapBaker::cancel()
 {
   m_stage = -1;
   m_callback = nullptr;
-  if (m_process && m_process->state() != QProcess::NotRunning)
+  auto workDir = std::move(m_workDir);
+  if (auto* process = m_process.release())
   {
-    m_process->kill();
-    m_process->waitForFinished(3000);
+    disconnect(process, nullptr, this, nullptr);
+    if (process->state() == QProcess::NotRunning)
+    {
+      process->deleteLater();
+      return;
+    }
+
+    // Destroying a running QProcess waits for it. Keep the process and its files
+    // alive until the OS reports exit, independently of the next bake or view.
+    process->setParent(QCoreApplication::instance());
+    connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    connect(process, &QProcess::errorOccurred, process, [process](const auto error) {
+      if (error == QProcess::FailedToStart)
+        process->deleteLater();
+    });
+    connect(process, &QObject::destroyed, [workDir = std::move(workDir)] {});
+    if (process->state() == QProcess::Starting)
+      connect(process, &QProcess::started, process, &QProcess::kill);
+    else
+      process->kill();
   }
 }
 
@@ -207,7 +216,7 @@ void LightmapBaker::runStage()
     // the smallest nonzero luxel value so they do not fall back to full brightness.
     arguments = {
       QStringLiteral("compile"),
-      toQString(m_workDir / MapFileName),
+      m_workDir->filePath(MapFileName),
       QStringLiteral("-minlight"),
       QStringLiteral("1"),
       QStringLiteral("-threads"),
@@ -221,14 +230,14 @@ void LightmapBaker::runStage()
   {
     arguments = {
       QStringLiteral("lightmap"),
-      toQString(m_workDir / BspFileName),
-      toQString(m_workDir / AtlasFileName),
+      m_workDir->filePath(BspFileName),
+      m_workDir->filePath(AtlasFileName),
       QStringLiteral("-manifest"),
-      toQString(m_workDir / ManifestFileName),
+      m_workDir->filePath(ManifestFileName),
       QStringLiteral("-force")};
   }
 
-  m_process->setProgram(toQString(m_executable));
+  m_process->setProgram(pathAsQString(m_executable));
   m_process->setArguments(arguments);
   m_process->start();
 }
@@ -257,7 +266,9 @@ void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
 
   auto error = std::string{};
   auto bake = readLightmapBake(
-    m_workDir / ManifestFileName, m_workDir / AtlasFileName, error);
+    pathFromQString(m_workDir->filePath(ManifestFileName)),
+    pathFromQString(m_workDir->filePath(AtlasFileName)),
+    error);
   if (!bake)
   {
     finish(std::nullopt, error);
@@ -269,13 +280,10 @@ void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
 void LightmapBaker::finish(
   std::optional<render::LightmapBake> bake, std::string error)
 {
-  m_stage = -1;
-  if (m_callback)
-  {
-    auto callback = std::move(m_callback);
-    m_callback = nullptr;
+  auto callback = std::move(m_callback);
+  cancel();
+  if (callback)
     callback(std::move(bake), error);
-  }
 }
 
 } // namespace tb::ui
