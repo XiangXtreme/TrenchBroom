@@ -1,7 +1,7 @@
 "use strict";
 
 globalThis.TerrainBake = (() => {
-  const columns = 10, rows = 5, core = 96, gutter = 16, period = 32;
+  const columns = 10, rows = 5, core = 96, gutter = 16, period = 128;
   const width = columns * core, height = rows * core;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const wrap = (value, size) => ((value % size) + size) % size;
@@ -70,22 +70,22 @@ globalThis.TerrainBake = (() => {
   for (let y = 0; y < period; y++) {
     for (let x = 0; x < period; x++) {
       const index = y * period + x;
-      grass[index] = 3 + 8 * valueNoise(x, y, 8, 10) + 5 * noise(x, y, 9)
-        - 3 * Number(noise(x, Math.floor(y / 2), 32) < 0.15);
-      dirt[index] = 2 + 7 * valueNoise(x, y, 4, 21) + 5 * noise(x, y, 37)
-        + 3 * Number(noise(x, y, 44) > 0.94);
+      grass[index] = 2 + 3 * valueNoise(x, y, 32, 10) + 4 * valueNoise(x, y, 4, 32)
+        + 5 * noise(x, y, 9);
+      dirt[index] = 3 + 2 * valueNoise(x, y, 16, 21) + 4 * valueNoise(x, y, 4, 44)
+        + 4 * noise(x, y, 37);
     }
   }
 
-  function raster(size, sample) {
+  function raster(size, sample, originX = 0, originY = 0) {
     const alpha = new Float32Array(size * size), shade = new Float32Array(size * size);
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const index = y * size + x;
         const weight = sample(x, y);
         alpha[index] = weight * (15 / 255);
-        shade[index] = mix(grass[wrap(y, period) * period + wrap(x, period)],
-          dirt[wrap(y, period) * period + wrap(x, period)], weight / 255);
+        const materialIndex = wrap(originY + y, period) * period + wrap(originX + x, period);
+        shade[index] = mix(grass[materialIndex], dirt[materialIndex], weight / 255);
       }
     }
     return Array.from({ length: 4 }, (_, level) => {
@@ -173,7 +173,8 @@ globalThis.TerrainBake = (() => {
 
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < columns; col++) {
-        const at = (x, y) => sample(col * core - gutter + x, row * core - gutter + y);
+        const originX = col * core - gutter, originY = row * core - gutter;
+        const at = (x, y) => sample(originX + x, originY + y);
         let lo = 255, hi = 0, hash = 2166136261;
         const signature = new Uint8Array(size * size);
         for (let y = 0; y < size; y++) {
@@ -191,16 +192,17 @@ globalThis.TerrainBake = (() => {
           sharedCells.push(index);
           continue;
         }
-        const matches = uniqueTiles.get(hash) ?? [];
-        // Cell size and gutter are multiples of the base texture period or share
-        // a fixed phase; matching the full padded mask preserves every mip.
+        // A matching mask can only share pixels at the same base texture phase.
+        const key = [wrap(originX, period), wrap(originY, period), hash].join(":");
+        const matches = uniqueTiles.get(key) ?? [];
         let match = matches.find((candidate) =>
           candidate.signature.every((value, index) => signature[index] === value));
         if (!match) {
           match = { signature, texture: shared.length };
           matches.push(match);
-          uniqueTiles.set(hash, matches);
-          shared.push({ name: "tm_s" + shared.length, size, levels: raster(size, at) });
+          uniqueTiles.set(key, matches);
+          shared.push({ name: "tm_s" + shared.length, size,
+            levels: raster(size, at, originX, originY) });
         }
         originalCells.push(original.length);
         original.push({ ...shared[match.texture], name: "tm_u" + original.length });

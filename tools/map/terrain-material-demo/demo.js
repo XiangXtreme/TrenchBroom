@@ -40,7 +40,7 @@
       for (let y = 0; y < side; y++) {
         for (let x = 0; x < side; x++) {
           const source = index < 2
-            ? (y % tileSide) * tileSide + x % tileSide
+            ? ((startY + y) % tileSide) * tileSide + (startX + x) % tileSide
             : (y + gutter / step) * tileSide + x + gutter / step;
           const color = levels[level][source] * 3;
           const output = ((startY + y) * image.width + startX + x) * 4;
@@ -137,7 +137,7 @@
     const base = results.original.wad.length, shared = results.shared.wad.length;
     find("savings").textContent = number.format(base - shared) + " B（" +
       ((1 - shared / base) * 100).toFixed(1) + "%）";
-    status.textContent = "两版共用同一笔迹，权重和边缘采样一致的过渡块可以复用。";
+    status.textContent = "两版共用同一笔迹，权重和底纹相位一致的过渡块可以复用。";
     for (const panel of panels) {
       const variant = results[panel.id];
       panel.counts = new Uint16Array(variant.textures.length);
