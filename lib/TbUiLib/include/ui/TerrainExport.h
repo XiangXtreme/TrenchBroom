@@ -14,6 +14,9 @@
 
 namespace tb::ui
 {
+// Bump when generation changes so saved results are refreshed for unchanged maps.
+inline constexpr std::uint64_t TerrainGeneratorVersion = 1;
+
 struct TerrainSnapshot
 {
   std::vector<std::uint8_t> map;

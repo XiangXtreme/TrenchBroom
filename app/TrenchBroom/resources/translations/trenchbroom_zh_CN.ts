@@ -8469,8 +8469,8 @@ Removing them frees about %3. Current assets and versions are kept.</source>
             <translation>涂刷地形</translation>
         </message>
         <message>
-            <source>Generate MAP and WAD…</source>
-            <translation>生成 MAP 和 WAD…</translation>
+            <source>Export Compile Snapshot…</source>
+            <translation>导出编译快照…</translation>
         </message>
         <message>
             <source>Material</source>

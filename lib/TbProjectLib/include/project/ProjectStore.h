@@ -41,6 +41,17 @@ struct RevisionCleanup
   bool empty() const { return revisions.empty() && contentRows == 0; }
 };
 
+/** Derived terrain data for one saved map revision. */
+struct TerrainCompile
+{
+  std::uint64_t sourceRevision = 0;
+  std::uint64_t generatorVersion = 0;
+  std::uint64_t topFaces = 0;
+  std::vector<std::uint8_t> map;
+  std::vector<std::uint8_t> wad;
+  std::string error;
+};
+
 /**
  * Single-file project catalog. Each mutation commits atomically; callers must serialize
  * access to a store. Content is immutable and loaded separately from catalog metadata.
@@ -104,6 +115,11 @@ public:
     const std::string& id,
     ContentKind kind,
     std::optional<std::uint64_t> revision = std::nullopt) const;
+
+  // The derived data is replaceable and is valid only for the recorded map revision.
+  Result<std::optional<TerrainCompile>> terrainCompile(const std::string& id) const;
+  Result<void> setTerrainCompile(const std::string& id, const TerrainCompile& data);
+  Result<void> clearTerrainCompile(const std::string& id);
 
   // Snapshot provenance. A project only ever knows the library revisions it captured.
   Result<std::vector<Asset>> libraryLinkedAssets() const;

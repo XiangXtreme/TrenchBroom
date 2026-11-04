@@ -519,6 +519,7 @@ public:
   std::filesystem::path path;
   Database database;
   ProjectInfo info;
+  std::uint64_t schemaVersion = 3;
 
   Impl(std::filesystem::path projectPath, const bool create)
     : path{std::move(projectPath)}
@@ -598,8 +599,9 @@ Result<std::unique_ptr<ProjectStore>> ProjectStore::open(
       transaction.commit();
       version = 3;
     }
-    if (version != 3)
-      throw StoreError{"Not a supported TB project (format version 3 required)."};
+    if (version != 3 && version != 4)
+      throw StoreError{"Not a supported TB project (format version 3 or 4 required)."};
+    impl->schemaVersion = version;
     auto info = Statement{db, "SELECT id,name,game_id FROM project"};
     if (!info.next())
       throw StoreError{"Project metadata is missing."};
@@ -620,6 +622,15 @@ Result<std::unique_ptr<ProjectStore>> ProjectStore::open(
       auto librariesProbe = Statement{db, "SELECT id FROM libraries LIMIT 1"};
       while (librariesProbe.next())
         ;
+      if (version == 4)
+      {
+        auto terrainProbe = Statement{
+          db,
+          "SELECT asset_id,source_revision,generator_version,top_faces,map,wad,error "
+          "FROM terrain_compile LIMIT 1"};
+        while (terrainProbe.next())
+          ;
+      }
     }
     configure(db);
     return std::unique_ptr<ProjectStore>{new ProjectStore{std::move(impl)}};
@@ -935,6 +946,86 @@ Result<std::vector<std::uint8_t>> ProjectStore::readAsset(
     if (!query.next())
       throw StoreError{"Project asset content not found."};
     return query.bytes(0);
+  });
+}
+
+Result<std::optional<TerrainCompile>> ProjectStore::terrainCompile(
+  const std::string& id) const
+{
+  return attempt([&]() -> std::optional<TerrainCompile> {
+    if (m_impl->schemaVersion < 4)
+      return std::nullopt;
+    auto query = Statement{
+      m_impl->database.get(),
+      "SELECT source_revision,generator_version,top_faces,map,wad,error "
+      "FROM terrain_compile WHERE asset_id=?"};
+    query.bind(1, id);
+    if (!query.next())
+      return std::nullopt;
+    return TerrainCompile{
+      query.integer(0),
+      query.integer(1),
+      query.integer(2),
+      query.bytes(3),
+      query.bytes(4),
+      query.text(5)};
+  });
+}
+
+Result<void> ProjectStore::setTerrainCompile(
+  const std::string& id, const TerrainCompile& data)
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    const auto asset = requireAsset(db, id);
+    if (
+      asset.type != AssetType::Map || asset.revision != data.sourceRevision
+      || data.generatorVersion == 0
+      || (data.error.empty() && (data.map.empty() || data.wad.empty()))
+      || data.error.find('\0') != std::string::npos)
+      throw StoreError{"Invalid or outdated terrain compile data."};
+    if (m_impl->schemaVersion == 3)
+    {
+      execute(
+        db,
+        "CREATE TABLE terrain_compile("
+        "asset_id TEXT PRIMARY KEY REFERENCES heads(asset_id) ON DELETE CASCADE,"
+        "source_revision INTEGER NOT NULL,generator_version INTEGER NOT NULL,"
+        "top_faces INTEGER NOT NULL,map BLOB NOT NULL,wad BLOB NOT NULL,"
+        "error TEXT NOT NULL);"
+        "PRAGMA user_version=4;");
+    }
+    auto write = Statement{
+      db,
+      "INSERT INTO terrain_compile"
+      "(asset_id,source_revision,generator_version,top_faces,map,wad,error) "
+      "VALUES(?,?,?,?,?,?,?) ON CONFLICT(asset_id) DO UPDATE SET "
+      "source_revision=excluded.source_revision,"
+      "generator_version=excluded.generator_version,top_faces=excluded.top_faces,"
+      "map=excluded.map,wad=excluded.wad,error=excluded.error"};
+    write.bind(1, id);
+    write.bind(2, data.sourceRevision);
+    write.bind(3, data.generatorVersion);
+    write.bind(4, data.topFaces);
+    write.bind(5, data.map);
+    write.bind(6, data.wad);
+    write.bind(7, data.error);
+    write.run();
+    transaction.commit();
+    m_impl->schemaVersion = 4;
+  });
+}
+
+Result<void> ProjectStore::clearTerrainCompile(const std::string& id)
+{
+  return attempt([&] {
+    if (m_impl->schemaVersion < 4)
+      return;
+    auto remove =
+      Statement{m_impl->database.get(), "DELETE FROM terrain_compile WHERE asset_id=?"};
+    remove.bind(1, id);
+    remove.run();
   });
 }
 

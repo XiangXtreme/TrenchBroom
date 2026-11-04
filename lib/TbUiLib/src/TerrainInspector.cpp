@@ -53,7 +53,7 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_create = new QPushButton{tr("Create Terrain Region")};
   m_paint = new QPushButton{tr("Paint Terrain")};
   m_paint->setCheckable(true);
-  m_generate = new QPushButton{tr("Generate MAP and WAD…")};
+  m_generate = new QPushButton{tr("Export Compile Snapshot…")};
 
   auto* form = new QFormLayout{};
   form->addRow(tr("Material"), m_material);

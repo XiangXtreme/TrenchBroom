@@ -838,7 +838,16 @@ TEST_CASE("Project terrain paint survives clipping and compile snapshots")
   texture.original = texture.compatible;
   requireProject(session->importAsset(texture));
   requireProject(session->registerDocument(document, asset.id));
+  CHECK(requireProject(session->terrainCompileNeedsSave(asset.id)));
   requireProject(session->save());
+  CHECK_FALSE(requireProject(session->terrainCompileNeedsSave(asset.id)));
+  const auto current = requireProject(session->store().findAsset(asset.id));
+  REQUIRE(current);
+  const auto cached = requireProject(session->store().terrainCompile(asset.id));
+  REQUIRE(cached);
+  CHECK(cached->sourceRevision == current->revision);
+  CHECK(cached->error.empty());
+  CHECK(cached->topFaces > 2);
   requireProject(session->exportCompileSnapshot(asset.id, root / "live"));
   CHECK(group->childCount() == 2);
   CHECK(group->group().terrainPaint() == painted);
@@ -863,6 +872,9 @@ TEST_CASE("Project terrain paint survives clipping and compile snapshots")
   requireProject(session->exportCompileSnapshot(asset.id, root / "reopened"));
   const auto compiledMap = readProjectFile(root / "live/map.map");
   const auto wad = readProjectFile(root / "live/textures.wad");
+  CHECK(compiledMap == cached->map);
+  const auto terrainWad = requireProject(project::readGoldSrcWad(cached->wad));
+  CHECK_FALSE(terrainWad.textures.empty());
   CHECK(compiledMap == readProjectFile(root / "reopened/map.map"));
   CHECK(wad == readProjectFile(root / "reopened/textures.wad"));
   const auto mapText = std::string{compiledMap.begin(), compiledMap.end()};
@@ -873,6 +885,40 @@ TEST_CASE("Project terrain paint survives clipping and compile snapshots")
   CHECK(std::ranges::any_of(archive.textures, [](const auto& entry) {
     return entry.valid && entry.name.starts_with("tbt0_") && entry.width > 64;
   }));
+
+  // A new map revision must invalidate the old generated result, even when its
+  // appearance is unchanged. Saving replaces it with data for the new revision.
+  auto changedInput = input;
+  changedInput.original.push_back('\n');
+  changedInput.compatible = changedInput.original;
+  const auto changed = requireProject(session->replaceAsset(asset.id, changedInput));
+  REQUIRE(changed.revision != current->revision);
+  CHECK(requireProject(session->terrainCompileNeedsSave(asset.id)));
+  requireProject(session->save());
+  const auto updated = requireProject(session->store().terrainCompile(asset.id));
+  REQUIRE(updated);
+  CHECK(updated->sourceRevision == changed.revision);
+  CHECK(updated->error.empty());
+  CHECK_FALSE(requireProject(session->terrainCompileNeedsSave(asset.id)));
+
+  // Broken terrain should remain editable and savable, while compilation reports it.
+  auto broken = std::string{input.original.begin(), input.original.end()};
+  const auto marker = std::string{"\"_tb_terrain_paint\" \""};
+  const auto markerPos = broken.find(marker);
+  REQUIRE(markerPos != std::string::npos);
+  const auto start = markerPos + marker.size();
+  const auto end = broken.find('"', start);
+  REQUIRE(end != std::string::npos);
+  broken.replace(start, end - start, "invalid");
+  auto brokenInput = input;
+  brokenInput.original.assign(broken.begin(), broken.end());
+  brokenInput.compatible = brokenInput.original;
+  requireProject(session->replaceAsset(asset.id, brokenInput));
+  requireProject(session->save());
+  const auto failed = requireProject(session->store().terrainCompile(asset.id));
+  REQUIRE(failed);
+  CHECK_FALSE(failed->error.empty());
+  CHECK(session->exportCompileSnapshot(asset.id, root / "broken").is_error());
 }
 
 TEST_CASE("ProjectSessionAssetLibrary")

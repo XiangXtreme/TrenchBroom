@@ -84,6 +84,7 @@ class ProjectSession : public QObject, public std::enable_shared_from_this<Proje
   Result<void> initialize(bool create, const std::string& name, const std::string& game);
   Result<void> stageMaps();
   Result<void> unstageMaps();
+  Result<void> updateTerrainCompiles();
   Result<void> refreshRuntime();
   Result<void> writeProject(const std::filesystem::path& path, bool overwrite);
   void bindDocument(MapDocument& document);
@@ -262,6 +263,7 @@ public:
   // Reads live edits without selecting revisions, saving the project or clearing dirty
   // state.
   Result<std::vector<std::uint8_t>> workingMapContents(const std::string& id) const;
+  Result<bool> terrainCompileNeedsSave(const std::string& id) const;
   Result<std::filesystem::path> assetFile(const project::Asset& asset) const;
   /**
    * Builds the capture plan for the given library resources.

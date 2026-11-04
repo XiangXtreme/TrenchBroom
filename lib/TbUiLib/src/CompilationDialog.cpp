@@ -269,6 +269,14 @@ Result<void> CompilationDialog::runProfile(
     const auto assetId = project->assetFor(m_document);
     if (!assetId)
       return Error{"This document is not a project map."};
+    const auto terrainNeedsSave = project->terrainCompileNeedsSave(*assetId);
+    if (terrainNeedsSave.is_error())
+      return std::get<Error>(terrainNeedsSave.error());
+    if (terrainNeedsSave.value())
+    {
+      if (const auto saved = project->save(); saved.is_error())
+        return std::get<Error>(saved.error());
+    }
     const auto asset = project->store().findAsset(*assetId);
     if (asset.is_error())
       return std::get<Error>(asset.error());

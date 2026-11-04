@@ -37,11 +37,19 @@
 #include <cctype>
 #include <functional>
 #include <set>
+#include <string_view>
 
 namespace tb::ui
 {
 namespace
 {
+bool containsTerrainPaint(const std::vector<std::uint8_t>& source)
+{
+  constexpr auto marker = std::string_view{"\"_tb_terrain_paint\""};
+  return std::search(source.begin(), source.end(), marker.begin(), marker.end())
+         != source.end();
+}
+
 // GoldSrc texture references and miptex names are case insensitive. The audit indexes
 // resources by this normalized form, so snapshot export must compare the same way.
 std::string normalizedTextureName(std::string name)
@@ -720,7 +728,40 @@ Result<void> ProjectSession::exportCompileSnapshot(
     }
   }
 
-  auto baked = bakeTerrainSnapshot(contents.value());
+  auto baked = [&]() -> Result<std::optional<TerrainSnapshot>> {
+    const auto* document = documentFor(mapAssetId);
+    if (!document || !document->map().modified())
+    {
+      const auto cached = m_store->terrainCompile(mapAssetId);
+      if (cached.is_error())
+        return std::get<Error>(cached.error());
+      if (
+        cached.value() && cached.value()->sourceRevision == map.value()->revision
+        && cached.value()->generatorVersion == TerrainGeneratorVersion)
+      {
+        const auto& data = *cached.value();
+        if (!data.error.empty())
+          return Error{data.error};
+        if (data.map.empty() || data.wad.empty() || containsTerrainPaint(data.map))
+          return Error{"Invalid cached terrain compilation data."};
+        const auto wad = project::readGoldSrcWad(data.wad);
+        if (wad.is_error())
+          return std::get<Error>(wad.error());
+        auto terrain = TerrainSnapshot{};
+        terrain.map = data.map;
+        terrain.topFaces = static_cast<size_t>(data.topFaces);
+        for (const auto& texture : wad.value().textures)
+        {
+          if (
+            !texture.valid
+            || !terrain.textures.emplace(texture.name, texture.miptex).second)
+            return Error{"Invalid cached terrain texture."};
+        }
+        return std::optional<TerrainSnapshot>{std::move(terrain)};
+      }
+    }
+    return bakeTerrainSnapshot(contents.value());
+  }();
   if (baked.is_error())
     return std::get<Error>(baked.error());
   auto terrain = std::move(baked).value();
@@ -1015,6 +1056,81 @@ Result<void> ProjectSession::unstageMaps()
          | kdl::transform([&]() { m_stagedMaps.clear(); });
 }
 
+Result<bool> ProjectSession::terrainCompileNeedsSave(const std::string& id) const
+{
+  const auto asset = m_store->findAsset(id);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (!asset.value() || asset.value()->type != project::AssetType::Map)
+    return Error{"Project map asset is missing."};
+  const auto cached = m_store->terrainCompile(id);
+  if (cached.is_error())
+    return std::get<Error>(cached.error());
+  if (
+    cached.value() && cached.value()->sourceRevision == asset.value()->revision
+    && cached.value()->generatorVersion == TerrainGeneratorVersion)
+    return false;
+  const auto source = m_store->readAsset(id, project::ContentKind::Compatible);
+  if (source.is_error())
+    return std::get<Error>(source.error());
+  return cached.value().has_value() || containsTerrainPaint(source.value());
+}
+
+Result<void> ProjectSession::updateTerrainCompiles()
+{
+  const auto maps = m_store->assets(project::AssetType::Map);
+  if (maps.is_error())
+    return std::get<Error>(maps.error());
+  for (const auto& asset : maps.value())
+  {
+    const auto needed = terrainCompileNeedsSave(asset.id);
+    if (needed.is_error())
+      return std::get<Error>(needed.error());
+    if (!needed.value())
+      continue;
+    const auto source = m_store->readAsset(asset.id, project::ContentKind::Compatible);
+    if (source.is_error())
+      return std::get<Error>(source.error());
+    auto baked = bakeTerrainSnapshot(source.value());
+    auto data = project::TerrainCompile{};
+    data.sourceRevision = asset.revision;
+    data.generatorVersion = TerrainGeneratorVersion;
+    if (baked.is_error())
+    {
+      data.error = std::get<Error>(baked.error()).msg;
+    }
+    else if (auto terrain = std::move(baked).value())
+    {
+      data.map = std::move(terrain->map);
+      data.topFaces = static_cast<std::uint64_t>(terrain->topFaces);
+      auto entries = std::vector<std::vector<std::uint8_t>>{};
+      for (auto& entry : terrain->textures)
+        entries.push_back(std::move(entry.second));
+      auto wad = project::buildGoldSrcWad(entries);
+      if (wad.is_error())
+        data.error = std::get<Error>(wad.error()).msg;
+      else
+        data.wad = std::move(wad).value();
+    }
+    else
+    {
+      if (containsTerrainPaint(source.value()))
+        data.error = "Terrain paint data could not be parsed.";
+      else
+      {
+        const auto cleared = m_store->clearTerrainCompile(asset.id);
+        if (cleared.is_error())
+          return std::get<Error>(cleared.error());
+        continue;
+      }
+    }
+    const auto saved = m_store->setTerrainCompile(asset.id, data);
+    if (saved.is_error())
+      return std::get<Error>(saved.error());
+  }
+  return {};
+}
+
 Result<void> ProjectSession::writeProject(
   const std::filesystem::path& path, const bool overwrite)
 {
@@ -1026,6 +1142,8 @@ Result<void> ProjectSession::writeProject(
   }
   else if (QFile::exists(pathAsQString(path)))
     return Error{"Copy destination already exists."};
+  if (const auto updated = updateTerrainCompiles(); updated.is_error())
+    return std::get<Error>(updated.error());
   const auto snapshot =
     pathFromQString(m_workspace.path()) / (generateUuid() + ".tbproj");
   auto backup = m_store->saveCopy(snapshot);

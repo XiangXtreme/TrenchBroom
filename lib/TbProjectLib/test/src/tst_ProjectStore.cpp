@@ -98,6 +98,40 @@ TEST_CASE("ProjectStore")
 {
   auto workspace = Workspace{};
 
+  SECTION("keeps terrain compilation data tied to a saved map revision")
+  {
+    auto store = require(ProjectStore::create(workspace.path, "Terrain", "Half-Life"));
+    const auto input = map("maps/terrain.map");
+    const auto asset = require(store->importAsset(input));
+    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 3);
+    CHECK_FALSE(require(store->terrainCompile(asset.id)));
+
+    auto data =
+      TerrainCompile{asset.revision, 1, 12, {'m', 'a', 'p'}, {'w', 'a', 'd'}, {}};
+    require(store->setTerrainCompile(asset.id, data));
+    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 4);
+    const auto restored = require(store->terrainCompile(asset.id));
+    REQUIRE(restored);
+    CHECK(restored->sourceRevision == asset.revision);
+    CHECK(restored->topFaces == 12);
+    CHECK(restored->map == data.map);
+    CHECK(restored->wad == data.wad);
+
+    auto changed = input;
+    changed.compatible.push_back(' ');
+    const auto updated = require(store->replaceAsset(asset.id, changed));
+    REQUIRE(updated.revision != asset.revision);
+    CHECK(store->setTerrainCompile(asset.id, data).is_error());
+    CHECK(require(store->terrainCompile(asset.id))->sourceRevision == asset.revision);
+    data = TerrainCompile{updated.revision, 1, 0, {}, {}, "invalid terrain"};
+    require(store->setTerrainCompile(asset.id, data));
+    store.reset();
+    store = require(ProjectStore::open(workspace.path));
+    CHECK(require(store->terrainCompile(asset.id))->error == "invalid terrain");
+    require(store->removeAsset(asset.id));
+    CHECK_FALSE(require(store->terrainCompile(asset.id)));
+  }
+
   SECTION("creates a portable Unicode project and persists embedded content")
   {
     auto store =
