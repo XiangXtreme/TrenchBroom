@@ -5,7 +5,7 @@
     globalThis.TerrainBake;
   const find = (id) => document.getElementById(id);
   const radius = find("radius");
-  const number = new Intl.NumberFormat("zh-CN");
+  const formatMB = (bytes) => (bytes / 1_000_000).toFixed(3) + " MB";
   const panels = ["original", "shared"].map((id) => {
     const root = find(id);
     const canvas = root.querySelector(".terrain");
@@ -135,14 +135,14 @@
     queuedBake = undefined;
     results = bake(weights);
     const base = results.original.wad.length, shared = results.shared.wad.length;
-    find("savings").textContent = number.format(base - shared) + " B（" +
+    find("savings").textContent = formatMB(base - shared) + "（" +
       ((1 - shared / base) * 100).toFixed(1) + "%）";
     status.textContent = "两版共用同一笔迹，权重和底纹相位一致的过渡块可以复用。";
     for (const panel of panels) {
       const variant = results[panel.id];
       panel.counts = new Uint16Array(variant.textures.length);
       for (const index of variant.cells) panel.counts[index]++;
-      panel.root.querySelector(".bytes").textContent = number.format(variant.wad.length) + " B";
+      panel.root.querySelector(".bytes").textContent = formatMB(variant.wad.length);
       panel.root.querySelector(".stats").textContent = variant.textures.length + " 张 WAD 纹理 · "
         + (variant.textures.length - 2) + " 张过渡纹理 · " + variant.cells.length + " 个地形块";
       renderWad(panel);
