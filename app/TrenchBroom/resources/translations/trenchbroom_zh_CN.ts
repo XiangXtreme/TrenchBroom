@@ -8,16 +8,24 @@
             <translation>开关光照预览</translation>
             </message>
         <message>
-            <source>Lightmap preview quality</source>
-            <translation>光照预览质量</translation>
-            </message>
-        <message>
-            <source>Lightmap preview quality and estimated time left in the current stage</source>
-            <translation>光照预览质量及当前阶段的预计剩余时间</translation>
-            </message>
-        <message>
             <source>Baking…</source>
             <translation>烘焙中…</translation>
+            </message>
+        <message>
+            <source>Toggle lightmap preview. Use the arrow to choose quality (%1).</source>
+            <translation>切换光照预览。点击箭头选择质量（%1）。</translation>
+            </message>
+        <message>
+            <source>Fast</source>
+            <translation>快速</translation>
+            </message>
+        <message>
+            <source>Normal</source>
+            <translation>标准</translation>
+            </message>
+        <message>
+            <source>Ultra</source>
+            <translation>超高</translation>
             </message>
         </context>
     <context>
@@ -5042,11 +5050,6 @@ They may contain new features or bug fixes that are not yet part of a stable rel
             <location filename="../../../../lib/TbUiLib/src/ViewEditor.cpp" line="487" />
             <source>Use fog</source>
             <translation>使用雾效</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/ViewEditor.cpp" line="536" />
-            <source>Show lightmap</source>
-            <translation>显示光照贴图</translation>
             </message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/ViewEditor.cpp" line="488" />

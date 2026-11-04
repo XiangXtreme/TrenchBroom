@@ -9,7 +9,9 @@
 #include <QMouseEvent>
 #include <QScopeGuard>
 #include <QSettings>
+#include <QStyleOptionToolButton>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QToolButton>
 #include <QtTest/QTest>
 
@@ -111,40 +113,66 @@ TEST_CASE("AreaMapView")
     CHECK_FALSE(otherButton->isChecked());
   }
 
-  SECTION("3D lightmap quality and bake status appear beside the toggle")
+  SECTION("the lightmap split button toggles preview and opens its quality menu")
   {
     const auto savedQuality = pref(Preferences::LightmapQuality);
-    const auto restoreQuality =
-      qScopeGuard([&] { setPref(Preferences::LightmapQuality, savedQuality); });
+    const auto savedSetting = pref(Preferences::ShowLightmap);
+    const auto restore = qScopeGuard([&] {
+      setPref(Preferences::LightmapQuality, savedQuality);
+      setPref(Preferences::ShowLightmap, savedSetting);
+    });
     setPref(Preferences::LightmapQuality, Preferences::LightmapQualityNormal);
-    auto* toggle = original->findChild<QToolButton*>("MapViewLightmapButton");
-    auto* quality = original->findChild<QToolButton*>("MapViewLightmapQualityButton");
-    REQUIRE(toggle);
-    REQUIRE(quality);
-    REQUIRE(quality->menu());
-    REQUIRE(quality->menu()->actions().size() == 3);
-    CHECK_FALSE(quality->isHidden());
-    CHECK(quality->x() > toggle->geometry().right());
-    CHECK(quality->y() == toggle->y());
-    CHECK(quality->text() == "Normal");
-    CHECK(quality->menu()->actions()[1]->isChecked());
-    quality->menu()->actions()[2]->trigger();
+    setPref(Preferences::ShowLightmap, false);
+    auto* button = original->findChild<QToolButton*>("MapViewLightmapButton");
+    REQUIRE(button);
+    REQUIRE(button->menu());
+    REQUIRE(button->menu()->actions().size() == 3);
+    CHECK(button->popupMode() == QToolButton::MenuButtonPopup);
+    CHECK(button->text().isEmpty());
+    CHECK(button->toolButtonStyle() == Qt::ToolButtonIconOnly);
+    CHECK(button->menu()->actions()[1]->isChecked());
+
+    auto option = QStyleOptionToolButton{};
+    option.initFrom(button);
+    option.features =
+      QStyleOptionToolButton::MenuButtonPopup | QStyleOptionToolButton::HasMenu;
+    const auto menuRect = button->style()->subControlRect(
+      QStyle::CC_ToolButton, &option, QStyle::SC_ToolButtonMenu, button);
+    REQUIRE(menuRect.isValid());
+    auto menuOpened = false;
+    const auto connection =
+      QObject::connect(button->menu(), &QMenu::aboutToShow, button, [&] {
+        menuOpened = true;
+        QTimer::singleShot(0, button->menu(), &QMenu::hide);
+      });
+    QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, menuRect.center());
+    QObject::disconnect(connection);
+    CHECK(menuOpened);
+    CHECK_FALSE(pref(Preferences::ShowLightmap));
+
+    const auto mainRect = button->style()->subControlRect(
+      QStyle::CC_ToolButton, &option, QStyle::SC_ToolButton, button);
+    REQUIRE(mainRect.isValid());
+    QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, mainRect.center());
+    CHECK(pref(Preferences::ShowLightmap));
+    button->menu()->actions()[2]->trigger();
     CHECK(pref(Preferences::LightmapQuality) == Preferences::LightmapQualityUltra);
-    CHECK(quality->text() == "Ultra");
+    CHECK(button->menu()->actions()[2]->isChecked());
+
     REQUIRE(layout->splitArea(original, Qt::Horizontal));
     auto* second = layout->areas().back();
     second->setViewType(CyclingMapView::View_3D);
-    auto* otherQuality = second->findChild<QToolButton*>("MapViewLightmapQualityButton");
-    REQUIRE(otherQuality);
+    auto* otherButton = second->findChild<QToolButton*>("MapViewLightmapButton");
+    REQUIRE(otherButton);
     auto& preview = window.toolBox().lightmapPreview();
     emit preview.progressChanged(true, 65);
-    CHECK(quality->text() == "Ultra · ~1:05");
-    CHECK(otherQuality->text() == quality->text());
+    CHECK(button->text() == "~1:05");
+    CHECK(otherButton->text() == button->text());
     emit preview.progressChanged(false, -1);
-    CHECK(quality->text() == "Ultra");
-    CHECK(otherQuality->text() == "Ultra");
+    CHECK(button->text().isEmpty());
+    CHECK(otherButton->text().isEmpty());
     original->setViewType(CyclingMapView::View_XZ);
-    CHECK(quality->isHidden());
+    CHECK(button->isHidden());
   }
 
   SECTION("undo and a different edit invalidate a bake even without a paint")

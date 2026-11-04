@@ -117,7 +117,7 @@ void CyclingMapView::createGui(
   m_lightmapButton->setProperty("tbControlRole", "overlay");
   m_lightmapButton->setIcon(loadSVGIcon("LightmapPreview.svg"));
   m_lightmapButton->setAccessibleName(tr("Toggle lightmap preview"));
-  m_lightmapButton->setToolTip(m_lightmapButton->accessibleName());
+  m_lightmapButton->setPopupMode(QToolButton::MenuButtonPopup);
   m_lightmapButton->setFocusPolicy(Qt::StrongFocus);
   m_lightmapButton->setCheckable(true);
   m_lightmapButton->setChecked(pref(Preferences::ShowLightmap));
@@ -125,16 +125,7 @@ void CyclingMapView::createGui(
     setPref(Preferences::ShowLightmap, checked);
   });
 
-  m_lightmapQualityButton = new QToolButton{this};
-  m_lightmapQualityButton->setObjectName("MapViewLightmapQualityButton");
-  m_lightmapQualityButton->setProperty("tbControlRole", "overlay");
-  m_lightmapQualityButton->setPopupMode(QToolButton::InstantPopup);
-  m_lightmapQualityButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-  m_lightmapQualityButton->setFocusPolicy(Qt::StrongFocus);
-  m_lightmapQualityButton->setAccessibleName(tr("Lightmap preview quality"));
-  m_lightmapQualityButton->setToolTip(
-    tr("Lightmap preview quality and estimated time left in the current stage"));
-  auto* qualityMenu = new QMenu{m_lightmapQualityButton};
+  auto* qualityMenu = new QMenu{m_lightmapButton};
   auto* qualityGroup = new QActionGroup{qualityMenu};
   const auto addQuality = [&](const QString& name, const char* quality) {
     auto* action = qualityMenu->addAction(name);
@@ -145,10 +136,10 @@ void CyclingMapView::createGui(
       setPref(Preferences::LightmapQuality, quality);
     });
   };
-  addQuality(QStringLiteral("Fast"), Preferences::LightmapQualityFast);
-  addQuality(QStringLiteral("Normal"), Preferences::LightmapQualityNormal);
-  addQuality(QStringLiteral("Ultra"), Preferences::LightmapQualityUltra);
-  m_lightmapQualityButton->setMenu(qualityMenu);
+  addQuality(tr("Fast"), Preferences::LightmapQualityFast);
+  addQuality(tr("Normal"), Preferences::LightmapQualityNormal);
+  addQuality(tr("Ultra"), Preferences::LightmapQualityUltra);
+  m_lightmapButton->setMenu(qualityMenu);
   auto& preview = toolBox.lightmapPreview();
   m_bakingLightmap = preview.baking();
   m_lightmapRemainingSeconds = preview.remainingSeconds();
@@ -201,7 +192,6 @@ void CyclingMapView::switchToMapView(MapViewBase* mapView)
   updateChrome();
   m_viewButton->raise();
   m_lightmapButton->raise();
-  m_lightmapQualityButton->raise();
   if (m_border)
     m_border->raise();
   if (previous != viewType())
@@ -230,43 +220,44 @@ void CyclingMapView::setViewType(const int type)
     switchToMapView(view);
 }
 
-QString CyclingMapView::updateLightmapQualityButton()
+void CyclingMapView::updateLightmapButton()
 {
-  auto quality = QString::fromStdString(pref(Preferences::LightmapQuality));
-  if (
-    quality != QLatin1String{Preferences::LightmapQualityFast}
-    && quality != QLatin1String{Preferences::LightmapQualityUltra})
+  const auto quality = pref(Preferences::LightmapQuality);
+  const auto selectedQuality =
+    quality == Preferences::LightmapQualityFast
+        || quality == Preferences::LightmapQualityUltra
+      ? QString::fromStdString(quality)
+      : QString::fromLatin1(Preferences::LightmapQualityNormal);
+  auto qualityLabel = QString{};
+  for (auto* action : m_lightmapButton->menu()->actions())
   {
-    quality = QLatin1String{Preferences::LightmapQualityNormal};
-  }
-  auto label = QString{};
-  for (auto* action : m_lightmapQualityButton->menu()->actions())
-  {
-    const auto selected = action->data().toString() == quality;
+    const auto selected = action->data().toString() == selectedQuality;
     action->setChecked(selected);
     if (selected)
-      label = action->text();
+      qualityLabel = action->text();
   }
-  if (!m_bakingLightmap)
+
+  auto status = QString{};
+  if (m_bakingLightmap)
   {
-    m_lightmapQualityButton->setText(label);
+    status = m_lightmapRemainingSeconds < 0
+               ? tr("Baking…")
+               : QStringLiteral("~%1:%2")
+                   .arg(m_lightmapRemainingSeconds / 60)
+                   .arg(m_lightmapRemainingSeconds % 60, 2, 10, QLatin1Char{'0'});
   }
-  else
-  {
-    const auto status =
-      m_lightmapRemainingSeconds < 0
-        ? tr("Baking…")
-        : QStringLiteral("~%1:%2")
-            .arg(m_lightmapRemainingSeconds / 60)
-            .arg(m_lightmapRemainingSeconds % 60, 2, 10, QLatin1Char{'0'});
-    m_lightmapQualityButton->setText(QStringLiteral("%1 · %2").arg(label, status));
-  }
-  return label;
+
+  m_lightmapButton->setText(status);
+  auto toolTip = tr("Toggle lightmap preview. Use the arrow to choose quality (%1).")
+                   .arg(qualityLabel);
+  if (!status.isEmpty())
+    toolTip += QLatin1Char{'\n'} + status;
+  m_lightmapButton->setToolTip(toolTip);
 }
 
 void CyclingMapView::updateChrome()
 {
-  if (!m_lightmapQualityButton)
+  if (!m_lightmapButton || !m_lightmapButton->menu())
     return;
   for (auto* action : m_viewButton->menu()->actions())
   {
@@ -290,45 +281,43 @@ void CyclingMapView::updateChrome()
   const auto availableWidth = width() - 2 * cornerInset;
   const auto availableHeight = height() - cornerInset - inset;
   const auto is3D = viewType() == View_3D;
-  const auto lightmapSize = m_lightmapButton->sizeHint();
-  const auto lightmapWidth = is3D ? spacing + lightmapSize.width() : 0;
-  const auto qualityLabel = updateLightmapQualityButton();
-  const auto qualityWidth =
-    is3D ? spacing + m_lightmapQualityButton->sizeHint().width() : 0;
+  updateLightmapButton();
+  m_lightmapButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  const auto compactSize = m_lightmapButton->sizeHint();
   m_viewButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-  if (m_viewButton->sizeHint().width() + lightmapWidth + qualityWidth > availableWidth)
+  if (
+    m_viewButton->sizeHint().width() + (is3D ? spacing + compactSize.width() : 0)
+    > availableWidth)
+  {
     m_viewButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  }
+
   const auto viewSize = m_viewButton->sizeHint();
+  const auto lightmapSpace = availableWidth - viewSize.width() - spacing;
   const auto showSelector = !window()->isFullScreen()
                             && availableWidth >= viewSize.width()
                             && availableHeight >= viewSize.height();
-  const auto showLightmap = showSelector && is3D
-                            && availableWidth >= viewSize.width() + lightmapWidth
-                            && availableHeight >= lightmapSize.height();
-  const auto qualitySpace = availableWidth - viewSize.width() - lightmapWidth - spacing;
-  if (m_bakingLightmap && m_lightmapQualityButton->sizeHint().width() > qualitySpace)
-    m_lightmapQualityButton->setText(qualityLabel);
-  const auto qualitySize = m_lightmapQualityButton->sizeHint();
-  const auto showQuality = showLightmap && qualitySpace >= qualitySize.width()
-                           && availableHeight >= qualitySize.height();
-  auto rowHeight =
+  const auto showLightmap = showSelector && is3D && lightmapSpace >= compactSize.width()
+                            && availableHeight >= compactSize.height();
+  if (showLightmap && m_bakingLightmap)
+  {
+    m_lightmapButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    const auto statusSize = m_lightmapButton->sizeHint();
+    if (statusSize.width() > lightmapSpace || statusSize.height() > availableHeight)
+      m_lightmapButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  }
+
+  const auto lightmapSize = m_lightmapButton->sizeHint();
+  const auto rowHeight =
     showLightmap ? std::max(viewSize.height(), lightmapSize.height()) : viewSize.height();
-  if (showQuality)
-    rowHeight = std::max(rowHeight, qualitySize.height());
   m_viewButton->setGeometry(cornerInset, cornerInset, viewSize.width(), rowHeight);
   m_lightmapButton->setGeometry(
     cornerInset + viewSize.width() + spacing,
     cornerInset,
     lightmapSize.width(),
     rowHeight);
-  m_lightmapQualityButton->setGeometry(
-    cornerInset + viewSize.width() + lightmapWidth + spacing,
-    cornerInset,
-    qualitySize.width(),
-    rowHeight);
   m_viewButton->setVisible(showSelector);
   m_lightmapButton->setVisible(showLightmap);
-  m_lightmapQualityButton->setVisible(showQuality);
 }
 
 void CyclingMapView::resizeEvent(QResizeEvent* event)
