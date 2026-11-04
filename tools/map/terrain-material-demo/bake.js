@@ -2,6 +2,7 @@
 
 globalThis.TerrainBake = (() => {
   const columns = 10, rows = 5, core = 96, gutter = 16, period = 128;
+  const worldBlockSize = 128;
   const width = columns * core, height = rows * core;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const wrap = (value, size) => ((value % size) + size) % size;
@@ -220,7 +221,7 @@ globalThis.TerrainBake = (() => {
   }
 
   function makeMap(variant) {
-    const span = 128, scale = span / core;
+    const span = worldBlockSize, scale = span / core;
     const mapWidth = span * columns, mapHeight = span * rows;
     const point = (xyz) => "( " + xyz.join(" ") + " )";
     const face = (a, b, c, texture, s, t, factor = 1) =>
@@ -262,5 +263,6 @@ globalThis.TerrainBake = (() => {
     return lines.join("\n") + "\n";
   }
 
-  return { columns, rows, core, gutter, width, height, initialWeights, paint, bake, makeMap };
+  return { columns, rows, core, gutter, width, height, worldBlockSize,
+    initialWeights, paint, bake, makeMap };
 })();

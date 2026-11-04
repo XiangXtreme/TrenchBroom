@@ -1,8 +1,8 @@
 "use strict";
 
 (() => {
-  const { columns, rows, core, gutter, width, height, initialWeights, paint, bake, makeMap } =
-    globalThis.TerrainBake;
+  const { columns, rows, core, gutter, width, height, worldBlockSize,
+    initialWeights, paint, bake, makeMap } = globalThis.TerrainBake;
   const find = (id) => document.getElementById(id);
   const radius = find("radius");
   const formatMB = (bytes) => (bytes / 1_000_000).toFixed(3) + " MB";
@@ -144,7 +144,7 @@
       for (const index of variant.cells) panel.counts[index]++;
       panel.root.querySelector(".bytes").textContent = formatMB(variant.wad.length);
       panel.root.querySelector(".stats").textContent = variant.textures.length + " 张 WAD 纹理 · "
-        + (variant.textures.length - 2) + " 张过渡纹理 · " + variant.cells.length + " 个地形块";
+        + (variant.textures.length - 2) + " 张过渡纹理";
       renderWad(panel);
     }
     scheduleOverlay();
@@ -225,4 +225,14 @@
   find("grid").addEventListener("change", scheduleOverlay);
   find("reset").addEventListener("click", () => { weights = initialWeights(); rebake(); });
   rebake();
+
+  for (const { id, root } of panels) {
+    const variant = results[id];
+    const faceCount = Array.from(makeMap(variant).matchAll(/^\( /gm)).length;
+    const tileSize = core + 2 * gutter;
+    root.querySelector(".geometry").textContent =
+      `地形 ${columns * worldBlockSize} × ${rows * worldBlockSize} 单位 · ${variant.cells.length} 个顶面 · MAP 共 ${faceCount} 个 Brush 面`;
+    root.querySelector(".tile-size").textContent =
+      `单块 ${worldBlockSize} × ${worldBlockSize} 单位 · 过渡贴图 ${tileSize} × ${tileSize} px（有效区 ${core} × ${core}）`;
+  }
 })();
