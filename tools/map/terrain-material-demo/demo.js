@@ -141,7 +141,7 @@
       : panel.counts[index] > 1 ? "共享过渡" : "独有过渡";
     const info = panel.root.querySelector(".tile-info");
     const text = tex.name + " · " + kind + " · " + panel.counts[index] + " 个面引用 · "
-      + (tex.size >> level) + " × " + (tex.size >> level) + " px";
+      + (tex.size >> level) + " × " + (tex.height >> level) + " px";
     if (info.textContent !== text) info.textContent = text;
   }
 
@@ -171,8 +171,8 @@
       panel.root.querySelector(".bytes").textContent = formatMB(variant.wad.length);
       const baseCount = variant.baseCount ?? 2;
       panel.root.querySelector(".stats").textContent = variant.textures.length + " 张 WAD 纹理 · "
-        + (variant.textures.length - baseCount - (variant.patchCount ?? 0)) + " 张过渡纹理"
-        + (variant.grid ? " · " + variant.patchCount + " 张局部烘焙" : "");
+        + (variant.textures.length - baseCount - (variant.atlasCount ?? 0)) + " 张过渡纹理"
+        + (variant.grid ? " · " + variant.atlasCount + " 张图集（" + variant.patchCount + " 个烘焙块）" : "");
       renderWad(panel);
     }
     renderGeometry();

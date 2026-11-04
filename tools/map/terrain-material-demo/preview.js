@@ -39,9 +39,10 @@ globalThis.TerrainPreview = (() => {
         for (let x = 0; x < imageWidth; x++) {
           const px = (x + 0.5) * step, py = (y + 0.5) * step;
           const surface = surfaceAt(variant, px, py);
-          const texture = variant.textures[surface.material], side = texture.size / step;
-          const index = coordinate(surface.v, px, py, side) * side
-            + coordinate(surface.u, px, py, side);
+          const texture = variant.textures[surface.material];
+          const cols = texture.size / step, rows = texture.height / step;
+          const index = coordinate(surface.v, px, py, rows) * cols
+            + coordinate(surface.u, px, py, cols);
           write((y * imageWidth + x) * 4, texture, index);
         }
       }

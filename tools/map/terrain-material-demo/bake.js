@@ -122,10 +122,10 @@ globalThis.TerrainBake = (() => {
     u32(4, textures.length);
     u32(8, directory);
     let offset = 12;
-    textures.forEach(({ name, size, levels, colors = palette }, index) => {
+    textures.forEach(({ name, size, height = size, levels, colors = palette }, index) => {
       ascii(offset, name);
       u32(offset + 16, size);
-      u32(offset + 20, size);
+      u32(offset + 20, height);
       let mipOffset = 40;
       levels.forEach((level, mip) => {
         u32(offset + 24 + mip * 4, mipOffset);
@@ -151,12 +151,13 @@ globalThis.TerrainBake = (() => {
     return textures.map((texture, index) => {
       const offset = view.getUint32(directory + index * 32, true);
       const size = view.getUint32(offset + 16, true);
+      const height = view.getUint32(offset + 20, true);
       const levels = Array.from({ length: 4 }, (_, level) => {
         const start = offset + view.getUint32(offset + 24 + level * 4, true);
-        return bytes.subarray(start, start + (size >> level) ** 2);
+        return bytes.subarray(start, start + (size >> level) * (height >> level));
       });
       const colors = levels[3].byteOffset + levels[3].byteLength + 2;
-      return { ...texture, size, levels, colors: bytes.subarray(colors, colors + 768) };
+      return { ...texture, size, height, levels, colors: bytes.subarray(colors, colors + 768) };
     });
   }
 

@@ -6,7 +6,8 @@ globalThis.TerrainMulti = (() => {
   const names = ["grass", "dirt", "rock"];
   const colors = [[102, 115, 62], [158, 116, 78], [129, 128, 130]];
   const step = 24, across = width / step, down = height / step, stride = across + 1;
-  const patchCore = 2 * step, patchGutter = 8;
+  const patchCore = 2 * step, patchGutter = 8, patchSize = patchCore + 2 * patchGutter;
+  const atlasSide = 256 / patchSize, atlasCapacity = atlasSide ** 2;
   const lowV = 24, highV = 104;
   const worldU = [1, 0, 0], worldV = [0, 1, 0], sharedU = [0.875, 0.5, 0];
   const weightSteps = 7, shades = 7;
@@ -135,6 +136,38 @@ globalThis.TerrainMulti = (() => {
     }
   }
 
+  function packPatches(patches, textures) {
+    const powerOfTwo = (n) => 2 ** Math.ceil(Math.log2(n));
+    for (let start = 0; start < patches.length; start += atlasCapacity) {
+      const tiles = patches.slice(start, start + atlasCapacity);
+      const cols = powerOfTwo(Math.sqrt(tiles.length));
+      const rows = powerOfTwo(Math.ceil(tiles.length / cols));
+      const size = cols * patchSize, height = rows * patchSize;
+      const levels = Array.from({ length: 4 }, (_, mip) =>
+        new Uint8Array((size >> mip) * (height >> mip)));
+      for (let slot = 0; slot < cols * rows; slot++) {
+        // Fill spare slots with real texels so they contribute to the same
+        // color range when RAD averages the whole texture for bounced light.
+        const tile = tiles[slot % tiles.length];
+        const x = (slot % cols) * patchSize, y = Math.floor(slot / cols) * patchSize;
+        // Copy each prefiltered tile with its gutter intact at every mip.
+        tile.levels.forEach((pixels, mip) => {
+          const side = patchSize >> mip, width = size >> mip;
+          const offset = (y >> mip) * width + (x >> mip);
+          for (let row = 0; row < side; row++) {
+            levels[mip].set(pixels.subarray(row * side, (row + 1) * side), offset + row * width);
+          }
+        });
+        for (const face of tiles[slot]?.faces ?? []) {
+          face.material = textures.length;
+          face.u[2] += x;
+          face.v[2] += y;
+        }
+      }
+      textures.push({ name: "tm_a" + start / atlasCapacity, size, height, levels, colors: palette });
+    }
+  }
+
   function bake(weights) {
     const vertices = weights.map((vertex) => {
       const active = vertex.map((value) => value >= 0.05 ? value : 0);
@@ -177,7 +210,7 @@ globalThis.TerrainMulti = (() => {
       }
     }
 
-    const textures = [...bases], textureIndices = new Map();
+    const textures = [...bases], pairIndices = new Map(), patches = new Map();
     const faces = [], grid = new Array(quads.length);
     const pure = quads.map((quad) => {
       const active = activeMaterials(quad);
@@ -200,26 +233,26 @@ globalThis.TerrainMulti = (() => {
         return { kind: "pair", key: a * names.length + b, v: [vx, vy, v0 - vx * x - vy * y] };
       });
     });
-    let patchCount = 0, mergedPatchFaces = 0;
+    let mergedPatchFaces = 0;
     function add(points, u, v, material, kind) {
       const face = { points, u, v, material, kind };
       faces.push(face);
       return face;
     }
     function patch(points, x, y, kind) {
-      const key = `patch:${x}:${y}`;
-      if (!textureIndices.has(key)) {
-        textureIndices.set(key, textures.length);
-        textures.push(texture("tm_p" + patchCount++, sample,
-          x - patchGutter, y - patchGutter, patchCore + 2 * patchGutter));
+      const key = `${x}:${y}`;
+      if (!patches.has(key)) {
+        const { levels } = texture("", sample, x - patchGutter, y - patchGutter, patchSize);
+        patches.set(key, { levels, faces: [] });
       }
-      return add(points, [1, 0, patchGutter - x], [0, 1, patchGutter - y],
-        textureIndices.get(key), kind);
+      const face = add(points, [1, 0, patchGutter - x], [0, 1, patchGutter - y], -1, kind);
+      patches.get(key).faces.push(face);
+      return face;
     }
     const rect = (x, y, right, bottom) => [[x, y], [right, y], [right, bottom], [x, bottom]];
 
     // Merge busy blocks already paying for a patch first. Spend a limited number
-    // of extra 64px textures on two-material blocks with the most cuts.
+    // of extra 64px tiles on two-material blocks with the most cuts.
     const candidates = [];
     for (let row = 0; row < down; row += 2) {
       for (let col = 0; col < across; col += 2) {
@@ -271,11 +304,11 @@ globalThis.TerrainMulti = (() => {
           if (kind === "base") return add(polygon, worldU, worldV, material, kind);
           if (kind !== "pair") return patch(polygon,
             Math.floor(x / patchCore) * patchCore, Math.floor(y / patchCore) * patchCore, kind);
-          if (!textureIndices.has(key)) {
-            textureIndices.set(key, textures.length);
+          if (!pairIndices.has(key)) {
+            pairIndices.set(key, textures.length);
             textures.push(pairs.get(key));
           }
-          return add(polygon, sharedU, v, textureIndices.get(key), kind);
+          return add(polygon, sharedU, v, pairIndices.get(key), kind);
         }
         const samePair = first.kind === "pair" && second.kind === "pair"
           && first.key === second.key && first.v.every((value, i) => Math.abs(value - second.v[i]) < 1e-8);
@@ -284,10 +317,12 @@ globalThis.TerrainMulti = (() => {
           : triangles.map((triangle, half) => surface(triangle.map((index) => points[index]), mixes[cell][half]));
       }
     }
+    const patchCount = patches.size, atlasCount = Math.ceil(patchCount / atlasCapacity);
+    packPatches([...patches.values()], textures);
     const original = wadVariant("terrain_multi_baked", bakedTextures, bakedCells);
     const shared = wadVariant("terrain_multi_uv", textures, faces.map((face) => face.material));
     return { original: { ...original, baseCount: bases.length },
-      shared: { ...shared, baseCount: bases.length, faces, patchCount, mergedPatchFaces,
+      shared: { ...shared, baseCount: bases.length, faces, patchCount, atlasCount, mergedPatchFaces,
         junctionFaces: faces.filter(({ kind }) => kind === "junction").length,
         fitFaces: faces.filter(({ kind }) => kind === "fit").length,
         grid, gridStep: step } };
