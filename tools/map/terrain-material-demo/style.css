@@ -35,6 +35,8 @@ input { accent-color: var(--accent); }
 .summary { min-height: 65px; gap: 12px 20px; flex-wrap: wrap; }
 .summary strong { margin-left: 10px; color: var(--accent); font-variant-numeric: tabular-nums; }
 .summary p { color: var(--muted); margin: 0; font-size: 13px; }
+#bake-progress { color: var(--muted); font-size: 12px; margin-left: 8px; }
+#bake-progress[hidden] { display: inline; visibility: hidden; }
 .legend { margin-left: auto; white-space: nowrap; }
 .comparisons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .panel { background: #20241f; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }

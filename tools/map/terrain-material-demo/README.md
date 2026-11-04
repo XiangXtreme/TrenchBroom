@@ -1,6 +1,6 @@
 # GoldSrc 地形材质实验台
 
-用浏览器打开 `index.html`。也可以在本目录执行 `python -m http.server 8765 --bind 127.0.0.1`，再打开 <http://127.0.0.1:8765/>。
+在本目录执行 `python -m http.server 8765 --bind 127.0.0.1`，再打开 <http://127.0.0.1:8765/>。HTTP 页面会在后台线程刷新笔迹预览。直接打开 `index.html` 时，预览在松开笔刷后更新。
 
 ## 草泥岩涂刷
 

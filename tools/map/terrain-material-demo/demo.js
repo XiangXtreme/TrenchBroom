@@ -4,6 +4,7 @@
   const { columns, rows, core, gutter, width, height, worldBlockSize,
     initialWeights, paint, bake, bakeBend, makeMap } = globalThis.TerrainBake;
   const multi = globalThis.TerrainMulti;
+  const preview = globalThis.TerrainPreview;
   const find = (id) => document.getElementById(id);
   const radius = find("radius");
   const formatMB = (bytes) => (bytes / 1_000_000).toFixed(3) + " MB";
@@ -17,90 +18,45 @@
     const detail = root.querySelector(".detail");
     detail.width = 400;
     detail.height = 100;
-    return { id, root, canvas, detail, image: document.createElement("canvas") };
+    const backdrop = document.createElement("canvas");
+    backdrop.width = width;
+    backdrop.height = height;
+    return { id, root, canvas, detail, backdrop, image: document.createElement("canvas") };
   });
   let weights = initialWeights();
   let multiWeights = multi.initialWeights();
-  let results, bendResults;
+  let results, bendResults, displayedScene;
   let scene = "multi";
   let tool = "inspect", level = 0;
   let position = { x: 4 * core, y: 191 };
-  let stroke, queuedBake, frame;
+  let stroke, queuedBake, frame, activeBake, worker;
+  let revision = 0, published = 0;
   const status = find("status");
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-
-  function surfaceAt(variant, x, y) {
-    if (variant.faceAt) return variant.faceAt(x, y);
-    const segment = Math.floor(x / variant.segmentWidth);
-    const fraction = x / variant.segmentWidth - segment;
-    for (let band = 0; band < variant.bandCount; band++) {
-      const surface = variant.faces[segment * variant.bandCount + band];
-      const lower = surface.points[3][1], upper = surface.points[2][1];
-      if (y < lower + (upper - lower) * fraction) return surface;
-    }
-  }
-
-  function writePixel(image, output, texture, level, index) {
-    const color = texture.levels[level][index] * 3;
-    image.data[output] = texture.colors[color];
-    image.data[output + 1] = texture.colors[color + 1];
-    image.data[output + 2] = texture.colors[color + 2];
-    image.data[output + 3] = 255;
-  }
-
-  function renderStrip(image, variant, step) {
-    const coordinate = ([a, b, offset], x, y, side) => {
-      const texel = Math.floor((a * x + b * y + offset) / step);
-      return ((texel % side) + side) % side;
-    };
-    for (let y = 0; y < image.height; y++) {
-      for (let x = 0; x < image.width; x++) {
-        const px = (x + 0.5) * step, py = (y + 0.5) * step;
-        const surface = surfaceAt(variant, px, py);
-        const texture = variant.textures[surface.material], side = texture.size / step;
-        const index = coordinate(surface.v, px, py, side) * side
-          + coordinate(surface.u, px, py, side);
-        writePixel(image, (y * image.width + x) * 4, texture, level, index);
-      }
-    }
-  }
 
   function renderWad(panel) {
     const variant = results[panel.id];
     const step = 1 << level;
-    const side = core / step;
+    const pixels = variant.previews?.[level] ?? preview.render(variant, level);
     panel.image.width = width / step;
     panel.image.height = height / step;
-    const ctx = panel.image.getContext("2d");
-    const image = ctx.createImageData(panel.image.width, panel.image.height);
-
-    if (variant.faces) renderStrip(image, variant, step);
-    else variant.cells.forEach((index, cell) => {
-      const texture = variant.textures[index];
-      const { size } = texture;
-      const tileSide = size / step;
-      const startX = (cell % columns) * side, startY = Math.floor(cell / columns) * side;
-      for (let y = 0; y < side; y++) {
-        for (let x = 0; x < side; x++) {
-          const source = index < (variant.baseCount ?? 2)
-            ? ((startY + y) % tileSide) * tileSide + (startX + x) % tileSide
-            : (y + gutter / step) * tileSide + x + gutter / step;
-          const output = ((startY + y) * image.width + startX + x) * 4;
-          writePixel(image, output, texture, level, source);
-        }
-      }
-    });
-    ctx.putImageData(image, 0, 0);
+    panel.image.getContext("2d").putImageData(new ImageData(pixels, width / step, height / step), 0, 0);
+    renderBackdrop(panel);
   }
 
-  function drawEdges(ctx, variant, projectX, projectY, kind) {
+  function drawEdges(ctx, variant, projectX, projectY, kind, bounds) {
     ctx.beginPath();
     if (variant.faces) {
       for (const face of variant.faces) {
         if (kind && face.kind !== kind) continue;
         const { points } = face;
+        if (bounds && (points.every(([x]) => x < bounds.left)
+          || points.every(([x]) => x > bounds.right)
+          || points.every(([, y]) => y < bounds.top)
+          || points.every(([, y]) => y > bounds.bottom))) continue;
         ctx.moveTo(projectX(points[0][0]), projectY(points[0][1]));
-        for (const [x, y] of points.slice(1)) ctx.lineTo(projectX(x), projectY(y));
+        for (let i = 1; i < points.length; i++)
+          ctx.lineTo(projectX(points[i][0]), projectY(points[i][1]));
         ctx.closePath();
       }
     } else {
@@ -116,9 +72,9 @@
     ctx.stroke();
   }
 
-  function renderOverlay(panel) {
-    const { canvas, detail, image } = panel;
-    const ctx = canvas.getContext("2d");
+  function renderBackdrop(panel) {
+    const { backdrop, image } = panel;
+    const ctx = backdrop.getContext("2d");
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(image, 0, 0, width, height);
     const variant = results[panel.id];
@@ -131,12 +87,18 @@
         drawEdges(ctx, variant, (x) => x + 0.5, (y) => y + 0.5, "junction");
       }
       ctx.fillStyle = "#c8ed8a";
-      if (scene === "paint") variant.cells.forEach((index, cell) => {
+      if (displayedScene === "paint") variant.cells.forEach((index, cell) => {
         if (index >= 2 && panel.counts[index] > 1)
           ctx.fillRect((cell % columns) * core + 7, Math.floor(cell / columns) * core + 7, 10, 10);
       });
     }
+  }
 
+  function renderOverlay(panel) {
+    const { canvas, detail, image, backdrop } = panel;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(backdrop, 0, 0);
+    const variant = results[panel.id];
     const { x, y } = position;
     ctx.strokeStyle = "#f7f9dd";
     ctx.lineWidth = 1.5;
@@ -150,9 +112,9 @@
 
     const zoom = detail.getContext("2d");
     const step = 1 << level;
-    const cropWidth = 112, cropHeight = 28;
-    const cropX = clamp(x - cropWidth / 2, 0, width - cropWidth);
-    const cropY = clamp(y - cropHeight / 2, 0, height - cropHeight);
+    const cropWidth = 64, cropHeight = 16;
+    const cropX = clamp(Math.round((x - cropWidth / 2) / step) * step, 0, width - cropWidth);
+    const cropY = clamp(Math.round((y - cropHeight / 2) / step) * step, 0, height - cropHeight);
     zoom.imageSmoothingEnabled = false;
     zoom.drawImage(image, cropX / step, cropY / step, cropWidth / step, cropHeight / step,
       0, 0, detail.width, detail.height);
@@ -160,14 +122,15 @@
       zoom.strokeStyle = "#fff6d67a";
       const projectX = (x) => (x - cropX) * detail.width / cropWidth + 0.5;
       const projectY = (y) => (y - cropY) * detail.height / cropHeight + 0.5;
-      drawEdges(zoom, variant, projectX, projectY);
+      const bounds = { left: cropX, top: cropY, right: cropX + cropWidth, bottom: cropY + cropHeight };
+      drawEdges(zoom, variant, projectX, projectY, undefined, bounds);
       if (variant.junctionFaces) {
         zoom.strokeStyle = "#ffbd73";
-        drawEdges(zoom, variant, projectX, projectY, "junction");
+        drawEdges(zoom, variant, projectX, projectY, "junction", bounds);
       }
     }
     const cell = Math.floor(y / core) * columns + Math.floor(x / core);
-    const surface = variant.faces && surfaceAt(variant, x, y);
+    const surface = variant.faces && preview.surfaceAt(variant, x, y);
     const index = surface ? surface.material : variant.cells[cell];
     const tex = variant.textures[index];
     const kind = surface?.kind === "junction" ? "三材质交汇"
@@ -175,23 +138,23 @@
       : surface?.kind === "pair" ? "可复用过渡"
       : index < (variant.baseCount ?? 2) ? "平铺底纹"
       : panel.counts[index] > 1 ? "共享过渡" : "独有过渡";
-    panel.root.querySelector(".tile-info").textContent =
-      tex.name + " · " + kind + " · " + panel.counts[index] + " 个面引用 · "
+    const info = panel.root.querySelector(".tile-info");
+    const text = tex.name + " · " + kind + " · " + panel.counts[index] + " 个面引用 · "
       + (tex.size >> level) + " × " + (tex.size >> level) + " px";
+    if (info.textContent !== text) info.textContent = text;
   }
 
   function scheduleOverlay() {
     if (!frame) frame = requestAnimationFrame(() => {
       frame = undefined;
-      panels.forEach(renderOverlay);
+      if (results) panels.forEach(renderOverlay);
     });
   }
 
-  function rebake() {
-    clearTimeout(queuedBake);
-    queuedBake = undefined;
-    results = scene === "multi" ? multi.bake(multiWeights)
-      : scene === "bend" ? (bendResults ??= bakeBend()) : bake(weights);
+  function showResults(nextResults, nextRevision) {
+    results = nextResults;
+    displayedScene = scene;
+    published = nextRevision;
     const base = results.original.wad.length, shared = results.shared.wad.length;
     find("savings").textContent = formatMB(base - shared) + "（" +
       ((1 - shared / base) * 100).toFixed(1) + "%）";
@@ -208,11 +171,64 @@
       const baseCount = variant.baseCount ?? 2;
       panel.root.querySelector(".stats").textContent = variant.textures.length + " 张 WAD 纹理 · "
         + (variant.textures.length - baseCount - (variant.patchCount ?? 0)) + " 张过渡纹理"
-        + (variant.faceAt ? " · " + variant.patchCount + " 张局部烘焙" : "");
+        + (variant.grid ? " · " + variant.patchCount + " 张局部烘焙" : "");
       renderWad(panel);
     }
     renderGeometry();
+    showPending();
     scheduleOverlay();
+  }
+
+  function showPending() {
+    const pending = revision !== published;
+    find("bake-progress").hidden = !pending;
+    for (const { root } of panels)
+      for (const button of root.querySelectorAll("[data-file]")) button.disabled = pending;
+  }
+
+  function runBake() {
+    clearTimeout(queuedBake);
+    queuedBake = undefined;
+    if (published === revision) return;
+    if (scene === "bend") {
+      showResults(bendResults ??= bakeBend(), revision);
+      return;
+    }
+    if (activeBake) return;
+    if (worker) {
+      activeBake = { scene, revision };
+      worker.postMessage({ ...activeBake, weights: scene === "multi" ? multiWeights : weights });
+    } else if (stroke === undefined) {
+      showResults(scene === "multi" ? multi.bake(multiWeights) : bake(weights), revision);
+    }
+  }
+
+  function queueBake(delay = 0) {
+    const wasCurrent = published === revision;
+    revision++;
+    if (wasCurrent) showPending();
+    if (delay === 0) runBake();
+    else if (!activeBake && !queuedBake) queuedBake = setTimeout(runBake, delay);
+  }
+
+  if (location.protocol !== "file:" && typeof Worker === "function") {
+    try {
+      worker = new Worker("bake-worker.js");
+      worker.onmessage = ({ data }) => {
+        activeBake = undefined;
+        if (data.scene === scene && data.revision > published)
+          showResults(data.results, data.revision);
+        runBake();
+      };
+      worker.onerror = () => {
+        worker.terminate();
+        worker = undefined;
+        activeBake = undefined;
+        runBake();
+      };
+    } catch {
+      // Browsers that disallow workers can still bake after the stroke.
+    }
   }
 
   function move(event, canvas) {
@@ -232,7 +248,7 @@
         if (scene === "multi") multi.paint(multiWeights, x, y, brushRadius, target);
         else paint(weights, x, y, brushRadius, target === 1 ? 255 : 0);
       }
-      if (!queuedBake) queuedBake = setTimeout(rebake, scene === "multi" ? 180 : 100);
+      queueBake(90);
     }
     scheduleOverlay();
   }
@@ -253,14 +269,14 @@
     const finish = (event) => {
       if (stroke !== event.pointerId) return;
       stroke = undefined;
-      if (queuedBake) rebake();
+      runBake();
     };
     canvas.addEventListener("pointerup", finish);
     canvas.addEventListener("pointercancel", finish);
     canvas.addEventListener("lostpointercapture", finish);
     for (const button of panel.root.querySelectorAll("[data-file]")) {
       button.addEventListener("click", () => {
-        if (queuedBake) rebake();
+        if (published !== revision) return;
         const variant = results[panel.id], type = button.dataset.file;
         const data = type === "map" ? makeMap(variant) : variant.wad;
         const url = URL.createObjectURL(new Blob([data], { type: "application/octet-stream" }));
@@ -285,7 +301,10 @@
   }
 
   segment("tools", (data) => { if (scene !== "bend") tool = data.tool; });
-  segment("mips", (data) => { level = Number(data.mip); panels.forEach(renderWad); });
+  segment("mips", (data) => {
+    level = Number(data.mip);
+    if (results) panels.forEach(renderWad);
+  });
   function changeScene(nextScene) {
     scene = nextScene;
     const bend = scene === "bend";
@@ -307,24 +326,30 @@
     find("shared").querySelector("h2").textContent = multiple ? "自动 UV + 局部烘焙"
       : bend ? "三材质过渡带" : "共享过渡纹理";
     position = multiple ? { x: 515, y: 186 } : { x: 4 * core, y: bend ? 228 : 191 };
-    rebake();
+    queueBake();
   }
   segment("scenes", (data) => changeScene(data.scene));
   radius.addEventListener("input", () => {
     find("radius-value").value = radius.value;
     scheduleOverlay();
   });
-  find("grid").addEventListener("change", scheduleOverlay);
+  find("grid").addEventListener("change", () => {
+    if (results) panels.forEach(renderBackdrop);
+    scheduleOverlay();
+  });
   find("reset").addEventListener("click", () => {
+    if (stroke !== undefined) return;
     if (scene === "multi") multiWeights = multi.initialWeights();
     else weights = initialWeights();
-    rebake();
+    queueBake();
   });
 
   function renderGeometry() {
     for (const { id, root } of panels) {
       const variant = results[id];
-      const faceCount = Array.from(makeMap(variant).matchAll(/^\( /gm)).length;
+      const faceCount = 30 + (variant.faces
+        ? variant.faces.reduce((count, face) => count + face.points.length + 2, 0)
+        : variant.cells.length * 6);
       const tileSize = core + 2 * gutter;
       const bsp = root.querySelector(".bsp");
       const measurement = bendBsp[id];
@@ -332,7 +357,7 @@
       bsp.textContent = `BSP 实测 ${formatMB(measurement.bytes)} · ${measurement.faces} 个面`;
       root.querySelector(".geometry").textContent =
         `地形 ${columns * worldBlockSize} × ${rows * worldBlockSize} 单位 · ${variant.cells.length} 个顶面 · MAP 共 ${faceCount} 个 Brush 面`;
-      root.querySelector(".tile-size").textContent = variant.faceAt
+      root.querySelector(".tile-size").textContent = variant.grid
         ? `三材质交汇 ${variant.junctionFaces} 面 · UV 退化处烘焙 ${variant.fitFaces} 面`
         : variant.faces
         ? `过渡带沿 Y 轴宽 ${(variant.transitionWidth * worldBlockSize / core).toFixed(1)} 单位 · 过渡贴图 ${variant.textures[2].size} × ${variant.textures[2].size} px`

@@ -21,16 +21,22 @@ globalThis.TerrainMulti = (() => {
         for (let channel = 0; channel < 3; channel++) {
           const base = (colors[0][channel] * grass + colors[1][channel] * dirt
             + colors[2][channel] * rock) / weightSteps;
-          palette[nextColor * 3 + channel] = Math.round(base + (shade - 3) * 7);
+          palette[nextColor * 3 + channel] = Math.round(base + (shade - 3) * 9);
         }
         nextColor++;
       }
     }
   }
 
-  function detail(x, y) {
-    return 1 + 3 * valueNoise(x, y, 16, 62) + 2 * noise(x, y, 97);
-  }
+  const detail = names.map((_, material) => Float32Array.from({ length: period ** 2 }, (_, i) => {
+    const x = i % period, y = Math.floor(i / period);
+    const grain = noise(x, y, 97 + material * 17) - 0.5;
+    if (material === 0)
+      return clamp(3 + 3 * (valueNoise(x, y, 2, 62) - 0.5) + 3 * grain, 0, 6);
+    if (material === 1)
+      return clamp(3 + 4 * (valueNoise(x, y, 4, 71) - 0.5) + 2 * grain, 0, 6);
+    return clamp(3 + 5 * (valueNoise(x, y, 8, 83) - 0.5) + 3 * grain, 0, 6);
+  }));
 
   function texture(name, sample, originX = 0, originY = 0, size = period) {
     let side = size;
@@ -42,7 +48,9 @@ globalThis.TerrainMulti = (() => {
         const weights = sample(worldX + 0.5, worldY + 0.5);
         samples[offset] = weights[1];
         samples[offset + 1] = weights[2];
-        samples[offset + 2] = detail((worldX + period) % period, (worldY + period) % period);
+        const texel = ((worldY + period) % period) * period + (worldX + period) % period;
+        samples[offset + 2] = weights[0] * detail[0][texel] + weights[1] * detail[1][texel]
+          + weights[2] * detail[2][texel];
       }
     }
     const levels = [];
@@ -229,11 +237,7 @@ globalThis.TerrainMulti = (() => {
     const shared = wadVariant("terrain_multi_uv", textures, faces.map((face) => face.material));
     return { original: { ...original, baseCount: bases.length },
       shared: { ...shared, baseCount: bases.length, faces, junctionFaces, fitFaces, patchCount,
-        faceAt(x, y) {
-          const [cell, s, t] = locate(x, y);
-          const candidates = grid[cell];
-          return candidates.length === 1 || s >= t ? candidates[0] : candidates[1];
-        } } };
+        grid, gridStep: step } };
   }
 
   return { initialWeights, paint, bake };

@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="style.css">
 <script defer src="bake.js"></script>
 <script defer src="multi.js"></script>
+<script defer src="preview.js"></script>
 <script defer src="demo.js"></script>
 <body>
   <main>
@@ -45,12 +46,12 @@
           <button type="button" data-mip="3" aria-pressed="false">3</button>
         </div>
       </div>
-      <label class="grid-toggle"><input id="grid" type="checkbox" checked> 面边界</label>
+      <label class="grid-toggle"><input id="grid" type="checkbox"> 面边界</label>
       <button id="reset" type="button">重置样图</button>
     </section>
 
     <div class="summary">
-      <div><span class="label">WAD 体积差</span><strong id="savings"></strong></div>
+      <div><span class="label">WAD 体积差</span><strong id="savings"></strong><span id="bake-progress" hidden>更新中…</span></div>
       <p id="status" role="status"></p>
       <span class="legend"><i></i> <span></span></span>
     </div>
@@ -66,7 +67,7 @@
         <p class="stats geometry"></p>
         <p class="stats tile-size"></p>
         <p class="stats bsp" hidden></p>
-        <div class="inspection"><p class="label">同位置放大</p><canvas class="detail" aria-label="独有烘焙局部"></canvas><p class="tile-info"></p></div>
+        <div class="inspection"><p class="label">同位置放大 · 64 × 16 纹素区域</p><canvas class="detail" aria-label="独有烘焙局部"></canvas><p class="tile-info"></p></div>
         <div class="exports"><button data-file="map">下载 MAP</button><button data-file="wad">下载 WAD3</button></div>
       </article>
       <article class="panel shared" id="shared">
@@ -79,7 +80,7 @@
         <p class="stats geometry"></p>
         <p class="stats tile-size"></p>
         <p class="stats bsp" hidden></p>
-        <div class="inspection"><p class="label">同位置放大</p><canvas class="detail" aria-label="共享纹理局部"></canvas><p class="tile-info"></p></div>
+        <div class="inspection"><p class="label">同位置放大 · 64 × 16 纹素区域</p><canvas class="detail" aria-label="共享纹理局部"></canvas><p class="tile-info"></p></div>
         <div class="exports"><button data-file="map">下载 MAP</button><button data-file="wad">下载 WAD3</button></div>
       </article>
     </section>
