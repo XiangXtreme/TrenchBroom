@@ -274,7 +274,7 @@ globalThis.TerrainBake = (() => {
       bandCount: materials.length } };
   }
 
-  function makeMap(variant) {
+  function makeMap(variant, { terrainTop = (x) => x / 16 } = {}) {
     const span = worldBlockSize, scale = span / core;
     const mapWidth = span * columns, mapHeight = span * rows;
     const point = (xyz) => "( " + xyz.join(" ") + " )";
@@ -307,7 +307,7 @@ globalThis.TerrainBake = (() => {
       for (const surface of variant.faces) {
         const corners = surface.points.map(([x, y]) => [x * scale, -y * scale]).reverse();
         const axis = ([x, y, offset]) => [x / scale, -y / scale, 0, offset];
-        lines.push(prism(corners, -64, (x) => x / 16, variant.textures[surface.material].name,
+        lines.push(prism(corners, -64, terrainTop, variant.textures[surface.material].name,
           axis(surface.u), axis(surface.v)));
       }
     } else {
@@ -316,7 +316,7 @@ globalThis.TerrainBake = (() => {
         const shift = index < (variant.baseCount ?? 2) ? [0, 0]
           : [gutter - col * core, gutter - row * core];
         lines.push(brush(col * span, -(row + 1) * span, (col + 1) * span, -row * span,
-          -64, (x) => x / 16, variant.textures[index].name, shift));
+          -64, terrainTop, variant.textures[index].name, shift));
       });
     }
     const box = (x0, y0, x1, y1, bottom, top) =>
