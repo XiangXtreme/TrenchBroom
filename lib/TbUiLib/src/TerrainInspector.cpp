@@ -582,6 +582,11 @@ bool TerrainInspector::stroking() const
   return m_stroke.has_value();
 }
 
+size_t TerrainInspector::strokeRevision() const
+{
+  return m_strokeRevision;
+}
+
 const TerrainRegion* TerrainInspector::previewStroke(const mdl::GroupNode& group) const
 {
   return m_stroke && group.persistentId() == m_strokeGroup ? &*m_stroke : nullptr;
@@ -595,6 +600,7 @@ void TerrainInspector::beginStroke(const mdl::PickResult& pick)
   auto region = TerrainRegion::decode(group->group().terrainPaint());
   if (region.is_error())
     return;
+  ++m_strokeRevision;
   m_stroke = std::move(region).value();
   m_strokeGroup = group->persistentId();
   continueStroke(pick);

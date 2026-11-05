@@ -5,6 +5,7 @@
 #include "ui/TerrainPreviewRenderer.h"
 
 #include <QFuture>
+#include <QFutureWatcher>
 #include <QTimer>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -39,7 +40,6 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -277,8 +277,6 @@ std::unique_ptr<PreviewScene> makeScene(
 
 class TerrainPreviewRenderer::Impl
 {
-  using Clock = std::chrono::steady_clock;
-
   struct Display
   {
     std::string key;
@@ -288,6 +286,7 @@ class TerrainPreviewRenderer::Impl
     std::unique_ptr<PreviewScene> scene;
     size_t geometryRevision = 0;
     const render::LightmapAssembly* lightmap = nullptr;
+    std::optional<size_t> strokeRevision;
   };
 
   struct Entry
@@ -296,17 +295,19 @@ class TerrainPreviewRenderer::Impl
     std::optional<TerrainRegion> region;
     std::string wanted;
     std::string running;
-    std::string baked;
     std::string failed;
-    Clock::time_point changedAt{};
     QFuture<std::shared_ptr<PreparedBake>> future;
+    std::unique_ptr<QFutureWatcher<std::shared_ptr<PreparedBake>>> watcher;
     std::optional<TerrainRegion> runningRegion;
     size_t runningMaterialRevision = 0;
+    std::optional<size_t> strokeRevision;
+    std::optional<size_t> runningStrokeRevision;
     size_t geometryRevision = 1;
     vm::mat4x4d observedTransform;
     bool observed = false;
-    std::unique_ptr<Display> active;
-    std::unique_ptr<Display> pending;
+    std::shared_ptr<Display> active;
+    std::shared_ptr<Display> strokeBase;
+    std::shared_ptr<Display> pending;
   };
 
   AppController& m_app;
@@ -328,7 +329,8 @@ public:
     , m_document{document}
     , m_previewDidChange{previewDidChange}
   {
-    m_timer.setInterval(100);
+    // GPU resources are processed independently on a 20 ms timer.
+    m_timer.setInterval(20);
     m_timer.setSingleShot(true);
     QObject::connect(&m_timer, &QTimer::timeout, &m_timer, [&] { m_previewDidChange(); });
     m_connection += document.nodesDidChangeNotifier.connect(
@@ -429,13 +431,20 @@ public:
         continue;
       }
       auto wanted = stroke ? stroke->encode() : encoded;
+      auto saved = encoded;
       if (!region->materialAssetId.empty())
-        wanted += ":" + std::to_string(m_materialRevision);
+      {
+        const auto suffix = ":" + std::to_string(m_materialRevision);
+        wanted += suffix;
+        saved += suffix;
+      }
       updateEntry(
         *group,
         entry,
         *region,
         std::move(wanted),
+        saved,
+        stroke ? std::optional{inspector->strokeRevision()} : std::nullopt,
         project.get(),
         batch,
         needsTimer,
@@ -527,11 +536,14 @@ private:
             const auto offset = delta * vm::vec3d{};
             translated = vm::is_equal(delta, vm::translation_matrix(offset), 1e-6);
           }
-          for (auto* display : {entry.active.get(), entry.pending.get()})
-          {
+          const auto translateDisplay = [&](Display* display) {
             if (translated && display && display->scene)
               translated = display->scene->translateTo(transform);
-          }
+          };
+          translateDisplay(entry.active.get());
+          translateDisplay(entry.pending.get());
+          if (entry.strokeBase != entry.active && entry.strokeBase != entry.pending)
+            translateDisplay(entry.strokeBase.get());
         }
       }
       if ((relatedGeometry || transformChanged) && !translated)
@@ -567,109 +579,147 @@ private:
     Entry& entry,
     const TerrainRegion& region,
     std::string wanted,
+    const std::string& saved,
+    const std::optional<size_t> strokeRevision,
     const ProjectSession* project,
     render::RenderBatch& batch,
     bool& needsTimer,
     const render::LightmapAssembly* lightmap)
   {
-    if (entry.wanted != wanted)
+    if (entry.strokeRevision != strokeRevision)
     {
-      entry.wanted = std::move(wanted);
-      entry.changedAt = Clock::now();
-      if (entry.pending && entry.pending->key != entry.wanted)
-        entry.pending.reset();
-      if (entry.active && entry.active->key == entry.wanted)
-        entry.baked = entry.wanted;
+      // A stroke may end and another start before the next frame. Restore the
+      // committed preview when available, then record the new stroke's baseline.
+      if (entry.strokeBase && entry.strokeBase->key == saved)
+        entry.active = entry.strokeBase;
+      entry.strokeBase.reset();
+      if (strokeRevision && entry.active && entry.active->key == saved)
+        entry.strokeBase = entry.active;
+      entry.strokeRevision = strokeRevision;
     }
-    if (!entry.running.empty() && entry.future.isFinished())
+    entry.wanted = std::move(wanted);
+    if (
+      entry.pending && entry.pending->key != entry.wanted
+      && (!strokeRevision || entry.pending->strokeRevision != strokeRevision
+          || (entry.active && entry.active->key == entry.wanted)))
+      entry.pending.reset();
+
+    const auto updatePending = [&] {
+      if (!entry.pending)
+        return;
+      updateDisplay(group, entry, *entry.pending, lightmap);
+      if (!entry.pending->scene)
+      {
+        if (entry.pending->key == entry.wanted)
+          entry.failed = entry.wanted;
+        entry.pending.reset();
+      }
+      else if (entry.pending->scene->ready())
+        entry.active = std::move(entry.pending);
+      else
+        needsTimer = true;
+    };
+
+    // Do not replace an upload in progress with every newer bake. Otherwise fast
+    // continuous input can prevent any of the intermediate previews from appearing.
+    updatePending();
+    if (!entry.pending && !entry.running.empty() && entry.future.isFinished())
     {
       auto bake = entry.future.result();
       if (
         bake && bake->material && entry.runningRegion
         && entry.runningMaterialRevision == m_materialRevision)
         m_materials[entry.runningRegion->materialAssetId] = bake->material;
-      if (entry.running == entry.wanted)
+      const auto current = entry.running == entry.wanted;
+      const auto intermediate = strokeRevision
+                                && entry.runningStrokeRevision == strokeRevision
+                                && entry.runningMaterialRevision == m_materialRevision
+                                && (!entry.active || entry.active->key != entry.wanted)
+                                && (!entry.pending || entry.pending->key != entry.wanted);
+      if (current || intermediate)
       {
-        entry.baked = bake ? entry.running : std::string{};
-        entry.failed = bake ? std::string{} : entry.running;
+        if (current)
+          entry.failed = bake ? std::string{} : entry.running;
         if (bake && entry.runningRegion)
         {
           auto materials = std::make_shared<PreviewMaterials>(bake->bake.textures.size());
-          entry.pending = std::make_unique<Display>(Display{
+          entry.pending = std::make_shared<Display>(Display{
             entry.running,
             std::move(bake),
             *entry.runningRegion,
             std::move(materials),
             nullptr,
-            0});
+            0,
+            nullptr,
+            entry.runningStrokeRevision});
         }
       }
       entry.running.clear();
       entry.runningRegion.reset();
     }
     if (
-      entry.wanted != entry.baked && entry.wanted != entry.failed
-      && entry.running.empty())
+      entry.running.empty() && entry.wanted != entry.failed
+      && (!entry.active || entry.active->key != entry.wanted)
+      && (!entry.pending || entry.pending->key != entry.wanted))
     {
-      if (Clock::now() - entry.changedAt >= std::chrono::milliseconds{150})
+      auto material = std::shared_ptr<const TerrainMaterial>{};
+      auto sources = std::optional<MaterialSources>{};
+      auto valid = true;
+      if (!region.materialAssetId.empty())
       {
-        auto material = std::shared_ptr<const TerrainMaterial>{};
-        auto sources = std::optional<MaterialSources>{};
-        auto valid = true;
-        if (!region.materialAssetId.empty())
+        if (const auto it = m_materials.find(region.materialAssetId);
+            it != m_materials.end())
+          material = it->second;
+        else if (project)
         {
-          if (const auto it = m_materials.find(region.materialAssetId);
-              it != m_materials.end())
-            material = it->second;
-          else if (project)
+          auto images =
+            loadTerrainMaterialImages(project->store(), region.materialAssetId);
+          if (images.is_success())
           {
-            auto images =
-              loadTerrainMaterialImages(project->store(), region.materialAssetId);
-            if (images.is_success())
-            {
-              auto package = project->store().readAsset(
-                region.materialAssetId, project::ContentKind::Compatible);
-              sources = MaterialSources{
-                std::move(images).value(),
-                package.is_success() ? std::move(package).value()
-                                     : std::vector<std::uint8_t>{}};
-            }
+            auto package = project->store().readAsset(
+              region.materialAssetId, project::ContentKind::Compatible);
+            sources = MaterialSources{
+              std::move(images).value(),
+              package.is_success() ? std::move(package).value()
+                                   : std::vector<std::uint8_t>{}};
           }
-          valid = bool(material) || sources.has_value();
         }
-        if (valid)
+        valid = bool(material) || sources.has_value();
+      }
+      if (valid)
+      {
+        entry.running = entry.wanted;
+        entry.runningRegion = region;
+        entry.runningMaterialRevision = m_materialRevision;
+        entry.runningStrokeRevision = strokeRevision;
+        if (!entry.watcher)
         {
-          entry.running = entry.wanted;
-          entry.runningRegion = region;
-          entry.runningMaterialRevision = m_materialRevision;
-          // The task owns its inputs and never accesses the live document or store.
-          entry.future = QtConcurrent::run([region,
-                                            material = std::move(material),
-                                            sources = std::move(sources)]() mutable {
-            return prepareBake(region, std::move(material), std::move(sources));
-          });
+          entry.watcher =
+            std::make_unique<QFutureWatcher<std::shared_ptr<PreparedBake>>>();
+          QObject::connect(
+            entry.watcher.get(),
+            &QFutureWatcher<std::shared_ptr<PreparedBake>>::finished,
+            &m_timer,
+            [this] { m_previewDidChange(); });
         }
-        else
-        {
-          entry.failed = entry.wanted;
-          entry.pending.reset();
-          entry.active.reset();
-        }
+        render::RenderTiming::count("terrain.bake_starts", 1);
+        // The task owns its inputs and never accesses the live document or store.
+        entry.future = QtConcurrent::run([region,
+                                          material = std::move(material),
+                                          sources = std::move(sources)]() mutable {
+          return prepareBake(region, std::move(material), std::move(sources));
+        });
+        entry.watcher->setFuture(entry.future);
       }
       else
-        needsTimer = true;
+      {
+        entry.failed = entry.wanted;
+        entry.pending.reset();
+        entry.active.reset();
+      }
     }
-    if (!entry.running.empty())
-      needsTimer = true;
 
-    if (entry.pending)
-    {
-      updateDisplay(group, entry, *entry.pending, lightmap);
-      if (entry.pending->scene && entry.pending->scene->ready())
-        entry.active = std::move(entry.pending);
-      else if (entry.pending->scene)
-        needsTimer = true;
-    }
+    updatePending();
     if (entry.active)
     {
       updateDisplay(group, entry, *entry.active, lightmap);

@@ -406,6 +406,43 @@ TEST_CASE("Project terrain panel paints a picked brush")
   REQUIRE(face);
   REQUIRE(&face->node() == brush);
   REQUIRE(face->face().normal().z() > 0);
+
+  // A continuously changing stroke must start baking immediately and show progress
+  // before the user releases the mouse, even while a newer sample is being prepared.
+  auto* strength = panel->findChild<QSpinBox*>("TerrainInspector_Strength");
+  REQUIRE(strength);
+  const auto originalStrength = strength->value();
+  strength->setValue(5);
+  panel->beginStroke(pick);
+  REQUIRE(panel->stroking());
+  auto startTiming = render::RenderTiming{};
+  {
+    const auto capture = render::RenderTiming::Capture{startTiming};
+    view->grabFramebuffer();
+  }
+  CHECK(startTiming.counters["terrain.bake_starts"] == 1);
+  auto changedDuringStroke = false;
+  for (auto i = 0; i < 150 && !changedDuringStroke; ++i)
+  {
+    panel->continueStroke(pick);
+    QTest::qWait(10);
+    changedDuringStroke = centerIs(true);
+  }
+  CHECK(changedDuringStroke);
+  CHECK(panel->stroking());
+  const auto firstStroke = panel->strokeRevision();
+  panel->endStroke(false);
+  // These two transitions intentionally happen before the renderer sees a frame.
+  panel->beginStroke(pick);
+  CHECK(panel->strokeRevision() != firstStroke);
+  CHECK(centerIs(false));
+  QTest::qWait(250);
+  CHECK(centerIs(false));
+  panel->endStroke(false);
+  CHECK(centerIs(false));
+  CHECK(group->group().terrainPaint() == initial);
+  strength->setValue(originalStrength);
+
   // Exercise the uncommitted stroke separately from native focus, which the
   // background-window test policy intentionally does not establish.
   view->clearFocus();

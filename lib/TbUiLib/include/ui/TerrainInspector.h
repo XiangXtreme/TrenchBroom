@@ -10,6 +10,7 @@
 #include "ui/TerrainExport.h"
 #include "ui/TerrainRegion.h"
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -62,6 +63,7 @@ private:
   QPushButton* m_analyze = nullptr;
   QTimer* m_refreshTimer = nullptr;
   std::optional<TerrainRegion> m_stroke;
+  size_t m_strokeRevision = 0;
   std::optional<mdl::IdType> m_strokeGroup;
   std::optional<vm::vec2d> m_previousPoint;
   std::optional<mdl::IdType> m_cutPreviewGroup;
@@ -77,6 +79,7 @@ public:
   TerrainInspector(AppController& app, MapDocument& document);
   bool painting() const;
   bool stroking() const;
+  size_t strokeRevision() const;
   const TerrainRegion* previewStroke(const mdl::GroupNode& group) const;
   void beginStroke(const mdl::PickResult& pick);
   void continueStroke(const mdl::PickResult& pick);
