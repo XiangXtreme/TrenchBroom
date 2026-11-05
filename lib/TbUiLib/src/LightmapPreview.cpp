@@ -101,6 +101,11 @@ int LightmapPreview::remainingSeconds() const
   return m_remainingSeconds;
 }
 
+void LightmapPreview::setProjectInfoProvider(ProjectInfoProvider provider)
+{
+  m_projectInfoProvider = std::move(provider);
+}
+
 void LightmapPreview::invalidate()
 {
   cancel();
@@ -144,6 +149,10 @@ void LightmapPreview::startBake()
     return;
   }
 
+  auto projectInfo = std::optional<ProjectCompileInfo>{};
+  if (m_projectInfoProvider)
+    projectInfo = m_projectInfoProvider();
+
   const auto startedAt = std::chrono::steady_clock::now();
   logger.info() << "Baking a lightmap for the view.";
   setProgress(true, -1);
@@ -182,7 +191,8 @@ void LightmapPreview::startBake()
       assembly->pixels = std::vector<std::uint8_t>{};
       m_assembly = std::move(assembly);
       emit changed();
-    });
+    },
+    std::move(projectInfo));
 }
 
 } // namespace tb::ui

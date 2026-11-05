@@ -20,6 +20,7 @@
 #pragma once
 
 #include "render/LightmapData.h"
+#include "ui/CompilationRun.h"
 
 #include <QByteArray>
 #include <QObject>
@@ -73,7 +74,8 @@ public:
     const std::filesystem::path& executable,
     int threadCount,
     const std::string& quality,
-    Callback callback);
+    Callback callback,
+    std::optional<ProjectCompileInfo> project = std::nullopt);
 
   void cancel();
 
@@ -100,6 +102,7 @@ private:
   int m_stage = -1;
   int m_threadCount = 1;
   Callback m_callback;
+  std::optional<ProjectCompileInfo> m_project;
 };
 
 } // namespace tb::ui

@@ -24,6 +24,7 @@
 
 #include "base/NotifierConnection.h"
 #include "render/LightmapAtlas.h"
+#include "ui/CompilationRun.h"
 #include "ui/LightmapBaker.h"
 
 #include <memory>
@@ -48,6 +49,9 @@ public:
   bool baking() const;
   int remainingSeconds() const;
 
+  using ProjectInfoProvider = std::function<std::optional<ProjectCompileInfo>()>;
+  void setProjectInfoProvider(ProjectInfoProvider provider);
+
 signals:
   void changed();
   void progressChanged(bool baking, int remainingSeconds);
@@ -68,6 +72,7 @@ private:
   bool m_baking = false;
   int m_remainingSeconds = -1;
   NotifierConnection m_notifierConnection;
+  ProjectInfoProvider m_projectInfoProvider;
 };
 
 } // namespace tb::ui

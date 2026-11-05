@@ -83,7 +83,8 @@ void LightmapBaker::start(
   const std::filesystem::path& executable,
   const int threadCount,
   const std::string& quality,
-  Callback callback)
+  Callback callback,
+  std::optional<ProjectCompileInfo> project)
 {
   cancel();
 
@@ -91,6 +92,7 @@ void LightmapBaker::start(
   m_executable = executable;
   m_threadCount = clampedThreadCount(threadCount);
   m_quality = quality;
+  m_project = std::move(project);
   m_output.clear();
   m_progressBuffer.clear();
   m_stage = 0;
@@ -103,17 +105,20 @@ void LightmapBaker::start(
     return;
   }
 
-  // Use the live map and the same layer filtering as a normal compile export.
-  const auto exported = map.exportAs(mdl::MapExportOptions{
-    pathFromQString(m_workDir->filePath(MapFileName)),
-    false,
-    std::nullopt,
-    std::nullopt,
-  });
-  if (exported.is_error())
+  if (!m_project)
   {
-    finish(std::nullopt, std::get<Error>(exported.error()).msg);
-    return;
+    // Use the live map and the same layer filtering as a normal compile export.
+    const auto exported = map.exportAs(mdl::MapExportOptions{
+      pathFromQString(m_workDir->filePath(MapFileName)),
+      false,
+      std::nullopt,
+      std::nullopt,
+    });
+    if (exported.is_error())
+    {
+      finish(std::nullopt, std::get<Error>(exported.error()).msg);
+      return;
+    }
   }
 
   m_process = std::make_unique<QProcess>();
@@ -214,13 +219,31 @@ void LightmapBaker::runStage()
   {
     // RAD discards all-zero lightmaps. Keep dark faces in the preview atlas with
     // the smallest nonzero luxel value so they do not fall back to full brightness.
-    arguments = {
-      QStringLiteral("compile"),
-      m_workDir->filePath(MapFileName),
-      QStringLiteral("-minlight"),
-      QStringLiteral("1"),
-      QStringLiteral("-threads"),
-      QString::number(m_threadCount)};
+    if (m_project)
+    {
+      arguments = {
+        QStringLiteral("compile"),
+        QStringLiteral("--project"),
+        pathAsQString(m_project->projectPath),
+        QStringLiteral("--map"),
+        QString::fromStdString(m_project->mapName),
+        QStringLiteral("--output"),
+        m_workDir->filePath(BspFileName),
+        QStringLiteral("-minlight"),
+        QStringLiteral("1"),
+        QStringLiteral("-threads"),
+        QString::number(m_threadCount)};
+    }
+    else
+    {
+      arguments = {
+        QStringLiteral("compile"),
+        m_workDir->filePath(MapFileName),
+        QStringLiteral("-minlight"),
+        QStringLiteral("1"),
+        QStringLiteral("-threads"),
+        QString::number(m_threadCount)};
+    }
     if (m_quality == Preferences::LightmapQualityFast)
       arguments << QStringLiteral("-fast");
     else if (m_quality == Preferences::LightmapQualityUltra)
