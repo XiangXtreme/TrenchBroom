@@ -40,6 +40,7 @@
 #include "project/GoldSrcWad.h"
 #include "project/LibrarySync.h"
 #include "ui/AssetInspection.h"
+#include "ui/BuiltinGoldSrcAssets.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/ClipTool.h"
 #include "ui/CompilationContext.h"
@@ -1261,6 +1262,127 @@ TEST_CASE("Terrain material normalizes textures and validates input")
   images[0] = QImage{64, 64, QImage::Format_RGBA8888};
   images[0].fill(Qt::transparent);
   CHECK(prepareTerrainMaterial(images).is_error());
+}
+
+TEST_CASE("BuiltinGoldSrcAssets")
+{
+  const auto wadBytes = requireProject(builtinEmptyTextureWad());
+  const auto builtin = requireProject(project::readGoldSrcWad(wadBytes));
+  REQUIRE(builtin.textures.size() == 1);
+  CHECK(builtin.textures.front().name == "__TB_empty");
+  CHECK(builtin.textures.front().valid);
+  CHECK(builtin.textures.front().width == 32);
+  CHECK(builtin.textures.front().height == 32);
+
+  SECTION("lightmap project uses a scratch copy and preserves an existing texture")
+  {
+    auto temp = QTemporaryDir{};
+    REQUIRE(temp.isValid());
+    const auto root = pathFromQString(temp.path());
+    const auto projectPath = root / "source.tbproj";
+    const auto copyPath = root / "preview.tbproj";
+    auto source =
+      requireProject(project::ProjectStore::create(projectPath, "Test", "Half-Life"));
+
+    CHECK(requireProject(prepareLightmapProject(projectPath, copyPath)) == copyPath);
+    CHECK(requireProject(source->assets()).empty());
+    auto copy = requireProject(project::ProjectStore::open(copyPath));
+    const auto copiedAssets = requireProject(copy->assets(project::AssetType::Texture));
+    REQUIRE(copiedAssets.size() == 1);
+    CHECK(
+      requireProject(
+        copy->readAsset(copiedAssets.front().id, project::ContentKind::Compatible))
+      == wadBytes);
+
+    auto custom = project::AssetImport{};
+    custom.type = project::AssetType::Texture;
+    custom.virtualPath = "textures/custom.wad";
+    custom.displayName = "Custom";
+    custom.original =
+      requireProject(project::buildGoldSrcWad({miptexFor("__TB_EMPTY", 16, 127)}));
+    custom.compatible = custom.original;
+    requireProject(source->importAsset(custom));
+    const auto otherCopy = root / "unused.tbproj";
+    CHECK(requireProject(prepareLightmapProject(projectPath, otherCopy)) == projectPath);
+    CHECK_FALSE(std::filesystem::exists(otherCopy));
+  }
+
+  SECTION("standalone lightmap configuration keeps map WADs before the fallback")
+  {
+    auto fixture = mdl::MapFixture{};
+    auto& map = fixture.create(mdl::QuakeFixtureConfig);
+    mdl::selectNodes(map, {&map.worldNode()});
+    mdl::setEntityProperty(map, "wad", "first.wad;path with spaces/second.wad");
+    auto temp = QTemporaryDir{};
+    REQUIRE(temp.isValid());
+    const auto root = pathFromQString(temp.path());
+    const auto config = requireProject(prepareLightmapWads(map, root));
+    const auto data = readProjectFile(config);
+    const auto text = std::string{data.begin(), data.end()};
+    CHECK(text.find("\"first.wad\"") < text.find("\"path with spaces/second.wad\""));
+    CHECK(text.find("\"path with spaces/second.wad\"") < text.find("tb_empty.wad"));
+    CHECK(readProjectFile(root / "tb_empty.wad") == wadBytes);
+  }
+
+  SECTION("named WAD configurations retain their paths and gain the fallback")
+  {
+    auto fixture = mdl::MapFixture{};
+    auto& map = fixture.create(mdl::QuakeFixtureConfig);
+    auto temp = QTemporaryDir{};
+    REQUIRE(temp.isValid());
+    const auto root = pathFromQString(temp.path());
+    const auto original = root / "original.cfg";
+    const auto originalText =
+      std::string{"one { \"a}b.wad\" }\ntwo { include second.wad }\n"};
+    writeFile(original, {originalText.begin(), originalText.end()});
+    mdl::selectNodes(map, {&map.worldNode()});
+    mdl::setEntityProperty(map, "wadconfig", "two");
+    mdl::setEntityProperty(
+      map, "wadcfgfile", pathAsQString(original).toUtf8().toStdString());
+    const auto generated = requireProject(prepareLightmapWads(map, root));
+    const auto bytes = readProjectFile(generated);
+    const auto text = std::string{bytes.begin(), bytes.end()};
+    CHECK(text.find("\"a}b.wad\"") != std::string::npos);
+    const auto firstFallback = text.find("tb_empty.wad");
+    const auto secondWad = text.find("include second.wad");
+    const auto secondFallback = text.find("tb_empty.wad", firstFallback + 1);
+    CHECK(firstFallback < secondWad);
+    CHECK(secondWad < secondFallback);
+    const auto originalBytes =
+      std::vector<std::uint8_t>{originalText.begin(), originalText.end()};
+    CHECK(readProjectFile(original) == originalBytes);
+  }
+
+  SECTION("project snapshots include the fallback only when referenced")
+  {
+    auto sandbox = LibrarySandbox{};
+    auto stream = std::ostringstream{};
+    mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Valve, "Placeholder");
+    stream << R"({
+"classname" "worldspawn"
+"mapversion" "220"
+{
+( 0 0 0 ) ( 128 0 0 ) ( 0 128 0 ) __TB_EMPTY [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+}
+}
+)";
+    const auto mapText = stream.str();
+    auto mapImport = project::AssetImport{};
+    mapImport.type = project::AssetType::Map;
+    mapImport.virtualPath = "maps/placeholder.map";
+    mapImport.displayName = "Placeholder";
+    mapImport.original = {mapText.begin(), mapText.end()};
+    mapImport.compatible = mapImport.original;
+    const auto map = requireProject(sandbox.session->importAsset(mapImport));
+    const auto folder = sandbox.root / "snapshot";
+    requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));
+    const auto exported =
+      requireProject(project::readGoldSrcWad(readProjectFile(folder / "textures.wad")));
+    REQUIRE(exported.textures.size() == 1);
+    CHECK(exported.textures.front().miptex == builtin.textures.front().miptex);
+    CHECK(requireProject(sandbox.session->store().assets(project::AssetType::Texture))
+            .empty());
+  }
 }
 
 TEST_CASE("ProjectSessionAssetLibrary")

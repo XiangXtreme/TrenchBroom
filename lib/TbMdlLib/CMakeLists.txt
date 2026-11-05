@@ -30,6 +30,7 @@ target_sources(TbMdlLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EditorContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EmptyBrushEntityValidator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EmptyGroupValidator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EmptyMaterialValidator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EmptyPropertyKeyValidator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EmptyPropertyValueValidator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Entity.cpp

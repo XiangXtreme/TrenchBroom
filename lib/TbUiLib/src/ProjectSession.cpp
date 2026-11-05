@@ -18,12 +18,14 @@
 #include "base/Uuid.h"
 #include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
+#include "mdl/BrushFace.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
 #include "prefs/Preferences.h"
 #include "project/ContentHash.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
+#include "ui/BuiltinGoldSrcAssets.h"
 #include "ui/MapDocument.h"
 #include "ui/ProjectReference.h"
 #include "ui/ProjectResourceAudit.h"
@@ -465,6 +467,7 @@ Result<void> ProjectSession::exportCompileSnapshot(
   auto externals = std::vector<std::string>{};
   auto directAssets = std::vector<std::string>{};
   auto directTextures = std::map<std::string, std::vector<std::string>>{};
+  auto needsEmptyTexture = false;
   // The compiler recognizes these by name and never embeds them, so a missing entry says
   // nothing about the completeness of the project.
   const auto isToolTexture = [](const std::string& name) {
@@ -507,7 +510,11 @@ Result<void> ProjectSession::exportCompileSnapshot(
       // Sentence and decal lookups are not project resources; the engine resolves them.
       break;
     case ProjectResourceStatus::Missing:
-      if (isToolTexture(use.reference) || isEngineExternal(use.reference))
+      if (
+        normalizedTextureName(use.reference)
+        == normalizedTextureName(mdl::BrushFace::NoMaterialName))
+        needsEmptyTexture = true;
+      else if (isToolTexture(use.reference) || isEngineExternal(use.reference))
         externals.push_back(use.reference);
       else
         problems.push_back(where + " is not embedded in the project");
@@ -742,6 +749,20 @@ Result<void> ProjectSession::exportCompileSnapshot(
             + "'."};
       }
     }
+  }
+
+  if (needsEmptyTexture)
+  {
+    const auto bytes = builtinEmptyTextureWad();
+    if (bytes.is_error())
+      return std::get<Error>(bytes.error());
+    const auto wad = project::readGoldSrcWad(bytes.value());
+    if (
+      wad.is_error() || wad.value().textures.size() != 1
+      || !wad.value().textures.front().valid)
+      return Error{"Invalid built-in placeholder texture."};
+    const auto& texture = wad.value().textures.front();
+    miptexByName.emplace(texture.name, texture.miptex);
   }
 
   auto baked = [&]() -> Result<std::optional<TerrainSnapshot>> {

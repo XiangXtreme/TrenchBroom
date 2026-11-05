@@ -18,8 +18,11 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "mdl/BrushBuilder.h"
+#include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/CatchConfig.h"
+#include "mdl/EmptyMaterialValidator.h"
 #include "mdl/EmptyPropertyKeyValidator.h"
 #include "mdl/EmptyPropertyValueValidator.h"
 #include "mdl/EntityDefinition.h"
@@ -101,6 +104,30 @@ TEST_CASE("Validation")
   });
 
   const auto& pointEntityDefinition = map.entityDefinitionManager().definitions().front();
+
+  SECTION("EmptyMaterialValidator")
+  {
+    const auto validators = map.worldNode().registeredValidators();
+    const auto registered = std::ranges::find_if(validators, [](const auto* validator) {
+      return validator->description() == "Placeholder texture";
+    });
+    REQUIRE(registered != validators.end());
+
+    auto builder = BrushBuilder{MapFormat::Valve, map.worldBounds()};
+    auto brush = builder.createCube(
+      64.0, "__TB_EMPTY", "brick", "__TB_empty", "wall", "floor", "ceiling");
+    REQUIRE(brush.is_success());
+    auto node = BrushNode{std::move(brush).value()};
+    auto issues = std::vector<std::unique_ptr<Issue>>{};
+    (*registered)->validate(node, issues);
+    REQUIRE(issues.size() == 2);
+    for (const auto& issue : issues)
+    {
+      CHECK(issue->type() == (*registered)->type());
+      CHECK(issue->description().find("__TB_empty") != std::string::npos);
+      CHECK(dynamic_cast<const BrushFaceIssue*>(issue.get()) != nullptr);
+    }
+  }
 
   SECTION("EmptyPropertyKeyValidator")
   {

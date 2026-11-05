@@ -1,0 +1,5 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/builtin-goldsrc">
+    <file alias="tb_empty.wad">../../../app/TrenchBroom/resources/defaults/assets/wads/tb_empty.wad</file>
+</qresource>
+</RCC>

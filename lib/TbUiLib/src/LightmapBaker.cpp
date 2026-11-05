@@ -21,6 +21,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QString>
@@ -30,6 +31,7 @@
 #include "mdl/ExportOptions.h"
 #include "mdl/Map.h"
 #include "prefs/Preferences.h"
+#include "ui/BuiltinGoldSrcAssets.h"
 #include "ui/LightmapBakeReader.h"
 #include "ui/QPathUtils.h"
 
@@ -119,6 +121,26 @@ void LightmapBaker::start(
       finish(std::nullopt, std::get<Error>(exported.error()).msg);
       return;
     }
+    if (mapUsesEmptyTexture(map))
+    {
+      const auto config = prepareLightmapWads(map, pathFromQString(m_workDir->path()));
+      if (config.is_error())
+      {
+        finish(std::nullopt, std::get<Error>(config.error()).msg);
+        return;
+      }
+    }
+  }
+  else if (mapUsesEmptyTexture(map))
+  {
+    const auto prepared = prepareLightmapProject(
+      m_project->projectPath, pathFromQString(m_workDir->filePath("lightmap.tbproj")));
+    if (prepared.is_error())
+    {
+      finish(std::nullopt, std::get<Error>(prepared.error()).msg);
+      return;
+    }
+    m_project->projectPath = prepared.value();
   }
 
   m_process = std::make_unique<QProcess>();
@@ -243,6 +265,8 @@ void LightmapBaker::runStage()
         QStringLiteral("1"),
         QStringLiteral("-threads"),
         QString::number(m_threadCount)};
+      if (QFile::exists(m_workDir->filePath("wads.cfg")))
+        arguments << QStringLiteral("-wadcfgfile") << m_workDir->filePath("wads.cfg");
     }
     if (m_quality == Preferences::LightmapQualityFast)
       arguments << QStringLiteral("-fast");

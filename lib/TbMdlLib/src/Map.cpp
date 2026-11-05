@@ -34,6 +34,7 @@
 #include "mdl/EditorContext.h"
 #include "mdl/EmptyBrushEntityValidator.h"
 #include "mdl/EmptyGroupValidator.h"
+#include "mdl/EmptyMaterialValidator.h"
 #include "mdl/EmptyPropertyKeyValidator.h"
 #include "mdl/EmptyPropertyValueValidator.h"
 #include "mdl/EntityDefinitionManager.h"
@@ -1158,6 +1159,7 @@ void Map::registerValidators()
   m_worldNode->registerValidator(std::make_unique<MissingDefinitionValidator>());
   m_worldNode->registerValidator(std::make_unique<MissingModValidator>(*this));
   m_worldNode->registerValidator(std::make_unique<EmptyGroupValidator>());
+  m_worldNode->registerValidator(std::make_unique<EmptyMaterialValidator>());
   m_worldNode->registerValidator(std::make_unique<EmptyBrushEntityValidator>());
   m_worldNode->registerValidator(std::make_unique<PointEntityWithBrushesValidator>());
   m_worldNode->registerValidator(
