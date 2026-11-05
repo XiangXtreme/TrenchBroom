@@ -122,6 +122,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainExport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainMaterial.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainMaterialRaster.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainRegion.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainBaker.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/IssueBrowser.cpp

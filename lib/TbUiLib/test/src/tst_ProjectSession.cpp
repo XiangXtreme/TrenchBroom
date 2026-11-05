@@ -4,6 +4,7 @@
  */
 #include <QBuffer>
 #include <QColor>
+#include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
@@ -983,6 +984,10 @@ TEST_CASE("Project terrain bakes captured material and invalidates changed textu
   CHECK(decodeTerrainMaterialPackage(
           package, requireProject(normalizeTerrainMaterialImages(capturedImages)))
           .has_value());
+  const auto capturedMaterial =
+    requireProject(loadTerrainMaterial(sandbox.session->store(), captured.id));
+  CHECK_FALSE(capturedMaterial.baseLevels[0][0].empty());
+  CHECK_FALSE(capturedMaterial.pairLevels[0][0].empty());
   const auto dependencies =
     requireProject(sandbox.session->store().dependencies(captured.id));
   REQUIRE(dependencies.size() == 3);
@@ -1218,6 +1223,32 @@ TEST_CASE("Terrain material normalizes textures and validates input")
   REQUIRE(restored);
   CHECK(restored->palette == material.palette);
   CHECK(restored->images == material.images);
+  for (const auto* set : {&restored->baseLevels, &restored->pairLevels})
+    for (const auto& texture : *set)
+      for (auto mip = size_t{0}; mip < texture.size(); ++mip)
+      {
+        const auto side = size_t(TerrainMaterial::Period) >> mip;
+        CHECK(texture[mip].size() == side * side);
+      }
+
+  // Older packages only contain the images and palette. They remain readable and
+  // can generate texture levels on demand.
+  constexpr auto v1PayloadSize =
+    size_t{8 + 3 * TerrainMaterial::Period * TerrainMaterial::Period * 4 + 768};
+  auto legacy = std::vector<std::uint8_t>{
+    package.begin(), package.begin() + std::ptrdiff_t(v1PayloadSize)};
+  legacy[6] = '1';
+  const auto legacyDigest = QCryptographicHash::hash(
+    QByteArrayView{
+      reinterpret_cast<const char*>(legacy.data()), qsizetype(legacy.size())},
+    QCryptographicHash::Sha256);
+  legacy.insert(legacy.end(), legacyDigest.begin(), legacyDigest.end());
+  const auto restoredLegacy = decodeTerrainMaterialPackage(legacy, material.images);
+  REQUIRE(restoredLegacy);
+  CHECK(restoredLegacy->images == material.images);
+  CHECK(restoredLegacy->palette == material.palette);
+  CHECK(restoredLegacy->baseLevels[0][0].empty());
+
   auto changed = material.images;
   changed[1].setPixelColor(0, 0, Qt::red);
   CHECK_FALSE(decodeTerrainMaterialPackage(package, changed));

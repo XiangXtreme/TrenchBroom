@@ -1218,9 +1218,11 @@ TEST_CASE("AssetInspection")
       const auto converted = require(img::convertGoldSrcTexture(image, "captured"));
       capturedImages[slot] = require(inspection::decodeImage(converted.wad));
     }
-    CHECK(decodeTerrainMaterialPackage(
-            package, require(normalizeTerrainMaterialImages(capturedImages)))
-            .has_value());
+    const auto decoded = decodeTerrainMaterialPackage(
+      package, require(normalizeTerrainMaterialImages(capturedImages)));
+    REQUIRE(decoded);
+    CHECK_FALSE(decoded->baseLevels[0][0].empty());
+    CHECK_FALSE(decoded->pairLevels[0][0].empty());
     REQUIRE(library->scan().is_success());
     CHECK(require(library->readContent(materials.front().id)) == package);
   }

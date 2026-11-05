@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "TerrainMaterialRaster.h"
 #include "img/GoldSrcTexture.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
@@ -27,18 +28,53 @@ namespace tb::ui
 {
 namespace
 {
-constexpr auto PackageMagic =
+constexpr auto PackageMagicV1 =
   std::array<std::uint8_t, 8>{'T', 'B', 'T', 'M', 'A', 'T', '1', 0};
+// The version also identifies the sampling and palette rules for cached levels.
+constexpr auto PackageMagicV2 =
+  std::array<std::uint8_t, 8>{'T', 'B', 'T', 'M', 'A', 'T', '2', 0};
 constexpr auto PackageImageBytes =
   size_t{TerrainMaterial::Period * TerrainMaterial::Period * 4};
 constexpr auto PackageDigestBytes = size_t{32};
+constexpr auto PackageLevelsBytes =
+  size_t{TerrainMaterial::Period * TerrainMaterial::Period * 85 / 64};
 
 std::uint32_t readU32(const std::vector<std::uint8_t>& bytes, const size_t at)
 {
   return std::uint32_t(bytes[at]) | (std::uint32_t(bytes[at + 1]) << 8)
          | (std::uint32_t(bytes[at + 2]) << 16) | (std::uint32_t(bytes[at + 3]) << 24);
 }
+
+QByteArray levelSourceHash(const TerrainMaterial& material)
+{
+  auto hash = QCryptographicHash{QCryptographicHash::Sha256};
+  for (const auto& image : material.images)
+  {
+    if (
+      image.size() != QSize{TerrainMaterial::Period, TerrainMaterial::Period}
+      || image.format() != QImage::Format_RGBA8888
+      || size_t(image.sizeInBytes()) != PackageImageBytes)
+      return {};
+    hash.addData(QByteArrayView{
+      reinterpret_cast<const char*>(image.constBits()), qsizetype(PackageImageBytes)});
+  }
+  hash.addData(QByteArrayView{
+    reinterpret_cast<const char*>(material.palette.data()),
+    qsizetype(material.palette.size())});
+  return hash.result();
+}
 } // namespace
+
+bool detail::terrainMaterialLevelsMatch(const TerrainMaterial& material)
+{
+  if (material.baseLevels.front().front().empty())
+    return false;
+  const auto hash = levelSourceHash(material);
+  return size_t(hash.size()) == material.levelSourceHash.size()
+         && std::memcmp(
+              hash.constData(), material.levelSourceHash.data(), size_t(hash.size()))
+              == 0;
+}
 
 Result<std::array<QImage, 3>> loadTerrainMaterialImages(
   const project::ProjectStore& store, const std::string& materialAssetId)
@@ -239,20 +275,21 @@ Result<TerrainMaterial> prepareTerrainMaterial(std::array<QImage, 3> images)
 
 std::vector<std::uint8_t> encodeTerrainMaterialPackage(const TerrainMaterial& material)
 {
-  auto bytes = std::vector<std::uint8_t>{PackageMagic.begin(), PackageMagic.end()};
+  if (levelSourceHash(material).isEmpty())
+    return {};
+  auto prepared = material;
+  detail::precomputeTerrainMaterialLevels(prepared);
+  auto bytes = std::vector<std::uint8_t>{PackageMagicV2.begin(), PackageMagicV2.end()};
   bytes.reserve(
-    PackageMagic.size() + 3 * PackageImageBytes + material.palette.size()
-    + PackageDigestBytes);
+    PackageMagicV2.size() + 3 * PackageImageBytes + material.palette.size()
+    + 6 * PackageLevelsBytes + PackageDigestBytes);
   for (const auto& image : material.images)
-  {
-    if (
-      image.size() != QSize{TerrainMaterial::Period, TerrainMaterial::Period}
-      || image.format() != QImage::Format_RGBA8888
-      || size_t(image.sizeInBytes()) != PackageImageBytes)
-      return {};
     bytes.insert(bytes.end(), image.constBits(), image.constBits() + PackageImageBytes);
-  }
   bytes.insert(bytes.end(), material.palette.begin(), material.palette.end());
+  for (const auto* set : {&prepared.baseLevels, &prepared.pairLevels})
+    for (const auto& texture : *set)
+      for (const auto& level : texture)
+        bytes.insert(bytes.end(), level.begin(), level.end());
   const auto digest = QCryptographicHash::hash(
     QByteArrayView{reinterpret_cast<const char*>(bytes.data()), qsizetype(bytes.size())},
     QCryptographicHash::Sha256);
@@ -263,11 +300,16 @@ std::vector<std::uint8_t> encodeTerrainMaterialPackage(const TerrainMaterial& ma
 std::optional<TerrainMaterial> decodeTerrainMaterialPackage(
   const std::vector<std::uint8_t>& bytes, std::array<QImage, 3> normalizedImages)
 {
-  constexpr auto expectedSize =
-    PackageMagic.size() + 3 * PackageImageBytes + 768 + PackageDigestBytes;
-  if (
-    bytes.size() != expectedSize
-    || !std::equal(PackageMagic.begin(), PackageMagic.end(), bytes.begin()))
+  constexpr auto v1Size =
+    PackageMagicV1.size() + 3 * PackageImageBytes + 768 + PackageDigestBytes;
+  constexpr auto v2Size = v1Size + 6 * PackageLevelsBytes;
+  const auto isV1 =
+    bytes.size() == v1Size
+    && std::equal(PackageMagicV1.begin(), PackageMagicV1.end(), bytes.begin());
+  const auto isV2 =
+    bytes.size() == v2Size
+    && std::equal(PackageMagicV2.begin(), PackageMagicV2.end(), bytes.begin());
+  if (!isV1 && !isV2)
     return std::nullopt;
   const auto digest = QCryptographicHash::hash(
     QByteArrayView{
@@ -281,7 +323,7 @@ std::optional<TerrainMaterial> decodeTerrainMaterialPackage(
       PackageDigestBytes)
     != 0)
     return std::nullopt;
-  auto offset = PackageMagic.size();
+  auto offset = PackageMagicV1.size();
   for (const auto& image : normalizedImages)
   {
     if (
@@ -297,6 +339,24 @@ std::optional<TerrainMaterial> decodeTerrainMaterialPackage(
     bytes.begin() + std::ptrdiff_t(offset),
     result.palette.size(),
     result.palette.begin());
+  offset += result.palette.size();
+  if (isV2)
+  {
+    for (auto* set : {&result.baseLevels, &result.pairLevels})
+      for (auto& texture : *set)
+        for (auto mip = size_t{0}; mip < texture.size(); ++mip)
+        {
+          const auto side = size_t(TerrainMaterial::Period) >> mip;
+          const auto count = side * side;
+          texture[mip].assign(
+            bytes.begin() + std::ptrdiff_t(offset),
+            bytes.begin() + std::ptrdiff_t(offset + count));
+          offset += count;
+        }
+    const auto hash = levelSourceHash(result);
+    std::memcpy(
+      result.levelSourceHash.data(), hash.constData(), result.levelSourceHash.size());
+  }
   return result;
 }
 

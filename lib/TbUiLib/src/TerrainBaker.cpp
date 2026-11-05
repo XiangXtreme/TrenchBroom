@@ -4,6 +4,7 @@
  */
 #include "ui/TerrainBaker.h"
 
+#include "TerrainMaterialRaster.h"
 #include "ui/TerrainMaterial.h"
 #include "ui/TerrainRegion.h"
 
@@ -47,6 +48,8 @@ const vm::vec3d WorldV{0.0, 1.0, 0.0};
 const vm::vec3d SharedU{0.875, 0.5, 0.0};
 constexpr int WeightSteps = 7;
 constexpr int Shades = 7;
+constexpr auto MaterialPairs =
+  std::array{std::array{0, 1}, std::array{0, 2}, std::array{1, 2}};
 
 inline double clamp(const double value, const double minVal, const double maxVal)
 {
@@ -352,6 +355,45 @@ std::array<std::vector<std::uint8_t>, 4> rasterizeLevels(
   return levels;
 }
 
+project::WadTextureEntry makeTexture(
+  const std::string_view name,
+  const int size,
+  const TerrainMipLevels& levels,
+  const PaletteData& pal)
+{
+  project::WadTextureEntry entry;
+  entry.name = std::string{name};
+  entry.width = static_cast<std::uint32_t>(size);
+  entry.height = static_cast<std::uint32_t>(size);
+  entry.miptex = createMiptexLump(name, size, size, levels, pal.palette);
+  entry.valid = true;
+  return entry;
+}
+
+bool hasMaterialLevels(const TerrainMipLevels& levels)
+{
+  for (auto mip = size_t{0}; mip < levels.size(); ++mip)
+  {
+    const auto side = size_t(Period) >> mip;
+    if (levels[mip].size() != side * side)
+      return false;
+  }
+  return true;
+}
+
+bool isUniform(const QImage& image)
+{
+  const auto* first = image.constScanLine(0);
+  for (auto y = 0; y < image.height(); ++y)
+  {
+    const auto* row = image.constScanLine(y);
+    for (auto x = 0; x < image.width(); ++x)
+      if (std::memcmp(first, row + x * 4, 4) != 0)
+        return false;
+  }
+  return true;
+}
+
 template <typename SampleFn>
 project::WadTextureEntry generateTexture(
   const std::string_view name,
@@ -374,13 +416,7 @@ project::WadTextureEntry generateTexture(
     detail,
     material,
     nearestColors);
-  project::WadTextureEntry entry;
-  entry.name = std::string{name};
-  entry.width = static_cast<std::uint32_t>(size);
-  entry.height = static_cast<std::uint32_t>(size);
-  entry.miptex = createMiptexLump(name, size, size, levels, pal.palette);
-  entry.valid = true;
-  return entry;
+  return makeTexture(name, size, levels, pal);
 }
 
 inline bool usableTransitionUv(const double vx, const double vy)
@@ -436,6 +472,49 @@ QPolygonF makeRect(const double x1, const double y1, const double x2, const doub
   return poly;
 }
 } // namespace
+
+void detail::precomputeTerrainMaterialLevels(TerrainMaterial& material)
+{
+  auto pal = PaletteData{};
+  pal.palette = material.palette;
+  const auto& detail = getDetails();
+  auto nearestColors = std::unordered_map<std::uint32_t, std::uint8_t>{};
+  for (auto slot = size_t{0}; slot < material.baseLevels.size(); ++slot)
+    material.baseLevels[slot] = rasterizeLevels(
+      [slot](double, double) {
+        auto weights = std::array<double, 3>{};
+        weights[slot] = 1.0;
+        return weights;
+      },
+      0.0,
+      0.0,
+      Period,
+      1.0,
+      pal,
+      detail,
+      &material,
+      nearestColors);
+  for (auto pair = size_t{0}; pair < MaterialPairs.size(); ++pair)
+  {
+    const auto [a, b] = MaterialPairs[pair];
+    material.pairLevels[pair] = rasterizeLevels(
+      [a, b](double, const double y) {
+        const auto weight = clamp((y - LowV) / (HighV - LowV), 0.0, 1.0);
+        auto weights = std::array<double, 3>{};
+        weights[size_t(a)] = 1.0 - weight;
+        weights[size_t(b)] = weight;
+        return weights;
+      },
+      0.0,
+      0.0,
+      Period,
+      1.0,
+      pal,
+      detail,
+      &material,
+      nearestColors);
+  }
+}
 
 Result<TerrainBake> runTerrainBaker(
   const TerrainRegion& region,
@@ -548,12 +627,80 @@ Result<TerrainBake> runTerrainBaker(
     return mats;
   };
 
+  const auto matchesPairNeighborhood = [&](
+                                         const int col,
+                                         const int row,
+                                         const int a,
+                                         const int b,
+                                         const double vx,
+                                         const double vy,
+                                         const double offset) {
+    // MIP filtering and the minimum UV scale can reach beyond an adjacent cell.
+    // Check two cells in every direction, including bilinear filter footprints.
+    constexpr auto padding = 2;
+    if (
+      col < padding || row < padding || col >= Across - padding || row >= Down - padding)
+      return false;
+    constexpr auto triangles = std::array{std::array{0, 1, 2}, std::array{0, 2, 3}};
+    constexpr auto tolerance = 1e-8;
+    for (auto y = row - padding; y <= row + padding; ++y)
+      for (auto x = col - padding; x <= col + padding; ++x)
+      {
+        const auto corners = std::array{
+          std::array{x, y},
+          std::array{x + 1, y},
+          std::array{x + 1, y + 1},
+          std::array{x, y + 1}};
+        for (const auto& triangle : triangles)
+        {
+          auto low = std::numeric_limits<double>::infinity();
+          auto high = -std::numeric_limits<double>::infinity();
+          for (const auto corner : triangle)
+          {
+            const auto [gx, gy] = corners[size_t(corner)];
+            const auto raw =
+              (vx * double(gx) * Step + vy * double(gy) * Step + offset - LowV)
+              / (HighV - LowV);
+            low = std::min(low, raw);
+            high = std::max(high, raw);
+            const auto weight = clamp(raw, 0.0, 1.0);
+            const auto& actual = vertices[size_t(gy * Stride + gx)];
+            for (auto slot = 0; slot < 3; ++slot)
+            {
+              const auto expected = slot == a ? 1.0 - weight : slot == b ? weight : 0.0;
+              if (std::abs(actual[size_t(slot)] - expected) > tolerance)
+                return false;
+            }
+          }
+          // A clamp crossing inside a triangle is not affine there, even if its
+          // three corner weights happen to agree.
+          if (
+            (low < -tolerance && high > tolerance)
+            || (low < 1.0 - tolerance && high > 1.0 + tolerance))
+            return false;
+        }
+      }
+    return true;
+  };
+
+  auto uniform = std::array<bool, 3>{};
+  const auto usePrecomputed = material && detail::terrainMaterialLevelsMatch(*material);
+  if (material)
+    for (auto slot = size_t{0}; slot < uniform.size(); ++slot)
+      uniform[slot] = isUniform(material->images[slot]);
+
   // Base textures
   std::vector<project::WadTextureEntry> bases;
   constexpr std::array<std::string_view, 3> names{"grass", "dirt", "rock"};
   bases.reserve(3);
   for (size_t idx = 0; idx < 3; ++idx)
   {
+    if (usePrecomputed && hasMaterialLevels(material->baseLevels[idx]))
+    {
+      bases.push_back(makeTexture(
+        fmt::format("tm_{}", names[idx]), Period, material->baseLevels[idx], pal));
+      continue;
+    }
     bases.push_back(generateTexture(
       fmt::format("tm_{}", names[idx]),
       [idx](double, double) {
@@ -570,33 +717,43 @@ Result<TerrainBake> runTerrainBaker(
       nearestColors));
   }
 
-  // Pre-generate pair textures
+  // Built-in pairs are generated once. Custom pairs are generated or loaded only
+  // when a face actually needs one.
   std::map<int, project::WadTextureEntry> pairs;
-  for (auto a = 0; !material && a < 3; ++a)
+  auto pairLookup = std::array<size_t, 9>{};
+  const auto makePair = [&](const size_t pair) {
+    const auto [a, b] = MaterialPairs[pair];
+    const auto name = fmt::format("tm_{}_{}", names[size_t(a)], names[size_t(b)]);
+    if (usePrecomputed && hasMaterialLevels(material->pairLevels[pair]))
+      return makeTexture(name, Period, material->pairLevels[pair], pal);
+    return generateTexture(
+      name,
+      [a, b](double, const double y) {
+        const auto weight = clamp((y - LowV) / (HighV - LowV), 0.0, 1.0);
+        auto weights = std::array<double, 3>{};
+        weights[size_t(a)] = 1.0 - weight;
+        weights[size_t(b)] = weight;
+        return weights;
+      },
+      0.0,
+      0.0,
+      Period,
+      pal,
+      detail,
+      material,
+      nearestColors);
+  };
+  for (auto pair = size_t{0}; pair < MaterialPairs.size(); ++pair)
   {
-    for (auto b = a + 1; b < 3; ++b)
-    {
-      const auto key = a * 3 + b;
-      pairs.emplace(
-        key,
-        generateTexture(
-          fmt::format(
-            "tm_{}_{}", names[static_cast<size_t>(a)], names[static_cast<size_t>(b)]),
-          [a, b](double, const double y) {
-            const auto weight = clamp((y - LowV) / (HighV - LowV), 0.0, 1.0);
-            std::array<double, 3> w{};
-            w[static_cast<size_t>(a)] = 1.0 - weight;
-            w[static_cast<size_t>(b)] = weight;
-            return w;
-          },
-          0.0,
-          0.0,
-          Period,
-          pal,
-          detail,
-          material,
-          nearestColors));
-    }
+    const auto [a, b] = MaterialPairs[pair];
+    if (
+      material
+      && (mode != TerrainBakeMode::Shared || region.patchDensityPercent != 100 || !uniform[size_t(a)] || !uniform[size_t(b)]))
+      continue;
+    const auto key = a * 3 + b;
+    pairLookup[size_t(key)] = pair + 1;
+    if (!material)
+      pairs.emplace(key, makePair(pair));
   }
 
   auto mixedTiles = 0;
@@ -686,20 +843,25 @@ Result<TerrainBake> runTerrainBaker(
           x >= tileX * Period + int(PatchGutter) && y >= tileY * Period + int(PatchGutter)
           && x + int(Step) <= (tileX + 1) * Period - int(PatchGutter)
           && y + int(Step) <= (tileY + 1) * Period - int(PatchGutter);
+        const auto offset = v0 - vx * x - vy * y;
         if (
+          pairLookup[size_t(a * 3 + b)] != 0 && usableTransitionUv(vx, vy)
+          && (!material || matchesPairNeighborhood(cellCol, cellRow, a, b, vx, vy, offset)))
+        {
+          // A rotated transition preserves arbitrary procedural textures only for the
+          // built-in material. Custom sources must be uniform in both slots.
+          mix = {"pair", -1, a * 3 + b, vm::vec3d{vx, vy, offset}};
+        }
+        else if (
           material && mode == TerrainBakeMode::Shared && region.patchDensityPercent == 100
           && insideSharedTile)
         {
           constexpr auto tilesAcross = (int(Width) + Period - 1) / Period;
           mix = {"shared", -1, tileY * tilesAcross + tileX, WorldV};
         }
-        else if (material || !usableTransitionUv(vx, vy))
-        {
-          mix = {"fit", -1, 0, {}};
-        }
         else
         {
-          mix = {"pair", -1, a * 3 + b, vm::vec3d{vx, vy, v0 - vx * x - vy * y}};
+          mix = {"fit", -1, 0, {}};
         }
       }
     }
@@ -778,7 +940,7 @@ Result<TerrainBake> runTerrainBaker(
           return mixes[c][0].kind == k || mixes[c][1].kind == k;
         });
       };
-      if (has("shared"))
+      if (has("shared") || (material && has("pair")))
         continue;
       const auto kind = has("junction") ? "junction" : has("fit") ? "fit" : "patch";
       if (kind != std::string_view{"patch"} || mixed.size() >= 3)
@@ -937,6 +1099,8 @@ Result<TerrainBake> runTerrainBaker(
         auto it = pairIndices.find(mix.key);
         if (it == pairIndices.end())
         {
+          if (!pairs.contains(mix.key))
+            pairs.emplace(mix.key, makePair(pairLookup[size_t(mix.key)] - 1));
           const auto matIdx = textures.size();
           pairIndices.emplace(mix.key, matIdx);
           textures.push_back(pairs.at(mix.key));
@@ -953,13 +1117,19 @@ Result<TerrainBake> runTerrainBaker(
       const auto samePatch =
         first.kind == second.kind && (first.kind == "junction" || first.kind == "fit");
 
-      if (sameShared)
+      if (sameShared || (material && samePair))
       {
         const auto reusable = [&](const size_t candidate) {
           const auto& halves = mixes[candidate];
-          return !cellCovered[candidate] && halves[0].kind == "shared"
-                 && halves[1].kind == "shared" && halves[0].key == first.key
-                 && halves[1].key == first.key;
+          if (cellCovered[candidate])
+            return false;
+          if (sameShared)
+            return halves[0].kind == "shared" && halves[1].kind == "shared"
+                   && halves[0].key == first.key && halves[1].key == first.key;
+          return halves[0].kind == "pair" && halves[1].kind == "pair"
+                 && halves[0].key == first.key && halves[1].key == first.key
+                 && vm::is_equal(halves[0].v, first.v, 1e-8)
+                 && vm::is_equal(halves[1].v, first.v, 1e-8);
         };
         auto width = 1;
         auto height = 1;

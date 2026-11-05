@@ -133,6 +133,10 @@ TEST_CASE("Terrain baker shares terrain-aligned custom texture tiles")
   REQUIRE(localResult.is_success());
   const auto& shared = sharedResult.value();
   const auto& local = localResult.value();
+  CHECK(std::ranges::none_of(shared.textures, [](const auto& texture) {
+    return texture.name == "tm_grass_dirt" || texture.name == "tm_grass_rock"
+           || texture.name == "tm_dirt_rock";
+  }));
 
   auto tileMaterials = std::map<std::pair<int, int>, size_t>{};
   auto compared = size_t{0};
@@ -194,6 +198,131 @@ TEST_CASE("Terrain baker shares terrain-aligned custom texture tiles")
       return face.kind == TerrainFaceKind::Shared;
     }));
   }
+}
+
+TEST_CASE("Terrain baker uses packaged transitions for uniform sources")
+{
+  auto images = std::array<QImage, 3>{
+    QImage{128, 128, QImage::Format_RGBA8888},
+    QImage{128, 128, QImage::Format_RGBA8888},
+    QImage{128, 128, QImage::Format_RGBA8888}};
+  images[0].fill(QColor{220, 40, 20});
+  images[1].fill(QColor{30, 180, 40});
+  images[2].fill(QColor{20, 40, 210});
+  const auto prepared = requireValue(prepareTerrainMaterial(images));
+  const auto packaged =
+    decodeTerrainMaterialPackage(encodeTerrainMaterialPackage(prepared), prepared.images);
+  REQUIRE(packaged);
+  const auto pairs = std::array{
+    std::pair{std::array{0, 1}, "tm_grass_dirt"},
+    std::pair{std::array{0, 2}, "tm_grass_rock"},
+    std::pair{std::array{1, 2}, "tm_dirt_rock"}};
+
+  for (auto pair = size_t{0}; pair < pairs.size(); ++pair)
+  {
+    const auto [slotPair, name] = pairs[pair];
+    auto region = TerrainRegion{vm::vec2d{0, 0}};
+    for (auto row = 0; row <= TerrainRegion::Rows; ++row)
+      for (auto col = 0; col <= TerrainRegion::Columns; ++col)
+      {
+        const auto weight = std::clamp((double(row) - 2.0) * 0.3, 0.0, 1.0);
+        auto weights = TerrainRegion::Weight{};
+        weights[size_t(slotPair[0])] = 1.0 - weight;
+        weights[size_t(slotPair[1])] = weight;
+        region.weights[size_t(row * (TerrainRegion::Columns + 1) + col)] = weights;
+      }
+
+    const auto shared =
+      requireValue(runTerrainBaker(region, &*packaged, TerrainBakeMode::Shared));
+    const auto local =
+      requireValue(runTerrainBaker(region, &*packaged, TerrainBakeMode::Local));
+    const auto texture = std::ranges::find_if(
+      shared.textures, [&](const auto& candidate) { return candidate.name == name; });
+    REQUIRE(texture != shared.textures.end());
+    for (auto mip = size_t{0}; mip < 4; ++mip)
+    {
+      const auto offset = size_t(readU32(texture->miptex, 24 + mip * 4));
+      const auto& expected = packaged->pairLevels[pair][mip];
+      REQUIRE(offset + expected.size() <= texture->miptex.size());
+      CHECK(std::equal(
+        expected.begin(),
+        expected.end(),
+        texture->miptex.begin() + std::ptrdiff_t(offset)));
+    }
+
+    const auto materialIndex = size_t(std::distance(shared.textures.begin(), texture));
+    auto compared = size_t{0};
+    for (const auto& face : shared.faces)
+    {
+      if (face.kind != TerrainFaceKind::Shared || face.material != materialIndex)
+        continue;
+      const auto bounds = face.polygon.boundingRect();
+      const auto points = std::array{
+        bounds.center() + QPointF{0.125, -0.125},
+        QPointF{bounds.left() + 0.125, bounds.top() + 0.375},
+        QPointF{bounds.right() - 0.125, bounds.bottom() - 0.375},
+        QPointF{bounds.left() + 0.125, bounds.bottom() - 0.375},
+        QPointF{bounds.right() - 0.125, bounds.top() + 0.375}};
+      for (const auto& point : points)
+      {
+        if (!face.polygon.containsPoint(point, Qt::OddEvenFill))
+          continue;
+        const auto original =
+          std::ranges::find_if(local.faces, [&](const auto& candidate) {
+            return candidate.polygon.containsPoint(point, Qt::OddEvenFill);
+          });
+        REQUIRE(original != local.faces.end());
+        for (auto mip = 0; mip < 4; ++mip)
+          CHECK(
+            sampleIndex(shared, face, point.x(), point.y(), mip)
+            == sampleIndex(local, *original, point.x(), point.y(), mip));
+      }
+      ++compared;
+    }
+    CHECK(compared > 0);
+
+    // The blend ceases to be affine past row 5. Nearby faces must not use the
+    // fixed ramp because their MIP filter can reach that change in gradient.
+    const auto kink = QPointF{300.125, 108.375};
+    const auto kinkFace = std::ranges::find_if(shared.faces, [&](const auto& candidate) {
+      return candidate.polygon.containsPoint(kink, Qt::OddEvenFill);
+    });
+    REQUIRE(kinkFace != shared.faces.end());
+    CHECK(kinkFace->material != materialIndex);
+
+    auto withoutLevels = *packaged;
+    withoutLevels.baseLevels = {};
+    withoutLevels.pairLevels = {};
+    const auto generated =
+      requireValue(runTerrainBaker(region, &withoutLevels, TerrainBakeMode::Shared));
+    REQUIRE(generated.textures.size() == shared.textures.size());
+    for (auto index = size_t{0}; index < shared.textures.size(); ++index)
+      CHECK(generated.textures[index].miptex == shared.textures[index].miptex);
+  }
+
+  auto changed = *packaged;
+  changed.images[0].setPixelColor(0, 0, Qt::white);
+  auto withoutLevels = changed;
+  withoutLevels.baseLevels = {};
+  withoutLevels.pairLevels = {};
+  const auto region = TerrainRegion{vm::vec2d{0, 0}};
+  const auto rebuilt = requireValue(runTerrainBaker(region, &changed));
+  const auto generated = requireValue(runTerrainBaker(region, &withoutLevels));
+  REQUIRE(rebuilt.textures.size() == generated.textures.size());
+  for (auto index = size_t{0}; index < rebuilt.textures.size(); ++index)
+    CHECK(rebuilt.textures[index].miptex == generated.textures[index].miptex);
+
+  auto repaletted = *packaged;
+  repaletted.palette.fill(0);
+  withoutLevels = repaletted;
+  withoutLevels.baseLevels = {};
+  withoutLevels.pairLevels = {};
+  const auto rebuiltPalette = requireValue(runTerrainBaker(region, &repaletted));
+  const auto generatedPalette = requireValue(runTerrainBaker(region, &withoutLevels));
+  REQUIRE(rebuiltPalette.textures.size() == generatedPalette.textures.size());
+  for (auto index = size_t{0}; index < rebuiltPalette.textures.size(); ++index)
+    CHECK(
+      rebuiltPalette.textures[index].miptex == generatedPalette.textures[index].miptex);
 }
 
 TEST_CASE("Project terrain chooses shared tiles only within budget and with WAD savings")
@@ -358,6 +487,62 @@ TEST_CASE("Project terrain chooses shared tiles only within budget and with WAD 
   REQUIRE(repeated);
   CHECK(repeated->map == snapshot->map);
   CHECK(repeated->textures == snapshot->textures);
+
+  auto bands = region;
+  constexpr auto third = 1.0 / 3.0;
+  constexpr auto rowWeights = std::array{
+    0.0, 0.0, 0.0,   third,     2 * third, 1.0, 1.0, 1.0,       2 * third, third, 0.0,
+    0.0, 0.0, third, 2 * third, 1.0,       1.0, 1.0, 2 * third, third,     0.0};
+  for (auto row = 0; row <= TerrainRegion::Rows; ++row)
+    for (auto col = 0; col <= TerrainRegion::Columns; ++col)
+    {
+      const auto weight = rowWeights[size_t(row)];
+      bands.weights[size_t(row * (TerrainRegion::Columns + 1) + col)] = {
+        1.0 - weight, weight, 0};
+    }
+  saveRegion(bands);
+  const auto encodedBands = requireValue(TerrainRegion::decode(bands.encode()));
+  const auto bandPlan =
+    requireValue(runTerrainBaker(encodedBands, &material, TerrainBakeMode::Shared));
+  REQUIRE(std::ranges::any_of(bandPlan.textures, [](const auto& texture) {
+    return texture.name == "tm_grass_dirt";
+  }));
+  const auto bandEstimate = requireValue(estimateTerrainGroup(*group, &session->store()));
+  const auto bandSnapshot =
+    requireValue(bakeTerrainSnapshot(readBytes(source), &session->store()));
+  REQUIRE(bandSnapshot);
+  CHECK(bandSnapshot->topFaces == bandEstimate.generatedFaces);
+  const auto packaged =
+    decodeTerrainMaterialPackage(encodeTerrainMaterialPackage(material), material.images);
+  REQUIRE(packaged);
+  CHECK(std::ranges::any_of(bandSnapshot->textures, [&](const auto& item) {
+    const auto& bytes = item.second;
+    if (bytes.size() < 40)
+      return false;
+    for (auto mip = size_t{0}; mip < 4; ++mip)
+    {
+      const auto offset = size_t(readU32(bytes, 24 + mip * 4));
+      const auto& expected = packaged->pairLevels[0][mip];
+      if (offset > bytes.size() || expected.size() > bytes.size() - offset)
+        return false;
+      if (!std::equal(
+            expected.begin(), expected.end(), bytes.begin() + std::ptrdiff_t(offset)))
+        return false;
+    }
+    return true;
+  }));
+  if (const auto output = qEnvironmentVariable("TB_TERRAIN_PAIR_ACCEPTANCE_PROJECT");
+      !output.isEmpty())
+  {
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.virtualPath = "maps/bands.map";
+    input.displayName = "Bands";
+    input.original = input.compatible = readBytes(source);
+    requireValue(session->importAsset(input));
+    requireValue(session->save());
+    requireValue(session->saveCopy(pathFromQString(output)));
+  }
 
   auto constrained = region;
   constrained.maxAddedFaces = 0;

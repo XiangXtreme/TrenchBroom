@@ -21,12 +21,17 @@ class ProjectStore;
 
 namespace tb::ui
 {
-/** Three normalized, opaque source textures and their common GoldSrc palette. */
+using TerrainMipLevels = std::array<std::vector<std::uint8_t>, 4>;
+
+/** Normalized source textures, a common palette, and optional precomputed mip levels. */
 struct TerrainMaterial
 {
   static constexpr auto Period = 128;
   std::array<QImage, 3> images;
   std::array<std::uint8_t, 768> palette;
+  std::array<TerrainMipLevels, 3> baseLevels{};
+  std::array<TerrainMipLevels, 3> pairLevels{};
+  std::array<std::uint8_t, 32> levelSourceHash{};
 };
 
 /** Resolve exact captured texture dependencies, without consulting the asset library. */
@@ -43,7 +48,7 @@ QImage renderTerrainMaterialPreview(std::array<QImage, 3> images);
 /** Normalize the source images and construct one palette covering their blends. */
 Result<TerrainMaterial> prepareTerrainMaterial(std::array<QImage, 3> images);
 
-/** Persist the normalized textures and palette as a checked, versioned package. */
+/** Persist the normalized textures, palette, and precomputed mip levels. */
 std::vector<std::uint8_t> encodeTerrainMaterialPackage(const TerrainMaterial& material);
 
 /** Use a package only when it matches the currently captured texture pixels. */
