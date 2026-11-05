@@ -137,25 +137,30 @@ protected:
   }
 };
 
-AssetInspector::AssetInspector(QWidget* parent)
+AssetInspector::AssetInspector(QWidget* parent, const ScrollMode scrollMode)
   : QWidget{parent}
 {
   setObjectName("AssetInspector");
-  // The inspector is docked, split and occasionally squeezed into a short panel. Without
-  // a scroller its layout runs out of height, overlaps its own rows and paints the
-  // preview over the controls. Scrolling keeps every control reachable at any panel size.
   auto* outerLayout = new QVBoxLayout{this};
   outerLayout->setContentsMargins(0, 0, 0, 0);
-  auto* scroll = new QScrollArea{this};
-  scroll->setObjectName("AssetInspector_Scroll");
-  scroll->setWidgetResizable(true);
-  scroll->setFrameShape(QFrame::NoFrame);
-  scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  // Let the hosting surface show through instead of painting a scroll-area background.
-  scroll->viewport()->setAutoFillBackground(false);
-  outerLayout->addWidget(scroll);
   auto* content = new QWidget{};
-  scroll->setWidget(content);
+  if (scrollMode == ScrollMode::Independent)
+  {
+    // Standalone inspectors can be squeezed into a short dock or dialog.
+    auto* scroll = new QScrollArea{this};
+    scroll->setObjectName("AssetInspector_Scroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->viewport()->setAutoFillBackground(false);
+    outerLayout->addWidget(scroll);
+    scroll->setWidget(content);
+  }
+  else
+  {
+    // The host scrolls the entire inspector, keeping the preview at its usable size.
+    outerLayout->addWidget(content);
+  }
   auto* layout = new QVBoxLayout{content};
   layout->setContentsMargins(4, 4, 4, 4);
   m_name = new QLabel{};

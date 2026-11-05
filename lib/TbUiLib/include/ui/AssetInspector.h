@@ -92,7 +92,14 @@ class AssetInspector : public QWidget
   float m_modelPitch = 0.38f;
 
 public:
-  explicit AssetInspector(QWidget* parent = nullptr);
+  enum class ScrollMode
+  {
+    Independent,
+    SharedWithParent
+  };
+
+  explicit AssetInspector(
+    QWidget* parent = nullptr, ScrollMode scrollMode = ScrollMode::Independent);
   ~AssetInspector() override;
   void setAsset(Result<inspection::Asset> asset);
   void clear();

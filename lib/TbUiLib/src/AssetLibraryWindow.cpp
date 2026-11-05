@@ -526,7 +526,8 @@ void AssetLibraryWindow::buildUi()
 
   auto* previewTitle = new QLabel{tr("Preview"), inspector};
   previewTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
-  m_inspector = new AssetInspector{inspector};
+  m_inspector =
+    new AssetInspector{inspector, AssetInspector::ScrollMode::SharedWithParent};
   auto* actionRow = new QWidget{inspector};
   auto* actionLayout = new QHBoxLayout{actionRow};
   actionLayout->setContentsMargins(0, 0, 0, 0);
@@ -622,7 +623,6 @@ void AssetLibraryWindow::buildUi()
   connect(refreshUsage, &QPushButton::clicked, this, &AssetLibraryWindow::refreshUsage);
   inspectorLayout->addWidget(refreshUsage);
   inspectorLayout->addWidget(m_usage);
-  inspectorLayout->addStretch(1);
   auto* inspectorScroll = new QScrollArea{splitter};
   inspectorScroll->setObjectName("AssetLibrary_InspectorScroll");
   inspectorScroll->setWidgetResizable(true);

@@ -18,6 +18,7 @@
 #include <QMediaPlayer>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalSpy>
 #include <QSlider>
 #include <QTemporaryDir>
@@ -359,6 +360,70 @@ TEST_CASE("AssetInspection")
                              .toImage();
     REQUIRE_FALSE(thumbnail.isNull());
     CHECK(thumbnail.pixelColor(0, 0) == QColor{Qt::red});
+  }
+  SECTION("library preview shares the inspector scroll area")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    write(folder / "texture.png", png(Qt::red));
+    write(folder / "model.mdl", studioModel());
+    auto library = require(project::AssetLibrary::create(folder, "Library"));
+    REQUIRE(library->scan().is_success());
+    const auto assets = require(library->assets());
+    REQUIRE(assets.size() == 2);
+
+    auto browser = AssetLibraryWindow{temporary.path(), false};
+    auto* scroll = browser.findChild<QScrollArea*>("AssetLibrary_InspectorScroll");
+    auto* inspector = browser.findChild<AssetInspector*>();
+    auto* preview = browser.findChild<QWidget*>("AssetInspector_Image");
+    auto* usage = browser.findChild<QListWidget*>("AssetLibraryUsage");
+    REQUIRE(scroll);
+    REQUIRE(inspector);
+    REQUIRE(preview);
+    REQUIRE(usage);
+    CHECK(inspector->findChild<QScrollArea*>("AssetInspector_Scroll") == nullptr);
+
+    browser.show();
+    for (const auto& asset : assets)
+    {
+      CAPTURE(asset.virtualPath);
+      REQUIRE(browser.revealAsset(library->info().id, asset.id).is_success());
+      for (const auto height : {760, 520})
+      {
+        browser.resize(1400, height);
+        scroll->verticalScrollBar()->setValue(0);
+        QApplication::processEvents();
+
+        CHECK(preview->isVisible());
+        CHECK(preview->height() >= 260);
+        CHECK(preview->mapTo(scroll->viewport(), QPoint{0, 0}).y() >= 0);
+        CHECK(
+          preview->mapTo(scroll->viewport(), QPoint{0, preview->height()}).y()
+          <= scroll->viewport()->height());
+        REQUIRE(scroll->verticalScrollBar()->maximum() > 0);
+
+        if (asset.type == project::AssetType::Model)
+        {
+          auto* sequence =
+            inspector->findChild<QComboBox*>("AssetInspector_ModelSequence");
+          REQUIRE(sequence);
+          REQUIRE(sequence->isVisible());
+          scroll->ensureWidgetVisible(sequence, 0, 0);
+          QApplication::processEvents();
+          CHECK(
+            sequence->mapTo(scroll->viewport(), QPoint{0, sequence->height()}).y()
+            <= scroll->viewport()->height());
+        }
+
+        scroll->ensureWidgetVisible(usage, 0, 0);
+        QApplication::processEvents();
+        CHECK(scroll->verticalScrollBar()->value() > 0);
+        CHECK(
+          usage->mapTo(scroll->viewport(), QPoint{0, 0}).y()
+          < scroll->viewport()->height());
+      }
+    }
   }
   SECTION("source snapshots and host selection are independent")
   {
