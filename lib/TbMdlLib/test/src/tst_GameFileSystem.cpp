@@ -106,6 +106,20 @@ TEST_CASE("GameFileSystem")
     CHECK(fs.pathInfo("mod1_pak0_1.txt") == fs::PathInfo::Unknown);
   }
 
+  SECTION("Reload detects added and removed loose files")
+  {
+    auto env = fs::TestEnvironment{};
+    env.createFile("old.txt", "old");
+    fs.mount("", std::make_unique<fs::DiskFileSystem>(env.dir()));
+    REQUIRE(fs.pathInfo("old.txt") == fs::PathInfo::File);
+
+    env.createFile("new.txt", "new");
+    REQUIRE(std::filesystem::remove(env.dir() / "old.txt"));
+    REQUIRE_FALSE(fs.reload().is_error());
+    CHECK(fs.pathInfo("new.txt") == fs::PathInfo::File);
+    CHECK(fs.pathInfo("old.txt") == fs::PathInfo::Unknown);
+  }
+
   SECTION("Packages files override loose files")
   {
     fs.initialize(environmentConfig, gameConfig, fixturePath, {}, logger);

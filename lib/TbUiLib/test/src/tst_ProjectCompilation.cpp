@@ -24,6 +24,7 @@
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
+#include "mdl/CompilationProfile.h"
 #include "mdl/EditorContext.h"
 #include "mdl/GroupNode.h"
 #include "mdl/HitAdapter.h"
@@ -59,6 +60,7 @@
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace tb::ui
 {
@@ -126,9 +128,26 @@ const auto CompilationProfiles = R"({
                 {
                     "type": "tool",
                     "tool": "cmd.exe",
-                    "parameters": "/c echo project=${PROJECT_PATH} name=${MAP_NAME} map=${MAP_FULL_NAME}",
+                    "parameters": "/c echo project=${PROJECT_PATH} name=${MAP_NAME}",
                     "treatNonZeroResultCodeAsError": true
                 }
+            ]
+        },
+        {
+            "name": "Mixed",
+            "workdir": "${MAP_DIR_PATH}",
+            "tasks": [
+                { "type": "tool", "tool": "cmd.exe", "parameters": "/c echo snapshot=${MAP_DIR_PATH} map=${MAP_FULL_NAME} base=${MAP_BASE_NAME} project=${PROJECT_PATH}", "treatNonZeroResultCodeAsError": true },
+                { "type": "export", "target": "exported.map", "stripTbProperties": true, "entityToAdd": [ { "key": "classname", "value": "info_player_start" } ] }
+            ]
+        },
+        {
+            "name": "DisabledMarker",
+            "workdir": "${MAP_DIR_PATH}",
+            "tasks": [
+                { "type": "tool", "enabled": false, "tool": "cmd.exe", "parameters": "/c echo ${PROJECT_PATH}" },
+                { "type": "tool", "tool": "cmd.exe", "parameters": "/c echo snapshot=${MAP_DIR_PATH} map=${MAP_FULL_NAME} base=${MAP_BASE_NAME}", "treatNonZeroResultCodeAsError": true },
+                { "type": "export", "target": "exported.map", "stripTbProperties": true, "entityToAdd": [ { "key": "classname", "value": "info_player_start" } ] }
             ]
         }
     ]
@@ -162,9 +181,26 @@ const auto CompilationProfiles = R"({
                 {
                     "type": "tool",
                     "tool": "/bin/echo",
-                    "parameters": "project=${PROJECT_PATH} name=${MAP_NAME} map=${MAP_FULL_NAME}",
+                    "parameters": "project=${PROJECT_PATH} name=${MAP_NAME}",
                     "treatNonZeroResultCodeAsError": true
                 }
+            ]
+        },
+        {
+            "name": "Mixed",
+            "workdir": "${MAP_DIR_PATH}",
+            "tasks": [
+                { "type": "tool", "tool": "/bin/echo", "parameters": "snapshot=${MAP_DIR_PATH} map=${MAP_FULL_NAME} base=${MAP_BASE_NAME} project=${PROJECT_PATH}", "treatNonZeroResultCodeAsError": true },
+                { "type": "export", "target": "exported.map", "stripTbProperties": true, "entityToAdd": [ { "key": "classname", "value": "info_player_start" } ] }
+            ]
+        },
+        {
+            "name": "DisabledMarker",
+            "workdir": "${MAP_DIR_PATH}",
+            "tasks": [
+                { "type": "tool", "enabled": false, "tool": "/bin/echo", "parameters": "${PROJECT_PATH}" },
+                { "type": "tool", "tool": "/bin/echo", "parameters": "snapshot=${MAP_DIR_PATH} map=${MAP_FULL_NAME} base=${MAP_BASE_NAME}", "treatNonZeroResultCodeAsError": true },
+                { "type": "export", "target": "exported.map", "stripTbProperties": true, "entityToAdd": [ { "key": "classname", "value": "info_player_start" } ] }
             ]
         }
     ]
@@ -705,6 +741,9 @@ TEST_CASE("Project terrain panel paints a picked brush")
 
 TEST_CASE("ProjectCompilation")
 {
+  const auto profileName = GENERATE("Probe", "Mixed", "DisabledMarker");
+  const auto restoreProject = GENERATE(false, true);
+  CAPTURE(profileName, restoreProject);
   // The project window belongs to the app controller, so the folder holding the project
   // file has to outlive the fixture; otherwise the store still has the file open when the
   // temporary folder is removed.
@@ -740,15 +779,22 @@ TEST_CASE("ProjectCompilation")
 
   REQUIRE(mdl::setEntityProperty(document->map(), "message", "Frozen content"));
   REQUIRE(mdl::setEntityProperty(document->map(), "_tb_compile_test", "Strip me"));
+  const auto checkpoint = require(session->checkpoint("Frozen input"));
+  const auto mapIdentity = document->map().identity();
 
   auto camera = gl::PerspectiveCamera{};
   auto dialog = CompilationDialog{appController, *document, camera};
 
   auto started = QSignalSpy{&dialog, &CompilationDialog::compilationProfileStarted};
-  REQUIRE(dialog.runProfileByName("Probe"));
+  REQUIRE(dialog.runProfileByName(profileName));
   REQUIRE(dialog.isRunning());
   // The first task is asynchronous; edit while it is running, before Export Map starts.
   REQUIRE(mdl::setEntityProperty(document->map(), "message", "Later live edit"));
+  if (restoreProject)
+  {
+    require(session->restore(checkpoint.id));
+    CHECK(document->map().identity() != mapIdentity);
+  }
   REQUIRE(QTest::qWaitFor([&]() { return !dialog.isRunning(); }, 15000));
 
   const auto output = dialog.outputText();
@@ -795,33 +841,35 @@ TEST_CASE("ProjectCompilation")
   CHECK_FALSE(bytes.contains("Later live edit"));
   CHECK_FALSE(bytes.contains("_tb_compile_test"));
   CHECK(bytes.contains("info_player_start"));
-  CHECK(document->map().modified());
+  CHECK(document->map().modified() == !restoreProject);
 
-  SECTION("a later run captures the newer edits")
+  if (!restoreProject)
   {
-    REQUIRE(dialog.runProfileByName("Probe"));
-    REQUIRE(QTest::qWaitFor([&]() { return !dialog.isRunning(); }, 15000));
-    const auto laterOutput = dialog.outputText();
-    const auto start =
-      laterOutput.indexOf("snapshot=") + int(std::string{"snapshot="}.size());
-    const auto end = laterOutput.indexOf(" map=", start);
-    REQUIRE(end > start);
-    const auto laterFolder = laterOutput.mid(start, end - start);
-    CHECK(laterFolder != snapshotFolder);
-    auto later = QFile{laterFolder + "/exported.map"};
-    REQUIRE(later.open(QIODevice::ReadOnly));
-    const auto laterBytes = later.readAll();
-    CHECK(laterBytes.contains("Later live edit"));
-    CHECK_FALSE(laterBytes.contains("Frozen content"));
+    SECTION("a later run captures the newer edits")
+    {
+      REQUIRE(dialog.runProfileByName(profileName));
+      REQUIRE(QTest::qWaitFor([&]() { return !dialog.isRunning(); }, 15000));
+      const auto laterOutput = dialog.outputText();
+      const auto start =
+        laterOutput.indexOf("snapshot=") + int(std::string{"snapshot="}.size());
+      const auto end = laterOutput.indexOf(" map=", start);
+      REQUIRE(end > start);
+      const auto laterFolder = laterOutput.mid(start, end - start);
+      CHECK(laterFolder != snapshotFolder);
+      auto later = QFile{laterFolder + "/exported.map"};
+      REQUIRE(later.open(QIODevice::ReadOnly));
+      const auto laterBytes = later.readAll();
+      CHECK(laterBytes.contains("Later live edit"));
+      CHECK_FALSE(laterBytes.contains("Frozen content"));
+    }
   }
 }
 
 TEST_CASE("ProjectCompilation.projectAwareProfilesSkipTheSnapshot")
 {
-  // A profile that uses ${PROJECT_PATH} reads the project file from disk. It must not
-  // pay for an exported compile snapshot: that snapshot is a frozen input for tools
-  // consuming a map file, and its resource audit can reject resources the project tool
-  // never reads (for example a BSP model reference).
+  const auto restoreProject = GENERATE(false, true);
+  // The default brush references a placeholder texture that snapshot export rejects.
+  // A project-only tool must still run, even if restoring replaces the open map.
   auto directory = QTemporaryDir{};
   REQUIRE(directory.isValid());
   const auto projectPath = pathFromQString(directory.filePath("compile.tbproj"));
@@ -845,15 +893,20 @@ TEST_CASE("ProjectCompilation.projectAwareProfilesSkipTheSnapshot")
   REQUIRE(mapAsset != assets.end());
   auto* document = session->documentFor(mapAsset->id);
   REQUIRE(document != nullptr);
-  // Keep this test about input paths, not about resource capture.
-  mdl::selectAllNodes(document->map());
-  mdl::removeSelectedNodes(document->map());
+  const auto checkpoint = require(session->checkpoint("Compile input"));
+  const auto mapIdentity = document->map().identity();
+  const auto liveFolder = pathAsQString(document->map().path().parent_path());
 
   auto camera = gl::PerspectiveCamera{};
   auto dialog = CompilationDialog{appController, *document, camera};
 
   REQUIRE(dialog.runProfileByName("ProjectAware"));
   REQUIRE(dialog.isRunning());
+  if (restoreProject)
+  {
+    require(session->restore(checkpoint.id));
+    CHECK(document->map().identity() != mapIdentity);
+  }
   REQUIRE(QTest::qWaitFor([&]() { return !dialog.isRunning(); }, 15000));
 
   const auto output = dialog.outputText();
@@ -864,11 +917,9 @@ TEST_CASE("ProjectCompilation.projectAwareProfilesSkipTheSnapshot")
   CHECK(output.contains("compile.tbproj"));
   CHECK_FALSE(output.contains("${PROJECT_PATH}"));
   CHECK(output.contains("name=alpha"));
-  CHECK(output.contains("map=alpha.map"));
 
   // No snapshot: the tool's working directory is the live project map folder, not a
   // temporary snapshot folder.
-  const auto liveFolder = pathAsQString(document->map().path().parent_path());
   const auto workDir = [&]() {
     const auto marker = output.indexOf("Using working directory '");
     REQUIRE(marker >= 0);
@@ -878,5 +929,40 @@ TEST_CASE("ProjectCompilation.projectAwareProfilesSkipTheSnapshot")
     return output.mid(start, end - start);
   }();
   CHECK(workDir == liveFolder);
+}
+
+TEST_CASE("ProjectCompilation.directProfileSelection")
+{
+  auto profile = mdl::CompilationProfile{
+    "Project",
+    "${MAP_DIR_PATH}",
+    {mdl::CompilationRunTool{
+      true, "compiler", "--project ${PROJECT_PATH} --map ${MAP_NAME}", true}}};
+  REQUIRE(isDirectProjectCompilation(profile));
+
+  SECTION("disabled tasks are ignored")
+  {
+    profile.tasks.push_back(mdl::CompilationExportMap{false, false, {}, {}, "unused"});
+    CHECK(isDirectProjectCompilation(profile));
+    std::get<mdl::CompilationRunTool>(profile.tasks.front()).enabled = false;
+    profile.tasks.push_back(mdl::CompilationRunTool{true, "compiler", "ordinary", true});
+    CHECK_FALSE(isDirectProjectCompilation(profile));
+  }
+  SECTION("an enabled map task needs a snapshot")
+  {
+    profile.tasks.push_back(mdl::CompilationExportMap{true, false, {}, {}, "output.map"});
+    CHECK_FALSE(isDirectProjectCompilation(profile));
+  }
+  SECTION("map path variables need a snapshot, including expressions")
+  {
+    auto& tool = std::get<mdl::CompilationRunTool>(profile.tasks.front());
+    tool.parameterSpec += " ${MAP_DIR_PATH + '/input.map'}";
+    CHECK_FALSE(isDirectProjectCompilation(profile));
+  }
+  SECTION("a project path in an output task does not select direct compilation")
+  {
+    profile.tasks = {mdl::CompilationExportMap{true, false, {}, {}, "${PROJECT_PATH}"}};
+    CHECK_FALSE(isDirectProjectCompilation(profile));
+  }
 }
 } // namespace tb::ui

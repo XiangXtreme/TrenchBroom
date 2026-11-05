@@ -150,6 +150,12 @@ void doSwapNodeContents(
 
   const auto [notifyWadsChange, notifyEntityDefinitionsChange, notifyModsChange] =
     notifySpecialWorldProperties(nodesToSwap);
+  // Changing mods rebuilds the search paths; otherwise a WAD change needs to pick up
+  // any loose files added since the last scan before materials are reloaded.
+  if (notifyWadsChange && !notifyModsChange)
+  {
+    map.refreshGameFileSystem();
+  }
   change.updateTags |=
     notifyWadsChange || notifyEntityDefinitionsChange || notifyModsChange;
   auto notifyWads = NotifyBeforeAndAfter{

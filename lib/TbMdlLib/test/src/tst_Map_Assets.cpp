@@ -422,7 +422,7 @@ TEST_CASE("Map_Assets")
       faces, [](const auto* face) { return face->material() == nullptr; }));
   }
 
-  SECTION("reloadMaterialCollections picks up materials added to disk")
+  SECTION("material reloads pick up files added to disk")
   {
     auto env = fs::TestEnvironment{};
     env.createDirectory("textures");
@@ -441,7 +441,14 @@ TEST_CASE("Map_Assets")
     REQUIRE(map.materialManager().collections().front().materials().size() == 1);
 
     env.createFile("textures/tex2.png", "tex2");
-    reloadMaterialCollections(map);
+    SECTION("explicit material reload")
+    {
+      reloadMaterialCollections(map);
+    }
+    SECTION("world WAD property change")
+    {
+      REQUIRE(setEntityProperty(map, EntityPropertyKeys::Wad, "missing.wad"));
+    }
 
     REQUIRE(map.materialManager().collections().size() == 1);
     CHECK(map.materialManager().collections().front().materials().size() == 2);

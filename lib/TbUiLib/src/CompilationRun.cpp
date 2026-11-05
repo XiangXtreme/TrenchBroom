@@ -21,6 +21,7 @@
 
 #include "el/Interpolate.h"
 #include "mdl/CompilationProfile.h"
+#include "mdl/CompilationTask.h"
 #include "mdl/Map.h"
 #include "ui/CompilationContext.h"
 #include "ui/CompilationRunner.h"
@@ -29,10 +30,43 @@
 
 #include "kd/contracts.h"
 
+#include <algorithm>
+#include <array>
 #include <string>
+#include <variant>
 
 namespace tb::ui
 {
+
+bool isDirectProjectCompilation(const mdl::CompilationProfile& profile)
+{
+  const mdl::CompilationRunTool* tool = nullptr;
+  for (const auto& task : profile.tasks)
+  {
+    if (!std::visit([](const auto& t) { return t.enabled; }, task))
+      continue;
+    if (tool != nullptr || !std::holds_alternative<mdl::CompilationRunTool>(task))
+      return false;
+    tool = &std::get<mdl::CompilationRunTool>(task);
+  }
+  if (
+    tool == nullptr
+    || tool->parameterSpec.find("${" + CompilationVariableNames::PROJECT_PATH + "}")
+         == std::string::npos)
+    return false;
+
+  // These variables can identify the map file or the snapshot directory, even inside
+  // a more complex interpolation expression. Such tools need the frozen input.
+  const auto mapPathVariables = std::array{
+    CompilationVariableNames::MAP_DIR_PATH,
+    CompilationVariableNames::MAP_FULL_NAME,
+    CompilationVariableNames::MAP_BASE_NAME,
+    CompilationVariableNames::WORK_DIR_PATH};
+  return std::ranges::none_of(mapPathVariables, [&](const auto& variable) {
+    return tool->toolSpec.find(variable) != std::string::npos
+           || tool->parameterSpec.find(variable) != std::string::npos;
+  });
+}
 
 CompilationRun::~CompilationRun()
 {
@@ -67,6 +101,27 @@ Result<void> CompilationRun::test(
 {
   return run(
     profile, map, camera, currentOutput, true, std::nullopt, {}, std::move(project));
+}
+
+Result<void> CompilationRun::runProjectTool(
+  const mdl::CompilationProfile& profile,
+  const mdl::Map& map,
+  const gl::PerspectiveCamera& camera,
+  QTextEdit* currentOutput,
+  ProjectCompileInfo project,
+  const bool test)
+{
+  contract_pre(isDirectProjectCompilation(profile));
+  return run(
+    profile,
+    map,
+    camera,
+    currentOutput,
+    test,
+    std::nullopt,
+    {},
+    std::move(project),
+    true);
 }
 
 Result<void> CompilationRun::runSnapshot(
@@ -112,7 +167,8 @@ Result<void> CompilationRun::run(
   const bool test,
   const std::optional<std::filesystem::path>& mapPath,
   std::shared_ptr<const mdl::Map> snapshot,
-  std::optional<ProjectCompileInfo> project)
+  std::optional<ProjectCompileInfo> project,
+  const bool projectToolOnly)
 {
   contract_pre(!profile.tasks.empty());
   contract_pre(currentOutput != nullptr);
@@ -124,15 +180,17 @@ Result<void> CompilationRun::run(
            auto variables =
              CompilationVariables{map, workDir, mapPath.value_or(map.path())};
            if (project)
-             variables.setProject(
-               project->projectPath.string(), project->mapName);
-           auto compilationContext = CompilationContext{
-             map,
-             camera,
-             variables,
-             TextOutputAdapter{currentOutput},
-             test,
-             std::move(snapshot)};
+             variables.setProject(project->projectPath.string(), project->mapName);
+           auto compilationContext =
+             projectToolOnly
+               ? CompilationContext{variables, TextOutputAdapter{currentOutput}, test}
+               : CompilationContext{
+                   map,
+                   camera,
+                   variables,
+                   TextOutputAdapter{currentOutput},
+                   test,
+                   std::move(snapshot)};
            m_currentRun =
              new CompilationRunner{std::move(compilationContext), profile, this};
            connect(

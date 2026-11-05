@@ -23,8 +23,18 @@
 #include "el/Interpolate.h"
 #include "el/Types.h"
 
+#include "kd/contracts.h"
+
 namespace tb::ui
 {
+
+CompilationContext::CompilationContext(
+  const el::VariableStore& variables, TextOutputAdapter output, const bool test)
+  : m_variables{variables.clone()}
+  , m_output{std::move(output)}
+  , m_test{test}
+{
+}
 
 CompilationContext::CompilationContext(
   const mdl::Map& map,
@@ -34,8 +44,8 @@ CompilationContext::CompilationContext(
   bool test,
   std::shared_ptr<const mdl::Map> snapshot)
   : m_snapshot{std::move(snapshot)}
-  , m_map{m_snapshot ? *m_snapshot : map}
-  , m_camera{camera}
+  , m_map{m_snapshot ? m_snapshot.get() : &map}
+  , m_camera{&camera}
   , m_variables{variables.clone()}
   , m_output{std::move(output)}
   , m_test{test}
@@ -44,12 +54,14 @@ CompilationContext::CompilationContext(
 
 const mdl::Map& CompilationContext::map() const
 {
-  return m_map;
+  contract_assert(m_map != nullptr);
+  return *m_map;
 }
 
 const gl::PerspectiveCamera& CompilationContext::camera() const
 {
-  return m_camera;
+  contract_assert(m_camera != nullptr);
+  return *m_camera;
 }
 
 bool CompilationContext::test() const

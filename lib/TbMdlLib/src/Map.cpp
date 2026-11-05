@@ -840,6 +840,13 @@ const GameFileSystem& Map::gameFileSystem() const
   return *m_gameFileSystem;
 }
 
+void Map::refreshGameFileSystem()
+{
+  m_gameFileSystem->reload() | kdl::transform_error([&](auto e) {
+    m_logger.error() << "Could not reload game file systems: " + e.msg;
+  });
+}
+
 void Map::reloadEntityModels(const std::vector<std::filesystem::path>& paths)
 {
   if (paths.empty())
@@ -1258,9 +1265,6 @@ void Map::clearEntityDefinitions()
 
 void Map::reloadMaterials()
 {
-  // This is an explicit user action (or a game path change), so loose files that
-  // appeared on disk must be picked up by the reload below.
-  m_gameFileSystem->requestFullRescan();
   clearMaterials();
   loadMaterials();
 }
@@ -1279,12 +1283,6 @@ void Map::loadMaterials()
   }
   m_gameFileSystem->reloadWads(
     gameInfo().gameConfig.materialConfig.root, searchPaths, wadPaths, logger());
-
-  // rescans the loose-file search path mounts (e.g. reloadWads above only replaces the
-  // wad mounts, it doesn't pick up files added to or removed from disk directories)
-  m_gameFileSystem->reload() | kdl::transform_error([&](auto e) {
-    m_logger.error() << "Could not reload game file systems: " + e.msg;
-  });
 
   m_materialManager->clear();
 

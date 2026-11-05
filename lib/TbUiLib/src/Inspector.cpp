@@ -103,9 +103,7 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
     button->setIconSize(QSize{16, 16});
     button->setFixedSize(QSize{32, 32});
 
-    connect(button, &QToolButton::clicked, this, [this, page]() {
-      m_tabBook->switchToPage(static_cast<int>(page));
-    });
+    connect(button, &QToolButton::clicked, this, [this, page]() { switchToPage(page); });
 
     m_navigationButtons.push_back(button);
     navigationLayout->addWidget(button);

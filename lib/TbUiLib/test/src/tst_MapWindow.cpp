@@ -36,6 +36,7 @@
 #include <QScopeGuard>
 #include <QScreen>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QStyleOptionViewItem>
@@ -936,27 +937,44 @@ TEST_CASE("MapWindow")
     CHECK(entityButton->toolTip().contains("Ctrl+2"));
     CHECK(faceButton->toolTip().contains("Ctrl+3"));
 
-    window.switchToInspectorPage(InspectorPage::Outliner);
+    auto* inspector = window.findChild<Inspector*>();
+    REQUIRE(inspector);
+    auto prepared = QSignalSpy{inspector, &Inspector::pagePrepared};
+    QTest::mouseClick(outlinerButton, Qt::LeftButton);
     CHECK(outlinerButton->isChecked());
     CHECK(pageTitle->text() == "OUTLINER");
+    REQUIRE(window.findChild<QWidget*>("OutlinerInspector"));
+    REQUIRE(prepared.count() == 1);
+    CHECK(
+      prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Outliner));
     checkSingleNavigation();
 
     QTest::keyClick(entityButton, Qt::Key_Space);
     CHECK(entityButton->isChecked());
     CHECK_FALSE(outlinerButton->isChecked());
     CHECK(pageTitle->text() == "ENTITY");
+    REQUIRE(window.findChild<QWidget*>("EntityInspector_Splitter"));
+    REQUIRE(prepared.count() == 1);
+    CHECK(
+      prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Entity));
     checkSingleNavigation();
 
     QTest::mouseClick(faceButton, Qt::LeftButton);
     CHECK(faceButton->isChecked());
     CHECK_FALSE(entityButton->isChecked());
     CHECK(pageTitle->text() == "FACE");
+    REQUIRE(window.findChild<QWidget*>("FaceInspector_Splitter"));
+    REQUIRE(prepared.count() == 1);
+    CHECK(prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Face));
     checkSingleNavigation();
 
-    window.switchToInspectorPage(InspectorPage::Plugin);
+    QTest::mouseClick(pluginButton, Qt::LeftButton);
     CHECK(pluginButton->isChecked());
     CHECK_FALSE(faceButton->isChecked());
     CHECK(pageTitle->text() == "PLUGINS");
+    REQUIRE(prepared.count() == 1);
+    CHECK(
+      prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Plugin));
     checkSingleNavigation();
     QTest::mouseClick(terrainButton, Qt::LeftButton);
     CHECK(terrainButton->isChecked());

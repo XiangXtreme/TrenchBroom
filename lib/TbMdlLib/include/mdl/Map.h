@@ -296,6 +296,7 @@ public: // game path
   void setGamePath(std::filesystem::path gamePath);
   GameFileSystem& gameFileSystem();
   const GameFileSystem& gameFileSystem() const;
+  void refreshGameFileSystem();
   void reloadEntityModels(const std::vector<std::filesystem::path>& paths);
   void reloadEntityModels(const std::filesystem::path& path);
 

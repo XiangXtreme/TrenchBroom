@@ -57,6 +57,9 @@ struct ProjectCompileInfo
   std::string mapName;
 };
 
+/** Whether a profile consists of one enabled tool that takes its input from a project. */
+bool isDirectProjectCompilation(const mdl::CompilationProfile& profile);
+
 class CompilationRun : public QObject
 {
   Q_OBJECT
@@ -67,11 +70,7 @@ public:
   ~CompilationRun() override;
 
   bool running() const;
-  /**
-   * Runs the profile against the live map. If `project` is set, project variables such
-   * as ${PROJECT_PATH} and ${MAP_NAME} are available, which lets a project aware tool
-   * read its input from the project file instead of an exported compile snapshot.
-   */
+  /** Runs the profile against the live map. */
   Result<void> run(
     const mdl::CompilationProfile& profile,
     const mdl::Map& map,
@@ -84,6 +83,14 @@ public:
     const gl::PerspectiveCamera& camera,
     QTextEdit* currentOutput,
     std::optional<ProjectCompileInfo> project = std::nullopt);
+  /** Runs a project-only tool without retaining the live map or camera. */
+  Result<void> runProjectTool(
+    const mdl::CompilationProfile& profile,
+    const mdl::Map& map,
+    const gl::PerspectiveCamera& camera,
+    QTextEdit* currentOutput,
+    ProjectCompileInfo project,
+    bool test);
   /**
    * Runs the profile against a frozen map file.
    *
@@ -113,7 +120,8 @@ private:
     bool test,
     const std::optional<std::filesystem::path>& mapPath,
     std::shared_ptr<const mdl::Map> snapshot = {},
-    std::optional<ProjectCompileInfo> project = std::nullopt);
+    std::optional<ProjectCompileInfo> project = std::nullopt,
+    bool projectToolOnly = false);
 
 private:
   Result<std::string> buildWorkDir(
