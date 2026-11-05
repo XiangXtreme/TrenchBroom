@@ -61,9 +61,11 @@ int main(int argc, char** argv)
     std::make_unique<tb::TestPreferenceStore>(), K(saveInstantly));
 
   const auto showWindows = qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1;
-  if (qEnvironmentVariableIsSet("TB_RENDER_PROFILE_MAP"))
+  if (
+    qEnvironmentVariableIsSet("TB_RENDER_PROFILE_MAP")
+    || qEnvironmentVariableIsSet("TB_TEST_SHARED_OPENGL"))
   {
-    // The opt-in map benchmark uses the application's real shared resource uploader.
+    // Viewport acceptance and the opt-in benchmark use the application's shared uploader.
     tb::ui::configureDefaultGlFormat();
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
   }

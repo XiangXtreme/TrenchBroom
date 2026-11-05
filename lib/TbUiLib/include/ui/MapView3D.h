@@ -50,6 +50,7 @@ class PlayModeController;
 class PlayModeFullScreen;
 class PlayModeRawMouse;
 class TerrainInspector;
+class TerrainPreviewRenderer;
 
 class MapView3D : public MapViewBase
 {
@@ -60,6 +61,7 @@ private:
   std::unique_ptr<PlayModeController> m_playMode;
   std::unique_ptr<PlayModeRawMouse> m_rawMouse;
   std::unique_ptr<PlayModeFullScreen> m_playModeFullScreen;
+  std::unique_ptr<TerrainPreviewRenderer> m_terrainPreview;
   bool m_changingPlayPresentation = false;
   QProgressDialog* m_playModeBuildProgress = nullptr;
   bool m_ignoreCameraChangeEvents = false;

@@ -7,6 +7,8 @@
 #include <QComboBox>
 #include <QFile>
 #include <QLabel>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTemporaryDir>
@@ -28,6 +30,7 @@
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Groups.h"
+#include "mdl/Map_NodeVisibility.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Picking.h"
 #include "mdl/Map_Selection.h"
@@ -164,6 +167,27 @@ ProjectWindow* findProjectWindow(const std::filesystem::path& path)
 
 TEST_CASE("Project terrain panel paints a picked brush")
 {
+  if (!qEnvironmentVariableIsSet("TB_TERRAIN_PREVIEW_TEST_CHILD"))
+  {
+    // The ordinary test process does not share GL contexts. Run this framebuffer
+    // test in a fresh process with the same sharing policy as the application.
+    auto process = QProcess{};
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert("TB_TEST_SHARED_OPENGL", "1");
+    environment.insert("TB_TERRAIN_PREVIEW_TEST_CHILD", "1");
+    process.setProcessEnvironment(environment);
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    process.start(
+      QCoreApplication::applicationFilePath(),
+      {"Project terrain panel paints a picked brush", "--reporter", "compact"});
+    REQUIRE(process.waitForStarted(10000));
+    const auto finished = process.waitForFinished(55000);
+    INFO(process.readAllStandardOutput().toStdString());
+    REQUIRE(finished);
+    REQUIRE(process.exitStatus() == QProcess::NormalExit);
+    REQUIRE(process.exitCode() == 0);
+    return;
+  }
   auto directory = QTemporaryDir{};
   REQUIRE(directory.isValid());
   const auto path = pathFromQString(directory.filePath("terrain-panel.tbproj"));
@@ -177,14 +201,27 @@ TEST_CASE("Project terrain panel paints a picked brush")
   REQUIRE(app.openProject(path));
   auto* project = findProjectWindow(path);
   REQUIRE(project);
-  const auto converted = require(img::convertGoldSrcTexture(
-    {64, 64, std::vector<unsigned char>(64 * 64 * 4, 255)}, "terrain_slot"));
-  auto textureInput = project::AssetImport{};
-  textureInput.type = project::AssetType::Texture;
-  textureInput.virtualPath = "textures/terrain_slot.wad";
-  textureInput.displayName = "Terrain texture";
-  textureInput.original = textureInput.compatible = converted.wad;
-  const auto texture = require(project->session()->importAsset(textureInput));
+  const auto colors = std::array{
+    std::array<unsigned char, 3>{30, 210, 40},
+    std::array<unsigned char, 3>{210, 35, 30},
+    std::array<unsigned char, 3>{30, 40, 210}};
+  auto textures = std::array<std::string, 3>{};
+  for (auto slot = size_t{0}; slot < colors.size(); ++slot)
+  {
+    auto pixels = std::vector<unsigned char>(64 * 64 * 4, 255);
+    for (auto pixel = size_t{0}; pixel < 64 * 64; ++pixel)
+      for (auto channel = size_t{0}; channel < 3; ++channel)
+        pixels[pixel * 4 + channel] = colors[slot][channel];
+    const auto name = "terrain_slot" + std::to_string(slot);
+    const auto converted =
+      require(img::convertGoldSrcTexture({64, 64, std::move(pixels)}, name));
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Texture;
+    input.virtualPath = "textures/" + name + ".wad";
+    input.displayName = "Terrain texture";
+    input.original = input.compatible = converted.wad;
+    textures[slot] = require(project->session()->importAsset(input)).id;
+  }
   const auto json =
     std::string{R"({"format":"goldsrc-terrain-material","version":1,"slots":[)"
                 R"({"name":"Moss"},{"name":"Sand"},{"name":"Stone"}]})"};
@@ -199,7 +236,9 @@ TEST_CASE("Project terrain panel paints a picked brush")
     auto store = require(project::ProjectStore::open(project->session()->store().path()));
     for (auto slot = 0; slot < 3; ++slot)
       require(store->addDependency(
-        capturedMaterial.id, texture.id, "terrain-slot-" + std::to_string(slot)));
+        capturedMaterial.id,
+        textures[size_t(slot)],
+        "terrain-slot-" + std::to_string(slot)));
   }
   require(app.mapWindowManager().createProjectMap(
     project->session(), "Terrain", mdl::MapFormat::Valve));
@@ -300,6 +339,16 @@ TEST_CASE("Project terrain panel paints a picked brush")
   camera.setViewport({0, 0, view->width(), view->height()});
   camera.moveTo(vm::vec3f{0, 0, 256});
   camera.lookAt(vm::vec3f{0, 0, 0}, vm::vec3f{0, 1, 0});
+  const auto centerIs = [&](const bool red) {
+    const auto image = view->grabFramebuffer();
+    if (image.isNull())
+      return false;
+    // Stay off the world axes and grid at the exact center.
+    const auto color = image.pixelColor(image.width() / 2 + 10, image.height() / 2 + 10);
+    return red ? color.red() > color.green() * 2 : color.green() > color.red() * 2;
+  };
+  // Preview must use the captured texture even before painting.
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(false); }, 15000));
   const auto center = view->rect().center();
   auto pick = mdl::PickResult::byDistance();
   mdl::pick(map, vm::ray3d{camera.pickRay(float(center.x()), float(center.y()))}, pick);
@@ -308,6 +357,17 @@ TEST_CASE("Project terrain panel paints a picked brush")
   REQUIRE(face);
   REQUIRE(&face->node() == brush);
   REQUIRE(face->face().normal().z() > 0);
+  // Exercise the uncommitted stroke separately from native focus, which the
+  // background-window test policy intentionally does not establish.
+  view->clearFocus();
+  QApplication::processEvents();
+  panel->beginStroke(pick);
+  REQUIRE(panel->stroking());
+  CHECK(group->group().terrainPaint() == initial);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  REQUIRE(panel->stroking());
+  panel->endStroke(false);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(false); }, 15000));
   // The first left click activates a viewport after working in the inspector.
   QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, center);
   QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, center);
@@ -315,6 +375,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
   QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, center);
   const auto painted = group->group().terrainPaint();
   REQUIRE(painted != initial);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
   CHECK(material->currentIndex() == 1);
   button("Analyze Terrain")->click();
   REQUIRE(showCuts->isChecked());
@@ -327,9 +388,78 @@ TEST_CASE("Project terrain panel paints a picked brush")
   map.undoCommand();
   const auto restored = group->group().terrainPaint() == initial;
   CHECK(restored);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(false); }, 15000));
   map.redoCommand();
   const auto repainted = group->group().terrainPaint() == painted;
   CHECK(repainted);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  button("Paint Terrain")->click();
+  mdl::deselectAll(map);
+  window->switchToInspectorPage(InspectorPage::Entity);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  mdl::hideNodes(map, {group});
+  REQUIRE(QTest::qWaitFor([&] { return !centerIs(true); }, 15000));
+  mdl::showNodes(map, {group});
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+
+  const auto mapId = project->session()->assetFor(window->document());
+  REQUIRE(mapId);
+  const auto copy = pathFromQString(directory.filePath("terrain-reopened.tbproj"));
+  require(project->session()->saveCopy(copy));
+  REQUIRE(app.openProject(copy));
+  auto* reopenedProject = findProjectWindow(copy);
+  REQUIRE(reopenedProject);
+  require(app.mapWindowManager().loadProjectMap(reopenedProject->session(), *mapId));
+  auto* reopenedWindow = app.mapWindowManager().topMapWindow();
+  REQUIRE(reopenedWindow);
+  reopenedProject->resize(1200, 820);
+  reopenedProject->show();
+  QApplication::processEvents();
+  auto* reopenedView = reopenedWindow->currentOrFirstVisible3DMapView();
+  REQUIRE(reopenedView);
+  auto& reopenedCamera = static_cast<MapViewBase&>(*reopenedView).camera();
+  reopenedCamera.setViewport({0, 0, reopenedView->width(), reopenedView->height()});
+  reopenedCamera.moveTo(vm::vec3f{0, 0, 256});
+  reopenedCamera.lookAt(vm::vec3f{0, 0, 0}, vm::vec3f{0, 1, 0});
+  REQUIRE(QTest::qWaitFor(
+    [&] {
+      const auto image = reopenedView->grabFramebuffer();
+      if (image.isNull())
+        return false;
+      const auto color =
+        image.pixelColor(image.width() / 2 + 10, image.height() / 2 + 10);
+      return color.red() > color.green() * 2;
+    },
+    15000));
+  reopenedWindow->closeDocument(true);
+
+  // Updating a captured dependency must invalidate the preview in the open map.
+  project->show();
+  auto bluePixels = std::vector<unsigned char>(64 * 64 * 4, 255);
+  for (auto pixel = size_t{0}; pixel < 64 * 64; ++pixel)
+  {
+    bluePixels[pixel * 4] = 30;
+    bluePixels[pixel * 4 + 1] = 40;
+    bluePixels[pixel * 4 + 2] = 210;
+  }
+  const auto blue =
+    require(img::convertGoldSrcTexture({64, 64, std::move(bluePixels)}, "terrain_slot1"));
+  auto replacement = project::AssetImport{};
+  replacement.type = project::AssetType::Texture;
+  replacement.virtualPath = "textures/terrain_slot1.wad";
+  replacement.displayName = "Terrain texture";
+  replacement.original = replacement.compatible = blue.wad;
+  require(project->session()->replaceAsset(textures[1], replacement));
+  REQUIRE(QTest::qWaitFor(
+    [&] {
+      const auto image = view->grabFramebuffer();
+      if (image.isNull())
+        return false;
+      const auto color =
+        image.pixelColor(image.width() / 2 + 10, image.height() / 2 + 10);
+      return color.blue() > color.red() * 2;
+    },
+    15000));
   window->closeDocument(true);
 }
 

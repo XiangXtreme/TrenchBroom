@@ -85,6 +85,7 @@
 #include "ui/ShearToolController.h"
 #include "ui/SweepToolController.h"
 #include "ui/TerrainInspector.h"
+#include "ui/TerrainPreviewRenderer.h"
 #include "ui/VertexTool.h"
 #include "ui/VertexToolController.h"
 
@@ -113,6 +114,8 @@ MapView3D::MapView3D(
         }
       })}
   , m_playModeFullScreen{std::make_unique<PlayModeFullScreen>()}
+  , m_terrainPreview{
+      std::make_unique<TerrainPreviewRenderer>(appController, document, *this)}
 {
   bindEvents();
   connectObservers();
@@ -1017,6 +1020,7 @@ void MapView3D::renderMap(
   render::RenderBatch& renderBatch)
 {
   renderer.render(renderContext, renderBatch);
+  m_terrainPreview->render(renderBatch, terrainInspector());
 
   const auto& map = m_document.map();
   if (const auto& bounds = map.selectionBounds();

@@ -46,6 +46,7 @@
 #include "ui/TerrainMaterial.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace tb::ui
@@ -242,8 +243,6 @@ void TerrainInspector::updateSlotLabels(const std::string& materialAssetId)
   {
     m_previewIdentity.clear();
     m_materialPreviewValid = true;
-    m_slotColors = {
-      {{0.40f, 0.45f, 0.24f}, {0.62f, 0.45f, 0.31f}, {0.51f, 0.50f, 0.51f}}};
     m_material->addItems({tr("Slot 0: Grass"), tr("Slot 1: Dirt"), tr("Slot 2: Rock")});
     return;
   }
@@ -316,26 +315,6 @@ void TerrainInspector::updateSlotLabels(const std::string& materialAssetId)
     m_previewIdentity = std::move(previewIdentity);
     const auto images = loadTerrainMaterialImages(project->store(), materialAssetId);
     m_materialPreviewValid = images.is_success();
-    if (images.is_success())
-    {
-      for (auto slot = size_t{0}; slot < 3; ++slot)
-      {
-        const auto image = images.value()[slot].convertToFormat(QImage::Format_RGBA8888);
-        auto sum = std::array<unsigned long long, 3>{};
-        auto count = 0u;
-        for (auto y = 0; y < image.height(); y += 8)
-          for (auto x = 0; x < image.width(); x += 8)
-          {
-            const auto* pixel = image.constScanLine(y) + x * 4;
-            for (auto channel = size_t{0}; channel < 3; ++channel)
-              sum[channel] += pixel[channel];
-            ++count;
-          }
-        if (count)
-          for (auto channel = size_t{0}; channel < 3; ++channel)
-            m_slotColors[slot][channel] = float(double(sum[channel]) / (255.0 * count));
-      }
-    }
   }
 }
 
@@ -414,7 +393,8 @@ void TerrainInspector::refresh()
     m_faceBudget->setValue(region.value().maxAddedFaces);
     m_wadBudget->setValue(region.value().maxWadKiB);
     m_minFaceWidth->setValue(region.value().minFaceWidth);
-    m_patchDensity->setCurrentIndex(m_patchDensity->findData(region.value().patchDensityPercent));
+    m_patchDensity->setCurrentIndex(
+      m_patchDensity->findData(region.value().patchDensityPercent));
   }
 
   const auto targetMatId = QString::fromStdString(region.value().materialAssetId);
@@ -563,6 +543,11 @@ bool TerrainInspector::stroking() const
   return m_stroke.has_value();
 }
 
+const TerrainRegion* TerrainInspector::previewStroke(const mdl::GroupNode& group) const
+{
+  return m_stroke && group.persistentId() == m_strokeGroup ? &*m_stroke : nullptr;
+}
+
 void TerrainInspector::beginStroke(const mdl::PickResult& pick)
 {
   const auto* group = selectedTerrainGroup(m_document.map());
@@ -670,14 +655,12 @@ void TerrainInspector::generate()
 void TerrainInspector::render(
   render::RenderContext& context, render::RenderBatch& batch) const
 {
-  if (!isVisible())
+  if (!isVisible() || !m_showCuts->isChecked() || m_stroke)
     return;
   const auto* group = selectedTerrainGroup(m_document.map());
   if (!group || group->group().terrainPaint().empty())
     return;
-  const auto region = m_stroke && group->persistentId() == m_strokeGroup
-                        ? Result<TerrainRegion>{*m_stroke}
-                        : TerrainRegion::decode(group->group().terrainPaint());
+  const auto region = TerrainRegion::decode(group->group().terrainPaint());
   if (region.is_error())
     return;
   const auto surfaces = terrainSurfaces(*group, region.value());
@@ -687,59 +670,7 @@ void TerrainInspector::render(
   auto renderer = render::RenderService{context, batch};
   renderer.setHideOccludedObjects();
   renderer.setShowBackfaces();
-  for (const auto& surface : surfaces.value())
-  {
-    const auto& plane = surface.brush->brush().face(surface.top).boundary();
-    if (!m_document.map().editorContext().visible(*surface.brush))
-      continue;
-    const auto bounds = surface.outline.boundingRect();
-    for (auto row = std::max(0, int(std::floor(bounds.top() / TerrainRegion::Step)));
-         row < TerrainRegion::Rows && row * TerrainRegion::Step < bounds.bottom();
-         ++row)
-    {
-      for (auto col = std::max(0, int(std::floor(bounds.left() / TerrainRegion::Step)));
-           col < TerrainRegion::Columns && col * TerrainRegion::Step < bounds.right();
-           ++col)
-      {
-        const auto& a = region.value().weight(col, row);
-        const auto& b = region.value().weight(col + 1, row);
-        const auto& c = region.value().weight(col + 1, row + 1);
-        const auto& d = region.value().weight(col, row + 1);
-        const auto dirt = float((a[1] + b[1] + c[1] + d[1]) / 4);
-        const auto rock = float((a[2] + b[2] + c[2] + d[2]) / 4);
-        if (dirt + rock < 0.01f && region.value().materialAssetId.empty())
-          continue;
-        const auto tile = QPolygonF{QRectF{
-          col * TerrainRegion::Step,
-          row * TerrainRegion::Step,
-          TerrainRegion::Step,
-          TerrainRegion::Step}};
-        const auto clip = surface.outline.intersected(tile);
-        if (terrainArea(clip) < 1e-7)
-          continue;
-        auto vertices = std::vector<vm::vec3f>{};
-        for (const auto& pixel : clip)
-        {
-          const auto xy = transform * region.value().unproject(pixel);
-          vertices.emplace_back(
-            vm::vec3d{xy.x(), xy.y(), plane.zAt(vm::vec2d{xy.x(), xy.y()}) + 0.2});
-        }
-        if (vertices.front() == vertices.back())
-          vertices.pop_back();
-        const auto grass = 1 - dirt - rock;
-        renderer.setForegroundColor(RgbaF{
-          m_slotColors[0][0] * grass + m_slotColors[1][0] * dirt
-            + m_slotColors[2][0] * rock,
-          m_slotColors[0][1] * grass + m_slotColors[1][1] * dirt
-            + m_slotColors[2][1] * rock,
-          m_slotColors[0][2] * grass + m_slotColors[1][2] * dirt
-            + m_slotColors[2][2] * rock,
-          0.35f + 0.4f * (dirt + rock)});
-        renderer.renderFilledPolygon(vertices);
-      }
-    }
-  }
-  if (m_showCuts->isChecked() && !m_stroke && m_cutPreviewGroup == group->persistentId())
+  if (m_cutPreviewGroup == group->persistentId())
   {
     auto lines = std::array<std::vector<vm::vec3f>, 4>{};
     for (const auto& cut : m_cutPreview)

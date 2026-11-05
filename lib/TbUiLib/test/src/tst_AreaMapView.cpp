@@ -75,6 +75,12 @@ TEST_CASE("AreaMapView")
   auto* layout = window.findChild<AreaMapView*>();
   REQUIRE(layout);
   auto* original = layout->areas().front();
+  const auto secondArea = [&]() -> CyclingMapView* {
+    for (auto* area : layout->areas())
+      if (area != original)
+        return area;
+    return nullptr;
+  };
   auto* native = original->firstMapViewBase();
   native->camera().moveTo(vm::vec3f{128, 256, 512});
   const auto position = native->camera().position();
@@ -97,8 +103,8 @@ TEST_CASE("AreaMapView")
     CHECK(button->height() == selector->height());
 
     REQUIRE(layout->splitArea(original, Qt::Horizontal));
-    auto* second = layout->areas().back();
-    REQUIRE(second != original);
+    auto* second = secondArea();
+    REQUIRE(second);
     auto* otherButton = second->findChild<QToolButton*>("MapViewLightmapButton");
     REQUIRE(otherButton);
     second->setViewType(CyclingMapView::View_XZ);
@@ -160,7 +166,8 @@ TEST_CASE("AreaMapView")
     CHECK(button->menu()->actions()[2]->isChecked());
 
     REQUIRE(layout->splitArea(original, Qt::Horizontal));
-    auto* second = layout->areas().back();
+    auto* second = secondArea();
+    REQUIRE(second);
     second->setViewType(CyclingMapView::View_3D);
     auto* otherButton = second->findChild<QToolButton*>("MapViewLightmapButton");
     REQUIRE(otherButton);

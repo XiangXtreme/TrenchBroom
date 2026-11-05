@@ -10,7 +10,6 @@
 #include "ui/TerrainExport.h"
 #include "ui/TerrainRegion.h"
 
-#include <array>
 #include <optional>
 
 class QComboBox;
@@ -66,13 +65,12 @@ private:
   bool m_refreshingMaterial = false;
   bool m_materialPreviewValid = true;
   std::string m_previewIdentity;
-  std::array<std::array<float, 3>, 3> m_slotColors{
-    {{0.40f, 0.45f, 0.24f}, {0.62f, 0.45f, 0.31f}, {0.51f, 0.50f, 0.51f}}};
 
 public:
   TerrainInspector(AppController& app, MapDocument& document);
   bool painting() const;
   bool stroking() const;
+  const TerrainRegion* previewStroke(const mdl::GroupNode& group) const;
   void beginStroke(const mdl::PickResult& pick);
   void continueStroke(const mdl::PickResult& pick);
   void endStroke(bool commit);

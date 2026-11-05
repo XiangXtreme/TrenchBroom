@@ -121,6 +121,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Inspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainExport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainInspector.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainPreviewRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainMaterial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainMaterialRaster.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainRegion.cpp
@@ -425,6 +426,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView2D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView3D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TerrainInspector.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TerrainPreviewRenderer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewActivationTracker.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewBar.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewBase.h
