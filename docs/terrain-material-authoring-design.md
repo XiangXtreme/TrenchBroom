@@ -205,3 +205,19 @@ Remove-Item Env:TB_TERRAIN_PAIR_ACCEPTANCE_PROJECT
 2026-11-05 已用本机 `hltools 1.24.0` 编译此样例；BSP 30 含 104 个面、4 种 hull 和 10 张嵌入纹理。回归测试核对了固定过渡纹理的四级 MIP 确实出现在导出快照中。
 
 原生版本人工验收时，在同一个 `.tbproj` 内完成「从资产库合成地形材质、捕获入工程、绑定并刷材质、裁剪、撤销、重做、保存重开、重编」。检查坡折两侧的贴图接缝、输出 Brush 的体积与边界、CS 1.6 内的行走碰撞，以及同一输入重复应用的面数和纹理一致性。
+
+### 原生纹理坡地编译样例
+
+下面的回归测试使用自生成、可平铺且包含细节的三张不同分辨率贴图，制作一条跨过裁剪边界的笔迹，并包含三材质交汇。测试使用原生裁剪工具将坡地一端削平，检查裁剪前后、撤销和重做时的笔迹及几何覆盖，并验证保存重开和重复烘焙结果。先构建 `TbUiLibTest` 并确保 Qt 运行库和支持工程地形的 `hltools` 在 `PATH` 中，然后运行以下命令，导出包含四张地图的自包含工程及其编译快照：
+
+```powershell
+$env:TB_TERRAIN_SLOPE_ACCEPTANCE_DIR = Join-Path $env:TEMP ("tb-terrain-slope-" + [guid]::NewGuid().ToString('N'))
+build-release-codex\lib\TbUiLib\test\TbUiLibTest.exe 'Project terrain textured slope survives clipping and compile snapshots'
+foreach ($map in @('TerrainBefore', 'Terrain50', 'Terrain100', 'Terrain200')) {
+  hltools compile --project (Join-Path $env:TB_TERRAIN_SLOPE_ACCEPTANCE_DIR 'terrain-slope.tbproj') --map $map --output (Join-Path $env:TB_TERRAIN_SLOPE_ACCEPTANCE_DIR ($map.ToLower() + '.bsp')) -threads 2 -noembedsource
+}
+hltools bsp info (Join-Path $env:TB_TERRAIN_SLOPE_ACCEPTANCE_DIR 'terrain100.bsp')
+Remove-Item Env:TB_TERRAIN_SLOPE_ACCEPTANCE_DIR
+```
+
+`TerrainBefore` 是裁剪前的斜坡；`Terrain50`、`Terrain100` 和 `Terrain200` 是裁剪后的同一笔迹，分别使用对应的局部纹理密度。2026-11-05 使用本机 hltools 1.24.0 编译四张地图均成功。`Terrain100` 的 BSP 30 包含 136 个面和 8 张嵌入纹理；对四张 BSP 回读时，所有嵌入贴图的四级 MIP 与各自的工程编译 WAD 一致。该样例用于功能验收，纹理是程序生成的测试素材，游戏内画面和行走碰撞仍需人工检查。

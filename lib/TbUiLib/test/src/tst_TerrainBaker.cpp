@@ -23,6 +23,7 @@
 #include "mdl/PasteType.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
+#include "ui/ClipTool.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 #include "ui/ProjectSession.h"
@@ -593,5 +594,269 @@ TEST_CASE("Project terrain chooses shared tiles only within budget and with WAD 
   if (const auto output = qEnvironmentVariable("TB_TERRAIN_SHARED_ACCEPTANCE_PROJECT");
       !output.isEmpty())
     requireValue(session->saveCopy(pathFromQString(output)));
+}
+
+TEST_CASE("Project terrain textured slope survives clipping and compile snapshots")
+{
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto root = pathFromQString(directory.path());
+  const auto projectPath = root / "terrain-slope.tbproj";
+  auto session =
+    requireValue(ProjectSession::create(projectPath, "Terrain Slope", "Half-Life"));
+
+  // Procedural, tileable source images keep the fixture self-contained while exposing
+  // the alignment and mipmapping problems that uniform-color sources cannot reveal.
+  const auto names = std::array{"TERR_GRASS", "TERR_DIRT", "TERR_ROCK", "TERR_WALL"};
+  const auto sizes = std::array{64, 128, 256, 64};
+  const auto colors = std::array{
+    std::array{68, 91, 43},
+    std::array{119, 88, 58},
+    std::array{112, 108, 98},
+    std::array{116, 114, 106}};
+  auto textureIds = std::array<std::string, 3>{};
+  constexpr auto pi = 3.14159265358979323846;
+  for (auto slot = size_t{0}; slot < names.size(); ++slot)
+  {
+    const auto size = sizes[slot];
+    auto pixels = std::vector<unsigned char>(size_t(size * size * 4), 255);
+    for (auto y = 0; y < size; ++y)
+      for (auto x = 0; x < size; ++x)
+      {
+        const auto u = double(x) / size;
+        const auto v = double(y) / size;
+        const auto noise = std::uint32_t(x) * 73856093u ^ std::uint32_t(y) * 19349663u
+                           ^ std::uint32_t(slot) * 83492791u;
+        const auto grain = int((noise ^ (noise >> 13)) % 17u) - 8;
+        const auto shade = int(std::lround(
+                             12 * std::sin(2 * pi * (3 * u + 2 * v))
+                             + 7 * std::sin(2 * pi * (7 * u - 5 * v))
+                             + 4 * std::sin(2 * pi * (13 * u + 11 * v))))
+                           + grain;
+        const auto offset = size_t((y * size + x) * 4);
+        for (auto channel = size_t{0}; channel < 3; ++channel)
+          pixels[offset + channel] =
+            static_cast<unsigned char>(std::clamp(colors[slot][channel] + shade, 0, 255));
+      }
+    const auto converted = requireValue(
+      img::convertGoldSrcTexture({size_t(size), size_t(size), pixels}, names[slot]));
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Texture;
+    input.virtualPath = "textures/" + std::string{names[slot]} + ".wad";
+    input.displayName = names[slot];
+    input.original = input.compatible = converted.wad;
+    const auto texture = requireValue(session->importAsset(input));
+    if (slot < textureIds.size())
+      textureIds[slot] = texture.id;
+  }
+  const auto recipe = std::string{
+    R"({"format":"goldsrc-terrain-material","version":1,"slots":[{"name":"Grass"},{"name":"Dirt"},{"name":"Rock"}]})"};
+  auto materialInput = project::AssetImport{};
+  materialInput.type = project::AssetType::Material;
+  materialInput.virtualPath = "materials/terrain-slope.tbmat";
+  materialInput.displayName = "Grass, dirt and rock";
+  materialInput.original.assign(recipe.begin(), recipe.end());
+  materialInput.compatible = materialInput.original;
+  const auto materialAsset = requireValue(session->importAsset(materialInput));
+  {
+    auto store = requireValue(project::ProjectStore::open(session->store().path()));
+    for (auto slot = size_t{0}; slot < textureIds.size(); ++slot)
+      requireValue(store->addDependency(
+        materialAsset.id, textureIds[slot], "terrain-slot-" + std::to_string(slot)));
+  }
+
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  config.gameInfo.gameConfig.name = "Half-Life";
+  auto& document = fixture.create(config);
+  auto& map = document.map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* ramp = new mdl::BrushNode{requireValue(builder.createBrush(
+    std::vector<vm::vec3d>{
+      {0, 0, 0},
+      {0, -640, 0},
+      {1280, 0, 80},
+      {1280, -640, 80},
+      {0, 0, -64},
+      {0, -640, -64},
+      {1280, 0, -64},
+      {1280, -640, -64}},
+    "TERR_GRASS"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {ramp}}});
+  mdl::selectNodes(map, {ramp});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+  auto region = requireValue(createTerrainRegion(*group));
+  region.materialAssetId = materialAsset.id;
+  for (auto x = 96; x <= 864; x += 6)
+    region.paint(vm::vec2d{double(x), 240 + 30 * std::sin(pi * x / 480.0)}, 70, 1, 0.65);
+  for (auto x = 360; x <= 600; x += 6)
+    region.paint(vm::vec2d{double(x), 190}, 52, 2, 0.38);
+  for (auto row = 8; row <= 10; ++row)
+    for (auto col = 19; col <= 21; ++col)
+      region.weights[size_t(row * (TerrainRegion::Columns + 1) + col)] = {
+        0.35, 0.4, 0.25};
+  REQUIRE(std::ranges::any_of(region.weights, [](const auto& weight) {
+    return weight[0] > 0.1 && weight[1] > 0.1 && weight[2] > 0.1;
+  }));
+  const auto painted = region.encode();
+  auto content = group->group();
+  content.setTerrainPaint(painted);
+  REQUIRE(mdl::updateNodeContents(
+    map, "Paint terrain", {{group, mdl::NodeContents{std::move(content)}}}));
+
+  auto walls = std::vector<mdl::Node*>{};
+  for (const auto& bounds :
+       {vm::bbox3d{{-32, -672, -64}, {0, 32, 224}},
+        vm::bbox3d{{1280, -672, -64}, {1312, 32, 224}},
+        vm::bbox3d{{0, -672, -64}, {1280, -640, 224}},
+        vm::bbox3d{{0, 0, -64}, {1280, 32, 224}},
+        vm::bbox3d{{-32, -672, 224}, {1312, 32, 256}}})
+    walls.push_back(
+      new mdl::BrushNode{requireValue(builder.createCuboid(bounds, "TERR_WALL"))});
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), std::move(walls)}});
+  REQUIRE(mdl::paste(map, R"(
+    { "classname" "info_player_start" "origin" "64 -300 48" "angle" "0" }
+    { "classname" "info_player_deathmatch" "origin" "1160 -420 112" "angle" "180" }
+    { "classname" "light" "origin" "160 -320 190" "_light" "255 240 215 420" }
+    { "classname" "light" "origin" "560 -320 190" "_light" "255 240 215 420" }
+    { "classname" "light" "origin" "960 -320 190" "_light" "255 240 215 420" }
+  )") == mdl::PasteType::Node);
+
+  auto assets = std::vector<std::pair<std::string, std::string>>{};
+  const auto saveMap = [&](const std::string& name, const TerrainRegion& settings) {
+    auto updated = group->group();
+    updated.setTerrainPaint(settings.encode());
+    REQUIRE(mdl::updateNodeContents(
+      map, "Set terrain density", {{group, mdl::NodeContents{std::move(updated)}}}));
+    const auto source = root / (name + ".map");
+    requireValue(map.saveTo(source));
+    const auto estimate = requireValue(estimateTerrainGroup(*group, &session->store()));
+    const auto surfaces = requireValue(terrainSurfaces(*group, settings));
+    CHECK(estimate.sourceFaces == surfaces.size());
+    CHECK(estimate.generatedFaces > estimate.sourceFaces);
+    CHECK(std::ranges::any_of(
+      estimate.cuts, [](const auto& cut) { return cut.kind == TerrainFaceKind::Local; }));
+    for (auto surface = size_t{0}; surface < surfaces.size(); ++surface)
+    {
+      auto area = 0.0;
+      for (const auto& cut : estimate.cuts)
+        if (cut.surfaceIndex == surface)
+          area += terrainArea(cut.polygon);
+      CHECK(std::abs(area - terrainArea(surfaces[surface].outline)) < 1e-4);
+    }
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.virtualPath = "maps/" + name + ".map";
+    input.displayName = name;
+    input.original = input.compatible = readBytes(source);
+    if (name == "Terrain100")
+    {
+      const auto first =
+        requireValue(bakeTerrainSnapshot(input.original, &session->store()));
+      const auto second =
+        requireValue(bakeTerrainSnapshot(input.original, &session->store()));
+      REQUIRE(first);
+      REQUIRE(second);
+      CHECK(first->topFaces == estimate.generatedFaces);
+      CHECK(first->map == second->map);
+      CHECK(first->textures == second->textures);
+    }
+    const auto asset = requireValue(session->importAsset(input));
+    assets.emplace_back(name, asset.id);
+  };
+  saveMap("TerrainBefore", region);
+  REQUIRE(group->childCount() == 1);
+
+  mdl::openGroup(map, *group);
+  mdl::selectNodes(map, {ramp});
+  auto clip = ClipTool{document};
+  REQUIRE(clip.activate());
+  clip.addPoint(vm::vec3d{640, 0, 40}, {});
+  clip.addPoint(vm::vec3d{640, -640, 40}, {});
+  clip.addPoint(vm::vec3d{640, -640, -32}, {});
+  REQUIRE(clip.canClip());
+  clip.toggleSide();
+  clip.performClip();
+  clip.deactivate();
+  REQUIRE(group->childCount() == 2);
+  CHECK(group->group().terrainPaint() == painted);
+  map.undoCommand();
+  CHECK(group->childCount() == 1);
+  map.redoCommand();
+  REQUIRE(group->childCount() == 2);
+  const auto upper = std::ranges::find_if(group->children(), [](const auto* child) {
+    return child->logicalBounds().min.x() >= 640;
+  });
+  REQUIRE(upper != group->children().end());
+  mdl::deselectAll(map);
+  mdl::selectNodes(map, {*upper});
+  auto flatten = ClipTool{document};
+  REQUIRE(flatten.activate());
+  flatten.addPoint(vm::vec3d{640, 0, 40}, {});
+  flatten.addPoint(vm::vec3d{1280, -640, 40}, {});
+  flatten.addPoint(vm::vec3d{640, -640, 40}, {});
+  REQUIRE(flatten.canClip());
+  flatten.performClip();
+  flatten.deactivate();
+  REQUIRE(group->childCount() == 2);
+  CHECK(group->logicalBounds().max.z() == 40);
+  CHECK(group->group().terrainPaint() == painted);
+  map.undoCommand();
+  CHECK(group->logicalBounds().max.z() == 80);
+  map.redoCommand();
+  CHECK(group->logicalBounds().max.z() == 40);
+  mdl::closeGroup(map);
+
+  for (const auto density : {50, 100, 200})
+  {
+    auto settings = region;
+    settings.patchDensityPercent = density;
+    saveMap("Terrain" + std::to_string(density), settings);
+  }
+  requireValue(session->save());
+  auto wadSizes = std::array<size_t, 3>{};
+  for (const auto& [name, id] : assets)
+  {
+    const auto cached = requireValue(session->store().terrainCompile(id));
+    REQUIRE(cached);
+    INFO(name << ": " << cached->error);
+    REQUIRE(cached->error.empty());
+    if (name == "Terrain50")
+      wadSizes[0] = cached->wad.size();
+    else if (name == "Terrain100")
+      wadSizes[1] = cached->wad.size();
+    else if (name == "Terrain200")
+      wadSizes[2] = cached->wad.size();
+    requireValue(session->exportCompileSnapshot(id, root / "saved" / name));
+  }
+  CHECK(wadSizes[0] < wadSizes[1]);
+  CHECK(wadSizes[1] < wadSizes[2]);
+  session.reset();
+  session = requireValue(ProjectSession::open(projectPath));
+  for (const auto& [name, id] : assets)
+  {
+    CHECK_FALSE(requireValue(session->terrainCompileNeedsSave(id)));
+    requireValue(session->exportCompileSnapshot(id, root / "reopened" / name));
+    CHECK(
+      readBytes(root / "saved" / name / "map.map")
+      == readBytes(root / "reopened" / name / "map.map"));
+    CHECK(
+      readBytes(root / "saved" / name / "textures.wad")
+      == readBytes(root / "reopened" / name / "textures.wad"));
+  }
+
+  if (const auto output = qEnvironmentVariable("TB_TERRAIN_SLOPE_ACCEPTANCE_DIR");
+      !output.isEmpty())
+  {
+    const auto destination = pathFromQString(output);
+    REQUIRE_FALSE(std::filesystem::exists(destination));
+    REQUIRE(std::filesystem::create_directories(destination));
+    requireValue(session->saveCopy(destination / "terrain-slope.tbproj"));
+    for (const auto& [name, id] : assets)
+      requireValue(session->exportCompileSnapshot(id, destination / name));
+  }
 }
 } // namespace tb::ui
