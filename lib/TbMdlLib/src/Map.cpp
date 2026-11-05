@@ -1258,6 +1258,9 @@ void Map::clearEntityDefinitions()
 
 void Map::reloadMaterials()
 {
+  // This is an explicit user action (or a game path change), so loose files that
+  // appeared on disk must be picked up by the reload below.
+  m_gameFileSystem->requestFullRescan();
   clearMaterials();
   loadMaterials();
 }

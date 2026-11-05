@@ -32,6 +32,7 @@
 #include "mdl/GameConfig.h"
 
 #include "kd/ranges/as_rvalue_view.h"
+#include "kd/result.h"
 #include "kd/result_fold.h"
 #include "kd/string_compare.h"
 #include "kd/string_compare_natural.h"
@@ -76,6 +77,22 @@ void GameFileSystem::initialize(
   }
   if (!m_projectDirectory.empty())
     setProjectDirectory(m_projectDirectory);
+  m_needsFullRescan = false;
+}
+
+void GameFileSystem::requestFullRescan()
+{
+  m_needsFullRescan = true;
+}
+
+Result<void> GameFileSystem::reload()
+{
+  if (!m_needsFullRescan)
+  {
+    return kdl::void_success;
+  }
+  m_needsFullRescan = false;
+  return VirtualFileSystem::reload();
 }
 
 void GameFileSystem::reloadWads(

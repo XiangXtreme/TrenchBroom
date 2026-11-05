@@ -942,12 +942,14 @@ Result<void> ProjectSession::refreshRuntime()
                || asset.type == project::AssetType::Sprite)
                modelPaths.emplace_back(asset.publishPath);
            }
+           ++m_runtimeGeneration;
            for (const auto& [document, entry] : m_documents)
            {
              document->map().gameFileSystem().setProjectDirectory(root);
              document->map().reloadEntityModels(modelPaths);
              document->map().materialCollectionsWillChangeNotifier();
              document->map().materialCollectionsDidChangeNotifier();
+             markDocumentBound(*document, root);
            }
            m_runtime = std::move(runtime);
            m_runtimeAssets = std::move(runtimeAssets);
@@ -975,23 +977,51 @@ Result<std::vector<std::uint8_t>> ProjectSession::workingMapContents(
   return document->map().saveTo(path) | kdl::and_then([&]() { return readBytes(path); });
 }
 
+void ProjectSession::markDocumentBound(
+  MapDocument& document, const std::filesystem::path& projectDirectory)
+{
+  auto& map = document.map();
+  m_boundDocuments[&document] = BoundDocumentState{
+    &map, &map.gameFileSystem(), projectDirectory, m_runtimeGeneration};
+}
+
 void ProjectSession::bindDocument(MapDocument& document)
 {
-  document.map().gameFileSystem().setProjectDirectory(pathFromQString(m_runtime->path()));
-  auto modelPaths = std::vector<std::filesystem::path>{};
-  for (const auto& asset : m_runtimeAssets)
-    if (
-      asset.type == project::AssetType::Model || asset.type == project::AssetType::Sprite)
-      modelPaths.emplace_back(asset.publishPath);
-  document.map().reloadEntityModels(modelPaths);
-  document.map().materialCollectionsWillChangeNotifier();
-  document.map().materialCollectionsDidChangeNotifier();
   auto weak = weak_from_this();
   document.map().setSaveHandler([weak]() -> Result<void> {
     if (const auto session = weak.lock())
       return session->save();
     return Error{"Project session has closed."};
   });
+
+  // Opening a map fires documentWasLoaded right after registerDocument has bound it,
+  // and a runtime refresh binds every open document itself. Repeating the entity model
+  // and material reload for the same document state is pure work (including a full
+  // game directory rescan), so skip it unless the map, its file system or the runtime
+  // generation actually changed.
+  auto& map = document.map();
+  const auto projectDirectory = pathFromQString(m_runtime->path());
+  auto* gameFileSystem = &map.gameFileSystem();
+  const auto bound = m_boundDocuments.find(&document);
+  if (
+    bound != m_boundDocuments.end() && bound->second.map == &map
+    && bound->second.gameFileSystem == gameFileSystem
+    && bound->second.projectDirectory == projectDirectory
+    && bound->second.runtimeGeneration == m_runtimeGeneration)
+  {
+    return;
+  }
+
+  gameFileSystem->setProjectDirectory(projectDirectory);
+  auto modelPaths = std::vector<std::filesystem::path>{};
+  for (const auto& asset : m_runtimeAssets)
+    if (
+      asset.type == project::AssetType::Model || asset.type == project::AssetType::Sprite)
+      modelPaths.emplace_back(asset.publishPath);
+  map.reloadEntityModels(modelPaths);
+  map.materialCollectionsWillChangeNotifier();
+  map.materialCollectionsDidChangeNotifier();
+  markDocumentBound(document, projectDirectory);
 }
 Result<void> ProjectSession::registerDocument(
   MapDocument& document, const std::string& id)
@@ -1054,6 +1084,7 @@ void ProjectSession::unregisterDocument(MapDocument& document)
   PythonHandleRegistry::instance().invalidateDocument(&document);
   document.map().setSaveHandler({});
   m_documents.erase(&document);
+  m_boundDocuments.erase(&document);
   emit stateChanged();
 }
 
@@ -1428,6 +1459,8 @@ Result<void> ProjectSession::restore(const std::string& id)
   m_store = std::move(candidate);
   auto previousRuntime =
     std::move(m_runtime); // Keep old resources alive during view refresh.
+  ++m_runtimeGeneration;
+  m_boundDocuments.clear(); // Every open document gets a new Map below.
   m_runtime = std::move(runtime);
   m_runtimeAssets = std::move(runtimeAssets);
   m_modified = true;

@@ -56,7 +56,18 @@ public:
     const std::vector<std::filesystem::path>& wadPaths,
     Logger& logger);
 
+  /**
+   * Requests a full scan of the loose-file directory mounts on the next reload().
+   * initialize(), setProjectDirectory() and reloadWads() already scan the mounts they
+   * create, so a reload is only useful when files were changed on disk behind our back
+   * (the explicit "reload material collections" action). Opening a map used to rescan
+   * the whole game directory several times for no reason.
+   */
+  void requestFullRescan();
+  Result<void> reload() override;
+
 private:
+  bool m_needsFullRescan = false;
   void addDefaultAssetPaths(
     const EnvironmentConfig& environmentConfig, const GameConfig& config, Logger& logger);
   void addGameFileSystems(

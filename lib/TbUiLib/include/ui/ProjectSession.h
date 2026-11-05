@@ -14,6 +14,8 @@
 #include "project/ProjectStore.h"
 
 #include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -67,6 +69,21 @@ class ProjectSession : public QObject, public std::enable_shared_from_this<Proje
     std::string assetId;
     NotifierConnection connection;
   };
+  /**
+   * Identifies the exact document state a bind was performed against. Opening a map
+   * fires documentWasLoaded after registerDocument has already bound it, and a runtime
+   * refresh binds every open document itself; without this record both paths repeat the
+   * entity model and material reload (including a full game directory rescan).
+   */
+  struct BoundDocumentState
+  {
+    const void* map = nullptr;
+    const void* gameFileSystem = nullptr;
+    std::filesystem::path projectDirectory;
+    std::uint64_t runtimeGeneration = 0;
+  };
+  std::map<MapDocument*, BoundDocumentState> m_boundDocuments;
+  std::uint64_t m_runtimeGeneration = 0;
   std::filesystem::path m_path;
   QTemporaryDir m_workspace;
   std::unique_ptr<QLockFile> m_lock;
@@ -88,6 +105,8 @@ class ProjectSession : public QObject, public std::enable_shared_from_this<Proje
   Result<void> refreshRuntime();
   Result<void> writeProject(const std::filesystem::path& path, bool overwrite);
   void bindDocument(MapDocument& document);
+  void markDocumentBound(
+    MapDocument& document, const std::filesystem::path& projectDirectory);
   void changed();
 
   /**

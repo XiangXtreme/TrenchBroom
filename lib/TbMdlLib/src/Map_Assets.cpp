@@ -23,6 +23,7 @@
 #include "gl/MaterialManager.h"
 #include "mdl/EntityModelManager.h"
 #include "mdl/GameConfig.h"
+#include "mdl/GameFileSystem.h"
 #include "mdl/GameInfo.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Entities.h"
@@ -159,6 +160,9 @@ void setEnabledMaterialCollections(
 
 void reloadMaterialCollections(Map& map)
 {
+  // The user explicitly asked to see files that may have appeared on disk, so the
+  // material reload below must rescan the loose-file mounts.
+  map.gameFileSystem().requestFullRescan();
   const auto nodes = std::vector<Node*>{&map.worldNode()};
   const auto notifyNodes = NotifyNodesChange{map, nodes};
   const auto notifyMaterialCollections = NotifyBeforeAndAfter{
