@@ -67,16 +67,23 @@ public:
   ~CompilationRun() override;
 
   bool running() const;
+  /**
+   * Runs the profile against the live map. If `project` is set, project variables such
+   * as ${PROJECT_PATH} and ${MAP_NAME} are available, which lets a project aware tool
+   * read its input from the project file instead of an exported compile snapshot.
+   */
   Result<void> run(
     const mdl::CompilationProfile& profile,
     const mdl::Map& map,
     const gl::PerspectiveCamera& camera,
-    QTextEdit* currentOutput);
+    QTextEdit* currentOutput,
+    std::optional<ProjectCompileInfo> project = std::nullopt);
   Result<void> test(
     const mdl::CompilationProfile& profile,
     const mdl::Map& map,
     const gl::PerspectiveCamera& camera,
-    QTextEdit* currentOutput);
+    QTextEdit* currentOutput,
+    std::optional<ProjectCompileInfo> project = std::nullopt);
   /**
    * Runs the profile against a frozen map file.
    *

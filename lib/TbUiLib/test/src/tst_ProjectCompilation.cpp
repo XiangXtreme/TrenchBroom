@@ -118,6 +118,18 @@ const auto CompilationProfiles = R"({
                     "entityToAdd": [ { "key": "classname", "value": "info_player_start" } ]
                 }
             ]
+        },
+        {
+            "name": "ProjectAware",
+            "workdir": "${MAP_DIR_PATH}",
+            "tasks": [
+                {
+                    "type": "tool",
+                    "tool": "cmd.exe",
+                    "parameters": "/c echo project=${PROJECT_PATH} name=${MAP_NAME} map=${MAP_FULL_NAME}",
+                    "treatNonZeroResultCodeAsError": true
+                }
+            ]
         }
     ]
 })";
@@ -140,6 +152,18 @@ const auto CompilationProfiles = R"({
                     "target": "exported.map",
                     "stripTbProperties": true,
                     "entityToAdd": [ { "key": "classname", "value": "info_player_start" } ]
+                }
+            ]
+        },
+        {
+            "name": "ProjectAware",
+            "workdir": "${MAP_DIR_PATH}",
+            "tasks": [
+                {
+                    "type": "tool",
+                    "tool": "/bin/echo",
+                    "parameters": "project=${PROJECT_PATH} name=${MAP_NAME} map=${MAP_FULL_NAME}",
+                    "treatNonZeroResultCodeAsError": true
                 }
             ]
         }
@@ -790,5 +814,69 @@ TEST_CASE("ProjectCompilation")
     CHECK(laterBytes.contains("Later live edit"));
     CHECK_FALSE(laterBytes.contains("Frozen content"));
   }
+}
+
+TEST_CASE("ProjectCompilation.projectAwareProfilesSkipTheSnapshot")
+{
+  // A profile that uses ${PROJECT_PATH} reads the project file from disk. It must not
+  // pay for an exported compile snapshot: that snapshot is a frozen input for tools
+  // consuming a map file, and its resource audit can reject resources the project tool
+  // never reads (for example a BSP model reference).
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto projectPath = pathFromQString(directory.filePath("compile.tbproj"));
+  require(ProjectSession::create(projectPath, "Compile", GameName));
+
+  auto fixture = AppControllerFixture{[](const auto& writeGameConfig) {
+    writeGameConfig(GameName, GameConfig, CompilationProfiles, std::nullopt);
+  }};
+  auto& appController = fixture.appController();
+
+  REQUIRE(appController.openProject(projectPath));
+  auto* window = findProjectWindow(projectPath);
+  REQUIRE(window != nullptr);
+  auto session = window->session();
+  require(appController.mapWindowManager().createProjectMap(
+    session, "alpha", mdl::MapFormat::Valve));
+
+  const auto assets = require(session->store().assets());
+  const auto mapAsset = std::ranges::find_if(
+    assets, [](const auto& asset) { return asset.type == project::AssetType::Map; });
+  REQUIRE(mapAsset != assets.end());
+  auto* document = session->documentFor(mapAsset->id);
+  REQUIRE(document != nullptr);
+  // Keep this test about input paths, not about resource capture.
+  mdl::selectAllNodes(document->map());
+  mdl::removeSelectedNodes(document->map());
+
+  auto camera = gl::PerspectiveCamera{};
+  auto dialog = CompilationDialog{appController, *document, camera};
+
+  REQUIRE(dialog.runProfileByName("ProjectAware"));
+  REQUIRE(dialog.isRunning());
+  REQUIRE(QTest::qWaitFor([&]() { return !dialog.isRunning(); }, 15000));
+
+  const auto output = dialog.outputText();
+  INFO(output.toStdString());
+  CHECK_FALSE(output.contains("Compilation failed"));
+  // Project variables are available even though no snapshot was exported.
+  REQUIRE(output.contains("project="));
+  CHECK(output.contains("compile.tbproj"));
+  CHECK_FALSE(output.contains("${PROJECT_PATH}"));
+  CHECK(output.contains("name=alpha"));
+  CHECK(output.contains("map=alpha.map"));
+
+  // No snapshot: the tool's working directory is the live project map folder, not a
+  // temporary snapshot folder.
+  const auto liveFolder = pathAsQString(document->map().path().parent_path());
+  const auto workDir = [&]() {
+    const auto marker = output.indexOf("Using working directory '");
+    REQUIRE(marker >= 0);
+    const auto start = marker + int(std::string{"Using working directory '"}.size());
+    const auto end = output.indexOf('\'', start);
+    REQUIRE(end > start);
+    return output.mid(start, end - start);
+  }();
+  CHECK(workDir == liveFolder);
 }
 } // namespace tb::ui

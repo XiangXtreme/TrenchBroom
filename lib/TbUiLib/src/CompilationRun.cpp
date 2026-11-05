@@ -51,18 +51,22 @@ Result<void> CompilationRun::run(
   const mdl::CompilationProfile& profile,
   const mdl::Map& map,
   const gl::PerspectiveCamera& camera,
-  QTextEdit* currentOutput)
+  QTextEdit* currentOutput,
+  std::optional<ProjectCompileInfo> project)
 {
-  return run(profile, map, camera, currentOutput, false, std::nullopt);
+  return run(
+    profile, map, camera, currentOutput, false, std::nullopt, {}, std::move(project));
 }
 
 Result<void> CompilationRun::test(
   const mdl::CompilationProfile& profile,
   const mdl::Map& map,
   const gl::PerspectiveCamera& camera,
-  QTextEdit* currentOutput)
+  QTextEdit* currentOutput,
+  std::optional<ProjectCompileInfo> project)
 {
-  return run(profile, map, camera, currentOutput, true, std::nullopt);
+  return run(
+    profile, map, camera, currentOutput, true, std::nullopt, {}, std::move(project));
 }
 
 Result<void> CompilationRun::runSnapshot(

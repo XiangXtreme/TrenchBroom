@@ -32,12 +32,14 @@
 
 #include "base/Logger.h"
 #include "mdl/CompilationProfile.h"
+#include "mdl/CompilationTask.h"
 #include "mdl/GameInfo.h"
 #include "mdl/GameManager.h"
 #include "mdl/Map.h"
 #include "ui/AppController.h"
 #include "ui/CompilationProfileManager.h"
 #include "ui/CompilationRunner.h"
+#include "ui/CompilationVariables.h"
 #include "ui/DialogButtonLayout.h"
 #include "ui/FixedWidthFont.h"
 #include "ui/LaunchGameEngineDialog.h"
@@ -52,8 +54,53 @@
 
 #include "kd/contracts.h"
 
+#include <algorithm>
+#include <string>
+#include <type_traits>
+#include <variant>
+
 namespace tb::ui
 {
+namespace
+{
+/**
+ * A project aware tool resolves its map from the project file on disk. Exporting a
+ * frozen compile snapshot for such a profile would only re-check resources the tool
+ * never reads. ${PROJECT_PATH} is the marker these profiles use to locate the project.
+ */
+bool usesProjectPath(const mdl::CompilationProfile& profile)
+{
+  const auto marker = "${" + CompilationVariableNames::PROJECT_PATH + "}";
+  const auto referencesProject = [&](const std::string& spec) {
+    return spec.find(marker) != std::string::npos;
+  };
+  return std::ranges::any_of(profile.tasks, [&](const auto& task) {
+    return std::visit(
+      [&](const auto& t) {
+        using T = std::decay_t<decltype(t)>;
+        if constexpr (std::is_same_v<T, mdl::CompilationRunTool>)
+        {
+          return referencesProject(t.toolSpec) || referencesProject(t.parameterSpec);
+        }
+        else if constexpr (
+          std::is_same_v<T, mdl::CompilationCopyFiles>
+          || std::is_same_v<T, mdl::CompilationRenameFile>)
+        {
+          return referencesProject(t.sourceSpec) || referencesProject(t.targetSpec);
+        }
+        else if constexpr (std::is_same_v<T, mdl::CompilationLaunchEngine>)
+        {
+          return false;
+        }
+        else
+        {
+          return referencesProject(t.targetSpec);
+        }
+      },
+      task);
+  });
+}
+} // namespace
 
 CompilationDialog::CompilationDialog(
   AppController& appController,
@@ -265,7 +312,8 @@ Result<void> CompilationDialog::runProfile(
     }
 
     // The project file itself is the compile input for project aware tools, so profiles
-    // can resolve the map by name instead of using the temporary export below.
+    // marked with ${PROJECT_PATH} run against the live map and never need a temporary
+    // export. Other profiles still get a frozen snapshot with the captured resources.
     const auto assetId = project->assetFor(m_document);
     if (!assetId)
       return Error{"This document is not a project map."};
@@ -286,6 +334,12 @@ Result<void> CompilationDialog::runProfile(
     if (mapName.empty())
       mapName = std::filesystem::path{asset.value()->publishPath}.stem().string();
     const auto projectInfo = ProjectCompileInfo{project->path(), mapName};
+
+    if (usesProjectPath(profile))
+    {
+      return test ? m_run.test(profile, map, m_camera, m_output, projectInfo)
+                  : m_run.run(profile, map, m_camera, m_output, projectInfo);
+    }
 
     return prepareProjectSnapshot(*project)
            | kdl::and_then([&](const auto& mapPath) -> Result<void> {
