@@ -11,17 +11,21 @@
 #include "ui/TerrainRegion.h"
 
 #include <optional>
+#include <string>
+#include <vector>
 
 class QComboBox;
 class QCheckBox;
 class QLabel;
 class QPushButton;
 class QSpinBox;
+class QTimer;
 
 namespace tb::mdl
 {
 class PickResult;
-}
+class Node;
+} // namespace tb::mdl
 namespace tb::render
 {
 class RenderBatch;
@@ -56,6 +60,7 @@ private:
   QPushButton* m_paint = nullptr;
   QPushButton* m_generate = nullptr;
   QPushButton* m_analyze = nullptr;
+  QTimer* m_refreshTimer = nullptr;
   std::optional<TerrainRegion> m_stroke;
   std::optional<mdl::IdType> m_strokeGroup;
   std::optional<vm::vec2d> m_previousPoint;
@@ -65,6 +70,8 @@ private:
   bool m_refreshingMaterial = false;
   bool m_materialPreviewValid = true;
   std::string m_previewIdentity;
+  std::optional<mdl::IdType> m_refreshedGroup;
+  std::string m_refreshedPaint;
 
 public:
   TerrainInspector(AppController& app, MapDocument& document);
@@ -74,10 +81,14 @@ public:
   void beginStroke(const mdl::PickResult& pick);
   void continueStroke(const mdl::PickResult& pick);
   void endStroke(bool commit);
-  void render(render::RenderContext& context, render::RenderBatch& batch) const;
+  void render(
+    render::RenderContext& context,
+    render::RenderBatch& batch,
+    const mdl::PickResult* cursorPick) const;
 
 private:
   void refresh();
+  void nodesChanged(const std::vector<mdl::Node*>& nodes);
   void createRegion();
   void generate();
   void analyze();

@@ -53,6 +53,7 @@ class MoveObjectsTool;
 class ExtrudeTool;
 class RotateTool;
 class SweepTool;
+class TerrainPreviewRenderer;
 class ScaleTool;
 class ShearTool;
 class VertexTool;
@@ -67,6 +68,7 @@ class MapViewToolBox : public ToolBox
 private:
   MapDocument& m_document;
   std::unique_ptr<LightmapPreview> m_lightmapPreview;
+  std::unique_ptr<TerrainPreviewRenderer> m_terrainPreview;
   std::function<ActionExecutionContext(MapViewBase*)> m_actionContextFactory;
   bool m_selectMode;
   QStackedLayout* m_bookCtrl = nullptr;
@@ -110,6 +112,7 @@ public:
   ActionExecutionContext actionContext(AppController& app, MapViewBase* view) const;
 
   LightmapPreview& lightmapPreview();
+  TerrainPreviewRenderer& terrainPreview(AppController& app);
 
 public: // tools
   bool selectMode() const;

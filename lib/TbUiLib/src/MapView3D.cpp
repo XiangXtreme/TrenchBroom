@@ -114,8 +114,6 @@ MapView3D::MapView3D(
         }
       })}
   , m_playModeFullScreen{std::make_unique<PlayModeFullScreen>()}
-  , m_terrainPreview{
-      std::make_unique<TerrainPreviewRenderer>(appController, document, *this)}
 {
   bindEvents();
   connectObservers();
@@ -349,6 +347,11 @@ void MapView3D::initializeToolChain(MapViewToolBox& toolBox)
 void MapView3D::connectObservers()
 {
   m_notifierConnection +=
+    m_toolBox.terrainPreview(m_appController).previewDidChangeNotifier.connect([this] {
+      if (isVisible())
+        update();
+    });
+  m_notifierConnection +=
     m_camera->cameraDidChangeNotifier.connect(this, &MapView3D::cameraDidChange);
 
   auto& prefs = PreferenceManager::instance();
@@ -376,6 +379,11 @@ void MapView3D::preferenceDidChange(const std::filesystem::path& path)
 
 bool MapView3D::event(QEvent* event)
 {
+  if (event->type() == QEvent::Leave && m_terrainCursorPosition)
+  {
+    m_terrainCursorPosition.reset();
+    update();
+  }
   if (m_playMode->active() && event->type() == QEvent::ShortcutOverride)
   {
     // While playing, every key belongs to the game: accepting the override delivers it
@@ -463,6 +471,7 @@ void MapView3D::mouseMoveEvent(QMouseEvent* event)
 {
   if (!m_playMode->active())
   {
+    m_terrainCursorPosition = event->position();
     if (auto* terrain = terrainInspector(); terrain && terrain->stroking())
     {
       terrain->continueStroke(terrainPick(*event));
@@ -514,6 +523,8 @@ void MapView3D::mouseMoveEvent(QMouseEvent* event)
 
 void MapView3D::mousePressEvent(QMouseEvent* event)
 {
+  if (!m_playMode->active())
+    m_terrainCursorPosition = event->position();
   if (
     !m_playMode->active() && event->button() == Qt::LeftButton
     && event->modifiers() == Qt::NoModifier && !m_toolBox.anyModalToolActive())
@@ -539,6 +550,8 @@ void MapView3D::mousePressEvent(QMouseEvent* event)
 
 void MapView3D::mouseReleaseEvent(QMouseEvent* event)
 {
+  if (!m_playMode->active())
+    m_terrainCursorPosition = event->position();
   if (event->button() == Qt::LeftButton)
   {
     if (auto* terrain = terrainInspector(); terrain && terrain->stroking())
@@ -1020,7 +1033,11 @@ void MapView3D::renderMap(
   render::RenderBatch& renderBatch)
 {
   renderer.render(renderContext, renderBatch);
-  m_terrainPreview->render(renderBatch, terrainInspector());
+  m_toolBox.terrainPreview(m_appController)
+    .render(
+      renderBatch,
+      terrainInspector(),
+      renderContext.showFaces() && renderContext.showMaterials());
 
   const auto& map = m_document.map();
   if (const auto& bounds = map.selectionBounds();
@@ -1049,7 +1066,17 @@ void MapView3D::renderTools(
 
   ToolBoxConnector::renderTools(renderContext, renderBatch);
   if (const auto* terrain = terrainInspector())
-    terrain->render(renderContext, renderBatch);
+  {
+    if (terrain->painting() && m_terrainCursorPosition && !m_toolBox.anyModalToolActive())
+    {
+      const auto& position = *m_terrainCursorPosition;
+      const auto cursorPick =
+        pick(vm::ray3d{m_camera->pickRay(float(position.x()), float(position.y()))});
+      terrain->render(renderContext, renderBatch, &cursorPick);
+    }
+    else
+      terrain->render(renderContext, renderBatch, nullptr);
+  }
 }
 
 void MapView3D::beforePopupMenu()

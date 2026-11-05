@@ -4,9 +4,9 @@
  */
 #pragma once
 
-#include <memory>
+#include "base/Notifier.h"
 
-class QWidget;
+#include <memory>
 
 namespace tb::render
 {
@@ -21,13 +21,18 @@ class TerrainInspector;
 /** Draws a transient material preview over the editable terrain brush faces. */
 class TerrainPreviewRenderer
 {
+public:
+  Notifier<> previewDidChangeNotifier;
+
+private:
   class Impl;
   std::unique_ptr<Impl> m_impl;
 
 public:
-  TerrainPreviewRenderer(AppController& app, MapDocument& document, QWidget& view);
+  TerrainPreviewRenderer(AppController& app, MapDocument& document);
   ~TerrainPreviewRenderer();
 
-  void render(render::RenderBatch& batch, const TerrainInspector* inspector);
+  void render(
+    render::RenderBatch& batch, const TerrainInspector* inspector, bool visible);
 };
 } // namespace tb::ui

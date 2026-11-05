@@ -18,6 +18,7 @@
 #include <QScopeGuard>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "mdl/BrushFace.h"
@@ -35,6 +36,7 @@
 #include "mdl/WorldNode.h"
 #include "project/ProjectStore.h"
 #include "render/RenderService.h"
+#include "render/RenderTiming.h"
 #include "ui/AppController.h"
 #include "ui/AssetLibraryWindow.h"
 #include "ui/MapDocument.h"
@@ -212,12 +214,22 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   connect(m_paint, &QPushButton::toggled, this, [this](const bool on) {
     if (!on)
       endStroke(false);
+    refreshViews();
   });
-  const auto update = [this](const auto&) { refresh(); };
-  m_connection += m_document.selectionDidChangeNotifier.connect(update);
-  m_connection += m_document.nodesDidChangeNotifier.connect(update);
-  m_connection += m_document.nodesWereRemovedNotifier.connect(update);
-  m_connection += m_document.nodesWereAddedNotifier.connect(update);
+  connect(m_radius, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
+  connect(m_hardness, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
+  m_refreshTimer = new QTimer{this};
+  m_refreshTimer->setSingleShot(true);
+  m_refreshTimer->setInterval(150);
+  connect(m_refreshTimer, &QTimer::timeout, this, &TerrainInspector::refresh);
+  m_connection +=
+    m_document.selectionDidChangeNotifier.connect([this](const auto&) { refresh(); });
+  m_connection += m_document.nodesDidChangeNotifier.connect(
+    [this](const auto& nodes) { nodesChanged(nodes); });
+  m_connection += m_document.nodesWillBeRemovedNotifier.connect(
+    [this](const auto& nodes) { nodesChanged(nodes); });
+  m_connection += m_document.nodesWereAddedNotifier.connect(
+    [this](const auto& nodes) { nodesChanged(nodes); });
   m_connection += m_document.groupWasOpenedNotifier.connect([this] { refresh(); });
   m_connection += m_document.groupWasClosedNotifier.connect([this] { refresh(); });
   m_connection += m_document.documentWasLoadedNotifier.connect([this] { refresh(); });
@@ -320,6 +332,8 @@ void TerrainInspector::updateSlotLabels(const std::string& materialAssetId)
 
 void TerrainInspector::refresh()
 {
+  m_refreshTimer->stop();
+  render::RenderTiming::count("terrain.inspector_refreshes", 1);
   m_cutPreview.clear();
   m_cutPreviewGroup.reset();
   m_showCuts->setChecked(false);
@@ -329,6 +343,8 @@ void TerrainInspector::refresh()
                          && map.gameInfo().gameConfig.name == "Half-Life"
                          && map.worldNode().mapFormat() == mdl::MapFormat::Valve;
   const auto* group = supported ? selectedTerrainGroup(map) : nullptr;
+  m_refreshedGroup = group ? group->persistentId() : std::nullopt;
+  m_refreshedPaint = group ? group->group().terrainPaint() : std::string{};
   const auto hasRegion = group && !group->group().terrainPaint().empty();
   m_create->setEnabled(group && !hasRegion);
   m_generate->setEnabled(hasRegion);
@@ -431,6 +447,29 @@ void TerrainInspector::refresh()
   m_status->setText(tr("%1 · %2 source top faces")
                       .arg(QString::fromStdString(group->name()))
                       .arg(surfaces.value().size()));
+}
+
+void TerrainInspector::nodesChanged(const std::vector<mdl::Node*>& nodes)
+{
+  const auto* group = selectedTerrainGroup(m_document.map());
+  if (!group || !std::ranges::any_of(nodes, [&](const auto* node) {
+        return node == group || group->isAncestorOf(*node) || node->isAncestorOf(*group);
+      }))
+    return;
+  if (
+    group->persistentId() != m_refreshedGroup
+    || group->group().terrainPaint() != m_refreshedPaint)
+  {
+    refresh();
+    return;
+  }
+  // Geometry changes can arrive for every mouse movement. Refresh validation and
+  // material controls once after the edit settles, not during each drag event.
+  m_cutPreview.clear();
+  m_cutPreviewGroup.reset();
+  m_showCuts->setChecked(false);
+  m_showCuts->setEnabled(false);
+  m_refreshTimer->start();
 }
 
 void TerrainInspector::analyze()
@@ -653,12 +692,67 @@ void TerrainInspector::generate()
 }
 
 void TerrainInspector::render(
-  render::RenderContext& context, render::RenderBatch& batch) const
+  render::RenderContext& context,
+  render::RenderBatch& batch,
+  const mdl::PickResult* cursorPick) const
 {
-  if (!isVisible() || !m_showCuts->isChecked() || m_stroke)
+  if (!isVisible())
+    return;
+  if ((!painting() || !cursorPick) && (!m_showCuts->isChecked() || m_stroke))
     return;
   const auto* group = selectedTerrainGroup(m_document.map());
   if (!group || group->group().terrainPaint().empty())
+    return;
+
+  auto renderer = render::RenderService{context, batch};
+  renderer.setHideOccludedObjects();
+  renderer.setShowBackfaces();
+  if (painting() && cursorPick)
+  {
+    const auto& hit =
+      cursorPick->first(mdl::HitFilters::type(mdl::BrushNode::BrushHitType));
+    const auto face = mdl::hitToFaceHandle(hit);
+    const auto inverse = vm::invert(group->group().transformation());
+    if (
+      face && face->node().parent() == group && face->face().normal().z() > 1e-6
+      && inverse)
+    {
+      const auto& transform = group->group().transformation();
+      const auto& plane = face->face().boundary();
+      const auto localCenter = *inverse * hit.hitPoint();
+      const auto drawRing = [&](const double radius) {
+        auto points = std::vector<vm::vec3f>{};
+        constexpr auto segments = 64;
+        points.reserve(segments + 1);
+        for (auto i = 0; i <= segments; ++i)
+        {
+          const auto angle = 2.0 * vm::Cd::pi() * double(i) / segments;
+          const auto local =
+            localCenter
+            + vm::vec3d{radius * std::cos(angle), radius * std::sin(angle), 0};
+          const auto xy = transform * local;
+          const auto point =
+            vm::vec3d{xy.x(), xy.y(), plane.zAt(vm::vec2d{xy.x(), xy.y()})}
+            + plane.normal * 0.5;
+          points.emplace_back(point);
+        }
+        renderer.setLineWidth(4.0f);
+        renderer.setForegroundColor(RgbaF{0, 0, 0, 0.85f});
+        renderer.renderLineStrip(points);
+        for (auto& point : points)
+          point = point + vm::vec3f{plane.normal * 0.05};
+        renderer.setLineWidth(2.0f);
+        renderer.setForegroundColor(RgbaF{1, 1, 1, 1});
+        renderer.renderLineStrip(points);
+      };
+      drawRing(double(m_radius->value()));
+      if (m_hardness->value() > 0 && m_hardness->value() < 100)
+        drawRing(double(m_radius->value()) * double(m_hardness->value()) / 100.0);
+      render::RenderTiming::count("terrain.brush_cursors", 1);
+    }
+  }
+
+  if (!m_showCuts->isChecked() || m_stroke)
     return;
   const auto region = TerrainRegion::decode(group->group().terrainPaint());
   if (region.is_error())
@@ -667,9 +761,6 @@ void TerrainInspector::render(
   if (surfaces.is_error())
     return;
   const auto& transform = group->group().transformation();
-  auto renderer = render::RenderService{context, batch};
-  renderer.setHideOccludedObjects();
-  renderer.setShowBackfaces();
   if (m_cutPreviewGroup == group->persistentId())
   {
     auto lines = std::array<std::vector<vm::vec3f>, 4>{};

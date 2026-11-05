@@ -53,6 +53,7 @@
 #include "ui/ShearTool.h"
 #include "ui/SweepTool.h"
 #include "ui/SweepToolPage.h"
+#include "ui/TerrainPreviewRenderer.h"
 #include "ui/VertexTool.h"
 
 #include "kd/contracts.h"
@@ -95,6 +96,13 @@ ActionExecutionContext MapViewToolBox::actionContext(
 LightmapPreview& MapViewToolBox::lightmapPreview()
 {
   return *m_lightmapPreview;
+}
+
+TerrainPreviewRenderer& MapViewToolBox::terrainPreview(AppController& app)
+{
+  if (!m_terrainPreview)
+    m_terrainPreview = std::make_unique<TerrainPreviewRenderer>(app, m_document);
+  return *m_terrainPreview;
 }
 
 bool MapViewToolBox::selectMode() const

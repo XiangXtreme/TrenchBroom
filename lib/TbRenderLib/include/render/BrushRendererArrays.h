@@ -381,6 +381,9 @@ public:
   std::pair<AllocationTracker::Block*, Vertex*> getPointerToInsertVerticesAt(
     size_t vertexCount);
 
+  /** Update an existing allocation without reallocating its VBO. */
+  Vertex* getPointerToUpdateVerticesAt(const AllocationTracker::Block& block);
+
   void deleteVerticesWithKey(AllocationTracker::Block* key);
 
   // uploading the VBO

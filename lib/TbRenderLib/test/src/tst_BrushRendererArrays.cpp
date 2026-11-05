@@ -358,6 +358,41 @@ TEST_CASE("BrushVertexArray")
     dest2[0] = Vertex{vm::vec3f{7, 8, 9}, vm::vec3f{0, 0, 1}, vm::vec2f{0, 0}, vm::vec2f{0.5f, 0.5f}};
   }
 
+  SECTION("updating an existing allocation uploads only that range")
+  {
+    auto array = BrushVertexArray{};
+    auto* firstDest = array.getPointerToInsertVerticesAt(1).second;
+    firstDest[0] = Vertex{
+      vm::vec3f{0, 0, 0}, vm::vec3f{0, 0, 1}, vm::vec2f{0, 0}, vm::vec2f{0.5f, 0.5f}};
+    const auto [block, dest] = array.getPointerToInsertVerticesAt(2);
+    dest[0] = Vertex{
+      vm::vec3f{1, 2, 3}, vm::vec3f{0, 0, 1}, vm::vec2f{0, 0}, vm::vec2f{0.5f, 0.5f}};
+    dest[1] = Vertex{
+      vm::vec3f{4, 5, 6}, vm::vec3f{0, 0, 1}, vm::vec2f{1, 0}, vm::vec2f{0.5f, 0.5f}};
+    array.prepare(gl, vboManager);
+    REQUIRE(array.prepared());
+
+    auto allocations = 0;
+    auto uploads = 0;
+    auto uploadedSize = GLsizeiptr{0};
+    auto uploadedPosition = vm::vec3f{};
+    gl.onBufferData = [&](GLenum, GLsizeiptr, const void*, GLenum) { ++allocations; };
+    gl.onBufferSubData = [&](GLenum, GLintptr, const GLsizeiptr size, const void* data) {
+      ++uploads;
+      uploadedSize = size;
+      uploadedPosition = static_cast<const Vertex*>(data)[0].attr;
+    };
+    auto* updated = array.getPointerToUpdateVerticesAt(*block);
+    updated[0].attr = vm::vec3f{7, 8, 9};
+    CHECK_FALSE(array.prepared());
+    array.prepare(gl, vboManager);
+    CHECK(array.prepared());
+    CHECK(allocations == 0);
+    CHECK(uploads == 1);
+    CHECK(uploadedSize == GLsizeiptr{2 * sizeof(Vertex)});
+    CHECK(uploadedPosition == vm::vec3f{7, 8, 9});
+  }
+
   SECTION("prepare uploads the array")
   {
     auto array = BrushVertexArray{};

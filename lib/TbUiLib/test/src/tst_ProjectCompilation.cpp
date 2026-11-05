@@ -7,15 +7,18 @@
 #include <QComboBox>
 #include <QFile>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QPushButton>
+#include <QScopeGuard>
 #include <QSpinBox>
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
 
+#include "base/PreferenceManager.h"
 #include "gl/PerspectiveCamera.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushBuilder.h"
@@ -29,13 +32,16 @@
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
 #include "mdl/Map_Entities.h"
+#include "mdl/Map_Geometry.h"
 #include "mdl/Map_Groups.h"
 #include "mdl/Map_NodeVisibility.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Picking.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/PickResult.h"
+#include "prefs/Preferences.h"
 #include "project/ProjectStore.h"
+#include "render/RenderTiming.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/CompilationDialog.h"
 #include "ui/Inspector.h"
@@ -49,6 +55,7 @@
 #include "ui/TerrainInspector.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
@@ -350,6 +357,48 @@ TEST_CASE("Project terrain panel paints a picked brush")
   // Preview must use the captured texture even before painting.
   REQUIRE(QTest::qWaitFor([&] { return centerIs(false); }, 15000));
   const auto center = view->rect().center();
+  const auto withoutCursor = view->grabFramebuffer();
+  auto hover = QMouseEvent{
+    QEvent::MouseMove,
+    QPointF{center},
+    QPointF{view->mapToGlobal(center)},
+    Qt::NoButton,
+    Qt::NoButton,
+    Qt::NoModifier};
+  QApplication::sendEvent(view, &hover);
+  auto cursorTiming = render::RenderTiming{};
+  auto withCursor = QImage{};
+  {
+    const auto capture = render::RenderTiming::Capture{cursorTiming};
+    withCursor = view->grabFramebuffer();
+  }
+  CHECK(cursorTiming.counters["terrain.brush_cursors"] == 1);
+  CHECK(withCursor != withoutCursor);
+  const auto movedPosition = center + QPoint{30, 0};
+  auto movedHover = QMouseEvent{
+    QEvent::MouseMove,
+    QPointF{movedPosition},
+    QPointF{view->mapToGlobal(movedPosition)},
+    Qt::NoButton,
+    Qt::NoButton,
+    Qt::NoModifier};
+  QApplication::sendEvent(view, &movedHover);
+  CHECK(view->grabFramebuffer() != withCursor);
+  QApplication::sendEvent(view, &hover);
+  auto* radius = panel->findChild<QSpinBox*>("TerrainInspector_Radius");
+  REQUIRE(radius);
+  const auto originalRadius = radius->value();
+  radius->setValue(originalRadius + 20);
+  CHECK(view->grabFramebuffer() != withCursor);
+  radius->setValue(originalRadius);
+  auto leave = QEvent{QEvent::Leave};
+  QApplication::sendEvent(view, &leave);
+  auto leaveTiming = render::RenderTiming{};
+  {
+    const auto capture = render::RenderTiming::Capture{leaveTiming};
+    view->grabFramebuffer();
+  }
+  CHECK(leaveTiming.counters["terrain.brush_cursors"] == 0);
   auto pick = mdl::PickResult::byDistance();
   mdl::pick(map, vm::ray3d{camera.pickRay(float(center.x()), float(center.y()))}, pick);
   const auto face =
@@ -364,7 +413,22 @@ TEST_CASE("Project terrain panel paints a picked brush")
   panel->beginStroke(pick);
   REQUIRE(panel->stroking());
   CHECK(group->group().terrainPaint() == initial);
-  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  auto blankFrames = 0;
+  REQUIRE(QTest::qWaitFor(
+    [&] {
+      const auto image = view->grabFramebuffer();
+      if (image.isNull())
+        return false;
+      const auto color =
+        image.pixelColor(image.width() / 2 + 10, image.height() / 2 + 10);
+      const auto red = color.red() > color.green() * 2;
+      const auto green = color.green() > color.red() * 2;
+      if (!red && !green)
+        ++blankFrames;
+      return red;
+    },
+    15000));
+  CHECK(blankFrames == 0);
   REQUIRE(panel->stroking());
   panel->endStroke(false);
   REQUIRE(QTest::qWaitFor([&] { return centerIs(false); }, 15000));
@@ -400,6 +464,113 @@ TEST_CASE("Project terrain panel paints a picked brush")
   mdl::hideNodes(map, {group});
   REQUIRE(QTest::qWaitFor([&] { return !centerIs(true); }, 15000));
   mdl::showNodes(map, {group});
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+
+  // A second 3D viewport for the same document must use the existing preview.
+  {
+    auto sibling = MapView3D{app, window->document(), window->toolBox()};
+    sibling.resize(view->size());
+    sibling.show();
+    QApplication::processEvents();
+    auto& siblingCamera = static_cast<MapViewBase&>(sibling).camera();
+    siblingCamera.setViewport({0, 0, sibling.width(), sibling.height()});
+    siblingCamera.moveTo(vm::vec3f{0, 0, 256});
+    siblingCamera.lookAt(vm::vec3f{0, 0, 0}, vm::vec3f{0, 1, 0});
+    auto timing = render::RenderTiming{};
+    const auto capture = render::RenderTiming::Capture{timing};
+    const auto image = sibling.grabFramebuffer();
+    REQUIRE_FALSE(image.isNull());
+    const auto color = image.pixelColor(image.width() / 2 + 10, image.height() / 2 + 10);
+    CHECK(color.red() > color.green() * 2);
+    CHECK(timing.counters["terrain.scene_builds"] == 0);
+  }
+
+  // Moving other objects must not rebuild the terrain or drop its ready texture.
+  auto* other = new mdl::BrushNode{
+    require(builder.createCuboid(vm::bbox3d{{512, 512, -64}, {576, 576, 0}}, "grass"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {other}}});
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  const auto drag = [&](mdl::Node* node, const vm::vec3d& delta) {
+    auto timing = render::RenderTiming{};
+    const auto capture = render::RenderTiming::Capture{timing};
+    REQUIRE(mdl::transformNodes(
+      map, {node}, "Move test object", vm::translation_matrix(delta)));
+    const auto image = view->grabFramebuffer();
+    REQUIRE_FALSE(image.isNull());
+    const auto color = image.pixelColor(image.width() / 2 + 10, image.height() / 2 + 10);
+    CHECK(color.red() > color.green() * 2);
+    CHECK(timing.counters["terrain.scene_builds"] == 0);
+    CHECK(timing.counters["terrain.texture_resources_created"] == 0);
+    CHECK(timing.counters["terrain.inspector_refreshes"] == 0);
+  };
+  for (auto i = 0; i < 4; ++i)
+    drag(other, vm::vec3d{1, 0, 0});
+  // Moving the terrain as a whole should update its existing geometry in place.
+  const auto redCentroid = [](const QImage& image) {
+    auto sum = 0.0;
+    auto count = 0;
+    for (auto y = 0; y < image.height(); y += 3)
+      for (auto x = 0; x < image.width(); x += 3)
+      {
+        const auto color = image.pixelColor(x, y);
+        if (
+          color.red() > 80 && color.red() > color.green() * 2
+          && color.red() > color.blue() * 2)
+        {
+          sum += x;
+          ++count;
+        }
+      }
+    return count > 0 ? sum / count : -1.0;
+  };
+  const auto initialCentroid = redCentroid(view->grabFramebuffer());
+  REQUIRE(initialCentroid >= 0);
+  for (auto i = 0; i < 4; ++i)
+    drag(group, vm::vec3d{4, 0, 0});
+  const auto movedCentroid = redCentroid(view->grabFramebuffer());
+  REQUIRE(movedCentroid >= 0);
+  CHECK(std::abs(movedCentroid - initialCentroid) > 3.0);
+  drag(group, vm::vec3d{-16, 0, 0});
+
+  mdl::selectNodes(map, {group});
+  {
+    auto timing = render::RenderTiming{};
+    const auto capture = render::RenderTiming::Capture{timing};
+    REQUIRE(mdl::transformNodes(
+      map, {group}, "Move selected terrain", vm::translation_matrix(vm::vec3d{2, 0, 0})));
+    view->grabFramebuffer();
+    CHECK(timing.counters["terrain.scene_builds"] == 0);
+    CHECK(timing.counters["terrain.inspector_refreshes"] == 0);
+  }
+  REQUIRE(mdl::transformNodes(
+    map,
+    {group},
+    "Restore selected terrain",
+    vm::translation_matrix(vm::vec3d{-2, 0, 0})));
+  mdl::deselectAll(map);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+
+  // Moving an individual terrain brush changes clipping, but must reuse ready textures.
+  {
+    auto timing = render::RenderTiming{};
+    const auto capture = render::RenderTiming::Capture{timing};
+    REQUIRE(mdl::transformNodes(
+      map, {brush}, "Move terrain brush", vm::translation_matrix(vm::vec3d{2, 0, 0})));
+    CHECK(centerIs(true));
+    CHECK(timing.counters["terrain.scene_builds"] == 1);
+    CHECK(timing.counters["terrain.texture_resources_created"] == 0);
+  }
+  REQUIRE(mdl::transformNodes(
+    map, {brush}, "Restore terrain brush", vm::translation_matrix(vm::vec3d{-2, 0, 0})));
+  CHECK(centerIs(true));
+
+  // Face display modes must control the terrain just like ordinary brush faces.
+  const auto savedFaceMode = pref(Preferences::FaceRenderMode);
+  const auto restoreFaceMode =
+    qScopeGuard([&] { setPref(Preferences::FaceRenderMode, savedFaceMode); });
+  setPref(Preferences::FaceRenderMode, Preferences::FaceRenderModeSkip);
+  CHECK_FALSE(centerIs(true));
+  setPref(Preferences::FaceRenderMode, savedFaceMode);
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
 
   const auto mapId = project->session()->assetFor(window->document());

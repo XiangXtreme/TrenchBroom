@@ -242,6 +242,12 @@ std::pair<AllocationTracker::Block*, BrushVertexArray::Vertex*> BrushVertexArray
   return {block, dest};
 }
 
+BrushVertexArray::Vertex* BrushVertexArray::getPointerToUpdateVerticesAt(
+  const AllocationTracker::Block& block)
+{
+  return m_vertexHolder.getPointerToWriteElementsTo(block.pos, block.size);
+}
+
 void BrushVertexArray::deleteVerticesWithKey(AllocationTracker::Block* key)
 {
   m_allocationTracker.free(key);
