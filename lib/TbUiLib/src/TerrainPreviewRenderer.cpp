@@ -162,6 +162,9 @@ std::unique_ptr<PreviewScene> makeScene(
     return nullptr;
 
   const auto& transform = group.group().transformation();
+  const auto inverse = vm::invert(transform);
+  if (!inverse)
+    return nullptr;
   auto scene = std::make_unique<PreviewScene>(std::move(materials), transform);
   auto bakedBounds = std::vector<QRectF>{};
   bakedBounds.reserve(bake.faces.size());
@@ -207,97 +210,64 @@ std::unique_ptr<PreviewScene> makeScene(
 
       auto positions = std::vector<vm::vec3d>{};
       positions.reserve(size_t(polygon.size()));
-      auto centroid = vm::vec3d{};
       for (const auto& pixel : polygon)
       {
         const auto xy = transform * region.unproject(pixel);
-        const auto pos =
-          vm::vec3d{xy.x(), xy.y(), plane.zAt(vm::vec2d{xy.x(), xy.y()})}
-          + plane.normal * 0.1;
-        centroid = centroid + pos;
-        positions.push_back(pos);
+        positions.emplace_back(xy.x(), xy.y(), plane.zAt(vm::vec2d{xy.x(), xy.y()}));
       }
-      if (!positions.empty())
-        centroid = centroid / static_cast<double>(positions.size());
-
-      const auto* lightmapBlock =
-        lightmap ? lightmap->terrainBlockFor(
-          vm::vec3f{centroid}, vm::vec3f{plane.normal}, static_cast<float>(plane.distance))
-                 : nullptr;
-
-      // The face renderer uses clockwise front faces, matching vm::from_points.
-      auto winding = std::optional<vm::plane3d>{};
-      for (auto i = size_t{1}; i + 1 < positions.size() && !winding; ++i)
-        winding = vm::from_points(positions[0], positions[i], positions[i + 1]);
-      if (!winding)
-        continue;
-      if (vm::dot(winding->normal, plane.normal) < 0)
+      auto fragments =
+        lightmap
+          ? lightmap->terrainFragments(plane, positions)
+          : std::vector<render::TerrainLightmapFragment>{{std::move(positions), nullptr}};
+      for (auto& fragment : fragments)
       {
-        std::ranges::reverse(positions);
-        std::reverse(polygon.begin(), polygon.end());
-      }
+        auto& fragmentPositions = fragment.vertices;
+        // The face renderer uses clockwise front faces, matching vm::from_points.
+        auto winding = std::optional<vm::plane3d>{};
+        for (auto i = size_t{1}; i + 1 < fragmentPositions.size() && !winding; ++i)
+          winding = vm::from_points(
+            fragmentPositions[0], fragmentPositions[i], fragmentPositions[i + 1]);
+        if (!winding)
+          continue;
+        if (vm::dot(winding->normal, plane.normal) < 0)
+          std::ranges::reverse(fragmentPositions);
 
-      auto [vertexBlock, vertexDest] =
-        scene->vertices->getPointerToInsertVerticesAt(positions.size());
-      auto basePositions = std::vector<vm::vec3f>{};
-      basePositions.reserve(positions.size());
-      for (auto i = size_t{0}; i < positions.size(); ++i)
-      {
-        const auto& pixel = polygon[qsizetype(i)];
-        const auto uv = [&](const vm::vec3d& axis, const double dimension) {
-          return float(
-            (axis.x() * pixel.x() + axis.y() * pixel.y() + axis.z()) / dimension);
-        };
-
-        auto lightmapUv = vm::vec2f{0.5f, 0.5f};
-        if (lightmap && lightmap->width > 0 && lightmap->height > 0)
+        auto [vertexBlock, vertexDest] =
+          scene->vertices->getPointerToInsertVerticesAt(fragmentPositions.size());
+        auto basePositions = std::vector<vm::vec3f>{};
+        basePositions.reserve(fragmentPositions.size());
+        for (auto i = size_t{0}; i < fragmentPositions.size(); ++i)
         {
-          if (lightmapBlock)
-          {
-            constexpr auto LuxelSize = 16.0f;
-            const auto atlasWidth = static_cast<float>(lightmap->width);
-            const auto atlasHeight = static_cast<float>(lightmap->height);
-            const auto& uAxis = lightmapBlock->vecs[0];
-            const auto& vAxis = lightmapBlock->vecs[1];
-            const auto posF = vm::vec3f{positions[i]};
-            const auto u = (vm::dot(posF, uAxis.xyz()) + uAxis[3]) / LuxelSize;
-            const auto v = (vm::dot(posF, vAxis.xyz()) + vAxis[3]) / LuxelSize;
-            lightmapUv = vm::vec2f{
-              (static_cast<float>(lightmapBlock->tile.x()) + u
-               - static_cast<float>(lightmapBlock->mins.x()) + 0.5f)
-                / atlasWidth,
-              (static_cast<float>(lightmapBlock->tile.y()) + v
-               - static_cast<float>(lightmapBlock->mins.y()) + 0.5f)
-                / atlasHeight};
-          }
-          else
-          {
-            lightmapUv = vm::vec2f{
-              0.5f / static_cast<float>(lightmap->width),
-              0.5f / static_cast<float>(lightmap->height)};
-          }
+          const auto& position = fragmentPositions[i];
+          const auto pixel = region.project(*inverse * position);
+          const auto uv = [&](const vm::vec3d& axis, const double dimension) {
+            return float(
+              (axis.x() * pixel.x() + axis.y() * pixel.y() + axis.z()) / dimension);
+          };
+          const auto lightmapUv = lightmap ? lightmap->terrainUv(fragment.block, position)
+                                           : vm::vec2f{0.5f, 0.5f};
+          const auto renderPosition = vm::vec3f{position + plane.normal * 0.1};
+          vertexDest[i] = Vertex{
+            renderPosition,
+            vm::vec3f{plane.normal},
+            vm::vec2f{uv(bakedFace.u, texture.width), uv(bakedFace.v, texture.height)},
+            lightmapUv};
+          basePositions.push_back(renderPosition);
         }
-
-        vertexDest[i] = Vertex{
-          vm::vec3f{positions[i]},
-          vm::vec3f{plane.normal},
-          vm::vec2f{uv(bakedFace.u, texture.width), uv(bakedFace.v, texture.height)},
-          lightmapUv};
-        basePositions.emplace_back(positions[i]);
-      }
-      scene->vertexBlocks.push_back({vertexBlock, std::move(basePositions)});
-      auto& holder = (*scene->indices)[material.get()];
-      if (!holder)
-        holder = std::make_shared<render::BrushIndexArray>();
-      auto [indexBlock, indexDest] =
-        holder->getPointerToInsertElementsAt((positions.size() - 2) * 3);
-      static_cast<void>(indexBlock);
-      const auto start = GLuint(vertexBlock->pos);
-      for (auto i = size_t{0}; i + 2 < positions.size(); ++i)
-      {
-        *indexDest++ = start;
-        *indexDest++ = start + GLuint(i + 1);
-        *indexDest++ = start + GLuint(i + 2);
+        scene->vertexBlocks.push_back({vertexBlock, std::move(basePositions)});
+        auto& holder = (*scene->indices)[material.get()];
+        if (!holder)
+          holder = std::make_shared<render::BrushIndexArray>();
+        auto [indexBlock, indexDest] =
+          holder->getPointerToInsertElementsAt((fragmentPositions.size() - 2) * 3);
+        static_cast<void>(indexBlock);
+        const auto start = GLuint(vertexBlock->pos);
+        for (auto i = size_t{0}; i + 2 < fragmentPositions.size(); ++i)
+        {
+          *indexDest++ = start;
+          *indexDest++ = start + GLuint(i + 1);
+          *indexDest++ = start + GLuint(i + 2);
+        }
       }
     }
   }
@@ -577,7 +547,8 @@ private:
     Display& display,
     const render::LightmapAssembly* lightmap)
   {
-    if (display.geometryRevision != entry.geometryRevision || display.lightmap != lightmap)
+    if (
+      display.geometryRevision != entry.geometryRevision || display.lightmap != lightmap)
     {
       display.scene = makeScene(
         m_document.map(),

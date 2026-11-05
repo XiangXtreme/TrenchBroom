@@ -24,7 +24,6 @@
 
 #include <cstdint>
 #include <optional>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -90,6 +89,13 @@ struct TerrainLightmapBlock
   std::vector<vm::vec2f> poly;
 };
 
+/** A convex portion of a terrain face and its corresponding baked lightmap, if any. */
+struct TerrainLightmapFragment
+{
+  std::vector<vm::vec3d> vertices;
+  const TerrainLightmapBlock* block = nullptr;
+};
+
 /**
  * A lightmap atlas holding one rectangle per brush face and terrain piece.
  */
@@ -103,8 +109,13 @@ struct LightmapAssembly
   std::vector<TerrainLightmapBlock> terrainBlocks;
 
   const LightmapBlock* blockFor(const mdl::BrushFace& face) const;
-  const TerrainLightmapBlock* terrainBlockFor(
-    const vm::vec3f& point, const vm::vec3f& normal, float dist) const;
+
+  /** Splits a convex face along baked face boundaries; uncovered fragments stay unlit. */
+  std::vector<TerrainLightmapFragment> terrainFragments(
+    const vm::plane3d& plane, const std::vector<vm::vec3d>& vertices) const;
+
+  /** Returns an atlas coordinate for a fragment, using the white texel if unmatched. */
+  vm::vec2f terrainUv(const TerrainLightmapBlock* block, const vm::vec3d& point) const;
 };
 
 /**
@@ -129,8 +140,7 @@ struct FaceLightmapInput
 std::optional<LightmapBlock> buildFaceLightmap(
   const FaceLightmapInput& face,
   const LightmapBake& bake,
-  std::vector<std::uint8_t>& pixels,
-  std::unordered_set<const LightmapFaceRecord*>* usedRecords = nullptr);
+  std::vector<std::uint8_t>& pixels);
 
 /**
  * Gives every face its own lightmap rectangle and packs those rectangles into one atlas.

@@ -39,7 +39,6 @@
 #include <cmath>
 #include <functional>
 #include <limits>
-#include <unordered_set>
 
 namespace tb::render
 {
@@ -54,6 +53,7 @@ constexpr int BleedRounds = 2;
 constexpr float PlaneDotThreshold = 0.9999f;
 constexpr float PlaneDistThreshold = 0.5f;
 constexpr float VecsEpsilon = 1e-3f;
+constexpr double TerrainClipEpsilon = 1e-7;
 
 float projectPoint(const vm::vec3f& point, const vm::vec4f& vec)
 {
@@ -62,8 +62,8 @@ float projectPoint(const vm::vec3f& point, const vm::vec4f& vec)
 
 vm::vec2f luxelCoord(const vm::vec3f& point, const vm::vec4f vecs[2])
 {
-  return {projectPoint(point, vecs[0]) / LuxelSize,
-          projectPoint(point, vecs[1]) / LuxelSize};
+  return {
+    projectPoint(point, vecs[0]) / LuxelSize, projectPoint(point, vecs[1]) / LuxelSize};
 }
 
 bool sameVecs(const vm::vec4f lhs[2], const vm::vec4f rhs[2])
@@ -89,7 +89,8 @@ bool matchesPlane(
 }
 
 /**
- * Crossing number test. The polygon is in luxel units, so callers sample at luxel centers.
+ * Crossing number test. The polygon is in luxel units, so callers sample at luxel
+ * centers.
  */
 bool containsPoint(const std::vector<vm::vec2f>& poly, const float u, const float v)
 {
@@ -113,6 +114,64 @@ bool containsPoint(const std::vector<vm::vec2f>& poly, const float u, const floa
     }
   }
   return inside;
+}
+
+vm::vec2d terrainLuxelCoord(const vm::vec3d& point, const TerrainLightmapBlock& block)
+{
+  const auto project = [&](const vm::vec4f& axis) {
+    return (vm::dot(point, vm::vec3d{axis.xyz()}) + double(axis.w())) / double(LuxelSize);
+  };
+  return {project(block.vecs[0]), project(block.vecs[1])};
+}
+
+bool hasArea(const std::vector<vm::vec3d>& vertices)
+{
+  if (vertices.size() < 3)
+    return false;
+
+  auto area = vm::vec3d{};
+  for (auto i = size_t{1}; i + 1 < vertices.size(); ++i)
+    area = area + vm::cross(vertices[i] - vertices[0], vertices[i + 1] - vertices[0]);
+  return vm::length(area) > TerrainClipEpsilon;
+}
+
+/** Splits a world-space polygon at an edge in the block's lightmap coordinates. */
+std::pair<std::vector<vm::vec3d>, std::vector<vm::vec3d>> splitTerrainPolygon(
+  const std::vector<vm::vec3d>& vertices,
+  const TerrainLightmapBlock& block,
+  const vm::vec2d& edgeStart,
+  const vm::vec2d& edge,
+  const double winding)
+{
+  auto inside = std::vector<vm::vec3d>{};
+  auto outside = std::vector<vm::vec3d>{};
+  const auto edgeLength = vm::length(edge);
+  const auto distance = [&](const vm::vec3d& point) {
+    const auto coord = terrainLuxelCoord(point, block) - edgeStart;
+    const auto value =
+      winding * (edge.x() * coord.y() - edge.y() * coord.x()) / edgeLength;
+    return std::abs(value) < TerrainClipEpsilon ? 0.0 : value;
+  };
+
+  for (auto i = size_t{0}; i < vertices.size(); ++i)
+  {
+    const auto& a = vertices[i];
+    const auto& b = vertices[(i + 1) % vertices.size()];
+    const auto da = distance(a);
+    const auto db = distance(b);
+    if (da >= 0.0)
+      inside.push_back(a);
+    if (da <= 0.0)
+      outside.push_back(a);
+    if ((da < 0.0 && db > 0.0) || (da > 0.0 && db < 0.0))
+    {
+      const auto t = da / (da - db);
+      const auto intersection = a + (b - a) * t;
+      inside.push_back(intersection);
+      outside.push_back(intersection);
+    }
+  }
+  return {std::move(inside), std::move(outside)};
 }
 
 vm::polygon3f bakedPolygon(const LightmapFaceRecord& record)
@@ -147,8 +206,11 @@ bool overlapsFace(
  * Fills unlit luxels from their lit neighbours so that linear filtering does not pick up
  * the surrounding background around the edges of a face.
  */
-void bleed(std::vector<std::uint8_t>& pixels, std::vector<bool>& valid, const int width,
-           const int height)
+void bleed(
+  std::vector<std::uint8_t>& pixels,
+  std::vector<bool>& valid,
+  const int width,
+  const int height)
 {
   for (auto round = 0; round < BleedRounds; ++round)
   {
@@ -157,8 +219,8 @@ void bleed(std::vector<std::uint8_t>& pixels, std::vector<bool>& valid, const in
     {
       for (auto x = 0; x < width; ++x)
       {
-        const auto index = static_cast<size_t>(y) * static_cast<size_t>(width)
-                           + static_cast<size_t>(x);
+        const auto index =
+          static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
         if (valid[index])
         {
           continue;
@@ -273,57 +335,114 @@ const LightmapBlock* LightmapAssembly::blockFor(const mdl::BrushFace& face) cons
   return it != blocks.end() && it->first == &face ? &it->second : nullptr;
 }
 
-const TerrainLightmapBlock* LightmapAssembly::terrainBlockFor(
-  const vm::vec3f& point, const vm::vec3f& normal, const float dist) const
+std::vector<TerrainLightmapFragment> LightmapAssembly::terrainFragments(
+  const vm::plane3d& plane, const std::vector<vm::vec3d>& vertices) const
 {
-  const TerrainLightmapBlock* bestBboxMatch = nullptr;
+  auto fragments = std::vector<TerrainLightmapFragment>{};
+  if (!hasArea(vertices))
+    return fragments;
 
-  for (const auto& tb : terrainBlocks)
+  // Each BSP face is convex. Subtract it from the remaining convex pieces so that
+  // unmatched areas retain their geometry and overlapping records are not drawn twice.
+  auto remaining = std::vector<std::vector<vm::vec3d>>{vertices};
+  for (const auto& block : terrainBlocks)
   {
-    if (vm::dot(tb.normal, normal) <= 0.999f || std::abs(tb.dist - dist) >= 0.1f)
-    {
+    if (
+      vm::dot(vm::vec3d{block.normal}, plane.normal) <= 0.999
+      || std::abs(double(block.dist) - plane.distance) >= 0.1 || block.poly.size() < 3)
       continue;
-    }
 
-    const auto u = (vm::dot(point, tb.vecs[0].xyz()) + tb.vecs[0][3]) / LuxelSize;
-    const auto v = (vm::dot(point, tb.vecs[1].xyz()) + tb.vecs[1][3]) / LuxelSize;
-
-    if (containsPoint(tb.poly, u, v))
+    constexpr auto high = std::numeric_limits<double>::max();
+    constexpr auto low = std::numeric_limits<double>::lowest();
+    auto signedArea = 0.0;
+    auto blockMin = vm::vec2d{high, high};
+    auto blockMax = vm::vec2d{low, low};
+    for (auto i = size_t{0}; i < block.poly.size(); ++i)
     {
-      return &tb;
+      const auto& a = block.poly[i];
+      const auto& b = block.poly[(i + 1) % block.poly.size()];
+      signedArea += double(a.x()) * double(b.y()) - double(a.y()) * double(b.x());
+      blockMin = vm::min(blockMin, vm::vec2d{a});
+      blockMax = vm::max(blockMax, vm::vec2d{a});
     }
+    if (std::abs(signedArea) < TerrainClipEpsilon)
+      continue;
 
-    if (!bestBboxMatch && !tb.poly.empty())
+    auto faceMin = vm::vec2d{high, high};
+    auto faceMax = vm::vec2d{low, low};
+    for (const auto& vertex : vertices)
     {
-      auto minU = std::numeric_limits<float>::max();
-      auto minV = std::numeric_limits<float>::max();
-      auto maxU = std::numeric_limits<float>::lowest();
-      auto maxV = std::numeric_limits<float>::lowest();
-      for (const auto& p : tb.poly)
-      {
-        minU = std::min(minU, p.x());
-        minV = std::min(minV, p.y());
-        maxU = std::max(maxU, p.x());
-        maxV = std::max(maxV, p.y());
-      }
-      if (u >= minU - 0.5f && u <= maxU + 0.5f && v >= minV - 0.5f && v <= maxV + 0.5f)
-      {
-        bestBboxMatch = &tb;
-      }
+      const auto coord = terrainLuxelCoord(vertex, block);
+      faceMin = vm::min(faceMin, coord);
+      faceMax = vm::max(faceMax, coord);
     }
+    if (
+      faceMax.x() <= blockMin.x() || faceMin.x() >= blockMax.x()
+      || faceMax.y() <= blockMin.y() || faceMin.y() >= blockMax.y())
+      continue;
+
+    const auto winding = signedArea > 0.0 ? 1.0 : -1.0;
+
+    auto next = std::vector<std::vector<vm::vec3d>>{};
+    for (auto& piece : remaining)
+    {
+      auto inside = piece;
+      auto outside = std::vector<std::vector<vm::vec3d>>{};
+      for (auto i = size_t{0}; i < block.poly.size() && hasArea(inside); ++i)
+      {
+        const auto a = vm::vec2d{block.poly[i]};
+        const auto edge = vm::vec2d{block.poly[(i + 1) % block.poly.size()]} - a;
+        if (vm::length(edge) < TerrainClipEpsilon)
+          continue;
+        auto [clipped, cutOff] = splitTerrainPolygon(inside, block, a, edge, winding);
+        if (hasArea(cutOff))
+          outside.push_back(std::move(cutOff));
+        inside = std::move(clipped);
+      }
+      if (hasArea(inside))
+      {
+        fragments.push_back({std::move(inside), &block});
+        for (auto& cutOff : outside)
+          next.push_back(std::move(cutOff));
+      }
+      else
+        next.push_back(std::move(piece));
+    }
+    remaining = std::move(next);
+    if (remaining.empty())
+      break;
   }
 
-  return bestBboxMatch;
+  for (auto& piece : remaining)
+    fragments.push_back({std::move(piece), nullptr});
+  return fragments;
+}
+
+vm::vec2f LightmapAssembly::terrainUv(
+  const TerrainLightmapBlock* block, const vm::vec3d& point) const
+{
+  if (width <= 0 || height <= 0)
+    return {0.5f, 0.5f};
+  if (!block || block->size.x() <= 0 || block->size.y() <= 0)
+    return {0.5f / float(width), 0.5f / float(height)};
+
+  const auto coord = terrainLuxelCoord(point, *block);
+  const auto u =
+    std::clamp(coord.x() - double(block->mins.x()), 0.0, double(block->size.x() - 1));
+  const auto v =
+    std::clamp(coord.y() - double(block->mins.y()), 0.0, double(block->size.y() - 1));
+  return {
+    float((double(block->tile.x()) + u + 0.5) / double(width)),
+    float((double(block->tile.y()) + v + 0.5) / double(height))};
 }
 
 std::optional<LightmapBlock> buildFaceLightmap(
   const FaceLightmapInput& face,
   const LightmapBake& bake,
-  std::vector<std::uint8_t>& pixels,
-  std::unordered_set<const LightmapFaceRecord*>* usedRecords)
+  std::vector<std::uint8_t>& pixels)
 {
-  if (bake.width <= 0 || bake.height <= 0 || bake.pixels.empty()
-      || face.outline.size() < 3)
+  if (
+    bake.width <= 0 || bake.height <= 0 || bake.pixels.empty() || face.outline.size() < 3)
   {
     return std::nullopt;
   }
@@ -417,26 +536,26 @@ std::optional<LightmapBlock> buildFaceLightmap(
   pixels.assign(luxelCount * 3, 0);
   auto valid = std::vector<bool>(luxelCount, false);
 
-  const auto copySamples = [&](const LightmapFaceRecord& record, const auto& coversLuxel) {
+  const auto copySamples = [&](
+                             const LightmapFaceRecord& record, const auto& coversLuxel) {
     const auto start = vm::max(block.mins, record.mins);
     const auto end = vm::min(block.mins + block.size, record.mins + record.size);
     for (auto y = start.y(); y < end.y(); ++y)
     {
       for (auto x = start.x(); x < end.x(); ++x)
       {
-        const auto index = static_cast<size_t>(y - block.mins.y())
-                             * static_cast<size_t>(block.size.x())
-                           + static_cast<size_t>(x - block.mins.x());
+        const auto index =
+          static_cast<size_t>(y - block.mins.y()) * static_cast<size_t>(block.size.x())
+          + static_cast<size_t>(x - block.mins.x());
         if (valid[index] || !coversLuxel(static_cast<float>(x), static_cast<float>(y)))
         {
           continue;
         }
 
-        const auto source =
-          (static_cast<size_t>(record.tile.y() + y - record.mins.y())
-             * static_cast<size_t>(bake.width)
-           + static_cast<size_t>(record.tile.x() + x - record.mins.x()))
-          * 3;
+        const auto source = (static_cast<size_t>(record.tile.y() + y - record.mins.y())
+                               * static_cast<size_t>(bake.width)
+                             + static_cast<size_t>(record.tile.x() + x - record.mins.x()))
+                            * 3;
         if (source + 2 >= bake.pixels.size())
         {
           continue;
@@ -494,14 +613,6 @@ std::optional<LightmapBlock> buildFaceLightmap(
 
   bleed(pixels, valid, block.size.x(), block.size.y());
 
-  if (usedRecords)
-  {
-    for (const auto* record : group)
-    {
-      usedRecords->insert(record);
-    }
-  }
-
   return block;
 }
 
@@ -526,11 +637,10 @@ void buildLightmapAssembly(
 
   auto pending = std::vector<PendingBlock>{};
   pending.reserve(faces.size());
-  auto usedRecords = std::unordered_set<const LightmapFaceRecord*>{};
   for (const auto& face : faces)
   {
     auto pixels = std::vector<std::uint8_t>{};
-    if (auto block = buildFaceLightmap(face, bake, pixels, &usedRecords))
+    if (auto block = buildFaceLightmap(face, bake, pixels))
     {
       pending.push_back({face.face, *block, std::move(pixels), nullptr});
     }
@@ -538,11 +648,11 @@ void buildLightmapAssembly(
 
   for (const auto& record : bake.faces)
   {
-    if (usedRecords.contains(&record))
-    {
-      continue;
-    }
-    if (record.size.x() <= 0 || record.size.y() <= 0 || record.poly.size() < 3)
+    // A compiled face may cover both an ordinary brush and terrain. Keep every
+    // upward-facing record available to the terrain renderer even if a brush used it.
+    if (
+      record.normal.z() <= 0.0f || record.size.x() <= 0 || record.size.y() <= 0
+      || record.poly.size() < 3)
     {
       continue;
     }
@@ -619,11 +729,10 @@ void buildLightmapAssembly(
   {
     for (auto row = 0; row < block.block.size.y(); ++row)
     {
-      const auto destination =
-        (static_cast<size_t>(block.block.tile.y() + row)
-           * static_cast<size_t>(result.width)
-         + static_cast<size_t>(block.block.tile.x()))
-        * 3;
+      const auto destination = (static_cast<size_t>(block.block.tile.y() + row)
+                                  * static_cast<size_t>(result.width)
+                                + static_cast<size_t>(block.block.tile.x()))
+                               * 3;
       const auto source =
         static_cast<size_t>(row) * static_cast<size_t>(block.block.size.x()) * 3;
       std::copy_n(

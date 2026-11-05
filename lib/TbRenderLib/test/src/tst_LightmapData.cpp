@@ -32,9 +32,11 @@
 #include "vm/vec.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 namespace tb::render
@@ -57,9 +59,9 @@ LightmapBake makeBake(const int width, const int height)
   {
     for (auto x = 0; x < width; ++x)
     {
-      const auto index = (static_cast<size_t>(y) * static_cast<size_t>(width)
-                          + static_cast<size_t>(x))
-                         * 3;
+      const auto index =
+        (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x))
+        * 3;
       bake.pixels[index + 0] = static_cast<std::uint8_t>(x + 1);
       bake.pixels[index + 1] = static_cast<std::uint8_t>(y + 1);
       bake.pixels[index + 2] = 100;
@@ -72,7 +74,9 @@ LightmapBake makeBake(const int width, const int height)
  * A record on the z = 0 plane covering the given luxel rectangle, with identity axes.
  */
 LightmapFaceRecord makeRecord(
-  const vm::vec2i mins, const vm::vec2i size, const vm::vec2i tile,
+  const vm::vec2i mins,
+  const vm::vec2i size,
+  const vm::vec2i tile,
   std::vector<vm::vec2f> poly)
 {
   auto record = LightmapFaceRecord{};
@@ -100,12 +104,27 @@ FaceLightmapInput makeFace(const float size)
 }
 
 std::uint8_t pixelAt(
-  const std::vector<std::uint8_t>& pixels, const vm::vec2i size, const int x, const int y,
+  const std::vector<std::uint8_t>& pixels,
+  const vm::vec2i size,
+  const int x,
+  const int y,
   const int channel)
 {
-  return pixels[(static_cast<size_t>(y) * static_cast<size_t>(size.x())
-                 + static_cast<size_t>(x))
-                * 3 + static_cast<size_t>(channel)];
+  return pixels
+    [(static_cast<size_t>(y) * static_cast<size_t>(size.x()) + static_cast<size_t>(x)) * 3
+     + static_cast<size_t>(channel)];
+}
+
+double areaXY(const std::vector<vm::vec3d>& vertices)
+{
+  auto area = 0.0;
+  for (auto i = size_t{0}; i < vertices.size(); ++i)
+  {
+    const auto& a = vertices[i];
+    const auto& b = vertices[(i + 1) % vertices.size()];
+    area += a.x() * b.y() - a.y() * b.x();
+  }
+  return std::abs(area) / 2.0;
 }
 
 } // namespace
@@ -116,7 +135,9 @@ TEST_CASE("buildFaceLightmap")
   {
     auto bake = makeBake(8, 8);
     bake.faces.push_back(makeRecord(
-      {0, 0}, {3, 3}, {2, 1},
+      {0, 0},
+      {3, 3},
+      {2, 1},
       // a quad covering luxels [0, 3) on both axes
       {{0.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 3.0f}, {0.0f, 3.0f}}));
 
@@ -140,11 +161,9 @@ TEST_CASE("buildFaceLightmap")
     auto bake = makeBake(8, 8);
     // left half in one record, right half in another, each in its own tile
     bake.faces.push_back(makeRecord(
-      {0, 0}, {2, 3}, {0, 0},
-      {{0.0f, 0.0f}, {2.0f, 0.0f}, {2.0f, 3.0f}, {0.0f, 3.0f}}));
+      {0, 0}, {2, 3}, {0, 0}, {{0.0f, 0.0f}, {2.0f, 0.0f}, {2.0f, 3.0f}, {0.0f, 3.0f}}));
     bake.faces.push_back(makeRecord(
-      {2, 0}, {2, 3}, {4, 0},
-      {{2.0f, 0.0f}, {4.0f, 0.0f}, {4.0f, 3.0f}, {2.0f, 3.0f}}));
+      {2, 0}, {2, 3}, {4, 0}, {{2.0f, 0.0f}, {4.0f, 0.0f}, {4.0f, 3.0f}, {2.0f, 3.0f}}));
 
     auto pixels = std::vector<std::uint8_t>{};
     const auto block = buildFaceLightmap(makeFace(48.0f), bake, pixels);
@@ -161,8 +180,7 @@ TEST_CASE("buildFaceLightmap")
     auto bake = makeBake(8, 8);
     // the record only covers the left half of the face's rectangle
     bake.faces.push_back(makeRecord(
-      {0, 0}, {3, 3}, {0, 0},
-      {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 3.0f}, {0.0f, 3.0f}}));
+      {0, 0}, {3, 3}, {0, 0}, {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 3.0f}, {0.0f, 3.0f}}));
 
     auto pixels = std::vector<std::uint8_t>{};
     const auto block = buildFaceLightmap(makeFace(32.0f), bake, pixels);
@@ -204,15 +222,9 @@ TEST_CASE("buildFaceLightmap")
   {
     auto bake = makeBake(8, 8);
     bake.faces.push_back(makeRecord(
-      {0, 0},
-      {2, 2},
-      {0, 0},
-      {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 0.5f}, {0.0f, 0.5f}}));
+      {0, 0}, {2, 2}, {0, 0}, {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 0.5f}, {0.0f, 0.5f}}));
     bake.faces.push_back(makeRecord(
-      {1, 0},
-      {2, 2},
-      {4, 0},
-      {{1.0f, 0.0f}, {2.0f, 0.0f}, {2.0f, 0.5f}, {1.0f, 0.5f}}));
+      {1, 0}, {2, 2}, {4, 0}, {{1.0f, 0.0f}, {2.0f, 0.0f}, {2.0f, 0.5f}, {1.0f, 0.5f}}));
 
     auto face = makeFace(32.0f);
     face.outline = {
@@ -269,8 +281,7 @@ TEST_CASE("buildFaceLightmap")
   {
     auto bake = makeBake(8, 8);
     auto record = makeRecord(
-      {0, 0}, {3, 3}, {0, 0},
-      {{0.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 3.0f}, {0.0f, 3.0f}});
+      {0, 0}, {3, 3}, {0, 0}, {{0.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 3.0f}, {0.0f, 3.0f}});
     record.dist = -64.0f;
     record.normal = vm::vec3f{0.0f, 0.0f, -1.0f};
     bake.faces.push_back(std::move(record));
@@ -286,8 +297,7 @@ TEST_CASE("buildLightmapAssembly")
   {
     auto bake = makeBake(8, 8);
     bake.faces.push_back(makeRecord(
-      {0, 0}, {3, 3}, {0, 0},
-      {{0.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 3.0f}, {0.0f, 3.0f}}));
+      {0, 0}, {3, 3}, {0, 0}, {{0.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 3.0f}, {0.0f, 3.0f}}));
 
     auto faces = std::vector<FaceLightmapInput>{makeFace(32.0f), makeFace(16.0f)};
     auto assembly = LightmapAssembly{};
@@ -348,17 +358,15 @@ TEST_CASE("buildLightmapAssembly")
     CHECK(assembly.blocks.empty());
   }
 
-  SECTION("packs unconsumed baked faces into terrainBlocks")
+  SECTION("keeps baked faces available for both brushes and terrain")
   {
     auto bake = makeBake(16, 16);
     // Brush face record on z = 0
     bake.faces.push_back(makeRecord(
-      {0, 0}, {3, 3}, {0, 0},
-      {{0.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 3.0f}, {0.0f, 3.0f}}));
+      {0, 0}, {3, 3}, {0, 0}, {{0.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 3.0f}, {0.0f, 3.0f}}));
     // Terrain face record on z = 40
     auto terrainRecord = makeRecord(
-      {4, 4}, {3, 3}, {4, 0},
-      {{4.0f, 4.0f}, {7.0f, 4.0f}, {7.0f, 7.0f}, {4.0f, 7.0f}});
+      {4, 4}, {3, 3}, {4, 0}, {{4.0f, 4.0f}, {7.0f, 4.0f}, {7.0f, 7.0f}, {4.0f, 7.0f}});
     terrainRecord.dist = 40.0f;
     bake.faces.push_back(std::move(terrainRecord));
 
@@ -367,16 +375,124 @@ TEST_CASE("buildLightmapAssembly")
     buildLightmapAssembly(faces, bake, assembly);
 
     CHECK(assembly.blocks.size() == 1);
-    CHECK(assembly.terrainBlocks.size() == 1);
+    CHECK(assembly.terrainBlocks.size() == 2);
+    const auto plane = vm::plane3d{0.0, vm::vec3d{0.0, 0.0, 1.0}};
+    const auto fragments = assembly.terrainFragments(
+      plane, {{0.0, 0.0, 0.0}, {32.0, 0.0, 0.0}, {32.0, 32.0, 0.0}, {0.0, 32.0, 0.0}});
+    REQUIRE(fragments.size() == 1);
+    REQUIRE(fragments.front().block != nullptr);
+    CHECK(fragments.front().block->dist == 0.0f);
+  }
+}
 
-    // blockForPoint finds the terrain block
-    const auto* found = assembly.terrainBlockFor(
-      vm::vec3f{5.5f * 16.0f, 5.5f * 16.0f, 40.0f},
-      vm::vec3f{0.0f, 0.0f, 1.0f},
-      40.0f);
-    REQUIRE(found != nullptr);
-    CHECK(found->mins == vm::vec2i{4, 4});
-    CHECK(found->dist == 40.0f);
+TEST_CASE("LightmapAssembly terrain fragments")
+{
+  const auto plane = vm::plane3d{0.0, vm::vec3d{0.0, 0.0, 1.0}};
+  const auto outline = std::vector<vm::vec3d>{
+    {0.0, 0.0, 0.0}, {64.0, 0.0, 0.0}, {64.0, 32.0, 0.0}, {0.0, 32.0, 0.0}};
+
+  SECTION("splits a terrain face across differently mapped BSP lightmaps")
+  {
+    auto bake = makeBake(16, 8);
+    bake.faces.push_back(makeRecord(
+      {0, 0}, {3, 3}, {1, 1}, {{0.0f, 0.0f}, {2.0f, 0.0f}, {2.0f, 2.0f}, {0.0f, 2.0f}}));
+    auto right = makeRecord(
+      {0, 0}, {3, 3}, {10, 1}, {{0.0f, 0.0f}, {0.0f, 2.0f}, {2.0f, 2.0f}, {2.0f, 0.0f}});
+    right.vecs[0] = vm::vec4f{-1.0f, 0.0f, 0.0f, 64.0f};
+    bake.faces.push_back(std::move(right));
+    auto assembly = LightmapAssembly{};
+    buildLightmapAssembly(std::vector<FaceLightmapInput>{}, bake, assembly);
+
+    const auto fragments = assembly.terrainFragments(plane, outline);
+    REQUIRE(fragments.size() == 2);
+    for (const auto& fragment : fragments)
+    {
+      REQUIRE(fragment.block != nullptr);
+      CHECK(areaXY(fragment.vertices) == Catch::Approx(1024.0));
+      for (const auto& vertex : fragment.vertices)
+      {
+        const auto uv = assembly.terrainUv(fragment.block, vertex);
+        const auto u = double(uv.x()) * double(assembly.width) - 0.5;
+        const auto v = double(uv.y()) * double(assembly.height) - 0.5;
+        CHECK(u >= double(fragment.block->tile.x()) - 1e-4);
+        CHECK(
+          u <= double(fragment.block->tile.x() + fragment.block->size.x() - 1) + 1e-4);
+        CHECK(v >= double(fragment.block->tile.y()) - 1e-4);
+        CHECK(
+          v <= double(fragment.block->tile.y() + fragment.block->size.y() - 1) + 1e-4);
+      }
+    }
+
+    const auto sample = [&](const TerrainLightmapFragment& fragment) {
+      auto center = vm::vec3d{};
+      for (const auto& vertex : fragment.vertices)
+        center = center + vertex;
+      center = center / double(fragment.vertices.size());
+      const auto uv = assembly.terrainUv(fragment.block, center);
+      const auto x = int(std::lround(double(uv.x()) * double(assembly.width) - 0.5));
+      const auto y = int(std::lround(double(uv.y()) * double(assembly.height) - 0.5));
+      return pixelAt(assembly.pixels, {assembly.width, assembly.height}, x, y, 0);
+    };
+    CHECK(sample(fragments[0]) == 3);
+    CHECK(sample(fragments[1]) == 12);
+  }
+
+  SECTION("preserves uncovered areas and does not draw overlapping records twice")
+  {
+    auto bake = makeBake(8, 8);
+    const auto record = makeRecord(
+      {1, 0}, {3, 3}, {1, 1}, {{1.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 2.0f}, {1.0f, 2.0f}});
+    bake.faces.push_back(record);
+    bake.faces.push_back(record);
+    auto assembly = LightmapAssembly{};
+    buildLightmapAssembly(std::vector<FaceLightmapInput>{}, bake, assembly);
+
+    const auto fragments = assembly.terrainFragments(plane, outline);
+    auto litArea = 0.0;
+    auto unlitArea = 0.0;
+    for (const auto& fragment : fragments)
+    {
+      if (fragment.block)
+        litArea += areaXY(fragment.vertices);
+      else
+      {
+        unlitArea += areaXY(fragment.vertices);
+        const auto uv = assembly.terrainUv(nullptr, fragment.vertices.front());
+        CHECK(uv.x() * float(assembly.width) == Catch::Approx(0.5f));
+        CHECK(uv.y() * float(assembly.height) == Catch::Approx(0.5f));
+      }
+    }
+    CHECK(litArea == Catch::Approx(1024.0));
+    CHECK(unlitArea == Catch::Approx(1024.0));
+  }
+
+  SECTION("clips sloped terrain without matching a different plane")
+  {
+    auto bake = makeBake(8, 8);
+    auto record =
+      makeRecord({0, 0}, {3, 3}, {1, 1}, {{0.0f, 0.0f}, {2.0f, 0.0f}, {0.0f, 2.0f}});
+    const auto normal = vm::normalize(vm::vec3d{-1.0, 0.0, 1.0});
+    record.normal = vm::vec3f{normal};
+    bake.faces.push_back(record);
+    auto different = record;
+    different.dist = 10.0f;
+    bake.faces.push_back(std::move(different));
+    auto assembly = LightmapAssembly{};
+    buildLightmapAssembly(std::vector<FaceLightmapInput>{}, bake, assembly);
+
+    const auto sloped = std::vector<vm::vec3d>{
+      {0.0, 0.0, 0.0}, {32.0, 0.0, 32.0}, {32.0, 32.0, 32.0}, {0.0, 32.0, 0.0}};
+    const auto fragments = assembly.terrainFragments(vm::plane3d{0.0, normal}, sloped);
+    auto litArea = 0.0;
+    auto unlitArea = 0.0;
+    for (const auto& fragment : fragments)
+    {
+      (fragment.block ? litArea : unlitArea) += areaXY(fragment.vertices);
+      for (const auto& vertex : fragment.vertices)
+        CHECK(vertex.z() == Catch::Approx(vertex.x()));
+    }
+    CHECK(litArea == Catch::Approx(512.0));
+    CHECK(unlitArea == Catch::Approx(512.0));
   }
 }
 
