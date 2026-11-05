@@ -103,7 +103,7 @@ TEST_CASE("ProjectStore")
     auto store = require(ProjectStore::create(workspace.path, "Terrain", "Half-Life"));
     const auto input = map("maps/terrain.map");
     const auto asset = require(store->importAsset(input));
-    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 3);
+    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 4);
     CHECK_FALSE(require(store->terrainCompile(asset.id)));
 
     auto data =
@@ -730,11 +730,58 @@ TEST_CASE("ProjectStore")
     CHECK(asset->contentHash == contentHash(std::string_view{"legacybytes"}));
     CHECK(asset->library.empty());
     CHECK(require(store->libraryLinkedAssets()).empty());
-    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 3);
+    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 4);
     // The migrated project must stay writable.
     const auto renamed = require(store->renameAsset(asset->id, "renamed"));
     CHECK(renamed.revision == 2);
     CHECK(renamed.contentHash == asset->contentHash);
+  }
+
+  SECTION("migrates format 3 projects to format 4 baseline")
+  {
+    {
+      auto db = RawDatabase{workspace.path};
+      db.exec(
+        "PRAGMA application_id=0x5442504a; PRAGMA user_version=3;"
+        "CREATE TABLE project(id TEXT PRIMARY KEY,name TEXT NOT NULL,game_id TEXT NOT "
+        "NULL);"
+        "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
+        "CREATE INDEX content_hash ON content(hash);"
+        "CREATE TABLE revisions(asset_id TEXT NOT NULL,type TEXT NOT NULL,virtual_path "
+        "TEXT NOT NULL,publish_path TEXT NOT NULL,display_name TEXT NOT NULL,source_name TEXT NOT NULL,revision "
+        "INTEGER NOT NULL CHECK(revision>0),recipe TEXT NOT NULL,original TEXT NOT NULL "
+        "REFERENCES content(id),compatible TEXT NOT NULL REFERENCES content(id),"
+        "content_hash TEXT NOT NULL DEFAULT '',library_id TEXT NOT NULL DEFAULT '',"
+        "library_asset_id TEXT NOT NULL DEFAULT '',library_revision INTEGER NOT NULL DEFAULT 0,"
+        "library_hash TEXT NOT NULL DEFAULT '',source_container TEXT NOT NULL DEFAULT '',"
+        "source_member TEXT NOT NULL DEFAULT '',PRIMARY KEY(asset_id,revision));"
+        "CREATE TABLE heads(asset_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,"
+        "virtual_path TEXT NOT NULL UNIQUE,FOREIGN KEY(asset_id,revision) REFERENCES "
+        "revisions(asset_id,revision));"
+        "CREATE TABLE dependencies(asset_id TEXT NOT NULL REFERENCES heads(asset_id),"
+        "dependency_id TEXT NOT NULL REFERENCES heads(asset_id),kind TEXT NOT NULL,"
+        "PRIMARY KEY(asset_id,dependency_id,kind),CHECK(asset_id<>dependency_id));"
+        "CREATE TABLE libraries(id TEXT PRIMARY KEY,name TEXT NOT NULL,last_path TEXT NOT NULL,attached_at TEXT NOT NULL);"
+        "CREATE TABLE library_ignores(asset_id TEXT NOT NULL,library_hash TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(asset_id,library_hash));"
+        "CREATE TABLE checkpoints(id TEXT PRIMARY KEY,name TEXT NOT NULL,description TEXT NOT NULL,created_at TEXT NOT NULL);"
+        "CREATE TABLE checkpoint_assets(checkpoint_id TEXT NOT NULL REFERENCES checkpoints(id),asset_id TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(checkpoint_id,asset_id),FOREIGN KEY(asset_id,revision) REFERENCES revisions(asset_id,revision));"
+        "CREATE TABLE checkpoint_dependencies(checkpoint_id TEXT NOT NULL REFERENCES checkpoints(id),asset_id TEXT NOT NULL,dependency_id TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(checkpoint_id,asset_id,dependency_id,kind),FOREIGN KEY(checkpoint_id,asset_id) REFERENCES checkpoint_assets(checkpoint_id,asset_id),FOREIGN KEY(checkpoint_id,dependency_id) REFERENCES checkpoint_assets(checkpoint_id,asset_id));");
+      db.exec(
+        "INSERT INTO project VALUES('p3','V3Project','Half-Life');"
+        "INSERT INTO content VALUES('c1','0','v3bytes');"
+        "INSERT INTO revisions(asset_id,type,virtual_path,publish_path,display_name,source_name,revision,recipe,original,compatible) "
+        "VALUES('22222222-2222-2222-2222-222222222222','map',"
+        "'maps/test.map','maps/test.map','test','test.map',1,'{}','c1','c1');"
+        "INSERT INTO heads VALUES('22222222-2222-2222-2222-222222222222',1,'maps/test.map');");
+    }
+    auto store = require(ProjectStore::open(workspace.path));
+    CHECK(store->info().name == "V3Project");
+    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 4);
+    // Able to save terrain compile into migrated project without error
+    auto data =
+      TerrainCompile{1, 1, 4, {'m', 'a', 'p'}, {'w', 'a', 'd'}, {}, {}};
+    require(store->setTerrainCompile("22222222-2222-2222-2222-222222222222", data));
+    CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 4);
   }
 }
 

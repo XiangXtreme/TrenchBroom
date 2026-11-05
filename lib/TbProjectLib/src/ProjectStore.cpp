@@ -358,7 +358,7 @@ Checkpoint makeCheckpoint(
 }
 
 constexpr auto Schema =
-  "PRAGMA application_id=0x5442504a; PRAGMA user_version=3;"
+  "PRAGMA application_id=0x5442504a; PRAGMA user_version=4;"
   "CREATE TABLE project(id TEXT PRIMARY KEY,name TEXT NOT NULL,game_id TEXT NOT NULL);"
   "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
   "CREATE INDEX content_hash ON content(hash);"
@@ -406,7 +406,38 @@ constexpr auto Schema =
   "FOREIGN KEY(checkpoint_id,asset_id) REFERENCES "
   "checkpoint_assets(checkpoint_id,asset_id),"
   "FOREIGN KEY(checkpoint_id,dependency_id) REFERENCES "
-  "checkpoint_assets(checkpoint_id,asset_id));";
+  "checkpoint_assets(checkpoint_id,asset_id));"
+  "CREATE TABLE terrain_compile("
+  "asset_id TEXT PRIMARY KEY REFERENCES heads(asset_id) ON DELETE CASCADE,"
+  "source_revision INTEGER NOT NULL,generator_version INTEGER NOT NULL,"
+  "top_faces INTEGER NOT NULL,map BLOB NOT NULL,wad BLOB NOT NULL,"
+  "error TEXT NOT NULL);"
+  "CREATE TABLE terrain_compile_dependencies("
+  "asset_id TEXT NOT NULL REFERENCES terrain_compile(asset_id) ON DELETE CASCADE,"
+  "dependency_id TEXT NOT NULL,PRIMARY KEY(asset_id,dependency_id));"
+  "CREATE INDEX terrain_compile_dependency_id ON terrain_compile_dependencies(dependency_id);"
+  "CREATE TRIGGER terrain_head_insert AFTER INSERT ON heads BEGIN "
+  "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+  "terrain_compile_dependencies WHERE dependency_id=NEW.asset_id); END;"
+  "CREATE TRIGGER terrain_head_update AFTER UPDATE ON heads "
+  "WHEN OLD.revision<>NEW.revision BEGIN "
+  "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+  "terrain_compile_dependencies WHERE dependency_id=OLD.asset_id); END;"
+  "CREATE TRIGGER terrain_head_delete AFTER DELETE ON heads BEGIN "
+  "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+  "terrain_compile_dependencies WHERE dependency_id=OLD.asset_id); END;"
+  "CREATE TRIGGER terrain_dependency_insert AFTER INSERT ON "
+  "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+  "(SELECT asset_id FROM terrain_compile_dependencies "
+  "WHERE dependency_id=NEW.asset_id); END;"
+  "CREATE TRIGGER terrain_dependency_delete AFTER DELETE ON "
+  "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+  "(SELECT asset_id FROM terrain_compile_dependencies "
+  "WHERE dependency_id=OLD.asset_id); END;"
+  "CREATE TRIGGER terrain_dependency_update AFTER UPDATE ON "
+  "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+  "(SELECT asset_id FROM terrain_compile_dependencies "
+  "WHERE dependency_id=OLD.asset_id OR dependency_id=NEW.asset_id); END;";
 
 // Format 1 stored no snapshot provenance and no content hashes. The migration adds the
 // columns, then backfills the hash from the compatible payload so that every revision
@@ -461,6 +492,47 @@ void migrateFromVersion2(sqlite3* db)
     "UPDATE revisions SET publish_path=(SELECT first.virtual_path FROM revisions first "
     "WHERE first.asset_id=revisions.asset_id ORDER BY first.revision LIMIT 1);"
     "PRAGMA user_version=3;");
+}
+
+// Format 3 added publish_path. Format 4 established the permanent frozen baseline
+// including terrain_compile. Format 3 projects automatically upgrade to 4.
+void migrateFromVersion3(sqlite3* db)
+{
+  execute(
+    db,
+    "CREATE TABLE IF NOT EXISTS terrain_compile("
+    "asset_id TEXT PRIMARY KEY REFERENCES heads(asset_id) ON DELETE CASCADE,"
+    "source_revision INTEGER NOT NULL,generator_version INTEGER NOT NULL,"
+    "top_faces INTEGER NOT NULL,map BLOB NOT NULL,wad BLOB NOT NULL,"
+    "error TEXT NOT NULL);"
+    "CREATE TABLE IF NOT EXISTS terrain_compile_dependencies("
+    "asset_id TEXT NOT NULL REFERENCES terrain_compile(asset_id) ON DELETE CASCADE,"
+    "dependency_id TEXT NOT NULL,PRIMARY KEY(asset_id,dependency_id));"
+    "CREATE INDEX IF NOT EXISTS terrain_compile_dependency_id "
+    "ON terrain_compile_dependencies(dependency_id);"
+    "CREATE TRIGGER IF NOT EXISTS terrain_head_insert AFTER INSERT ON heads BEGIN "
+    "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+    "terrain_compile_dependencies WHERE dependency_id=NEW.asset_id); END;"
+    "CREATE TRIGGER IF NOT EXISTS terrain_head_update AFTER UPDATE ON heads "
+    "WHEN OLD.revision<>NEW.revision BEGIN "
+    "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+    "terrain_compile_dependencies WHERE dependency_id=OLD.asset_id); END;"
+    "CREATE TRIGGER IF NOT EXISTS terrain_head_delete AFTER DELETE ON heads BEGIN "
+    "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
+    "terrain_compile_dependencies WHERE dependency_id=OLD.asset_id); END;"
+    "CREATE TRIGGER IF NOT EXISTS terrain_dependency_insert AFTER INSERT ON "
+    "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+    "(SELECT asset_id FROM terrain_compile_dependencies "
+    "WHERE dependency_id=NEW.asset_id); END;"
+    "CREATE TRIGGER IF NOT EXISTS terrain_dependency_delete AFTER DELETE ON "
+    "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+    "(SELECT asset_id FROM terrain_compile_dependencies "
+    "WHERE dependency_id=OLD.asset_id); END;"
+    "CREATE TRIGGER IF NOT EXISTS terrain_dependency_update AFTER UPDATE ON "
+    "dependencies BEGIN DELETE FROM terrain_compile WHERE asset_id IN "
+    "(SELECT asset_id FROM terrain_compile_dependencies "
+    "WHERE dependency_id=OLD.asset_id OR dependency_id=NEW.asset_id); END;"
+    "PRAGMA user_version=4;");
 }
 
 void configure(sqlite3* db)
@@ -599,8 +671,15 @@ Result<std::unique_ptr<ProjectStore>> ProjectStore::open(
       transaction.commit();
       version = 3;
     }
-    if (version != 3 && version != 4)
-      throw StoreError{"Not a supported TB project (format version 3 or 4 required)."};
+    if (version == 3)
+    {
+      auto transaction = Transaction{db};
+      migrateFromVersion3(db);
+      transaction.commit();
+      version = 4;
+    }
+    if (version != 4)
+      throw StoreError{"Not a supported TB project (format version 4 required)."};
     impl->schemaVersion = version;
     auto info = Statement{db, "SELECT id,name,game_id FROM project"};
     if (!info.next())
@@ -1001,17 +1080,6 @@ Result<void> ProjectStore::setTerrainCompile(
       || (data.error.empty() && (data.map.empty() || data.wad.empty()))
       || data.error.find('\0') != std::string::npos)
       throw StoreError{"Invalid or outdated terrain compile data."};
-    if (m_impl->schemaVersion == 3)
-    {
-      execute(
-        db,
-        "CREATE TABLE terrain_compile("
-        "asset_id TEXT PRIMARY KEY REFERENCES heads(asset_id) ON DELETE CASCADE,"
-        "source_revision INTEGER NOT NULL,generator_version INTEGER NOT NULL,"
-        "top_faces INTEGER NOT NULL,map BLOB NOT NULL,wad BLOB NOT NULL,"
-        "error TEXT NOT NULL);"
-        "PRAGMA user_version=4;");
-    }
     // These auxiliary records and triggers are deliberately compatible with version 4
     // readers. External compilers see a missing cache, never a stale terrain result.
     execute(
