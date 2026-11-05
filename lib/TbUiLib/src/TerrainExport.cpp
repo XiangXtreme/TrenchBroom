@@ -35,19 +35,6 @@ namespace tb::ui
 {
 namespace
 {
-Result<TerrainBake> runBaker(
-  const TerrainRegion& region, const project::ProjectStore* store)
-{
-  if (region.materialAssetId.empty())
-    return runTerrainBaker(region);
-  if (!store)
-    return Error{"The terrain material requires an open project."};
-  auto material = loadTerrainMaterial(*store, region.materialAssetId);
-  if (material.is_error())
-    return std::get<Error>(material.error());
-  return runTerrainBaker(region, &material.value());
-}
-
 size_t terrainWadBytes(const TerrainBake& plan, const std::vector<bool>& used)
 {
   auto bytes = size_t{12}; // WAD header
@@ -172,6 +159,109 @@ Result<std::unique_ptr<mdl::Node>> makePiece(
     std::make_unique<mdl::BrushNode>(std::move(brush).value())};
 }
 
+struct PlanScore
+{
+  size_t faces = 0;
+  size_t wadBytes = 0;
+  bool hasShared = false;
+  bool withinBudget = true;
+};
+
+std::optional<PlanScore> scorePlan(
+  const TerrainBake& plan,
+  const std::vector<TerrainSurface>& surfaces,
+  const TerrainRegion& region,
+  const vm::mat4x4d& transform)
+{
+  auto score = PlanScore{};
+  auto used = std::vector<bool>(plan.textures.size());
+  for (const auto& surface : surfaces)
+  {
+    auto coverage = 0.0;
+    for (const auto& face : plan.faces)
+    {
+      const auto clipped = surface.outline.intersected(face.polygon);
+      const auto area = terrainArea(clipped);
+      if (area <= 1e-7)
+        continue;
+      if (face.material >= used.size())
+        return std::nullopt;
+      coverage += area;
+      ++score.faces;
+      used[face.material] = true;
+      score.hasShared |= face.kind == TerrainFaceKind::Shared;
+      if (
+        region.minFaceWidth > 0
+        && faceWidth(clipped, region, transform).width + 1e-5 < region.minFaceWidth)
+        score.withinBudget = false;
+    }
+    if (std::abs(coverage - terrainArea(surface.outline)) > 1e-4)
+      return std::nullopt;
+  }
+  score.wadBytes = terrainWadBytes(plan, used);
+  const auto addedFaces =
+    score.faces > surfaces.size() ? score.faces - surfaces.size() : 0;
+  if (region.maxAddedFaces >= 0 && addedFaces > size_t(region.maxAddedFaces))
+    score.withinBudget = false;
+  if (region.maxWadKiB >= 0 && score.wadBytes > size_t(region.maxWadKiB) * 1024)
+    score.withinBudget = false;
+  return score;
+}
+
+bool validPieces(
+  const TerrainBake& plan,
+  const std::vector<TerrainSurface>& surfaces,
+  const TerrainRegion& region,
+  const vm::mat4x4d& transform)
+{
+  const auto inverse = vm::invert(transform);
+  if (!inverse)
+    return false;
+  for (const auto& surface : surfaces)
+    for (const auto& face : plan.faces)
+      if (
+        terrainArea(surface.outline.intersected(face.polygon)) > 1e-7
+        && makePiece(
+             surface, face, region, transform, *inverse, vm::bbox3d{65536.0}, "tbt0_0")
+             .is_error())
+        return false;
+  return true;
+}
+
+Result<TerrainBake> runBaker(
+  const TerrainRegion& region,
+  const std::vector<TerrainSurface>& surfaces,
+  const vm::mat4x4d& transform,
+  const project::ProjectStore* store)
+{
+  if (region.materialAssetId.empty())
+    return runTerrainBaker(region);
+  if (!store)
+    return Error{"The terrain material requires an open project."};
+  auto material = loadTerrainMaterial(*store, region.materialAssetId);
+  if (material.is_error())
+    return std::get<Error>(material.error());
+  auto shared = runTerrainBaker(region, &material.value(), TerrainBakeMode::Shared);
+  if (shared.is_error())
+    return std::get<Error>(shared.error());
+  if (std::ranges::none_of(shared.value().faces, [](const auto& face) {
+        return face.kind == TerrainFaceKind::Shared;
+      }))
+    return shared;
+
+  auto local = runTerrainBaker(region, &material.value(), TerrainBakeMode::Local);
+  if (local.is_error())
+    return std::get<Error>(local.error());
+  const auto sharedScore = scorePlan(shared.value(), surfaces, region, transform);
+  const auto localScore = scorePlan(local.value(), surfaces, region, transform);
+  if (
+    sharedScore && localScore && sharedScore->hasShared && sharedScore->withinBudget
+    && sharedScore->wadBytes < localScore->wadBytes
+    && validPieces(shared.value(), surfaces, region, transform))
+    return shared;
+  return local;
+}
+
 Result<void> bakeGroup(
   mdl::GroupNode& group,
   const vm::bbox3d& bounds,
@@ -185,7 +275,8 @@ Result<void> bakeGroup(
   const auto surfaces = terrainSurfaces(group, region.value());
   if (surfaces.is_error())
     return std::get<Error>(surfaces.error());
-  auto bake = runBaker(region.value(), store);
+  auto bake =
+    runBaker(region.value(), surfaces.value(), group.group().transformation(), store);
   if (bake.is_error())
     return std::get<Error>(bake.error());
   auto plan = std::move(bake).value();
@@ -274,7 +365,8 @@ Result<TerrainEstimate> estimateTerrainGroup(
   const auto surfaces = terrainSurfaces(group, region.value());
   if (surfaces.is_error())
     return std::get<Error>(surfaces.error());
-  const auto bake = runBaker(region.value(), store);
+  const auto bake =
+    runBaker(region.value(), surfaces.value(), group.group().transformation(), store);
   if (bake.is_error())
     return std::get<Error>(bake.error());
   auto result = TerrainEstimate{};

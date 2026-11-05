@@ -42,7 +42,16 @@ struct TerrainBake
   std::vector<project::WadTextureEntry> textures;
 };
 
+// Controls sharing for custom materials; built-in terrain generation is unchanged.
+enum class TerrainBakeMode
+{
+  Local,
+  Shared,
+};
+
 Result<TerrainBake> runTerrainBaker(
-  const TerrainRegion& region, const TerrainMaterial* material = nullptr);
+  const TerrainRegion& region,
+  const TerrainMaterial* material = nullptr,
+  TerrainBakeMode mode = TerrainBakeMode::Shared);
 
 } // namespace tb::ui

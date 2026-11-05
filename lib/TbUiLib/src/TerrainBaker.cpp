@@ -438,7 +438,9 @@ QPolygonF makeRect(const double x1, const double y1, const double x2, const doub
 } // namespace
 
 Result<TerrainBake> runTerrainBaker(
-  const TerrainRegion& region, const TerrainMaterial* material)
+  const TerrainRegion& region,
+  const TerrainMaterial* material,
+  const TerrainBakeMode mode)
 {
   if (
     region.patchDensityPercent != 50 && region.patchDensityPercent != 100
@@ -620,6 +622,8 @@ Result<TerrainBake> runTerrainBaker(
 
   auto textures = bases;
   std::map<int, size_t> pairIndices;
+  std::map<int, size_t> sharedTiles;
+  std::map<std::vector<std::uint8_t>, size_t> sharedContents;
   std::vector<PatchTile> patchTiles;
   std::map<std::pair<int, int>, size_t> patchKeyToIndex;
   std::vector<BakeFace> faces;
@@ -670,19 +674,31 @@ Result<TerrainBake> runTerrainBaker(
           LowV + triangleCorners[2][static_cast<size_t>(b)] * (HighV - LowV);
         const auto vx = (half ? v1 - v2 : v1 - v0) / Step;
         const auto vy = (half ? v2 - v0 : v2 - v1) / Step;
-        // Arbitrary source images have world-aligned texels. A shared pair texture
-        // cannot preserve those texels across a rotated transition UV, so use a local
-        // patch unless the built-in procedural material is in use.
-        if (material || !usableTransitionUv(vx, vy))
+        const auto cellCol = static_cast<int>(cell) % Across;
+        const auto cellRow = static_cast<int>(cell) / Across;
+        const auto x = cellCol * int(Step);
+        const auto y = cellRow * int(Step);
+        const auto tileX = x / Period;
+        const auto tileY = y / Period;
+        // Eight base texels keep all four MIP levels inside the sampled tile.
+        // UVs aligned to the terrain grid preserve the source images and paint.
+        const auto insideSharedTile =
+          x >= tileX * Period + int(PatchGutter) && y >= tileY * Period + int(PatchGutter)
+          && x + int(Step) <= (tileX + 1) * Period - int(PatchGutter)
+          && y + int(Step) <= (tileY + 1) * Period - int(PatchGutter);
+        if (
+          material && mode == TerrainBakeMode::Shared && region.patchDensityPercent == 100
+          && insideSharedTile)
+        {
+          constexpr auto tilesAcross = (int(Width) + Period - 1) / Period;
+          mix = {"shared", -1, tileY * tilesAcross + tileX, WorldV};
+        }
+        else if (material || !usableTransitionUv(vx, vy))
         {
           mix = {"fit", -1, 0, {}};
         }
         else
         {
-          const auto cellCol = static_cast<double>(static_cast<int>(cell) % Across);
-          const auto cellRow = static_cast<double>(static_cast<int>(cell) / Across);
-          const auto x = cellCol * Step;
-          const auto y = cellRow * Step;
           mix = {"pair", -1, a * 3 + b, vm::vec3d{vx, vy, v0 - vx * x - vy * y}};
         }
       }
@@ -762,6 +778,8 @@ Result<TerrainBake> runTerrainBaker(
           return mixes[c][0].kind == k || mixes[c][1].kind == k;
         });
       };
+      if (has("shared"))
+        continue;
       const auto kind = has("junction") ? "junction" : has("fit") ? "fit" : "patch";
       if (kind != std::string_view{"patch"} || mixed.size() >= 3)
       {
@@ -873,6 +891,42 @@ Result<TerrainBake> runTerrainBaker(
             TerrainFaceKind::Base);
           return;
         }
+        if (mix.kind == "shared")
+        {
+          auto it = sharedTiles.find(mix.key);
+          if (it == sharedTiles.end())
+          {
+            constexpr auto tilesAcross = (int(Width) + Period - 1) / Period;
+            const auto tileX = (mix.key % tilesAcross) * Period;
+            const auto tileY = (mix.key / tilesAcross) * Period;
+            auto texture = generateTexture(
+              fmt::format("tm_s{}", mix.key),
+              sample,
+              double(tileX),
+              double(tileY),
+              Period,
+              pal,
+              detail,
+              material,
+              nearestColors);
+            // The first 16 bytes contain the texture name, not its pixels.
+            auto content = std::vector<std::uint8_t>{
+              texture.miptex.begin() + 16, texture.miptex.end()};
+            const auto existing = sharedContents.find(content);
+            auto textureIndex = size_t{0};
+            if (existing != sharedContents.end())
+              textureIndex = existing->second;
+            else
+            {
+              textureIndex = textures.size();
+              textures.push_back(std::move(texture));
+              sharedContents.emplace(std::move(content), textureIndex);
+            }
+            it = sharedTiles.emplace(mix.key, textureIndex).first;
+          }
+          addFace(std::move(poly), WorldU, WorldV, it->second, TerrainFaceKind::Shared);
+          return;
+        }
         if (mix.kind != "pair")
         {
           const auto px = static_cast<int>(std::floor(x / PatchCore) * PatchCore);
@@ -894,9 +948,40 @@ Result<TerrainBake> runTerrainBaker(
       const auto samePair = first.kind == "pair" && second.kind == "pair"
                             && first.key == second.key
                             && vm::is_equal(first.v, second.v, 1e-8);
+      const auto sameShared =
+        first.kind == "shared" && second.kind == "shared" && first.key == second.key;
       const auto samePatch =
         first.kind == second.kind && (first.kind == "junction" || first.kind == "fit");
 
+      if (sameShared)
+      {
+        const auto reusable = [&](const size_t candidate) {
+          const auto& halves = mixes[candidate];
+          return !cellCovered[candidate] && halves[0].kind == "shared"
+                 && halves[1].kind == "shared" && halves[0].key == first.key
+                 && halves[1].key == first.key;
+        };
+        auto width = 1;
+        auto height = 1;
+        while (col + width < Across && reusable(cell + size_t(width)))
+          ++width;
+        while (row + height < Down)
+        {
+          const auto start = cell + size_t(height * Across);
+          auto allReusable = true;
+          for (auto dx = 0; dx < width; ++dx)
+            allReusable &= reusable(start + size_t(dx));
+          if (!allReusable)
+            break;
+          ++height;
+        }
+        createSurface(
+          makeRect(x, y, x + double(width) * Step, y + double(height) * Step), first);
+        for (auto dy = 0; dy < height; ++dy)
+          for (auto dx = 0; dx < width; ++dx)
+            cellCovered[cell + size_t(dy * Across + dx)] = true;
+        continue;
+      }
       if (samePair || samePatch)
       {
         createSurface(points, first);
