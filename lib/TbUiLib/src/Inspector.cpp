@@ -46,22 +46,24 @@ namespace tb::ui
 {
 Inspector::Inspector(AppController& appController, MapDocument& document, QWidget* parent)
   : QWidget{parent}
+  , m_appController{&appController}
+  , m_document{&document}
 {
   m_tabBook = new TabBook{};
   m_tabBook->setObjectName("Inspector_TabBook");
 
+  // Only the default page and the terrain page are needed up front: the 3D views
+  // look up the TerrainInspector for brush state even while its tab is hidden.
+  // The remaining pages are created on first use so opening a map does not have
+  // to build every inspector widget (and style every one of them) up front.
   m_mapInspector = new MapInspector{document};
-  m_entityInspector = new EntityInspector{appController, document};
-  m_faceInspector = new FaceInspector{appController, document};
-  m_outlinerInspector = new OutlinerInspector{document};
-  m_pluginInspector = new PluginInspector{};
   m_terrainInspector = new TerrainInspector{appController, document};
 
   m_tabBook->addPage(m_mapInspector, "Map");
-  m_tabBook->addPage(m_entityInspector, "Entity");
-  m_tabBook->addPage(m_faceInspector, "Face");
-  m_tabBook->addPage(m_outlinerInspector, "Outliner");
-  m_tabBook->addPage(m_pluginInspector, "Plugin");
+  m_tabBook->addPlaceholderPage("Entity");
+  m_tabBook->addPlaceholderPage("Face");
+  m_tabBook->addPlaceholderPage("Outliner");
+  m_tabBook->addPlaceholderPage("Plugin");
   m_tabBook->addPage(m_terrainInspector, "Terrain");
 
   auto* legacyTabBar = m_tabBook->tabBar();
@@ -186,8 +188,52 @@ void Inspector::connectTopWidgets(MapViewBar* mapViewBar)
   m_syncHeaderEventFilter = new SyncHeightEventFilter{mapViewBar, m_pageTitle, this};
 }
 
+void Inspector::ensurePage(const InspectorPage page)
+{
+  const auto index = static_cast<int>(page);
+  switch (page)
+  {
+  case InspectorPage::Entity:
+    if (!m_entityInspector)
+    {
+      m_entityInspector = new EntityInspector{*m_appController, *m_document};
+      m_tabBook->replacePage(index, m_entityInspector);
+      emit pagePrepared(index);
+    }
+    break;
+  case InspectorPage::Face:
+    if (!m_faceInspector)
+    {
+      m_faceInspector = new FaceInspector{*m_appController, *m_document};
+      m_tabBook->replacePage(index, m_faceInspector);
+      emit pagePrepared(index);
+    }
+    break;
+  case InspectorPage::Outliner:
+    if (!m_outlinerInspector)
+    {
+      m_outlinerInspector = new OutlinerInspector{*m_document};
+      m_tabBook->replacePage(index, m_outlinerInspector);
+      emit pagePrepared(index);
+    }
+    break;
+  case InspectorPage::Plugin:
+    if (!m_pluginInspector)
+    {
+      m_pluginInspector = new PluginInspector{};
+      m_tabBook->replacePage(index, m_pluginInspector);
+      emit pagePrepared(index);
+    }
+    break;
+  case InspectorPage::Map:
+  case InspectorPage::Terrain:
+    break;
+  }
+}
+
 void Inspector::switchToPage(const InspectorPage page)
 {
+  ensurePage(page);
   m_tabBook->switchToPage(static_cast<int>(page));
 }
 
@@ -211,16 +257,19 @@ void Inspector::updateNavigation(const int page)
 
 bool Inspector::cancelMouseDrag()
 {
-  return m_faceInspector->cancelMouseDrag();
+  // Don't build a page just to answer an Escape key press.
+  return m_faceInspector && m_faceInspector->cancelMouseDrag();
 }
 
 FaceInspector* Inspector::faceInspector()
 {
+  ensurePage(InspectorPage::Face);
   return m_faceInspector;
 }
 
 PluginInspector* Inspector::pluginInspector()
 {
+  ensurePage(InspectorPage::Plugin);
   return m_pluginInspector;
 }
 

@@ -22,6 +22,8 @@
 #include <QApplication>
 #include <QChildEvent>
 #include <QClipboard>
+#include <QElapsedTimer>
+#include <QFile>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -34,10 +36,12 @@
 #include <QRegion>
 #include <QResizeEvent>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QString>
 #include <QStringList>
 #include <QTableWidget>
+#include <QTextStream>
 #include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
@@ -513,6 +517,14 @@ void MapWindow::updateRecentDocumentsMenu()
 
 void MapWindow::createGui()
 {
+  // Opt-in timing for the UI construction path (set TB_TIMING=1 when profiling).
+  const auto timeCreateGui = qEnvironmentVariableIsSet("TB_TIMING");
+  auto createGuiTimer = QElapsedTimer{};
+  if (timeCreateGui)
+  {
+    createGuiTimer.start();
+  }
+
   setWindowIconTB(this);
   setWindowTitle("TrenchBroom");
 
@@ -569,6 +581,19 @@ void MapWindow::createGui()
   m_commands = std::make_unique<MapCommandSurface>(m_appController, [this]() {
     return ActionExecutionContext{m_appController, this, currentMapViewBase()};
   });
+
+  if (timeCreateGui)
+  {
+    const auto path =
+      QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+      + QStringLiteral("/tb-create-gui-timing.log");
+    auto file = QFile{path};
+    if (file.open(QIODevice::Append | QIODevice::Text))
+    {
+      QTextStream{&file} << QStringLiteral("MapWindow::createGui %1 ms\n")
+                              .arg(createGuiTimer.elapsed());
+    }
+  }
 }
 
 void MapWindow::createToolBar()

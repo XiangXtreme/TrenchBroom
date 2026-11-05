@@ -75,6 +75,32 @@ void TabBook::addPage(TabBookPage* page, const QString& title)
   m_tabBook->addWidget(page);
 }
 
+void TabBook::addPlaceholderPage(const QString& title)
+{
+  addPage(new TabBookPage{}, title);
+}
+
+void TabBook::replacePage(const int index, TabBookPage* page)
+{
+  contract_pre(index >= 0 && index < m_tabBook->count());
+  contract_pre(page != nullptr);
+
+  auto* previous = m_tabBook->widget(index);
+  const auto currentIndex = m_tabBook->currentIndex();
+
+  // insertWidget puts the new page at `index` and shifts the placeholder to
+  // `index + 1`; dropping the placeholder leaves every page index unchanged.
+  m_tabBook->insertWidget(index, page);
+  m_tabBook->removeWidget(previous);
+  delete previous;
+
+  // Removing the current widget makes QStackedLayout pick another page.
+  if (m_tabBook->currentIndex() != currentIndex)
+  {
+    m_tabBook->setCurrentIndex(currentIndex);
+  }
+}
+
 void TabBook::switchToPage(const int index)
 {
   contract_pre(index < m_tabBook->count());

@@ -124,4 +124,36 @@ TEST_CASE("TabBook")
   }
 }
 
+TEST_CASE("TabBook lazy page replacement")
+{
+  auto tabBook = TabBook{};
+  tabBook.addPage(new TabBookPage{}, "First");
+  tabBook.addPlaceholderPage("Second");
+  tabBook.addPlaceholderPage("Third");
+  tabBook.resize(400, 240);
+  tabBook.show();
+  QApplication::processEvents();
+
+  CHECK(tabBook.currentPageIndex() == 0);
+  CHECK(tabBook.findChildren<TabBarButton*>().size() == 3);
+
+  auto* second = new TabBookPage{};
+  second->setObjectName("SecondPage");
+  tabBook.replacePage(1, second);
+  CHECK(tabBook.currentPageIndex() == 0);
+  CHECK(tabBook.findChild<QWidget*>("SecondPage") == second);
+
+  tabBook.switchToPage(2);
+  QApplication::processEvents();
+  CHECK(tabBook.currentPageIndex() == 2);
+
+  // Replacing the page that is currently displayed must keep it displayed.
+  auto* third = new TabBookPage{};
+  third->setObjectName("ThirdPage");
+  tabBook.replacePage(2, third);
+  CHECK(tabBook.currentPageIndex() == 2);
+  CHECK(tabBook.findChild<QWidget*>("ThirdPage") == third);
+  CHECK(tabBook.findChildren<TabBarButton*>().size() == 3);
+}
+
 } // namespace tb::ui

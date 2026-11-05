@@ -54,6 +54,8 @@ class Inspector : public QWidget
 {
   Q_OBJECT
 private:
+  AppController* m_appController = nullptr;
+  MapDocument* m_document = nullptr;
   TabBook* m_tabBook = nullptr;
   MapInspector* m_mapInspector = nullptr;
   EntityInspector* m_entityInspector = nullptr;
@@ -67,6 +69,7 @@ private:
   SyncHeightEventFilter* m_syncHeaderEventFilter = nullptr;
 
   void updateNavigation(int page);
+  void ensurePage(InspectorPage page);
 
 public:
   Inspector(
@@ -83,6 +86,10 @@ public:
 
   QByteArray saveState() const;
   bool restoreState(const QByteArray& state);
+
+signals:
+  /** Emitted right after a lazily created inspector page is installed. */
+  void pagePrepared(int page);
 };
 
 } // namespace tb::ui

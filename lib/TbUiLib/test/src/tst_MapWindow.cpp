@@ -774,6 +774,22 @@ TEST_CASE("MapWindow")
 
   SECTION("exposes styled inspector and browser sections")
   {
+    // Inspector pages are built on first use. Visit every tab so the complete
+    // styled widget tree exists before the assertions below inspect it.
+    auto* inspector = window.findChild<Inspector*>();
+    REQUIRE(inspector != nullptr);
+    for (const auto page :
+         {InspectorPage::Map,
+          InspectorPage::Entity,
+          InspectorPage::Face,
+          InspectorPage::Outliner,
+          InspectorPage::Plugin,
+          InspectorPage::Terrain})
+    {
+      inspector->switchToPage(page);
+    }
+    QApplication::processEvents();
+
     CHECK(window.findChild<QWidget*>("FaceAttribsEditor") != nullptr);
     CHECK(window.findChild<QWidget*>("FaceAttribsEditor_Tools") != nullptr);
     CHECK(window.findChild<QWidget*>("FaceAttribsEditor_Attributes") != nullptr);

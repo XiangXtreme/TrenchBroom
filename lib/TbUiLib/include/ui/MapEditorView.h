@@ -66,6 +66,9 @@ private:
   bool m_layoutPending = true;
   bool m_externalInfoPanel = false;
   bool m_externalInfoPanelExpanded = false;
+  bool m_outlinerConnectionsDone = false;
+
+  void connectOutlinerWidgets();
 
 public:
   MapEditorView(AppController& appController, MapDocument& document);

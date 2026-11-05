@@ -636,6 +636,8 @@ TEST_CASE("ProjectWindow")
     REQUIRE(context.hasDocument());
     CHECK(&context.editorView() == &editor);
 
+    // The outliner page is built when its tab is first selected.
+    editor.inspector()->switchToPage(InspectorPage::Outliner);
     auto* outliner = editor.inspector()->findChild<OutlinerTreeWidget*>();
     REQUIRE(outliner);
     auto outlinerMenu = QMenu{};

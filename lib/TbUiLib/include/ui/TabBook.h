@@ -49,6 +49,23 @@ public:
   TabBar* tabBar();
 
   void addPage(TabBookPage* page, const QString& title);
+
+  /**
+   * Reserves a page slot with an empty placeholder so the page index stays stable
+   * without constructing the (potentially expensive) page widget. Use replacePage()
+   * when the page is first needed.
+   *
+   * Only use this for pages whose createTabBarPage() is the empty default: the tab
+   * bar builds its page widget from the placeholder and keeps it after replacement.
+   */
+  void addPlaceholderPage(const QString& title);
+
+  /**
+   * Replaces a placeholder (or an existing page) at the given index while keeping
+   * the index and the current page unchanged.
+   */
+  void replacePage(int index, TabBookPage* page);
+
   void switchToPage(int index);
   int currentPageIndex() const;
 

@@ -112,7 +112,39 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   layout->setContentsMargins(6, 6, 6, 6);
   layout->addWidget(m_hSplitter);
   m_controller = std::make_unique<MapEditorController>(appController, document, *this);
-  for (auto* tree : m_inspector->findChildren<OutlinerTreeWidget*>())
+  // Outliner widgets live on a lazily created inspector page, so wire them up
+  // when that page is installed rather than assuming they exist at construction.
+  connect(m_inspector, &Inspector::pagePrepared, this, [this](const int page) {
+    if (page == static_cast<int>(InspectorPage::Outliner))
+    {
+      connectOutlinerWidgets();
+    }
+  });
+  connectOutlinerWidgets();
+  restoreLayoutState();
+  connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
+    if (auto* view = qobject_cast<MapViewBase*>(focus); view && isAncestorOf(view))
+      m_currentMapView = view;
+  });
+}
+
+void MapEditorView::connectOutlinerWidgets()
+{
+  if (m_outlinerConnectionsDone)
+  {
+    return;
+  }
+
+  const auto trees = m_inspector->findChildren<OutlinerTreeWidget*>();
+  const auto propertyEditors =
+    m_inspector->findChildren<OutlinerEntityPropertyEditor*>();
+  if (trees.isEmpty() && propertyEditors.isEmpty())
+  {
+    return;
+  }
+  m_outlinerConnectionsDone = true;
+
+  for (auto* tree : trees)
   {
     connect(
       tree,
@@ -142,7 +174,7 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
         view->showPieMenu();
     });
   }
-  for (auto* properties : m_inspector->findChildren<OutlinerEntityPropertyEditor*>())
+  for (auto* properties : propertyEditors)
   {
     connect(
       properties, &OutlinerEntityPropertyEditor::focusMapViewRequested, this, [this] {
@@ -150,11 +182,6 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
           view->setFocus(Qt::OtherFocusReason);
       });
   }
-  restoreLayoutState();
-  connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
-    if (auto* view = qobject_cast<MapViewBase*>(focus); view && isAncestorOf(view))
-      m_currentMapView = view;
-  });
 }
 
 namespace
