@@ -591,7 +591,7 @@ public:
   std::filesystem::path path;
   Database database;
   ProjectInfo info;
-  std::uint64_t schemaVersion = 3;
+  std::uint64_t schemaVersion = 4;
 
   Impl(std::filesystem::path projectPath, const bool create)
     : path{std::move(projectPath)}

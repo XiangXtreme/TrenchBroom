@@ -132,6 +132,19 @@ TEST_CASE("ProjectStore")
     CHECK_FALSE(require(store->terrainCompile(asset.id)));
   }
 
+  SECTION("a newly created store reads and clears terrain data from another connection")
+  {
+    auto store = require(ProjectStore::create(workspace.path, "Terrain", "Half-Life"));
+    const auto asset = require(store->importAsset(map("maps/terrain.map")));
+    auto other = require(ProjectStore::open(workspace.path));
+    const auto data =
+      TerrainCompile{asset.revision, 1, 12, {'m', 'a', 'p'}, {'w', 'a', 'd'}, {}, {}};
+    require(other->setTerrainCompile(asset.id, data));
+    REQUIRE(require(store->terrainCompile(asset.id)));
+    require(store->clearTerrainCompile(asset.id));
+    CHECK_FALSE(require(other->terrainCompile(asset.id)));
+  }
+
   SECTION("invalidates terrain caches when captured dependencies change")
   {
     auto store = require(ProjectStore::create(workspace.path, "Terrain", "Half-Life"));

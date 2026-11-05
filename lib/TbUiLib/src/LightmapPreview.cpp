@@ -149,10 +149,6 @@ void LightmapPreview::startBake()
     return;
   }
 
-  auto projectInfo = std::optional<ProjectCompileInfo>{};
-  if (m_projectInfoProvider)
-    projectInfo = m_projectInfoProvider();
-
   const auto startedAt = std::chrono::steady_clock::now();
   logger.info() << "Baking a lightmap for the view.";
   setProgress(true, -1);
@@ -193,7 +189,7 @@ void LightmapPreview::startBake()
       m_assembly = std::move(assembly);
       emit changed();
     },
-    std::move(projectInfo));
+    m_projectInfoProvider);
 }
 
 } // namespace tb::ui

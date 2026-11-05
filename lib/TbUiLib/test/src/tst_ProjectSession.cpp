@@ -418,6 +418,56 @@ TEST_CASE("ProjectSession")
     session->unregisterDocument(document);
   }
 
+  SECTION("lightmap project snapshots preserve all unsaved map and project state")
+  {
+    auto firstFixture = MapDocumentFixture{};
+    auto secondFixture = MapDocumentFixture{};
+    auto& first = firstFixture.create();
+    auto& second = secondFixture.create();
+    const auto source = path.parent_path() / "preview-source.map";
+    requireProject(first.map().saveTo(source));
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.displayName = "First";
+    input.virtualPath = "maps/first.map";
+    input.original = input.compatible = readProjectFile(source);
+    const auto firstAsset = requireProject(session->importAsset(input));
+    input.displayName = "Second";
+    input.virtualPath = "maps/second.map";
+    const auto secondAsset = requireProject(session->importAsset(input));
+    requireProject(session->registerDocument(first, firstAsset.id));
+    requireProject(session->registerDocument(second, secondAsset.id));
+    requireProject(session->save());
+    const auto savedFirstAsset =
+      requireProject(session->store().findAsset(firstAsset.id));
+    const auto savedProject = readProjectFile(path);
+    REQUIRE(mdl::setEntityProperty(first.map(), "message", "First unsaved"));
+    REQUIRE(mdl::setEntityProperty(second.map(), "message", "Second unsaved"));
+    REQUIRE(first.map().modified());
+    REQUIRE(second.map().modified());
+    const auto unsavedAsset = requireProject(session->importAsset(testAsset()));
+
+    const auto previewPath = path.parent_path() / "preview.tbproj";
+    requireProject(session->writeLightmapPreviewProject(firstAsset.id, previewPath));
+    auto preview = requireProject(project::ProjectStore::open(previewPath));
+    const auto previewMap =
+      requireProject(preview->readAsset(firstAsset.id, project::ContentKind::Compatible));
+    CHECK(
+      std::string(previewMap.begin(), previewMap.end()).find("First unsaved")
+      != std::string::npos);
+    CHECK(requireProject(preview->findAsset(unsavedAsset.id)));
+    CHECK(
+      requireProject(preview->readAsset(secondAsset.id, project::ContentKind::Compatible))
+      == input.compatible);
+    CHECK(readProjectFile(path) == savedProject);
+    CHECK(requireProject(session->store().findAsset(firstAsset.id)) == savedFirstAsset);
+    CHECK(first.map().modified());
+    CHECK(second.map().modified());
+    CHECK(session->modified());
+    session->unregisterDocument(first);
+    session->unregisterDocument(second);
+  }
+
   SECTION("multi map restore prepares every replacement before changing live state")
   {
     auto firstFixture = MapDocumentFixture{};
@@ -945,7 +995,7 @@ TEST_CASE("Project terrain bakes captured material and invalidates changed textu
   sandbox.writeWad(
     {coloredMiptex("RED", Qt::red),
      coloredMiptex("GREEN", Qt::green),
-     coloredMiptex("BLUE", Qt::blue)});
+     coloredMiptex("tbt0_0", Qt::blue)});
   sandbox.createLibrary();
   auto library = requireProject(project::AssetLibrary::open(sandbox.libraryFolder));
   const auto libraryId = library->info().id;
@@ -956,7 +1006,7 @@ TEST_CASE("Project terrain bakes captured material and invalidates changed textu
   definition.materialSlots = {
     {{"Red", libraryAssetNamed(assets, "RED").id},
      {"Green", libraryAssetNamed(assets, "GREEN").id},
-     {"Blue", libraryAssetNamed(assets, "BLUE").id}}};
+     {"Blue", libraryAssetNamed(assets, "tbt0_0").id}}};
   auto libraryImages = std::array<QImage, 3>{};
   for (auto slot = size_t{0}; slot < libraryImages.size(); ++slot)
     libraryImages[slot] = requireProject(inspection::decodeImage(
@@ -1144,6 +1194,25 @@ TEST_CASE("Project terrain bakes captured material and invalidates changed textu
   INFO(cached->error);
   REQUIRE(cached->error.empty());
   CHECK(cached->dependencies.size() == 4);
+  requireProject(sandbox.session->registerDocument(document, mapAsset.id));
+  auto changedRegion = region;
+  changedRegion.paint(vm::vec2d{180, 130}, 45, 1);
+  auto changedGroup = group->group();
+  changedGroup.setTerrainPaint(changedRegion.encode());
+  REQUIRE(mdl::updateNodeContents(
+    map, "Edit preview terrain", {{group, mdl::NodeContents{std::move(changedGroup)}}}));
+  const auto previewPath = sandbox.root / "terrain-preview.tbproj";
+  requireProject(sandbox.session->writeLightmapPreviewProject(mapAsset.id, previewPath));
+  auto preview = requireProject(project::ProjectStore::open(previewPath));
+  const auto previewCache = requireProject(preview->terrainCompile(mapAsset.id));
+  REQUIRE(previewCache);
+  CHECK(previewCache->error.empty());
+  CHECK(previewCache->sourceRevision != cached->sourceRevision);
+  CHECK(
+    requireProject(sandbox.session->store().terrainCompile(mapAsset.id))->wad
+    == cached->wad);
+  CHECK(map.modified());
+  sandbox.session->unregisterDocument(document);
   if (const auto output = qEnvironmentVariable("TB_TERRAIN_ACCEPTANCE_PROJECT");
       !output.isEmpty())
     requireProject(sandbox.session->saveCopy(pathFromQString(output)));
@@ -1201,6 +1270,18 @@ TEST_CASE("Project terrain bakes captured material and invalidates changed textu
   CHECK_FALSE(requireProject(sandbox.session->terrainCompileNeedsSave(mapAsset.id)));
   requireProject(
     sandbox.session->exportCompileSnapshot(mapAsset.id, sandbox.root / "export"));
+  const auto exported = requireProject(
+    project::readGoldSrcWad(readProjectFile(sandbox.root / "export" / "textures.wad")));
+  CHECK(std::ranges::any_of(
+    exported.textures, [](const auto& texture) { return texture.name == "RED"; }));
+  CHECK(std::ranges::none_of(
+    exported.textures, [](const auto& texture) { return texture.name == "GREEN"; }));
+  const auto generated = std::ranges::find_if(
+    exported.textures, [](const auto& texture) { return texture.name == "tbt0_0"; });
+  REQUIRE(generated != exported.textures.end());
+  CHECK(generated->miptex != coloredMiptex("tbt0_0", Qt::blue));
+  CHECK_FALSE(std::filesystem::exists(
+    sandbox.root / "export" / "resources" / "materials" / "colored.tbmat"));
 }
 
 TEST_CASE("Terrain material normalizes textures and validates input")
@@ -2274,6 +2355,26 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto file = requireProject(sandbox.session->assetFile(captured));
     CHECK(std::filesystem::exists(file));
     CHECK(file.filename() == "alpine_blend.tbmat");
+  }
+
+  SECTION("terrain slots can share a texture without repeated update notices")
+  {
+    auto library = requireProject(project::AssetLibrary::open(sandbox.libraryFolder));
+    auto definition = project::AssetLibrary::TerrainMaterialDefinition{};
+    definition.name = "shared-slots";
+    definition.materialSlots = {
+      {{"First", wallLibraryId}, {"Second", wallLibraryId}, {"Third", floorLibraryId}}};
+    const auto material = requireProject(library->createTerrainMaterial(definition));
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, material.id));
+    REQUIRE(
+      requireProject(sandbox.session->store().dependencies(captured.id)).size() == 3);
+    auto updates = requireProject(sandbox.session->checkLibraryUpdates());
+    CHECK(updateFor(updates, captured.id).state == project::LibraryUpdateState::UpToDate);
+    CHECK(requireProject(sandbox.session->updateLibraryAssets({captured.id})).empty());
+    updates = requireProject(sandbox.session->checkLibraryUpdates());
+    CHECK(updateFor(updates, captured.id).state == project::LibraryUpdateState::UpToDate);
   }
 
   SECTION("a dependency the library added after capture reports an update")

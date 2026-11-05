@@ -86,7 +86,7 @@ void LightmapBaker::start(
   const int threadCount,
   const std::string& quality,
   Callback callback,
-  std::optional<ProjectCompileInfo> project)
+  ProjectInfoProvider projectInfoProvider)
 {
   cancel();
 
@@ -94,7 +94,7 @@ void LightmapBaker::start(
   m_executable = executable;
   m_threadCount = clampedThreadCount(threadCount);
   m_quality = quality;
-  m_project = std::move(project);
+  m_project.reset();
   m_output.clear();
   m_progressBuffer.clear();
   m_stage = 0;
@@ -105,6 +105,17 @@ void LightmapBaker::start(
   {
     finish(std::nullopt, "could not create the lightmap scratch directory");
     return;
+  }
+
+  if (projectInfoProvider)
+  {
+    auto project = projectInfoProvider(pathFromQString(m_workDir->path()));
+    if (project.is_error())
+    {
+      finish(std::nullopt, std::get<Error>(project.error()).msg);
+      return;
+    }
+    m_project = std::move(project).value();
   }
 
   if (!m_project)

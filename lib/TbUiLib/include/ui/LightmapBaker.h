@@ -19,11 +19,12 @@
 
 #pragma once
 
-#include "render/LightmapData.h"
-#include "ui/CompilationRun.h"
-
 #include <QByteArray>
 #include <QObject>
+
+#include "base/Result.h"
+#include "render/LightmapData.h"
+#include "ui/CompilationRun.h"
 
 #include <filesystem>
 #include <functional>
@@ -58,6 +59,8 @@ class LightmapBaker : public QObject
 public:
   using Callback = std::function<void(
     std::optional<render::LightmapBake> bake, const std::string& error)>;
+  using ProjectInfoProvider = std::function<Result<std::optional<ProjectCompileInfo>>(
+    const std::filesystem::path& scratchDirectory)>;
 
   explicit LightmapBaker(QObject* parent = nullptr);
   ~LightmapBaker() override;
@@ -75,7 +78,7 @@ public:
     int threadCount,
     const std::string& quality,
     Callback callback,
-    std::optional<ProjectCompileInfo> project = std::nullopt);
+    ProjectInfoProvider projectInfoProvider = {});
 
   void cancel();
 

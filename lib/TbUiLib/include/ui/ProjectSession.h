@@ -264,6 +264,9 @@ public:
   // state.
   Result<std::vector<std::uint8_t>> workingMapContents(const std::string& id) const;
   Result<bool> terrainCompileNeedsSave(const std::string& id) const;
+  /** Writes a disposable project with this map's live edits and terrain compile data. */
+  Result<void> writeLightmapPreviewProject(
+    const std::string& id, const std::filesystem::path& path) const;
   Result<std::filesystem::path> assetFile(const project::Asset& asset) const;
   /**
    * Builds the capture plan for the given library resources.

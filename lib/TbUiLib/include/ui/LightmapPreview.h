@@ -49,7 +49,7 @@ public:
   bool baking() const;
   int remainingSeconds() const;
 
-  using ProjectInfoProvider = std::function<std::optional<ProjectCompileInfo>()>;
+  using ProjectInfoProvider = LightmapBaker::ProjectInfoProvider;
   void setProjectInfoProvider(ProjectInfoProvider provider);
 
 signals:

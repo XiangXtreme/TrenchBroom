@@ -19,6 +19,7 @@
 #include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushFace.h"
+#include "mdl/EntityProperties.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
 #include "prefs/Preferences.h"
@@ -501,6 +502,11 @@ Result<void> ProjectSession::exportCompileSnapshot(
     case ProjectResourceStatus::Embedded:
       for (const auto& id : use.assetIds)
       {
+        // Terrain recipes and their slots are bake inputs. The generated map uses only
+        // the baked textures; include an asset here only if the map also references it
+        // as an ordinary resource.
+        if (use.location.ends_with("." + mdl::EntityPropertyKeys::TbTerrainPaint))
+          continue;
         if (std::ranges::find(directAssets, id) == directAssets.end())
           directAssets.push_back(id);
         directTextures[id].push_back(use.reference);
@@ -1093,24 +1099,70 @@ Result<void> ProjectSession::unstageMaps()
          | kdl::transform([&]() { m_stagedMaps.clear(); });
 }
 
-Result<bool> ProjectSession::terrainCompileNeedsSave(const std::string& id) const
+namespace
 {
-  const auto asset = m_store->findAsset(id);
+Result<bool> terrainCompileNeedsRefresh(
+  project::ProjectStore& store, const std::string& id)
+{
+  const auto asset = store.findAsset(id);
   if (asset.is_error())
     return std::get<Error>(asset.error());
   if (!asset.value() || asset.value()->type != project::AssetType::Map)
     return Error{"Project map asset is missing."};
-  const auto cached = m_store->terrainCompile(id);
+  const auto cached = store.terrainCompile(id);
   if (cached.is_error())
     return std::get<Error>(cached.error());
   if (
     cached.value() && cached.value()->sourceRevision == asset.value()->revision
     && cached.value()->generatorVersion == TerrainGeneratorVersion)
     return false;
-  const auto source = m_store->readAsset(id, project::ContentKind::Compatible);
+  const auto source = store.readAsset(id, project::ContentKind::Compatible);
   if (source.is_error())
     return std::get<Error>(source.error());
   return cached.value().has_value() || containsTerrainPaint(source.value());
+}
+
+Result<void> updateTerrainCompile(
+  project::ProjectStore& store, const project::Asset& asset)
+{
+  const auto needed = terrainCompileNeedsRefresh(store, asset.id);
+  if (needed.is_error())
+    return std::get<Error>(needed.error());
+  if (!needed.value())
+    return {};
+  const auto source = store.readAsset(asset.id, project::ContentKind::Compatible);
+  if (source.is_error())
+    return std::get<Error>(source.error());
+  auto data = project::TerrainCompile{};
+  auto baked = bakeTerrainSnapshot(source.value(), &store, &data.dependencies);
+  data.sourceRevision = asset.revision;
+  data.generatorVersion = TerrainGeneratorVersion;
+  if (baked.is_error())
+    data.error = std::get<Error>(baked.error()).msg;
+  else if (auto terrain = std::move(baked).value())
+  {
+    data.map = std::move(terrain->map);
+    data.topFaces = static_cast<std::uint64_t>(terrain->topFaces);
+    auto entries = std::vector<std::vector<std::uint8_t>>{};
+    for (auto& entry : terrain->textures)
+      entries.push_back(std::move(entry.second));
+    auto wad = project::buildGoldSrcWad(entries);
+    if (wad.is_error())
+      data.error = std::get<Error>(wad.error()).msg;
+    else
+      data.wad = std::move(wad).value();
+  }
+  else if (containsTerrainPaint(source.value()))
+    data.error = "Terrain paint data could not be parsed.";
+  else
+    return store.clearTerrainCompile(asset.id);
+  return store.setTerrainCompile(asset.id, data);
+}
+} // namespace
+
+Result<bool> ProjectSession::terrainCompileNeedsSave(const std::string& id) const
+{
+  return terrainCompileNeedsRefresh(*m_store, id);
 }
 
 Result<void> ProjectSession::updateTerrainCompiles()
@@ -1119,53 +1171,43 @@ Result<void> ProjectSession::updateTerrainCompiles()
   if (maps.is_error())
     return std::get<Error>(maps.error());
   for (const auto& asset : maps.value())
-  {
-    const auto needed = terrainCompileNeedsSave(asset.id);
-    if (needed.is_error())
-      return std::get<Error>(needed.error());
-    if (!needed.value())
-      continue;
-    const auto source = m_store->readAsset(asset.id, project::ContentKind::Compatible);
-    if (source.is_error())
-      return std::get<Error>(source.error());
-    auto data = project::TerrainCompile{};
-    auto baked = bakeTerrainSnapshot(source.value(), m_store.get(), &data.dependencies);
-    data.sourceRevision = asset.revision;
-    data.generatorVersion = TerrainGeneratorVersion;
-    if (baked.is_error())
-    {
-      data.error = std::get<Error>(baked.error()).msg;
-    }
-    else if (auto terrain = std::move(baked).value())
-    {
-      data.map = std::move(terrain->map);
-      data.topFaces = static_cast<std::uint64_t>(terrain->topFaces);
-      auto entries = std::vector<std::vector<std::uint8_t>>{};
-      for (auto& entry : terrain->textures)
-        entries.push_back(std::move(entry.second));
-      auto wad = project::buildGoldSrcWad(entries);
-      if (wad.is_error())
-        data.error = std::get<Error>(wad.error()).msg;
-      else
-        data.wad = std::move(wad).value();
-    }
-    else
-    {
-      if (containsTerrainPaint(source.value()))
-        data.error = "Terrain paint data could not be parsed.";
-      else
-      {
-        const auto cleared = m_store->clearTerrainCompile(asset.id);
-        if (cleared.is_error())
-          return std::get<Error>(cleared.error());
-        continue;
-      }
-    }
-    const auto saved = m_store->setTerrainCompile(asset.id, data);
-    if (saved.is_error())
-      return std::get<Error>(saved.error());
-  }
+    if (const auto updated = updateTerrainCompile(*m_store, asset); updated.is_error())
+      return std::get<Error>(updated.error());
   return {};
+}
+
+Result<void> ProjectSession::writeLightmapPreviewProject(
+  const std::string& id, const std::filesystem::path& path) const
+{
+  const auto asset = m_store->findAsset(id);
+  if (asset.is_error())
+    return std::get<Error>(asset.error());
+  if (!asset.value() || asset.value()->type != project::AssetType::Map)
+    return Error{"Project map asset is missing."};
+
+  if (const auto copied = m_store->saveCopy(path); copied.is_error())
+    return std::get<Error>(copied.error());
+  auto opened = project::ProjectStore::open(path);
+  if (opened.is_error())
+    return std::get<Error>(opened.error());
+  auto& copy = *opened.value();
+  auto snapshotAsset = *asset.value();
+  if (const auto* document = documentFor(id); document && document->map().modified())
+  {
+    auto bytes = workingMapContents(id);
+    if (bytes.is_error())
+      return std::get<Error>(bytes.error());
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.sourceName = snapshotAsset.sourceName;
+    input.conversionRecipe = snapshotAsset.conversionRecipe;
+    input.original = input.compatible = std::move(bytes).value();
+    auto replaced = copy.replaceAsset(id, input);
+    if (replaced.is_error())
+      return std::get<Error>(replaced.error());
+    snapshotAsset = std::move(replaced).value();
+  }
+  return updateTerrainCompile(copy, snapshotAsset);
 }
 
 Result<void> ProjectSession::writeProject(
@@ -2444,7 +2486,7 @@ Result<bool> snapshotNeedsRefresh(
     libraryAsset.contentHash != projectAsset.library.libraryContentHash
     || libraryAsset.revision != projectAsset.library.libraryRevision)
     return true;
-  auto expected = std::map<std::string, std::string>{};
+  auto expected = std::set<std::pair<std::string, std::string>>{};
   const auto dependencies = library.dependencies(libraryAssetId);
   if (dependencies.is_error())
     return std::get<Error>(dependencies.error());
@@ -2456,13 +2498,13 @@ Result<bool> snapshotNeedsRefresh(
       return std::get<Error>(captured.error());
     if (!captured.value())
       return true;
-    expected[captured.value()->id] = dependency.kind;
+    expected.emplace(captured.value()->id, dependency.kind);
   }
   const auto edges = store.dependencies(projectAsset.id);
   if (edges.is_error())
     return std::get<Error>(edges.error());
   for (const auto& edge : edges.value())
-    if (!expected.contains(edge.dependencyId))
+    if (!expected.contains({edge.dependencyId, edge.kind}))
       return true;
   return expected.size() != edges.value().size();
 }

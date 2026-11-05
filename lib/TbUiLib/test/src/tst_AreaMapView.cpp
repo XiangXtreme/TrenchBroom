@@ -235,6 +235,23 @@ TEST_CASE("AreaMapView")
     CHECK(cancelledCallbacks == 0);
   }
 
+  SECTION("a project preview preparation error does not fall back to map compilation")
+  {
+    auto error = std::string{};
+    auto baker = LightmapBaker{};
+    baker.start(
+      document->map(),
+      pathFromQString(QCoreApplication::applicationFilePath()),
+      1,
+      Preferences::LightmapQualityNormal,
+      [&](auto, const auto& message) { error = message; },
+      [](const auto&) -> Result<std::optional<ProjectCompileInfo>> {
+        return Error{"Project preview preparation failed."};
+      });
+    CHECK(error == "Project preview preparation failed.");
+    CHECK_FALSE(baker.running());
+  }
+
   SECTION("each area can select every view without losing cameras or changing the map")
   {
     auto* button = original->findChild<QToolButton*>("MapViewTypeButton");

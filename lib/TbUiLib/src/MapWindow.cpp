@@ -223,31 +223,27 @@ MapWindow::MapWindow(
       &MapWindow::updateTitleDelayed);
 
   toolBox().lightmapPreview().setProjectInfoProvider(
-    [this]() -> std::optional<ProjectCompileInfo> {
+    [this](const std::filesystem::path& scratchDirectory)
+      -> Result<std::optional<ProjectCompileInfo>> {
       auto project = m_project ? m_project : m_appController.projectFor(*m_document);
       if (!project)
-        return std::nullopt;
-      if (project->modified())
-      {
-        if (const auto saved = project->save(); saved.is_error())
-          return std::nullopt;
-      }
+        return std::optional<ProjectCompileInfo>{};
       const auto assetId = project->assetFor(*m_document);
       if (!assetId)
-        return std::nullopt;
-      const auto terrainNeedsSave = project->terrainCompileNeedsSave(*assetId);
-      if (terrainNeedsSave.is_success() && terrainNeedsSave.value())
-      {
-        if (const auto saved = project->save(); saved.is_error())
-          return std::nullopt;
-      }
+        return Error{"The open map is not registered with its project."};
       const auto asset = project->store().findAsset(*assetId);
-      if (asset.is_error() || !asset.value())
-        return std::nullopt;
+      if (asset.is_error())
+        return std::get<Error>(asset.error());
+      if (!asset.value())
+        return Error{"The open project map is missing."};
+      const auto path = scratchDirectory / "preview.tbproj";
+      if (const auto copied = project->writeLightmapPreviewProject(*assetId, path);
+          copied.is_error())
+        return std::get<Error>(copied.error());
       auto mapName = asset.value()->displayName;
       if (mapName.empty())
         mapName = std::filesystem::path{asset.value()->publishPath}.stem().string();
-      return ProjectCompileInfo{project->path(), std::move(mapName)};
+      return std::optional{ProjectCompileInfo{path, std::move(mapName)}};
     });
 
 
