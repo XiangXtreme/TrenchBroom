@@ -64,9 +64,9 @@
   & scripts\ci-preflight.ps1
   ```
   It checks patch whitespace, verifies the exact CI Qt package metadata exists for Windows/Linux/macOS (cached locally for 24h under `build-release-codex\codex-logs\ci-qt-package-cache.txt` unless `.github/actions/setup-common/action.yml` changed or `-Full` is passed), reports local/CI Qt compatibility, builds affected targets, strict-compiles changed C/C++ translation units in parallel with `clang-cl` conversion warnings treated as errors, and runs the affected CTest cases.
-- By default, `ci-preflight.ps1` scopes its diff intelligently so local unpushed history on `main` does not trigger a full-repo rebuild:
-  - When the working tree or index has uncommitted changes, `BaseRef` defaults to `HEAD` (checking only in-progress changes).
-  - When the working tree is clean on a short-lived feature branch (`1..15` commits ahead of local `main`), `BaseRef` defaults to `main`; otherwise it defaults to `HEAD^` (checking the latest commit).
+- By default, `ci-preflight.ps1` includes both local changes and commits ahead of the local tracking ref, so unrelated untracked files cannot hide commits from the push check. It does not fetch the remote.
+  - Without a usable tracking ref, a short-lived feature branch (`1..15` commits ahead of local `main`) uses `main`; otherwise it uses `HEAD^` (checking the latest commit).
+  - For a focused check of only in-progress changes, pass `-BaseRef HEAD`. Before pushing, use an explicit `-BaseRef` covering the push if the tracking ref is unavailable or stale.
   - For affected library test directories, preflight automatically narrows `ctest -R` to the `TEST_CASE`s in changed `tst_*.cpp` files and test files referencing changed source/header stems (up to 30 cases). Pass `-AllTests` to run the entire library test suite, or `-TestFilter <regex>` to target a custom CTest regex.
 - For broad CMake, shared infrastructure, compiler, Qt, or CI changes, run the full local matrix instead:
   ```powershell

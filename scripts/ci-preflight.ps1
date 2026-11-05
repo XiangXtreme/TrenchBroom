@@ -40,13 +40,14 @@ function Invoke-GitCheck {
 }
 
 function Get-DefaultBaseRef {
-  # When the working tree or index has uncommitted changes, scope preflight by
-  # default to those in-progress changes rather than re-checking historical commits.
-  $statusLines = @(& git status --porcelain --untracked-files=normal 2>$null)
-  if ($LASTEXITCODE -eq 0 -and $statusLines.Count -gt 0) {
-    & git rev-parse --verify --quiet "HEAD^{commit}" *> $null
-    if ($LASTEXITCODE -eq 0) {
-      return "HEAD"
+  # Include commits that would be pushed even when unrelated worktree files exist.
+  # Use the local tracking ref; this does not contact or modify the remote.
+  $tracking = @(& git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>$null)
+  if ($LASTEXITCODE -eq 0 -and $tracking.Count -eq 1) {
+    $aheadText = (& git rev-list --count "$($tracking[0])..HEAD" 2>$null)
+    $aheadCount = 0
+    if ($LASTEXITCODE -eq 0 -and [int]::TryParse("$aheadText".Trim(), [ref] $aheadCount) -and $aheadCount -gt 0) {
+      return $tracking[0]
     }
   }
 
