@@ -1033,11 +1033,14 @@ void MapView3D::renderMap(
   render::RenderBatch& renderBatch)
 {
   renderer.render(renderContext, renderBatch);
+  const auto* lightmapAssembly =
+    renderContext.showLightmap() ? renderContext.lightmapAssembly().get() : nullptr;
   m_toolBox.terrainPreview(m_appController)
     .render(
       renderBatch,
       terrainInspector(),
-      renderContext.showFaces() && renderContext.showMaterials());
+      renderContext.showFaces() && renderContext.showMaterials(),
+      lightmapAssembly);
 
   const auto& map = m_document.map();
   if (const auto& bounds = map.selectionBounds();

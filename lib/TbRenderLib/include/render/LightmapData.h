@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -76,7 +77,21 @@ struct LightmapBlock
 };
 
 /**
- * A lightmap atlas holding one rectangle per brush face.
+ * The lightmap rectangle a terrain piece samples from the assembled atlas.
+ */
+struct TerrainLightmapBlock
+{
+  vm::vec3f normal;
+  float dist = 0.0f;
+  vm::vec4f vecs[2] = {};
+  vm::vec2i mins = {};
+  vm::vec2i size = {};
+  vm::vec2i tile = {};
+  std::vector<vm::vec2f> poly;
+};
+
+/**
+ * A lightmap atlas holding one rectangle per brush face and terrain piece.
  */
 struct LightmapAssembly
 {
@@ -85,8 +100,11 @@ struct LightmapAssembly
   std::vector<std::uint8_t> pixels; // rgb8, rows top down
   // Sorted by face address for lookup during vertex construction.
   std::vector<std::pair<const mdl::BrushFace*, LightmapBlock>> blocks;
+  std::vector<TerrainLightmapBlock> terrainBlocks;
 
   const LightmapBlock* blockFor(const mdl::BrushFace& face) const;
+  const TerrainLightmapBlock* terrainBlockFor(
+    const vm::vec3f& point, const vm::vec3f& normal, float dist) const;
 };
 
 /**
@@ -109,7 +127,10 @@ struct FaceLightmapInput
  * neighbours so that linear filtering never picks up the background.
  */
 std::optional<LightmapBlock> buildFaceLightmap(
-  const FaceLightmapInput& face, const LightmapBake& bake, std::vector<std::uint8_t>& pixels);
+  const FaceLightmapInput& face,
+  const LightmapBake& bake,
+  std::vector<std::uint8_t>& pixels,
+  std::unordered_set<const LightmapFaceRecord*>* usedRecords = nullptr);
 
 /**
  * Gives every face its own lightmap rectangle and packs those rectangles into one atlas.

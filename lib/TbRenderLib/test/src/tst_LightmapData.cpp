@@ -347,6 +347,37 @@ TEST_CASE("buildLightmapAssembly")
     CHECK(assembly.height == 0);
     CHECK(assembly.blocks.empty());
   }
+
+  SECTION("packs unconsumed baked faces into terrainBlocks")
+  {
+    auto bake = makeBake(16, 16);
+    // Brush face record on z = 0
+    bake.faces.push_back(makeRecord(
+      {0, 0}, {3, 3}, {0, 0},
+      {{0.0f, 0.0f}, {3.0f, 0.0f}, {3.0f, 3.0f}, {0.0f, 3.0f}}));
+    // Terrain face record on z = 40
+    auto terrainRecord = makeRecord(
+      {4, 4}, {3, 3}, {4, 0},
+      {{4.0f, 4.0f}, {7.0f, 4.0f}, {7.0f, 7.0f}, {4.0f, 7.0f}});
+    terrainRecord.dist = 40.0f;
+    bake.faces.push_back(std::move(terrainRecord));
+
+    auto faces = std::vector<FaceLightmapInput>{makeFace(32.0f)};
+    auto assembly = LightmapAssembly{};
+    buildLightmapAssembly(faces, bake, assembly);
+
+    CHECK(assembly.blocks.size() == 1);
+    CHECK(assembly.terrainBlocks.size() == 1);
+
+    // blockForPoint finds the terrain block
+    const auto* found = assembly.terrainBlockFor(
+      vm::vec3f{5.5f * 16.0f, 5.5f * 16.0f, 40.0f},
+      vm::vec3f{0.0f, 0.0f, 1.0f},
+      40.0f);
+    REQUIRE(found != nullptr);
+    CHECK(found->mins == vm::vec2i{4, 4});
+    CHECK(found->dist == 40.0f);
+  }
 }
 
 } // namespace tb::render

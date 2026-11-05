@@ -39,6 +39,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <unordered_set>
 
 namespace tb::render
 {
@@ -225,6 +226,10 @@ std::vector<FaceLightmapInput> collectBrushFaces(mdl::Map& map)
         }
       },
       [&](mdl::GroupNode& n) {
+        if (!n.group().terrainPaint().empty())
+        {
+          return;
+        }
         for (auto* child : n.children())
         {
           self(self, *child);
@@ -268,10 +273,54 @@ const LightmapBlock* LightmapAssembly::blockFor(const mdl::BrushFace& face) cons
   return it != blocks.end() && it->first == &face ? &it->second : nullptr;
 }
 
+const TerrainLightmapBlock* LightmapAssembly::terrainBlockFor(
+  const vm::vec3f& point, const vm::vec3f& normal, const float dist) const
+{
+  const TerrainLightmapBlock* bestBboxMatch = nullptr;
+
+  for (const auto& tb : terrainBlocks)
+  {
+    if (vm::dot(tb.normal, normal) <= 0.999f || std::abs(tb.dist - dist) >= 0.1f)
+    {
+      continue;
+    }
+
+    const auto u = (vm::dot(point, tb.vecs[0].xyz()) + tb.vecs[0][3]) / LuxelSize;
+    const auto v = (vm::dot(point, tb.vecs[1].xyz()) + tb.vecs[1][3]) / LuxelSize;
+
+    if (containsPoint(tb.poly, u, v))
+    {
+      return &tb;
+    }
+
+    if (!bestBboxMatch && !tb.poly.empty())
+    {
+      auto minU = std::numeric_limits<float>::max();
+      auto minV = std::numeric_limits<float>::max();
+      auto maxU = std::numeric_limits<float>::lowest();
+      auto maxV = std::numeric_limits<float>::lowest();
+      for (const auto& p : tb.poly)
+      {
+        minU = std::min(minU, p.x());
+        minV = std::min(minV, p.y());
+        maxU = std::max(maxU, p.x());
+        maxV = std::max(maxV, p.y());
+      }
+      if (u >= minU - 0.5f && u <= maxU + 0.5f && v >= minV - 0.5f && v <= maxV + 0.5f)
+      {
+        bestBboxMatch = &tb;
+      }
+    }
+  }
+
+  return bestBboxMatch;
+}
+
 std::optional<LightmapBlock> buildFaceLightmap(
   const FaceLightmapInput& face,
   const LightmapBake& bake,
-  std::vector<std::uint8_t>& pixels)
+  std::vector<std::uint8_t>& pixels,
+  std::unordered_set<const LightmapFaceRecord*>* usedRecords)
 {
   if (bake.width <= 0 || bake.height <= 0 || bake.pixels.empty()
       || face.outline.size() < 3)
@@ -444,6 +493,15 @@ std::optional<LightmapBlock> buildFaceLightmap(
   }
 
   bleed(pixels, valid, block.size.x(), block.size.y());
+
+  if (usedRecords)
+  {
+    for (const auto* record : group)
+    {
+      usedRecords->insert(record);
+    }
+  }
+
   return block;
 }
 
@@ -463,18 +521,59 @@ void buildLightmapAssembly(
     const mdl::BrushFace* face = nullptr;
     LightmapBlock block;
     std::vector<std::uint8_t> pixels;
+    const LightmapFaceRecord* terrainRecord = nullptr;
   };
 
   auto pending = std::vector<PendingBlock>{};
   pending.reserve(faces.size());
+  auto usedRecords = std::unordered_set<const LightmapFaceRecord*>{};
   for (const auto& face : faces)
   {
     auto pixels = std::vector<std::uint8_t>{};
-    if (auto block = buildFaceLightmap(face, bake, pixels))
+    if (auto block = buildFaceLightmap(face, bake, pixels, &usedRecords))
     {
-      pending.push_back({face.face, *block, std::move(pixels)});
+      pending.push_back({face.face, *block, std::move(pixels), nullptr});
     }
   }
+
+  for (const auto& record : bake.faces)
+  {
+    if (usedRecords.contains(&record))
+    {
+      continue;
+    }
+    if (record.size.x() <= 0 || record.size.y() <= 0 || record.poly.size() < 3)
+    {
+      continue;
+    }
+
+    auto pixels = std::vector<std::uint8_t>(
+      static_cast<size_t>(record.size.x()) * static_cast<size_t>(record.size.y()) * 3u);
+    for (auto row = 0; row < record.size.y(); ++row)
+    {
+      const auto source =
+        (static_cast<size_t>(record.tile.y() + row) * static_cast<size_t>(bake.width)
+         + static_cast<size_t>(record.tile.x()))
+        * 3u;
+      const auto destination =
+        static_cast<size_t>(row) * static_cast<size_t>(record.size.x()) * 3u;
+      if (source + static_cast<size_t>(record.size.x()) * 3u <= bake.pixels.size())
+      {
+        std::copy_n(
+          bake.pixels.begin() + static_cast<std::ptrdiff_t>(source),
+          static_cast<size_t>(record.size.x()) * 3u,
+          pixels.begin() + static_cast<std::ptrdiff_t>(destination));
+      }
+    }
+
+    auto block = LightmapBlock{};
+    block.vecs[0] = record.vecs[0];
+    block.vecs[1] = record.vecs[1];
+    block.mins = record.mins;
+    block.size = record.size;
+    pending.push_back({nullptr, block, std::move(pixels), &record});
+  }
+
   if (pending.empty())
   {
     return;
@@ -532,7 +631,21 @@ void buildLightmapAssembly(
         static_cast<size_t>(block.block.size.x()) * 3,
         result.pixels.begin() + static_cast<std::ptrdiff_t>(destination));
     }
-    result.blocks.emplace_back(block.face, block.block);
+    if (block.terrainRecord)
+    {
+      result.terrainBlocks.push_back(TerrainLightmapBlock{
+        block.terrainRecord->normal,
+        block.terrainRecord->dist,
+        {block.block.vecs[0], block.block.vecs[1]},
+        block.block.mins,
+        block.block.size,
+        block.block.tile,
+        block.terrainRecord->poly});
+    }
+    else
+    {
+      result.blocks.emplace_back(block.face, block.block);
+    }
   }
 
   std::ranges::sort(

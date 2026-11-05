@@ -23,6 +23,7 @@
 #include "mdl/WorldNode.h"
 #include "render/BrushRendererArrays.h"
 #include "render/FaceRenderer.h"
+#include "render/LightmapData.h"
 #include "render/RenderBatch.h"
 #include "render/RenderTiming.h"
 #include "ui/AppController.h"
@@ -151,7 +152,8 @@ std::unique_ptr<PreviewScene> makeScene(
   const mdl::GroupNode& group,
   const TerrainRegion& region,
   const TerrainBake& bake,
-  std::shared_ptr<PreviewMaterials> materials)
+  std::shared_ptr<PreviewMaterials> materials,
+  const render::LightmapAssembly* lightmap)
 {
   const auto timing = render::RenderTimingScope{"cpu.terrain.scene_build"};
   render::RenderTiming::count("terrain.scene_builds", 1);
@@ -205,13 +207,24 @@ std::unique_ptr<PreviewScene> makeScene(
 
       auto positions = std::vector<vm::vec3d>{};
       positions.reserve(size_t(polygon.size()));
+      auto centroid = vm::vec3d{};
       for (const auto& pixel : polygon)
       {
         const auto xy = transform * region.unproject(pixel);
-        positions.push_back(
+        const auto pos =
           vm::vec3d{xy.x(), xy.y(), plane.zAt(vm::vec2d{xy.x(), xy.y()})}
-          + plane.normal * 0.1);
+          + plane.normal * 0.1;
+        centroid = centroid + pos;
+        positions.push_back(pos);
       }
+      if (!positions.empty())
+        centroid = centroid / static_cast<double>(positions.size());
+
+      const auto* lightmapBlock =
+        lightmap ? lightmap->terrainBlockFor(
+          vm::vec3f{centroid}, vm::vec3f{plane.normal}, static_cast<float>(plane.distance))
+                 : nullptr;
+
       // The face renderer uses clockwise front faces, matching vm::from_points.
       auto winding = std::optional<vm::plane3d>{};
       for (auto i = size_t{1}; i + 1 < positions.size() && !winding; ++i)
@@ -235,11 +248,41 @@ std::unique_ptr<PreviewScene> makeScene(
           return float(
             (axis.x() * pixel.x() + axis.y() * pixel.y() + axis.z()) / dimension);
         };
+
+        auto lightmapUv = vm::vec2f{0.5f, 0.5f};
+        if (lightmap && lightmap->width > 0 && lightmap->height > 0)
+        {
+          if (lightmapBlock)
+          {
+            constexpr auto LuxelSize = 16.0f;
+            const auto atlasWidth = static_cast<float>(lightmap->width);
+            const auto atlasHeight = static_cast<float>(lightmap->height);
+            const auto& uAxis = lightmapBlock->vecs[0];
+            const auto& vAxis = lightmapBlock->vecs[1];
+            const auto posF = vm::vec3f{positions[i]};
+            const auto u = (vm::dot(posF, uAxis.xyz()) + uAxis[3]) / LuxelSize;
+            const auto v = (vm::dot(posF, vAxis.xyz()) + vAxis[3]) / LuxelSize;
+            lightmapUv = vm::vec2f{
+              (static_cast<float>(lightmapBlock->tile.x()) + u
+               - static_cast<float>(lightmapBlock->mins.x()) + 0.5f)
+                / atlasWidth,
+              (static_cast<float>(lightmapBlock->tile.y()) + v
+               - static_cast<float>(lightmapBlock->mins.y()) + 0.5f)
+                / atlasHeight};
+          }
+          else
+          {
+            lightmapUv = vm::vec2f{
+              0.5f / static_cast<float>(lightmap->width),
+              0.5f / static_cast<float>(lightmap->height)};
+          }
+        }
+
         vertexDest[i] = Vertex{
           vm::vec3f{positions[i]},
           vm::vec3f{plane.normal},
           vm::vec2f{uv(bakedFace.u, texture.width), uv(bakedFace.v, texture.height)},
-          vm::vec2f{0.5f, 0.5f}};
+          lightmapUv};
         basePositions.emplace_back(positions[i]);
       }
       scene->vertexBlocks.push_back({vertexBlock, std::move(basePositions)});
@@ -274,6 +317,7 @@ class TerrainPreviewRenderer::Impl
     std::shared_ptr<PreviewMaterials> materials;
     std::unique_ptr<PreviewScene> scene;
     size_t geometryRevision = 0;
+    const render::LightmapAssembly* lightmap = nullptr;
   };
 
   struct Entry
@@ -343,7 +387,10 @@ public:
   ~Impl() { QObject::disconnect(m_projectConnection); }
 
   void render(
-    render::RenderBatch& batch, const TerrainInspector* inspector, const bool visible)
+    render::RenderBatch& batch,
+    const TerrainInspector* inspector,
+    const bool visible,
+    const render::LightmapAssembly* lightmap)
   {
     if (!visible)
     {
@@ -415,7 +462,14 @@ public:
       if (!region->materialAssetId.empty())
         wanted += ":" + std::to_string(m_materialRevision);
       updateEntry(
-        *group, entry, *region, std::move(wanted), project.get(), batch, needsTimer);
+        *group,
+        entry,
+        *region,
+        std::move(wanted),
+        project.get(),
+        batch,
+        needsTimer,
+        lightmap);
     }
     if (needsTimer && !m_timer.isActive())
       m_timer.start();
@@ -517,13 +571,23 @@ private:
     }
   }
 
-  void updateDisplay(const mdl::GroupNode& group, Entry& entry, Display& display)
+  void updateDisplay(
+    const mdl::GroupNode& group,
+    Entry& entry,
+    Display& display,
+    const render::LightmapAssembly* lightmap)
   {
-    if (display.geometryRevision != entry.geometryRevision)
+    if (display.geometryRevision != entry.geometryRevision || display.lightmap != lightmap)
     {
       display.scene = makeScene(
-        m_document.map(), group, display.region, display.bake->bake, display.materials);
+        m_document.map(),
+        group,
+        display.region,
+        display.bake->bake,
+        display.materials,
+        lightmap);
       display.geometryRevision = entry.geometryRevision;
+      display.lightmap = lightmap;
     }
   }
 
@@ -534,7 +598,8 @@ private:
     std::string wanted,
     const ProjectSession* project,
     render::RenderBatch& batch,
-    bool& needsTimer)
+    bool& needsTimer,
+    const render::LightmapAssembly* lightmap)
   {
     if (entry.wanted != wanted)
     {
@@ -628,7 +693,7 @@ private:
 
     if (entry.pending)
     {
-      updateDisplay(group, entry, *entry.pending);
+      updateDisplay(group, entry, *entry.pending, lightmap);
       if (entry.pending->scene && entry.pending->scene->ready())
         entry.active = std::move(entry.pending);
       else if (entry.pending->scene)
@@ -636,7 +701,7 @@ private:
     }
     if (entry.active)
     {
-      updateDisplay(group, entry, *entry.active);
+      updateDisplay(group, entry, *entry.active, lightmap);
       if (entry.active->scene && entry.active->scene->ready())
         entry.active->scene->renderer.render(batch);
       else if (entry.active->scene)
@@ -653,8 +718,11 @@ TerrainPreviewRenderer::TerrainPreviewRenderer(AppController& app, MapDocument& 
 TerrainPreviewRenderer::~TerrainPreviewRenderer() = default;
 
 void TerrainPreviewRenderer::render(
-  render::RenderBatch& batch, const TerrainInspector* inspector, const bool visible)
+  render::RenderBatch& batch,
+  const TerrainInspector* inspector,
+  const bool visible,
+  const render::LightmapAssembly* lightmap)
 {
-  m_impl->render(batch, inspector, visible);
+  m_impl->render(batch, inspector, visible, lightmap);
 }
 } // namespace tb::ui

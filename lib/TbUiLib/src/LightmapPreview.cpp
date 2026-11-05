@@ -173,7 +173,7 @@ void LightmapPreview::startBake()
 
       auto assembly = std::make_shared<render::LightmapAssembly>();
       render::buildLightmapAssembly(m_document.map(), *bake, *assembly);
-      if (assembly->blocks.empty())
+      if (assembly->blocks.empty() && assembly->terrainBlocks.empty())
       {
         logger.warn() << "The lightmap bake does not match any face of this map.";
         return;
@@ -182,8 +182,9 @@ void LightmapPreview::startBake()
       const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - startedAt)
                              .count();
+      const auto totalLit = assembly->blocks.size() + assembly->terrainBlocks.size();
       logger.info() << "Lightmap baked in " << elapsed
-                    << " ms: " << assembly->blocks.size() << " of " << bake->faces.size()
+                    << " ms: " << totalLit << " of " << bake->faces.size()
                     << " faces lit, " << assembly->width << "x" << assembly->height
                     << " atlas.";
 

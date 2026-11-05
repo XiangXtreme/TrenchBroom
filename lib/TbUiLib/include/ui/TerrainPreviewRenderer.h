@@ -10,6 +10,7 @@
 
 namespace tb::render
 {
+struct LightmapAssembly;
 class RenderBatch;
 } // namespace tb::render
 namespace tb::ui
@@ -33,6 +34,9 @@ public:
   ~TerrainPreviewRenderer();
 
   void render(
-    render::RenderBatch& batch, const TerrainInspector* inspector, bool visible);
+    render::RenderBatch& batch,
+    const TerrainInspector* inspector,
+    bool visible,
+    const render::LightmapAssembly* lightmap = nullptr);
 };
 } // namespace tb::ui
