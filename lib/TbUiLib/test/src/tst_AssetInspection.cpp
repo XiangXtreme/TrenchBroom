@@ -1319,6 +1319,7 @@ TEST_CASE("AssetInspection")
     auto source = openLocalAssetLibrary(folder);
     REQUIRE(source);
     auto inspected = require(inspection::readLibraryAsset(*source, materials.front()));
+    CHECK(inspected.resource.type == BrowserCellType::Material);
     REQUIRE_FALSE(inspected.terrainPreview.isNull());
     const auto thumbnail = grid->currentItem()
                              ->data(AssetLibraryItemDelegate::ThumbnailRole)
@@ -1336,6 +1337,7 @@ TEST_CASE("AssetInspection")
     const auto* summary = inspector.findChild<QLabel*>("AssetInspector_Summary");
     REQUIRE(summary);
     CHECK(summary->text().contains("128 × 128"));
+    CHECK(summary->text().contains("Add it to the project"));
     const auto package = require(library->readContent(materials.front().id));
     auto capturedImages = std::array<QImage, 3>{};
     for (auto slot = size_t{0}; slot < selectedIds.size(); ++slot)

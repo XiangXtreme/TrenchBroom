@@ -574,7 +574,8 @@ void AssetInspector::setAsset(Result<inspection::Asset> asset)
   }
   m_mode->setEnabled(
     m_asset->resource.skybox
-    || (m_asset->terrainPreview.isNull() && m_asset->original != m_asset->compatible
+    || (m_asset->resource.type != BrowserCellType::Material
+        && m_asset->original != m_asset->compatible
         && m_asset->resource.type != BrowserCellType::Model));
   refreshPreview();
   emit assetChanged();
@@ -719,9 +720,12 @@ void AssetInspector::refreshPreview()
       return;
     }
   }
-  else if (!m_asset->terrainPreview.isNull())
+  else if (type == BrowserCellType::Material)
   {
     image = m_asset->terrainPreview;
+    if (image.isNull())
+      m_summary->setText(
+        tr("The terrain material or one of its source textures is missing or invalid."));
   }
   else
   {
@@ -733,10 +737,25 @@ void AssetInspector::refreshPreview()
   }
   m_image->setImage(image);
   if (!image.isNull())
-    m_summary->setText(tr("%1 × %2 · %3")
-                         .arg(image.width())
-                         .arg(image.height())
-                         .arg(image.hasAlphaChannel() ? tr("RGBA") : tr("RGB")));
+  {
+    if (type == BrowserCellType::Material)
+    {
+      const auto hint =
+        m_asset->resource.source == BrowserSource::AssetLibrary
+            && m_asset->resource.projectAssetId.empty()
+          ? tr("Add it to the project, then bind it in the Terrain panel.")
+          : tr("Bind it in the Terrain panel.");
+      m_summary->setText(tr("Illustrative terrain blend · %1 × %2\n%3")
+                           .arg(image.width())
+                           .arg(image.height())
+                           .arg(hint));
+    }
+    else
+      m_summary->setText(tr("%1 × %2 · %3")
+                           .arg(image.width())
+                           .arg(image.height())
+                           .arg(image.hasAlphaChannel() ? tr("RGBA") : tr("RGB")));
+  }
   else if (type == BrowserCellType::Model || type == BrowserCellType::Sprite)
     m_summary->setText(tr("The resource could not be decoded."));
 }

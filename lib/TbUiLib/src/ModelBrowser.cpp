@@ -115,6 +115,23 @@ const auto DocumentLoadAssetRefreshDelay = 1500;
 constexpr auto PrefabThumbnailMaxSize = 512;
 constexpr auto SkyboxTypeFilter = -2;
 
+BrowserCellType catalogCellType(
+  const project::AssetType type, const std::filesystem::path& path)
+{
+  switch (type)
+  {
+  case project::AssetType::Map:
+    return BrowserCellType::Map;
+  case project::AssetType::Texture:
+  case project::AssetType::Skybox:
+    return BrowserCellType::Texture;
+  case project::AssetType::Material:
+    return BrowserCellType::Material;
+  default:
+    return assetTypeForExtension(path);
+  }
+}
+
 std::optional<float> assetIconSizeForComboIndex(QComboBox* combo, const int index)
 {
   if (!combo || index < 0)
@@ -397,6 +414,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_typeCombo->addItem(tr("All Types"), -1);
   m_typeCombo->addItem(tr("Maps"), int(BrowserCellType::Map));
   m_typeCombo->addItem(tr("Textures"), int(BrowserCellType::Texture));
+  m_typeCombo->addItem(tr("Terrain Materials"), int(BrowserCellType::Material));
   m_typeCombo->addItem(tr("Models"), int(BrowserCellType::Model));
   m_typeCombo->addItem(tr("Sprites"), int(BrowserCellType::Sprite));
   m_typeCombo->addItem(tr("Sounds"), int(BrowserCellType::Sound));
@@ -1949,17 +1967,17 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
   for (const auto& asset : catalog.value())
   {
     const auto path = pathFromQString(QString::fromStdString(asset.publishPath));
-    const auto type = asset.type == project::AssetType::Map ? BrowserCellType::Map
-                      : asset.type == project::AssetType::Texture
-                          || asset.type == project::AssetType::Skybox
-                        ? BrowserCellType::Texture
-                        : assetTypeForExtension(path);
+    const auto type = catalogCellType(asset.type, path);
     if (type == BrowserCellType::Folder)
       continue;
-    const auto file = m_project->assetFile(asset);
-    if (file.is_error())
-      continue;
-    auto entry = BrowserAsset{type, path, file.value()};
+    auto entry = BrowserAsset{type, path};
+    if (type != BrowserCellType::Material)
+    {
+      const auto file = m_project->assetFile(asset);
+      if (file.is_error())
+        continue;
+      entry.absolutePath = file.value();
+    }
     entry.source = BrowserSource::Project;
     entry.skybox = asset.type == project::AssetType::Skybox;
     entry.projectId = m_project->store().info().id;
@@ -2015,12 +2033,8 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
   auto assets = std::vector<BrowserAsset>{};
   for (const auto& asset : catalog.value())
   {
-    const auto type = asset.type == project::AssetType::Map ? BrowserCellType::Map
-                      : asset.type == project::AssetType::Texture
-                          || asset.type == project::AssetType::Skybox
-                        ? BrowserCellType::Texture
-                        : assetTypeForExtension(
-                            pathFromQString(QString::fromStdString(asset.virtualPath)));
+    const auto type = catalogCellType(
+      asset.type, pathFromQString(QString::fromStdString(asset.virtualPath)));
     if (type == BrowserCellType::Folder)
       continue;
     auto entry =
@@ -2064,13 +2078,11 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
     assets.push_back(std::move(entry));
   }
 
-  // Non-texture resources have a real file in the library. Textures stay unresolved and
-  // get their compatible WAD only when a cell becomes visible, so browsing never copies
-  // the whole library into the cache. All remaining files are resolved in one catalog
-  // pass; asking for them one at a time would reopen the index per resource.
+  // Resolve file-backed resources in one pass. Texture files and terrain material
+  // dependencies are loaded only for visible previews, without caching entire libraries.
   auto fileIds = std::vector<std::string>{};
   for (const auto& entry : assets)
-    if (entry.type != BrowserCellType::Texture)
+    if (entry.type != BrowserCellType::Texture && entry.type != BrowserCellType::Material)
       fileIds.push_back(entry.libraryAssetId);
 
   if (const auto files = m_project->libraryAssetFiles(m_libraryId, fileIds);

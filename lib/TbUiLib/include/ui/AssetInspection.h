@@ -97,6 +97,8 @@ Result<QImage> decodeImage(
 /** Builds a terrain blend from all three library texture dependencies. */
 QImage libraryTerrainMaterialPreview(
   const AssetLibrarySource& source, const std::string& assetId);
+/** Resolves only the source textures needed for a catalog material thumbnail. */
+Result<QImage> terrainMaterialPreview(const BrowserAsset& asset, ProjectSession* project);
 Result<Asset> readLibraryAsset(
   const AssetLibrarySource& source,
   const project::LibraryAsset& asset,

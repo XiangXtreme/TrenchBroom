@@ -46,6 +46,7 @@ enum class BrowserCellType
   Prefab,
   Map,
   Texture,
+  Material,
 };
 
 /**

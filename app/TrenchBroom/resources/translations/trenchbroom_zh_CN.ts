@@ -3757,6 +3757,10 @@ Please choose a different file name to export to.</source>
             <translation>纹理</translation>
         </message>
         <message>
+            <source>Terrain Materials</source>
+            <translation>地形混合材质</translation>
+        </message>
+        <message>
             <source>Models</source>
             <translation>模型</translation>
         </message>
@@ -6176,6 +6180,24 @@ By %2</source>
         <context>
         <name>tb::ui::AssetInspector</name>
         <message>
+            <source>The terrain material or one of its source textures is missing or invalid.</source>
+            <translation>地形材质或其源纹理缺失或无效。</translation>
+        </message>
+        <message>
+            <source>Add it to the project, then bind it in the Terrain panel.</source>
+            <translation>先添加到工程，再在地形面板中绑定。</translation>
+        </message>
+        <message>
+            <source>Bind it in the Terrain panel.</source>
+            <translation>在地形面板中绑定。</translation>
+        </message>
+        <message>
+            <source>Illustrative terrain blend · %1 × %2
+%3</source>
+            <translation>地形混合示意 · %1 × %2
+%3</translation>
+        </message>
+        <message>
             <location filename="../../../../lib/TbUiLib/src/AssetInspector.cpp" line="153"/>
             <source>Compatible result</source>
             <translation>兼容结果</translation>
@@ -8413,6 +8435,10 @@ Removing them frees about %3. Current assets and versions are kept.</source>
     </context>
     <context>
         <name>tb::ui::AssetTypes</name>
+        <message>
+            <source>Terrain Material</source>
+            <translation>地形混合材质</translation>
+        </message>
         <message>
             <source>Folder</source>
             <translation>文件夹</translation>

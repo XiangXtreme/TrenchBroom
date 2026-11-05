@@ -64,11 +64,13 @@ std::string browserTypeName(const BrowserCellType type)
     return "map";
   case BrowserCellType::Texture:
     return "texture";
+  case BrowserCellType::Material:
+    return "material";
   }
   return "unknown";
 }
 
-/** The browser groups materials and skyboxes under textures. */
+/** The broad automation texture type includes material and skybox assets. */
 BrowserCellType browserTypeForProjectType(const project::AssetType type)
 {
   switch (type)

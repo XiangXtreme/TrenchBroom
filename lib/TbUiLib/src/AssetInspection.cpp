@@ -518,6 +518,44 @@ QImage libraryTerrainMaterialPreview(
   return renderTerrainMaterialPreview(std::move(images));
 }
 
+Result<QImage> terrainMaterialPreview(const BrowserAsset& asset, ProjectSession* project)
+{
+  if (!project)
+    return Error{"No project resource context is available."};
+
+  auto image = QImage{};
+  if (asset.source == BrowserSource::Project)
+  {
+    if (asset.projectId != project->store().info().id)
+      return Error{"The resource belongs to another project."};
+    const auto id = asset.projectAssetId.empty() ? asset.assetId : asset.projectAssetId;
+    auto images = loadTerrainMaterialImages(project->store(), id);
+    if (images.is_error())
+      return std::get<Error>(images.error());
+    image = renderTerrainMaterialPreview(std::move(images).value());
+  }
+  else if (asset.source == BrowserSource::AssetLibrary)
+  {
+    const auto libraries = project->libraries();
+    if (libraries.is_error())
+      return std::get<Error>(libraries.error());
+    for (const auto& connection : libraries.value())
+    {
+      if (connection.info.id != asset.libraryId)
+        continue;
+      const auto source = openLocalAssetLibrary(connection.info.path);
+      if (!source || source->libraryId() != asset.libraryId)
+        return Error{"The asset library is unavailable."};
+      image = libraryTerrainMaterialPreview(*source, asset.libraryAssetId);
+      break;
+    }
+  }
+  if (image.isNull())
+    return Error{
+      "The terrain material or one of its source textures is missing or invalid."};
+  return image;
+}
+
 Result<Asset> readLibraryAsset(
   const AssetLibrarySource& source,
   const project::LibraryAsset& asset,
@@ -530,12 +568,14 @@ Result<Asset> readLibraryAsset(
   if (compatible.is_error())
     return std::get<Error>(compatible.error());
   auto result = Asset{};
-  result.resource.type =
-    (asset.type == project::AssetType::Skybox || asset.type == project::AssetType::Texture
-     || asset.type == project::AssetType::Material)
-      ? BrowserCellType::Texture
-      : assetTypeForExtension(
-          pathFromQString(QString::fromStdString(asset.sourceContainer)));
+  if (asset.type == project::AssetType::Material)
+    result.resource.type = BrowserCellType::Material;
+  else if (
+    asset.type == project::AssetType::Skybox || asset.type == project::AssetType::Texture)
+    result.resource.type = BrowserCellType::Texture;
+  else
+    result.resource.type = assetTypeForExtension(
+      pathFromQString(QString::fromStdString(asset.sourceContainer)));
   result.resource.skybox = asset.type == project::AssetType::Skybox;
   result.resource.source = BrowserSource::AssetLibrary;
   result.resource.libraryId = source.libraryId();
@@ -622,15 +662,14 @@ Result<Asset> readProjectAsset(ProjectSession& session, const std::string& asset
   result.resource.libraryRevision = entry.library.libraryRevision;
   result.resource.path = entry.publishPath;
   result.resource.type = assetTypeForExtension(entry.publishPath);
-  if (
-    entry.type == project::AssetType::Texture
-    || entry.type == project::AssetType::Material)
+  if (entry.type == project::AssetType::Texture)
   {
     result.resource.type = BrowserCellType::Texture;
   }
   result.resource.skybox = entry.type == project::AssetType::Skybox;
   if (entry.type == project::AssetType::Material)
   {
+    result.resource.type = BrowserCellType::Material;
     const auto images = loadTerrainMaterialImages(session.store(), assetId);
     if (images.is_success())
       result.terrainPreview = renderTerrainMaterialPreview(images.value());
@@ -663,10 +702,11 @@ Result<Asset> readProjectAsset(ProjectSession& session, const std::string& asset
   {
     readProjectStudioExternal(session, assetId, result);
   }
-  const auto file = session.assetFile(entry);
-  if (file.is_success())
+  if (entry.type != project::AssetType::Material)
   {
-    result.resource.absolutePath = file.value();
+    const auto file = session.assetFile(entry);
+    if (file.is_success())
+      result.resource.absolutePath = file.value();
   }
   if (result.resource.type == BrowserCellType::Prefab)
   {
@@ -692,23 +732,22 @@ Result<Asset> readBrowserAsset(
       auto source = openLocalAssetLibrary(connection.info.path);
       if (!source)
         return Error{"The asset library is unavailable."};
-      const auto entries = source->allAssets();
-      if (entries.is_error())
-        return std::get<Error>(entries.error());
-      for (const auto& entry : entries.value())
-        if (entry.id == asset.libraryAssetId)
+      const auto entry = source->findAsset(asset.libraryAssetId);
+      if (entry.is_error())
+        return std::get<Error>(entry.error());
+      if (entry.value())
+      {
+        auto result = readLibraryAsset(*source, *entry.value(), session);
+        if (result.is_success())
         {
-          auto result = readLibraryAsset(*source, entry, session);
-          if (result.is_success())
-          {
-            auto loaded = std::move(result).value();
-            loaded.resource.projectAssetId = asset.projectAssetId;
-            loaded.resource.projectRevision = asset.projectRevision;
-            loaded.resource.projectUpdateAvailable = asset.projectUpdateAvailable;
-            return loaded;
-          }
-          return result;
+          auto loaded = std::move(result).value();
+          loaded.resource.projectAssetId = asset.projectAssetId;
+          loaded.resource.projectRevision = asset.projectRevision;
+          loaded.resource.projectUpdateAvailable = asset.projectUpdateAvailable;
+          return loaded;
         }
+        return result;
+      }
     }
     return Error{"The library resource no longer exists."};
   }

@@ -122,6 +122,8 @@ std::optional<RgbaF> assetPlaceholderColor(
     return RgbaF{0.15f, 0.45f, 0.75f, lightBackground ? 0.12f : 0.24f};
   case BrowserCellType::Texture:
     return RgbaF{0.65f, 0.42f, 0.15f, lightBackground ? 0.12f : 0.24f};
+  case BrowserCellType::Material:
+    return RgbaF{0.36f, 0.55f, 0.22f, lightBackground ? 0.12f : 0.24f};
   case BrowserCellType::Folder:
   case BrowserCellType::Model:
     return std::nullopt;
@@ -164,6 +166,7 @@ bool shouldRenderErrorText(const BrowserCellType type, const AssetPreviewState* 
   case BrowserCellType::Sprite:
   case BrowserCellType::Sound:
   case BrowserCellType::Texture:
+  case BrowserCellType::Material:
     return preview && preview->status != AssetPreviewStatus::Ready;
   case BrowserCellType::Folder:
   case BrowserCellType::Model:
@@ -178,7 +181,7 @@ bool shouldRenderErrorText(const BrowserCellType type, const AssetPreviewState* 
 bool canRenderImagePreview(const BrowserCellType type)
 {
   return type == BrowserCellType::Sprite || type == BrowserCellType::Prefab
-         || type == BrowserCellType::Texture;
+         || type == BrowserCellType::Texture || type == BrowserCellType::Material;
 }
 
 bool canLoadPreview(const BrowserCellType type)
@@ -563,17 +566,28 @@ void ModelBrowserView::loadMissingVisiblePreviews(
       {
         const auto& item = cellData(cell);
         const auto* asset = assetAt(item.path);
-        if (asset && asset->skybox)
+        if (asset && (asset->skybox || asset->type == BrowserCellType::Material))
         {
           if (!m_assetPreviews.contains(item.path))
           {
-            const auto inspected =
-              inspection::readBrowserAsset(*asset, m_project.get(), *m_document);
-            const auto preview =
-              inspected.is_success()
-                ? assetImagePreview(inspection::skyThumbnail(inspected.value()))
-                : AssetPreviewState{AssetPreviewStatus::Error, std::nullopt};
-            m_assetPreviews.emplace(item.path, preview);
+            auto preview = AssetPreviewState{AssetPreviewStatus::Error, std::nullopt};
+            if (asset->skybox)
+            {
+              const auto inspected =
+                inspection::readBrowserAsset(*asset, m_project.get(), *m_document);
+              if (inspected.is_success())
+                preview = assetImagePreview(inspection::skyThumbnail(inspected.value()));
+            }
+            else
+            {
+              const auto image =
+                inspection::terrainMaterialPreview(*asset, m_project.get());
+              if (image.is_success())
+                preview = assetImagePreview(image.value());
+              else
+                preview.error = std::get<Error>(image.error()).msg;
+            }
+            m_assetPreviews.emplace(item.path, std::move(preview));
           }
           continue;
         }
@@ -2122,6 +2136,7 @@ QString ModelBrowserView::dndData(const Cell& cell)
   case BrowserCellType::Folder:
   case BrowserCellType::Map:
   case BrowserCellType::Texture:
+  case BrowserCellType::Material:
     return "";
   }
 

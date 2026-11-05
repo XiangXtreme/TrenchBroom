@@ -194,6 +194,8 @@ const char* browserCellTypeName(const BrowserCellType type)
     return "Map";
   case BrowserCellType::Texture:
     return "Texture";
+  case BrowserCellType::Material:
+    return "Terrain Material";
   }
   return "Unknown";
 }

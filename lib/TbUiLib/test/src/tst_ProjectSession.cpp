@@ -1025,6 +1025,7 @@ TEST_CASE("Project terrain bakes captured material and invalidates changed textu
     requireProject(sandbox.session->captureLibraryAsset(libraryId, material.id));
   const auto inspected =
     requireProject(inspection::readProjectAsset(*sandbox.session, captured.id));
+  CHECK(inspected.resource.type == BrowserCellType::Material);
   CHECK_FALSE(inspected.terrainPreview.isNull());
   CHECK(
     requireProject(

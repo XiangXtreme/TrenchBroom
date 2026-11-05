@@ -72,6 +72,7 @@ AssetPreviewState AssetPreviewProvider::preview(const BrowserAsset& asset) const
   case BrowserCellType::Folder:
   case BrowserCellType::Model:
   case BrowserCellType::Map:
+  case BrowserCellType::Material:
     return {AssetPreviewStatus::Unsupported, std::nullopt};
   }
 
@@ -193,7 +194,7 @@ AssetPreviewMap loadAssetPreviews(
 
     if (
       asset.type == BrowserCellType::Folder || asset.type == BrowserCellType::Model
-      || asset.type == BrowserCellType::Map)
+      || asset.type == BrowserCellType::Map || asset.type == BrowserCellType::Material)
       continue;
 
     pending.push_back(&asset);

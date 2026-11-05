@@ -3038,6 +3038,7 @@ std::string assetTypeName(const BrowserCellType type)
   case BrowserCellType::Prefab:
   case BrowserCellType::Map:
   case BrowserCellType::Texture:
+  case BrowserCellType::Material:
     return "unknown";
   }
   return "unknown";

@@ -1976,6 +1976,172 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(std::filesystem::exists(projectRecoveryPath(session->path())));
   }
 
+  SECTION("terrain materials appear and preview in both catalog sources")
+  {
+    const auto folder = directory.filePath("terrain-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    const auto colors = std::array{QColor{Qt::red}, QColor{Qt::green}, QColor{Qt::blue}};
+    for (auto i = size_t{0}; i < colors.size(); ++i)
+    {
+      auto image = QImage{64, 64, QImage::Format_RGBA8888};
+      image.fill(colors[i]);
+      REQUIRE(image.save(folder + "/layer" + QString::number(i) + ".png"));
+    }
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Terrain"));
+    require(library->scan());
+    const auto textures = require(library->assets(project::AssetType::Texture));
+    REQUIRE(textures.size() == 3);
+    auto definition = project::AssetLibrary::TerrainMaterialDefinition{};
+    definition.name = "Grass, dirt and rock";
+    definition.folder = "materials";
+    for (auto i = size_t{0}; i < colors.size(); ++i)
+    {
+      const auto name = "layer" + std::to_string(i) + ".png";
+      const auto found =
+        std::ranges::find(textures, name, &project::LibraryAsset::sourceContainer);
+      REQUIRE(found != textures.end());
+      definition.materialSlots[i] = {"Layer " + std::to_string(i), found->id};
+    }
+    const auto material = require(library->createTerrainMaterial(definition));
+    require(session->attachLibrary(pathFromQString(folder)));
+
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    auto* cards = browser->findChild<ModelBrowserView*>();
+    REQUIRE(source);
+    REQUIRE(type);
+    REQUIRE(folders);
+    REQUIRE(cards);
+    const auto materialIndex = type->findData(int(BrowserCellType::Material));
+    REQUIRE(materialIndex >= 0);
+    type->setCurrentIndex(materialIndex);
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    QTRY_COMPARE(cards->assets().size(), 1);
+    auto libraryEntry = cards->assets().front();
+    CHECK(libraryEntry.type == BrowserCellType::Material);
+    CHECK(libraryEntry.libraryAssetId == material.id);
+    CHECK_FALSE(folders->findItems("materials", Qt::MatchRecursive).empty());
+    CHECK(catalogAssetDragData(libraryEntry, session->store().info().id).isEmpty());
+    const auto libraryPreview =
+      require(inspection::terrainMaterialPreview(libraryEntry, session.get()));
+    CHECK(libraryPreview.pixelColor(0, 0).red() > 200);
+    CHECK(libraryPreview.pixelColor(127, 0).blue() > 200);
+
+    auto inspector = AssetInspector{};
+    browser->bindInspector(inspector, true);
+    inspector.setAsset(
+      inspection::readBrowserAsset(libraryEntry, session.get(), *alphaDocument));
+    REQUIRE(inspector.asset());
+    CHECK(inspector.asset()->resource.type == BrowserCellType::Material);
+    CHECK(inspector.findChild<QPushButton*>("AssetInspector_Apply")->isHidden());
+    CHECK_FALSE(inspector.findChild<QPushButton*>("AssetInspector_Capture")->isHidden());
+
+    const auto captured =
+      require(session->captureLibraryAsset(library->info().id, material.id));
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    QTRY_VERIFY(
+      cards->assets().size() == 1
+      && cards->assets().front().source == BrowserSource::Project);
+    const auto projectEntry = cards->assets().front();
+    CHECK(projectEntry.type == BrowserCellType::Material);
+    CHECK(projectEntry.projectAssetId == captured.id);
+    CHECK(projectEntry.displayName == "Grass, dirt and rock");
+    CHECK(catalogAssetDragData(projectEntry, session->store().info().id).isEmpty());
+    const auto projectPreview =
+      require(inspection::terrainMaterialPreview(projectEntry, session.get()));
+    CHECK(projectPreview.pixelColor(0, 0).red() > 200);
+    CHECK(projectPreview.pixelColor(127, 0).blue() > 200);
+    inspector.setAsset(
+      inspection::readBrowserAsset(projectEntry, session.get(), *alphaDocument));
+    REQUIRE(inspector.asset());
+    CHECK(inspector.asset()->resource.type == BrowserCellType::Material);
+    CHECK(inspector.findChild<QPushButton*>("AssetInspector_Apply")->isHidden());
+    CHECK(inspector.findChild<QLabel*>("AssetInspector_Summary")
+            ->text()
+            .contains("Terrain panel"));
+
+    emit cards->folderActivated("materials");
+    const auto hasBlendPixels = [&] {
+      const auto image = cards->grabFramebuffer();
+      auto red = 0;
+      auto blue = 0;
+      for (auto y = 0; y < image.height(); y += 2)
+        for (auto x = 0; x < image.width(); x += 2)
+        {
+          const auto color = image.pixelColor(x, y);
+          if (color.red() > 180 && color.green() < 70 && color.blue() < 70)
+            ++red;
+          if (color.blue() > 180 && color.red() < 70 && color.green() < 70)
+            ++blue;
+        }
+      return red > 40 && blue > 40;
+    };
+    REQUIRE(QTest::qWaitFor(hasBlendPixels, 3000));
+
+    auto previewRequests = 0;
+    auto applyRequests = 0;
+    QObject::disconnect(
+      cards, &ModelBrowserView::assetPreviewRequested, browser, nullptr);
+    QObject::connect(
+      cards, &ModelBrowserView::assetPreviewRequested, &window, [&](const auto&) {
+        ++previewRequests;
+      });
+    QObject::connect(
+      cards, &ModelBrowserView::assetApplyRequested, &window, [&](const auto&) {
+        ++applyRequests;
+      });
+    cards->setScrollPosition(0);
+    auto position = std::optional<QPoint>{};
+    cards->scrollToCell([&](const auto& cell) {
+      if (cell.template itemAs<BrowserCellData>().type == BrowserCellType::Material)
+      {
+        const auto& bounds = cell.itemBounds();
+        position = QPoint{
+          int(bounds.left() + bounds.width / 2), int(bounds.top() + bounds.height / 2)};
+      }
+      return false;
+    });
+    REQUIRE(position);
+    QTest::mouseDClick(cards, Qt::LeftButton, Qt::NoModifier, *position);
+    CHECK(previewRequests == 1);
+    CHECK(applyRequests == 0);
+
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Texture)));
+    CHECK(std::ranges::none_of(cards->assets(), [](const auto& entry) {
+      return entry.type == BrowserCellType::Material;
+    }));
+
+    type->setCurrentIndex(materialIndex);
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    QTRY_VERIFY(
+      cards->assets().size() == 1
+      && cards->assets().front().source == BrowserSource::AssetLibrary);
+    const auto previewIdentity = cards->assets().front().previewIdentity;
+    REQUIRE(QFile::remove(folder + "/layer0.png"));
+    auto librarySource = openLocalAssetLibrary(pathFromQString(folder));
+    REQUIRE(librarySource);
+    require(librarySource->rescan());
+    QTRY_VERIFY(
+      !cards->assets().empty()
+      && cards->assets().front().previewIdentity != previewIdentity);
+    CHECK(inspection::terrainMaterialPreview(cards->assets().front(), session.get())
+            .is_error());
+    inspector.setAsset(inspection::readBrowserAsset(
+      cards->assets().front(), session.get(), *alphaDocument));
+    REQUIRE(inspector.asset());
+    CHECK(inspector.findChild<QLabel*>("AssetInspector_Summary")
+            ->text()
+            .contains("missing or invalid"));
+    CHECK_FALSE(
+      inspector.findChild<QComboBox*>("AssetInspector_ContentKind")->isEnabled());
+    require(session->save());
+  }
+
   SECTION("catalog skybox drops capture the group and set the world sky")
   {
     const auto doubleClick = GENERATE(false, true);
