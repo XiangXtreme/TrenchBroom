@@ -110,9 +110,16 @@ struct LightmapAssembly
 
   const LightmapBlock* blockFor(const mdl::BrushFace& face) const;
 
+  /** Selects blocks that could overlap the given face, for reuse by its fragments. */
+  std::vector<const TerrainLightmapBlock*> terrainBlocksFor(
+    const vm::plane3d& plane, const std::vector<vm::vec3d>& vertices) const;
+
   /** Splits a convex face along baked face boundaries; uncovered fragments stay unlit. */
   std::vector<TerrainLightmapFragment> terrainFragments(
     const vm::plane3d& plane, const std::vector<vm::vec3d>& vertices) const;
+  std::vector<TerrainLightmapFragment> terrainFragments(
+    const std::vector<const TerrainLightmapBlock*>& candidates,
+    const std::vector<vm::vec3d>& vertices) const;
 
   /** Returns an atlas coordinate for a fragment, using the white texel if unmatched. */
   vm::vec2f terrainUv(const TerrainLightmapBlock* block, const vm::vec3d& point) const;

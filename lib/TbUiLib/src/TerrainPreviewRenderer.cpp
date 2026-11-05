@@ -40,6 +40,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -147,30 +148,85 @@ struct PreviewScene
   }
 };
 
+// The bake grid has fixed bounds. Index face bounds once so each source brush only
+// checks nearby baked polygons, preserving their original order for clipping.
+class TerrainFaceIndex
+{
+  int m_columns;
+  int m_rows;
+  std::vector<QRectF> m_bounds;
+  std::vector<std::vector<size_t>> m_cells;
+
+  std::array<int, 4> cellsFor(const QRectF& bounds) const
+  {
+    const auto cell = [](const double value, const double extent, const int count) {
+      return int(
+        std::clamp(std::floor(value * double(count) / extent), 0.0, double(count - 1)));
+    };
+    const auto width = TerrainRegion::Width;
+    const auto height = TerrainRegion::Height;
+    return {
+      cell(bounds.left(), width, m_columns),
+      cell(bounds.top(), height, m_rows),
+      cell(bounds.right(), width, m_columns),
+      cell(bounds.bottom(), height, m_rows)};
+  }
+
+public:
+  explicit TerrainFaceIndex(const TerrainBake& bake)
+    : m_columns{std::clamp(int(std::sqrt(double(bake.faces.size()) * 2.0)), 1, 40)}
+    , m_rows{std::clamp(
+        int(std::ceil(double(bake.faces.size()) / double(m_columns))), 1, 20)}
+    , m_cells(size_t(m_columns * m_rows))
+  {
+    m_bounds.reserve(bake.faces.size());
+    for (auto i = size_t{0}; i < bake.faces.size(); ++i)
+    {
+      const auto bounds = bake.faces[i].polygon.boundingRect();
+      m_bounds.push_back(bounds);
+      const auto [left, top, right, bottom] = cellsFor(bounds);
+      for (auto y = top; y <= bottom; ++y)
+        for (auto x = left; x <= right; ++x)
+          m_cells[size_t(y * m_columns + x)].push_back(i);
+    }
+  }
+
+  std::vector<size_t> intersecting(const QRectF& bounds) const
+  {
+    auto result = std::vector<size_t>{};
+    auto seen = std::vector<bool>(m_bounds.size());
+    const auto [left, top, right, bottom] = cellsFor(bounds);
+    for (auto y = top; y <= bottom; ++y)
+      for (auto x = left; x <= right; ++x)
+        for (const auto i : m_cells[size_t(y * m_columns + x)])
+          if (!seen[i] && m_bounds[i].intersects(bounds))
+          {
+            seen[i] = true;
+            result.push_back(i);
+          }
+    std::ranges::sort(result);
+    return result;
+  }
+};
+
 std::unique_ptr<PreviewScene> makeScene(
   mdl::Map& map,
   const mdl::GroupNode& group,
   const TerrainRegion& region,
+  const std::vector<TerrainSurface>& surfaces,
   const TerrainBake& bake,
   std::shared_ptr<PreviewMaterials> materials,
   const render::LightmapAssembly* lightmap)
 {
   const auto timing = render::RenderTimingScope{"cpu.terrain.scene_build"};
   render::RenderTiming::count("terrain.scene_builds", 1);
-  const auto surfaces = terrainSurfaces(group, region);
-  if (surfaces.is_error())
-    return nullptr;
-
   const auto& transform = group.group().transformation();
   const auto inverse = vm::invert(transform);
   if (!inverse)
     return nullptr;
   auto scene = std::make_unique<PreviewScene>(std::move(materials), transform);
-  auto bakedBounds = std::vector<QRectF>{};
-  bakedBounds.reserve(bake.faces.size());
-  for (const auto& face : bake.faces)
-    bakedBounds.push_back(face.polygon.boundingRect());
-  for (const auto& surface : surfaces.value())
+  const auto faceIndex = TerrainFaceIndex{bake};
+  for (const auto& surface : surfaces)
   {
     const auto& face = surface.brush->brush().face(surface.top);
     if (!map.editorContext().visible(*surface.brush, face))
@@ -178,12 +234,13 @@ std::unique_ptr<PreviewScene> makeScene(
 
     const auto& plane = face.boundary();
     const auto surfaceBounds = surface.outline.boundingRect();
-    for (auto faceIndex = size_t{0}; faceIndex < bake.faces.size(); ++faceIndex)
+    const auto lightmapBlocks =
+      lightmap ? lightmap->terrainBlocksFor(plane, face.vertexPositions())
+               : std::vector<const render::TerrainLightmapBlock*>{};
+    for (const auto index : faceIndex.intersecting(surfaceBounds))
     {
-      const auto& bakedFace = bake.faces[faceIndex];
+      const auto& bakedFace = bake.faces[index];
       if (bakedFace.material >= bake.textures.size())
-        continue;
-      if (!surfaceBounds.intersects(bakedBounds[faceIndex]))
         continue;
       auto polygon = surface.outline.intersected(bakedFace.polygon);
       if (terrainArea(polygon) <= 1e-7)
@@ -217,7 +274,7 @@ std::unique_ptr<PreviewScene> makeScene(
       }
       auto fragments =
         lightmap
-          ? lightmap->terrainFragments(plane, positions)
+          ? lightmap->terrainFragments(lightmapBlocks, positions)
           : std::vector<render::TerrainLightmapFragment>{{std::move(positions), nullptr}};
       for (auto& fragment : fragments)
       {
@@ -303,6 +360,9 @@ class TerrainPreviewRenderer::Impl
     std::optional<size_t> strokeRevision;
     std::optional<size_t> runningStrokeRevision;
     size_t geometryRevision = 1;
+    size_t surfaceRevision = 0;
+    std::optional<vm::vec2d> surfaceOrigin;
+    std::optional<std::vector<TerrainSurface>> surfaces;
     vm::mat4x4d observedTransform;
     bool observed = false;
     std::shared_ptr<Display> active;
@@ -562,13 +622,27 @@ private:
     if (
       display.geometryRevision != entry.geometryRevision || display.lightmap != lightmap)
     {
-      display.scene = makeScene(
-        m_document.map(),
-        group,
-        display.region,
-        display.bake->bake,
-        display.materials,
-        lightmap);
+      if (
+        entry.surfaceRevision != entry.geometryRevision || !entry.surfaceOrigin
+        || !vm::is_equal(*entry.surfaceOrigin, display.region.origin, 1e-6))
+      {
+        render::RenderTiming::count("terrain.surface_extractions", 1);
+        auto surfaces = terrainSurfaces(group, display.region);
+        entry.surfaces = surfaces.is_success()
+                           ? std::optional{std::move(surfaces).value()}
+                           : std::nullopt;
+        entry.surfaceRevision = entry.geometryRevision;
+        entry.surfaceOrigin = display.region.origin;
+      }
+      display.scene = entry.surfaces ? makeScene(
+                                         m_document.map(),
+                                         group,
+                                         display.region,
+                                         *entry.surfaces,
+                                         display.bake->bake,
+                                         display.materials,
+                                         lightmap)
+                                     : nullptr;
       display.geometryRevision = entry.geometryRevision;
       display.lightmap = lightmap;
     }
@@ -643,6 +717,26 @@ private:
         if (bake && entry.runningRegion)
         {
           auto materials = std::make_shared<PreviewMaterials>(bake->bake.textures.size());
+          if (entry.active)
+          {
+            const auto& previous = entry.active->bake->bake.textures;
+            auto previousByName = std::unordered_map<std::string, size_t>{};
+            for (auto i = size_t{0}; i < previous.size(); ++i)
+              previousByName.emplace(previous[i].name, i);
+            for (auto i = size_t{0}; i < bake->bake.textures.size(); ++i)
+            {
+              const auto& texture = bake->bake.textures[i];
+              const auto found = previousByName.find(texture.name);
+              if (
+                found != previousByName.end()
+                && previous[found->second].miptex == texture.miptex)
+              {
+                (*materials)[i] = (*entry.active->materials)[found->second];
+                if ((*materials)[i])
+                  render::RenderTiming::count("terrain.texture_resources_reused", 1);
+              }
+            }
+          }
           entry.pending = std::make_shared<Display>(Display{
             entry.running,
             std::move(bake),

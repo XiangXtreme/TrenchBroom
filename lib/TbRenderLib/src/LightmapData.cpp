@@ -135,6 +135,41 @@ bool hasArea(const std::vector<vm::vec3d>& vertices)
   return vm::length(area) > TerrainClipEpsilon;
 }
 
+std::optional<double> terrainBlockWinding(
+  const TerrainLightmapBlock& block, const std::vector<vm::vec3d>& vertices)
+{
+  if (block.poly.size() < 3 || vertices.empty())
+    return std::nullopt;
+  constexpr auto high = std::numeric_limits<double>::max();
+  constexpr auto low = std::numeric_limits<double>::lowest();
+  auto signedArea = 0.0;
+  auto blockMin = vm::vec2d{high, high};
+  auto blockMax = vm::vec2d{low, low};
+  for (auto i = size_t{0}; i < block.poly.size(); ++i)
+  {
+    const auto& a = block.poly[i];
+    const auto& b = block.poly[(i + 1) % block.poly.size()];
+    signedArea += double(a.x()) * double(b.y()) - double(a.y()) * double(b.x());
+    blockMin = vm::min(blockMin, vm::vec2d{a});
+    blockMax = vm::max(blockMax, vm::vec2d{a});
+  }
+  if (std::abs(signedArea) < TerrainClipEpsilon)
+    return std::nullopt;
+  auto faceMin = vm::vec2d{high, high};
+  auto faceMax = vm::vec2d{low, low};
+  for (const auto& vertex : vertices)
+  {
+    const auto coord = terrainLuxelCoord(vertex, block);
+    faceMin = vm::min(faceMin, coord);
+    faceMax = vm::max(faceMax, coord);
+  }
+  if (
+    faceMax.x() <= blockMin.x() || faceMin.x() >= blockMax.x()
+    || faceMax.y() <= blockMin.y() || faceMin.y() >= blockMax.y())
+    return std::nullopt;
+  return signedArea > 0.0 ? 1.0 : -1.0;
+}
+
 /** Splits a world-space polygon at an edge in the block's lightmap coordinates. */
 std::pair<std::vector<vm::vec3d>, std::vector<vm::vec3d>> splitTerrainPolygon(
   const std::vector<vm::vec3d>& vertices,
@@ -335,8 +370,28 @@ const LightmapBlock* LightmapAssembly::blockFor(const mdl::BrushFace& face) cons
   return it != blocks.end() && it->first == &face ? &it->second : nullptr;
 }
 
+std::vector<const TerrainLightmapBlock*> LightmapAssembly::terrainBlocksFor(
+  const vm::plane3d& plane, const std::vector<vm::vec3d>& vertices) const
+{
+  auto candidates = std::vector<const TerrainLightmapBlock*>{};
+  for (const auto& block : terrainBlocks)
+    if (
+      vm::dot(vm::vec3d{block.normal}, plane.normal) > 0.999
+      && std::abs(double(block.dist) - plane.distance) < 0.1
+      && terrainBlockWinding(block, vertices))
+      candidates.push_back(&block);
+  return candidates;
+}
+
 std::vector<TerrainLightmapFragment> LightmapAssembly::terrainFragments(
   const vm::plane3d& plane, const std::vector<vm::vec3d>& vertices) const
+{
+  return terrainFragments(terrainBlocksFor(plane, vertices), vertices);
+}
+
+std::vector<TerrainLightmapFragment> LightmapAssembly::terrainFragments(
+  const std::vector<const TerrainLightmapBlock*>& candidates,
+  const std::vector<vm::vec3d>& vertices) const
 {
   auto fragments = std::vector<TerrainLightmapFragment>{};
   if (!hasArea(vertices))
@@ -345,43 +400,12 @@ std::vector<TerrainLightmapFragment> LightmapAssembly::terrainFragments(
   // Each BSP face is convex. Subtract it from the remaining convex pieces so that
   // unmatched areas retain their geometry and overlapping records are not drawn twice.
   auto remaining = std::vector<std::vector<vm::vec3d>>{vertices};
-  for (const auto& block : terrainBlocks)
+  for (const auto* candidate : candidates)
   {
-    if (
-      vm::dot(vm::vec3d{block.normal}, plane.normal) <= 0.999
-      || std::abs(double(block.dist) - plane.distance) >= 0.1 || block.poly.size() < 3)
+    const auto& block = *candidate;
+    const auto winding = terrainBlockWinding(block, vertices);
+    if (!winding)
       continue;
-
-    constexpr auto high = std::numeric_limits<double>::max();
-    constexpr auto low = std::numeric_limits<double>::lowest();
-    auto signedArea = 0.0;
-    auto blockMin = vm::vec2d{high, high};
-    auto blockMax = vm::vec2d{low, low};
-    for (auto i = size_t{0}; i < block.poly.size(); ++i)
-    {
-      const auto& a = block.poly[i];
-      const auto& b = block.poly[(i + 1) % block.poly.size()];
-      signedArea += double(a.x()) * double(b.y()) - double(a.y()) * double(b.x());
-      blockMin = vm::min(blockMin, vm::vec2d{a});
-      blockMax = vm::max(blockMax, vm::vec2d{a});
-    }
-    if (std::abs(signedArea) < TerrainClipEpsilon)
-      continue;
-
-    auto faceMin = vm::vec2d{high, high};
-    auto faceMax = vm::vec2d{low, low};
-    for (const auto& vertex : vertices)
-    {
-      const auto coord = terrainLuxelCoord(vertex, block);
-      faceMin = vm::min(faceMin, coord);
-      faceMax = vm::max(faceMax, coord);
-    }
-    if (
-      faceMax.x() <= blockMin.x() || faceMin.x() >= blockMax.x()
-      || faceMax.y() <= blockMin.y() || faceMin.y() >= blockMax.y())
-      continue;
-
-    const auto winding = signedArea > 0.0 ? 1.0 : -1.0;
 
     auto next = std::vector<std::vector<vm::vec3d>>{};
     for (auto& piece : remaining)
@@ -394,7 +418,7 @@ std::vector<TerrainLightmapFragment> LightmapAssembly::terrainFragments(
         const auto edge = vm::vec2d{block.poly[(i + 1) % block.poly.size()]} - a;
         if (vm::length(edge) < TerrainClipEpsilon)
           continue;
-        auto [clipped, cutOff] = splitTerrainPolygon(inside, block, a, edge, winding);
+        auto [clipped, cutOff] = splitTerrainPolygon(inside, block, a, edge, *winding);
         if (hasArea(cutOff))
           outside.push_back(std::move(cutOff));
         inside = std::move(clipped);

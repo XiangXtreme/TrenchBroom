@@ -405,6 +405,23 @@ TEST_CASE("LightmapAssembly terrain fragments")
 
     const auto fragments = assembly.terrainFragments(plane, outline);
     REQUIRE(fragments.size() == 2);
+    const auto candidates = assembly.terrainBlocksFor(plane, outline);
+    REQUIRE(candidates.size() == 2);
+    const auto selectedFragments = assembly.terrainFragments(candidates, outline);
+    REQUIRE(selectedFragments.size() == fragments.size());
+    for (auto i = size_t{0}; i < fragments.size(); ++i)
+    {
+      CHECK(selectedFragments[i].block == fragments[i].block);
+      CHECK(selectedFragments[i].vertices == fragments[i].vertices);
+    }
+    const auto leftOutline = std::vector<vm::vec3d>{
+      {0.0, 0.0, 0.0}, {24.0, 0.0, 0.0}, {24.0, 32.0, 0.0}, {0.0, 32.0, 0.0}};
+    const auto leftCandidates = assembly.terrainBlocksFor(plane, leftOutline);
+    REQUIRE(leftCandidates.size() == 1);
+    const auto leftFragments = assembly.terrainFragments(candidates, leftOutline);
+    REQUIRE(leftFragments.size() == 1);
+    CHECK(leftFragments.front().block == leftCandidates.front());
+    CHECK(areaXY(leftFragments.front().vertices) == Catch::Approx(768.0));
     for (const auto& fragment : fragments)
     {
       REQUIRE(fragment.block != nullptr);

@@ -421,14 +421,21 @@ TEST_CASE("Project terrain panel paints a picked brush")
     view->grabFramebuffer();
   }
   CHECK(startTiming.counters["terrain.bake_starts"] == 1);
+  auto strokeTiming = render::RenderTiming{};
   auto changedDuringStroke = false;
-  for (auto i = 0; i < 150 && !changedDuringStroke; ++i)
   {
-    panel->continueStroke(pick);
-    QTest::qWait(10);
-    changedDuringStroke = centerIs(true);
+    const auto capture = render::RenderTiming::Capture{strokeTiming};
+    for (auto i = 0; i < 150 && !changedDuringStroke; ++i)
+    {
+      panel->continueStroke(pick);
+      QTest::qWait(10);
+      changedDuringStroke = centerIs(true);
+    }
   }
   CHECK(changedDuringStroke);
+  CHECK(strokeTiming.counters["terrain.scene_builds"] > 0);
+  CHECK(strokeTiming.counters["terrain.surface_extractions"] == 0);
+  CHECK(strokeTiming.counters["terrain.texture_resources_reused"] > 0);
   CHECK(panel->stroking());
   const auto firstStroke = panel->strokeRevision();
   panel->endStroke(false);
@@ -595,6 +602,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
       map, {brush}, "Move terrain brush", vm::translation_matrix(vm::vec3d{2, 0, 0})));
     CHECK(centerIs(true));
     CHECK(timing.counters["terrain.scene_builds"] == 1);
+    CHECK(timing.counters["terrain.surface_extractions"] == 1);
     CHECK(timing.counters["terrain.texture_resources_created"] == 0);
   }
   REQUIRE(mdl::transformNodes(
