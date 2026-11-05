@@ -1309,37 +1309,7 @@ QImage AssetLibraryWindow::loadThumbnail(const project::LibraryAsset& asset) con
     return renderModelThumbnail(
       pathFromQString(m_source->location()), asset.sourceContainer, 256);
   if (asset.type == project::AssetType::Material)
-  {
-    const auto edges = m_source->dependencies(asset.id);
-    if (edges.is_success())
-    {
-      auto s0 = QImage{}, s1 = QImage{}, s2 = QImage{};
-      for (const auto& edge : edges.value())
-      {
-        const auto texture = std::ranges::find_if(m_assets, [&](const auto& candidate) {
-          return candidate.id == edge.dependencyId;
-        });
-        if (texture == m_assets.end())
-          continue;
-        auto slotBytes = m_source->readContent(edge.dependencyId);
-        if (slotBytes.is_error())
-          continue;
-        auto decoded = inspection::decodeImage(slotBytes.value(), texture->nativeFormat);
-        if (decoded.is_error())
-          continue;
-        if (edge.kind == "terrain-slot-0")
-          s0 = decoded.value();
-        else if (edge.kind == "terrain-slot-1")
-          s1 = decoded.value();
-        else if (edge.kind == "terrain-slot-2")
-          s2 = decoded.value();
-      }
-      if (!s0.isNull() && !s1.isNull() && !s2.isNull())
-        return renderTerrainMaterialPreview(
-          {std::move(s0), std::move(s1), std::move(s2)});
-    }
-    return {};
-  }
+    return inspection::libraryTerrainMaterialPreview(*m_source, asset.id);
   const auto bytes = m_source->readContent(asset.id);
   if (bytes.is_error())
     return {};
@@ -1739,20 +1709,7 @@ void AssetLibraryWindow::runCreateTerrainMaterial()
     return;
   }
   reload();
-  m_filter = QStringLiteral("material");
-  refreshCategories();
-  refreshGrid();
-  m_selectedId = created.value().id;
-  for (auto row = 0; row < m_grid->count(); ++row)
-  {
-    if (auto* item = m_grid->item(row);
-        item->data(AssetLibraryItemDelegate::AssetIdRole).toString()
-        == QString::fromStdString(*m_selectedId))
-    {
-      m_grid->setCurrentRow(row);
-      break;
-    }
-  }
+  focusAsset(created.value().id, QStringLiteral("material"));
   updateStatus();
 }
 
@@ -2118,18 +2075,26 @@ Result<void> AssetLibraryWindow::revealAsset(
       std::ranges::find(m_assets, assetId, &project::LibraryAsset::id) == m_assets.end())
       return Error{"The requested asset no longer exists in this library."};
   }
-  m_filter = QStringLiteral("all");
+  focusAsset(assetId, QStringLiteral("all"));
+  return {};
+}
+
+void AssetLibraryWindow::focusAsset(const std::string& assetId, const QString& category)
+{
+  m_filter = category;
   const auto searchBlocker = QSignalBlocker{m_searchEdit};
   const auto tagBlocker = QSignalBlocker{m_tagCombo};
+  const auto soundBlocker = QSignalBlocker{m_soundCombo};
   m_searchEdit->clear();
   m_search.clear();
   m_tagCombo->setCurrentIndex(0);
+  m_soundCombo->setCurrentIndex(0);
+  m_waveKind = inspection::WaveKind::All;
   m_selectedId = assetId;
   refreshCategories();
   refreshGrid();
   if (const auto* current = m_grid->currentItem())
     m_grid->scrollToItem(current);
-  return {};
 }
 
 void AssetLibraryWindow::updateProjectActions()

@@ -146,6 +146,7 @@ private:
   void chooseLibrary();
   void openLibrary(const QString& folder, bool remember = true);
   void reload();
+  void focusAsset(const std::string& assetId, const QString& category);
   void refreshCategories();
   void refreshGrid();
   void showAsset(const project::LibraryAsset* asset);

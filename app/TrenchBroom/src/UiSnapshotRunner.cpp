@@ -137,6 +137,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("command-palette"),
     QStringLiteral("components"),
     QStringLiteral("asset-library"),
+    QStringLiteral("asset-library-material"),
     QStringLiteral("asset-library-project"),
     QStringLiteral("asset-library-narrow"),
     QStringLiteral("asset-library-project-narrow"),
@@ -813,6 +814,18 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
                            : UiSnapshotReadinessState::Failed,
       "Output log must meet the drawer tab strip without a blank spacer"};
   }
+  if (targetName == QStringLiteral("asset-library-material"))
+  {
+    const auto* inspector = targetWidget.findChild<AssetInspector*>();
+    if (
+      !inspector || !inspector->asset()
+      || inspector->asset()->nativeFormat != "goldsrc-terrain-material"
+      || inspector->asset()->terrainPreview.isNull())
+      return {
+        UiSnapshotReadinessState::Failed,
+        "Library inspector must load its three-texture terrain material"};
+    return {UiSnapshotReadinessState::Ready, {}};
+  }
   if (
     targetName == QStringLiteral("asset-library-project")
     || targetName == QStringLiteral("asset-library-project-narrow"))
@@ -1340,9 +1353,14 @@ int runUiSnapshot(
   }
   else if (options.page.startsWith(QStringLiteral("asset-library")))
   {
-    assetLibrarySnapshot = createUiAssetLibrarySnapshot(
-      options.page == QStringLiteral("asset-library-project")
-      || options.page == QStringLiteral("asset-library-project-narrow"));
+    const auto kind =
+      options.page == QStringLiteral("asset-library-material")
+        ? UiAssetLibrarySnapshotKind::TerrainMaterial
+      : (options.page == QStringLiteral("asset-library-project")
+         || options.page == QStringLiteral("asset-library-project-narrow"))
+        ? UiAssetLibrarySnapshotKind::Project
+        : UiAssetLibrarySnapshotKind::Library;
+    assetLibrarySnapshot = createUiAssetLibrarySnapshot(kind);
     if (!assetLibrarySnapshot)
     {
       qCritical() << "Could not build the asset library snapshot fixture";

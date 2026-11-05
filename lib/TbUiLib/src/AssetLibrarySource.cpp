@@ -53,8 +53,12 @@ Result<AssetPreviewKeys> previewKeys(
 {
   auto revisions = std::unordered_map<std::string, std::string>{};
   for (const auto& asset : assets)
-    revisions.emplace(
-      asset.id, "/" + std::to_string(asset.revision) + "/" + asset.contentHash);
+  {
+    auto revision = "/" + std::to_string(asset.revision) + "/" + asset.contentHash;
+    if constexpr (requires { asset.missing; })
+      revision += asset.missing ? "/missing" : "/available";
+    revisions.emplace(asset.id, std::move(revision));
+  }
   auto keys = AssetPreviewKeys{};
   for (const auto& asset : assets)
   {
@@ -193,6 +197,18 @@ AssetLibraryChanges& AssetLibraryChanges::instance()
   static auto changes = AssetLibraryChanges{};
   return changes;
 }
+
+Result<std::optional<project::LibraryAsset>> AssetLibrarySource::findAsset(
+  const std::string& assetId) const
+{
+  const auto entries = allAssets();
+  if (entries.is_error())
+    return std::get<Error>(entries.error());
+  const auto found =
+    std::ranges::find(entries.value(), assetId, &project::LibraryAsset::id);
+  return found == entries.value().end() ? std::nullopt : std::optional{*found};
+}
+
 namespace
 {
 
@@ -228,6 +244,12 @@ public:
   Result<std::vector<project::LibraryAsset>> allAssets() const override
   {
     return m_library->assets();
+  }
+
+  Result<std::optional<project::LibraryAsset>> findAsset(
+    const std::string& assetId) const override
+  {
+    return m_library->findAsset(assetId);
   }
 
   Result<std::vector<std::uint8_t>> readOriginal(

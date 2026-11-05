@@ -1230,16 +1230,48 @@ TEST_CASE("AssetInspection")
     const auto folder = pathFromQString(temporary.path());
     const auto colors = std::array{
       QColor{Qt::red}, QColor{Qt::green}, QColor{Qt::blue}, QColor{Qt::yellow}};
+    const auto names = std::array{"texture0", "texture1bk", "texture2", "texture3"};
     for (auto i = size_t{0}; i < colors.size(); ++i)
-      write(folder / ("texture" + std::to_string(i) + ".png"), png(colors[i], 64));
+      write(folder / (std::string{names[i]} + ".png"), png(colors[i], 64));
     auto library = require(project::AssetLibrary::create(folder, "Textures"));
     REQUIRE(library->scan().is_success());
+    for (const auto& asset : require(library->assets()))
+      REQUIRE(library->setTags(asset.id, {"terrain"}).is_success());
     auto browser = AssetLibraryWindow{temporary.path(), false};
     auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* categories = browser.findChild<QListWidget*>("AssetLibraryCategories");
+    auto* search = browser.findChild<QLineEdit*>("AssetLibrarySearch");
+    auto* tag = browser.findChild<QComboBox*>("AssetLibrary_Tag");
+    auto* sound = browser.findChild<QComboBox*>("AssetLibrary_SoundKind");
+    auto* createButton = browser.findChild<QPushButton*>("AssetLibraryCreateMaterial");
     REQUIRE(grid);
+    REQUIRE(categories);
+    REQUIRE(search);
+    REQUIRE(tag);
+    REQUIRE(sound);
+    REQUIRE(createButton);
     REQUIRE(grid->count() == 4);
     auto* action = grid->findChild<QAction*>("AssetLibrary_CreateMaterialFromSelection");
     REQUIRE(action);
+    auto useToolbar = false;
+    auto checkHiddenDependency = false;
+    SECTION("no active filter")
+    {
+      checkHiddenDependency = true;
+    }
+    SECTION("active search filter")
+    {
+      search->setText("texture");
+    }
+    SECTION("active tag filter")
+    {
+      REQUIRE(tag->findData("terrain") > 0);
+      tag->setCurrentIndex(tag->findData("terrain"));
+    }
+    SECTION("active sound filter")
+    {
+      useToolbar = true;
+    }
     grid->clearSelection();
     for (auto row = 1; row < 4; ++row)
       grid->item(row)->setSelected(true);
@@ -1250,10 +1282,14 @@ TEST_CASE("AssetInspection")
                             ->data(AssetLibraryItemDelegate::AssetIdRole)
                             .toString()
                             .toStdString();
+    if (useToolbar)
+      sound->setCurrentIndex(1);
     auto chosen = std::array<std::string, 3>{};
     QTimer::singleShot(0, &browser, [&] {
       if (auto* dialog = browser.findChild<CreateTerrainMaterialDialog*>())
       {
+        if (useToolbar)
+          dialog->setSelectedTextures(selectedIds);
         const auto def = dialog->definition();
         for (auto slot = size_t{0}; slot < chosen.size(); ++slot)
           chosen[slot] = def.materialSlots[slot].texture;
@@ -1261,14 +1297,40 @@ TEST_CASE("AssetInspection")
         dialog->accept();
       }
     });
-    action->trigger();
+    if (useToolbar)
+      createButton->click();
+    else
+      action->trigger();
     CHECK(chosen == selectedIds);
     const auto materials = require(library->assets(project::AssetType::Material));
     REQUIRE(materials.size() == 1);
+    REQUIRE(grid->count() == 1);
+    REQUIRE(grid->currentItem());
+    CHECK(
+      grid->currentItem()->data(AssetLibraryItemDelegate::AssetIdRole).toString()
+      == QString::fromStdString(materials.front().id));
+    REQUIRE(categories->currentItem());
+    CHECK(
+      categories->currentItem()->data(AssetLibraryCategoryDelegate::FilterRole).toString()
+      == "material");
+    CHECK(search->text().isEmpty());
+    CHECK(tag->currentData().toString().isEmpty());
+    CHECK(sound->currentData().toInt() == int(inspection::WaveKind::All));
     auto source = openLocalAssetLibrary(folder);
     REQUIRE(source);
     auto inspected = require(inspection::readLibraryAsset(*source, materials.front()));
     REQUIRE_FALSE(inspected.terrainPreview.isNull());
+    const auto thumbnail = grid->currentItem()
+                             ->data(AssetLibraryItemDelegate::ThumbnailRole)
+                             .value<QPixmap>()
+                             .toImage();
+    REQUIRE_FALSE(thumbnail.isNull());
+    CHECK(thumbnail.pixelColor(0, 0) == inspected.terrainPreview.pixelColor(0, 0));
+    CHECK(thumbnail.pixelColor(255, 0) == inspected.terrainPreview.pixelColor(127, 0));
+    auto* browserInspector = browser.findChild<AssetInspector*>();
+    REQUIRE(browserInspector);
+    REQUIRE(browserInspector->asset());
+    CHECK(browserInspector->asset()->terrainPreview == inspected.terrainPreview);
     auto inspector = AssetInspector{};
     inspector.setAsset(inspected);
     const auto* summary = inspector.findChild<QLabel*>("AssetInspector_Summary");
@@ -1290,6 +1352,56 @@ TEST_CASE("AssetInspection")
     CHECK_FALSE(decoded->pairLevels[0][0].empty());
     REQUIRE(library->scan().is_success());
     CHECK(require(library->readContent(materials.front().id)) == package);
+    sound->setCurrentIndex(1);
+    REQUIRE(browser.revealAsset(library->info().id, materials.front().id).is_success());
+    REQUIRE(grid->currentItem());
+    CHECK(
+      grid->currentItem()->data(AssetLibraryItemDelegate::AssetIdRole).toString()
+      == QString::fromStdString(materials.front().id));
+    CHECK(sound->currentData().toInt() == int(inspection::WaveKind::All));
+
+    if (checkHiddenDependency)
+    {
+      // Skybox faces remain usable dependencies even when hidden from the asset grid.
+      for (const auto* suffix : {"rt", "lf", "ft", "up", "dn"})
+        write(folder / (std::string{"texture1"} + suffix + ".png"), png(Qt::green, 64));
+      REQUIRE(library->scan().is_success());
+      auto groupedBrowser = AssetLibraryWindow{temporary.path(), false};
+      REQUIRE(groupedBrowser.revealAsset(library->info().id, materials.front().id)
+                .is_success());
+      auto* groupedGrid = groupedBrowser.findChild<QListWidget*>("AssetLibraryGrid");
+      REQUIRE(groupedGrid);
+      REQUIRE(groupedGrid->currentItem());
+      const auto groupedThumbnail = groupedGrid->currentItem()
+                                      ->data(AssetLibraryItemDelegate::ThumbnailRole)
+                                      .value<QPixmap>()
+                                      .toImage();
+      REQUIRE_FALSE(groupedThumbnail.isNull());
+      CHECK(
+        groupedThumbnail.pixelColor(0, 0) == inspected.terrainPreview.pixelColor(0, 0));
+      CHECK(
+        groupedThumbnail.pixelColor(255, 0)
+        == inspected.terrainPreview.pixelColor(127, 0));
+
+      const auto before = require(assetPreviewKeys(*source)).at(materials.front().id);
+      REQUIRE(std::filesystem::remove(folder / "texture1bk.png"));
+      REQUIRE(source->rescan().is_success());
+      CHECK(require(assetPreviewKeys(*source)).at(materials.front().id) != before);
+      QTRY_VERIFY(
+        groupedGrid->currentItem()
+        && groupedGrid->currentItem()
+             ->data(AssetLibraryItemDelegate::ThumbnailRole)
+             .value<QPixmap>()
+             .isNull());
+      write(folder / "texture1bk.png", png(Qt::green, 64));
+      REQUIRE(source->rescan().is_success());
+      QTRY_VERIFY(
+        groupedGrid->currentItem()
+        && !groupedGrid->currentItem()
+              ->data(AssetLibraryItemDelegate::ThumbnailRole)
+              .value<QPixmap>()
+              .isNull());
+    }
   }
 }
 } // namespace tb::ui

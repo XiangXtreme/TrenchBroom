@@ -588,7 +588,9 @@ LibraryAsset readAssetRow(const detail::Statement& query)
     query.flag(12) != 0};
   detail::validateAssetId(asset.id);
   detail::validatePath(asset.virtualPath);
-  detail::validatePath(asset.sourceContainer);
+  // A skybox is a logical group whose source container is its parent folder, which may
+  // be the library root. File-backed assets still require a non-empty source path.
+  detail::validatePath(asset.sourceContainer, asset.type == AssetType::Skybox);
   detail::validateText(asset.displayName, "display name");
   if (asset.revision == 0)
     throw detail::StoreError{"Invalid library asset revision."};

@@ -17,17 +17,20 @@
 #include "mdl/MapFormat.h"
 #include "mdl/MapHeader.h"
 #include "project/AssetLibrary.h"
+#include "ui/AssetInspection.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryWindow.h"
 #include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainMaterial.h"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -189,9 +192,47 @@ void dropOneSource(const std::filesystem::path& folder)
   auto error = std::error_code{};
   std::filesystem::remove(folder / "textures" / "grate.png", error);
 }
+
+std::optional<std::string> createTerrainMaterial(project::AssetLibrary& library)
+{
+  const auto assets = library.assets(project::AssetType::Texture);
+  if (assets.is_error())
+    return {};
+  const auto paths = std::array{
+    "textures/floor_grass.png", "textures/floor_dirt.png", "textures/wall01.png"};
+  auto definition = project::AssetLibrary::TerrainMaterialDefinition{};
+  definition.name = "courtyard_terrain";
+  auto images = std::array<QImage, 3>{};
+  for (auto slot = size_t{0}; slot < paths.size(); ++slot)
+  {
+    const auto asset = std::ranges::find_if(assets.value(), [&](const auto& entry) {
+      return entry.virtualPath == paths[slot];
+    });
+    if (
+      asset == assets.value().end() || convertLibraryImage(library, asset->id).is_error())
+      return {};
+    const auto content = library.readContent(asset->id);
+    if (content.is_error())
+      return {};
+    const auto image = inspection::decodeImage(content.value());
+    if (image.is_error())
+      return {};
+    definition.materialSlots[slot].texture = asset->id;
+    images[slot] = image.value();
+  }
+  const auto material = prepareTerrainMaterial(std::move(images));
+  if (material.is_error())
+    return {};
+  auto package = encodeTerrainMaterialPackage(material.value());
+  if (package.empty())
+    return {};
+  const auto created = library.createTerrainMaterial(definition, std::move(package));
+  return created.is_success() ? std::optional{created.value().id} : std::nullopt;
+}
 } // namespace
 
-std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(const bool projectContext)
+std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(
+  const UiAssetLibrarySnapshotKind kind)
 {
   auto holder = std::unique_ptr<TemporaryLibrary>{};
   const auto folder = [&]() {
@@ -217,13 +258,23 @@ std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(const bool projectContext)
   if (library.scan().is_error())
     return {};
 
+  auto terrainId = std::optional<std::string>{};
+  if (kind == UiAssetLibrarySnapshotKind::TerrainMaterial)
+  {
+    terrainId = createTerrainMaterial(library);
+    if (!terrainId)
+      return {};
+  }
   const auto assets = library.assets();
   if (assets.is_error())
     return {};
   const auto chosen = std::ranges::find_if(assets.value(), [&](const auto& asset) {
-    return projectContext ? asset.type == project::AssetType::Skybox
-                          : asset.type == project::AssetType::Texture
-                              && asset.nativeFormat == "goldsrc-wad" && !asset.missing;
+    if (terrainId)
+      return asset.id == *terrainId;
+    return kind == UiAssetLibrarySnapshotKind::Project
+             ? asset.type == project::AssetType::Skybox
+             : asset.type == project::AssetType::Texture
+                 && asset.nativeFormat == "goldsrc-wad" && !asset.missing;
   });
   if (chosen == assets.value().end())
     return {};
@@ -232,7 +283,7 @@ std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(const bool projectContext)
     || library.setTags(chosen->id, {"Environment", "Courtyard"}).is_error())
     return {};
   auto session = std::shared_ptr<ProjectSession>{};
-  if (projectContext)
+  if (kind == UiAssetLibrarySnapshotKind::Project)
   {
     auto createdProject =
       ProjectSession::create(folder / "review.tbproj", "Courtyard", "Half-Life");

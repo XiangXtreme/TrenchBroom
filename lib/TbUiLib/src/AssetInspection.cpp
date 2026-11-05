@@ -487,6 +487,37 @@ Result<QImage> decodeImage(
     .copy();
 }
 
+QImage libraryTerrainMaterialPreview(
+  const AssetLibrarySource& source, const std::string& assetId)
+{
+  const auto dependencies = source.dependencies(assetId);
+  if (dependencies.is_error())
+    return {};
+
+  auto images = std::array<QImage, 3>{};
+  for (const auto& edge : dependencies.value())
+  {
+    const auto slot = edge.kind == "terrain-slot-0"   ? 0
+                      : edge.kind == "terrain-slot-1" ? 1
+                      : edge.kind == "terrain-slot-2" ? 2
+                                                      : -1;
+    if (slot < 0)
+      continue;
+    const auto texture = source.findAsset(edge.dependencyId);
+    if (
+      texture.is_error() || !texture.value() || texture.value()->missing
+      || texture.value()->type != project::AssetType::Texture)
+      continue;
+    const auto content = source.readContent(texture.value()->id);
+    if (content.is_error())
+      continue;
+    const auto image = decodeImage(content.value(), texture.value()->nativeFormat);
+    if (image.is_success())
+      images[size_t(slot)] = image.value();
+  }
+  return renderTerrainMaterialPreview(std::move(images));
+}
+
 Result<Asset> readLibraryAsset(
   const AssetLibrarySource& source,
   const project::LibraryAsset& asset,
@@ -525,37 +556,7 @@ Result<Asset> readLibraryAsset(
   result.original = std::move(original).value();
   result.compatible = std::move(compatible).value();
   if (asset.type == project::AssetType::Material)
-  {
-    const auto dependencies = source.dependencies(asset.id);
-    const auto entries = source.allAssets();
-    if (dependencies.is_success() && entries.is_success())
-    {
-      auto images = std::array<QImage, 3>{};
-      for (const auto& edge : dependencies.value())
-      {
-        const auto slot = edge.kind == "terrain-slot-0"   ? 0
-                          : edge.kind == "terrain-slot-1" ? 1
-                          : edge.kind == "terrain-slot-2" ? 2
-                                                          : -1;
-        if (slot < 0)
-          continue;
-        const auto texture =
-          std::ranges::find_if(entries.value(), [&](const auto& entry) {
-            return entry.id == edge.dependencyId
-                   && entry.type == project::AssetType::Texture;
-          });
-        if (texture == entries.value().end() || texture->missing)
-          continue;
-        const auto content = source.readContent(texture->id);
-        if (content.is_error())
-          continue;
-        const auto image = decodeImage(content.value(), texture->nativeFormat);
-        if (image.is_success())
-          images[size_t(slot)] = image.value();
-      }
-      result.terrainPreview = renderTerrainMaterialPreview(std::move(images));
-    }
-  }
+    result.terrainPreview = libraryTerrainMaterialPreview(source, asset.id);
   if (result.resource.skybox)
   {
     const auto dependencies = source.dependencies(asset.id);

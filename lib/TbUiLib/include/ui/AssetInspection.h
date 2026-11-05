@@ -94,6 +94,9 @@ QImage renderSkyView(
 /** GoldSrc palettes contain RGB triples. Masked miptex index 255 is transparent. */
 Result<QImage> decodeImage(
   std::span<const std::uint8_t> bytes, std::string_view nativeFormat = {});
+/** Builds a terrain blend from all three library texture dependencies. */
+QImage libraryTerrainMaterialPreview(
+  const AssetLibrarySource& source, const std::string& assetId);
 Result<Asset> readLibraryAsset(
   const AssetLibrarySource& source,
   const project::LibraryAsset& asset,

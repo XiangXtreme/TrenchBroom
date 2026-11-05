@@ -434,6 +434,31 @@ TEST_CASE("AssetLibrary")
     CHECK(grouped->missing);
   }
 
+  SECTION("indexes a skybox whose faces are in the library root")
+  {
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+      workspace.write(
+        std::string{"desert"} + face + ".png",
+        std::vector<std::uint8_t>{'P', 'N', 'G', std::uint8_t(face[0])});
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+
+    const auto assets = require(library->assets());
+    REQUIRE(assets.size() == 7);
+    const auto skybox = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.type == AssetType::Skybox; });
+    REQUIRE(skybox != assets.end());
+    CHECK(skybox->virtualPath == "desert");
+    CHECK(skybox->sourceContainer.empty());
+    CHECK(require(library->dependencies(skybox->id)).size() == 6);
+    CHECK_FALSE(require(library->readOriginal(skybox->id)).empty());
+
+    auto reopened = require(AssetLibrary::open(workspace.folder));
+    CHECK(require(reopened->assets(AssetType::Skybox)).size() == 1);
+    require(reopened->scan());
+    CHECK(require(reopened->assets()).size() == 7);
+  }
+
   SECTION("a removed skybox group returns when one of its faces is imported again")
   {
     for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
