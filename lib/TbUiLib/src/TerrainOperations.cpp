@@ -7,11 +7,14 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EditorContext.h"
+#include "mdl/Group.h"
 #include "mdl/GroupNode.h"
+#include "mdl/LayerNode.h"
 #include "mdl/LinkedGroupUtils.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
+#include "mdl/Map_Selection.h"
 #include "mdl/NodeContents.h"
 #include "mdl/Transaction.h"
 #include "mdl/WorldNode.h"
@@ -19,6 +22,7 @@
 #include "ui/TerrainRegion.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace tb::ui
@@ -170,6 +174,103 @@ Result<void> convertSelectedTerrainToHeightField(mdl::Map& map, const double spa
   }
   if (!transaction.commit())
     return Error{"Could not commit the terrain conversion."};
+  return {};
+}
+
+Result<void> createTerrainRectangle(
+  mdl::Map& map,
+  const vm::vec2d& first,
+  const vm::vec2d& second,
+  const double height,
+  const double thickness,
+  const double spacing)
+{
+  const auto minX = std::min(first.x(), second.x());
+  const auto maxX = std::max(first.x(), second.x());
+  const auto minY = std::min(first.y(), second.y());
+  const auto maxY = std::max(first.y(), second.y());
+  const auto width = maxX - minX;
+  const auto depth = maxY - minY;
+  if (
+    !std::isfinite(minX) || !std::isfinite(maxX) || !std::isfinite(minY)
+    || !std::isfinite(maxY) || !std::isfinite(height) || !std::isfinite(thickness)
+    || !std::isfinite(spacing) || spacing <= 0 || thickness < 1 || width <= 0
+    || depth <= 0)
+    return Error{"Invalid terrain rectangle, height, thickness or grid spacing."};
+  if (
+    width > TerrainRegion::Width * TerrainRegion::UnitsPerTexel
+    || depth > TerrainRegion::Height * TerrainRegion::UnitsPerTexel)
+    return Error{"Terrain rectangle exceeds the 1280 by 640 unit region."};
+  const auto columns = std::round(width / spacing);
+  const auto rows = std::round(depth / spacing);
+  if (
+    columns < 1 || rows < 1 || columns > 4096 || rows > 4096
+    || std::abs(width - columns * spacing) > 1e-6
+    || std::abs(depth - rows * spacing) > 1e-6)
+    return Error{"Terrain rectangle dimensions must align with the grid spacing."};
+  auto field = TerrainHeightField::create(
+    int(columns), int(rows), spacing, height - thickness, height);
+  if (field.is_error())
+    return std::get<Error>(field.error());
+
+  auto* parent = map.editorContext().currentGroup()
+                   ? static_cast<mdl::Node*>(map.editorContext().currentGroup())
+                   : static_cast<mdl::Node*>(map.editorContext().currentLayer());
+  if (
+    !parent || !map.editorContext().editable(*parent)
+    || !map.editorContext().visible(*parent))
+    return Error{"The current layer or group is locked or hidden."};
+  for (auto* node = parent; node; node = node->parent())
+    if (const auto* linked = dynamic_cast<const mdl::GroupNode*>(node);
+        linked
+        && mdl::collectNodesWithLinkId({&map.worldNode()}, linked->linkId()).size() > 1)
+      return Error{"Unlink the terrain group before editing its height field."};
+
+  auto region = TerrainRegion{{minX, maxY}};
+  region.heightField = std::move(field).value();
+  auto brushes = createTerrainBrushes(
+    *region.heightField,
+    region.origin,
+    vm::mat4x4d::identity(),
+    map.worldNode().mapFormat(),
+    map.worldBounds(),
+    "null");
+  if (brushes.is_error())
+    return std::get<Error>(brushes.error());
+  auto material = map.currentMaterialName();
+  if (material.empty())
+    material = "null";
+  auto content = mdl::Group{"Terrain"};
+  content.setTerrainPaint(region.encode());
+  auto* group = new mdl::GroupNode{std::move(content)};
+  auto generated = std::move(brushes).value();
+  for (auto& brush : generated)
+  {
+    for (auto& face : brush.faces())
+    {
+      const auto vertices = face.vertexPositions();
+      const auto onBoundary = [&](const size_t axis, const double coordinate) {
+        return std::ranges::all_of(vertices, [&](const auto& vertex) {
+          return std::abs(vertex[axis] - coordinate) < 1e-6;
+        });
+      };
+      if (
+        std::abs(face.normal().z()) > 1e-6 || onBoundary(0, minX) || onBoundary(0, maxX)
+        || onBoundary(1, minY) || onBoundary(1, maxY))
+        face.setMaterialName(material);
+    }
+    group->addChild(new mdl::BrushNode{std::move(brush)});
+  }
+  auto transaction = mdl::Transaction{map, "Create Terrain"};
+  mdl::deselectAll(map);
+  if (mdl::addNodes(map, {{parent, {group}}}).empty())
+  {
+    transaction.cancel();
+    return Error{"Could not add the terrain geometry."};
+  }
+  mdl::selectNodes(map, {group});
+  if (!transaction.commit())
+    return Error{"Could not commit the terrain creation."};
   return {};
 }
 

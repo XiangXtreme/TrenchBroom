@@ -297,6 +297,44 @@ TEST_CASE("Terrain conversion groups selected ground as one undo step")
   CHECK(map.selection().groups.front()->children().size() == 8);
 }
 
+TEST_CASE("Terrain rectangle creation is atomic and undoable")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* existing = new mdl::BrushNode{requireValue(
+    builder.createCuboid(vm::bbox3d{{512, 512, -64}, {576, 576, 0}}, "GROUND"))};
+  auto* layer = map.editorContext().currentLayer();
+  mdl::addNodes(map, {{layer, {existing}}});
+  mdl::selectNodes(map, {existing});
+  CHECK(createTerrainRectangle(map, {0, 0}, {130, 64}, 16, 64, 32).is_error());
+  CHECK(createTerrainRectangle(map, {0, 0}, {2048, 64}, 16, 64, 32).is_error());
+  CHECK(map.selection().brushes.front() == existing);
+
+  requireValue(createTerrainRectangle(map, {128, -64}, {0, 0}, 16, 64, 32));
+  REQUIRE(map.selection().groups.size() == 1);
+  auto* terrain = map.selection().groups.front();
+  const auto region =
+    requireValue(TerrainRegion::decode(terrain->group().terrainPaint()));
+  REQUIRE(region.heightField);
+  CHECK(region.origin == vm::vec2d{0, 0});
+  CHECK(region.heightField->columns == 4);
+  CHECK(region.heightField->rows == 2);
+  CHECK(region.heightField->bottom == -48);
+  CHECK(terrain->children().size() == 16);
+  CHECK(terrainSurfaces(*terrain, region).is_success());
+  map.undoCommand();
+  REQUIRE(map.selection().brushes.size() == 1);
+  CHECK(map.selection().brushes.front() == existing);
+  CHECK(layer->children().size() == 1);
+  map.redoCommand();
+  REQUIRE(map.selection().groups.size() == 1);
+  CHECK(map.selection().groups.front()->children().size() == 16);
+}
+
 TEST_CASE("Terrain conversion does not desynchronize linked groups")
 {
   auto fixture = MapDocumentFixture{};

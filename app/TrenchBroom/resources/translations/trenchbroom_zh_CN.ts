@@ -8531,7 +8531,29 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Grid spacing</source><translation>网格间距</translation></message>
         <message><source>%1 units</source><translation>%1 单位</translation></message>
         <message><source>Lock terrain edges</source><translation>锁定地形边缘</translation></message>
+        <message><source>All vertices are on locked edges; unlock the edges to sculpt.</source><translation>所有顶点都位于已锁定的边缘；请解锁边缘以进行雕刻。</translation></message>
         <message><source>Create Sculptable Terrain</source><translation>创建可雕刻地形</translation></message>
+        <message><source>Draw New Terrain</source><translation>框选新地形</translation></message>
+        <message><source>New terrain height</source><translation>新地形高度</translation></message>
+        <message><source>New terrain thickness</source><translation>新地形厚度</translation></message>
+        <message><source>Drag a rectangle in the top (XY) view to create terrain.</source><translation>在俯视图（XY）中拖出矩形以创建地形。</translation></message>
+        <message><source>Invalid terrain rectangle, height, thickness or grid spacing.</source><translation>地形范围、高度、厚度或网格间距无效。</translation></message>
+        <message><source>Terrain rectangle exceeds the 1280 by 640 unit region.</source><translation>单个地形区域不能超过 1280 × 640 单位。</translation></message>
+        <message><source>Terrain rectangle dimensions must align with the grid spacing.</source><translation>地形范围的宽度和长度必须与网格间距对齐。</translation></message>
+        <message><source>The current layer or group is locked or hidden.</source><translation>当前图层或组已锁定或隐藏。</translation></message>
+        <message><source>The source must be continuous rectangular brushes with planar tops, a shared flat bottom, and edges aligned to the terrain grid.</source><translation>源地面必须由连续的矩形 Brush 组成，顶面为平面，底面平坦且高度一致，边界与地形网格对齐。</translation></message>
+        <message><source>Adjacent terrain brushes have different heights at their boundary.</source><translation>相邻地面 Brush 的接缝高度不一致。</translation></message>
+        <message><source>The source terrain is too thin to sculpt.</source><translation>源地面太薄，无法雕刻。</translation></message>
+        <message><source>The terrain geometry no longer matches its height field. Undo edits made outside the terrain tools or recreate the terrain.</source><translation>地形几何与高度数据不一致。请撤销使用其他工具进行的修改，或重新创建地形。</translation></message>
+        <message><source>Terrain brushes exceed the 1280 by 640 unit region.</source><translation>地面 Brush 超出了单个 1280 × 640 单位的地形区域。</translation></message>
+        <message><source>Terrain top faces overlap in the region plane.</source><translation>地形顶面在水平投影上发生重叠。</translation></message>
+        <message><source>Terrain brushes must fit beneath their top faces.</source><translation>地面 Brush 必须位于其顶面的下方。</translation></message>
+        <message><source>Terrain groups must contain brushes directly.</source><translation>地形组必须直接包含 Brush。</translation></message>
+        <message><source>A terrain brush is missing its top face.</source><translation>地面 Brush 缺少朝上的顶面。</translation></message>
+        <message><source>Unlink the terrain group before editing its height field.</source><translation>请先取消地形组的关联，再编辑其高度。</translation></message>
+        <message><source>Invalid or excessively dense terrain geometry.</source><translation>地形几何无效，或网格过密。</translation></message>
+        <message><source>Could not add the terrain geometry.</source><translation>无法添加地形几何。</translation></message>
+        <message><source>Could not commit the terrain creation.</source><translation>无法完成地形创建。</translation></message>
         <message><source>Sculpt Terrain</source><translation>雕刻地形</translation></message>
         <message><source>The terrain or one of its brushes is locked or hidden.</source><translation>地形或其中的 Brush 已锁定或隐藏。</translation></message>
         <message><source>Brush strength</source><translation>笔刷强度</translation></message>

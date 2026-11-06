@@ -11,6 +11,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QPushButton>
+#include <QRubberBand>
 #include <QScopeGuard>
 #include <QSpinBox>
 #include <QTemporaryDir>
@@ -19,6 +20,7 @@
 #include <QtTest/QTest>
 
 #include "base/PreferenceManager.h"
+#include "gl/OrthographicCamera.h"
 #include "gl/PerspectiveCamera.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushBuilder.h"
@@ -49,6 +51,8 @@
 #include "ui/CompilationDialog.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorView.h"
+#include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
@@ -853,6 +857,75 @@ TEST_CASE("Project terrain panel paints a picked brush")
       return color.blue() > color.red() * 2;
     },
     15000));
+
+  // Draw a new flat terrain in an XY view, then undo it without changing the
+  // existing sculpted terrain. The rectangle follows the selected grid spacing.
+  window->switchToInspectorPage(InspectorPage::Terrain);
+  navigation->click();
+  editMode->setCurrentIndex(1);
+  auto* drawNew = panel->findChild<QPushButton*>("TerrainInspector_DrawNew");
+  auto* newHeight = panel->findChild<QSpinBox*>("TerrainInspector_NewHeight");
+  auto* newThickness = panel->findChild<QSpinBox*>("TerrainInspector_NewThickness");
+  REQUIRE(drawNew);
+  REQUIRE(newHeight);
+  REQUIRE(newThickness);
+  auto* ancestor = view->parentWidget();
+  while (ancestor && !qobject_cast<MapEditorView*>(ancestor))
+    ancestor = ancestor->parentWidget();
+  REQUIRE(ancestor);
+  {
+    auto top =
+      MapView2D{app, window->document(), window->toolBox(), MapView2D::ViewPlane::XY};
+    top.setParent(ancestor);
+    top.resize(400, 400);
+    top.show();
+    QApplication::processEvents();
+    auto& topCamera = top.camera();
+    topCamera.setViewport({0, 0, top.width(), top.height()});
+    const auto toScreen = [&](const vm::vec3f& world) {
+      const auto projected = topCamera.project(world);
+      return QPoint{
+        int(std::lround(projected.x())),
+        int(std::lround(float(top.height()) - projected.y()))};
+    };
+    const auto start = toScreen({-128, -128, 0});
+    const auto finish = toScreen({128, 128, 0});
+    REQUIRE(top.rect().contains(start));
+    REQUIRE(top.rect().contains(finish));
+    newHeight->setValue(32);
+    newThickness->setValue(96);
+    drawNew->click();
+    REQUIRE(panel->drawingTerrain());
+    QTest::mousePress(&top, Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(&top, finish);
+    const auto* outline = top.findChild<QRubberBand*>();
+    REQUIRE(outline);
+    CHECK(outline->isVisible());
+    QTest::mouseRelease(&top, Qt::LeftButton, Qt::NoModifier, finish);
+    CHECK_FALSE(panel->drawingTerrain());
+    REQUIRE(map.selection().groups.size() == 1);
+    auto* created = map.selection().groups.front();
+    const auto newRegion =
+      require(TerrainRegion::decode(created->group().terrainPaint()));
+    REQUIRE(newRegion.heightField);
+    CHECK(newRegion.heightField->columns == 4);
+    CHECK(newRegion.heightField->rows == 4);
+    CHECK(newRegion.heightField->bottom == -64);
+    CHECK(newRegion.heightField->heights.front() == 32);
+    CHECK(terrainSurfaces(*created, newRegion).is_success());
+    map.undoCommand();
+    CHECK(map.selection().groups.front() == group);
+    CHECK(
+      require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
+      == sculpted.heightField->heights);
+    drawNew->click();
+    QTest::mousePress(&top, Qt::LeftButton, Qt::NoModifier, start);
+    QTest::keyClick(&top, Qt::Key_Escape);
+    CHECK_FALSE(panel->drawingTerrain());
+    QTest::mouseRelease(&top, Qt::LeftButton, Qt::NoModifier, finish);
+    CHECK(map.selection().groups.front() == group);
+    top.hide();
+  }
   window->closeDocument(true);
 }
 

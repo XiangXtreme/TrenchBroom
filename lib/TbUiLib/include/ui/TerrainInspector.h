@@ -51,6 +51,8 @@ private:
   QComboBox* m_sculptMode = nullptr;
   QComboBox* m_gridSpacing = nullptr;
   QCheckBox* m_lockEdges = nullptr;
+  QSpinBox* m_newHeight = nullptr;
+  QSpinBox* m_newThickness = nullptr;
   QComboBox* m_terrainMaterial = nullptr;
   QComboBox* m_material = nullptr;
   QSpinBox* m_radius = nullptr;
@@ -65,6 +67,7 @@ private:
   QPushButton* m_openLibrary = nullptr;
   QPushButton* m_create = nullptr;
   QPushButton* m_convert = nullptr;
+  QPushButton* m_drawNew = nullptr;
   QPushButton* m_paint = nullptr;
   QPushButton* m_generate = nullptr;
   QPushButton* m_analyze = nullptr;
@@ -89,6 +92,9 @@ private:
 public:
   TerrainInspector(AppController& app, MapDocument& document);
   bool painting() const;
+  bool drawingTerrain() const;
+  void createDrawnTerrain(const vm::vec2d& first, const vm::vec2d& second);
+  void cancelDrawing();
   bool stroking() const;
   size_t strokeRevision() const;
   const TerrainRegion* previewStroke(const mdl::GroupNode& group) const;

@@ -6,6 +6,8 @@
 
 #include "base/Result.h"
 
+#include "vm/vec.h"
+
 namespace tb::mdl
 {
 class GroupNode;
@@ -22,6 +24,15 @@ Result<void> convertTerrainToHeightField(
 
 /** Convert the selected brush group or group selected brushes and convert them. */
 Result<void> convertSelectedTerrainToHeightField(mdl::Map& map, double spacing);
+
+/** Create a flat terrain rectangle in map XY coordinates as one undo step. */
+Result<void> createTerrainRectangle(
+  mdl::Map& map,
+  const vm::vec2d& first,
+  const vm::vec2d& second,
+  double height,
+  double thickness,
+  double spacing);
 
 /** Update the edited heights and only the affected proxy brushes atomically. */
 Result<void> updateTerrainHeightField(

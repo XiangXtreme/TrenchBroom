@@ -6,6 +6,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -56,6 +57,11 @@ namespace tb::ui
 {
 namespace
 {
+QString terrainErrorMessage(const Error& error)
+{
+  return QCoreApplication::translate("tb::ui::TerrainInspector", error.msg.c_str());
+}
+
 bool terrainEditable(const mdl::Map& map, const mdl::GroupNode& group)
 {
   return map.editorContext().editable(group) && map.editorContext().visible(group)
@@ -95,6 +101,16 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_lockEdges = new QCheckBox{tr("Lock terrain edges"), this};
   m_lockEdges->setObjectName(QStringLiteral("TerrainInspector_LockEdges"));
   m_lockEdges->setChecked(true);
+
+  m_newHeight = new QSpinBox{this};
+  m_newHeight->setObjectName(QStringLiteral("TerrainInspector_NewHeight"));
+  m_newHeight->setRange(-65536, 65536);
+  m_newHeight->setSuffix(tr(" units"));
+  m_newThickness = new QSpinBox{this};
+  m_newThickness->setObjectName(QStringLiteral("TerrainInspector_NewThickness"));
+  m_newThickness->setRange(1, 65536);
+  m_newThickness->setValue(64);
+  m_newThickness->setSuffix(tr(" units"));
 
   m_material = new QComboBox{this};
   m_material->setObjectName(QStringLiteral("TerrainInspector_SlotSelect"));
@@ -174,6 +190,10 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_convert = new QPushButton{tr("Create Sculptable Terrain")};
   m_convert->setObjectName(QStringLiteral("TerrainInspector_Convert"));
 
+  m_drawNew = new QPushButton{tr("Draw New Terrain")};
+  m_drawNew->setObjectName(QStringLiteral("TerrainInspector_DrawNew"));
+  m_drawNew->setCheckable(true);
+
   m_paint = new QPushButton{tr("Paint Terrain")};
   m_paint->setObjectName(QStringLiteral("TerrainInspector_PaintTerrain"));
   m_paint->setCheckable(true);
@@ -186,6 +206,8 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   form->addRow(tr("Edit mode"), m_editMode);
   form->addRow(tr("Sculpt tool"), m_sculptMode);
   form->addRow(tr("Grid spacing"), m_gridSpacing);
+  form->addRow(tr("New terrain height"), m_newHeight);
+  form->addRow(tr("New terrain thickness"), m_newThickness);
   form->addRow(m_lockEdges);
   form->addRow(tr("Terrain Material"), m_terrainMaterial);
   form->addRow(tr("Paint Slot"), m_material);
@@ -202,6 +224,7 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   layout->addWidget(m_create);
   layout->addLayout(form);
   layout->addWidget(m_convert);
+  layout->addWidget(m_drawNew);
   layout->addWidget(m_paint);
   layout->addWidget(m_openLibrary);
   layout->addWidget(m_analyze);
@@ -215,6 +238,7 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   connect(m_convert, &QPushButton::clicked, this, &TerrainInspector::convertSelection);
   connect(m_editMode, &QComboBox::currentIndexChanged, this, [this] {
     m_paint->setChecked(false);
+    m_drawNew->setChecked(false);
     updateModeControls();
     refresh();
     refreshViews();
@@ -263,12 +287,24 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
       }
     });
   connect(m_paint, &QPushButton::toggled, this, [this](const bool on) {
-    if (!on)
+    if (on)
+      m_drawNew->setChecked(false);
+    else
       endStroke(false);
+    refreshViews();
+  });
+  connect(m_drawNew, &QPushButton::toggled, this, [this](const bool on) {
+    if (on)
+    {
+      m_paint->setChecked(false);
+      m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
+    }
+    updateModeControls();
     refreshViews();
   });
   connect(m_radius, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
   connect(m_hardness, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
+  connect(m_lockEdges, &QCheckBox::toggled, this, [this] { refresh(); });
   m_refreshTimer = new QTimer{this};
   m_refreshTimer->setSingleShot(true);
   m_refreshTimer->setInterval(150);
@@ -399,10 +435,30 @@ void TerrainInspector::updateModeControls()
                             : Result<TerrainRegion>{Error{"No terrain selected."}};
   const auto hasHeightField =
     region.is_success() && region.value().heightField.has_value();
-  m_form->setRowVisible(m_sculptMode, sculpt);
-  m_form->setRowVisible(m_lockEdges, sculpt);
-  m_form->setRowVisible(m_gridSpacing, sculpt && !hasHeightField);
-  m_convert->setVisible(sculpt && !hasHeightField);
+  const auto drawing = sculpt && m_drawNew->isChecked();
+  m_form->setRowVisible(m_sculptMode, sculpt && !drawing);
+  m_form->setRowVisible(m_lockEdges, sculpt && !drawing);
+  m_form->setRowVisible(m_gridSpacing, sculpt && (!hasHeightField || drawing));
+  m_form->setRowVisible(m_newHeight, drawing);
+  m_form->setRowVisible(m_newThickness, drawing);
+  m_form->setRowVisible(m_terrainMaterial, !sculpt);
+  m_form->setRowVisible(m_material, !sculpt);
+  m_form->setRowVisible(m_radius, !drawing);
+  m_form->setRowVisible(m_strength, !drawing);
+  m_form->setRowVisible(m_hardness, !drawing);
+  m_form->setRowVisible(m_faceBudget, !sculpt);
+  m_form->setRowVisible(m_wadBudget, !sculpt);
+  m_form->setRowVisible(m_minFaceWidth, !sculpt);
+  m_form->setRowVisible(m_patchDensity, !sculpt);
+  m_create->setVisible(!sculpt);
+  m_convert->setVisible(sculpt && !hasHeightField && !drawing);
+  m_drawNew->setVisible(sculpt);
+  m_paint->setVisible(!drawing);
+  m_openLibrary->setVisible(!sculpt);
+  m_analyze->setVisible(!sculpt);
+  m_showCuts->setVisible(!sculpt);
+  m_estimate->setVisible(!sculpt);
+  m_generate->setVisible(!sculpt);
   m_paint->setText(sculpt ? tr("Sculpt Terrain") : tr("Paint Terrain"));
 }
 
@@ -429,6 +485,7 @@ void TerrainInspector::refresh()
   const auto selectedBrushes =
     !selection.brushes.empty() && selection.brushes.size() == selection.nodes.size();
   m_editMode->setEnabled(supported);
+  m_drawNew->setEnabled(supported);
   m_convert->setEnabled(supported && (editable || selectedBrushes));
   m_create->setEnabled(editable && !hasRegion);
   m_generate->setEnabled(hasRegion);
@@ -470,15 +527,18 @@ void TerrainInspector::refresh()
     m_paint->setChecked(false);
     updateSlotLabels({});
     m_refreshingMaterial = false;
-    m_status->setText(
-      supported ? tr("Select ground brushes or a brush group to create terrain.")
-                : tr("Open a Half-Life Valve 220 map in a project to edit terrain."));
+    if (m_drawNew->isChecked())
+      m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
+    else
+      m_status->setText(
+        supported ? tr("Select ground brushes or a brush group to create terrain.")
+                  : tr("Open a Half-Life Valve 220 map in a project to edit terrain."));
     return;
   }
   const auto region = TerrainRegion::decode(group->group().terrainPaint());
   if (region.is_error())
   {
-    m_status->setText(QString::fromStdString(std::get<Error>(region.error()).msg));
+    m_status->setText(terrainErrorMessage(std::get<Error>(region.error())));
     m_paint->setEnabled(false);
     m_generate->setEnabled(false);
     m_analyze->setEnabled(false);
@@ -528,7 +588,7 @@ void TerrainInspector::refresh()
   const auto surfaces = terrainSurfaces(*group, region.value());
   if (surfaces.is_error())
   {
-    m_status->setText(QString::fromStdString(std::get<Error>(surfaces.error()).msg));
+    m_status->setText(terrainErrorMessage(std::get<Error>(surfaces.error())));
     m_paint->setEnabled(false);
     m_generate->setEnabled(false);
     m_analyze->setEnabled(false);
@@ -539,9 +599,21 @@ void TerrainInspector::refresh()
     m_status->setText(tr("The terrain or one of its brushes is locked or hidden."));
     return;
   }
-  m_status->setText(tr("%1 · %2 source top faces")
-                      .arg(QString::fromStdString(group->name()))
-                      .arg(surfaces.value().size()));
+  if (
+    m_editMode->currentIndex() == 1 && !m_drawNew->isChecked() && m_lockEdges->isChecked()
+    && region.value().heightField
+    && (region.value().heightField->columns < 2 || region.value().heightField->rows < 2))
+  {
+    m_status->setText(
+      tr("All vertices are on locked edges; unlock the edges to sculpt."));
+    return;
+  }
+  if (m_drawNew->isChecked())
+    m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
+  else
+    m_status->setText(tr("%1 · %2 source top faces")
+                        .arg(QString::fromStdString(group->name()))
+                        .arg(surfaces.value().size()));
 }
 
 void TerrainInspector::nodesChanged(const std::vector<mdl::Node*>& nodes)
@@ -582,7 +654,7 @@ void TerrainInspector::analyze()
   auto estimate = estimateTerrainGroup(*group, project ? &project->store() : nullptr);
   if (estimate.is_error())
   {
-    m_estimate->setText(QString::fromStdString(std::get<Error>(estimate.error()).msg));
+    m_estimate->setText(terrainErrorMessage(std::get<Error>(estimate.error())));
     return;
   }
   const auto& stats = estimate.value();
@@ -665,7 +737,7 @@ void TerrainInspector::createRegion()
   {
     const auto region = createTerrainRegion(*group);
     if (region.is_error())
-      m_status->setText(QString::fromStdString(std::get<Error>(region.error()).msg));
+      m_status->setText(terrainErrorMessage(std::get<Error>(region.error())));
     else if (!saveRegion(*group, region.value(), tr("Create Terrain Region")))
       m_status->setText(tr("Could not create the terrain region."));
   }
@@ -676,7 +748,7 @@ void TerrainInspector::convertSelection()
   const auto result = convertSelectedTerrainToHeightField(
     m_document.map(), m_gridSpacing->currentData().toDouble());
   if (result.is_error())
-    m_status->setText(QString::fromStdString(std::get<Error>(result.error()).msg));
+    m_status->setText(terrainErrorMessage(std::get<Error>(result.error())));
   else
     refresh();
 }
@@ -684,6 +756,44 @@ void TerrainInspector::convertSelection()
 bool TerrainInspector::painting() const
 {
   return isVisible() && m_paint->isEnabled() && m_paint->isChecked();
+}
+
+bool TerrainInspector::drawingTerrain() const
+{
+  return isVisible() && m_drawNew->isEnabled() && m_drawNew->isChecked();
+}
+
+void TerrainInspector::createDrawnTerrain(const vm::vec2d& first, const vm::vec2d& second)
+{
+  if (!drawingTerrain())
+    return;
+  const auto spacing = m_gridSpacing->currentData().toDouble();
+  const auto snap = [spacing](const vm::vec2d& point) {
+    return vm::vec2d{
+      std::round(point.x() / spacing) * spacing,
+      std::round(point.y() / spacing) * spacing};
+  };
+  const auto result = createTerrainRectangle(
+    m_document.map(),
+    snap(first),
+    snap(second),
+    double(m_newHeight->value()),
+    double(m_newThickness->value()),
+    spacing);
+  if (result.is_error())
+    m_status->setText(terrainErrorMessage(std::get<Error>(result.error())));
+  else
+  {
+    m_drawNew->setChecked(false);
+    refresh();
+    refreshViews();
+  }
+}
+
+void TerrainInspector::cancelDrawing()
+{
+  m_drawNew->setChecked(false);
+  refresh();
 }
 
 bool TerrainInspector::stroking() const
@@ -820,7 +930,7 @@ void TerrainInspector::sculptTo(const vm::vec2d& point)
     m_sculptApplying = false;
     if (result.is_error())
     {
-      const auto message = QString::fromStdString(std::get<Error>(result.error()).msg);
+      const auto message = terrainErrorMessage(std::get<Error>(result.error()));
       endStroke(false);
       m_status->setText(message);
       return;
@@ -880,7 +990,7 @@ void TerrainInspector::generate()
   const auto result = project->exportCompileSnapshot(*asset, pathFromQString(dir));
   if (result.is_error())
   {
-    m_status->setText(QString::fromStdString(std::get<Error>(result.error()).msg));
+    m_status->setText(terrainErrorMessage(std::get<Error>(result.error())));
     return;
   }
   const auto size = QFileInfo{dir + QStringLiteral("/textures.wad")}.size();
