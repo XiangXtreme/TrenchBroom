@@ -84,6 +84,7 @@ class AssetLibraryWindow : public QDialog
   QPushButton* m_favoriteButton = nullptr;
   QPushButton* m_renameButton = nullptr;
   QPushButton* m_deleteButton = nullptr;
+  QAction* m_deleteAction = nullptr;
   QLineEdit* m_tagsEdit = nullptr;
   QProgressBar* m_convertProgress = nullptr;
   QPushButton* m_convertCancel = nullptr;
@@ -155,6 +156,7 @@ private:
   void updateStatus();
   void updateHeader();
   void updateActions();
+  void updateSelectionActions();
   void applyViewMode();
   void runImport();
   void runCreateTerrainMaterial();

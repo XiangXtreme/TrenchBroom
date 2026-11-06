@@ -6880,8 +6880,8 @@ Pick a sequence and frame, or press Play. Drag to orbit, wheel to zoom.</source>
             </message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="491"/>
-            <source>Remove this asset from the library. The source file stays on disk, and a later rescan will not add it back.</source>
-            <translation>从资产库中移除此资产。源文件仍保留在磁盘上，之后重新扫描也不会将其加回。</translation>
+            <source>Remove selected assets from the library. The source files stay on disk, and a later rescan will not add them back.</source>
+            <translation>从资产库中移除选中的资产。源文件仍保留在磁盘上，之后重新扫描也不会将其加回。</translation>
             </message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="510"/>
@@ -7387,6 +7387,15 @@ The source file is kept and a later rescan will not add the asset back. Projects
             <translation>从资产库中移除“%1”？
 
 源文件会保留，之后重新扫描也不会将资产加回。工程会保留其已捕获的副本。重新导入源文件即可恢复。</translation>
+            </message>
+        <message>
+            <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="2275"/>
+            <source>Remove %1 selected assets from the library?
+
+The source files are kept and a later rescan will not add the assets back. Projects keep their captured copies. Import the sources again to restore them.</source>
+            <translation>从资产库中移除选中的 %1 个资产？
+
+源文件会保留，之后重新扫描也不会将这些资产加回。工程会保留其已捕获的副本。重新导入源文件即可恢复。</translation>
             </message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/AssetLibraryWindow.cpp" line="382"/>

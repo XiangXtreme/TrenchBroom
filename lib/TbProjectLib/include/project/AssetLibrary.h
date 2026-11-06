@@ -101,6 +101,9 @@ public:
   // user files is the caller's decision. The removal is remembered, so a later scan does
   // not silently bring the asset back; importing the source again clears it.
   Result<void> removeAsset(const std::string& assetId);
+  // Removes all selected assets in one transaction. If any asset cannot be removed,
+  // the catalog remains unchanged.
+  Result<void> removeAssets(const std::vector<std::string>& assetIds);
 
   // Clears the catalog removals recorded for a source. Importing or replacing a source
   // calls this so its assets can be indexed again; a group whose virtual path prefixes
@@ -120,7 +123,8 @@ public:
 
   // Gives the asset a catalog name that a rescan keeps. The engine texture name is
   // separate: it lives in the converted miptex and only changes by converting again.
-  Result<LibraryAsset> setDisplayName(const std::string& assetId, const std::string& name);
+  Result<LibraryAsset> setDisplayName(
+    const std::string& assetId, const std::string& name);
 
   struct TerrainMaterialSlot
   {

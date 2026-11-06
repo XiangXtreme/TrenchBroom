@@ -20,6 +20,7 @@
 #include <QFile>
 #include <QImage>
 #include <QInputDialog>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -1429,6 +1430,126 @@ TEST_CASE("ProjectWindow")
     require(source->rescan());
     CHECK(require(source->assets()).empty());
     CHECK(QFile::exists(path));
+  }
+
+  SECTION("bulk library deletion respects selection and preserves project copies")
+  {
+    const auto folder = directory.filePath("bulk-delete-library");
+    REQUIRE(QDir{}.mkdir(folder));
+    const auto names = std::array{"match-one.wav", "match-two.wav", "other.wav"};
+    for (const auto* name : names)
+    {
+      auto file = QFile{folder + "/" + name};
+      REQUIRE(file.open(QIODevice::WriteOnly));
+      const auto bytes = wavBytes(false);
+      REQUIRE(
+        file.write(reinterpret_cast<const char*>(bytes.data()), qint64(bytes.size()))
+        == qint64(bytes.size()));
+    }
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->scan());
+    const auto libraryId = library->info().id;
+    require(session->attachLibrary(pathFromQString(folder)));
+
+    auto browser = AssetLibraryWindow{folder, false, &window};
+    browser.setProjectContext(session);
+    browser.show();
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* search = browser.findChild<QLineEdit*>("AssetLibrarySearch");
+    auto* remove = browser.findChild<QPushButton*>("AssetLibraryDeleteButton");
+    auto* removeAction = browser.findChild<QAction*>("AssetLibrary_DeleteSelected");
+    auto* capture = browser.findChild<QPushButton*>("AssetInspector_Capture");
+    REQUIRE(grid);
+    REQUIRE(search);
+    REQUIRE(remove);
+    REQUIRE(removeAction);
+    REQUIRE(capture);
+    CHECK(grid->actions().contains(removeAction));
+    CHECK(removeAction->shortcut() == QKeySequence{QKeySequence::Delete});
+
+    search->setText("match");
+    QTRY_COMPARE(grid->count(), 2);
+    grid->setCurrentRow(0);
+    const auto capturedId = grid->currentItem()
+                              ->data(AssetLibraryItemDelegate::AssetIdRole)
+                              .toString()
+                              .toStdString();
+    capture->click();
+    const auto snapshot =
+      require(session->projectAssetForLibraryAsset(libraryId, capturedId));
+    REQUIRE(snapshot);
+    QApplication::processEvents();
+
+    auto changes = 0;
+    QObject::connect(
+      &AssetLibraryChanges::instance(),
+      &AssetLibraryChanges::changed,
+      &browser,
+      [&](const QString& id) {
+        if (id.toStdString() == libraryId)
+          ++changes;
+      });
+    auto response = QMessageBox::Cancel;
+    auto prompt = QString{};
+    auto timer = QTimer{};
+    QObject::connect(&timer, &QTimer::timeout, [&] {
+      for (auto* widget : QApplication::topLevelWidgets())
+        if (auto* message = dynamic_cast<QMessageBox*>(widget);
+            message && message->isVisible())
+          if (auto* button = message->button(response))
+          {
+            prompt = message->text();
+            button->click();
+          }
+    });
+
+    grid->clearSelection();
+    CHECK_FALSE(remove->isEnabled());
+    CHECK_FALSE(removeAction->isEnabled());
+    grid->setFocus();
+    if (qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1)
+      QTest::keyClick(grid, Qt::Key_A, Qt::ControlModifier);
+    else
+      grid->selectAll();
+    REQUIRE(grid->selectedItems().size() == 2);
+    REQUIRE(removeAction->isEnabled());
+    timer.start(10);
+    removeAction->trigger();
+    timer.stop();
+    CHECK(prompt.contains("2"));
+    CHECK(grid->count() == 2);
+    CHECK(changes == 0);
+
+    response = QMessageBox::Yes;
+    timer.start(10);
+    remove->click();
+    timer.stop();
+    CHECK(changes == 1);
+    QTRY_COMPARE(grid->count(), 0);
+    CHECK(require(session->store().findAsset(snapshot->id)).has_value());
+    CHECK(QFile::exists(folder + "/match-one.wav"));
+    CHECK(QFile::exists(folder + "/match-two.wav"));
+
+    search->clear();
+    QTRY_COMPARE(grid->count(), 1);
+    CHECK(grid->item(0)->text().contains("other"));
+    grid->setCurrentRow(0);
+    grid->setFocus();
+    timer.start(10);
+    if (qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1)
+      QTest::keyClick(grid, Qt::Key_Delete);
+    else
+      removeAction->trigger();
+    timer.stop();
+    CHECK(changes == 2);
+    QTRY_COMPARE(grid->count(), 0);
+    auto source = openLocalAssetLibrary(pathFromQString(folder));
+    REQUIRE(source);
+    require(source->rescan());
+    CHECK(require(source->assets()).empty());
+    for (const auto* name : names)
+      CHECK(QFile::exists(folder + "/" + name));
   }
 
   SECTION("library and project browsers share metadata capture and identity navigation")

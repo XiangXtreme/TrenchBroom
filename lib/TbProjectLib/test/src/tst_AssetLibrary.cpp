@@ -632,6 +632,39 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->findAsset(wallId)).has_value());
   }
 
+  SECTION("removes selected assets atomically")
+  {
+    const auto source =
+      workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+    const auto assets = require(library->assets());
+    const auto wallId = findByMember(assets, "WALL01").id;
+    const auto floorId = findByMember(assets, "FLOOR01").id;
+    require(library->addDependency(wallId, floorId, "companion"));
+
+    CHECK(library->removeAssets({wallId, "missing"}).is_error());
+    CHECK(require(library->findAsset(wallId)).has_value());
+    CHECK(require(library->findAsset(floorId)).has_value());
+    CHECK(require(library->dependencies(wallId)).size() == 1);
+    require(library->scan());
+    CHECK(require(library->findAsset(wallId)).has_value());
+
+    require(library->removeAssets({wallId, floorId, wallId}));
+    CHECK_FALSE(require(library->findAsset(wallId)).has_value());
+    CHECK_FALSE(require(library->findAsset(floorId)).has_value());
+    CHECK(require(library->assets()).size() == assets.size() - 2);
+    CHECK(std::filesystem::exists(source));
+    require(library->scan());
+    CHECK_FALSE(require(library->findAsset(wallId)).has_value());
+    CHECK_FALSE(require(library->findAsset(floorId)).has_value());
+
+    require(library->clearRemovedSource("custom.wad"));
+    require(library->scan());
+    CHECK(require(library->findAsset(wallId)).has_value());
+    CHECK(require(library->findAsset(floorId)).has_value());
+  }
+
   SECTION("keeps user metadata and a renamed display name across rescans")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall})));

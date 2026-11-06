@@ -347,7 +347,12 @@ public:
 
   Result<void> removeAsset(const std::string& assetId) override
   {
-    auto result = m_library->removeAsset(assetId);
+    return removeAssets({assetId});
+  }
+
+  Result<void> removeAssets(const std::vector<std::string>& assetIds) override
+  {
+    auto result = m_library->removeAssets(assetIds);
     if (result.is_success())
       emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
     return result;

@@ -20,6 +20,7 @@
 #include <QHBoxLayout>
 #include <QImage>
 #include <QInputDialog>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -496,6 +497,12 @@ void AssetLibraryWindow::buildUi()
     QStringLiteral("AssetLibrary_CreateMaterialFromSelection"));
   m_createMaterialFromSelection->setEnabled(false);
   m_grid->addAction(m_createMaterialFromSelection);
+  m_deleteAction = new QAction{tr("Delete…"), m_grid};
+  m_deleteAction->setObjectName(QStringLiteral("AssetLibrary_DeleteSelected"));
+  m_deleteAction->setShortcut(QKeySequence::Delete);
+  m_deleteAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+  m_deleteAction->setEnabled(false);
+  m_grid->addAction(m_deleteAction);
   m_grid->setViewMode(QListView::IconMode);
   m_grid->setResizeMode(QListView::Adjust);
   m_grid->setMovement(QListView::Static);
@@ -539,8 +546,8 @@ void AssetLibraryWindow::buildUi()
   m_deleteButton = new QPushButton{tr("Delete…"), actionRow};
   m_deleteButton->setObjectName(QStringLiteral("AssetLibraryDeleteButton"));
   m_deleteButton->setToolTip(
-    tr("Remove this asset from the library. The source file stays on disk, and a later "
-       "rescan will not add it back."));
+    tr("Remove selected assets from the library. The source files stay on disk, and a "
+       "later rescan will not add them back."));
   m_favoriteButton->setEnabled(false);
   m_renameButton->setEnabled(false);
   m_deleteButton->setEnabled(false);
@@ -553,6 +560,7 @@ void AssetLibraryWindow::buildUi()
     m_renameButton, &QPushButton::clicked, this, &AssetLibraryWindow::renameSelected);
   connect(
     m_deleteButton, &QPushButton::clicked, this, &AssetLibraryWindow::deleteSelected);
+  connect(m_deleteAction, &QAction::triggered, this, &AssetLibraryWindow::deleteSelected);
 
   auto* tagsRow = new QWidget{inspector};
   auto* tagsLayout = new QHBoxLayout{tagsRow};
@@ -655,9 +663,11 @@ void AssetLibraryWindow::buildUi()
     &QAction::triggered,
     this,
     &AssetLibraryWindow::runCreateTerrainMaterial);
-  connect(m_grid, &QListWidget::itemSelectionChanged, this, [this] {
-    m_createMaterialFromSelection->setEnabled(selectedTextures().has_value());
-  });
+  connect(
+    m_grid,
+    &QListWidget::itemSelectionChanged,
+    this,
+    &AssetLibraryWindow::updateSelectionActions);
   connect(m_rescanButton, &QPushButton::clicked, this, &AssetLibraryWindow::runRescan);
   connect(
     m_convertButton, &QPushButton::clicked, this, &AssetLibraryWindow::runConvertPending);
@@ -946,6 +956,15 @@ void AssetLibraryWindow::updateActions()
   m_searchEdit->setEnabled(hasSource);
 }
 
+void AssetLibraryWindow::updateSelectionActions()
+{
+  m_createMaterialFromSelection->setEnabled(selectedTextures().has_value());
+  const auto canDelete =
+    m_source && m_source->canManage() && !m_grid->selectedItems().empty();
+  m_deleteButton->setEnabled(canDelete);
+  m_deleteAction->setEnabled(canDelete);
+}
+
 void AssetLibraryWindow::applyViewMode()
 {
   const auto side = m_sizeSlider->value();
@@ -1074,7 +1093,7 @@ void AssetLibraryWindow::refreshGrid()
   {
     m_grid->hide();
     m_countLabel->clear();
-    m_createMaterialFromSelection->setEnabled(false);
+    updateSelectionActions();
     return;
   }
 
@@ -1177,7 +1196,7 @@ void AssetLibraryWindow::refreshGrid()
       current->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString();
   else
     m_selectedId.reset();
-  m_createMaterialFromSelection->setEnabled(selectedTextures().has_value());
+  updateSelectionActions();
   showAsset(selectedAsset());
 }
 
@@ -1191,7 +1210,6 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
   const auto manageable = m_source && m_source->canManage();
   m_favoriteButton->setEnabled(manageable);
   m_renameButton->setEnabled(manageable);
-  m_deleteButton->setEnabled(manageable);
   auto favorite = false;
   auto tags = QString{};
   if (manageable)
@@ -1264,6 +1282,8 @@ void AssetLibraryWindow::showAsset(const project::LibraryAsset* asset)
 
 void AssetLibraryWindow::clearInspector()
 {
+  m_favoriteButton->setEnabled(false);
+  m_renameButton->setEnabled(false);
   m_projectAssetId.reset();
   m_usage->clear();
   m_usage->addItem(tr("No asset selected"));
@@ -2242,22 +2262,37 @@ void AssetLibraryWindow::renameSelected()
 
 void AssetLibraryWindow::deleteSelected()
 {
-  const auto* asset = selectedAsset();
-  if (!asset || !m_source || !m_source->canManage())
+  if (!m_source || !m_source->canManage())
     return;
 
+  const auto selected = m_grid->selectedItems();
+  if (selected.empty())
+    return;
+  auto assetIds = std::vector<std::string>{};
+  assetIds.reserve(static_cast<size_t>(selected.size()));
+  for (const auto* item : selected)
+    assetIds.push_back(
+      item->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString());
+  const auto libraryId = m_source->libraryId();
+  const auto message = selected.size() == 1
+                         ? tr(
+                             "Remove '%1' from the library?\n\nThe source file is kept "
+                             "and a later rescan will not add the asset back. Projects "
+                             "keep their captured copies. Import the source again to "
+                             "restore it.")
+                             .arg(selected.front()->text())
+                         : tr(
+                             "Remove %1 selected assets from the library?\n\nThe source "
+                             "files are kept and a later rescan will not add the assets "
+                             "back. Projects keep their captured copies. Import the "
+                             "sources again to restore them.")
+                             .arg(selected.size());
   const auto answer = QMessageBox::question(
-    this,
-    tr("Delete Asset"),
-    tr("Remove '%1' from the library?\n\nThe source file is kept and a later rescan "
-       "will not add the asset back. Projects keep their captured copies. Import the "
-       "source again to restore it.")
-      .arg(QString::fromStdString(asset->displayName)),
-    QMessageBox::Yes | QMessageBox::Cancel);
-  if (answer != QMessageBox::Yes)
+    this, tr("Delete Asset"), message, QMessageBox::Yes | QMessageBox::Cancel);
+  if (answer != QMessageBox::Yes || !m_source || m_source->libraryId() != libraryId)
     return;
 
-  if (const auto result = m_source->removeAsset(asset->id); result.is_error())
+  if (const auto result = m_source->removeAssets(assetIds); result.is_error())
   {
     QMessageBox::critical(
       this,
@@ -2265,6 +2300,7 @@ void AssetLibraryWindow::deleteSelected()
       QString::fromStdString(std::get<Error>(result.error()).msg));
     return;
   }
+  m_reloadTimer->stop();
   m_selectedId.reset();
   reload();
 }

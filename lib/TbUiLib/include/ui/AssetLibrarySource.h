@@ -113,6 +113,13 @@ public:
   {
     return Error{"This asset library is read only."};
   }
+  /** Removes the given catalog entries atomically. */
+  virtual Result<void> removeAssets(const std::vector<std::string>& assetIds)
+  {
+    if (assetIds.size() == 1)
+      return removeAsset(assetIds.front());
+    return Error{"This asset library does not support batch removal."};
+  }
   virtual Result<void> setTags(
     const std::string& /*assetId*/, const std::vector<std::string>& /*tags*/)
   {

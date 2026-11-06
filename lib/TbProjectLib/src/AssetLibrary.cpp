@@ -384,12 +384,13 @@ void discoverFile(
     return;
   if (format == SourceFormat::Material)
   {
-    const auto contentText = std::string_view{
-      reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+    const auto contentText =
+      std::string_view{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
     // Extract "texture" fields from slots
     auto pos = size_t{0};
     auto slotIdx = 0;
-    while (slotIdx < 3 && (pos = contentText.find("\"texture\"", pos)) != std::string_view::npos)
+    while (slotIdx < 3
+           && (pos = contentText.find("\"texture\"", pos)) != std::string_view::npos)
     {
       pos += 9;
       const auto colon = contentText.find(':', pos);
@@ -1489,38 +1490,56 @@ Result<void> AssetLibrary::addDependency(
 
 Result<void> AssetLibrary::removeAsset(const std::string& assetId)
 {
+  return removeAssets({assetId});
+}
+
+Result<void> AssetLibrary::removeAssets(const std::vector<std::string>& assetIds)
+{
   return detail::attempt([&] {
-    detail::validateAssetId(assetId);
+    if (assetIds.empty())
+      return;
     auto* db = m_impl->database.get();
     auto transaction = detail::Transaction{db};
     auto exists =
       detail::Statement{db, "SELECT virtual_path,source_rel_path FROM assets WHERE id=?"};
-    exists.bind(1, assetId);
-    if (!exists.next())
-      throw detail::StoreError{"Library asset not found."};
-    const auto virtualPath = exists.text(0);
-    const auto sourceRelPath = exists.text(1);
-    // Remember the removal before dropping the row: rescanning the folder finds the
-    // source file again, and a catalog entry must not silently come back.
     auto exclude = detail::Statement{
       db,
       "INSERT OR REPLACE INTO removed_assets(virtual_path,source_rel_path,removed_at) "
       "VALUES(?,?,?)"};
-    exclude.bind(1, virtualPath);
-    exclude.bind(2, sourceRelPath);
-    exclude.bind(3, nowText(db));
-    exclude.run();
-
-    for (const auto* sql :
-         {"DELETE FROM dependencies WHERE asset_id=? OR dependency_id=?",
-          "DELETE FROM asset_revisions WHERE asset_id=?",
-          "DELETE FROM assets WHERE id=?"})
+    auto deleteDependencies = detail::Statement{
+      db, "DELETE FROM dependencies WHERE asset_id=? OR dependency_id=?"};
+    auto deleteRevisions =
+      detail::Statement{db, "DELETE FROM asset_revisions WHERE asset_id=?"};
+    auto deleteAsset = detail::Statement{db, "DELETE FROM assets WHERE id=?"};
+    auto seen = std::unordered_set<std::string>{};
+    const auto removedAt = nowText(db);
+    for (const auto& assetId : assetIds)
     {
-      auto statement = detail::Statement{db, sql};
-      statement.bind(1, assetId);
-      if (std::string_view{sql}.find(" OR ") != std::string_view::npos)
-        statement.bind(2, assetId);
-      statement.run();
+      if (!seen.insert(assetId).second)
+        continue;
+      detail::validateAssetId(assetId);
+      exists.bind(1, assetId);
+      if (!exists.next())
+        throw detail::StoreError{"Library asset not found."};
+
+      // Preserve each removal across rescans before dropping its catalog row.
+      exclude.bind(1, exists.text(0));
+      exclude.bind(2, exists.text(1));
+      exclude.bind(3, removedAt);
+      exclude.run();
+      exists.reset();
+      exclude.reset();
+
+      deleteDependencies.bind(1, assetId);
+      deleteDependencies.bind(2, assetId);
+      deleteDependencies.run();
+      deleteDependencies.reset();
+      deleteRevisions.bind(1, assetId);
+      deleteRevisions.run();
+      deleteRevisions.reset();
+      deleteAsset.bind(1, assetId);
+      deleteAsset.run();
+      deleteAsset.reset();
     }
     transaction.commit();
   });
