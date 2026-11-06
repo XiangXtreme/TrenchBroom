@@ -24,6 +24,8 @@ enum class MapFormat;
 
 namespace tb::ui
 {
+inline constexpr auto MaxTerrainBrushes = 8192;
+
 enum class TerrainSculptMode
 {
   Raise,

@@ -122,6 +122,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/InputEvent.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Inspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainExport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainChunks.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainHeightField.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainOperations.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainInspector.cpp

@@ -35,6 +35,7 @@
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/TerrainBaker.h"
+#include "ui/TerrainChunks.h"
 #include "ui/TerrainExport.h"
 #include "ui/TerrainHeightField.h"
 #include "ui/TerrainMaterial.h"
@@ -297,6 +298,112 @@ TEST_CASE("Terrain conversion groups selected ground as one undo step")
   CHECK(map.selection().groups.front()->children().size() == 8);
 }
 
+TEST_CASE("Large existing ground converts into shared terrain chunks")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* source = new mdl::BrushNode{requireValue(builder.createBrush(
+    std::vector<vm::vec3d>{
+      {0, 0, 0},
+      {0, -128, 0},
+      {1408, 0, 88},
+      {1408, -128, 88},
+      {0, 0, -64},
+      {0, -128, -64},
+      {1408, 0, -64},
+      {1408, -128, -64}},
+    "TERR_GRASS"))};
+  auto* layer = map.editorContext().currentLayer();
+  mdl::addNodes(map, {{layer, {source}}});
+  mdl::selectNodes(map, {source});
+  CHECK(convertSelectedTerrainToHeightField(map, 30).is_error());
+  CHECK(source->parent() == layer);
+  REQUIRE(map.selection().brushes.size() == 1);
+
+  requireValue(convertSelectedTerrainToHeightField(map, 64));
+  REQUIRE(map.selection().groups.size() == 1);
+  auto* root = map.selection().groups.front();
+  REQUIRE(isTerrainChunkGroup(*root));
+  const auto chunks = requireValue(readTerrainChunks(*root));
+  REQUIRE(chunks.chunks.size() == 2);
+  REQUIRE(chunks.combined->heightField);
+  CHECK(chunks.combined->heightField->columns == 22);
+  CHECK(chunks.combined->heightField->rows == 2);
+  CHECK(
+    chunks.combined->heightField->heights[chunks.combined->heightField->index(20, 1)]
+    == Catch::Approx(80));
+  for (const auto& chunk : chunks.chunks)
+  {
+    const auto* child =
+      static_cast<const mdl::GroupNode*>(root->children()[chunk.childIndex]);
+    const auto surfaces = requireValue(terrainSurfaces(*child, chunk.region));
+    for (const auto& surface : surfaces)
+      CHECK(surface.brush->brush().face(surface.top).materialName() == "TERR_GRASS");
+  }
+  map.undoCommand();
+  CHECK(source->parent() == layer);
+  REQUIRE(map.selection().brushes.size() == 1);
+  CHECK(map.selection().brushes.front() == source);
+  map.redoCommand();
+  REQUIRE(map.selection().groups.size() == 1);
+  CHECK(readTerrainChunks(*map.selection().groups.front()).is_success());
+}
+
+TEST_CASE("Terrain chunks share one continuous height grid")
+{
+  auto rootData = mdl::Group{"Terrain"};
+  rootData.setTerrainPaint(terrainChunkGroupMarker());
+  auto root = mdl::GroupNode{std::move(rootData)};
+  const auto makeChunk = [](const vm::vec2d& origin) {
+    auto region = TerrainRegion{origin};
+    region.heightField = requireValue(TerrainHeightField::create(2, 2, 32, -64, 0));
+    auto data = mdl::Group{"Chunk"};
+    data.setTerrainPaint(region.encode());
+    return new mdl::GroupNode{std::move(data)};
+  };
+  auto* left = makeChunk({0, 0});
+  auto* right = makeChunk({64, 0});
+  root.addChild(left);
+  root.addChild(right);
+  auto chunks = requireValue(readTerrainChunks(root));
+  REQUIRE(chunks.combined->heightField);
+  CHECK(chunks.combined->heightField->columns == 4);
+  CHECK(chunks.combined->heightField->rows == 2);
+  CHECK(chunks.chunks[0].column == 0);
+  CHECK(chunks.chunks[1].column == 2);
+
+  auto inconsistent = requireValue(TerrainRegion::decode(right->group().terrainPaint()));
+  inconsistent.heightField->heights[inconsistent.heightField->index(0, 1)] = 16;
+  auto content = right->group();
+  content.setTerrainPaint(inconsistent.encode());
+  right->setGroup(std::move(content));
+  CHECK(readTerrainChunks(root).is_error());
+
+  inconsistent.heightField->heights[inconsistent.heightField->index(0, 1)] = 0;
+  inconsistent.origin = {96, 0};
+  content = right->group();
+  content.setTerrainPaint(inconsistent.encode());
+  right->setGroup(std::move(content));
+  CHECK(readTerrainChunks(root).is_error());
+
+  inconsistent.origin = {32, 0};
+  content = right->group();
+  content.setTerrainPaint(inconsistent.encode());
+  right->setGroup(std::move(content));
+  CHECK(readTerrainChunks(root).is_error());
+
+  inconsistent.origin = {64, 0};
+  inconsistent.weights[size_t(TerrainRegion::Columns + 1)] = {0, 1, 0};
+  content = right->group();
+  content.setTerrainPaint(inconsistent.encode());
+  right->setGroup(std::move(content));
+  CHECK(readTerrainChunks(root).is_error());
+}
+
 TEST_CASE("Terrain rectangle creation is atomic and undoable")
 {
   auto fixture = MapDocumentFixture{};
@@ -333,6 +440,94 @@ TEST_CASE("Terrain rectangle creation is atomic and undoable")
   map.redoCommand();
   REQUIRE(map.selection().groups.size() == 1);
   CHECK(map.selection().groups.front()->children().size() == 16);
+}
+
+TEST_CASE("Large terrain rectangle creates one undoable chunk group")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  auto* layer = map.editorContext().currentLayer();
+  const auto before = layer->children().size();
+  CHECK(createTerrainChunkRectangle(map, {0, -64}, {1408, 0}, 0, 64, 64).is_success());
+  REQUIRE(map.selection().groups.size() == 1);
+  auto* root = map.selection().groups.front();
+  REQUIRE(isTerrainChunkGroup(*root));
+  REQUIRE(root->children().size() == 2);
+  const auto chunks = requireValue(readTerrainChunks(*root));
+  REQUIRE(chunks.combined->heightField);
+  CHECK(chunks.combined->heightField->columns == 22);
+  CHECK(chunks.combined->heightField->rows == 1);
+  CHECK(chunks.combined->heightField->heights.size() == 46);
+  for (const auto& chunk : chunks.chunks)
+  {
+    const auto* group =
+      static_cast<const mdl::GroupNode*>(root->children()[chunk.childIndex]);
+    CHECK(terrainSurfaces(*group, chunk.region).is_success());
+  }
+  auto height = *chunks.combined->heightField;
+  const auto seam = height.index(20, 1);
+  height.heights[seam] = 16;
+  requireValue(updateTerrainHeightField(map, *root, height));
+  auto edited = requireValue(readTerrainChunks(*root));
+  CHECK(edited.combined->heightField->heights[seam] == 16);
+  for (const auto& chunk : edited.chunks)
+  {
+    const auto* group =
+      static_cast<const mdl::GroupNode*>(root->children()[chunk.childIndex]);
+    CHECK(terrainSurfaces(*group, chunk.region).is_success());
+  }
+  auto invalid = height;
+  invalid.heights[seam] = map.worldBounds().max.z() * 2;
+  CHECK(updateTerrainHeightField(map, *root, invalid).is_error());
+  CHECK(
+    requireValue(readTerrainChunks(*root)).combined->heightField->heights[seam] == 16);
+
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("large-terrain.map"));
+  requireValue(map.saveTo(path));
+  const auto bytes = readBytes(path);
+  const auto snapshot = requireValue(bakeTerrainSnapshot(bytes));
+  REQUIRE(snapshot);
+  CHECK(snapshot->topFaces >= 44);
+  const auto snapshotText = std::string{snapshot->map.begin(), snapshot->map.end()};
+  CHECK(snapshotText.find(terrainChunkGroupMarker()) == std::string::npos);
+  auto logger = NullLogger{};
+  auto status = SimpleParserStatus{logger};
+  auto tasks = kdl::task_manager{2};
+  const auto source =
+    std::string_view{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+  auto world = requireValue(mdl::WorldReader{source, mdl::MapFormat::Valve, {}}.read(
+    map.worldBounds(), status, tasks));
+  const auto findRoot =
+    [&](const auto& self, const mdl::Node& node) -> const mdl::GroupNode* {
+    if (const auto* group = dynamic_cast<const mdl::GroupNode*>(&node);
+        group && isTerrainChunkGroup(*group))
+      return group;
+    for (const auto* child : node.children())
+      if (const auto* group = self(self, *child))
+        return group;
+    return nullptr;
+  };
+  const auto* loaded = findRoot(findRoot, *world);
+  REQUIRE(loaded);
+  CHECK(
+    requireValue(readTerrainChunks(*loaded)).combined->heightField->heights[seam] == 16);
+
+  map.undoCommand();
+  CHECK(requireValue(readTerrainChunks(*root)).combined->heightField->heights[seam] == 0);
+  map.redoCommand();
+  CHECK(
+    requireValue(readTerrainChunks(*root)).combined->heightField->heights[seam] == 16);
+  map.undoCommand();
+  map.undoCommand();
+  CHECK(layer->children().size() == before);
+  map.redoCommand();
+  REQUIRE(map.selection().groups.size() == 1);
+  CHECK(readTerrainChunks(*map.selection().groups.front()).is_success());
 }
 
 TEST_CASE("Terrain conversion does not desynchronize linked groups")

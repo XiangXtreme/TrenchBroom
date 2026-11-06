@@ -34,6 +34,15 @@ Result<void> createTerrainRectangle(
   double thickness,
   double spacing);
 
+/** Create a rectangle as a single logical terrain made of paint-sized chunks. */
+Result<void> createTerrainChunkRectangle(
+  mdl::Map& map,
+  const vm::vec2d& first,
+  const vm::vec2d& second,
+  double height,
+  double thickness,
+  double spacing);
+
 /** Update the edited heights and only the affected proxy brushes atomically. */
 Result<void> updateTerrainHeightField(
   mdl::Map& map, mdl::GroupNode& group, const TerrainHeightField& heights);

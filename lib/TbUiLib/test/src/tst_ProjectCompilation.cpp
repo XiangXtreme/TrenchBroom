@@ -54,11 +54,14 @@
 #include "ui/MapEditorView.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainChunks.h"
+#include "ui/TerrainExport.h"
 #include "ui/TerrainInspector.h"
 
 #include <algorithm>
@@ -241,6 +244,163 @@ std::unique_ptr<TerrainRegion> testTerrainRegion(const mdl::GroupNode& group)
 {
   return std::make_unique<TerrainRegion>(
     require(TerrainRegion::decode(group.group().terrainPaint())));
+}
+
+std::unique_ptr<TerrainChunks> testTerrainChunks(const mdl::GroupNode& group)
+{
+  return std::make_unique<TerrainChunks>(require(readTerrainChunks(group)));
+}
+
+void testChunkedTerrainEditing(
+  AppController& app,
+  MapWindow* window,
+  MapView3D* view,
+  TerrainInspector* panel,
+  const std::string& materialId)
+{
+  auto& map = window->document().map();
+  auto* editMode = panel->findChild<QComboBox*>("TerrainInspector_EditMode");
+  auto* drawNew = panel->findChild<QPushButton*>("TerrainInspector_DrawNew");
+  auto* activate = panel->findChild<QPushButton*>("TerrainInspector_PaintTerrain");
+  auto* terrainMaterial =
+    panel->findChild<QComboBox*>("TerrainInspector_TerrainMaterial");
+  auto* material = panel->findChild<QComboBox*>("TerrainInspector_SlotSelect");
+  auto* radius = panel->findChild<QSpinBox*>("TerrainInspector_Radius");
+  auto* newHeight = panel->findChild<QSpinBox*>("TerrainInspector_NewHeight");
+  auto* newThickness = panel->findChild<QSpinBox*>("TerrainInspector_NewThickness");
+  REQUIRE(editMode);
+  REQUIRE(drawNew);
+  REQUIRE(activate);
+  REQUIRE(terrainMaterial);
+  REQUIRE(material);
+  REQUIRE(radius);
+  REQUIRE(newHeight);
+  REQUIRE(newThickness);
+  auto* ancestor = view->parentWidget();
+  while (ancestor && !qobject_cast<MapEditorView*>(ancestor))
+    ancestor = ancestor->parentWidget();
+  REQUIRE(ancestor);
+
+  editMode->setCurrentIndex(1);
+  newHeight->setValue(0);
+  newThickness->setValue(64);
+  {
+    auto top =
+      MapView2D{app, window->document(), window->toolBox(), MapView2D::ViewPlane::XY};
+    top.setParent(ancestor);
+    top.resize(400, 400);
+    top.show();
+    QApplication::processEvents();
+    auto& camera = top.camera();
+    camera.setViewport({0, 0, top.width(), top.height()});
+    camera.setZoom(0.2f);
+    auto position = camera.position();
+    position[0] = 1728;
+    camera.moveTo(position);
+    const auto screen = [&](const vm::vec3f& p) {
+      const auto projected = camera.project(p);
+      return QPoint{
+        int(std::lround(projected.x())),
+        int(std::lround(float(top.height()) - projected.y()))};
+    };
+    const auto first = screen({1024, -64, 0});
+    const auto second = screen({2432, 64, 0});
+    REQUIRE(top.rect().contains(first));
+    REQUIRE(top.rect().contains(second));
+    drawNew->click();
+    REQUIRE(panel->drawingTerrain());
+    QTest::mousePress(&top, Qt::LeftButton, Qt::NoModifier, first);
+    QTest::mouseMove(&top, second);
+    QTest::mouseRelease(&top, Qt::LeftButton, Qt::NoModifier, second);
+    REQUIRE_FALSE(panel->drawingTerrain());
+    top.hide();
+  }
+  REQUIRE(map.selection().groups.size() == 1);
+  auto* group = map.selection().groups.front();
+  REQUIRE(isTerrainChunkGroup(*group));
+  auto initial = testTerrainChunks(*group);
+  REQUIRE(initial->chunks.size() == 2);
+  const auto seam = initial->combined->heightField->index(20, 1);
+  auto& camera = static_cast<MapViewBase&>(*view).camera();
+  camera.setViewport({0, 0, view->width(), view->height()});
+  camera.moveTo({2304, 0, 512});
+  camera.lookAt({2304, 0, 0}, {0, 1, 0});
+  const auto point = view->rect().center();
+  radius->setValue(128);
+
+  editMode->setCurrentIndex(0);
+  const auto materialIndex =
+    terrainMaterial->findData(QString::fromStdString(materialId));
+  REQUIRE(materialIndex > 0);
+  terrainMaterial->setCurrentIndex(materialIndex);
+  material->setCurrentIndex(1);
+  REQUIRE(activate->isEnabled());
+  activate->click();
+  REQUIRE(panel->painting());
+  REQUIRE_FALSE(window->toolBox().anyModalToolActive());
+  REQUIRE(testTerrainChunks(*group)->chunks[0].region.materialAssetId == materialId);
+  REQUIRE(selectedTerrainGroup(map) == group);
+  // The first click activates the viewport after using the terrain inspector.
+  QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, point);
+  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, point);
+  REQUIRE(panel->stroking());
+  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, point);
+  auto painted = testTerrainChunks(*group);
+  CHECK(painted->chunks[0].region.weights != initial->chunks[0].region.weights);
+  CHECK(painted->chunks[1].region.weights != initial->chunks[1].region.weights);
+  activate->click();
+
+  editMode->setCurrentIndex(1);
+  REQUIRE(activate->isEnabled());
+  activate->click();
+  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, point);
+  REQUIRE(panel->stroking());
+  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, point);
+  auto sculpted = testTerrainChunks(*group);
+  CHECK(
+    sculpted->combined->heightField->heights[seam]
+    > initial->combined->heightField->heights[seam]);
+  CHECK(sculpted->chunks[0].region.weights == painted->chunks[0].region.weights);
+  CHECK(sculpted->chunks[1].region.weights == painted->chunks[1].region.weights);
+  activate->click();
+
+  editMode->setCurrentIndex(2);
+  activate->click();
+  const auto vertex =
+    camera.project({2304, 0, float(sculpted->combined->heightField->heights[seam])});
+  const auto handle = QPoint{
+    int(std::lround(vertex.x())), int(std::lround(float(view->height()) - vertex.y()))};
+  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, handle);
+  REQUIRE(panel->vertexInteracting());
+  QTest::mouseMove(view, handle + QPoint{0, -80});
+  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, handle + QPoint{0, -80});
+  auto edited = testTerrainChunks(*group);
+  CHECK(
+    edited->combined->heightField->heights[seam]
+    > sculpted->combined->heightField->heights[seam]);
+  CHECK(edited->chunks[0].region.weights == painted->chunks[0].region.weights);
+  CHECK(edited->chunks[1].region.weights == painted->chunks[1].region.weights);
+
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("chunked-terrain.map"));
+  require(map.saveTo(path));
+  auto file = QFile{pathAsQString(path)};
+  REQUIRE(file.open(QIODevice::ReadOnly));
+  const auto bytes = file.readAll();
+  const auto project = app.projectFor(window->document());
+  REQUIRE(project);
+  const auto snapshot = require(bakeTerrainSnapshot(
+    std::vector<std::uint8_t>{bytes.begin(), bytes.end()}, &project->store()));
+  REQUIRE(snapshot);
+  CHECK_FALSE(snapshot->textures.empty());
+  const auto exported = std::string{snapshot->map.begin(), snapshot->map.end()};
+  CHECK(exported.find(terrainChunkGroupMarker()) == std::string::npos);
+  map.undoCommand();
+  CHECK(
+    testTerrainChunks(*group)->combined->heightField->heights[seam]
+    == sculpted->combined->heightField->heights[seam]);
+  activate->click();
 }
 
 void testTerrainVertexEditing(
@@ -1043,6 +1203,93 @@ TEST_CASE("Project terrain panel paints a picked brush")
     CHECK(map.selection().groups.front() == group);
     top.hide();
   }
+  window->closeDocument(true);
+}
+
+TEST_CASE("Project terrain edits across chunk boundaries")
+{
+  if (!qEnvironmentVariableIsSet("TB_TERRAIN_CHUNK_TEST_CHILD"))
+  {
+    auto process = QProcess{};
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert("TB_TEST_SHARED_OPENGL", "1");
+    environment.insert("TB_TERRAIN_CHUNK_TEST_CHILD", "1");
+    process.setProcessEnvironment(environment);
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    process.start(
+      QCoreApplication::applicationFilePath(),
+      {"Project terrain edits across chunk boundaries", "--reporter", "compact"});
+    REQUIRE(process.waitForStarted(10000));
+    const auto finished = process.waitForFinished(55000);
+    INFO(process.readAllStandardOutput().toStdString());
+    REQUIRE(finished);
+    REQUIRE(process.exitStatus() == QProcess::NormalExit);
+    REQUIRE(process.exitCode() == 0);
+    return;
+  }
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("chunked-terrain.tbproj"));
+  require(ProjectSession::create(path, "Chunked Terrain", "Half-Life"));
+  auto fixture = AppControllerFixture{[](const auto& writeGameConfig) {
+    auto config = std::string{GameConfig};
+    config.replace(config.find(GameName), GameName.size(), "Half-Life");
+    writeGameConfig("Half-Life", config, std::nullopt, std::nullopt);
+  }};
+  auto& app = fixture.appController();
+  REQUIRE(app.openProject(path));
+  auto* project = findProjectWindow(path);
+  REQUIRE(project);
+  auto textures = std::array<std::string, 3>{};
+  for (auto slot = size_t{0}; slot < textures.size(); ++slot)
+  {
+    auto pixels = std::vector<unsigned char>(64 * 64 * 4, 255);
+    for (auto pixel = size_t{0}; pixel < 64 * 64; ++pixel)
+      pixels[pixel * 4 + slot] = 40;
+    const auto name = "chunk_slot" + std::to_string(slot);
+    const auto converted =
+      require(img::convertGoldSrcTexture({64, 64, std::move(pixels)}, name));
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Texture;
+    input.virtualPath = "textures/" + name + ".wad";
+    input.displayName = name;
+    input.original = input.compatible = converted.wad;
+    textures[slot] = require(project->session()->importAsset(input)).id;
+  }
+  const auto json = std::string{
+    R"({"format":"goldsrc-terrain-material","version":1,"slots":[{"name":"Moss"},{"name":"Sand"},{"name":"Stone"}]})"};
+  auto input = project::AssetImport{};
+  input.type = project::AssetType::Material;
+  input.virtualPath = "materials/chunks.tbmat";
+  input.displayName = "Chunk blend";
+  input.original.assign(json.begin(), json.end());
+  input.compatible = input.original;
+  const auto material = require(project->session()->importAsset(input));
+  {
+    auto store = require(project::ProjectStore::open(project->session()->store().path()));
+    for (auto slot = 0; slot < 3; ++slot)
+      require(store->addDependency(
+        material.id, textures[size_t(slot)], "terrain-slot-" + std::to_string(slot)));
+  }
+  require(app.mapWindowManager().createProjectMap(
+    project->session(), "Terrain", mdl::MapFormat::Valve));
+  auto* window = app.mapWindowManager().topMapWindow();
+  REQUIRE(window);
+  auto& map = window->document().map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  project->resize(1200, 820);
+  project->show();
+  window->switchToInspectorPage(InspectorPage::Terrain);
+  auto* navigation = window->findChild<QToolButton*>("Inspector_NavigationTerrain");
+  REQUIRE(navigation);
+  navigation->click();
+  QApplication::processEvents();
+  auto* panel = window->findChild<TerrainInspector*>();
+  auto* view = window->currentOrFirstVisible3DMapView();
+  REQUIRE(panel);
+  REQUIRE(view);
+  testChunkedTerrainEditing(app, window, view, panel, material.id);
   window->closeDocument(true);
 }
 

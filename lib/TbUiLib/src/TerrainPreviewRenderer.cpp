@@ -31,6 +31,7 @@
 #include "ui/MapDocument.h"
 #include "ui/ProjectSession.h"
 #include "ui/TerrainBaker.h"
+#include "ui/TerrainChunks.h"
 #include "ui/TerrainInspector.h"
 #include "ui/TerrainMaterial.h"
 #include "ui/TerrainRegion.h"
@@ -452,7 +453,8 @@ public:
       m_groups.clear();
       const auto visit = [&](const auto& self, const mdl::Node& node) -> void {
         if (const auto* group = dynamic_cast<const mdl::GroupNode*>(&node);
-            group && !group->group().terrainPaint().empty())
+            group && !group->group().terrainPaint().empty()
+            && !isTerrainChunkGroup(*group))
           m_groups.push_back(group);
         for (const auto* child : node.children())
           self(self, *child);
@@ -560,7 +562,9 @@ private:
       if (const auto* group = dynamic_cast<const mdl::GroupNode*>(node))
       {
         const auto known = std::ranges::find(m_groups, group) != m_groups.end();
-        if (known != !group->group().terrainPaint().empty())
+        if (
+          known
+          != (!group->group().terrainPaint().empty() && !isTerrainChunkGroup(*group)))
           m_groupsDirty = true;
       }
     }

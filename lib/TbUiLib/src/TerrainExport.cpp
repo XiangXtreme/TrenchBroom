@@ -17,6 +17,7 @@
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
 #include "ui/TerrainBaker.h"
+#include "ui/TerrainChunks.h"
 #include "ui/TerrainMaterial.h"
 #include "ui/TerrainRegion.h"
 
@@ -416,6 +417,48 @@ Result<void> bakeGroup(
 Result<TerrainEstimate> estimateTerrainGroup(
   const mdl::GroupNode& group, const project::ProjectStore* store)
 {
+  if (isTerrainChunkGroup(group))
+  {
+    const auto chunks = readTerrainChunks(group);
+    if (chunks.is_error())
+      return std::get<Error>(chunks.error());
+    auto result = TerrainEstimate{};
+    const auto& combined = *chunks.value().combined;
+    for (const auto& chunk : chunks.value().chunks)
+    {
+      const auto* child =
+        static_cast<const mdl::GroupNode*>(group.children()[chunk.childIndex]);
+      auto part = estimateTerrainGroup(*child, store);
+      if (part.is_error())
+        return std::get<Error>(part.error());
+      auto estimate = std::move(part).value();
+      const auto offset = QPointF{
+        (chunk.region.origin.x() - combined.origin.x()) / TerrainRegion::UnitsPerTexel,
+        (combined.origin.y() - chunk.region.origin.y()) / TerrainRegion::UnitsPerTexel};
+      for (auto& cut : estimate.cuts)
+      {
+        cut.surfaceIndex += result.sourceFaces;
+        cut.polygon.translate(offset);
+        result.cuts.push_back(std::move(cut));
+      }
+      if (
+        estimate.generatedFaces > 0
+        && (result.generatedFaces == 0 || estimate.narrowestFaceWidth < result.narrowestFaceWidth))
+      {
+        result.narrowestFaceWidth = estimate.narrowestFaceWidth;
+        result.narrowestFaceX = estimate.narrowestFaceX;
+        result.narrowestFaceY = estimate.narrowestFaceY;
+      }
+      result.sourceFaces += estimate.sourceFaces;
+      result.generatedFaces += estimate.generatedFaces;
+      result.textures += estimate.textures;
+      result.wadBytes += estimate.wadBytes;
+      result.facesBelowMinWidth += estimate.facesBelowMinWidth;
+      result.faceBudgetExceeded |= estimate.faceBudgetExceeded;
+      result.wadBudgetExceeded |= estimate.wadBudgetExceeded;
+    }
+    return result;
+  }
   const auto region = TerrainRegion::decode(group.group().terrainPaint());
   if (region.is_error())
     return std::get<Error>(region.error());
@@ -466,6 +509,13 @@ Result<TerrainEstimate> estimateTerrainGroup(
   }
   result.textures = size_t(std::count(used.begin(), used.end(), true));
   result.wadBytes = terrainWadBytes(bake.value(), used);
+  const auto added = result.generatedFaces > result.sourceFaces
+                       ? result.generatedFaces - result.sourceFaces
+                       : size_t{0};
+  result.faceBudgetExceeded =
+    region.value().maxAddedFaces >= 0 && added > size_t(region.value().maxAddedFaces);
+  result.wadBudgetExceeded = region.value().maxWadKiB >= 0
+                             && result.wadBytes > size_t(region.value().maxWadKiB) * 1024;
   return result;
 }
 
@@ -492,14 +542,27 @@ Result<std::optional<TerrainSnapshot>> bakeTerrainSnapshot(
 
   auto& world = *parsed.value();
   auto groups = std::vector<mdl::GroupNode*>{};
+  auto chunkRoots = std::vector<mdl::GroupNode*>{};
+  auto chunkError = std::optional<Error>{};
   const auto collect = [&](const auto& self, mdl::Node& node) -> void {
-    if (auto* group = dynamic_cast<mdl::GroupNode*>(&node);
-        group && !group->group().terrainPaint().empty())
-      groups.push_back(group);
+    if (auto* group = dynamic_cast<mdl::GroupNode*>(&node))
+    {
+      if (isTerrainChunkGroup(*group))
+      {
+        chunkRoots.push_back(group);
+        const auto chunks = readTerrainChunks(*group);
+        if (chunks.is_error())
+          chunkError = std::get<Error>(chunks.error());
+      }
+      else if (!group->group().terrainPaint().empty())
+        groups.push_back(group);
+    }
     for (auto* child : node.children())
       self(self, *child);
   };
   collect(collect, world);
+  if (chunkError)
+    return *chunkError;
   if (groups.empty())
     return std::optional<TerrainSnapshot>{};
   if (store && dependencies)
@@ -532,6 +595,12 @@ Result<std::optional<TerrainSnapshot>> bakeTerrainSnapshot(
         "Terrain group '{}': {}",
         groups[i]->name(),
         std::get<Error>(result.error()).msg)};
+  }
+  for (auto* root : chunkRoots)
+  {
+    auto content = root->group();
+    content.setTerrainPaint({});
+    root->setGroup(std::move(content));
   }
   auto entity = world.entity();
   entity.addOrUpdateProperty(mdl::EntityPropertyKeys::ValveVersion, "220");

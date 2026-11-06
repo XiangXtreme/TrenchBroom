@@ -10,6 +10,7 @@
 #include "base/NotifierConnection.h"
 #include "mdl/IdType.h"
 #include "ui/TabBook.h"
+#include "ui/TerrainChunks.h"
 #include "ui/TerrainExport.h"
 #include "ui/TerrainRegion.h"
 
@@ -84,6 +85,7 @@ private:
   QTimer* m_refreshTimer = nullptr;
   QTimer* m_sculptTimer = nullptr;
   std::optional<TerrainRegion> m_stroke;
+  std::vector<TerrainChunk> m_chunkStroke;
   size_t m_strokeRevision = 0;
   std::optional<mdl::IdType> m_strokeGroup;
   std::optional<vm::vec2d> m_previousPoint;
@@ -151,5 +153,7 @@ private:
   void updateSlotLabels(const std::string& materialAssetId);
   bool saveRegion(
     mdl::GroupNode& group, const TerrainRegion& region, const QString& label);
+  bool saveChunkRegions(
+    mdl::GroupNode& group, const std::vector<TerrainChunk>& chunks, const QString& label);
 };
 } // namespace tb::ui

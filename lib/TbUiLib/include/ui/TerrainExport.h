@@ -53,6 +53,8 @@ struct TerrainEstimate
   double narrowestFaceX = 0;
   double narrowestFaceY = 0;
   size_t facesBelowMinWidth = 0;
+  bool faceBudgetExceeded = false;
+  bool wadBudgetExceeded = false;
   std::vector<Cut> cuts;
 };
 

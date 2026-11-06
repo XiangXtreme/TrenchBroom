@@ -82,14 +82,20 @@ struct TerrainSurface
 };
 
 mdl::GroupNode* selectedTerrainGroup(const mdl::Map& map);
-Result<TerrainRegion> createTerrainRegion(const mdl::GroupNode& group);
+Result<TerrainRegion> createTerrainRegion(
+  const mdl::GroupNode& group, bool allowLargeSource = false);
 /** Sample aligned rectangular planar source brushes without changing their geometry. */
 Result<TerrainHeightField> createTerrainHeightField(
-  const mdl::GroupNode& group, const TerrainRegion& region, double spacing);
+  const mdl::GroupNode& group,
+  const TerrainRegion& region,
+  double spacing,
+  bool allowLargeSource = false);
 /** Map each height-field triangle to its verified child brush index. */
 Result<std::vector<size_t>> terrainHeightFieldBrushIndices(
   const mdl::GroupNode& group, const TerrainRegion& region);
 Result<std::vector<TerrainSurface>> terrainSurfaces(
-  const mdl::GroupNode& group, const TerrainRegion& region);
+  const mdl::GroupNode& group,
+  const TerrainRegion& region,
+  bool allowLargeSource = false);
 double terrainArea(const QPolygonF& polygon);
 } // namespace tb::ui

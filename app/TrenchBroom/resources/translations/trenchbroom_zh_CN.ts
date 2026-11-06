@@ -8495,7 +8495,10 @@ Narrowest top face: %1 units near (%2, %3)</source><translation>
 %1 个顶面小于设定的最小宽度。</translation></message>
         <message><source>Unlimited</source><translation>不限</translation></message>
         <message><source> KiB</source><translation> KiB</translation></message>
-        <message><source>Maximum WAD size for this terrain region only.</source><translation>仅限制此地形区域生成的 WAD 大小。</translation></message>
+        <message><source>For chunked terrain, this limit applies to each chunk.</source><translation>对于分块地形，此上限分别应用于每个分块。</translation></message>
+        <message><source>
+Chunk texture and WAD totals are estimated before deduplication.</source><translation>
+分块纹理数和 WAD 大小为去重前的合计估算。</translation></message>
         <message><source>Analyze Terrain</source><translation>分析地形</translation></message>
         <message><source>Extra top face limit</source><translation>新增顶面上限</translation></message>
         <message><source>Terrain WAD limit</source><translation>地形 WAD 上限</translation></message>
@@ -8544,6 +8547,11 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Invalid terrain rectangle, height, thickness or grid spacing.</source><translation>地形范围、高度、厚度或网格间距无效。</translation></message>
         <message><source>Terrain rectangle exceeds the 1280 by 640 unit region.</source><translation>单个地形区域不能超过 1280 × 640 单位。</translation></message>
         <message><source>Terrain rectangle dimensions must align with the grid spacing.</source><translation>地形范围的宽度和长度必须与网格间距对齐。</translation></message>
+        <message><source>Terrain would create too many brushes; increase the grid spacing.</source><translation>地形将生成过多 Brush；请增大网格间距。</translation></message>
+        <message><source>Grid spacing must align terrain chunk paint boundaries.</source><translation>网格间距必须与地形分块的材质边界对齐。</translation></message>
+        <message><source>The terrain chunks are missing, overlapping, or inconsistent.</source><translation>地形分块缺失、重叠或数据不一致。</translation></message>
+        <message><source>Could not create the terrain chunks.</source><translation>无法创建地形分块。</translation></message>
+        <message><source>Could not group the terrain chunks.</source><translation>无法组合地形分块。</translation></message>
         <message><source>The current layer or group is locked or hidden.</source><translation>当前图层或组已锁定或隐藏。</translation></message>
         <message><source>The source must be continuous rectangular brushes with planar tops, a shared flat bottom, and edges aligned to the terrain grid.</source><translation>源地面必须由连续的矩形 Brush 组成，顶面为平面，底面平坦且高度一致，边界与地形网格对齐。</translation></message>
         <message><source>Adjacent terrain brushes have different heights at their boundary.</source><translation>相邻地面 Brush 的接缝高度不一致。</translation></message>

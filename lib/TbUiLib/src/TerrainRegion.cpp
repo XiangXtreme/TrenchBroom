@@ -15,6 +15,7 @@
 #include "mdl/GroupNode.h"
 #include "mdl/Map.h"
 #include "mdl/Selection.h"
+#include "ui/TerrainChunks.h"
 
 #include <algorithm>
 #include <cmath>
@@ -364,12 +365,18 @@ Result<TerrainRegion> TerrainRegion::decode(const std::string_view text)
 mdl::GroupNode* selectedTerrainGroup(const mdl::Map& map)
 {
   const auto& selection = map.selection();
-  if (selection.nodes.size() == 1 && selection.groups.size() == 1)
-    return selection.groups.front();
-  return map.editorContext().currentGroup();
+  auto* group = selection.nodes.size() == 1 && selection.groups.size() == 1
+                  ? selection.groups.front()
+                  : map.editorContext().currentGroup();
+  if (group)
+    if (auto* parent = dynamic_cast<mdl::GroupNode*>(group->parent());
+        parent && isTerrainChunkGroup(*parent))
+      return parent;
+  return group;
 }
 
-Result<TerrainRegion> createTerrainRegion(const mdl::GroupNode& group)
+Result<TerrainRegion> createTerrainRegion(
+  const mdl::GroupNode& group, const bool allowLargeSource)
 {
   const auto inverse = vm::invert(group.group().transformation());
   if (!inverse || group.children().empty())
@@ -389,7 +396,8 @@ Result<TerrainRegion> createTerrainRegion(const mdl::GroupNode& group)
     }
   }
   auto region = TerrainRegion{vm::vec2d{left, top}};
-  if (const auto surfaces = terrainSurfaces(group, region); surfaces.is_error())
+  if (const auto surfaces = terrainSurfaces(group, region, allowLargeSource);
+      surfaces.is_error())
     return std::get<Error>(surfaces.error());
   return region;
 }
@@ -509,7 +517,7 @@ Result<std::vector<size_t>> terrainHeightFieldBrushIndices(
 }
 
 Result<std::vector<TerrainSurface>> terrainSurfaces(
-  const mdl::GroupNode& group, const TerrainRegion& region)
+  const mdl::GroupNode& group, const TerrainRegion& region, const bool allowLargeSource)
 {
   const auto& transform = group.group().transformation();
   const auto inverse = vm::invert(transform);
@@ -552,8 +560,8 @@ Result<std::vector<TerrainSurface>> terrainSurfaces(
     {
       const auto p = region.project(*inverse * vertex);
       if (
-        p.x() < -1e-5 || p.x() > TerrainRegion::Width + 1e-5 || p.y() < -1e-5
-        || p.y() > TerrainRegion::Height + 1e-5)
+        p.x() < -1e-5 || p.y() < -1e-5
+        || (!allowLargeSource && (p.x() > TerrainRegion::Width + 1e-5 || p.y() > TerrainRegion::Height + 1e-5)))
         return Error{"Terrain brushes exceed the 1280 by 640 unit region."};
       const auto underTop = std::ranges::any_of(brushSurfaces, [&](const auto& surface) {
         auto positive = false;
@@ -609,14 +617,17 @@ Result<std::vector<TerrainSurface>> terrainSurfaces(
 }
 
 Result<TerrainHeightField> createTerrainHeightField(
-  const mdl::GroupNode& group, const TerrainRegion& region, const double spacing)
+  const mdl::GroupNode& group,
+  const TerrainRegion& region,
+  const double spacing,
+  const bool allowLargeSource)
 {
   const auto unsupported = Error{
     "The source must be continuous rectangular brushes with planar tops, a shared flat "
     "bottom, and edges aligned to the terrain grid."};
   if (!std::isfinite(spacing) || spacing <= 0.0 || region.heightField)
     return unsupported;
-  const auto surfaces = terrainSurfaces(group, region);
+  const auto surfaces = terrainSurfaces(group, region, allowLargeSource);
   if (surfaces.is_error())
     return std::get<Error>(surfaces.error());
   if (group.children().empty() || surfaces.value().size() != group.children().size())
@@ -679,6 +690,9 @@ Result<TerrainHeightField> createTerrainHeightField(
     || std::abs(region.origin.x() - left) > Tolerance
     || std::abs(region.origin.y() - top) > Tolerance)
     return unsupported;
+
+  if (std::round(columnCount) * std::round(rowCount) * 2.0 > MaxTerrainBrushes)
+    return Error{"Terrain would create too many brushes; increase the grid spacing."};
 
   auto result = TerrainHeightField::create(
     int(std::round(columnCount)),

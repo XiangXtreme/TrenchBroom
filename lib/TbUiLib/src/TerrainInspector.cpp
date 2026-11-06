@@ -67,11 +67,29 @@ QString terrainErrorMessage(const Error& error)
 
 bool terrainEditable(const mdl::Map& map, const mdl::GroupNode& group)
 {
-  return map.editorContext().editable(group) && map.editorContext().visible(group)
-         && std::ranges::none_of(group.children(), [&](const auto* child) {
-              return !map.editorContext().editable(*child)
-                     || !map.editorContext().visible(*child);
-            });
+  const auto check = [&](const auto& self, const mdl::Node& node) -> bool {
+    return map.editorContext().editable(node) && map.editorContext().visible(node)
+           && std::ranges::all_of(
+             node.children(), [&](const auto* child) { return self(self, *child); });
+  };
+  return check(check, group);
+}
+
+bool terrainOwnsBrush(const mdl::GroupNode& group, const mdl::BrushNode& brush)
+{
+  if (brush.parent() == &group)
+    return true;
+  return isTerrainChunkGroup(group) && brush.parent()
+         && brush.parent()->parent() == &group;
+}
+
+Result<size_t> terrainSurfaceCount(
+  const mdl::GroupNode& group, const TerrainRegion& region)
+{
+  const auto surfaces = terrainGroupSurfaces(group, region);
+  if (surfaces.is_error())
+    return std::get<Error>(surfaces.error());
+  return surfaces.value().size();
 }
 
 vm::vec3d terrainVertex(
@@ -187,7 +205,8 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_wadBudget->setSuffix(tr(" KiB"));
   m_wadBudget->setValue(-1);
   m_wadBudget->setKeyboardTracking(false);
-  m_wadBudget->setToolTip(tr("Maximum WAD size for this terrain region only."));
+  m_faceBudget->setToolTip(tr("For chunked terrain, this limit applies to each chunk."));
+  m_wadBudget->setToolTip(tr("For chunked terrain, this limit applies to each chunk."));
 
   m_minFaceWidth = new QSpinBox{};
   m_minFaceWidth->setObjectName(QStringLiteral("TerrainInspector_MinFaceWidth"));
@@ -286,7 +305,7 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
     auto* group = selectedTerrainGroup(m_document.map());
     if (!group)
       return;
-    auto region = TerrainRegion::decode(group->group().terrainPaint());
+    auto region = readTerrainGroup(*group);
     if (region.is_error())
       return;
     auto updated = std::move(region).value();
@@ -310,7 +329,7 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
       auto* group = selectedTerrainGroup(m_document.map());
       if (!group)
         return;
-      auto region = TerrainRegion::decode(group->group().terrainPaint());
+      auto region = readTerrainGroup(*group);
       if (region.is_error())
         return;
       const auto newMatId = m_terrainMaterial->itemData(index).toString().toStdString();
@@ -479,7 +498,7 @@ void TerrainInspector::updateModeControls()
   const auto vertices = m_editMode->currentIndex() == 2;
   const auto material = m_editMode->currentIndex() == 0;
   const auto* group = selectedTerrainGroup(m_document.map());
-  const auto region = group ? TerrainRegion::decode(group->group().terrainPaint())
+  const auto region = group ? readTerrainGroup(*group)
                             : Result<TerrainRegion>{Error{"No terrain selected."}};
   const auto hasHeightField =
     region.is_success() && region.value().heightField.has_value();
@@ -535,7 +554,7 @@ void TerrainInspector::refresh()
   if (m_sculptStroke && (!group || group->persistentId() != m_strokeGroup))
     endStroke(false);
   m_refreshedGroup = group ? group->persistentId() : std::nullopt;
-  m_refreshedPaint = group ? group->group().terrainPaint() : std::string{};
+  m_refreshedPaint = group ? terrainGroupRevision(*group) : std::string{};
   const auto hasRegion = group && !group->group().terrainPaint().empty();
   const auto editable = group && terrainEditable(map, *group);
   const auto& selection = map.selection();
@@ -592,7 +611,7 @@ void TerrainInspector::refresh()
                   : tr("Open a Half-Life Valve 220 map in a project to edit terrain."));
     return;
   }
-  const auto region = TerrainRegion::decode(group->group().terrainPaint());
+  const auto region = readTerrainGroup(*group);
   if (region.is_error())
   {
     m_status->setText(terrainErrorMessage(std::get<Error>(region.error())));
@@ -642,7 +661,7 @@ void TerrainInspector::refresh()
     return;
   }
 
-  const auto surfaces = terrainSurfaces(*group, region.value());
+  const auto surfaces = terrainSurfaceCount(*group, region.value());
   if (surfaces.is_error())
   {
     m_status->setText(terrainErrorMessage(std::get<Error>(surfaces.error())));
@@ -674,7 +693,7 @@ void TerrainInspector::refresh()
   else
     m_status->setText(tr("%1 · %2 source top faces")
                         .arg(QString::fromStdString(group->name()))
-                        .arg(surfaces.value().size()));
+                        .arg(surfaces.value()));
 }
 
 void TerrainInspector::nodesChanged(const std::vector<mdl::Node*>& nodes)
@@ -688,7 +707,7 @@ void TerrainInspector::nodesChanged(const std::vector<mdl::Node*>& nodes)
     return;
   if (
     group->persistentId() != m_refreshedGroup
-    || group->group().terrainPaint() != m_refreshedPaint)
+    || terrainGroupRevision(*group) != m_refreshedPaint)
   {
     refresh();
     return;
@@ -742,9 +761,11 @@ void TerrainInspector::analyze()
             .arg(countKind(TerrainFaceKind::Base))
             .arg(countKind(TerrainFaceKind::Shared))
             .arg(countKind(TerrainFaceKind::Local));
-  if (m_faceBudget->value() >= 0 && added > size_t(m_faceBudget->value()))
+  if (isTerrainChunkGroup(*group))
+    text += tr("\nChunk texture and WAD totals are estimated before deduplication.");
+  if (stats.faceBudgetExceeded)
     text += tr("\nExtra top faces exceed the configured limit.");
-  if (m_wadBudget->value() >= 0 && stats.wadBytes > size_t(m_wadBudget->value()) * 1024)
+  if (stats.wadBudgetExceeded)
     text += tr("\nTerrain WAD exceeds the configured limit.");
   if (stats.facesBelowMinWidth > 0)
     text += tr("\n%1 top faces are below the configured minimum width.")
@@ -774,6 +795,22 @@ bool TerrainInspector::saveRegion(
 {
   if (!terrainEditable(m_document.map(), group))
     return false;
+  if (isTerrainChunkGroup(group))
+  {
+    auto decoded = readTerrainChunks(group);
+    if (decoded.is_error())
+      return false;
+    auto chunks = std::move(decoded).value().chunks;
+    for (auto& chunk : chunks)
+    {
+      chunk.region.materialAssetId = region.materialAssetId;
+      chunk.region.maxAddedFaces = region.maxAddedFaces;
+      chunk.region.maxWadKiB = region.maxWadKiB;
+      chunk.region.minFaceWidth = region.minFaceWidth;
+      chunk.region.patchDensityPercent = region.patchDensityPercent;
+    }
+    return saveChunkRegions(group, chunks, label);
+  }
   auto content = group.group();
   const auto encoded = region.encode();
   if (content.terrainPaint() == encoded)
@@ -785,6 +822,42 @@ bool TerrainInspector::saveRegion(
   map.startTransaction(name, mdl::TransactionScope::LongRunning);
   if (!mdl::updateNodeContents(
         map, name, {{&group, mdl::NodeContents{std::move(content)}}}))
+  {
+    map.cancelTransaction();
+    return false;
+  }
+  return map.commitTransaction();
+}
+
+bool TerrainInspector::saveChunkRegions(
+  mdl::GroupNode& group, const std::vector<TerrainChunk>& chunks, const QString& label)
+{
+  if (
+    !terrainEditable(m_document.map(), group) || !isTerrainChunkGroup(group)
+    || chunks.size() != group.children().size())
+    return false;
+  auto changes = std::vector<std::pair<mdl::Node*, mdl::NodeContents>>{};
+  for (const auto& chunk : chunks)
+  {
+    if (chunk.childIndex >= group.children().size())
+      return false;
+    auto* child = dynamic_cast<mdl::GroupNode*>(group.children()[chunk.childIndex]);
+    if (!child)
+      return false;
+    auto content = child->group();
+    const auto encoded = chunk.region.encode();
+    if (encoded != content.terrainPaint())
+    {
+      content.setTerrainPaint(encoded);
+      changes.emplace_back(child, mdl::NodeContents{std::move(content)});
+    }
+  }
+  if (changes.empty())
+    return true;
+  auto& map = m_document.map();
+  const auto name = label.toStdString();
+  map.startTransaction(name, mdl::TransactionScope::LongRunning);
+  if (!mdl::updateNodeContents(map, name, std::move(changes)))
   {
     map.cancelTransaction();
     return false;
@@ -835,12 +908,12 @@ const TerrainRegion* TerrainInspector::vertexRegion(const mdl::GroupNode& group)
 {
   if (m_vertexDragging && m_stroke && group.persistentId() == m_strokeGroup)
     return &*m_stroke;
-  const auto& encoded = group.group().terrainPaint();
+  const auto encoded = terrainGroupRevision(group);
   if (m_vertexCachedGroup != group.persistentId() || m_vertexCachedPaint != encoded)
   {
     m_vertexCachedGroup = group.persistentId();
     m_vertexCachedPaint = encoded;
-    auto decoded = TerrainRegion::decode(encoded);
+    auto decoded = readTerrainGroup(group);
     m_vertexCachedRegion = decoded.is_success()
                              ? std::make_unique<TerrainRegion>(std::move(decoded).value())
                              : nullptr;
@@ -974,7 +1047,7 @@ void TerrainInspector::moveVertexInteraction(const QPointF& point)
     return;
   }
   m_stroke->heightField = std::move(field);
-  m_refreshedPaint = group->group().terrainPaint();
+  m_refreshedPaint = terrainGroupRevision(*group);
   refreshViews();
 }
 
@@ -1080,13 +1153,26 @@ void TerrainInspector::createDrawnTerrain(const vm::vec2d& first, const vm::vec2
       std::round(point.x() / spacing) * spacing,
       std::round(point.y() / spacing) * spacing};
   };
-  const auto result = createTerrainRectangle(
-    m_document.map(),
-    snap(first),
-    snap(second),
-    double(m_newHeight->value()),
-    double(m_newThickness->value()),
-    spacing);
+  const auto start = snap(first);
+  const auto finish = snap(second);
+  const auto large =
+    std::abs(finish.x() - start.x()) > TerrainRegion::Width * TerrainRegion::UnitsPerTexel
+    || std::abs(finish.y() - start.y())
+         > TerrainRegion::Height * TerrainRegion::UnitsPerTexel;
+  const auto result = large ? createTerrainChunkRectangle(
+                                m_document.map(),
+                                start,
+                                finish,
+                                double(m_newHeight->value()),
+                                double(m_newThickness->value()),
+                                spacing)
+                            : createTerrainRectangle(
+                                m_document.map(),
+                                start,
+                                finish,
+                                double(m_newHeight->value()),
+                                double(m_newThickness->value()),
+                                spacing);
   if (result.is_error())
     m_status->setText(terrainErrorMessage(std::get<Error>(result.error())));
   else
@@ -1115,8 +1201,19 @@ size_t TerrainInspector::strokeRevision() const
 
 const TerrainRegion* TerrainInspector::previewStroke(const mdl::GroupNode& group) const
 {
-  return m_stroke && !m_sculptStroke && group.persistentId() == m_strokeGroup ? &*m_stroke
-                                                                              : nullptr;
+  if (!m_stroke || m_sculptStroke)
+    return nullptr;
+  if (group.persistentId() == m_strokeGroup)
+    return &*m_stroke;
+  const auto* parent = dynamic_cast<const mdl::GroupNode*>(group.parent());
+  if (!parent || parent->persistentId() != m_strokeGroup)
+    return nullptr;
+  for (const auto& chunk : m_chunkStroke)
+    if (
+      chunk.childIndex < parent->children().size()
+      && parent->children()[chunk.childIndex] == &group)
+      return &chunk.region;
+  return nullptr;
 }
 
 void TerrainInspector::beginStroke(const mdl::PickResult& pick)
@@ -1126,12 +1223,20 @@ void TerrainInspector::beginStroke(const mdl::PickResult& pick)
   const auto* group = selectedTerrainGroup(m_document.map());
   if (!group || !terrainEditable(m_document.map(), *group))
     return;
-  auto region = TerrainRegion::decode(group->group().terrainPaint());
+  auto region = readTerrainGroup(*group);
   if (region.is_error())
     return;
   const auto sculpt = m_editMode->currentIndex() == 1;
   if (sculpt && !region.value().heightField)
     return;
+  m_chunkStroke.clear();
+  if (!sculpt && isTerrainChunkGroup(*group))
+  {
+    auto chunks = readTerrainChunks(*group);
+    if (chunks.is_error())
+      return;
+    m_chunkStroke = std::move(chunks).value().chunks;
+  }
   ++m_strokeRevision;
   m_stroke = std::move(region).value();
   m_strokeGroup = group->persistentId();
@@ -1161,7 +1266,8 @@ void TerrainInspector::continueStroke(const mdl::PickResult& pick)
   }
   const auto& hit = pick.first(mdl::HitFilters::type(mdl::BrushNode::BrushHitType));
   const auto face = mdl::hitToFaceHandle(hit);
-  if (!face || face->node().parent() != group || face->face().normal().z() <= 1e-6)
+  if (
+    !face || !terrainOwnsBrush(*group, face->node()) || face->face().normal().z() <= 1e-6)
   {
     m_previousPoint.reset();
     if (m_sculptStroke)
@@ -1188,12 +1294,27 @@ void TerrainInspector::continueStroke(const mdl::PickResult& pick)
   const auto delta = point - previous;
   const auto steps = std::max(1, int(std::ceil(vm::length(delta) / (radius / 4.0))));
   for (auto i = 1; i <= steps; ++i)
-    m_stroke->paint(
-      previous + delta * (double(i) / steps),
-      radius,
-      material,
-      double(m_strength->value()) / 100.0,
-      double(m_hardness->value()) / 100.0);
+  {
+    const auto sample = previous + delta * (double(i) / steps);
+    if (m_chunkStroke.empty())
+      m_stroke->paint(
+        sample,
+        radius,
+        material,
+        double(m_strength->value()) / 100.0,
+        double(m_hardness->value()) / 100.0);
+    else
+      for (auto& chunk : m_chunkStroke)
+      {
+        const auto localSample = m_stroke->unproject(QPointF{sample.x(), sample.y()});
+        chunk.region.paint(
+          chunk.region.project(localSample),
+          radius,
+          material,
+          double(m_strength->value()) / 100.0,
+          double(m_hardness->value()) / 100.0);
+      }
+  }
   m_previousPoint = point;
 }
 
@@ -1243,7 +1364,7 @@ void TerrainInspector::sculptTo(const vm::vec2d& point)
       return;
     }
     m_stroke->heightField = std::move(height);
-    m_refreshedPaint = group->group().terrainPaint();
+    m_refreshedPaint = terrainGroupRevision(*group);
     refreshViews();
   }
   m_previousPoint = point;
@@ -1252,6 +1373,7 @@ void TerrainInspector::sculptTo(const vm::vec2d& point)
 void TerrainInspector::endStroke(const bool commit)
 {
   auto stroke = std::exchange(m_stroke, std::nullopt);
+  auto chunks = std::exchange(m_chunkStroke, {});
   auto id = std::exchange(m_strokeGroup, std::nullopt);
   const auto sculpt = std::exchange(m_sculptStroke, false);
   m_sculptTimer->stop();
@@ -1276,7 +1398,8 @@ void TerrainInspector::endStroke(const bool commit)
     if (auto* group = selectedTerrainGroup(m_document.map());
         group && group->persistentId() == id)
     {
-      if (!saveRegion(*group, *stroke, tr("Paint Terrain")))
+      if (!(chunks.empty() ? saveRegion(*group, *stroke, tr("Paint Terrain"))
+                           : saveChunkRegions(*group, chunks, tr("Paint Terrain"))))
         m_status->setText(tr("Could not save the terrain stroke."));
     }
   }
@@ -1344,13 +1467,13 @@ void TerrainInspector::render(
     const auto face = mdl::hitToFaceHandle(hit);
     const auto inverse = vm::invert(group->group().transformation());
     if (
-      face && face->node().parent() == group && face->face().normal().z() > 1e-6
+      face && terrainOwnsBrush(*group, face->node()) && face->face().normal().z() > 1e-6
       && inverse)
     {
       const auto& transform = group->group().transformation();
       const auto& plane = face->face().boundary();
       const auto localCenter = *inverse * hit.hitPoint();
-      const auto region = TerrainRegion::decode(group->group().terrainPaint());
+      const auto region = readTerrainGroup(*group);
       const auto drawRing = [&](const double radius) {
         auto points = std::vector<vm::vec3f>{};
         constexpr auto segments = 64;
@@ -1421,10 +1544,10 @@ void TerrainInspector::render(
 
   if (!m_showCuts->isChecked() || m_stroke)
     return;
-  const auto region = TerrainRegion::decode(group->group().terrainPaint());
+  const auto region = readTerrainGroup(*group);
   if (region.is_error())
     return;
-  const auto surfaces = terrainSurfaces(*group, region.value());
+  const auto surfaces = terrainGroupSurfaces(*group, region.value());
   if (surfaces.is_error())
     return;
   const auto& transform = group->group().transformation();
