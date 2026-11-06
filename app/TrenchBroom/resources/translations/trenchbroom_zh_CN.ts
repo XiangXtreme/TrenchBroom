@@ -6754,6 +6754,8 @@ Pick a sequence and frame, or press Play. Drag to orbit, wheel to zoom.</source>
         </context>
         <context>
         <name>tb::ui::AssetLibraryWindow</name>
+        <message><source>Folders</source><translation>文件夹</translation></message>
+        <message><source>All folders</source><translation>所有文件夹</translation></message>
         <message><source>Create Terrain Material from Selected Textures…</source><translation>用选中的贴图创建地形材质…</translation></message>
         <message><source>Cannot create the terrain material package.</source><translation>无法创建地形材质包。</translation></message>
         <message><source>New Material…</source><translation>新建材质…</translation></message>

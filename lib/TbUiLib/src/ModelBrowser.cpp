@@ -104,6 +104,7 @@
 #include <algorithm>
 #include <optional>
 #include <ranges>
+#include <unordered_map>
 
 namespace tb::ui
 {
@@ -1069,8 +1070,7 @@ void ModelBrowser::bindEvents(AppController& appController)
       return;
     }
 
-    const auto typedPath =
-      std::filesystem::path{m_folderEdit->text().toStdString()}.lexically_normal();
+    const auto typedPath = pathFromQString(m_folderEdit->text()).lexically_normal();
     if (typedPath.empty() || typedPath == std::filesystem::path{"."})
     {
       setCurrentFolderPath(std::filesystem::path{});
@@ -1116,12 +1116,12 @@ void ModelBrowser::bindEvents(AppController& appController)
         return;
       }
       const auto rel = current->data(0, Qt::UserRole).toString();
-      setCurrentFolderPath(std::filesystem::path{rel.toStdString()});
+      setCurrentFolderPath(pathFromQString(rel));
     });
 
   connect(
     m_view, &ModelBrowserView::folderActivated, this, [&](const QString& folderPath) {
-      setCurrentFolderPath(std::filesystem::path{folderPath.toStdString()});
+      setCurrentFolderPath(pathFromQString(folderPath));
     });
   connect(
     m_view,
@@ -1370,10 +1370,9 @@ void ModelBrowser::rebuildBreadcrumbBar()
 
   // The root crumb names the listing the paths are relative to, so "sprites" reads as
   // assets/sprites instead of looking like a top-level folder.
-  const auto rootTitle =
-    m_folderPath.filename().empty()
-      ? QStringLiteral("assets")
-      : QString::fromStdString(m_folderPath.filename().generic_string());
+  const auto rootTitle = m_folderPath.filename().empty()
+                           ? QStringLiteral("assets")
+                           : pathAsGenericQString(m_folderPath.filename());
   addCrumb(rootTitle, std::filesystem::path{});
 
   auto accumulated = std::filesystem::path{};
@@ -1381,7 +1380,7 @@ void ModelBrowser::rebuildBreadcrumbBar()
   {
     accumulated /= part;
     addSeparator();
-    addCrumb(QString::fromStdString(part.generic_string()), accumulated);
+    addCrumb(pathAsGenericQString(part), accumulated);
   }
 
   m_breadcrumbLayout->addStretch(1);
@@ -1400,13 +1399,13 @@ void ModelBrowser::showPathEditor()
     displayedPath /= m_currentFolderPath;
   }
 
-  auto displayedText = displayedPath.generic_string();
-  if (displayedText.empty())
+  auto displayedText = pathAsGenericQString(displayedPath);
+  if (displayedText.isEmpty())
   {
-    displayedText = "assets";
+    displayedText = QStringLiteral("assets");
   }
 
-  m_folderEdit->setText(QString::fromStdString(displayedText));
+  m_folderEdit->setText(displayedText);
   m_folderEdit->setModified(false);
   m_pathStack->setCurrentWidget(m_folderEdit);
   m_folderEdit->setFocus();
@@ -1489,7 +1488,7 @@ void ModelBrowser::updateFilterVisibility()
   // question of what it filters, so each one is kept for the types it can apply to.
   const auto currentFolderAbs =
     m_folderPath.empty() ? m_currentFolderPath : (m_folderPath / m_currentFolderPath);
-  const auto assets = m_view->assets();
+  const auto& assets = m_view->assets();
   const auto hasType = [&](const BrowserCellType type) {
     return std::ranges::any_of(assets, [&](const BrowserAsset& asset) {
       if (asset.type != type)
@@ -2023,6 +2022,15 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
   if (auto result = m_project->checkLibraryUpdates(); result.is_success())
     updates = std::move(result).value();
 
+  auto capturedAssets = std::unordered_map<std::string, project::Asset>{};
+  if (const auto linked = m_project->store().libraryLinkedAssets(); linked.is_success())
+    for (const auto& asset : linked.value())
+      if (asset.library.libraryId == m_libraryId)
+        capturedAssets.try_emplace(asset.library.libraryAssetId, asset);
+  auto updatesByAsset = std::unordered_map<std::string, project::LibraryUpdateState>{};
+  for (const auto& update : updates)
+    updatesByAsset.try_emplace(update.projectAssetId, update.state);
+
   auto assets = std::vector<BrowserAsset>{};
   for (const auto& asset : catalog.value())
   {
@@ -2030,8 +2038,9 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
       asset.type, pathFromQString(QString::fromStdString(asset.virtualPath)));
     if (type == BrowserCellType::Folder)
       continue;
-    auto entry =
-      BrowserAsset{type, pathFromQString(QString::fromStdString(asset.virtualPath))};
+    auto entry = BrowserAsset{};
+    entry.type = type;
+    entry.path = pathFromQString(QString::fromStdString(asset.virtualPath));
     entry.source = BrowserSource::AssetLibrary;
     // A non-empty project ID marks a catalog-backed entry, which is what makes the
     // browser show display names and search them.
@@ -2050,32 +2059,30 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
         pathFromQString(QString::fromStdString(asset.sourceContainer));
     entry.missing = asset.missing;
     entry.skybox = asset.type == project::AssetType::Skybox;
-    if (const auto captured =
-          m_project->projectAssetForLibraryAsset(m_libraryId, asset.id);
-        captured.is_success() && captured.value())
+    if (const auto captured = capturedAssets.find(asset.id);
+        captured != capturedAssets.end())
     {
-      const auto& projectAsset = *captured.value();
+      const auto& projectAsset = captured->second;
       entry.assetId = projectAsset.id;
       entry.projectAssetId = projectAsset.id;
       entry.projectRevision = projectAsset.revision;
       entry.projectPublishPath =
         pathFromQString(QString::fromStdString(projectAsset.publishPath));
 
-      const auto update = std::ranges::find_if(updates, [&](const auto& candidate) {
-        return candidate.projectAssetId == projectAsset.id;
-      });
+      const auto update = updatesByAsset.find(projectAsset.id);
       entry.projectUpdateAvailable =
-        update != updates.end()
-        && (update->state == project::LibraryUpdateState::NewVersion || update->state == project::LibraryUpdateState::DependenciesChanged);
+        update != updatesByAsset.end()
+        && (update->second == project::LibraryUpdateState::NewVersion || update->second == project::LibraryUpdateState::DependenciesChanged);
     }
     assets.push_back(std::move(entry));
   }
 
-  // Resolve file-backed resources in one pass. Texture files and terrain material
-  // dependencies are loaded only for visible previews, without caching entire libraries.
+  // Models, textures and terrain materials are resolved when their previews are visible.
   auto fileIds = std::vector<std::string>{};
   for (const auto& entry : assets)
-    if (entry.type != BrowserCellType::Texture && entry.type != BrowserCellType::Material)
+    if (
+      entry.type != BrowserCellType::Texture && entry.type != BrowserCellType::Material
+      && entry.type != BrowserCellType::Model)
       fileIds.push_back(entry.libraryAssetId);
 
   if (const auto files = m_project->libraryAssetFiles(m_libraryId, fileIds);
@@ -2663,9 +2670,9 @@ void ModelBrowser::rebuildFolderTree()
         continue;
       }
 
-      auto* item = new QTreeWidgetItem{
-        rootItem, QStringList{QString::fromStdString(rootPath.generic_string())}};
-      item->setData(0, Qt::UserRole, QString::fromStdString(rootPath.generic_string()));
+      auto* item =
+        new QTreeWidgetItem{rootItem, QStringList{pathAsGenericQString(rootPath)}};
+      item->setData(0, Qt::UserRole, pathAsGenericQString(rootPath));
       item->setIcon(0, folderIcon);
       m_folderTreeItems.emplace(rootPath, item);
     }
@@ -2699,10 +2706,9 @@ void ModelBrowser::rebuildFolderTree()
         continue;
       }
 
-      auto* item = new QTreeWidgetItem{
-        parentItem, QStringList{QString::fromStdString(part.generic_string())}};
-      item->setData(
-        0, Qt::UserRole, QString::fromStdString(accumulatedPath.generic_string()));
+      auto* item =
+        new QTreeWidgetItem{parentItem, QStringList{pathAsGenericQString(part)}};
+      item->setData(0, Qt::UserRole, pathAsGenericQString(accumulatedPath));
       item->setIcon(0, folderIcon);
       parentItem = item;
       m_folderTreeItems.emplace(accumulatedPath, item);

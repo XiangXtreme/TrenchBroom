@@ -36,6 +36,7 @@ class QPushButton;
 class QTimer;
 class QSlider;
 class QToolButton;
+class QTreeWidget;
 
 namespace tb::ui
 {
@@ -68,6 +69,7 @@ class AssetLibraryWindow : public QDialog
   std::optional<std::string> m_selectedId;
   QString m_filter = QStringLiteral("all");
   QString m_search;
+  QString m_folderPath;
   bool m_listMode = false;
 
   QLabel* m_libraryBadge = nullptr;
@@ -108,6 +110,7 @@ class AssetLibraryWindow : public QDialog
   QLabel* m_projectScope = nullptr;
   QTimer* m_reloadTimer = nullptr;
   AssetLibraryListView* m_categories = nullptr;
+  QTreeWidget* m_folders = nullptr;
   AssetLibraryListView* m_grid = nullptr;
   AssetLibraryItemDelegate* m_delegate = nullptr;
   QSlider* m_sizeSlider = nullptr;
@@ -149,6 +152,7 @@ private:
   void reload();
   void focusAsset(const std::string& assetId, const QString& category);
   void refreshCategories();
+  void refreshFolders();
   void refreshGrid();
   void showAsset(const project::LibraryAsset* asset);
   void clearInspector();

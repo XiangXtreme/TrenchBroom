@@ -88,6 +88,10 @@ public:
     const std::string& assetId) const = 0;
   virtual Result<std::vector<project::AssetDependency>> dependencies(
     const std::string& assetId) const = 0;
+  virtual Result<std::vector<project::AssetDependency>> allDependencies() const
+  {
+    return Error{"This asset library does not support batch dependencies."};
+  }
 
   virtual bool canImport() const { return false; }
   virtual bool canConvert() const { return false; }
@@ -96,6 +100,10 @@ public:
   virtual bool canManage() const { return false; }
 
   using Metadata = BrowserAssetMetadata;
+  virtual Result<std::map<std::string, Metadata>> allMetadata()
+  {
+    return Error{"This asset library does not support batch metadata."};
+  }
   virtual Result<Metadata> metadata(const std::string& /*assetId*/)
   {
     return Error{"This asset library is read only."};

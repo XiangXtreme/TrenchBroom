@@ -11,6 +11,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -94,6 +95,7 @@ public:
   Result<void> addDependency(
     const std::string& assetId, const std::string& dependencyId, const std::string& kind);
   Result<std::vector<AssetDependency>> dependencies(const std::string& assetId) const;
+  Result<std::vector<AssetDependency>> allDependencies() const;
   Result<std::vector<AssetDependency>> dependents(const std::string& dependencyId) const;
 
   // Removes the asset from the catalog together with its dependency edges. The source
@@ -118,6 +120,7 @@ public:
     friend bool operator==(const AssetMetadata&, const AssetMetadata&) = default;
   };
   Result<AssetMetadata> metadata(const std::string& assetId) const;
+  Result<std::map<std::string, AssetMetadata>> allMetadata() const;
   Result<void> setFavorite(const std::string& assetId, bool favorite);
   Result<void> setTags(const std::string& assetId, const std::vector<std::string>& tags);
 

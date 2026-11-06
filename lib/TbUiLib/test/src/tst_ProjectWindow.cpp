@@ -1945,6 +1945,118 @@ TEST_CASE("ProjectWindow")
       QTest::qWaitFor([&]() { return browser->grabFramebuffer() == rendered; }, 3000));
   }
 
+  SECTION("library model previews resolve only visible entries and invalidate revisions")
+  {
+    const auto modelFolder = directory.filePath("lazy-preview-models");
+    REQUIRE(QDir{}.mkpath(modelFolder));
+    const auto file = modelFolder + "/1000.obj";
+    auto output = QSaveFile{file};
+    REQUIRE(output.open(QIODevice::WriteOnly));
+    REQUIRE(output.write("v 0 0 0\nv 8 0 0\nv 0 8 0\nf 1 2 3\n") > 0);
+    REQUIRE(output.commit());
+    alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
+    QApplication::processEvents();
+    auto* browser = window.findChild<ModelBrowserView*>();
+    REQUIRE(browser);
+    browser->setIncludeDefaultRoots(false);
+    auto assets = std::vector<BrowserAsset>{};
+    for (auto i = 0; i < 120; ++i)
+    {
+      if (i != 0)
+        REQUIRE(
+          QFile::copy(file, modelFolder + "/" + QString::number(1000 + i) + ".obj"));
+      auto asset = BrowserAsset{};
+      asset.type = BrowserCellType::Model;
+      asset.path = std::to_string(1000 + i) + ".obj";
+      asset.displayName = std::to_string(1000 + i);
+      asset.source = BrowserSource::AssetLibrary;
+      asset.libraryId = "library";
+      asset.libraryAssetId = asset.displayName;
+      asset.libraryRevision = 1;
+      assets.push_back(std::move(asset));
+    }
+    auto resolved = std::vector<std::filesystem::path>{};
+    browser->setPreviewPathResolver([&](const auto& entries) {
+      auto files = std::map<std::filesystem::path, std::filesystem::path>{};
+      for (const auto& entry : entries)
+      {
+        resolved.push_back(entry.path);
+        files.emplace(entry.path, pathFromQString(modelFolder) / entry.path);
+      }
+      return Result<decltype(files)>{std::move(files)};
+    });
+    browser->setAssets({}, assets);
+    REQUIRE(QTest::qWaitFor([&]() { return browser->isVisible(); }, 3000));
+    REQUIRE_FALSE(browser->grabFramebuffer().isNull());
+    REQUIRE_FALSE(resolved.empty());
+    CHECK(resolved.size() < assets.size());
+    const auto visible = resolved.front();
+    const auto initialCount = resolved.size();
+    browser->setAssets({}, assets);
+    REQUIRE_FALSE(browser->grabFramebuffer().isNull());
+    CHECK(resolved.size() == initialCount);
+    const auto changed = std::ranges::find(assets, visible, &BrowserAsset::path);
+    REQUIRE(changed != assets.end());
+    ++changed->libraryRevision;
+    browser->setAssets({}, assets);
+    REQUIRE_FALSE(browser->grabFramebuffer().isNull());
+    CHECK(resolved.size() == initialCount + 1);
+    CHECK(resolved.back() == visible);
+    auto* scroll =
+      browser->parentWidget()->findChild<QScrollBar*>("ModelBrowser_ScrollBar");
+    REQUIRE(scroll);
+    REQUIRE(scroll->maximum() > 0);
+    scroll->setValue(scroll->maximum());
+    REQUIRE_FALSE(browser->grabFramebuffer().isNull());
+    CHECK(resolved.size() > initialCount + 1);
+    const auto afterScroll = resolved.size();
+    scroll->setValue(0);
+    REQUIRE_FALSE(browser->grabFramebuffer().isNull());
+    CHECK(resolved.size() == afterScroll);
+    browser->setPreviewPathResolver({});
+    browser->setAssets({}, {});
+  }
+
+  SECTION("library browsing keeps Unicode folders and does not eagerly resolve models")
+  {
+    const auto folder = directory.filePath("unicode-model-library");
+    const auto nature = QString::fromUtf8("自然与地形");
+    const auto trees = QString::fromUtf8("树木");
+    REQUIRE(QDir{}.mkpath(folder + "/" + nature + "/" + trees));
+    for (auto i = 0; i < 3; ++i)
+    {
+      auto file = QFile{
+        folder + "/" + nature + "/" + trees + "/tree" + QString::number(i) + ".mdl"};
+      REQUIRE(file.open(QIODevice::WriteOnly));
+      REQUIRE(file.write("IDST", 4) == 4);
+    }
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Models"));
+    require(library->scan());
+    require(session->attachLibrary(pathFromQString(folder)));
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    auto* cards = browser->findChild<ModelBrowserView*>();
+    REQUIRE(source);
+    REQUIRE(folders);
+    REQUIRE(cards);
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    QTRY_COMPARE(cards->assets().size(), 3);
+    for (const auto& asset : cards->assets())
+      CHECK(asset.absolutePath.empty());
+    const auto parents = folders->findItems(nature, Qt::MatchRecursive);
+    const auto children = folders->findItems(trees, Qt::MatchRecursive);
+    REQUIRE(parents.size() == 1);
+    REQUIRE(children.size() == 1);
+    folders->setCurrentItem(children.front());
+    const auto buttons = browser->findChildren<QToolButton*>();
+    CHECK(std::ranges::any_of(
+      buttons, [&](const auto* button) { return button->text() == trees; }));
+  }
+
   SECTION("refreshing asset cards preserves live map model renderers")
   {
     auto input = project::AssetImport{};

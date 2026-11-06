@@ -18,6 +18,7 @@
  */
 
 #include "ui/ModelBrowserView.h"
+#include "ui/QPathUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
@@ -86,6 +87,23 @@ TEST_CASE("ModelBrowserView")
     CHECK_THAT(
       entryPaths(entries),
       Equals(std::vector<std::string>{"crates", "monsters", "models/barrel.mdl"}));
+  }
+
+  SECTION("navigates and searches Unicode folder paths")
+  {
+    const auto folder = pathFromQString(QString::fromUtf8("自然与地形/树木"));
+    auto asset = BrowserAsset{};
+    asset.type = BrowserCellType::Model;
+    asset.path = folder / "tree.mdl";
+    asset.displayName = "tree.mdl";
+    asset.projectId = "library";
+    const auto unicodeAssets = std::vector<BrowserAsset>{asset};
+    const auto top = modelBrowserEntries({}, unicodeAssets, {}, {}, false);
+    REQUIRE(top.size() == 1);
+    CHECK(top.front().title == "自然与地形");
+    const auto nested = modelBrowserEntries({}, unicodeAssets, folder, {}, false);
+    REQUIRE(nested.size() == 1);
+    CHECK(nested.front().title == "tree.mdl");
   }
 
   SECTION("shows children inside a folder without a parent card")

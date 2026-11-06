@@ -154,8 +154,18 @@ Result<AssetPreviewKeys> assetPreviewKeys(const AssetLibrarySource& source)
   const auto assets = source.allAssets();
   if (assets.is_error())
     return std::get<Error>(assets.error());
+  const auto edges = source.allDependencies();
+  if (edges.is_error())
+    return previewKeys(assets.value(), source.libraryId(), [&](const auto& id) {
+      return source.dependencies(id);
+    });
+  auto byAsset = std::unordered_map<std::string, std::vector<project::AssetDependency>>{};
+  for (const auto& edge : edges.value())
+    byAsset[edge.assetId].push_back(edge);
   return previewKeys(assets.value(), source.libraryId(), [&](const auto& id) {
-    return source.dependencies(id);
+    const auto found = byAsset.find(id);
+    return Result<std::vector<project::AssetDependency>>{
+      found == byAsset.end() ? std::vector<project::AssetDependency>{} : found->second};
   });
 }
 
@@ -182,12 +192,20 @@ void loadBrowserAssetMetadata(
     auto source = openLocalAssetLibrary(connection.info.path);
     if (!source || source->libraryId() != connection.info.id)
       continue;
+    const auto allMetadata = source->allMetadata();
     for (auto& asset : assets)
     {
       if (asset.libraryId != source->libraryId() || asset.libraryAssetId.empty())
         continue;
-      const auto metadata = source->metadata(asset.libraryAssetId);
-      if (metadata.is_success())
+      if (allMetadata.is_success())
+      {
+        const auto found = allMetadata.value().find(asset.libraryAssetId);
+        asset.libraryMetadata = found == allMetadata.value().end()
+                                  ? AssetLibrarySource::Metadata{}
+                                  : found->second;
+      }
+      else if (const auto metadata = source->metadata(asset.libraryAssetId);
+               metadata.is_success())
         asset.libraryMetadata = metadata.value();
     }
   }
@@ -269,6 +287,11 @@ public:
     return m_library->dependencies(assetId);
   }
 
+  Result<std::vector<project::AssetDependency>> allDependencies() const override
+  {
+    return m_library->allDependencies();
+  }
+
   bool canImport() const override { return true; }
 
   bool canConvert() const override { return true; }
@@ -319,6 +342,17 @@ public:
   }
 
   bool canManage() const override { return true; }
+
+  Result<std::map<std::string, Metadata>> allMetadata() override
+  {
+    const auto entries = m_library->allMetadata();
+    if (entries.is_error())
+      return std::get<Error>(entries.error());
+    auto result = std::map<std::string, Metadata>{};
+    for (const auto& [id, meta] : entries.value())
+      result.emplace(id, Metadata{meta.favorite, meta.tags});
+    return result;
+  }
 
   Result<Metadata> metadata(const std::string& assetId) override
   {

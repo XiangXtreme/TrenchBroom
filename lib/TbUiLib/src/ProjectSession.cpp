@@ -2409,8 +2409,8 @@ Result<std::map<std::string, std::filesystem::path>> ProjectSession::libraryAsse
   if (library.is_error())
     return std::get<Error>(library.error());
 
-  // A browser scan asks for every non-texture resource at once, so the catalog is opened
-  // once here instead of once per resource.
+  // A browser can resolve a visible page in one batch without reopening the catalog for
+  // every resource.
   auto files = std::map<std::string, std::filesystem::path>{};
   for (const auto& libraryAssetId : libraryAssetIds)
   {

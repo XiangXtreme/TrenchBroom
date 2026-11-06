@@ -41,6 +41,8 @@
 #include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -401,7 +403,31 @@ void AssetLibraryWindow::buildUi()
   m_categories->setFrameShape(QFrame::NoFrame);
   m_categories->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_categories->setItemDelegate(new AssetLibraryCategoryDelegate{m_categories});
-  sideLayout->addWidget(m_categories, 1);
+  auto* sideSplitter = new QSplitter{Qt::Vertical, sidebar};
+  sideSplitter->addWidget(m_categories);
+  auto* foldersPanel = new QWidget{sideSplitter};
+  auto* foldersLayout = new QVBoxLayout{foldersPanel};
+  foldersLayout->setContentsMargins(0, 0, 0, 0);
+  foldersLayout->addWidget(new QLabel{tr("Folders"), foldersPanel});
+  m_folders = new QTreeWidget{foldersPanel};
+  m_folders->setObjectName(QStringLiteral("AssetLibraryFolders"));
+  m_folders->setHeaderHidden(true);
+  m_folders->setUniformRowHeights(true);
+  foldersLayout->addWidget(m_folders, 1);
+  sideSplitter->addWidget(foldersPanel);
+  sideSplitter->setStretchFactor(0, 3);
+  sideSplitter->setStretchFactor(1, 2);
+  sideLayout->addWidget(sideSplitter, 1);
+  connect(m_folders, &QTreeWidget::currentItemChanged, this, [this](auto* item, auto*) {
+    m_folderPath = item ? item->data(0, Qt::UserRole).toString() : QString{};
+    if (const auto* asset = selectedAsset(); asset && !m_folderPath.isEmpty())
+    {
+      const auto group = QString::fromStdString(asset->group);
+      if (group != m_folderPath && !group.startsWith(m_folderPath + QLatin1Char{'/'}))
+        m_selectedId.reset();
+    }
+    refreshGrid();
+  });
   splitter->addWidget(sidebar);
 
   auto* center = new QWidget{splitter};
@@ -839,6 +865,7 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
   m_source = std::move(source);
   m_selectedId.reset();
   m_filter = QStringLiteral("all");
+  m_folderPath.clear();
   if (remember)
     PreferenceManager::instance().set(Preferences::AssetLibraryDirectory, path);
   reload();
@@ -856,6 +883,7 @@ void AssetLibraryWindow::reload()
     clearInspector();
     updateHeader();
     refreshCategories();
+    refreshFolders();
     updateStatus();
     return;
   }
@@ -868,6 +896,7 @@ void AssetLibraryWindow::reload()
     m_grid->hide();
     updateHeader();
     refreshCategories();
+    refreshFolders();
     updateStatus();
     return;
   }
@@ -888,19 +917,22 @@ void AssetLibraryWindow::reload()
   m_tagCombo->clear();
   m_tagCombo->addItem(tr("All tags"), QString{});
   auto tags = QStringList{};
-  {
+  if (const auto metadata = m_source->allMetadata(); metadata.is_success())
+    m_metadata = metadata.value();
+  else
     for (const auto& asset : m_assets)
-    {
       if (const auto meta = m_source->metadata(asset.id); meta.is_success())
-      {
         m_metadata.emplace(asset.id, meta.value());
-        if (meta.value().favorite)
-          m_favorites.insert(asset.id);
-        for (const auto& value : meta.value().tags)
-          if (!tags.contains(QString::fromStdString(value), Qt::CaseInsensitive))
-            tags.push_back(QString::fromStdString(value));
-      }
-    }
+  for (const auto& asset : m_assets)
+  {
+    const auto meta = m_metadata.find(asset.id);
+    if (meta == m_metadata.end())
+      continue;
+    if (meta->second.favorite)
+      m_favorites.insert(asset.id);
+    for (const auto& value : meta->second.tags)
+      if (!tags.contains(QString::fromStdString(value), Qt::CaseInsensitive))
+        tags.push_back(QString::fromStdString(value));
   }
   tags.sort(Qt::CaseInsensitive);
   for (const auto& value : tags)
@@ -910,6 +942,7 @@ void AssetLibraryWindow::reload()
   m_tagCombo->setCurrentIndex(std::max(0, m_tagCombo->findData(tag)));
   updateHeader();
   refreshCategories();
+  refreshFolders();
   refreshGrid();
   updateStatus();
 }
@@ -1058,6 +1091,51 @@ void AssetLibraryWindow::refreshCategories()
   }
 }
 
+void AssetLibraryWindow::refreshFolders()
+{
+  auto expanded = QSet<QString>{};
+  for (auto it = QTreeWidgetItemIterator{m_folders}; *it; ++it)
+    if ((*it)->isExpanded())
+      expanded.insert((*it)->data(0, Qt::UserRole).toString());
+
+  const auto blocker = QSignalBlocker{m_folders};
+  m_folders->clear();
+  auto* root = new QTreeWidgetItem{m_folders, QStringList{tr("All folders")}};
+  root->setData(0, Qt::UserRole, QString{});
+  auto items = QHash<QString, QTreeWidgetItem*>{{QString{}, root}};
+  for (const auto& asset : m_assets)
+  {
+    auto path = QString{};
+    auto* parent = root;
+    for (const auto& part :
+         QString::fromStdString(asset.group).split('/', Qt::SkipEmptyParts))
+    {
+      path += (path.isEmpty() ? QString{} : QStringLiteral("/")) + part;
+      if (const auto found = items.constFind(path); found != items.cend())
+        parent = found.value();
+      else
+      {
+        auto* item = new QTreeWidgetItem{parent, QStringList{part}};
+        item->setData(0, Qt::UserRole, path);
+        items.insert(path, item);
+        parent = item;
+      }
+    }
+  }
+  for (auto it = items.cbegin(); it != items.cend(); ++it)
+    it.value()->setExpanded(it.key().isEmpty() || expanded.contains(it.key()));
+  auto* selected = items.value(m_folderPath, nullptr);
+  if (!selected)
+  {
+    m_folderPath.clear();
+    selected = root;
+  }
+  m_folders->setCurrentItem(selected);
+  for (auto* parent = selected->parent(); parent; parent = parent->parent())
+    parent->setExpanded(true);
+  m_folders->scrollToItem(selected);
+}
+
 std::optional<inspection::WaveInfo> AssetLibraryWindow::waveInfo(
   const project::LibraryAsset& asset) const
 {
@@ -1101,6 +1179,11 @@ void AssetLibraryWindow::refreshGrid()
   auto shown = 0;
   for (const auto& asset : m_assets)
   {
+    const auto group = QString::fromStdString(asset.group);
+    if (
+      !m_folderPath.isEmpty() && group != m_folderPath
+      && !group.startsWith(m_folderPath + QLatin1Char{'/'}))
+      continue;
     const auto typeFilter = typeForFilter(m_filter);
     const auto matchesType =
       m_filter == QStringLiteral("all") || (typeFilter && asset.type == *typeFilter)
@@ -2102,6 +2185,9 @@ Result<void> AssetLibraryWindow::revealAsset(
 void AssetLibraryWindow::focusAsset(const std::string& assetId, const QString& category)
 {
   m_filter = category;
+  if (const auto found = std::ranges::find(m_assets, assetId, &project::LibraryAsset::id);
+      found != m_assets.end())
+    m_folderPath = QString::fromStdString(found->group);
   const auto searchBlocker = QSignalBlocker{m_searchEdit};
   const auto tagBlocker = QSignalBlocker{m_tagCombo};
   const auto soundBlocker = QSignalBlocker{m_soundCombo};
@@ -2112,6 +2198,7 @@ void AssetLibraryWindow::focusAsset(const std::string& assetId, const QString& c
   m_waveKind = inspection::WaveKind::All;
   m_selectedId = assetId;
   refreshCategories();
+  refreshFolders();
   refreshGrid();
   if (const auto* current = m_grid->currentItem())
     m_grid->scrollToItem(current);

@@ -18,6 +18,9 @@
  */
 
 #include "ui/AssetBrowserModel.h"
+#include "ui/QPathUtils.h"
+
+#include <algorithm>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
@@ -281,6 +284,13 @@ TEST_CASE("AssetBrowserModel")
     CHECK(merged[0].projectUpdateAvailable);
     CHECK(merged[1].path == std::filesystem::path{"models/tree.mdl"});
     CHECK(merged[1].source == BrowserSource::AssetLibrary);
+    library.path = "models/renamed-box.mdl";
+    library.missing = true;
+    const auto moved = mergeBrowserAssets({snapshot}, {library});
+    REQUIRE(moved.size() == 1);
+    CHECK(moved.front().path == snapshot.path);
+    CHECK(moved.front().projectUpdateAvailable);
+    CHECK(moved.front().missing);
   }
 
   SECTION("keeps the project copy when a library entry has the same path")
@@ -296,6 +306,23 @@ TEST_CASE("AssetBrowserModel")
     const auto merged = mergeBrowserAssets({snapshot}, {library});
     REQUIRE(merged.size() == 1u);
     CHECK(merged[0].source == BrowserSource::Project);
+  }
+
+  SECTION("merges case-insensitive Unicode paths while preserving asset types")
+  {
+    auto model = BrowserAsset{};
+    model.type = BrowserCellType::Model;
+    model.path = pathFromQString(QString::fromUtf8("自然/Tree.MDL"));
+    model.source = BrowserSource::Project;
+    auto duplicate = model;
+    duplicate.path = pathFromQString(QString::fromUtf8("自然/tree.mdl"));
+    duplicate.source = BrowserSource::AssetLibrary;
+    auto otherType = duplicate;
+    otherType.type = BrowserCellType::Texture;
+    const auto merged = mergeBrowserAssets({model}, {duplicate, otherType});
+    REQUIRE(merged.size() == 2);
+    CHECK(std::ranges::count(merged, BrowserSource::Project, &BrowserAsset::source) == 1);
+    CHECK(std::ranges::count(merged, BrowserCellType::Texture, &BrowserAsset::type) == 1);
   }
 
   SECTION("filters sources for the layered listings")

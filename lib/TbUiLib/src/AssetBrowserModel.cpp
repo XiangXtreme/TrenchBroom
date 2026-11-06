@@ -29,7 +29,9 @@
 
 #include <algorithm>
 #include <iterator>
+#include <map>
 #include <ranges>
+#include <set>
 
 namespace tb::ui
 {
@@ -80,8 +82,8 @@ std::optional<std::filesystem::file_time_type> lastWriteTime(
 
 std::string displayNameForPath(const std::filesystem::path& path)
 {
-  const auto name = path.filename().generic_string();
-  return name.empty() ? path.generic_string() : name;
+  const auto name = pathAsGenericQString(path.filename());
+  return (name.isEmpty() ? pathAsGenericQString(path) : name).toStdString();
 }
 
 bool sameAssetIdentity(const BrowserAsset& lhs, const BrowserAsset& rhs)
@@ -347,11 +349,10 @@ std::vector<BrowserAsset> mergeBrowserAssets(
   const auto libraryIdentity = [](const BrowserAsset& asset) {
     return std::pair{asset.libraryId, asset.libraryAssetId};
   };
-  const auto isSnapshotOf =
-    [&](const BrowserAsset& projectAsset, const BrowserAsset& libraryAsset) {
-      return !projectAsset.libraryAssetId.empty()
-             && libraryIdentity(projectAsset) == libraryIdentity(libraryAsset);
-    };
+  auto snapshots = std::map<std::pair<std::string, std::string>, size_t>{};
+  for (size_t i = 0; i < projectAssets.size(); ++i)
+    if (!projectAssets[i].libraryAssetId.empty())
+      snapshots.try_emplace(libraryIdentity(projectAssets[i]), i);
 
   // The project snapshot is the authoritative copy of a captured library resource, so the
   // library's current state is reported on the snapshot instead of listing the resource
@@ -363,34 +364,30 @@ std::vector<BrowserAsset> mergeBrowserAssets(
       continue;
     }
 
-    const auto snapshot = std::ranges::find_if(
-      projectAssets,
-      [&](const auto& projectAsset) { return isSnapshotOf(projectAsset, libraryAsset); });
-    if (snapshot != projectAssets.end())
+    const auto snapshot = snapshots.find(libraryIdentity(libraryAsset));
+    if (snapshot != snapshots.end())
     {
-      snapshot->projectUpdateAvailable =
-        snapshot->projectUpdateAvailable || libraryAsset.projectUpdateAvailable;
-      snapshot->missing = snapshot->missing || libraryAsset.missing;
+      auto& projectAsset = projectAssets[snapshot->second];
+      projectAsset.projectUpdateAvailable =
+        projectAsset.projectUpdateAvailable || libraryAsset.projectUpdateAvailable;
+      projectAsset.missing = projectAsset.missing || libraryAsset.missing;
     }
   }
 
   const auto enginePathKey = [](const BrowserAsset& asset) {
-    return kdl::path_to_lower(asset.path.lexically_normal().generic_string());
+    return pathAsGenericQString(asset.path.lexically_normal()).toLower().toStdString();
   };
 
   auto result = std::vector<BrowserAsset>{};
   result.reserve(projectAssets.size() + libraryAssets.size());
+  auto seen = std::set<std::pair<BrowserCellType, std::string>>{};
   const auto append = [&](const BrowserAsset& asset) {
     if (asset.path.empty())
     {
       return;
     }
 
-    const auto key = enginePathKey(asset);
-    const auto duplicate = std::ranges::any_of(result, [&](const auto& existing) {
-      return existing.type == asset.type && enginePathKey(existing) == key;
-    });
-    if (!duplicate)
+    if (seen.emplace(asset.type, enginePathKey(asset)).second)
     {
       result.push_back(asset);
     }
@@ -402,10 +399,7 @@ std::vector<BrowserAsset> mergeBrowserAssets(
   }
   for (const auto& asset : libraryAssets)
   {
-    const auto captured = std::ranges::any_of(
-      projectAssets,
-      [&](const auto& projectAsset) { return isSnapshotOf(projectAsset, asset); });
-    if (!captured)
+    if (asset.libraryAssetId.empty() || !snapshots.contains(libraryIdentity(asset)))
     {
       append(asset);
     }
@@ -413,7 +407,7 @@ std::vector<BrowserAsset> mergeBrowserAssets(
   std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {
     if (lhs.path != rhs.path)
     {
-      return lhs.path.generic_string() < rhs.path.generic_string();
+      return lhs.path < rhs.path;
     }
     if (lhs.type != rhs.type)
     {
@@ -506,9 +500,8 @@ std::optional<std::vector<BrowserAsset>> collectBrowserAssets(
     }
   }
 
-  std::ranges::sort(assets, [](const auto& lhs, const auto& rhs) {
-    return lhs.path.generic_string() < rhs.path.generic_string();
-  });
+  std::ranges::sort(
+    assets, [](const auto& lhs, const auto& rhs) { return lhs.path < rhs.path; });
   assets.erase(
     std::unique(std::begin(assets), std::end(assets), sameAssetIdentity),
     std::end(assets));
@@ -540,6 +533,9 @@ std::vector<std::filesystem::path> changedAssetPaths(
 {
   auto changedPaths = std::vector<std::filesystem::path>{};
   const auto oldEntityModelPaths = entityModelAssetPaths(oldAssets);
+  auto newPaths = std::set<std::filesystem::path>{};
+  for (const auto& asset : newAssets)
+    newPaths.insert(asset.path);
 
   for (const auto& asset : newAssets)
   {
@@ -553,13 +549,15 @@ std::vector<std::filesystem::path> changedAssetPaths(
     // path and cannot be a map dependency yet.
     if (isLibraryAsset(asset))
     {
+      if (asset.projectPublishPath.empty())
+        continue;
       const auto old = std::ranges::find_if(oldAssets, [&](const auto& previous) {
         return sameAssetIdentity(previous, asset);
       });
       const auto revisionChanged = old == oldAssets.end()
                                    || old->libraryRevision != asset.libraryRevision
                                    || old->missing != asset.missing;
-      if (revisionChanged && !asset.projectPublishPath.empty())
+      if (revisionChanged)
         changedPaths.push_back(asset.projectPublishPath);
       continue;
     }
@@ -588,8 +586,7 @@ std::vector<std::filesystem::path> changedAssetPaths(
 
   for (const auto& oldPath : oldEntityModelPaths)
   {
-    if (std::ranges::none_of(
-          newAssets, [&](const auto& asset) { return asset.path == oldPath; }))
+    if (!newPaths.contains(oldPath))
     {
       changedPaths.push_back(oldPath);
     }
@@ -710,9 +707,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
     folderChildren.push_back(firstRelPath);
   }
 
-  std::ranges::sort(folderChildren, [](const auto& a, const auto& b) {
-    return a.generic_string() < b.generic_string();
-  });
+  std::ranges::sort(folderChildren, [](const auto& a, const auto& b) { return a < b; });
   folderChildren.erase(
     std::unique(std::begin(folderChildren), std::end(folderChildren)),
     std::end(folderChildren));
@@ -720,13 +715,13 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   std::ranges::sort(assetChildren, [&](const auto& a, const auto& b) {
     if (hasSearch)
     {
-      return a.path.generic_string() < b.path.generic_string();
+      return a.path < b.path;
     }
     if (a.type != b.type)
     {
       return a.type < b.type;
     }
-    return a.path.filename().generic_string() < b.path.filename().generic_string();
+    return a.path.filename() < b.path.filename();
   });
 
   // The breadcrumb and the folder tree navigate upwards; a ".." card would only repeat
@@ -736,7 +731,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   {
     entries.push_back(
       {BrowserCellData{BrowserCellType::Folder, folderRelPath},
-       folderRelPath.filename().generic_string()});
+       pathAsGenericQString(folderRelPath.filename()).toStdString()});
   }
 
   for (const auto& asset : assetChildren)
@@ -750,7 +745,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
     // The title stays the resource name: the browser marks a non-game source with a
     // badge, so two sources with the same name are told apart without truncating either
     // title.
-    auto title = asset.projectId.empty() ? titlePath.generic_string() : asset.displayName;
+    auto title = asset.projectId.empty() ? pathAsGenericQString(titlePath).toStdString()
+                                         : asset.displayName;
     entries.push_back({BrowserCellData{asset.type, assetPath}, std::move(title)});
   }
 

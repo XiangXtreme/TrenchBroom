@@ -352,6 +352,7 @@ TEST_CASE("AssetLibrary")
     REQUIRE(model != assets.end());
     CHECK(model->type == AssetType::Model);
     const auto dependencies = require(library->dependencies(model->id));
+    CHECK(require(library->allDependencies()) == dependencies);
     REQUIRE(dependencies.size() == 3);
     auto kinds = std::vector<std::string>{};
     auto targets = std::vector<std::string>{};
@@ -674,11 +675,13 @@ TEST_CASE("AssetLibrary")
     const auto wallId = findByMember(assets, "WALL01").id;
 
     CHECK(require(library->metadata(wallId)) == AssetLibrary::AssetMetadata{});
+    CHECK(require(library->allMetadata()).empty());
     require(library->setFavorite(wallId, true));
     require(library->setTags(wallId, {"stone", "exterior"}));
     const auto metadata = require(library->metadata(wallId));
     CHECK(metadata.favorite);
     CHECK(metadata.tags == std::vector<std::string>{"stone", "exterior"});
+    CHECK(require(library->allMetadata()).at(wallId) == metadata);
 
     const auto renamed = require(library->setDisplayName(wallId, "Castle Brick"));
     CHECK(renamed.displayName == "Castle Brick");

@@ -425,6 +425,52 @@ TEST_CASE("AssetInspection")
       }
     }
   }
+  SECTION("library folder navigation combines nested paths and filters")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto root = pathFromQString(temporary.path());
+    const auto nature = pathFromQString(QString::fromUtf8("自然与地形"));
+    const auto trees = nature / pathFromQString(QString::fromUtf8("树木"));
+    const auto buildings = pathFromQString(QString::fromUtf8("建筑"));
+    std::filesystem::create_directories(root / trees);
+    std::filesystem::create_directories(root / buildings);
+    write(root / nature / "grass.png", png(Qt::green));
+    write(root / trees / "tree.png", png(Qt::green));
+    write(root / buildings / "wall.png", png(Qt::red));
+    auto library = require(project::AssetLibrary::create(root, "Folders"));
+    REQUIRE(library->scan().is_success());
+    const auto assets = require(library->assets());
+    REQUIRE(assets.size() == 3);
+    auto browser = AssetLibraryWindow{temporary.path(), false};
+    auto* tree = browser.findChild<QTreeWidget*>("AssetLibraryFolders");
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* search = browser.findChild<QLineEdit*>("AssetLibrarySearch");
+    REQUIRE(tree);
+    REQUIRE(grid);
+    REQUIRE(search);
+    CHECK(grid->count() == 3);
+    const auto natureItems =
+      tree->findItems(QString::fromUtf8("自然与地形"), Qt::MatchRecursive);
+    const auto treeItems = tree->findItems(QString::fromUtf8("树木"), Qt::MatchRecursive);
+    REQUIRE(natureItems.size() == 1);
+    REQUIRE(treeItems.size() == 1);
+    tree->setCurrentItem(natureItems.front());
+    CHECK(grid->count() == 2);
+    search->setText("tree");
+    CHECK(grid->count() == 1);
+    search->clear();
+    tree->setCurrentItem(treeItems.front());
+    CHECK(grid->count() == 1);
+    const auto wall = std::ranges::find_if(
+      assets, [](const auto& asset) { return asset.displayName == "wall"; });
+    REQUIRE(wall != assets.end());
+    REQUIRE(browser.revealAsset(library->info().id, wall->id).is_success());
+    CHECK(tree->currentItem()->text(0) == QString::fromUtf8("建筑"));
+    CHECK(grid->count() == 1);
+    tree->setCurrentItem(tree->topLevelItem(0));
+    CHECK(grid->count() == 3);
+  }
   SECTION("source snapshots and host selection are independent")
   {
     auto temporary = QTemporaryDir{};

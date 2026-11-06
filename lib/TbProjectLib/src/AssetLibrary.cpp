@@ -1623,6 +1623,20 @@ Result<AssetLibrary::AssetMetadata> AssetLibrary::metadata(
   });
 }
 
+Result<std::map<std::string, AssetLibrary::AssetMetadata>> AssetLibrary::allMetadata()
+  const
+{
+  return detail::attempt([&] {
+    auto query = detail::Statement{
+      m_impl->database.get(), "SELECT asset_id,favorite,tags FROM asset_meta"};
+    auto result = std::map<std::string, AssetMetadata>{};
+    while (query.next())
+      result.emplace(
+        query.text(0), AssetMetadata{query.integer(1) != 0, splitTags(query.text(2))});
+    return result;
+  });
+}
+
 Result<void> AssetLibrary::setFavorite(const std::string& assetId, const bool favorite)
 {
   return detail::attempt([&] {
@@ -1703,6 +1717,20 @@ Result<std::vector<AssetDependency>> AssetLibrary::dependencies(
       "SELECT asset_id,dependency_id,kind FROM dependencies WHERE asset_id=? ORDER BY "
       "dependency_id,kind"};
     query.bind(1, assetId);
+    auto result = std::vector<AssetDependency>{};
+    while (query.next())
+      result.push_back({query.text(0), query.text(1), query.text(2)});
+    return result;
+  });
+}
+
+Result<std::vector<AssetDependency>> AssetLibrary::allDependencies() const
+{
+  return detail::attempt([&] {
+    auto query = detail::Statement{
+      m_impl->database.get(),
+      "SELECT asset_id,dependency_id,kind FROM dependencies ORDER BY "
+      "asset_id,dependency_id,kind"};
     auto result = std::vector<AssetDependency>{};
     while (query.next())
       result.push_back({query.text(0), query.text(1), query.text(2)});

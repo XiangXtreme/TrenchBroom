@@ -254,6 +254,7 @@ void ModelBrowserView::setDocument(MapDocument& document)
   for (auto& [path, model] : m_catalogModels)
     m_retiredCatalogModels.push_back(std::move(model));
   m_catalogModels.clear();
+  m_modelPreviewFiles.clear();
   m_assetPreviews.clear();
   invalidateSpritePreviewTextures();
   invalidate();
@@ -269,15 +270,18 @@ void ModelBrowserView::setAssets(
   std::filesystem::path rootFolderPath, std::vector<BrowserAsset> assets)
 {
   m_rootFolderPath = std::move(rootFolderPath);
+  auto nextIndices = std::map<std::filesystem::path, size_t>{};
+  for (size_t i = 0; i < assets.size(); ++i)
+    nextIndices.try_emplace(assets[i].path, i);
+  const auto unchanged = [&](const auto& path) {
+    const auto* previous = assetAt(path);
+    const auto current = nextIndices.find(path);
+    return previous && current != nextIndices.end()
+           && sameBrowserAssetContent(*previous, assets[current->second]);
+  };
   for (auto it = m_catalogModels.begin(); it != m_catalogModels.end();)
   {
-    const auto previous =
-      std::ranges::find_if(m_assets, [&](const auto& a) { return a.path == it->first; });
-    const auto current =
-      std::ranges::find_if(assets, [&](const auto& a) { return a.path == it->first; });
-    if (
-      previous == m_assets.end() || current == assets.end()
-      || !sameBrowserAssetContent(*previous, *current))
+    if (!unchanged(it->first))
     {
       m_retiredCatalogModels.push_back(std::move(it->second));
       it = m_catalogModels.erase(it);
@@ -285,10 +289,13 @@ void ModelBrowserView::setAssets(
     else
       ++it;
   }
+  std::erase_if(
+    m_modelPreviewFiles, [&](const auto& pair) { return !unchanged(pair.first); });
   // Retire CPU previews and their GPU textures together, including revisions which keep
   // the same path. Erasing the CPU entry first hides the texture from invalidation.
   removeStalePreviews(assets);
   m_assets = std::move(assets);
+  m_assetIndices = std::move(nextIndices);
   if (m_hasSelection && !assetAt(m_selectedPath))
   {
     m_hasSelection = false;
@@ -507,10 +514,10 @@ const AssetPreviewState* ModelBrowserView::assetPreview(
 
 void ModelBrowserView::removeStalePreviews(const std::vector<BrowserAsset>& assets)
 {
-  auto currentAssets = std::map<std::filesystem::path, BrowserAsset>{};
+  auto currentAssets = std::map<std::filesystem::path, const BrowserAsset*>{};
   for (const auto& asset : assets)
   {
-    currentAssets.emplace(asset.path, asset);
+    currentAssets.emplace(asset.path, &asset);
   }
 
   for (auto it = std::begin(m_assetPreviews); it != std::end(m_assetPreviews);)
@@ -526,11 +533,8 @@ void ModelBrowserView::removeStalePreviews(const std::vector<BrowserAsset>& asse
       continue;
     }
 
-    const auto oldAssetIt = std::ranges::find(
-      m_assets, it->first, [](const auto& asset) { return asset.path; });
-    if (
-      oldAssetIt == std::end(m_assets)
-      || !sameBrowserAssetContent(*oldAssetIt, assetIt->second))
+    const auto* oldAsset = assetAt(it->first);
+    if (!oldAsset || !sameBrowserAssetContent(*oldAsset, *assetIt->second))
     {
       if (m_spritePreviewTextures.contains(it->first))
       {
@@ -548,6 +552,7 @@ void ModelBrowserView::loadMissingVisiblePreviews(
   Layout& layout, const float y, const float height)
 {
   auto paths = std::set<std::filesystem::path>{};
+  auto models = std::vector<BrowserAsset>{};
   for (const auto& group : layout.groups())
   {
     if (!group.intersectsY(y, height))
@@ -566,6 +571,13 @@ void ModelBrowserView::loadMissingVisiblePreviews(
       {
         const auto& item = cellData(cell);
         const auto* asset = assetAt(item.path);
+        if (
+          asset && item.type == BrowserCellType::Model
+          && asset->source == BrowserSource::AssetLibrary
+          && !asset->absolutePath.is_absolute()
+          && !m_modelPreviewFiles.contains(item.path)
+          && !m_assetPreviews.contains(item.path))
+          models.push_back(*asset);
         if (asset && (asset->skybox || asset->type == BrowserCellType::Material))
         {
           if (!m_assetPreviews.contains(item.path))
@@ -596,6 +608,29 @@ void ModelBrowserView::loadMissingVisiblePreviews(
           paths.insert(item.path);
         }
       }
+    }
+  }
+
+  if (!models.empty() && m_previewPathResolver)
+  {
+    const auto resolved = m_previewPathResolver(models);
+    for (const auto& asset : models)
+    {
+      if (resolved.is_success())
+      {
+        const auto file = resolved.value().find(asset.path);
+        if (file != resolved.value().end() && file->second.is_absolute())
+        {
+          m_modelPreviewFiles.emplace(asset.path, file->second);
+          continue;
+        }
+      }
+      m_assetPreviews[asset.path] = {
+        AssetPreviewStatus::Error,
+        std::nullopt,
+        {},
+        resolved.is_error() ? std::get<Error>(resolved.error()).msg
+                            : "The catalog model preview file is unavailable."};
     }
   }
 
@@ -769,7 +804,7 @@ void ModelBrowserView::doDoubleClick(Layout& layout, const float x, const float 
     const auto& item = cellData(*cell);
     if (item.type == BrowserCellType::Folder)
     {
-      emit folderActivated(QString::fromStdString(item.path.generic_string()));
+      emit folderActivated(pathAsGenericQString(item.path));
     }
     else if (item.type == BrowserCellType::Map)
     {
@@ -2002,19 +2037,25 @@ void ModelBrowserView::renderModels(
             if (const auto* asset = assetAt(item.path);
                 asset && asset->source != BrowserSource::GameFiles)
             {
-              if (!asset->absolutePath.is_absolute())
+              auto previewPath = asset->absolutePath;
+              if (const auto resolved = m_modelPreviewFiles.find(item.path);
+                  !previewPath.is_absolute() && resolved != m_modelPreviewFiles.end())
+                previewPath = resolved->second;
+              if (!previewPath.is_absolute())
               {
-                m_assetPreviews[item.path] = {
-                  AssetPreviewStatus::Error,
-                  std::nullopt,
-                  {},
-                  "The catalog model preview file is unavailable."};
+                m_assetPreviews.try_emplace(
+                  item.path,
+                  AssetPreviewState{
+                    AssetPreviewStatus::Error,
+                    std::nullopt,
+                    {},
+                    "The catalog model preview file is unavailable."});
                 continue;
               }
               auto& preview = m_catalogModels[item.path];
               if (!preview)
                 preview = std::make_unique<CatalogModelPreview>(
-                  asset->absolutePath,
+                  previewPath,
                   m_document->map().gameInfo(),
                   [this](auto loader) {
                     auto resource = gl::createResourceSync(std::move(loader));
@@ -2150,14 +2191,14 @@ QString ModelBrowserView::tooltip(const Cell& cell)
   {
     const auto folderAbs =
       item.path.empty() ? m_rootFolderPath : (m_rootFolderPath / item.path);
-    return QString::fromStdString(folderAbs.generic_string());
+    return pathAsGenericQString(folderAbs);
   }
   if (const auto* asset = assetAt(item.path))
   {
     // The type and the source explain the card's bottom marker and source badge, so
     // neither has to be guessed from a colour.
     auto text = QString{"%1\n%2 · %3"}
-                  .arg(QString::fromStdString(item.path.generic_string()))
+                  .arg(pathAsGenericQString(item.path))
                   .arg(browserCellTypeDisplayName(asset->type))
                   .arg(QObject::tr(browserSourceName(asset->source)));
     auto status = browserAssetStatus(*asset);
@@ -2176,14 +2217,13 @@ QString ModelBrowserView::tooltip(const Cell& cell)
     }
     return text;
   }
-  return QString::fromStdString(item.path.generic_string());
+  return pathAsGenericQString(item.path);
 }
 
 const BrowserAsset* ModelBrowserView::assetAt(const std::filesystem::path& path) const
 {
-  const auto it =
-    std::ranges::find_if(m_assets, [&](const auto& asset) { return asset.path == path; });
-  return it == m_assets.end() ? nullptr : &*it;
+  const auto it = m_assetIndices.find(path);
+  return it == m_assetIndices.end() ? nullptr : &m_assets[it->second];
 }
 
 const BrowserCellData& ModelBrowserView::cellData(const Cell& cell) const

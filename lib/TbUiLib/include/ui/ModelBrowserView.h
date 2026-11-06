@@ -85,6 +85,7 @@ private:
   QScrollBar* m_scrollBar = nullptr;
   std::filesystem::path m_rootFolderPath;
   std::vector<BrowserAsset> m_assets;
+  std::map<std::filesystem::path, size_t> m_assetIndices;
   std::filesystem::path m_currentFolderPath;
   QString m_searchText;
   bool m_searchAllAssets = false;
@@ -94,6 +95,7 @@ private:
   GLuint m_folderIconTextureId = 0;
   AssetPreviewMap m_assetPreviews;
   std::map<std::filesystem::path, std::unique_ptr<CatalogModelPreview>> m_catalogModels;
+  std::map<std::filesystem::path, std::filesystem::path> m_modelPreviewFiles;
   std::vector<std::unique_ptr<CatalogModelPreview>> m_retiredCatalogModels;
   struct SpritePreviewTexture
   {
