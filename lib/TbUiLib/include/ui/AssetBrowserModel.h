@@ -176,6 +176,11 @@ const char* browserCellTypeName(BrowserCellType type);
 /** Translated display name of an asset type, shared by every browser surface. */
 QString browserCellTypeDisplayName(BrowserCellType type);
 
+/** Stable presentation folders; they do not change source or engine paths. */
+std::filesystem::path browserPathUnderType(
+  BrowserCellType type, bool skybox, const std::filesystem::path& path);
+QString browserFolderDisplayName(const std::filesystem::path& path);
+
 std::filesystem::path browserAssetDisplayPath(
   const BrowserAsset& asset, bool groupWadTextures);
 

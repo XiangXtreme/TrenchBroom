@@ -142,16 +142,81 @@ bool operator==(const BrowserAsset& lhs, const BrowserAsset& rhs)
          && lhs.missing == rhs.missing && lhs.libraryMetadata == rhs.libraryMetadata;
 }
 
+namespace
+{
+struct TypeFolder
+{
+  BrowserCellType type;
+  bool skybox;
+  const char* path;
+  const char* title;
+  const char* chinese;
+};
+
+constexpr TypeFolder TypeFolders[] = {
+  {BrowserCellType::Model, false, "models", "Model", "模型"},
+  {BrowserCellType::Sprite, false, "sprites", "Sprite", "精灵"},
+  {BrowserCellType::Sound, false, "sound", "Sound", "声音"},
+  {BrowserCellType::Prefab, false, "prefabs", "Prefab", "预制件"},
+  {BrowserCellType::Map, false, "maps", "Map", "地图"},
+  {BrowserCellType::Texture, false, "textures", "Texture", "纹理"},
+  {BrowserCellType::Material, false, "materials", "Material", "材质"},
+  {BrowserCellType::Texture, true, "skybox", "Skybox", "天空盒"},
+};
+
+const TypeFolder* typeFolder(const BrowserCellType type, const bool skybox)
+{
+  const auto found = std::ranges::find_if(TypeFolders, [&](const auto& folder) {
+    return folder.type == (skybox ? BrowserCellType::Texture : type)
+           && folder.skybox == skybox;
+  });
+  return found == std::end(TypeFolders) ? nullptr : found;
+}
+} // namespace
+
+std::filesystem::path browserPathUnderType(
+  const BrowserCellType type, const bool skybox, const std::filesystem::path& path)
+{
+  const auto* folder = typeFolder(type, skybox);
+  if (!folder)
+    return path;
+
+  auto result = std::filesystem::path{folder->path};
+  auto part = path.begin();
+  if (part != path.end())
+  {
+    const auto first = pathAsGenericQString(*part);
+    if (
+      first.compare(QLatin1String{folder->path}, Qt::CaseInsensitive) == 0
+      || first == QString::fromUtf8(folder->chinese))
+      ++part;
+  }
+  for (; part != path.end(); ++part)
+    result /= *part;
+  return result;
+}
+
+QString browserFolderDisplayName(const std::filesystem::path& path)
+{
+  if (path.parent_path().empty())
+  {
+    for (const auto& folder : TypeFolders)
+      if (path == folder.path)
+        return QCoreApplication::translate("tb::ui::AssetTypes", folder.title);
+  }
+  return pathAsGenericQString(path.filename());
+}
+
 std::filesystem::path browserAssetDisplayPath(
   const BrowserAsset& asset, const bool groupWadTextures)
 {
   const auto& path = asset.catalogPath.empty() ? asset.path : asset.catalogPath;
   if (asset.skybox)
     return std::filesystem::path{"skybox"} / path.filename();
-  if (
-    asset.type != BrowserCellType::Texture || asset.skybox
-    || asset.textureCollection.empty())
-    return path;
+  if (asset.type != BrowserCellType::Texture || asset.textureCollection.empty())
+    return asset.source == BrowserSource::GameFiles
+             ? path
+             : browserPathUnderType(asset.type, false, path);
 
   auto folder = std::filesystem::path{"textures"};
   if (groupWadTextures)
@@ -609,9 +674,13 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
 {
   const auto trimmedSearchText = searchText.trimmed();
   const auto hasSearch = !trimmedSearchText.isEmpty();
+  const auto searchingTypeRoots =
+    rootFolderPath.empty()
+    && (currentFolderPath.empty() || currentFolderPath == std::filesystem::path{"."} || searchAllAssets);
   const auto matches = [&](const std::filesystem::path& path) {
     return !hasSearch
-           || pathAsGenericQString(path).contains(trimmedSearchText, Qt::CaseInsensitive);
+           || pathAsGenericQString(path).contains(trimmedSearchText, Qt::CaseInsensitive)
+           || (searchingTypeRoots && browserFolderDisplayName(path).contains(trimmedSearchText, Qt::CaseInsensitive));
   };
 
   auto normalizedCurrentFolderPath = currentFolderPath.lexically_normal();
@@ -731,7 +800,9 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   {
     entries.push_back(
       {BrowserCellData{BrowserCellType::Folder, folderRelPath},
-       pathAsGenericQString(folderRelPath.filename()).toStdString()});
+       (rootFolderPath.empty() ? browserFolderDisplayName(folderRelPath)
+                               : pathAsGenericQString(folderRelPath.filename()))
+         .toStdString()});
   }
 
   for (const auto& asset : assetChildren)

@@ -53,6 +53,7 @@
 #include "project/AssetLibrary.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
+#include "ui/AssetBrowserModel.h"
 #include "ui/AssetInspector.h"
 #include "ui/AssetLibraryGlyphs.h"
 #include "ui/AssetLibraryImport.h"
@@ -138,6 +139,50 @@ QString typeText(const project::AssetType type)
     return QObject::tr("Prefab");
   }
   return QObject::tr("Unknown");
+}
+
+QString libraryFolder(const project::AssetType assetType, const std::string& group)
+{
+  auto type = BrowserCellType::Folder;
+  switch (assetType)
+  {
+  case project::AssetType::Model:
+    type = BrowserCellType::Model;
+    break;
+  case project::AssetType::Sprite:
+    type = BrowserCellType::Sprite;
+    break;
+  case project::AssetType::Sound:
+    type = BrowserCellType::Sound;
+    break;
+  case project::AssetType::Prefab:
+    type = BrowserCellType::Prefab;
+    break;
+  case project::AssetType::Map:
+    type = BrowserCellType::Map;
+    break;
+  case project::AssetType::Texture:
+  case project::AssetType::Skybox:
+    type = BrowserCellType::Texture;
+    break;
+  case project::AssetType::Material:
+    type = BrowserCellType::Material;
+    break;
+  }
+  return pathAsGenericQString(browserPathUnderType(
+    type,
+    assetType == project::AssetType::Skybox,
+    pathFromQString(QString::fromStdString(group))));
+}
+
+QString libraryFolder(const project::LibraryAsset& asset)
+{
+  return libraryFolder(asset.type, asset.group);
+}
+
+bool folderContains(const QString& folder, const QString& path)
+{
+  return path == folder || path.startsWith(folder + QLatin1Char{'/'});
 }
 
 // Only raster textures go through the GoldSrc converter; models, sprites, sounds and
@@ -420,10 +465,31 @@ void AssetLibraryWindow::buildUi()
   sideLayout->addWidget(sideSplitter, 1);
   connect(m_folders, &QTreeWidget::currentItemChanged, this, [this](auto* item, auto*) {
     m_folderPath = item ? item->data(0, Qt::UserRole).toString() : QString{};
+    if (const auto type = typeForFilter(m_filter);
+        type && !m_folderPath.isEmpty()
+        && !folderContains(libraryFolder(*type, {}), m_folderPath))
+    {
+      // A type filter cannot match a different type's folder. Honour the newly
+      // selected folder instead of leaving the grid unexpectedly empty.
+      m_filter = QStringLiteral("all");
+      const auto blocker = QSignalBlocker{m_categories};
+      for (auto row = 0; row < m_categories->count(); ++row)
+      {
+        if (
+          m_categories->item(row)
+            ->data(AssetLibraryCategoryDelegate::FilterRole)
+            .toString()
+          == m_filter)
+        {
+          m_categories->setCurrentRow(row);
+          break;
+        }
+      }
+    }
     if (const auto* asset = selectedAsset(); asset && !m_folderPath.isEmpty())
     {
-      const auto group = QString::fromStdString(asset->group);
-      if (group != m_folderPath && !group.startsWith(m_folderPath + QLatin1Char{'/'}))
+      const auto group = libraryFolder(*asset);
+      if (!folderContains(m_folderPath, group))
         m_selectedId.reset();
     }
     refreshGrid();
@@ -777,6 +843,26 @@ void AssetLibraryWindow::buildUi()
         return;
       m_filter = item->data(AssetLibraryCategoryDelegate::FilterRole).toString();
     }
+    if (const auto type = typeForFilter(m_filter);
+        type && !m_folderPath.isEmpty()
+        && !folderContains(libraryFolder(*type, {}), m_folderPath))
+    {
+      const auto target = libraryFolder(*type, {});
+      auto* folderItem = m_folders->topLevelItem(0);
+      for (auto it = QTreeWidgetItemIterator{m_folders}; *it; ++it)
+      {
+        if ((*it)->data(0, Qt::UserRole).toString() == target)
+        {
+          folderItem = *it;
+          break;
+        }
+      }
+      if (folderItem != m_folders->currentItem())
+      {
+        m_folders->setCurrentItem(folderItem);
+        return; // The folder selection refreshes the grid.
+      }
+    }
     refreshGrid();
   });
   connect(m_grid, &QListWidget::currentItemChanged, this, [this](auto* current, auto*) {
@@ -1107,15 +1193,16 @@ void AssetLibraryWindow::refreshFolders()
   {
     auto path = QString{};
     auto* parent = root;
-    for (const auto& part :
-         QString::fromStdString(asset.group).split('/', Qt::SkipEmptyParts))
+    for (const auto& part : libraryFolder(asset).split('/', Qt::SkipEmptyParts))
     {
       path += (path.isEmpty() ? QString{} : QStringLiteral("/")) + part;
       if (const auto found = items.constFind(path); found != items.cend())
         parent = found.value();
       else
       {
-        auto* item = new QTreeWidgetItem{parent, QStringList{part}};
+        const auto title =
+          parent == root ? browserFolderDisplayName(pathFromQString(path)) : part;
+        auto* item = new QTreeWidgetItem{parent, QStringList{title}};
         item->setData(0, Qt::UserRole, path);
         items.insert(path, item);
         parent = item;
@@ -1179,11 +1266,12 @@ void AssetLibraryWindow::refreshGrid()
   auto shown = 0;
   for (const auto& asset : m_assets)
   {
-    const auto group = QString::fromStdString(asset.group);
-    if (
-      !m_folderPath.isEmpty() && group != m_folderPath
-      && !group.startsWith(m_folderPath + QLatin1Char{'/'}))
-      continue;
+    if (!m_folderPath.isEmpty())
+    {
+      const auto group = libraryFolder(asset);
+      if (!folderContains(m_folderPath, group))
+        continue;
+    }
     const auto typeFilter = typeForFilter(m_filter);
     const auto matchesType =
       m_filter == QStringLiteral("all") || (typeFilter && asset.type == *typeFilter)
@@ -2187,7 +2275,7 @@ void AssetLibraryWindow::focusAsset(const std::string& assetId, const QString& c
   m_filter = category;
   if (const auto found = std::ranges::find(m_assets, assetId, &project::LibraryAsset::id);
       found != m_assets.end())
-    m_folderPath = QString::fromStdString(found->group);
+    m_folderPath = libraryFolder(*found);
   const auto searchBlocker = QSignalBlocker{m_searchEdit};
   const auto tagBlocker = QSignalBlocker{m_tagCombo};
   const auto soundBlocker = QSignalBlocker{m_soundCombo};

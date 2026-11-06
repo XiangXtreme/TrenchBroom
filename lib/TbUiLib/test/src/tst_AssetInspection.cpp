@@ -438,29 +438,60 @@ TEST_CASE("AssetInspection")
     write(root / nature / "grass.png", png(Qt::green));
     write(root / trees / "tree.png", png(Qt::green));
     write(root / buildings / "wall.png", png(Qt::red));
+    write(root / trees / "tree.mdl", studioModel());
     auto library = require(project::AssetLibrary::create(root, "Folders"));
     REQUIRE(library->scan().is_success());
     const auto assets = require(library->assets());
-    REQUIRE(assets.size() == 3);
+    REQUIRE(assets.size() == 4);
     auto browser = AssetLibraryWindow{temporary.path(), false};
     auto* tree = browser.findChild<QTreeWidget*>("AssetLibraryFolders");
     auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* categories = browser.findChild<QListWidget*>("AssetLibraryCategories");
     auto* search = browser.findChild<QLineEdit*>("AssetLibrarySearch");
     REQUIRE(tree);
     REQUIRE(grid);
+    REQUIRE(categories);
     REQUIRE(search);
+    CHECK(grid->count() == 4);
+    const auto modelRoots = tree->findItems("Model", Qt::MatchRecursive);
+    const auto textureRoots = tree->findItems("Texture", Qt::MatchRecursive);
+    REQUIRE(modelRoots.size() == 1);
+    REQUIRE(textureRoots.size() == 1);
+    tree->setCurrentItem(modelRoots.front());
+    CHECK(grid->count() == 1);
+    auto* textureCategory = static_cast<QListWidgetItem*>(nullptr);
+    for (auto row = 0; row < categories->count(); ++row)
+      if (
+        categories->item(row)->data(AssetLibraryCategoryDelegate::FilterRole).toString()
+        == QStringLiteral("texture"))
+        textureCategory = categories->item(row);
+    REQUIRE(textureCategory);
+    categories->setCurrentItem(textureCategory);
+    CHECK(tree->currentItem() == textureRoots.front());
+    CHECK(grid->count() == 3);
+    tree->setCurrentItem(modelRoots.front());
+    CHECK(
+      categories->currentItem()->data(AssetLibraryCategoryDelegate::FilterRole).toString()
+      == QStringLiteral("all"));
+    CHECK(grid->count() == 1);
+    tree->setCurrentItem(textureRoots.front());
     CHECK(grid->count() == 3);
     const auto natureItems =
       tree->findItems(QString::fromUtf8("自然与地形"), Qt::MatchRecursive);
     const auto treeItems = tree->findItems(QString::fromUtf8("树木"), Qt::MatchRecursive);
-    REQUIRE(natureItems.size() == 1);
-    REQUIRE(treeItems.size() == 1);
-    tree->setCurrentItem(natureItems.front());
+    REQUIRE(natureItems.size() == 2);
+    REQUIRE(treeItems.size() == 2);
+    const auto textureNature = std::ranges::find_if(natureItems, [&](const auto* item) {
+      return item->parent() == textureRoots.front();
+    });
+    REQUIRE(textureNature != natureItems.end());
+    REQUIRE((*textureNature)->childCount() == 1);
+    tree->setCurrentItem(*textureNature);
     CHECK(grid->count() == 2);
     search->setText("tree");
     CHECK(grid->count() == 1);
     search->clear();
-    tree->setCurrentItem(treeItems.front());
+    tree->setCurrentItem((*textureNature)->child(0));
     CHECK(grid->count() == 1);
     const auto wall = std::ranges::find_if(
       assets, [](const auto& asset) { return asset.displayName == "wall"; });
@@ -469,7 +500,9 @@ TEST_CASE("AssetInspection")
     CHECK(tree->currentItem()->text(0) == QString::fromUtf8("建筑"));
     CHECK(grid->count() == 1);
     tree->setCurrentItem(tree->topLevelItem(0));
-    CHECK(grid->count() == 3);
+    CHECK(grid->count() == 4);
+    CHECK(std::filesystem::exists(root / trees / "tree.mdl"));
+    CHECK(std::filesystem::exists(root / trees / "tree.png"));
   }
   SECTION("source snapshots and host selection are independent")
   {

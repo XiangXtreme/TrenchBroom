@@ -8478,6 +8478,14 @@ Removing them frees about %3. Current assets and versions are kept.</source>
             <source>Texture</source>
             <translation>纹理</translation>
         </message>
+        <message>
+            <source>Material</source>
+            <translation>材质</translation>
+        </message>
+        <message>
+            <source>Skybox</source>
+            <translation>天空盒</translation>
+        </message>
     </context>
     <context>
         <name>tb::ui::MapStatus</name>

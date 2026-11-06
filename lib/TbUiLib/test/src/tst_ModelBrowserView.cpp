@@ -172,7 +172,7 @@ TEST_CASE("ModelBrowserView")
       }));
     CHECK_THAT(
       entryTitles(entries),
-      Equals(std::vector<std::string>{"models", "prefabs", "sound", "sprites"}));
+      Equals(std::vector<std::string>{"Model", "Prefab", "Sound", "Sprite"}));
     CHECK_THAT(
       entryPaths(entries),
       Equals(std::vector<std::string>{"models", "prefabs", "sound", "sprites"}));
@@ -192,7 +192,7 @@ TEST_CASE("ModelBrowserView")
       }));
     CHECK_THAT(
       entryTitles(entries),
-      Equals(std::vector<std::string>{"models", "prefabs", "sound", "sprites"}));
+      Equals(std::vector<std::string>{"Model", "Prefab", "Sound", "Sprite"}));
     CHECK_THAT(
       entryPaths(entries),
       Equals(std::vector<std::string>{"models", "prefabs", "sound", "sprites"}));

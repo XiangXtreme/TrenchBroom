@@ -164,6 +164,37 @@ TEST_CASE("AssetBrowserModel")
     const auto loose = BrowserAsset{BrowserCellType::Texture, "textures/brick.png"};
     CHECK(browserAssetDisplayPath(loose, true) == loose.path);
   }
+  SECTION("project and library assets use type folders without changing their paths")
+  {
+    auto model = BrowserAsset{BrowserCellType::Model, "Nature/tree.mdl"};
+    model.source = BrowserSource::AssetLibrary;
+    CHECK(browserAssetDisplayPath(model, false) == "models/Nature/tree.mdl");
+    CHECK(model.path == std::filesystem::path{"Nature/tree.mdl"});
+
+    model.catalogPath = "Models/Nature/tree.mdl";
+    CHECK(browserAssetDisplayPath(model, false) == "models/Nature/tree.mdl");
+    model.catalogPath = pathFromQString(QString::fromUtf8("模型/自然/tree.mdl"));
+    CHECK(
+      browserAssetDisplayPath(model, false)
+      == pathFromQString(QString::fromUtf8("models/自然/tree.mdl")));
+
+    model.catalogPath.clear();
+    model.source = BrowserSource::GameFiles;
+    CHECK(browserAssetDisplayPath(model, false) == model.path);
+    model.source = BrowserSource::Project;
+    model.type = BrowserCellType::Sound;
+    CHECK(browserAssetDisplayPath(model, false) == "sound/Nature/tree.mdl");
+    model.type = BrowserCellType::Texture;
+    CHECK(browserAssetDisplayPath(model, false) == "textures/Nature/tree.mdl");
+    model.type = BrowserCellType::Material;
+    CHECK(browserAssetDisplayPath(model, false) == "materials/Nature/tree.mdl");
+    model.type = BrowserCellType::Sprite;
+    CHECK(browserAssetDisplayPath(model, false) == "sprites/Nature/tree.mdl");
+    model.type = BrowserCellType::Prefab;
+    CHECK(browserAssetDisplayPath(model, false) == "prefabs/Nature/tree.mdl");
+    model.type = BrowserCellType::Map;
+    CHECK(browserAssetDisplayPath(model, false) == "maps/Nature/tree.mdl");
+  }
   SECTION("skybox groups have one presentation root independent of engine paths")
   {
     auto sky = BrowserAsset{BrowserCellType::Texture, "gfx/env/desert"};

@@ -1380,7 +1380,10 @@ void ModelBrowser::rebuildBreadcrumbBar()
   {
     accumulated /= part;
     addSeparator();
-    addCrumb(pathAsGenericQString(part), accumulated);
+    addCrumb(
+      m_folderPath.empty() ? browserFolderDisplayName(accumulated)
+                           : pathAsGenericQString(part),
+      accumulated);
   }
 
   m_breadcrumbLayout->addStretch(1);
@@ -2671,7 +2674,7 @@ void ModelBrowser::rebuildFolderTree()
       }
 
       auto* item =
-        new QTreeWidgetItem{rootItem, QStringList{pathAsGenericQString(rootPath)}};
+        new QTreeWidgetItem{rootItem, QStringList{browserFolderDisplayName(rootPath)}};
       item->setData(0, Qt::UserRole, pathAsGenericQString(rootPath));
       item->setIcon(0, folderIcon);
       m_folderTreeItems.emplace(rootPath, item);
@@ -2706,8 +2709,9 @@ void ModelBrowser::rebuildFolderTree()
         continue;
       }
 
-      auto* item =
-        new QTreeWidgetItem{parentItem, QStringList{pathAsGenericQString(part)}};
+      const auto title = m_folderPath.empty() ? browserFolderDisplayName(accumulatedPath)
+                                              : pathAsGenericQString(part);
+      auto* item = new QTreeWidgetItem{parentItem, QStringList{title}};
       item->setData(0, Qt::UserRole, pathAsGenericQString(accumulatedPath));
       item->setIcon(0, folderIcon);
       parentItem = item;

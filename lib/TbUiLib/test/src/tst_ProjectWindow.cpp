@@ -1189,13 +1189,13 @@ TEST_CASE("ProjectWindow")
     source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
     used->setChecked(true);
     QApplication::processEvents();
-    CHECK(folders->findItems("skybox", Qt::MatchRecursive).empty());
+    CHECK(folders->findItems("Skybox", Qt::MatchRecursive).empty());
     REQUIRE(mdl::setEntityProperty(alphaDocument->map(), "skyname", "live"));
-    QTRY_COMPARE(folders->findItems("skybox", Qt::MatchRecursive).size(), 1);
+    QTRY_COMPARE(folders->findItems("Skybox", Qt::MatchRecursive).size(), 1);
     tabs->setCurrentIndex(1);
-    QTRY_VERIFY(folders->findItems("skybox", Qt::MatchRecursive).empty());
+    QTRY_VERIFY(folders->findItems("Skybox", Qt::MatchRecursive).empty());
     tabs->setCurrentIndex(0);
-    QTRY_COMPARE(folders->findItems("skybox", Qt::MatchRecursive).size(), 1);
+    QTRY_COMPARE(folders->findItems("Skybox", Qt::MatchRecursive).size(), 1);
     require(session->save());
     closeTab(*tabs, 1);
     closeTab(*tabs, 0);
@@ -1691,16 +1691,16 @@ TEST_CASE("ProjectWindow")
     favoriteFilter->setChecked(true);
     QTRY_VERIFY(tags->findData("Industrial") >= 0);
     tags->setCurrentIndex(tags->findData("Industrial"));
-    QTRY_COMPARE(folders->findItems("sound", Qt::MatchRecursive).size(), 1);
+    QTRY_COMPARE(folders->findItems("Sound", Qt::MatchRecursive).size(), 1);
     auto* favorite = linkedWindow->findChild<QPushButton*>("AssetLibraryFavoriteButton");
     REQUIRE(favorite);
     CHECK(favorite->isChecked());
     favorite->click();
-    QTRY_VERIFY(folders->findItems("sound", Qt::MatchRecursive).empty());
+    QTRY_VERIFY(folders->findItems("Sound", Qt::MatchRecursive).empty());
     QTRY_VERIFY(
       !libraryWindow.findChild<QPushButton*>("AssetLibraryFavoriteButton")->isChecked());
     require(source->setFavorite(resource.id, true));
-    QTRY_COMPARE(folders->findItems("sound", Qt::MatchRecursive).size(), 1);
+    QTRY_COMPARE(folders->findItems("Sound", Qt::MatchRecursive).size(), 1);
     auto* librarySearch = libraryWindow.findChild<QLineEdit*>("AssetLibrarySearch");
     REQUIRE(librarySearch);
     librarySearch->setText("ambience");
@@ -2051,6 +2051,13 @@ TEST_CASE("ProjectWindow")
     const auto children = folders->findItems(trees, Qt::MatchRecursive);
     REQUIRE(parents.size() == 1);
     REQUIRE(children.size() == 1);
+    REQUIRE(parents.front()->parent());
+    CHECK(parents.front()->parent()->text(0) == "Model");
+    CHECK(
+      parents.front()->parent()->data(0, Qt::UserRole).toString()
+      == QStringLiteral("models"));
+    for (const auto& asset : cards->assets())
+      CHECK(asset.catalogPath == std::filesystem::path{"models"} / asset.path);
     folders->setCurrentItem(children.front());
     const auto buttons = browser->findChildren<QToolButton*>();
     CHECK(std::ranges::any_of(
@@ -2357,7 +2364,7 @@ TEST_CASE("ProjectWindow")
     auto libraryEntry = cards->assets().front();
     CHECK(libraryEntry.type == BrowserCellType::Material);
     CHECK(libraryEntry.libraryAssetId == material.id);
-    CHECK_FALSE(folders->findItems("materials", Qt::MatchRecursive).empty());
+    CHECK_FALSE(folders->findItems("Material", Qt::MatchRecursive).empty());
     CHECK(catalogAssetDragData(libraryEntry, session->store().info().id).isEmpty());
     const auto libraryPreview =
       require(inspection::terrainMaterialPreview(libraryEntry, session.get()));
@@ -2687,13 +2694,13 @@ TEST_CASE("ProjectWindow")
     REQUIRE(assetView);
     CHECK_FALSE(groups->isChecked());
     source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
-    QTRY_COMPARE(folders->findItems("textures", Qt::MatchRecursive).size(), 1);
+    QTRY_COMPARE(folders->findItems("Texture", Qt::MatchRecursive).size(), 1);
     CHECK(folders->findItems("custom.wad", Qt::MatchRecursive).empty());
     groups->setChecked(true);
     QTRY_COMPARE(folders->findItems("custom.wad", Qt::MatchRecursive).size(), 1);
     CHECK(
       folders->findItems("custom.wad", Qt::MatchRecursive).front()->parent()->text(0)
-      == "textures");
+      == "Texture");
     emit assetView->folderActivated("textures/custom.wad");
     groups->setChecked(false);
     REQUIRE(folders->currentItem());
