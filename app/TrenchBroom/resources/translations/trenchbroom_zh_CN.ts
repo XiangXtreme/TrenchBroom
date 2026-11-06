@@ -8523,6 +8523,9 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Paint Slot</source><translation>涂刷槽位</translation></message>
         <message><source>Edit mode</source><translation>编辑模式</translation></message>
         <message><source>Sculpt</source><translation>雕刻</translation></message>
+        <message><source>Vertices</source><translation>顶点</translation></message>
+        <message><source>Edit Terrain Vertices</source><translation>编辑地形顶点</translation></message>
+        <message><source>Click or box-select vertices, then drag vertically. Hold Ctrl or Shift to add to the selection.</source><translation>点击或框选顶点，然后上下拖动。按住 Ctrl 或 Shift 可以追加选择。</translation></message>
         <message><source>Sculpt tool</source><translation>雕刻工具</translation></message>
         <message><source>Raise</source><translation>抬高</translation></message>
         <message><source>Lower</source><translation>降低</translation></message>
@@ -8531,7 +8534,8 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Grid spacing</source><translation>网格间距</translation></message>
         <message><source>%1 units</source><translation>%1 单位</translation></message>
         <message><source>Lock terrain edges</source><translation>锁定地形边缘</translation></message>
-        <message><source>All vertices are on locked edges; unlock the edges to sculpt.</source><translation>所有顶点都位于已锁定的边缘；请解锁边缘以进行雕刻。</translation></message>
+        <message><source>All vertices are on locked edges; unlock the edges to edit terrain.</source><translation>所有顶点都位于已锁定的边缘；请解锁边缘以编辑地形。</translation></message>
+        <message><source>Move Terrain Vertices</source><translation>移动地形顶点</translation></message>
         <message><source>Create Sculptable Terrain</source><translation>创建可雕刻地形</translation></message>
         <message><source>Draw New Terrain</source><translation>框选新地形</translation></message>
         <message><source>New terrain height</source><translation>新地形高度</translation></message>

@@ -16,16 +16,19 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QPushButton>
+#include <QRubberBand>
 #include <QScopeGuard>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include "gl/Camera.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EditorContext.h"
 #include "mdl/GameInfo.h"
+#include "mdl/Grid.h"
 #include "mdl/GroupNode.h"
 #include "mdl/HitAdapter.h"
 #include "mdl/HitFilter.h"
@@ -70,6 +73,38 @@ bool terrainEditable(const mdl::Map& map, const mdl::GroupNode& group)
                      || !map.editorContext().visible(*child);
             });
 }
+
+vm::vec3d terrainVertex(
+  const TerrainRegion& region, const mdl::GroupNode& group, const size_t index)
+{
+  const auto& field = *region.heightField;
+  const auto width = size_t(field.columns + 1);
+  const auto column = index % width;
+  const auto row = index / width;
+  return group.group().transformation()
+         * vm::vec3d{
+           region.origin.x() + double(column) * field.spacing,
+           region.origin.y() - double(row) * field.spacing,
+           field.heights[index]};
+}
+
+bool terrainEdgeVertex(const TerrainHeightField& field, const size_t index)
+{
+  const auto width = size_t(field.columns + 1);
+  const auto column = index % width;
+  const auto row = index / width;
+  return column == 0 || column == size_t(field.columns) || row == 0
+         || row == size_t(field.rows);
+}
+
+std::optional<QPointF> terrainVertexScreenPosition(
+  const gl::Camera& camera, const vm::vec3d& position)
+{
+  const auto projected = camera.project(vm::vec3f{position});
+  if (projected.z() < 0.0f || projected.z() > 1.0f)
+    return std::nullopt;
+  return QPointF{double(projected.x()), double(camera.viewport().height) - projected.y()};
+}
 } // namespace
 
 TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
@@ -84,6 +119,7 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_editMode->setObjectName(QStringLiteral("TerrainInspector_EditMode"));
   m_editMode->addItem(tr("Material"));
   m_editMode->addItem(tr("Sculpt"));
+  m_editMode->addItem(tr("Vertices"));
 
   m_sculptMode = new QComboBox{this};
   m_sculptMode->setObjectName(QStringLiteral("TerrainInspector_SculptMode"));
@@ -290,7 +326,14 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
     if (on)
       m_drawNew->setChecked(false);
     else
+    {
+      cancelVertexInteraction();
       endStroke(false);
+    }
+    if (on && m_editMode->currentIndex() == 2)
+      m_status->setText(
+        tr("Click or box-select vertices, then drag vertically. Hold Ctrl or Shift to "
+           "add to the selection."));
     refreshViews();
   });
   connect(m_drawNew, &QPushButton::toggled, this, [this](const bool on) {
@@ -304,7 +347,10 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   });
   connect(m_radius, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
   connect(m_hardness, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
-  connect(m_lockEdges, &QCheckBox::toggled, this, [this] { refresh(); });
+  connect(m_lockEdges, &QCheckBox::toggled, this, [this] {
+    refresh();
+    refreshViews();
+  });
   m_refreshTimer = new QTimer{this};
   m_refreshTimer->setSingleShot(true);
   m_refreshTimer->setInterval(150);
@@ -430,6 +476,8 @@ void TerrainInspector::updateSlotLabels(const std::string& materialAssetId)
 void TerrainInspector::updateModeControls()
 {
   const auto sculpt = m_editMode->currentIndex() == 1;
+  const auto vertices = m_editMode->currentIndex() == 2;
+  const auto material = m_editMode->currentIndex() == 0;
   const auto* group = selectedTerrainGroup(m_document.map());
   const auto region = group ? TerrainRegion::decode(group->group().terrainPaint())
                             : Result<TerrainRegion>{Error{"No terrain selected."}};
@@ -437,29 +485,32 @@ void TerrainInspector::updateModeControls()
     region.is_success() && region.value().heightField.has_value();
   const auto drawing = sculpt && m_drawNew->isChecked();
   m_form->setRowVisible(m_sculptMode, sculpt && !drawing);
-  m_form->setRowVisible(m_lockEdges, sculpt && !drawing);
+  m_form->setRowVisible(m_lockEdges, (sculpt && !drawing) || vertices);
   m_form->setRowVisible(m_gridSpacing, sculpt && (!hasHeightField || drawing));
   m_form->setRowVisible(m_newHeight, drawing);
   m_form->setRowVisible(m_newThickness, drawing);
-  m_form->setRowVisible(m_terrainMaterial, !sculpt);
-  m_form->setRowVisible(m_material, !sculpt);
-  m_form->setRowVisible(m_radius, !drawing);
-  m_form->setRowVisible(m_strength, !drawing);
-  m_form->setRowVisible(m_hardness, !drawing);
-  m_form->setRowVisible(m_faceBudget, !sculpt);
-  m_form->setRowVisible(m_wadBudget, !sculpt);
-  m_form->setRowVisible(m_minFaceWidth, !sculpt);
-  m_form->setRowVisible(m_patchDensity, !sculpt);
-  m_create->setVisible(!sculpt);
+  m_form->setRowVisible(m_terrainMaterial, material);
+  m_form->setRowVisible(m_material, material);
+  m_form->setRowVisible(m_radius, !vertices && !drawing);
+  m_form->setRowVisible(m_strength, !vertices && !drawing);
+  m_form->setRowVisible(m_hardness, !vertices && !drawing);
+  m_form->setRowVisible(m_faceBudget, material);
+  m_form->setRowVisible(m_wadBudget, material);
+  m_form->setRowVisible(m_minFaceWidth, material);
+  m_form->setRowVisible(m_patchDensity, material);
+  m_create->setVisible(material);
   m_convert->setVisible(sculpt && !hasHeightField && !drawing);
   m_drawNew->setVisible(sculpt);
   m_paint->setVisible(!drawing);
-  m_openLibrary->setVisible(!sculpt);
-  m_analyze->setVisible(!sculpt);
-  m_showCuts->setVisible(!sculpt);
-  m_estimate->setVisible(!sculpt);
-  m_generate->setVisible(!sculpt);
-  m_paint->setText(sculpt ? tr("Sculpt Terrain") : tr("Paint Terrain"));
+  m_openLibrary->setVisible(material);
+  m_analyze->setVisible(material);
+  m_showCuts->setVisible(material);
+  m_estimate->setVisible(material);
+  m_generate->setVisible(material);
+  m_paint->setText(
+    vertices ? tr("Edit Terrain Vertices")
+    : sculpt ? tr("Sculpt Terrain")
+             : tr("Paint Terrain"));
 }
 
 void TerrainInspector::refresh()
@@ -475,6 +526,12 @@ void TerrainInspector::refresh()
                          && map.gameInfo().gameConfig.name == "Half-Life"
                          && map.worldNode().mapFormat() == mdl::MapFormat::Valve;
   const auto* group = supported ? selectedTerrainGroup(map) : nullptr;
+  if (!group || group->persistentId() != m_vertexSelectionGroup)
+  {
+    cancelVertexInteraction();
+    m_selectedVertices.clear();
+    m_vertexSelectionGroup = group ? group->persistentId() : std::nullopt;
+  }
   if (m_sculptStroke && (!group || group->persistentId() != m_strokeGroup))
     endStroke(false);
   m_refreshedGroup = group ? group->persistentId() : std::nullopt;
@@ -546,7 +603,7 @@ void TerrainInspector::refresh()
     return;
   }
 
-  if (m_editMode->currentIndex() == 1 && !region.value().heightField)
+  if (m_editMode->currentIndex() != 0 && !region.value().heightField)
     m_paint->setEnabled(false);
   if (!editable)
     m_paint->setChecked(false);
@@ -600,16 +657,20 @@ void TerrainInspector::refresh()
     return;
   }
   if (
-    m_editMode->currentIndex() == 1 && !m_drawNew->isChecked() && m_lockEdges->isChecked()
+    m_editMode->currentIndex() != 0 && !m_drawNew->isChecked() && m_lockEdges->isChecked()
     && region.value().heightField
     && (region.value().heightField->columns < 2 || region.value().heightField->rows < 2))
   {
     m_status->setText(
-      tr("All vertices are on locked edges; unlock the edges to sculpt."));
+      tr("All vertices are on locked edges; unlock the edges to edit terrain."));
     return;
   }
   if (m_drawNew->isChecked())
     m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
+  else if (vertexEditing())
+    m_status->setText(
+      tr("Click or box-select vertices, then drag vertically. Hold Ctrl or Shift to add "
+         "to the selection."));
   else
     m_status->setText(tr("%1 · %2 source top faces")
                         .arg(QString::fromStdString(group->name()))
@@ -755,7 +816,253 @@ void TerrainInspector::convertSelection()
 
 bool TerrainInspector::painting() const
 {
-  return isVisible() && m_paint->isEnabled() && m_paint->isChecked();
+  return isVisible() && m_paint->isEnabled() && m_paint->isChecked()
+         && m_editMode->currentIndex() != 2;
+}
+
+bool TerrainInspector::vertexEditing() const
+{
+  return isVisible() && m_paint->isEnabled() && m_paint->isChecked()
+         && m_editMode->currentIndex() == 2;
+}
+
+bool TerrainInspector::vertexInteracting() const
+{
+  return m_vertexSelecting || m_vertexDragging;
+}
+
+const TerrainRegion* TerrainInspector::vertexRegion(const mdl::GroupNode& group) const
+{
+  if (m_vertexDragging && m_stroke && group.persistentId() == m_strokeGroup)
+    return &*m_stroke;
+  const auto& encoded = group.group().terrainPaint();
+  if (m_vertexCachedGroup != group.persistentId() || m_vertexCachedPaint != encoded)
+  {
+    m_vertexCachedGroup = group.persistentId();
+    m_vertexCachedPaint = encoded;
+    auto decoded = TerrainRegion::decode(encoded);
+    m_vertexCachedRegion = decoded.is_success()
+                             ? std::make_unique<TerrainRegion>(std::move(decoded).value())
+                             : nullptr;
+  }
+  return m_vertexCachedRegion.get();
+}
+
+void TerrainInspector::beginVertexInteraction(
+  const gl::Camera& camera, QWidget& view, const QPointF& point, const bool additive)
+{
+  if (!vertexEditing() || vertexInteracting())
+    return;
+  auto& map = m_document.map();
+  const auto* group = selectedTerrainGroup(map);
+  if (!group || !terrainEditable(map, *group))
+    return;
+  const auto* region = vertexRegion(*group);
+  if (!region || !region->heightField)
+    return;
+  const auto& field = *region->heightField;
+  auto nearest = std::optional<size_t>{};
+  auto nearestDistance = 8.0 * 8.0;
+  auto nearestDepth = 1.0f;
+  for (auto i = size_t{0}; i < field.heights.size(); ++i)
+  {
+    if (m_lockEdges->isChecked() && terrainEdgeVertex(field, i))
+      continue;
+    const auto position = terrainVertex(*region, *group, i);
+    const auto screen = terrainVertexScreenPosition(camera, position);
+    if (!screen)
+      continue;
+    const auto delta = *screen - point;
+    const auto distance = delta.x() * delta.x() + delta.y() * delta.y();
+    const auto depth = camera.project(vm::vec3f{position}).z();
+    if (
+      distance < nearestDistance || (distance == nearestDistance && depth < nearestDepth))
+    {
+      nearest = i;
+      nearestDistance = distance;
+      nearestDepth = depth;
+    }
+  }
+
+  m_vertexStart = point;
+  m_vertexAdditive = additive;
+  if (!nearest)
+  {
+    m_vertexSelecting = true;
+    if (!m_vertexBox || m_vertexBox->parentWidget() != &view)
+    {
+      delete m_vertexBox.data();
+      m_vertexBox = new QRubberBand{QRubberBand::Rectangle, &view};
+    }
+    m_vertexBox->setGeometry(QRect{point.toPoint(), point.toPoint()});
+    m_vertexBox->show();
+    return;
+  }
+
+  if (!m_selectedVertices.contains(*nearest))
+  {
+    if (!additive)
+      m_selectedVertices.clear();
+    m_selectedVertices.insert(*nearest);
+  }
+  const auto world = terrainVertex(*region, *group, *nearest);
+  const auto& transform = group->group().transformation();
+  const auto vertical = transform * vm::vec3d{0, 0, 1} - transform * vm::vec3d{0, 0, 0};
+  const auto projected = camera.project(vm::vec3f{world});
+  const auto projectedUp = camera.project(vm::vec3f{world + vertical});
+  const auto pixelsPerUnit = double(projectedUp.y() - projected.y());
+  if (std::abs(pixelsPerUnit) > 0.01)
+    m_vertexUnitsPerPixel = 1.0 / pixelsPerUnit;
+  else
+  {
+    const auto a = camera.unproject(float(point.x()), float(point.y()), projected.z());
+    const auto b =
+      camera.unproject(float(point.x()), float(point.y() + 1), projected.z());
+    m_vertexUnitsPerPixel = double(vm::length(b - a)) / vm::length(vertical);
+  }
+  if (!std::isfinite(m_vertexUnitsPerPixel))
+    return;
+
+  m_vertexOriginalHeights = field.heights;
+  m_stroke = *region;
+  m_strokeGroup = group->persistentId();
+  m_sculptStroke = true;
+  m_vertexDragging = true;
+  map.startTransaction(
+    tr("Move Terrain Vertices").toStdString(), mdl::TransactionScope::LongRunning);
+  refreshViews();
+}
+
+void TerrainInspector::moveVertexInteraction(const QPointF& point)
+{
+  if (m_vertexSelecting)
+  {
+    if (m_vertexBox)
+      m_vertexBox->setGeometry(
+        QRect{m_vertexStart.toPoint(), point.toPoint()}.normalized());
+    return;
+  }
+  if (!m_vertexDragging || !m_stroke || !m_stroke->heightField)
+    return;
+  auto& map = m_document.map();
+  auto* group = selectedTerrainGroup(map);
+  if (!group || group->persistentId() != m_strokeGroup || !terrainEditable(map, *group))
+  {
+    cancelVertexInteraction();
+    return;
+  }
+  auto field = *m_stroke->heightField;
+  const auto delta =
+    map.grid().snap(-(point.y() - m_vertexStart.y()) * m_vertexUnitsPerPixel);
+  for (const auto i : m_selectedVertices)
+  {
+    if (
+      i < field.heights.size()
+      && (!m_lockEdges->isChecked() || !terrainEdgeVertex(field, i)))
+      field.heights[i] = std::max(field.bottom + 1.0, m_vertexOriginalHeights[i] + delta);
+  }
+  if (field.heights == m_stroke->heightField->heights)
+    return;
+  m_sculptApplying = true;
+  const auto result = updateTerrainHeightField(map, *group, field);
+  m_sculptApplying = false;
+  if (result.is_error())
+  {
+    const auto message = terrainErrorMessage(std::get<Error>(result.error()));
+    cancelVertexInteraction();
+    m_status->setText(message);
+    return;
+  }
+  m_stroke->heightField = std::move(field);
+  m_refreshedPaint = group->group().terrainPaint();
+  refreshViews();
+}
+
+void TerrainInspector::endVertexInteraction(
+  const gl::Camera& camera, const QPointF& point, const bool commit)
+{
+  if (!commit)
+  {
+    cancelVertexInteraction();
+    return;
+  }
+  if (m_vertexDragging)
+  {
+    moveVertexInteraction(point);
+    if (m_vertexDragging)
+    {
+      m_vertexDragging = false;
+      m_vertexOriginalHeights.clear();
+      endStroke(true);
+    }
+    return;
+  }
+  if (!m_vertexSelecting)
+    return;
+  m_vertexSelecting = false;
+  if (m_vertexBox)
+    m_vertexBox->hide();
+  const auto* group = selectedTerrainGroup(m_document.map());
+  if (!group || !terrainEditable(m_document.map(), *group))
+    return;
+  const auto* region = vertexRegion(*group);
+  if (!region || !region->heightField)
+    return;
+  if (!m_vertexAdditive)
+    m_selectedVertices.clear();
+  const auto& field = *region->heightField;
+  const auto rectangle = QRectF{m_vertexStart, point}.normalized();
+  for (auto i = size_t{0}; i < field.heights.size(); ++i)
+  {
+    if (m_lockEdges->isChecked() && terrainEdgeVertex(field, i))
+      continue;
+    const auto screen =
+      terrainVertexScreenPosition(camera, terrainVertex(*region, *group, i));
+    if (screen && rectangle.contains(*screen))
+      m_selectedVertices.insert(i);
+  }
+  refreshViews();
+}
+
+void TerrainInspector::cancelVertexInteraction()
+{
+  m_vertexSelecting = false;
+  if (m_vertexBox)
+    m_vertexBox->hide();
+  if (std::exchange(m_vertexDragging, false))
+  {
+    m_vertexOriginalHeights.clear();
+    endStroke(false);
+  }
+}
+
+void TerrainInspector::renderVertices(
+  render::RenderContext& context, render::RenderBatch& batch) const
+{
+  if (!vertexEditing())
+    return;
+  const auto* group = selectedTerrainGroup(m_document.map());
+  if (!group)
+    return;
+  const auto* region = vertexRegion(*group);
+  if (!region || !region->heightField)
+    return;
+  const auto& field = *region->heightField;
+  auto regular = std::vector<vm::vec3f>{};
+  auto selected = std::vector<vm::vec3f>{};
+  for (auto i = size_t{0}; i < field.heights.size(); ++i)
+  {
+    if (m_lockEdges->isChecked() && terrainEdgeVertex(field, i))
+      continue;
+    auto& handles = m_selectedVertices.contains(i) ? selected : regular;
+    handles.push_back(vm::vec3f{terrainVertex(*region, *group, i)});
+  }
+  auto renderer = render::RenderService{context, batch};
+  renderer.setShowOccludedObjectsTransparent();
+  renderer.setForegroundColor(RgbaF{0.9f, 0.9f, 0.9f, 1.0f});
+  renderer.renderHandles(regular);
+  renderer.setForegroundColor(RgbaF{1.0f, 0.55f, 0.1f, 1.0f});
+  renderer.renderHandles(selected);
 }
 
 bool TerrainInspector::drawingTerrain() const

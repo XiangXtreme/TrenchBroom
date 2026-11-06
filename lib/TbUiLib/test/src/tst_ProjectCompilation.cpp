@@ -63,6 +63,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
@@ -234,6 +235,119 @@ ProjectWindow* findProjectWindow(const std::filesystem::path& path)
         && candidate->session()->path() == std::filesystem::weakly_canonical(path))
       return candidate;
   return nullptr;
+}
+
+std::unique_ptr<TerrainRegion> testTerrainRegion(const mdl::GroupNode& group)
+{
+  return std::make_unique<TerrainRegion>(
+    require(TerrainRegion::decode(group.group().terrainPaint())));
+}
+
+void testTerrainVertexEditing(
+  AppController& app,
+  MapWindow* window,
+  MapView3D* view,
+  TerrainInspector* panel,
+  mdl::GroupNode* group,
+  QComboBox* editMode,
+  QPushButton* activate,
+  gl::Camera& camera,
+  const TerrainRegion& sculpted)
+{
+  auto& map = window->document().map();
+  // Terrain vertices are manipulated through the height field in both views,
+  // and each drag is one undoable operation that retains the paint.
+  editMode->setCurrentIndex(2);
+  activate->click();
+  REQUIRE(panel->vertexEditing());
+  const auto vertexIndex = sculpted.heightField->index(2, 2);
+  const auto centerVertex =
+    vm::vec3f{0, 0, float(sculpted.heightField->heights[vertexIndex])};
+  const auto projected = camera.project(centerVertex);
+  const auto vertexPosition = QPoint{
+    int(std::lround(projected.x())),
+    int(std::lround(float(view->height()) - projected.y()))};
+  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, vertexPosition);
+  REQUIRE(panel->vertexInteracting());
+  const auto raisedPosition = vertexPosition + QPoint{0, -80};
+  QTest::mouseMove(view, raisedPosition);
+  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, raisedPosition);
+  auto vertexEdited = testTerrainRegion(*group);
+  REQUIRE(vertexEdited->heightField);
+  CHECK(
+    vertexEdited->heightField->heights[vertexIndex]
+    > sculpted.heightField->heights[vertexIndex]);
+  CHECK(vertexEdited->weights == sculpted.weights);
+  CHECK(terrainSurfaces(*group, *vertexEdited).is_success());
+  map.undoCommand();
+  CHECK(testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
+  map.redoCommand();
+  CHECK(
+    testTerrainRegion(*group)->heightField->heights
+    == vertexEdited->heightField->heights);
+  map.undoCommand();
+  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, vertexPosition);
+  QTest::mouseMove(view, raisedPosition);
+  QTest::keyClick(view, Qt::Key_Escape);
+  CHECK_FALSE(panel->vertexInteracting());
+  CHECK(testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
+
+  auto* vertexAncestor = view->parentWidget();
+  while (vertexAncestor && !qobject_cast<MapEditorView*>(vertexAncestor))
+    vertexAncestor = vertexAncestor->parentWidget();
+  REQUIRE(vertexAncestor);
+  {
+    auto side =
+      MapView2D{app, window->document(), window->toolBox(), MapView2D::ViewPlane::XZ};
+    side.setParent(vertexAncestor);
+    side.resize(400, 400);
+    side.show();
+    QApplication::processEvents();
+    auto& sideCamera = side.camera();
+    sideCamera.setViewport({0, 0, side.width(), side.height()});
+    const auto screen = [&](const vm::vec3f& p) {
+      const auto result = sideCamera.project(p);
+      return QPoint{
+        int(std::lround(result.x())),
+        int(std::lround(float(side.height()) - result.y()))};
+    };
+    auto selectedBounds = QRect{};
+    for (auto row = 1; row < 4; ++row)
+      for (auto column = 1; column < 4; ++column)
+      {
+        const auto i = sculpted.heightField->index(column, row);
+        const auto p = screen(
+          {float(-128 + column * 64),
+           float(128 - row * 64),
+           float(sculpted.heightField->heights[i])});
+        selectedBounds |= QRect{p, QSize{1, 1}};
+      }
+    selectedBounds.adjust(-12, -12, 12, 12);
+    REQUIRE(side.rect().contains(selectedBounds));
+    QTest::mousePress(&side, Qt::LeftButton, Qt::NoModifier, selectedBounds.topLeft());
+    QTest::mouseMove(&side, selectedBounds.bottomRight());
+    QTest::mouseRelease(
+      &side, Qt::LeftButton, Qt::NoModifier, selectedBounds.bottomRight());
+    const auto handle = screen(centerVertex);
+    QTest::mousePress(&side, Qt::LeftButton, Qt::NoModifier, handle);
+    REQUIRE(panel->vertexInteracting());
+    QTest::mouseMove(&side, handle + QPoint{0, -32});
+    QTest::mouseRelease(&side, Qt::LeftButton, Qt::NoModifier, handle + QPoint{0, -32});
+    vertexEdited = testTerrainRegion(*group);
+    auto changed = 0;
+    for (auto i = size_t{0}; i < vertexEdited->heightField->heights.size(); ++i)
+      if (vertexEdited->heightField->heights[i] != sculpted.heightField->heights[i])
+        ++changed;
+    CHECK(changed >= 3);
+    CHECK(vertexEdited->weights == sculpted.weights);
+    CHECK(terrainSurfaces(*group, *vertexEdited).is_success());
+    map.undoCommand();
+    CHECK(
+      testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
+    side.hide();
+  }
+  activate->click();
+  editMode->setCurrentIndex(1);
 }
 
 } // namespace
@@ -776,6 +890,9 @@ TEST_CASE("Project terrain panel paints a picked brush")
     require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
     == sculpted.heightField->heights);
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+
+  testTerrainVertexEditing(
+    app, window, view, panel, group, editMode, activate, camera, sculpted);
   mdl::lockNodes(map, {group});
   CHECK_FALSE(activate->isEnabled());
   panel->beginStroke(terrainPick());

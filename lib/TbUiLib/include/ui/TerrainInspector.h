@@ -4,6 +4,9 @@
  */
 #pragma once
 
+#include <QPointF>
+#include <QPointer>
+
 #include "base/NotifierConnection.h"
 #include "mdl/IdType.h"
 #include "ui/TabBook.h"
@@ -11,7 +14,9 @@
 #include "ui/TerrainRegion.h"
 
 #include <cstddef>
+#include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -20,9 +25,14 @@ class QCheckBox;
 class QFormLayout;
 class QLabel;
 class QPushButton;
+class QRubberBand;
 class QSpinBox;
 class QTimer;
 
+namespace tb::gl
+{
+class Camera;
+}
 namespace tb::mdl
 {
 class PickResult;
@@ -78,6 +88,18 @@ private:
   std::optional<mdl::IdType> m_strokeGroup;
   std::optional<vm::vec2d> m_previousPoint;
   std::optional<double> m_flattenHeight;
+  std::optional<mdl::IdType> m_vertexSelectionGroup;
+  mutable std::optional<mdl::IdType> m_vertexCachedGroup;
+  mutable std::string m_vertexCachedPaint;
+  mutable std::unique_ptr<TerrainRegion> m_vertexCachedRegion;
+  std::set<size_t> m_selectedVertices;
+  std::vector<double> m_vertexOriginalHeights;
+  QPointF m_vertexStart;
+  QPointer<QRubberBand> m_vertexBox;
+  bool m_vertexSelecting = false;
+  bool m_vertexDragging = false;
+  bool m_vertexAdditive = false;
+  double m_vertexUnitsPerPixel = 1.0;
   std::optional<mdl::IdType> m_cutPreviewGroup;
   std::vector<TerrainEstimate::Cut> m_cutPreview;
   NotifierConnection m_connection;
@@ -92,6 +114,14 @@ private:
 public:
   TerrainInspector(AppController& app, MapDocument& document);
   bool painting() const;
+  bool vertexEditing() const;
+  bool vertexInteracting() const;
+  void beginVertexInteraction(
+    const gl::Camera& camera, QWidget& view, const QPointF& point, bool additive);
+  void moveVertexInteraction(const QPointF& point);
+  void endVertexInteraction(const gl::Camera& camera, const QPointF& point, bool commit);
+  void cancelVertexInteraction();
+  void renderVertices(render::RenderContext& context, render::RenderBatch& batch) const;
   bool drawingTerrain() const;
   void createDrawnTerrain(const vm::vec2d& first, const vm::vec2d& second);
   void cancelDrawing();
@@ -112,6 +142,7 @@ private:
   void createRegion();
   void convertSelection();
   void updateModeControls();
+  const TerrainRegion* vertexRegion(const mdl::GroupNode& group) const;
   void sculptTo(const vm::vec2d& point);
   void generate();
   void analyze();

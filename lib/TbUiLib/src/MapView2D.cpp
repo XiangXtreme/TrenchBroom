@@ -192,6 +192,13 @@ void MapView2D::keyPressEvent(QKeyEvent* event)
 {
   if (event->key() == Qt::Key_Escape)
   {
+    if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
+    {
+      terrain->cancelVertexInteraction();
+      update();
+      event->accept();
+      return;
+    }
     if (auto* terrain = terrainInspector(); terrain && terrain->drawingTerrain())
     {
       m_terrainDrawStart.reset();
@@ -207,6 +214,24 @@ void MapView2D::keyPressEvent(QKeyEvent* event)
 
 void MapView2D::mousePressEvent(QMouseEvent* event)
 {
+  if (event->button() == Qt::LeftButton && !m_toolBox.anyModalToolActive())
+  {
+    const auto modifiers = event->modifiers();
+    if (
+      modifiers == Qt::NoModifier || modifiers == Qt::ControlModifier
+      || modifiers == Qt::ShiftModifier
+      || modifiers == (Qt::ControlModifier | Qt::ShiftModifier))
+    {
+      if (auto* terrain = terrainInspector(); terrain && terrain->vertexEditing())
+      {
+        terrain->beginVertexInteraction(
+          *m_camera, *this, event->position(), modifiers != Qt::NoModifier);
+        update();
+        event->accept();
+        return;
+      }
+    }
+  }
   if (
     event->button() == Qt::LeftButton && event->modifiers() == Qt::NoModifier
     && !m_toolBox.anyModalToolActive())
@@ -234,6 +259,13 @@ void MapView2D::mousePressEvent(QMouseEvent* event)
 
 void MapView2D::mouseMoveEvent(QMouseEvent* event)
 {
+  if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
+  {
+    terrain->moveVertexInteraction(event->position());
+    update();
+    event->accept();
+    return;
+  }
   if (m_terrainDrawStart)
   {
     m_terrainDrawOutline->setGeometry(
@@ -246,6 +278,16 @@ void MapView2D::mouseMoveEvent(QMouseEvent* event)
 
 void MapView2D::mouseReleaseEvent(QMouseEvent* event)
 {
+  if (event->button() == Qt::LeftButton)
+  {
+    if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
+    {
+      terrain->endVertexInteraction(*m_camera, event->position(), true);
+      update();
+      event->accept();
+      return;
+    }
+  }
   if (event->button() == Qt::LeftButton && m_terrainDrawStart)
   {
     m_terrainDrawStart.reset();
@@ -262,6 +304,8 @@ void MapView2D::mouseReleaseEvent(QMouseEvent* event)
 
 void MapView2D::focusOutEvent(QFocusEvent* event)
 {
+  if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
+    terrain->cancelVertexInteraction();
   m_terrainDrawStart.reset();
   if (m_terrainDrawOutline)
     m_terrainDrawOutline->hide();
@@ -515,6 +559,8 @@ void MapView2D::renderTools(
   render::RenderBatch& renderBatch)
 {
   ToolBoxConnector::renderTools(renderContext, renderBatch);
+  if (const auto* terrain = terrainInspector())
+    terrain->renderVertices(renderContext, renderBatch);
 }
 
 void MapView2D::renderSoftWorldBounds(
