@@ -326,6 +326,107 @@ TEST_CASE("Terrain baker uses packaged transitions for uniform sources")
       rebuiltPalette.textures[index].miptex == generatedPalette.textures[index].miptex);
 }
 
+TEST_CASE("Terrain baker packs only patches covered by terrain")
+{
+  auto region = TerrainRegion{vm::vec2d{0, 0}};
+  region.patchDensityPercent = 50;
+  region.weights.fill({0.3, 0.3, 0.4});
+  auto outline = QPolygonF{};
+  outline << QPointF{0, 0} << QPointF{96, 0} << QPointF{96, 96} << QPointF{0, 96};
+  const auto coverage = std::vector<QPolygonF>{outline};
+
+  const auto full = requireValue(runTerrainBaker(region));
+  const auto clipped =
+    requireValue(runTerrainBaker(region, nullptr, TerrainBakeMode::Shared, &coverage));
+  const auto bytes = [](const auto& bake) {
+    auto result = size_t{0};
+    for (const auto& texture : bake.textures)
+      result += texture.miptex.size();
+    return result;
+  };
+  CHECK(bytes(clipped) < bytes(full));
+  REQUIRE(std::ranges::all_of(clipped.faces, [&](const auto& face) {
+    return face.material < clipped.textures.size();
+  }));
+
+  auto compared = size_t{0};
+  for (auto y = 2.25; y < 96; y += 7)
+    for (auto x = 2.25; x < 96; x += 7)
+    {
+      const auto point = QPointF{x, y};
+      const auto findFace = [&](const auto& bake) {
+        return std::ranges::find_if(bake.faces, [&](const auto& face) {
+          return face.polygon.containsPoint(point, Qt::OddEvenFill);
+        });
+      };
+      const auto original = findFace(full);
+      const auto packed = findFace(clipped);
+      REQUIRE(original != full.faces.end());
+      REQUIRE(packed != clipped.faces.end());
+      for (auto mip = 0; mip < 4; ++mip)
+        CHECK(
+          sampleIndex(full, *original, x, y, mip)
+          == sampleIndex(clipped, *packed, x, y, mip));
+      ++compared;
+    }
+  CHECK(compared > 0);
+}
+
+TEST_CASE("Project terrain reuses identical textures across groups")
+{
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  config.gameInfo.gameConfig.name = "Half-Life";
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto groups = std::vector<mdl::GroupNode*>{};
+  for (auto i = 0; i < 2; ++i)
+  {
+    const auto x = double(i * 256);
+    auto* brush = new mdl::BrushNode{requireValue(
+      builder.createCuboid(vm::bbox3d{{x, -128, -64}, {x + 128, 0, 0}}, "TEST"))};
+    mdl::addNodes(map, {{map.editorContext().currentLayer(), {brush}}});
+    mdl::deselectAll(map);
+    mdl::selectNodes(map, {brush});
+    auto* group = mdl::groupSelectedNodes(map, "Terrain " + std::to_string(i));
+    REQUIRE(group);
+    auto region = requireValue(createTerrainRegion(*group));
+    region.weights.fill({0.3, 0.3, 0.4});
+    auto content = group->group();
+    content.setTerrainPaint(region.encode());
+    REQUIRE(mdl::updateNodeContents(
+      map, "Paint terrain", {{group, mdl::NodeContents{std::move(content)}}}));
+    groups.push_back(group);
+  }
+
+  const auto path = pathFromQString(directory.path()) / "groups.map";
+  requireValue(map.saveTo(path));
+  const auto estimate = requireValue(estimateTerrainGroup(*groups[0]));
+  const auto snapshot = requireValue(bakeTerrainSnapshot(readBytes(path)));
+  REQUIRE(snapshot);
+  REQUIRE(estimate.textures == 1);
+  CHECK(snapshot->textures.size() == estimate.textures);
+  CHECK(snapshot->topFaces == estimate.generatedFaces * 2);
+  const auto text = std::string{snapshot->map.begin(), snapshot->map.end()};
+  CHECK(text.find(" tbt0_") != std::string::npos);
+  CHECK(text.find(" tbt1_") == std::string::npos);
+
+  auto changed = requireValue(TerrainRegion::decode(groups[1]->group().terrainPaint()));
+  changed.weights.fill({0.2, 0.3, 0.5});
+  auto content = groups[1]->group();
+  content.setTerrainPaint(changed.encode());
+  REQUIRE(mdl::updateNodeContents(
+    map, "Change terrain", {{groups[1], mdl::NodeContents{std::move(content)}}}));
+  requireValue(map.saveTo(path));
+  const auto different = requireValue(bakeTerrainSnapshot(readBytes(path)));
+  REQUIRE(different);
+  CHECK(different->textures.size() == 2);
+}
+
 TEST_CASE("Project terrain chooses shared tiles only within budget and with WAD savings")
 {
   auto directory = QTemporaryDir{};
@@ -387,7 +488,17 @@ TEST_CASE("Project terrain chooses shared tiles only within budget and with WAD 
   REQUIRE(group);
   auto region = requireValue(createTerrainRegion(*group));
   region.materialAssetId = materialAsset.id;
-  region.weights.fill({0.5, 0.5, 0});
+  constexpr auto third = 1.0 / 3.0;
+  constexpr auto rowWeights = std::array{
+    0.0, 0.0, 0.0,   third,     2 * third, 1.0, 1.0, 1.0,       2 * third, third, 0.0,
+    0.0, 0.0, third, 2 * third, 1.0,       1.0, 1.0, 2 * third, third,     0.0};
+  for (auto row = 0; row <= TerrainRegion::Rows; ++row)
+    for (auto col = 0; col <= TerrainRegion::Columns; ++col)
+    {
+      const auto weight = rowWeights[size_t(row)];
+      region.weights[size_t(row * (TerrainRegion::Columns + 1) + col)] = {
+        1.0 - weight, weight, 0};
+    }
 
   auto walls = std::vector<mdl::Node*>{};
   for (const auto& bounds :
@@ -432,10 +543,11 @@ TEST_CASE("Project terrain chooses shared tiles only within budget and with WAD 
     smallGroup.setGroup(std::move(content));
 
     const auto smallSurfaces = requireValue(terrainSurfaces(smallGroup, smallRegion));
-    const auto smallShared =
-      requireValue(runTerrainBaker(smallRegion, &material, TerrainBakeMode::Shared));
-    const auto smallLocal =
-      requireValue(runTerrainBaker(smallRegion, &material, TerrainBakeMode::Local));
+    const auto smallCoverage = std::vector<QPolygonF>{smallSurfaces.front().outline};
+    const auto smallShared = requireValue(
+      runTerrainBaker(smallRegion, &material, TerrainBakeMode::Shared, &smallCoverage));
+    const auto smallLocal = requireValue(
+      runTerrainBaker(smallRegion, &material, TerrainBakeMode::Local, &smallCoverage));
     REQUIRE(std::ranges::any_of(smallShared.faces, [&](const auto& face) {
       return face.kind == TerrainFaceKind::Shared
              && terrainArea(smallSurfaces.front().outline.intersected(face.polygon))
@@ -490,10 +602,6 @@ TEST_CASE("Project terrain chooses shared tiles only within budget and with WAD 
   CHECK(repeated->textures == snapshot->textures);
 
   auto bands = region;
-  constexpr auto third = 1.0 / 3.0;
-  constexpr auto rowWeights = std::array{
-    0.0, 0.0, 0.0,   third,     2 * third, 1.0, 1.0, 1.0,       2 * third, third, 0.0,
-    0.0, 0.0, third, 2 * third, 1.0,       1.0, 1.0, 2 * third, third,     0.0};
   for (auto row = 0; row <= TerrainRegion::Rows; ++row)
     for (auto col = 0; col <= TerrainRegion::Columns; ++col)
     {

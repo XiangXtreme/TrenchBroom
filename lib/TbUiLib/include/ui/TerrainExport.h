@@ -25,7 +25,7 @@ class GroupNode;
 namespace tb::ui
 {
 // Bump when generation changes so saved results are refreshed for unchanged maps.
-inline constexpr std::uint64_t TerrainGeneratorVersion = 5;
+inline constexpr std::uint64_t TerrainGeneratorVersion = 6;
 
 struct TerrainSnapshot
 {

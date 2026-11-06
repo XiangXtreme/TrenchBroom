@@ -30,6 +30,7 @@
 #include <memory>
 #include <sstream>
 #include <string_view>
+#include <unordered_map>
 
 namespace tb::ui
 {
@@ -234,14 +235,19 @@ Result<TerrainBake> runBaker(
   const vm::mat4x4d& transform,
   const project::ProjectStore* store)
 {
+  auto coverage = std::vector<QPolygonF>{};
+  coverage.reserve(surfaces.size());
+  for (const auto& surface : surfaces)
+    coverage.push_back(surface.outline);
   if (region.materialAssetId.empty())
-    return runTerrainBaker(region);
+    return runTerrainBaker(region, nullptr, TerrainBakeMode::Shared, &coverage);
   if (!store)
     return Error{"The terrain material requires an open project."};
   auto material = loadTerrainMaterial(*store, region.materialAssetId);
   if (material.is_error())
     return std::get<Error>(material.error());
-  auto shared = runTerrainBaker(region, &material.value(), TerrainBakeMode::Shared);
+  auto shared =
+    runTerrainBaker(region, &material.value(), TerrainBakeMode::Shared, &coverage);
   if (shared.is_error())
     return std::get<Error>(shared.error());
   if (std::ranges::none_of(shared.value().faces, [](const auto& face) {
@@ -249,7 +255,8 @@ Result<TerrainBake> runBaker(
       }))
     return shared;
 
-  auto local = runTerrainBaker(region, &material.value(), TerrainBakeMode::Local);
+  auto local =
+    runTerrainBaker(region, &material.value(), TerrainBakeMode::Local, &coverage);
   if (local.is_error())
     return std::get<Error>(local.error());
   const auto sharedScore = scorePlan(shared.value(), surfaces, region, transform);
@@ -262,12 +269,20 @@ Result<TerrainBake> runBaker(
   return local;
 }
 
+using TerrainTextureIndex = std::unordered_map<size_t, std::vector<std::string>>;
+
+std::string_view textureContent(const std::vector<std::uint8_t>& miptex)
+{
+  return {reinterpret_cast<const char*>(miptex.data() + 16), miptex.size() - 16};
+}
+
 Result<void> bakeGroup(
   mdl::GroupNode& group,
   const vm::bbox3d& bounds,
   TerrainSnapshot& snapshot,
   const size_t groupNumber,
-  const project::ProjectStore* store)
+  const project::ProjectStore* store,
+  TerrainTextureIndex& textureIndex)
 {
   const auto region = TerrainRegion::decode(group.group().terrainPaint());
   if (region.is_error())
@@ -284,6 +299,8 @@ Result<void> bakeGroup(
   const auto inverse = *vm::invert(transform);
   auto pieces = std::vector<std::unique_ptr<mdl::Node>>{};
   auto used = std::vector<bool>(plan.textures.size());
+  auto names = std::vector<std::string>(plan.textures.size());
+  auto hashes = std::vector<size_t>(plan.textures.size());
   for (const auto& surface : surfaces.value())
   {
     auto coverage = 0.0;
@@ -307,7 +324,30 @@ Result<void> bakeGroup(
             metrics.width,
             region.value().minFaceWidth)};
       }
-      const auto name = fmt::format("tbt{:x}_{:x}", groupNumber, face.material);
+      auto& name = names[face.material];
+      if (name.empty())
+      {
+        const auto& texture = plan.textures[face.material];
+        if (!texture.valid || texture.miptex.size() < 16)
+          return Error{"Invalid generated terrain texture."};
+        const auto content = textureContent(texture.miptex);
+        const auto hash = std::hash<std::string_view>{}(content);
+        hashes[face.material] = hash;
+        if (const auto candidates = textureIndex.find(hash);
+            candidates != textureIndex.end())
+        {
+          for (const auto& candidate : candidates->second)
+          {
+            if (textureContent(snapshot.textures.at(candidate)) == content)
+            {
+              name = candidate;
+              break;
+            }
+          }
+        }
+        if (name.empty())
+          name = fmt::format("tbt{:x}_{:x}", groupNumber, face.material);
+      }
       auto piece =
         makePiece(surface, face, region.value(), transform, inverse, bounds, name);
       if (piece.is_error())
@@ -339,13 +379,16 @@ Result<void> bakeGroup(
   {
     if (!used[i])
       continue;
-    const auto name = fmt::format("tbt{:x}_{:x}", groupNumber, i);
+    const auto& name = names[i];
+    if (snapshot.textures.contains(name))
+      continue;
     auto& texture = plan.textures[i];
     if (!texture.valid || name.size() > 15)
       return Error{"Invalid generated terrain texture."};
     std::fill_n(texture.miptex.begin(), 16, std::uint8_t{0});
     std::copy(name.begin(), name.end(), texture.miptex.begin());
     snapshot.textures.emplace(name, std::move(texture.miptex));
+    textureIndex[hashes[i]].push_back(name);
   }
   snapshot.topFaces += pieces.size();
   group.replaceChildren(std::move(pieces));
@@ -466,9 +509,10 @@ Result<std::optional<TerrainSnapshot>> bakeTerrainSnapshot(
       std::unique(dependencies->begin(), dependencies->end()), dependencies->end());
   }
   auto snapshot = TerrainSnapshot{};
+  auto textureIndex = TerrainTextureIndex{};
   for (auto i = size_t{0}; i < groups.size(); ++i)
   {
-    const auto result = bakeGroup(*groups[i], bounds, snapshot, i, store);
+    const auto result = bakeGroup(*groups[i], bounds, snapshot, i, store, textureIndex);
     if (result.is_error())
       return Error{fmt::format(
         "Terrain group '{}': {}",

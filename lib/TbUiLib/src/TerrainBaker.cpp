@@ -5,6 +5,7 @@
 #include "ui/TerrainBaker.h"
 
 #include "TerrainMaterialRaster.h"
+#include "ui/TerrainAtlas.h"
 #include "ui/TerrainMaterial.h"
 #include "ui/TerrainRegion.h"
 
@@ -435,30 +436,12 @@ inline bool usableTransitionUv(const double vx, const double vy)
          && largestSquared <= 4.0 * smallestSquared;
 }
 
-inline int powerOfTwo(const int n)
-{
-  if (n <= 1)
-    return 1;
-  auto val = 1;
-  while (val < n)
-    val <<= 1;
-  return val;
-}
-
 struct MixInfo
 {
   std::string kind;
   int material = -1;
   int key = 0;
   vm::vec3d v;
-};
-
-struct PatchTile
-{
-  int x = 0;
-  int y = 0;
-  std::array<std::vector<std::uint8_t>, 4> levels;
-  std::vector<size_t> faceIndices;
 };
 
 QPolygonF makeRect(const double x1, const double y1, const double x2, const double y2)
@@ -519,7 +502,8 @@ void detail::precomputeTerrainMaterialLevels(TerrainMaterial& material)
 Result<TerrainBake> runTerrainBaker(
   const TerrainRegion& region,
   const TerrainMaterial* material,
-  const TerrainBakeMode mode)
+  const TerrainBakeMode mode,
+  const std::vector<QPolygonF>* coverage)
 {
   if (
     region.patchDensityPercent != 50 && region.patchDensityPercent != 100
@@ -527,8 +511,7 @@ Result<TerrainBake> runTerrainBaker(
     return Error{"Invalid terrain patch density."};
   const auto density = double(region.patchDensityPercent) / 100.0;
   const auto patchSize = 64 * region.patchDensityPercent / 100;
-  const auto atlasSide = 256 / patchSize;
-  const auto atlasCapacity = atlasSide * atlasSide;
+  const auto coreSize = 48 * region.patchDensityPercent / 100;
   auto pal = getPalette();
   if (material)
   {
@@ -781,7 +764,7 @@ Result<TerrainBake> runTerrainBaker(
   std::map<int, size_t> pairIndices;
   std::map<int, size_t> sharedTiles;
   std::map<std::vector<std::uint8_t>, size_t> sharedContents;
-  std::vector<PatchTile> patchTiles;
+  std::vector<tb::ui::detail::TerrainAtlasPatch> patchTiles;
   std::map<std::pair<int, int>, size_t> patchKeyToIndex;
   std::vector<BakeFace> faces;
   std::vector<bool> cellCovered(static_cast<size_t>(Across * Down), false);
@@ -884,17 +867,7 @@ Result<TerrainBake> runTerrainBaker(
     {
       const auto idx = patchTiles.size();
       patchKeyToIndex.emplace(key, idx);
-      auto levels = rasterizeLevels(
-        sample,
-        static_cast<double>(px) - PatchGutter,
-        static_cast<double>(py) - PatchGutter,
-        patchSize,
-        1.0 / density,
-        pal,
-        detail,
-        material,
-        nearestColors);
-      patchTiles.push_back({px, py, std::move(levels), {}});
+      patchTiles.push_back({px, py, {}, {}});
       it = patchKeyToIndex.find(key);
     }
     const auto faceIdx = addFace(
@@ -1177,68 +1150,110 @@ Result<TerrainBake> runTerrainBaker(
     }
   }
 
-  // Pack patches into texture atlases
-  for (size_t start = 0; start < patchTiles.size();
-       start += static_cast<size_t>(atlasCapacity))
+  // Only rasterize and pack patches that intersect an actual terrain surface.
+  // The preview has no coverage restriction and still receives the complete bake.
+  if (coverage)
   {
-    const auto count =
-      std::min(static_cast<size_t>(atlasCapacity), patchTiles.size() - start);
-    const auto tilesSlice = std::span{&patchTiles[start], count};
-    const auto cols =
-      powerOfTwo(static_cast<int>(std::ceil(std::sqrt(tilesSlice.size()))));
-    const auto rows = powerOfTwo(static_cast<int>(
-      std::ceil(static_cast<double>(tilesSlice.size()) / static_cast<double>(cols))));
-    const auto atlasWidth = cols * patchSize;
-    const auto atlasHeight = rows * patchSize;
+    std::erase_if(patchTiles, [&](const auto& tile) {
+      return std::ranges::none_of(tile.faceIndices, [&](const auto index) {
+        const auto& polygon = faces[index].polygon;
+        const auto bounds = polygon.boundingRect();
+        return std::ranges::any_of(*coverage, [&](const auto& outline) {
+          return bounds.intersects(outline.boundingRect())
+                 && terrainArea(polygon.intersected(outline)) > 1e-7;
+        });
+      });
+    });
+  }
+  for (auto& tile : patchTiles)
+    tile.levels = rasterizeLevels(
+      sample,
+      double(tile.x) - PatchGutter,
+      double(tile.y) - PatchGutter,
+      patchSize,
+      1.0 / density,
+      pal,
+      detail,
+      material,
+      nearestColors);
 
+  const auto layouts =
+    tb::ui::detail::packTerrainAtlases(patchTiles, patchSize, coreSize);
+  for (auto atlasIndex = size_t{0}; atlasIndex < layouts.size(); ++atlasIndex)
+  {
+    const auto& layout = layouts[atlasIndex];
     std::array<std::vector<std::uint8_t>, 4> levels;
-    for (size_t mip = 0; mip < 4; ++mip)
-    {
-      levels[mip].resize(
-        static_cast<size_t>((atlasWidth >> mip) * (atlasHeight >> mip)), 0);
-    }
+    for (auto mip = size_t{0}; mip < levels.size(); ++mip)
+      levels[mip].resize(size_t((layout.width >> mip) * (layout.height >> mip)), 0);
 
-    for (auto slot = 0; slot < cols * rows; ++slot)
+    for (const auto& placement : layout.placements)
     {
-      const auto& tile = tilesSlice[static_cast<size_t>(slot) % tilesSlice.size()];
-      const auto sx = (slot % cols) * patchSize;
-      const auto sy = (slot / cols) * patchSize;
-
-      for (size_t mip = 0; mip < 4; ++mip)
+      const auto& tile = patchTiles[placement.patchIndex];
+      for (auto mip = size_t{0}; mip < levels.size(); ++mip)
       {
         const auto side = patchSize >> mip;
-        const auto width = atlasWidth >> mip;
-        const auto offset = (sy >> mip) * width + (sx >> mip);
-        for (auto r = 0; r < side; ++r)
+        const auto width = layout.width >> mip;
+        const auto offset = (placement.y >> mip) * width + (placement.x >> mip);
+        for (auto row = 0; row < side; ++row)
         {
           std::memcpy(
-            levels[mip].data() + offset + r * width,
-            tile.levels[mip].data() + r * side,
-            static_cast<size_t>(side));
+            levels[mip].data() + offset + row * width,
+            tile.levels[mip].data() + row * side,
+            size_t(side));
         }
       }
-
-      if (static_cast<size_t>(slot) < tilesSlice.size())
+      if (placement.referenced)
       {
-        for (const auto faceIdx : tilesSlice[static_cast<size_t>(slot)].faceIndices)
+        for (const auto faceIndex : tile.faceIndices)
         {
-          faces[faceIdx].material = textures.size();
-          faces[faceIdx].u[2] += static_cast<double>(sx);
-          faces[faceIdx].v[2] += static_cast<double>(sy);
+          faces[faceIndex].material = textures.size();
+          faces[faceIndex].u[2] += double(placement.x);
+          faces[faceIndex].v[2] += double(placement.y);
         }
       }
     }
 
-    project::WadTextureEntry atlasEntry;
-    atlasEntry.name = fmt::format("tm_a{}", start / static_cast<size_t>(atlasCapacity));
-    atlasEntry.width = static_cast<std::uint32_t>(atlasWidth);
-    atlasEntry.height = static_cast<std::uint32_t>(atlasHeight);
-    atlasEntry.miptex =
-      createMiptexLump(atlasEntry.name, atlasWidth, atlasHeight, levels, pal.palette);
-    atlasEntry.valid = true;
-    textures.push_back(std::move(atlasEntry));
+    auto atlas = project::WadTextureEntry{};
+    atlas.name = fmt::format("tm_a{}", atlasIndex);
+    atlas.width = std::uint32_t(layout.width);
+    atlas.height = std::uint32_t(layout.height);
+    atlas.miptex =
+      createMiptexLump(atlas.name, layout.width, layout.height, levels, pal.palette);
+    atlas.valid = true;
+    textures.push_back(std::move(atlas));
   }
 
-  return TerrainBake{std::move(faces), std::move(textures)};
+  // Pruned local faces do not intersect coverage and have no assigned atlas.
+  std::erase_if(faces, [](const auto& face) { return face.material == size_t(-1); });
+
+  // Names occupy the first 16 bytes. Identical dimensions, MIPs and palettes can
+  // share one texture even when generated for different terrain face kinds.
+  auto unique = std::vector<project::WadTextureEntry>{};
+  auto byHash = std::unordered_map<size_t, std::vector<size_t>>{};
+  auto remap = std::vector<size_t>(textures.size());
+  for (auto i = size_t{0}; i < textures.size(); ++i)
+  {
+    const auto& bytes = textures[i].miptex;
+    const auto content = std::string_view{
+      reinterpret_cast<const char*>(bytes.data() + 16), bytes.size() - 16};
+    auto& matchingTextures = byHash[std::hash<std::string_view>{}(content)];
+    const auto existing =
+      std::ranges::find_if(matchingTextures, [&](const auto candidate) {
+        const auto& previous = unique[candidate].miptex;
+        return previous.size() == bytes.size()
+               && std::equal(bytes.begin() + 16, bytes.end(), previous.begin() + 16);
+      });
+    if (existing != matchingTextures.end())
+      remap[i] = *existing;
+    else
+    {
+      remap[i] = unique.size();
+      matchingTextures.push_back(unique.size());
+      unique.push_back(std::move(textures[i]));
+    }
+  }
+  for (auto& face : faces)
+    face.material = remap[face.material];
+  return TerrainBake{std::move(faces), std::move(unique)};
 }
 } // namespace tb::ui

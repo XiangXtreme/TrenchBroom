@@ -52,6 +52,7 @@ enum class TerrainBakeMode
 Result<TerrainBake> runTerrainBaker(
   const TerrainRegion& region,
   const TerrainMaterial* material = nullptr,
-  TerrainBakeMode mode = TerrainBakeMode::Shared);
+  TerrainBakeMode mode = TerrainBakeMode::Shared,
+  const std::vector<QPolygonF>* coverage = nullptr);
 
 } // namespace tb::ui
