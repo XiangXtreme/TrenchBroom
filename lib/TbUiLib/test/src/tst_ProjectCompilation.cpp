@@ -28,6 +28,8 @@
 #include "mdl/BrushNode.h"
 #include "mdl/CompilationProfile.h"
 #include "mdl/EditorContext.h"
+#include "mdl/EntityDefinition.h"
+#include "mdl/EntityNode.h"
 #include "mdl/GroupNode.h"
 #include "mdl/HitAdapter.h"
 #include "mdl/HitFilter.h"
@@ -357,6 +359,33 @@ void testChunkedTerrainEditing(
   auto painted = testTerrainChunks(*group);
   CHECK(painted->chunks[0].region.weights != initial->chunks[0].region.weights);
   CHECK(painted->chunks[1].region.weights != initial->chunks[1].region.weights);
+  activate->click();
+
+  // Brush entities inside individual chunks must still be pickable by terrain tools.
+  mdl::openGroup(map, *group);
+  const auto detailDefinition = mdl::EntityDefinition{
+    "func_detail", RgbB{255, 255, 255}, "Detail brushes", {}, std::nullopt};
+  for (auto* child : group->children())
+  {
+    auto* chunk = dynamic_cast<mdl::GroupNode*>(child);
+    REQUIRE(chunk);
+    mdl::openGroup(map, *chunk);
+    mdl::selectNodes(map, chunk->children());
+    REQUIRE(mdl::createBrushEntity(map, detailDefinition));
+    mdl::closeGroup(map);
+  }
+  mdl::closeGroup(map);
+  mdl::selectNodes(map, {group});
+  material->setCurrentIndex(2);
+  REQUIRE(activate->isEnabled());
+  activate->click();
+  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, point);
+  REQUIRE(panel->stroking());
+  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, point);
+  const auto repainted = testTerrainChunks(*group);
+  CHECK(repainted->chunks[0].region.weights != painted->chunks[0].region.weights);
+  CHECK(repainted->chunks[1].region.weights != painted->chunks[1].region.weights);
+  painted = testTerrainChunks(*group);
   activate->click();
 
   editMode->setCurrentIndex(1);
@@ -1062,6 +1091,44 @@ TEST_CASE("Project terrain panel paints a picked brush")
 
   testTerrainVertexEditing(
     app, window, view, panel, group, editMode, activate, camera, sculpted);
+
+  // Converting the terrain brushes inside the open group must retain the live
+  // preview and keep both paint and sculpt tools working on entity-owned brushes.
+  mdl::openGroup(map, *group);
+  mdl::selectNodes(map, group->children());
+  const auto detailDefinition = mdl::EntityDefinition{
+    "func_detail", RgbB{255, 255, 255}, "Detail brushes", {}, std::nullopt};
+  auto* detail = mdl::createBrushEntity(map, detailDefinition);
+  REQUIRE(detail);
+  REQUIRE(detail->hasChildren());
+  CHECK(terrainSurfaces(*group, sculpted).is_success());
+  mdl::deselectAll(map);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  mdl::closeGroup(map);
+  mdl::selectNodes(map, {group});
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+
+  editMode->setCurrentIndex(0);
+  material->setCurrentIndex(0);
+  activate->click();
+  panel->beginStroke(terrainPick());
+  REQUIRE(panel->stroking());
+  panel->endStroke(true);
+  activate->click();
+  CHECK(testTerrainRegion(*group)->weights != sculpted.weights);
+  map.undoCommand();
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+
+  editMode->setCurrentIndex(1);
+  activate->click();
+  panel->beginStroke(terrainPick());
+  REQUIRE(panel->stroking());
+  panel->endStroke(true);
+  activate->click();
+  CHECK(testTerrainRegion(*group)->heightField->heights != sculpted.heightField->heights);
+  map.undoCommand();
+  CHECK(testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
+
   mdl::lockNodes(map, {group});
   CHECK_FALSE(activate->isEnabled());
   panel->beginStroke(terrainPick());

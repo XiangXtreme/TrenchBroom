@@ -8560,7 +8560,9 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Terrain brushes exceed the 1280 by 640 unit region.</source><translation>地面 Brush 超出了单个 1280 × 640 单位的地形区域。</translation></message>
         <message><source>Terrain top faces overlap in the region plane.</source><translation>地形顶面在水平投影上发生重叠。</translation></message>
         <message><source>Terrain brushes must fit beneath their top faces.</source><translation>地面 Brush 必须位于其顶面的下方。</translation></message>
-        <message><source>Terrain groups must contain brushes directly.</source><translation>地形组必须直接包含 Brush。</translation></message>
+        <message><source>Terrain groups must contain brushes or brush entities.</source><translation>地形组必须包含 Brush 或 Brush 实体。</translation></message>
+        <message><source>Terrain entities must contain brushes only.</source><translation>地形实体只能包含 Brush。</translation></message>
+        <message><source>Convert large terrain to chunks before moving its brushes into entities.</source><translation>请先将大地面转换并分块，再将其中的 Brush 转为实体。</translation></message>
         <message><source>A terrain brush is missing its top face.</source><translation>地面 Brush 缺少朝上的顶面。</translation></message>
         <message><source>Unlink the terrain group before editing its height field.</source><translation>请先取消地形组的关联，再编辑其高度。</translation></message>
         <message><source>Invalid or excessively dense terrain geometry.</source><translation>地形几何无效，或网格过密。</translation></message>

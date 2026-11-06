@@ -14,11 +14,15 @@
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EditorContext.h"
+#include "mdl/Entity.h"
+#include "mdl/EntityDefinition.h"
+#include "mdl/EntityNode.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
 #include "mdl/LockState.h"
 #include "mdl/Map.h"
 #include "mdl/Map_CopyPaste.h"
+#include "mdl/Map_Entities.h"
 #include "mdl/Map_Geometry.h"
 #include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
@@ -680,6 +684,238 @@ TEST_CASE("Terrain sculpt updates only affected brushes and supports undo")
   map.cancelTransaction();
   CHECK(group->group().terrainPaint() == sculpted);
   CHECK(terrainSurfaces(*group, updated).is_success());
+}
+
+TEST_CASE("Terrain brush entities retain paint, sculpting and compiled ownership")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* source = new mdl::BrushNode{requireValue(
+    builder.createCuboid(vm::bbox3d{{0, -64, -64}, {64, 0, 0}}, "TERR_GRASS"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {source}}});
+  mdl::selectNodes(map, {source});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+  requireValue(convertTerrainToHeightField(map, *group, 32));
+  auto region = requireValue(TerrainRegion::decode(group->group().terrainPaint()));
+  region.paint({20, 20}, 30, 1);
+  auto content = group->group();
+  content.setTerrainPaint(region.encode());
+  REQUIRE(mdl::updateNodeContents(map, "Paint", {{group, mdl::NodeContents{content}}}));
+  region = requireValue(TerrainRegion::decode(group->group().terrainPaint()));
+
+  auto brushes = requireValue(terrainBrushNodes(*group));
+  REQUIRE(brushes.size() == 8);
+  const auto definition = mdl::EntityDefinition{
+    "func_detail", RgbB{255, 255, 255}, "Detail brushes", {}, std::nullopt};
+  mdl::openGroup(map, *group);
+  mdl::selectNodes(map, {brushes[0], brushes[1]});
+  auto* first = mdl::createBrushEntity(map, definition);
+  REQUIRE(first);
+  REQUIRE(mdl::setEntityProperty(map, "zhlt_detaillevel", "1"));
+  mdl::deselectAll(map);
+  mdl::selectNodes(map, {brushes[5]});
+  auto* second = mdl::createBrushEntity(map, definition);
+  REQUIRE(second);
+  REQUIRE(first != second);
+  CHECK(terrainSurfaces(*group, region).is_success());
+  map.undoCommand();
+  CHECK(terrainSurfaces(*group, region).is_success());
+  map.redoCommand();
+  second = dynamic_cast<mdl::EntityNode*>(brushes[5]->parent());
+  REQUIRE(second);
+
+  auto height = *region.heightField;
+  height.heights[height.index(1, 1)] = 16;
+  requireValue(updateTerrainHeightField(map, *group, height));
+  const auto sculpted =
+    requireValue(TerrainRegion::decode(group->group().terrainPaint()));
+  CHECK(sculpted.weights == region.weights);
+  REQUIRE(terrainSurfaces(*group, sculpted).is_success());
+  CHECK(brushes[0]->parent() == first);
+  CHECK(brushes[5]->parent() == second);
+  map.undoCommand();
+  CHECK(terrainSurfaces(*group, region).is_success());
+  map.redoCommand();
+  CHECK(terrainSurfaces(*group, sculpted).is_success());
+
+  auto repainted = sculpted;
+  repainted.paint({25, 25}, 30, 2);
+  content = group->group();
+  content.setTerrainPaint(repainted.encode());
+  REQUIRE(mdl::updateNodeContents(map, "Repaint", {{group, mdl::NodeContents{content}}}));
+  repainted = requireValue(TerrainRegion::decode(group->group().terrainPaint()));
+  CHECK(repainted.weights != region.weights);
+  mdl::closeGroup(map);
+
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("entity-terrain.map"));
+  requireValue(map.saveTo(path));
+  const auto sourceBytes = readBytes(path);
+  auto logger = NullLogger{};
+  auto status = SimpleParserStatus{logger};
+  auto tasks = kdl::task_manager{2};
+  const auto parse = [&](const std::vector<std::uint8_t>& bytes) {
+    const auto text =
+      std::string_view{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+    return requireValue(mdl::WorldReader{text, mdl::MapFormat::Valve, {}}.read(
+      map.worldBounds(), status, tasks));
+  };
+  auto restoredWorld = parse(sourceBytes);
+  const auto findTerrain = [&](const auto& self, mdl::Node& node) -> mdl::GroupNode* {
+    if (auto* candidate = dynamic_cast<mdl::GroupNode*>(&node);
+        candidate && !candidate->group().terrainPaint().empty())
+      return candidate;
+    for (auto* child : node.children())
+      if (auto* candidate = self(self, *child))
+        return candidate;
+    return nullptr;
+  };
+  auto* restoredGroup = findTerrain(findTerrain, *restoredWorld);
+  REQUIRE(restoredGroup);
+  const auto restored =
+    requireValue(TerrainRegion::decode(restoredGroup->group().terrainPaint()));
+  CHECK(restored.weights == repainted.weights);
+  CHECK(restored.heightField->heights == height.heights);
+  CHECK(terrainSurfaces(*restoredGroup, restored).is_success());
+
+  const auto snapshot = requireValue(bakeTerrainSnapshot(sourceBytes));
+  REQUIRE(snapshot);
+  CHECK_FALSE(snapshot->textures.empty());
+  auto compiledWorld = parse(snapshot->map);
+  auto entities = std::vector<const mdl::EntityNode*>{};
+  auto worldBrushes = size_t{0};
+  auto totalBrushes = size_t{0};
+  const auto collect = [&](const auto& self, const mdl::Node& node) -> void {
+    if (const auto* entity = dynamic_cast<const mdl::EntityNode*>(&node);
+        entity && entity->entity().hasProperty("classname", "func_detail"))
+      entities.push_back(entity);
+    if (const auto* brush = dynamic_cast<const mdl::BrushNode*>(&node))
+    {
+      ++totalBrushes;
+      if (!dynamic_cast<const mdl::EntityNode*>(brush->parent()))
+        ++worldBrushes;
+      const auto top = std::ranges::find_if(brush->brush().faces(), [](const auto& face) {
+        return face.normal().z() > 1e-6;
+      });
+      REQUIRE(top != brush->brush().faces().end());
+      CHECK(snapshot->textures.contains(top->materialName()));
+    }
+    for (const auto* child : node.children())
+      self(self, *child);
+  };
+  collect(collect, *compiledWorld);
+  REQUIRE(entities.size() == 2);
+  CHECK(std::ranges::any_of(entities, [](const auto* entity) {
+    return entity->entity().hasProperty("zhlt_detaillevel", "1");
+  }));
+  CHECK(std::ranges::all_of(
+    entities, [](const auto* entity) { return entity->hasChildren(); }));
+  CHECK(worldBrushes > 0);
+  CHECK(snapshot->topFaces == totalBrushes);
+}
+
+TEST_CASE("Terrain converts existing brush entities without losing their ownership")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* left = new mdl::BrushNode{
+    requireValue(builder.createCuboid(vm::bbox3d{{0, -64, -64}, {64, 0, 0}}, "LEFT"))};
+  auto* right = new mdl::BrushNode{
+    requireValue(builder.createCuboid(vm::bbox3d{{64, -64, -64}, {128, 0, 0}}, "RIGHT"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {left, right}}});
+  mdl::selectNodes(map, {left, right});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+  mdl::openGroup(map, *group);
+  mdl::selectNodes(map, {left});
+  const auto definition = mdl::EntityDefinition{
+    "func_detail", RgbB{255, 255, 255}, "Detail brushes", {}, std::nullopt};
+  auto* entity = mdl::createBrushEntity(map, definition);
+  REQUIRE(entity);
+
+  const auto region = requireValue(createTerrainRegion(*group));
+  CHECK(createTerrainHeightField(*group, region, 32).is_success());
+  requireValue(convertTerrainToHeightField(map, *group, 32));
+  REQUIRE(entity->children().size() == 8);
+  REQUIRE(requireValue(terrainBrushNodes(*group)).size() == 16);
+  const auto converted =
+    requireValue(TerrainRegion::decode(group->group().terrainPaint()));
+  CHECK(terrainSurfaces(*group, converted).is_success());
+  for (const auto* child : entity->children())
+  {
+    const auto* brush = dynamic_cast<const mdl::BrushNode*>(child);
+    REQUIRE(brush);
+    const auto top = std::ranges::find_if(
+      brush->brush().faces(), [](const auto& face) { return face.normal().z() > 1e-6; });
+    REQUIRE(top != brush->brush().faces().end());
+    CHECK(top->materialName() == "LEFT");
+  }
+  map.undoCommand();
+  REQUIRE(entity->children().size() == 1);
+  CHECK(entity->children().front() == left);
+  CHECK(right->parent() == group);
+  map.redoCommand();
+  CHECK(entity->children().size() == 8);
+  CHECK(terrainSurfaces(*group, converted).is_success());
+}
+
+TEST_CASE("Chunked terrain supports brush entities across sculpt and bake")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  requireValue(createTerrainChunkRectangle(map, {0, -64}, {1408, 0}, 0, 64, 64));
+  REQUIRE(map.selection().groups.size() == 1);
+  auto* root = map.selection().groups.front();
+  REQUIRE(root->children().size() == 2);
+  auto* chunk = dynamic_cast<mdl::GroupNode*>(root->children().front());
+  REQUIRE(chunk);
+  mdl::openGroup(map, *root);
+  mdl::openGroup(map, *chunk);
+  mdl::selectNodes(map, {chunk->children().back()});
+  const auto definition = mdl::EntityDefinition{
+    "func_detail", RgbB{255, 255, 255}, "Detail brushes", {}, std::nullopt};
+  auto* entity = mdl::createBrushEntity(map, definition);
+  REQUIRE(entity);
+  mdl::closeGroup(map);
+  mdl::closeGroup(map);
+
+  auto chunks = requireValue(readTerrainChunks(*root));
+  auto height = *chunks.combined->heightField;
+  const auto seam = height.index(20, 1);
+  height.heights[seam] = 16;
+  requireValue(updateTerrainHeightField(map, *root, height));
+  chunks = requireValue(readTerrainChunks(*root));
+  CHECK(chunks.combined->heightField->heights[seam] == 16);
+  CHECK(entity->hasChildren());
+  for (const auto& part : chunks.chunks)
+  {
+    const auto* child =
+      static_cast<const mdl::GroupNode*>(root->children()[part.childIndex]);
+    CHECK(terrainSurfaces(*child, part.region).is_success());
+  }
+
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("chunked-entity-terrain.map"));
+  requireValue(map.saveTo(path));
+  const auto snapshot = requireValue(bakeTerrainSnapshot(readBytes(path)));
+  REQUIRE(snapshot);
+  CHECK_FALSE(snapshot->textures.empty());
+  const auto text = std::string{snapshot->map.begin(), snapshot->map.end()};
+  CHECK(text.find("\"classname\" \"func_detail\"") != std::string::npos);
 }
 
 TEST_CASE("Sculptable terrain survives map round trip and compiles its height field")

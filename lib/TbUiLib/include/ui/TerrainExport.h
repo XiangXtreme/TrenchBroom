@@ -26,7 +26,7 @@ namespace tb::ui
 {
 // This identifies cached output semantics, not the project or terrain file format.
 // Change it only when existing cached results may no longer be valid.
-inline constexpr std::uint64_t TerrainGeneratorVersion = 7;
+inline constexpr std::uint64_t TerrainGeneratorVersion = 8;
 
 struct TerrainSnapshot
 {

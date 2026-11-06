@@ -9,6 +9,7 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
+#include "mdl/EntityNode.h"
 #include "mdl/GroupNode.h"
 #include "mdl/MapFormat.h"
 #include "mdl/NodeWriter.h"
@@ -313,6 +314,17 @@ Result<void> bakeGroup(
   const auto& transform = group.group().transformation();
   const auto inverse = *vm::invert(transform);
   auto pieces = std::vector<std::unique_ptr<mdl::Node>>{};
+  auto entityCopies = std::unordered_map<const mdl::Node*, mdl::Node*>{};
+  for (const auto* child : group.children())
+  {
+    if (const auto* entity = dynamic_cast<const mdl::EntityNode*>(child))
+    {
+      auto copy = std::unique_ptr<mdl::Node>{entity->clone(bounds)};
+      entityCopies.emplace(entity, copy.get());
+      pieces.push_back(std::move(copy));
+    }
+  }
+  auto pieceCount = size_t{0};
   auto used = std::vector<bool>(plan.textures.size());
   auto names = std::vector<std::string>(plan.textures.size());
   auto hashes = std::vector<size_t>(plan.textures.size());
@@ -369,13 +381,18 @@ Result<void> bakeGroup(
         return std::get<Error>(piece.error());
       coverage += area;
       used[face.material] = true;
-      pieces.push_back(std::move(piece).value());
+      auto generated = std::move(piece).value();
+      if (surface.brush->parent() == &group)
+        pieces.push_back(std::move(generated));
+      else
+        entityCopies.at(surface.brush->parent())->addChild(generated.release());
+      ++pieceCount;
     }
     if (std::abs(coverage - terrainArea(surface.outline)) > 1e-4)
       return Error{"The terrain bake did not cover a source brush."};
   }
-  const auto addedFaces = pieces.size() > surfaces.value().size()
-                            ? pieces.size() - surfaces.value().size()
+  const auto addedFaces = pieceCount > surfaces.value().size()
+                            ? pieceCount - surfaces.value().size()
                             : size_t{0};
   if (
     region.value().maxAddedFaces >= 0
@@ -405,7 +422,7 @@ Result<void> bakeGroup(
     snapshot.textures.emplace(name, std::move(texture.miptex));
     textureIndex[hashes[i]].push_back(name);
   }
-  snapshot.topFaces += pieces.size();
+  snapshot.topFaces += pieceCount;
   group.replaceChildren(std::move(pieces));
   auto content = group.group();
   content.setTerrainPaint({});

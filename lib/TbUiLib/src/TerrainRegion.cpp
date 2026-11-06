@@ -12,6 +12,7 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EditorContext.h"
+#include "mdl/EntityNode.h"
 #include "mdl/GroupNode.h"
 #include "mdl/Map.h"
 #include "mdl/Selection.h"
@@ -26,6 +27,7 @@
 #include <optional>
 #include <ranges>
 #include <sstream>
+#include <type_traits>
 
 namespace tb::ui
 {
@@ -375,6 +377,49 @@ mdl::GroupNode* selectedTerrainGroup(const mdl::Map& map)
   return group;
 }
 
+namespace
+{
+template <typename Group>
+auto terrainBrushNodesImpl(Group& group) -> Result<std::vector<
+  std::conditional_t<std::is_const_v<Group>, const mdl::BrushNode*, mdl::BrushNode*>>>
+{
+  using Brush =
+    std::conditional_t<std::is_const_v<Group>, const mdl::BrushNode, mdl::BrushNode>;
+  using Entity =
+    std::conditional_t<std::is_const_v<Group>, const mdl::EntityNode, mdl::EntityNode>;
+  auto brushes = std::vector<Brush*>{};
+  for (auto* child : group.children())
+  {
+    if (auto* brush = dynamic_cast<Brush*>(child))
+      brushes.push_back(brush);
+    else if (auto* entity = dynamic_cast<Entity*>(child);
+             entity && !entity->children().empty())
+    {
+      for (auto* entityChild : entity->children())
+      {
+        auto* entityBrush = dynamic_cast<Brush*>(entityChild);
+        if (!entityBrush)
+          return Error{"Terrain entities must contain brushes only."};
+        brushes.push_back(entityBrush);
+      }
+    }
+    else
+      return Error{"Terrain groups must contain brushes or brush entities."};
+  }
+  return brushes;
+}
+} // namespace
+
+Result<std::vector<mdl::BrushNode*>> terrainBrushNodes(mdl::GroupNode& group)
+{
+  return terrainBrushNodesImpl(group);
+}
+
+Result<std::vector<const mdl::BrushNode*>> terrainBrushNodes(const mdl::GroupNode& group)
+{
+  return terrainBrushNodesImpl(group);
+}
+
 Result<TerrainRegion> createTerrainRegion(
   const mdl::GroupNode& group, const bool allowLargeSource)
 {
@@ -383,11 +428,11 @@ Result<TerrainRegion> createTerrainRegion(
     return Error{"Select a nonempty group of terrain brushes."};
   auto left = std::numeric_limits<double>::max();
   auto top = std::numeric_limits<double>::lowest();
-  for (const auto* child : group.children())
+  const auto brushes = terrainBrushNodes(group);
+  if (brushes.is_error())
+    return std::get<Error>(brushes.error());
+  for (const auto* brush : brushes.value())
   {
-    const auto* brush = dynamic_cast<const mdl::BrushNode*>(child);
-    if (!brush)
-      return Error{"Terrain groups must contain brushes directly."};
     for (const auto& vertex : brush->brush().vertexPositions())
     {
       const auto local = *inverse * vertex;
@@ -417,7 +462,7 @@ double terrainArea(const QPolygonF& polygon)
 namespace
 {
 Result<std::vector<size_t>> validateSculptedBrushes(
-  const mdl::GroupNode& group,
+  const std::vector<const mdl::BrushNode*>& brushes,
   const TerrainRegion& region,
   const TerrainHeightField& field,
   const vm::mat4x4d& inverse)
@@ -429,18 +474,15 @@ Result<std::vector<size_t>> validateSculptedBrushes(
     !field.valid()
     || field.columns * field.spacing > TerrainRegion::Width * TerrainRegion::UnitsPerTexel
     || field.rows * field.spacing > TerrainRegion::Height * TerrainRegion::UnitsPerTexel
-    || group.children().size() != size_t(field.columns) * size_t(field.rows) * 2)
+    || brushes.size() != size_t(field.columns) * size_t(field.rows) * 2)
     return invalid;
 
   constexpr auto Tolerance = 1e-3;
   auto indices = std::vector<size_t>(
     size_t(field.columns) * size_t(field.rows) * 2, std::numeric_limits<size_t>::max());
-  for (auto childIndex = size_t{0}; childIndex < group.children().size(); ++childIndex)
+  for (auto brushIndex = size_t{0}; brushIndex < brushes.size(); ++brushIndex)
   {
-    const auto* child = group.children()[childIndex];
-    const auto* brush = dynamic_cast<const mdl::BrushNode*>(child);
-    if (!brush)
-      return invalid;
+    const auto* brush = brushes[brushIndex];
     const auto vertices = brush->brush().vertexPositions();
     if (vertices.size() != 6)
       return invalid;
@@ -498,7 +540,7 @@ Result<std::vector<size_t>> validateSculptedBrushes(
       (size_t(minRow) * size_t(field.columns) + size_t(minColumn)) * 2 + size_t(acd);
     if (indices[triangle] != std::numeric_limits<size_t>::max())
       return invalid;
-    indices[triangle] = childIndex;
+    indices[triangle] = brushIndex;
   }
   return indices;
 }
@@ -513,7 +555,10 @@ Result<std::vector<size_t>> terrainHeightFieldBrushIndices(
     !region.heightField || !inverse || transform[2][2] <= 0
     || std::hypot(transform[2][0], transform[2][1]) > 1e-6)
     return Error{"Invalid sculptable terrain or group transformation."};
-  return validateSculptedBrushes(group, region, *region.heightField, *inverse);
+  const auto brushes = terrainBrushNodes(group);
+  if (brushes.is_error())
+    return std::get<Error>(brushes.error());
+  return validateSculptedBrushes(brushes.value(), region, *region.heightField, *inverse);
 }
 
 Result<std::vector<TerrainSurface>> terrainSurfaces(
@@ -525,19 +570,19 @@ Result<std::vector<TerrainSurface>> terrainSurfaces(
     !inverse || transform[2][2] <= 0
     || std::hypot(transform[2][0], transform[2][1]) > 1e-6)
     return Error{"Terrain groups must keep their local Z axis vertical."};
+  const auto brushes = terrainBrushNodes(group);
+  if (brushes.is_error())
+    return std::get<Error>(brushes.error());
   if (region.heightField)
   {
     const auto validation =
-      validateSculptedBrushes(group, region, *region.heightField, *inverse);
+      validateSculptedBrushes(brushes.value(), region, *region.heightField, *inverse);
     if (validation.is_error())
       return std::get<Error>(validation.error());
   }
   auto surfaces = std::vector<TerrainSurface>{};
-  for (const auto* child : group.children())
+  for (const auto* brushNode : brushes.value())
   {
-    const auto* brushNode = dynamic_cast<const mdl::BrushNode*>(child);
-    if (!brushNode)
-      return Error{"Terrain groups must contain brushes directly."};
     const auto& brush = brushNode->brush();
     auto brushSurfaces = std::vector<TerrainSurface>{};
     for (auto i = size_t{0}; i < brush.faceCount(); ++i)
@@ -630,7 +675,10 @@ Result<TerrainHeightField> createTerrainHeightField(
   const auto surfaces = terrainSurfaces(group, region, allowLargeSource);
   if (surfaces.is_error())
     return std::get<Error>(surfaces.error());
-  if (group.children().empty() || surfaces.value().size() != group.children().size())
+  const auto brushes = terrainBrushNodes(group);
+  if (brushes.is_error())
+    return std::get<Error>(brushes.error());
+  if (brushes.value().empty() || surfaces.value().size() != brushes.value().size())
     return unsupported;
   const auto& transform = group.group().transformation();
   const auto inverse = *vm::invert(transform); // Already checked by terrainSurfaces.

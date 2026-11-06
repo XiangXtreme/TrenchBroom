@@ -188,7 +188,12 @@ Result<void> convertTerrainToHeightField(
   // Exterior faces keep the original material, surface attributes and Valve UV axes.
   // New internal faces use null. Sampling already proved that every generated top is
   // coplanar with one of the source tops.
-  const auto sources = group.children();
+  const auto sourceResult = terrainBrushNodes(group);
+  if (sourceResult.is_error())
+    return std::get<Error>(sourceResult.error());
+  const auto& sources = sourceResult.value();
+  auto parents = std::vector<mdl::Node*>{};
+  parents.reserve(brushes.size());
   for (auto& brush : brushes)
   {
     auto center = vm::vec3d{};
@@ -196,12 +201,12 @@ Result<void> convertTerrainToHeightField(
     for (const auto& vertex : vertices)
       center = center + vertex;
     center = center / double(vertices.size());
-    const auto sourceNode = std::ranges::find_if(sources, [&](const auto* node) {
-      return static_cast<const mdl::BrushNode*>(node)->brush().containsPoint(center);
-    });
+    const auto sourceNode = std::ranges::find_if(
+      sources, [&](const auto* node) { return node->brush().containsPoint(center); });
     if (sourceNode == sources.end())
       return Error{"Could not match generated terrain to its source brush."};
-    const auto& source = static_cast<const mdl::BrushNode*>(*sourceNode)->brush();
+    const auto& source = (*sourceNode)->brush();
+    parents.push_back((*sourceNode)->parent());
     for (auto& face : brush.faces())
     {
       const auto match = std::ranges::find_if(source.faces(), [&](const auto& candidate) {
@@ -218,21 +223,28 @@ Result<void> convertTerrainToHeightField(
       > TerrainRegion::Width * TerrainRegion::UnitsPerTexel
     || region.heightField->rows * region.heightField->spacing
          > TerrainRegion::Height * TerrainRegion::UnitsPerTexel)
+  {
+    // Splitting one brush entity across chunks would duplicate its entity properties
+    // and potentially change its behavior. Convert before wrapping it in an entity.
+    if (std::ranges::any_of(
+          parents, [&](const auto* parent) { return parent != &group; }))
+      return Error{
+        "Convert large terrain to chunks before moving its brushes into entities."};
     return convertTerrainToChunks(map, group, region, std::move(brushes));
+  }
   auto content = group.group();
   content.setTerrainPaint(region.encode());
-  auto nodes = std::vector<mdl::Node*>{};
-  nodes.reserve(brushes.size());
-  for (auto& brush : brushes)
-    nodes.push_back(new mdl::BrushNode{std::move(brush)});
+  auto nodes = kdl::flat_map<mdl::Node*, std::vector<mdl::Node*>>{};
+  for (auto i = size_t{0}; i < brushes.size(); ++i)
+    nodes[parents[i]].push_back(new mdl::BrushNode{std::move(brushes[i])});
 
   auto transaction = mdl::Transaction{map, "Convert Terrain to Height Field"};
-  if (mdl::addNodes(map, {{&group, nodes}}).empty())
+  if (mdl::addNodes(map, nodes).empty())
   {
     transaction.cancel();
     return Error{"Could not add the terrain geometry."};
   }
-  mdl::removeNodes(map, sources);
+  mdl::removeNodes(map, {sources.begin(), sources.end()});
   if (!mdl::updateNodeContents(
         map,
         "Convert Terrain to Height Field",
@@ -483,6 +495,9 @@ Result<TerrainChanges> terrainHeightFieldChanges(
   const auto childIndices = terrainHeightFieldBrushIndices(group, region);
   if (childIndices.is_error())
     return std::get<Error>(childIndices.error());
+  const auto nodes = terrainBrushNodes(group);
+  if (nodes.is_error())
+    return std::get<Error>(nodes.error());
 
   auto triangles = std::vector<size_t>{};
   const auto changed = [&](const int column, const int row) {
@@ -519,8 +534,7 @@ Result<TerrainChanges> terrainHeightFieldChanges(
   changes.reserve(brushes.size() + 1);
   for (auto i = size_t{0}; i < triangles.size(); ++i)
   {
-    auto* node =
-      static_cast<mdl::BrushNode*>(group.children()[childIndices.value()[triangles[i]]]);
+    auto* node = nodes.value()[childIndices.value()[triangles[i]]];
     const auto& source = node->brush();
     const auto oldTop = std::ranges::find_if(
       source.faces(), [](const auto& face) { return face.normal().z() > 1e-6; });

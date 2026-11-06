@@ -28,6 +28,7 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EditorContext.h"
+#include "mdl/EntityNode.h"
 #include "mdl/GameInfo.h"
 #include "mdl/Grid.h"
 #include "mdl/GroupNode.h"
@@ -79,10 +80,12 @@ bool terrainEditable(const mdl::Map& map, const mdl::GroupNode& group)
 
 bool terrainOwnsBrush(const mdl::GroupNode& group, const mdl::BrushNode& brush)
 {
-  if (brush.parent() == &group)
+  auto* parent = brush.parent();
+  if (dynamic_cast<const mdl::EntityNode*>(parent))
+    parent = parent->parent();
+  if (parent == &group)
     return true;
-  return isTerrainChunkGroup(group) && brush.parent()
-         && brush.parent()->parent() == &group;
+  return isTerrainChunkGroup(group) && parent && parent->parent() == &group;
 }
 
 Result<size_t> terrainSurfaceCount(

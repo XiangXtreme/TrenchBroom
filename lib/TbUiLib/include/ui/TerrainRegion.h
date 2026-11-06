@@ -82,6 +82,9 @@ struct TerrainSurface
 };
 
 mdl::GroupNode* selectedTerrainGroup(const mdl::Map& map);
+/** Enumerate terrain brushes, including those inside brush entities. */
+Result<std::vector<mdl::BrushNode*>> terrainBrushNodes(mdl::GroupNode& group);
+Result<std::vector<const mdl::BrushNode*>> terrainBrushNodes(const mdl::GroupNode& group);
 Result<TerrainRegion> createTerrainRegion(
   const mdl::GroupNode& group, bool allowLargeSource = false);
 /** Sample aligned rectangular planar source brushes without changing their geometry. */
@@ -90,7 +93,7 @@ Result<TerrainHeightField> createTerrainHeightField(
   const TerrainRegion& region,
   double spacing,
   bool allowLargeSource = false);
-/** Map each height-field triangle to its verified child brush index. */
+/** Map each height-field triangle to its index in terrainBrushNodes. */
 Result<std::vector<size_t>> terrainHeightFieldBrushIndices(
   const mdl::GroupNode& group, const TerrainRegion& region);
 Result<std::vector<TerrainSurface>> terrainSurfaces(
