@@ -46,6 +46,7 @@
 #include <QtTest/QTest>
 
 #include "el/Expression.h"
+#include "gl/GlManager.h"
 #include "gl/Resource.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushFace.h"
@@ -64,6 +65,7 @@
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
+#include "mdl/Map_World.h"
 #include "mdl/PropertyDefinition.h"
 #include "mdl/WorldNode.h"
 #include "ui/Action.h"
@@ -979,6 +981,103 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(forward->isEnabled());
   }
 
+  SECTION(
+    "project content browser excludes game files while standalone maps include them")
+  {
+    const auto gameRoot = directory.filePath("game");
+    REQUIRE(QDir{}.mkpath(gameRoot + "/valve/sound"));
+    const auto writeWave = [](const QString& path) {
+      const auto bytes = wavBytes(false);
+      auto file = QFile{path};
+      REQUIRE(file.open(QIODevice::WriteOnly));
+      REQUIRE(
+        file.write(reinterpret_cast<const char*>(bytes.data()), qint64(bytes.size()))
+        == qint64(bytes.size()));
+    };
+    writeWave(gameRoot + "/valve/sound/game-only.wav");
+
+    const auto libraryRoot = directory.filePath("browser-library");
+    REQUIRE(QDir{}.mkpath(libraryRoot + "/sound"));
+    writeWave(libraryRoot + "/sound/library-only.wav");
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(libraryRoot), "Browser"));
+    require(library->scan());
+    require(session->attachLibrary(pathFromQString(libraryRoot)));
+
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Sound;
+    input.virtualPath = "sound/project-only.wav";
+    input.displayName = "project-only.wav";
+    input.original = input.compatible = wavBytes(false);
+    require(session->importAsset(input));
+    alphaDocument->map().setGamePath(pathFromQString(gameRoot));
+    mdl::setEnabledMods(alphaDocument->map(), {"valve"});
+
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
+    auto* view = browser->findChild<ModelBrowserView*>();
+    auto* savePrefab = browser->findChild<QToolButton*>("ModelBrowser_SavePrefabButton");
+    REQUIRE(source);
+    REQUIRE(type);
+    REQUIRE(view);
+    REQUIRE(savePrefab);
+    CHECK(source->findData(int(BrowserSourceFilter::GameFiles)) == -1);
+    CHECK(source->currentData().toInt() == int(BrowserSourceFilter::All));
+    CHECK_FALSE(savePrefab->isHidden());
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
+    const auto hasAsset = [](const auto& assets, const auto& name, const auto expected) {
+      return std::ranges::any_of(assets, [&](const auto& asset) {
+        return asset.path.filename() == name && asset.source == expected;
+      });
+    };
+    QTRY_VERIFY(
+      hasAsset(view->assets(), "project-only.wav", BrowserSource::Project)
+      && hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
+    CHECK_FALSE(hasAsset(view->assets(), "game-only.wav", BrowserSource::GameFiles));
+
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    QTRY_VERIFY(
+      hasAsset(view->assets(), "project-only.wav", BrowserSource::Project)
+      && !hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
+    CHECK_FALSE(hasAsset(view->assets(), "game-only.wav", BrowserSource::GameFiles));
+    CHECK_FALSE(savePrefab->isHidden());
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    QTRY_VERIFY(
+      hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
+    CHECK_FALSE(hasAsset(view->assets(), "game-only.wav", BrowserSource::GameFiles));
+    CHECK(savePrefab->isHidden());
+
+    auto standaloneDocument = require(MapDocument::createDocument(
+      appController.environmentConfig(),
+      alphaDocument->map().gameInfo(),
+      mdl::MapFormat::Valve,
+      MapDocument::DefaultWorldBounds,
+      appController.taskManager(),
+      appController.glManager().resourceManager()));
+    standaloneDocument->map().setGamePath(pathFromQString(gameRoot));
+    mdl::setEnabledMods(standaloneDocument->map(), {"valve"});
+    auto standaloneBrowser = ModelBrowser{appController, *standaloneDocument};
+    standaloneBrowser.resize(800, 400);
+    standaloneBrowser.show();
+    auto* standaloneSource =
+      standaloneBrowser.findChild<QComboBox*>("ModelBrowser_Source");
+    auto* standaloneView = standaloneBrowser.findChild<ModelBrowserView*>();
+    REQUIRE(standaloneSource);
+    REQUIRE(standaloneView);
+    CHECK(standaloneSource->currentData().toInt() == int(BrowserSourceFilter::GameFiles));
+    CHECK(standaloneSource->findData(int(BrowserSourceFilter::Project)) == -1);
+    QTRY_VERIFY(
+      hasAsset(standaloneView->assets(), "game-only.wav", BrowserSource::GameFiles));
+    CHECK_FALSE(
+      hasAsset(standaloneView->assets(), "project-only.wav", BrowserSource::Project));
+
+    alphaDocument->map().undoCommand();
+    require(session->save());
+  }
+
   SECTION("content browser restores folder and scrolling after a type or map switch")
   {
     for (auto i = 0; i < 60; ++i)
@@ -1014,7 +1113,7 @@ TEST_CASE("ProjectWindow")
     QTRY_COMPARE(scroll->value(), 100);
     REQUIRE(folders->currentItem());
     CHECK(folders->currentItem()->data(0, Qt::UserRole).toString() == "sound");
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::GameFiles)));
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::All)));
     QApplication::processEvents();
     source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
     QTRY_COMPARE(scroll->value(), 100);

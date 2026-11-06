@@ -3907,8 +3907,8 @@ Map: %2</source>
             <translation>无法扫描当前地图：%1</translation>
         </message>
         <message>
-            <source>Explicit MAP resource references, including unsaved edits. Captured resources match by identity; game files match by engine path.</source>
-            <translation>仅匹配 MAP 中显式引用的资源，包含未保存的修改。已捕获的资源按标识匹配，游戏文件按引擎路径匹配。</translation>
+            <source>Explicit MAP resource references, including unsaved edits. Captured resources match by identity.</source>
+            <translation>仅匹配 MAP 中显式引用的资源，包含未保存的修改。已捕获的资源按标识匹配。</translation>
         </message>
         <message>
             <source>No asset library</source>

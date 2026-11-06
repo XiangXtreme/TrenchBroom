@@ -273,8 +273,7 @@ ModelBrowser::ModelBrowser(
 {
   if (m_project)
   {
-    // A project owns all three layers, so the browser starts with the unified listing
-    // instead of hiding project content behind a selector.
+    // Show project resources and the attached library together by default.
     m_sourceFilter = BrowserSourceFilter::All;
   }
   createGui(appController);
@@ -381,9 +380,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_iconSizeCombo->addItem("300%", 3.0f);
   updateIconSizeCombo();
 
-  // The source filter chooses which layers the browser lists. The unified listing keeps
-  // each entry's real source marker, so project content, library content and game files
-  // never look alike.
+  // Project browsers list project and library content; standalone maps list game files.
   m_sourceCombo = new QComboBox{};
   m_sourceCombo->setObjectName("ModelBrowser_Source");
   m_sourceCombo->setMinimumWidth(96);
@@ -391,12 +388,12 @@ void ModelBrowser::createGui(AppController& appController)
   if (m_project)
   {
     m_sourceCombo->addItem(tr("All Sources"), int(BrowserSourceFilter::All));
-  }
-  m_sourceCombo->addItem(tr("Game Files"), int(BrowserSourceFilter::GameFiles));
-  if (m_project)
-  {
     m_sourceCombo->addItem(tr("Project"), int(BrowserSourceFilter::Project));
     m_sourceCombo->addItem(tr("Asset Library"), int(BrowserSourceFilter::AssetLibrary));
+  }
+  else
+  {
+    m_sourceCombo->addItem(tr("Game Files"), int(BrowserSourceFilter::GameFiles));
   }
 
   m_libraryCombo = new QComboBox{};
@@ -1272,11 +1269,7 @@ void ModelBrowser::documentWasLoaded()
 
 void ModelBrowser::modsDidChange()
 {
-  // Project and library layers do not depend on the enabled game mods; only the game-file
-  // layer does, and the unified listing includes it.
-  if (
-    m_sourceFilter == BrowserSourceFilter::Project
-    || m_sourceFilter == BrowserSourceFilter::AssetLibrary)
+  if (m_project)
   {
     return;
   }
@@ -2110,25 +2103,22 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets()
   case BrowserSourceFilter::AssetLibrary:
     return scanLibraryAssets();
   case BrowserSourceFilter::GameFiles:
-    return scanGameAssets();
+    return m_project ? std::nullopt : scanGameAssets();
   case BrowserSourceFilter::All:
     break;
   }
 
-  // The unified listing tolerates a missing layer: a project without an attached library,
-  // or a document without enabled game mods, still lists the remaining sources.
-  auto gameAssets = scanGameAssets();
+  // A project without an attached library still lists its own resources.
   auto projectAssets = scanProjectAssets();
   auto libraryAssets = scanLibraryAssets();
-  if (!gameAssets && !projectAssets && !libraryAssets)
+  if (!projectAssets && !libraryAssets)
   {
     return std::nullopt;
   }
 
   return mergeBrowserAssets(
     projectAssets ? std::move(*projectAssets) : std::vector<BrowserAsset>{},
-    libraryAssets ? std::move(*libraryAssets) : std::vector<BrowserAsset>{},
-    gameAssets ? std::move(*gameAssets) : std::vector<BrowserAsset>{});
+    libraryAssets ? std::move(*libraryAssets) : std::vector<BrowserAsset>{});
 }
 
 std::optional<std::vector<BrowserAsset>> ModelBrowser::scanGameAssets()
@@ -2474,7 +2464,7 @@ void ModelBrowser::refreshUsage()
     : !m_usageError.isEmpty()
       ? tr("Cannot scan current map: %1").arg(m_usageError)
       : tr("Explicit MAP resource references, including unsaved edits. Captured "
-           "resources match by identity; game files match by engine path."));
+           "resources match by identity."));
 }
 
 void ModelBrowser::updateSourceControls()
@@ -2495,12 +2485,12 @@ void ModelBrowser::updateSourceControls()
       }
     }
   }
-  // Saving a selection as a prefab is a game-file action, and the unified listing
-  // includes the game files it works with.
+  // Project prefabs are saved in the project; standalone prefabs use the configured path.
   if (m_savePrefabButton)
   {
     m_savePrefabButton->setVisible(
-      browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles));
+      !m_selectionOnly
+      && (!m_project || m_sourceFilter != BrowserSourceFilter::AssetLibrary));
   }
 }
 
@@ -2750,12 +2740,9 @@ void ModelBrowser::setWatchedDirectory()
     m_fileSystemWatcher->removePaths(m_fileSystemWatcher->directories());
   }
 
-  // Project and library entries live in the project file or in a library catalog, so
-  // there is no directory to watch; both notify through ProjectSession instead. The
-  // unified listing still contains game files, so it keeps watching their roots.
-  if (
-    m_sourceFilter == BrowserSourceFilter::Project
-    || m_sourceFilter == BrowserSourceFilter::AssetLibrary)
+  // Project and library changes notify through ProjectSession instead of a game
+  // directory.
+  if (m_project)
   {
     return;
   }

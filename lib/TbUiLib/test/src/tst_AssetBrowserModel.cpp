@@ -242,7 +242,7 @@ TEST_CASE("AssetBrowserModel")
     CHECK(changedAssetPaths({}, {}, {}, {uncaptured}).empty());
   }
 
-  SECTION("unifies project library and game sources")
+  SECTION("unifies project and library sources")
   {
     // The project snapshot of a captured library resource is authoritative, and the
     // library's update state is reported on it instead of listing the resource twice.
@@ -269,37 +269,40 @@ TEST_CASE("AssetBrowserModel")
     library.projectPublishPath = "models/box.mdl";
     library.projectUpdateAvailable = true;
 
-    auto game = BrowserAsset{BrowserCellType::Model, "models/box.mdl"};
-    auto unclaimedGame = BrowserAsset{BrowserCellType::Model, "models/tree.mdl"};
+    auto unclaimedLibrary = BrowserAsset{BrowserCellType::Model, "models/tree.mdl"};
+    unclaimedLibrary.source = BrowserSource::AssetLibrary;
+    unclaimedLibrary.libraryId = "library";
+    unclaimedLibrary.libraryAssetId = "lib-tree";
 
-    const auto merged = mergeBrowserAssets({snapshot}, {library}, {game, unclaimedGame});
+    const auto merged = mergeBrowserAssets({snapshot}, {library, unclaimedLibrary});
     REQUIRE(merged.size() == 2u);
     CHECK(merged[0].path == std::filesystem::path{"models/box.mdl"});
     CHECK(merged[0].source == BrowserSource::Project);
     CHECK(merged[0].projectUpdateAvailable);
     CHECK(merged[1].path == std::filesystem::path{"models/tree.mdl"});
-    CHECK(merged[1].source == BrowserSource::GameFiles);
+    CHECK(merged[1].source == BrowserSource::AssetLibrary);
   }
 
-  SECTION("keeps an uncaptured library copy instead of the game file at the same path")
+  SECTION("keeps the project copy when a library entry has the same path")
   {
     auto library = BrowserAsset{BrowserCellType::Texture, "textures/brick.wad"};
     library.source = BrowserSource::AssetLibrary;
     library.libraryId = "library";
     library.libraryAssetId = "lib-brick";
     library.libraryRevision = 1;
-    auto game = BrowserAsset{BrowserCellType::Texture, "textures/brick.wad"};
+    auto snapshot = BrowserAsset{BrowserCellType::Texture, "textures/brick.wad"};
+    snapshot.source = BrowserSource::Project;
 
-    const auto merged = mergeBrowserAssets({}, {library}, {game});
+    const auto merged = mergeBrowserAssets({snapshot}, {library});
     REQUIRE(merged.size() == 1u);
-    CHECK(merged[0].source == BrowserSource::AssetLibrary);
-    CHECK(merged[0].libraryAssetId == "lib-brick");
+    CHECK(merged[0].source == BrowserSource::Project);
   }
 
   SECTION("filters sources for the layered listings")
   {
-    CHECK(
+    CHECK_FALSE(
       browserFilterIncludesSource(BrowserSourceFilter::All, BrowserSource::GameFiles));
+    CHECK(browserFilterIncludesSource(BrowserSourceFilter::All, BrowserSource::Project));
     CHECK(
       browserFilterIncludesSource(BrowserSourceFilter::All, BrowserSource::AssetLibrary));
     CHECK(

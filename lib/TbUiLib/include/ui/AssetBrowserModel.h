@@ -52,8 +52,8 @@ enum class BrowserCellType
 /**
  * Where a browser entry comes from.
  *
- * The browser shows one layer at a time but always keeps the marker, so a project
- * resource never looks like a library resource and vice versa.
+ * Entries keep their source marker when project and library resources are listed
+ * together.
  */
 enum class BrowserSource
 {
@@ -198,20 +198,18 @@ std::vector<std::filesystem::path> entityModelAssetPaths(
   const std::vector<BrowserAsset>& assets);
 
 /**
- * Combines the project, library and game-file listings into the unified listing.
+ * Combines the project and library listings into the project browser listing.
  *
- * The three sources overlap, so the order of preference is:
+ * The sources overlap, so the order of preference is:
  *  - a project snapshot replaces the library entry it was captured from, keeping the
  *    library's "missing" and "update available" state visible on the snapshot;
- *  - the remaining entries are deduplicated by type and engine path, with a library entry
- *    replacing a game-file entry that has the same path.
+ *  - the remaining entries are deduplicated by type and engine path, with a project entry
+ *    replacing a library entry that has the same path.
  *
  * The result is ordered by engine path so the listing is stable across scans.
  */
 std::vector<BrowserAsset> mergeBrowserAssets(
-  std::vector<BrowserAsset> projectAssets,
-  std::vector<BrowserAsset> libraryAssets,
-  std::vector<BrowserAsset> gameAssets);
+  std::vector<BrowserAsset> projectAssets, std::vector<BrowserAsset> libraryAssets);
 
 /**
  * Narrows a listing to one asset type. No filter keeps every asset in its original order,

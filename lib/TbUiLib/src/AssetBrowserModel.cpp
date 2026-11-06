@@ -211,7 +211,7 @@ bool browserFilterIncludesSource(
   switch (filter)
   {
   case BrowserSourceFilter::All:
-    return true;
+    return source != BrowserSource::GameFiles;
   case BrowserSourceFilter::GameFiles:
     return source == BrowserSource::GameFiles;
   case BrowserSourceFilter::Project:
@@ -342,9 +342,7 @@ std::vector<std::filesystem::path> entityModelAssetPaths(
 }
 
 std::vector<BrowserAsset> mergeBrowserAssets(
-  std::vector<BrowserAsset> projectAssets,
-  std::vector<BrowserAsset> libraryAssets,
-  std::vector<BrowserAsset> gameAssets)
+  std::vector<BrowserAsset> projectAssets, std::vector<BrowserAsset> libraryAssets)
 {
   const auto libraryIdentity = [](const BrowserAsset& asset) {
     return std::pair{asset.libraryId, asset.libraryAssetId};
@@ -381,7 +379,7 @@ std::vector<BrowserAsset> mergeBrowserAssets(
   };
 
   auto result = std::vector<BrowserAsset>{};
-  result.reserve(projectAssets.size() + libraryAssets.size() + gameAssets.size());
+  result.reserve(projectAssets.size() + libraryAssets.size());
   const auto append = [&](const BrowserAsset& asset) {
     if (asset.path.empty())
     {
@@ -412,11 +410,6 @@ std::vector<BrowserAsset> mergeBrowserAssets(
       append(asset);
     }
   }
-  for (const auto& asset : gameAssets)
-  {
-    append(asset);
-  }
-
   std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {
     if (lhs.path != rhs.path)
     {
