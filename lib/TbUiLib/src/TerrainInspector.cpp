@@ -18,6 +18,7 @@
 #include <QPushButton>
 #include <QRubberBand>
 #include <QScopeGuard>
+#include <QScopedValueRollback>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
@@ -45,6 +46,7 @@
 #include "ui/AssetLibraryWindow.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/SwitchableMapViewContainer.h"
@@ -343,7 +345,10 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
     });
   connect(m_paint, &QPushButton::toggled, this, [this](const bool on) {
     if (on)
+    {
       m_drawNew->setChecked(false);
+      activateTerrainTool();
+    }
     else
     {
       cancelVertexInteraction();
@@ -359,6 +364,7 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
     if (on)
     {
       m_paint->setChecked(false);
+      activateTerrainTool();
       m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
     }
     updateModeControls();
@@ -775,6 +781,32 @@ void TerrainInspector::analyze()
   m_cutPreview = std::move(estimate).value().cuts;
   m_showCuts->setEnabled(!m_cutPreview.empty());
   m_showCuts->setChecked(!m_cutPreview.empty());
+}
+
+void TerrainInspector::activateTerrainTool()
+{
+  for (auto* widget = parentWidget(); widget; widget = widget->parentWidget())
+  {
+    if (auto* editor = qobject_cast<MapEditorView*>(widget))
+    {
+      auto& toolBox = editor->toolBox();
+      if (!m_toolBoxObserved)
+      {
+        m_connection +=
+          toolBox.toolActivatedNotifier.connect([this, box = &toolBox](const auto&) {
+            if (!m_switchingTool && box->anyModalToolActive())
+            {
+              m_paint->setChecked(false);
+              m_drawNew->setChecked(false);
+            }
+          });
+        m_toolBoxObserved = true;
+      }
+      const auto switching = QScopedValueRollback{m_switchingTool, true};
+      toolBox.deactivateAllTools();
+      return;
+    }
+  }
 }
 
 void TerrainInspector::refreshViews()

@@ -51,6 +51,8 @@ public:
 
   const std::string& terrainPaint() const;
   void setTerrainPaint(std::string paint);
+  /** Height-field terrain owns its brush geometry; edit it through terrain tools. */
+  bool hasSculptableTerrain() const;
 };
 
 } // namespace tb::mdl

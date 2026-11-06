@@ -19,6 +19,7 @@
 #include "mdl/LockState.h"
 #include "mdl/Map.h"
 #include "mdl/Map_CopyPaste.h"
+#include "mdl/Map_Geometry.h"
 #include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
@@ -528,6 +529,53 @@ TEST_CASE("Large terrain rectangle creates one undoable chunk group")
   map.redoCommand();
   REQUIRE(map.selection().groups.size() == 1);
   CHECK(readTerrainChunks(*map.selection().groups.front()).is_success());
+}
+
+TEST_CASE("Ordinary brush editing protects sculptable terrain")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  requireValue(createTerrainChunkRectangle(map, {0, -128}, {1408, 0}, 0, 64, 64));
+  REQUIRE(map.selection().groups.size() == 1);
+  auto* root = map.selection().groups.front();
+  auto* chunk = static_cast<mdl::GroupNode*>(root->children().front());
+  auto* brush = static_cast<mdl::BrushNode*>(chunk->children().front());
+  const auto vertex = brush->brush().vertexPositions().front();
+  const auto shift = vm::translation_matrix(vm::vec3d{0, 0, 16});
+  CHECK_FALSE(mdl::transformVertices(map, {vertex}, shift).success);
+  CHECK_FALSE(mdl::transformEdges(map, {}, shift));
+  CHECK_FALSE(mdl::transformFaces(map, {}, shift));
+  CHECK_FALSE(mdl::addVertex(map, vertex));
+  CHECK_FALSE(mdl::removeVertices(map, "Remove vertices", {vertex}));
+  CHECK_FALSE(mdl::chamferVertices(map, "Chamfer", {vertex}, 1));
+  CHECK_FALSE(mdl::chamferEdges(map, "Chamfer", {}, 1));
+  CHECK_FALSE(mdl::snapVertices(map, 16));
+  CHECK_FALSE(mdl::extrudeBrushes(map, {}, {0, 0, 16}));
+  CHECK_FALSE(mdl::transformNodes(map, {brush}, "Move brush", shift));
+  CHECK_FALSE(mdl::transformNodes(map, {chunk}, "Move chunk", shift));
+  CHECK(brush->brush().hasVertex(vertex));
+  REQUIRE(readTerrainChunks(*root).is_success());
+
+  // Moving the complete terrain and editing its height field remain supported.
+  REQUIRE(mdl::transformNodes(map, {root}, "Move terrain", shift));
+  const auto moved = requireValue(readTerrainChunks(*root));
+  CHECK(terrainGroupSurfaces(*root, *moved.combined).is_success());
+  auto heights = *moved.combined->heightField;
+  heights.heights[heights.index(20, 1)] = 8;
+  requireValue(updateTerrainHeightField(map, *root, heights));
+  CHECK(readTerrainChunks(*root).is_success());
+
+  // A non-terrain brush remains editable through the ordinary tools.
+  mdl::deselectAll(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* ordinary = new mdl::BrushNode{requireValue(
+    builder.createCuboid(vm::bbox3d{{-128, -128, -64}, {-64, -64, 0}}, "GROUND"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {ordinary}}});
+  mdl::selectNodes(map, {ordinary});
+  CHECK(mdl::transformVertices(map, {{-64, -64, 0}}, shift).success);
 }
 
 TEST_CASE("Terrain conversion does not desynchronize linked groups")

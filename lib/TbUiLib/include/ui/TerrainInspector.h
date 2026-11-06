@@ -109,6 +109,8 @@ private:
   bool m_materialPreviewValid = true;
   bool m_sculptStroke = false;
   bool m_sculptApplying = false;
+  bool m_toolBoxObserved = false;
+  bool m_switchingTool = false;
   std::string m_previewIdentity;
   std::optional<mdl::IdType> m_refreshedGroup;
   std::string m_refreshedPaint;
@@ -148,6 +150,7 @@ private:
   void sculptTo(const vm::vec2d& point);
   void generate();
   void analyze();
+  void activateTerrainTool();
   void refreshViews();
   void openAssetLibrary();
   void updateSlotLabels(const std::string& materialAssetId);

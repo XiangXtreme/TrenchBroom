@@ -68,4 +68,9 @@ void Group::setTerrainPaint(std::string paint)
   m_terrainPaint = std::move(paint);
 }
 
+bool Group::hasSculptableTerrain() const
+{
+  return m_terrainPaint.starts_with("5 ") || m_terrainPaint == "terrain-chunks";
+}
+
 } // namespace tb::mdl

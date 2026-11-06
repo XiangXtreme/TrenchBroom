@@ -335,9 +335,18 @@ void testChunkedTerrainEditing(
   terrainMaterial->setCurrentIndex(materialIndex);
   material->setCurrentIndex(1);
   REQUIRE(activate->isEnabled());
+  REQUIRE(window->toolBox().canToggleRotateTool());
+  window->toolBox().toggleRotateTool();
+  REQUIRE(window->toolBox().rotateToolActive());
   activate->click();
   REQUIRE(panel->painting());
   REQUIRE_FALSE(window->toolBox().anyModalToolActive());
+  window->toolBox().toggleRotateTool();
+  REQUIRE(window->toolBox().rotateToolActive());
+  REQUIRE_FALSE(panel->painting());
+  window->toolBox().toggleRotateTool();
+  activate->click();
+  REQUIRE(panel->painting());
   REQUIRE(testTerrainChunks(*group)->chunks[0].region.materialAssetId == materialId);
   REQUIRE(selectedTerrainGroup(map) == group);
   // The first click activates the viewport after using the terrain inspector.

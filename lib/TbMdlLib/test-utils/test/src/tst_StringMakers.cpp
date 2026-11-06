@@ -32,6 +32,8 @@
 #include "mdl/TestUtils.h"
 #include "mdl/WorldNode.h"
 
+#include <utility>
+
 #include <catch2/catch_test_macros.hpp>
 
 namespace tb::mdl
@@ -58,7 +60,9 @@ TEST_CASE("convertToString")
 
   auto brushBuilder = BrushBuilder{worldNode.mapFormat(), vm::bbox3d{8192.0}};
 
-  auto* groupNode = new GroupNode{Group{"group"}};
+  auto group = Group{"group"};
+  group.setTerrainPaint("terrain-paint");
+  auto* groupNode = new GroupNode{std::move(group)};
   auto* entityNode = new EntityNode{Entity{}};
   auto* brushNode =
     new BrushNode{brushBuilder.createCube(64.0, "material") | kdl::value()};
@@ -88,7 +92,7 @@ TEST_CASE("convertToString")
       m_layer: Layer{m_defaultLayer: 1, m_name: Default Layer, m_sortIndex: nullopt, m_color: nullopt, m_omitFromExport: 0},
       m_children: [
         GroupNode{
-          m_group: Group{m_name: group, m_transformation: 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1},
+          m_group: Group{m_name: group, m_transformation: 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1, m_terrainPaint: terrain-paint},
           m_linkId: group_link_id,
           m_children: [
             EntityNode{

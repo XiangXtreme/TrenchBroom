@@ -61,11 +61,48 @@
 
 #include <algorithm>
 #include <ranges>
+#include <unordered_set>
 
 namespace tb::mdl
 {
 
 kdl_reflect_impl(TransformVerticesResult);
+
+namespace
+{
+bool canEditBrushGeometry(Map& map)
+{
+  for (const auto* brush : map.selection().allBrushes())
+    for (auto* parent = brush->parent(); parent; parent = parent->parent())
+      if (const auto* group = dynamic_cast<const GroupNode*>(parent);
+          group && group->group().hasSculptableTerrain())
+      {
+        map.logger().error()
+          << "Use the terrain inspector to edit sculptable terrain geometry.";
+        return false;
+      }
+  return true;
+}
+
+bool canTransformTerrainNodes(Map& map, const std::vector<Node*>& nodes)
+{
+  const auto transformed = std::unordered_set<const Node*>{nodes.begin(), nodes.end()};
+  for (const auto* node : nodes)
+  {
+    if (!dynamic_cast<const BrushNode*>(node))
+      continue;
+    for (auto* parent = node->parent(); parent; parent = parent->parent())
+      if (const auto* group = dynamic_cast<const GroupNode*>(parent);
+          group && group->group().hasSculptableTerrain() && !transformed.contains(parent))
+      {
+        map.logger().error()
+          << "Move the whole terrain group or use the terrain inspector to edit it.";
+        return false;
+      }
+  }
+  return true;
+}
+} // namespace
 
 bool transformSelection(
   Map& map, const std::string& commandName, const vm::mat4x4d& transformation)
@@ -127,6 +164,9 @@ bool transformNodes(
         entitiesToTransform[patchNode.entity()]++;
       }));
   }
+
+  if (!canTransformTerrainNodes(map, nodesToTransform))
+    return false;
 
   // add entities if all of their children are transformed
   for (const auto& [entityNode, transformedChildCount] : entitiesToTransform)
@@ -209,11 +249,10 @@ bool transformNodes(
   }
 
   const auto success =
-    results | kdl::fold
-    | kdl::transform([&](auto nodesToUpdate) {
-        return updateNodeContents(
-          map, commandName, std::move(nodesToUpdate), collectContainingGroups(nodes));
-      })
+    results | kdl::fold | kdl::transform([&](auto nodesToUpdate) {
+      return updateNodeContents(
+        map, commandName, std::move(nodesToUpdate), collectContainingGroups(nodes));
+    })
     | kdl::value_or(false);
 
   return success;
@@ -269,6 +308,8 @@ bool flipSelection(mdl::Map& map, const vm::vec3d& center, const vm::axis::type 
 TransformVerticesResult transformVertices(
   Map& map, const std::vector<vm::vec3d>& vertexPositions, const vm::mat4x4d& transform)
 {
+  if (!canEditBrushGeometry(map))
+    return {false, false};
   auto newVertexPositions = std::vector<vm::vec3d>{};
   auto newNodes = applyToNodeContents(
     map.selection().nodes,
@@ -346,6 +387,8 @@ TransformVerticesResult transformVertices(
 bool transformEdges(
   Map& map, const std::vector<vm::segment3d>& edgePositions, const vm::mat4x4d& transform)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   auto newEdgePositions = std::vector<vm::segment3d>{};
   auto newNodes = applyToNodeContents(
     map.selection().nodes,
@@ -415,6 +458,8 @@ bool transformEdges(
 bool transformFaces(
   Map& map, const std::vector<vm::polygon3d>& facePositions, const vm::mat4x4d& transform)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   auto newFacePositions = std::vector<vm::polygon3d>{};
   auto newNodes = applyToNodeContents(
     map.selection().nodes,
@@ -483,6 +528,8 @@ bool transformFaces(
 
 bool addVertex(Map& map, const vm::vec3d& vertexPosition)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   auto newNodes = applyToNodeContents(
     map.selection().nodes,
     kdl::overload(
@@ -533,6 +580,8 @@ bool addVertex(Map& map, const vm::vec3d& vertexPosition)
 bool removeVertices(
   Map& map, const std::string& commandName, std::vector<vm::vec3d> vertexPositions)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   auto newNodes = applyToNodeContents(
     map.selection().nodes,
     kdl::overload(
@@ -652,6 +701,8 @@ bool chamferVertices(
   std::vector<vm::vec3d> vertexPositions,
   const double distance)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   if (distance <= 0.0)
   {
     return false;
@@ -738,6 +789,8 @@ bool chamferEdges(
   const double distance,
   const int segments)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   if (distance <= 0.0)
   {
     return false;
@@ -818,6 +871,8 @@ bool chamferEdges(
 
 bool snapVertices(Map& map, const double snapTo)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   size_t succeededBrushCount = 0;
   size_t failedBrushCount = 0;
 
@@ -1147,6 +1202,8 @@ bool csgHollow(Map& map, const std::string& commandName)
 bool extrudeBrushes(
   Map& map, const std::vector<vm::polygon3d>& faces, const vm::vec3d& delta)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   const auto nodes = map.selection().nodes;
   return applyAndSwap(
     map,
