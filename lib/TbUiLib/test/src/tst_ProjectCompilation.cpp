@@ -35,11 +35,13 @@
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Geometry.h"
 #include "mdl/Map_Groups.h"
+#include "mdl/Map_NodeLocking.h"
 #include "mdl/Map_NodeVisibility.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Picking.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/PickResult.h"
+#include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "project/ProjectStore.h"
 #include "render/RenderTiming.h"
@@ -678,6 +680,105 @@ TEST_CASE("Project terrain panel paints a picked brush")
   setPref(Preferences::FaceRenderMode, savedFaceMode);
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
 
+  // Converting painted ground and sculpting it must keep the ready paint bake,
+  // while the visible geometry and the pickable brush proxies change together.
+  mdl::selectNodes(map, {group});
+  window->switchToInspectorPage(InspectorPage::Terrain);
+  navigation->click();
+  auto* editMode = panel->findChild<QComboBox*>("TerrainInspector_EditMode");
+  auto* convert = panel->findChild<QPushButton*>("TerrainInspector_Convert");
+  auto* activate = panel->findChild<QPushButton*>("TerrainInspector_PaintTerrain");
+  REQUIRE(editMode);
+  REQUIRE(convert);
+  REQUIRE(activate);
+  editMode->setCurrentIndex(1);
+  REQUIRE(convert->isEnabled());
+  convert->click();
+  const auto converted = require(TerrainRegion::decode(group->group().terrainPaint()));
+  REQUIRE(converted.heightField);
+  const auto convertedHeights = converted.heightField->heights;
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  activate->click();
+  REQUIRE(panel->painting());
+  const auto terrainPick = [&] {
+    auto result = mdl::PickResult::byDistance();
+    mdl::pick(
+      map, vm::ray3d{camera.pickRay(float(center.x()), float(center.y()))}, result);
+    return result;
+  };
+  auto sculptTiming = render::RenderTiming{};
+  {
+    const auto capture = render::RenderTiming::Capture{sculptTiming};
+    panel->beginStroke(terrainPick());
+    REQUIRE(panel->stroking());
+    CHECK(centerIs(true));
+  }
+  CHECK(sculptTiming.counters["terrain.bake_starts"] == 0);
+  CHECK(sculptTiming.counters["terrain.scene_builds"] > 0);
+  const auto sculpted = require(TerrainRegion::decode(group->group().terrainPaint()));
+  REQUIRE(sculpted.heightField);
+  CHECK(sculpted.heightField->heights != convertedHeights);
+  CHECK(sculpted.weights == converted.weights);
+  CHECK(terrainSurfaces(*group, sculpted).is_success());
+  panel->endStroke(true);
+  map.undoCommand();
+  CHECK(
+    require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
+    == convertedHeights);
+  map.redoCommand();
+  CHECK(
+    require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
+    == sculpted.heightField->heights);
+  panel->beginStroke(terrainPick());
+  REQUIRE(panel->stroking());
+  panel->endStroke(false);
+  CHECK(
+    require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
+    == sculpted.heightField->heights);
+  activate->click();
+
+  // Paint after sculpting, then sculpt again without losing the new paint.
+  editMode->setCurrentIndex(0);
+  material->setCurrentIndex(0);
+  activate->click();
+  panel->beginStroke(terrainPick());
+  REQUIRE(panel->stroking());
+  panel->endStroke(true);
+  const auto repaintedRegion =
+    require(TerrainRegion::decode(group->group().terrainPaint()));
+  CHECK(repaintedRegion.weights != sculpted.weights);
+  CHECK(repaintedRegion.heightField->heights == sculpted.heightField->heights);
+  activate->click();
+  editMode->setCurrentIndex(1);
+  activate->click();
+  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, center);
+  REQUIRE(panel->stroking());
+  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, center);
+  const auto resculpted = require(TerrainRegion::decode(group->group().terrainPaint()));
+  CHECK(resculpted.weights == repaintedRegion.weights);
+  CHECK(resculpted.heightField->heights != repaintedRegion.heightField->heights);
+  CHECK(terrainSurfaces(*group, resculpted).is_success());
+  panel->beginStroke(terrainPick());
+  REQUIRE(panel->stroking());
+  QTest::keyClick(view, Qt::Key_Escape);
+  CHECK_FALSE(panel->stroking());
+  CHECK(
+    require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
+    == resculpted.heightField->heights);
+  activate->click();
+  map.undoCommand();
+  map.undoCommand();
+  CHECK(
+    require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
+    == sculpted.heightField->heights);
+  REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  mdl::lockNodes(map, {group});
+  CHECK_FALSE(activate->isEnabled());
+  panel->beginStroke(terrainPick());
+  CHECK_FALSE(panel->stroking());
+  mdl::unlockNodes(map, {group});
+  mdl::selectNodes(map, {group});
+
   const auto mapId = project->session()->assetFor(window->document());
   REQUIRE(mapId);
   const auto copy = pathFromQString(directory.filePath("terrain-reopened.tbproj"));
@@ -688,6 +789,22 @@ TEST_CASE("Project terrain panel paints a picked brush")
   require(app.mapWindowManager().loadProjectMap(reopenedProject->session(), *mapId));
   auto* reopenedWindow = app.mapWindowManager().topMapWindow();
   REQUIRE(reopenedWindow);
+  const mdl::GroupNode* reopenedTerrain = nullptr;
+  const auto findTerrain = [&](const auto& self, const mdl::Node& node) -> void {
+    if (const auto* candidate = dynamic_cast<const mdl::GroupNode*>(&node);
+        candidate && !candidate->group().terrainPaint().empty())
+      reopenedTerrain = candidate;
+    for (const auto* child : node.children())
+      self(self, *child);
+  };
+  findTerrain(findTerrain, reopenedWindow->document().map().worldNode());
+  REQUIRE(reopenedTerrain);
+  const auto reopenedRegion =
+    require(TerrainRegion::decode(reopenedTerrain->group().terrainPaint()));
+  REQUIRE(reopenedRegion.heightField);
+  CHECK(reopenedRegion.heightField->heights == sculpted.heightField->heights);
+  CHECK(reopenedRegion.weights == sculpted.weights);
+  CHECK(terrainSurfaces(*reopenedTerrain, reopenedRegion).is_success());
   reopenedProject->resize(1200, 820);
   reopenedProject->show();
   QApplication::processEvents();

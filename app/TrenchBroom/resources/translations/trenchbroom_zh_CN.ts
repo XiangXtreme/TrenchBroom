@@ -8521,6 +8521,19 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Asset Library…</source><translation>资产库…</translation></message>
         <message><source>Terrain Material</source><translation>地形材质</translation></message>
         <message><source>Paint Slot</source><translation>涂刷槽位</translation></message>
+        <message><source>Edit mode</source><translation>编辑模式</translation></message>
+        <message><source>Sculpt</source><translation>雕刻</translation></message>
+        <message><source>Sculpt tool</source><translation>雕刻工具</translation></message>
+        <message><source>Raise</source><translation>抬高</translation></message>
+        <message><source>Lower</source><translation>降低</translation></message>
+        <message><source>Smooth</source><translation>平滑</translation></message>
+        <message><source>Flatten</source><translation>压平</translation></message>
+        <message><source>Grid spacing</source><translation>网格间距</translation></message>
+        <message><source>%1 units</source><translation>%1 单位</translation></message>
+        <message><source>Lock terrain edges</source><translation>锁定地形边缘</translation></message>
+        <message><source>Create Sculptable Terrain</source><translation>创建可雕刻地形</translation></message>
+        <message><source>Sculpt Terrain</source><translation>雕刻地形</translation></message>
+        <message><source>The terrain or one of its brushes is locked or hidden.</source><translation>地形或其中的 Brush 已锁定或隐藏。</translation></message>
         <message><source>Brush strength</source><translation>笔刷强度</translation></message>
         <message><source>Brush hardness</source><translation>笔刷硬度</translation></message>
         <message><source>Change Terrain Material</source><translation>更改地形材质</translation></message>
@@ -8564,8 +8577,8 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
             <translation>笔刷半径</translation>
         </message>
         <message>
-            <source>Select a brush group to create a terrain region.</source>
-            <translation>选择一个 Brush 组来创建地形区域。</translation>
+            <source>Select ground brushes or a brush group to create terrain.</source>
+            <translation>选择地面 Brush 或 Brush 组来创建地形。</translation>
         </message>
         <message>
             <source>Open a Half-Life Valve 220 map in a project to edit terrain.</source>

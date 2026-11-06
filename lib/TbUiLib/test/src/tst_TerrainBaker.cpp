@@ -24,6 +24,7 @@
 #include "mdl/Map_Selection.h"
 #include "mdl/NodeContents.h"
 #include "mdl/PasteType.h"
+#include "mdl/TransactionScope.h"
 #include "mdl/WorldNode.h"
 #include "mdl/WorldReader.h"
 #include "project/GoldSrcWad.h"
@@ -263,6 +264,39 @@ TEST_CASE("Terrain conversion preserves source materials and is one undo step")
   CHECK(terrainSurfaces(*group, redone).is_success());
 }
 
+TEST_CASE("Terrain conversion groups selected ground as one undo step")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* source = new mdl::BrushNode{
+    requireValue(builder.createCuboid(vm::bbox3d{{0, -64, -64}, {64, 0, 0}}, "GROUND"))};
+  auto* layer = map.editorContext().currentLayer();
+  mdl::addNodes(map, {{layer, {source}}});
+  mdl::selectNodes(map, {source});
+
+  CHECK(convertSelectedTerrainToHeightField(map, 30).is_error());
+  CHECK(source->parent() == layer);
+  REQUIRE(map.selection().brushes.size() == 1);
+  CHECK(map.selection().brushes.front() == source);
+
+  requireValue(convertSelectedTerrainToHeightField(map, 32));
+  REQUIRE(map.selection().groups.size() == 1);
+  auto* group = map.selection().groups.front();
+  CHECK(group->children().size() == 8);
+  CHECK(requireValue(TerrainRegion::decode(group->group().terrainPaint())).heightField);
+  map.undoCommand();
+  CHECK(source->parent() == layer);
+  REQUIRE(map.selection().brushes.size() == 1);
+  CHECK(map.selection().brushes.front() == source);
+  map.redoCommand();
+  REQUIRE(map.selection().groups.size() == 1);
+  CHECK(map.selection().groups.front()->children().size() == 8);
+}
+
 TEST_CASE("Terrain conversion does not desynchronize linked groups")
 {
   auto fixture = MapDocumentFixture{};
@@ -288,6 +322,83 @@ TEST_CASE("Terrain conversion does not desynchronize linked groups")
   CHECK(linked->children().size() == 1);
   CHECK(group->group().terrainPaint().empty());
   CHECK(linked->group().terrainPaint().empty());
+}
+
+TEST_CASE("Terrain sculpt updates only affected brushes and supports undo")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* source = new mdl::BrushNode{requireValue(
+    builder.createCuboid(vm::bbox3d{{0, -64, -64}, {64, 0, 0}}, "TERR_GRASS"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {source}}});
+  mdl::selectNodes(map, {source});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+  requireValue(convertTerrainToHeightField(map, *group, 32));
+  const auto initial = group->group().terrainPaint();
+  const auto region = requireValue(TerrainRegion::decode(initial));
+  REQUIRE(region.heightField);
+  const auto order = requireValue(terrainHeightFieldBrushIndices(*group, region));
+  auto oldVertices = std::vector<std::vector<vm::vec3d>>{};
+  for (const auto* child : group->children())
+    oldVertices.push_back(
+      static_cast<const mdl::BrushNode*>(child)->brush().vertexPositions());
+
+  auto height = *region.heightField;
+  height.heights[height.index(1, 1)] = 16;
+  requireValue(updateTerrainHeightField(map, *group, height));
+  auto changedCount = size_t{0};
+  for (auto i = size_t{0}; i < group->children().size(); ++i)
+    if (
+      static_cast<const mdl::BrushNode*>(group->children()[i])->brush().vertexPositions()
+      != oldVertices[i])
+      ++changedCount;
+  CHECK(changedCount == 6);
+  const auto sculpted = group->group().terrainPaint();
+  const auto updated = requireValue(TerrainRegion::decode(sculpted));
+  REQUIRE(updated.heightField);
+  CHECK(updated.heightField->heights == height.heights);
+  CHECK(updated.weights == region.weights);
+  CHECK(terrainSurfaces(*group, updated).is_success());
+  for (const auto index : order)
+  {
+    const auto& brush =
+      static_cast<const mdl::BrushNode*>(group->children()[index])->brush();
+    const auto top = std::ranges::find_if(
+      brush.faces(), [](const auto& face) { return face.normal().z() > 1e-6; });
+    REQUIRE(top != brush.faces().end());
+    CHECK(top->materialName() == "TERR_GRASS");
+  }
+  map.undoCommand();
+  CHECK(group->group().terrainPaint() == initial);
+  map.redoCommand();
+  CHECK(group->group().terrainPaint() == sculpted);
+
+  auto outside = height;
+  outside.heights[outside.index(1, 1)] = map.worldBounds().max.z() * 2;
+  CHECK(updateTerrainHeightField(map, *group, outside).is_error());
+  CHECK(group->group().terrainPaint() == sculpted);
+  CHECK(terrainSurfaces(*group, updated).is_success());
+
+  map.startTransaction("Sculpt stroke", mdl::TransactionScope::LongRunning);
+  auto first = height;
+  first.heights[first.index(1, 1)] = 20;
+  requireValue(updateTerrainHeightField(map, *group, first));
+  first.heights[first.index(1, 1)] = 24;
+  requireValue(updateTerrainHeightField(map, *group, first));
+  CHECK(map.commitTransaction());
+  map.undoCommand();
+  CHECK(group->group().terrainPaint() == sculpted);
+  CHECK(terrainSurfaces(*group, updated).is_success());
+  map.startTransaction("Cancel sculpt stroke", mdl::TransactionScope::LongRunning);
+  requireValue(updateTerrainHeightField(map, *group, first));
+  map.cancelTransaction();
+  CHECK(group->group().terrainPaint() == sculpted);
+  CHECK(terrainSurfaces(*group, updated).is_success());
 }
 
 TEST_CASE("Sculptable terrain survives map round trip and compiles its height field")

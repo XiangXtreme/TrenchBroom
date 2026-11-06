@@ -209,6 +209,16 @@ const TerrainRegion::Weight& TerrainRegion::weight(const int col, const int row)
 
 std::string TerrainRegion::encode() const
 {
+  return encodeImpl(true);
+}
+
+std::string TerrainRegion::paintCacheKey() const
+{
+  return encodeImpl(false);
+}
+
+std::string TerrainRegion::encodeImpl(const bool includeHeightField) const
+{
   auto pixels = QByteArray{};
   pixels.reserve(qsizetype(weights.size() * 2));
   for (const auto& w : weights)
@@ -219,7 +229,7 @@ std::string TerrainRegion::encode() const
     pixels.append(char(dirt));
     pixels.append(char(rock));
   }
-  if (heightField)
+  if (includeHeightField && heightField)
   {
     auto heights = QJsonArray{};
     for (const auto height : heightField->heights)
@@ -398,7 +408,7 @@ double terrainArea(const QPolygonF& polygon)
 
 namespace
 {
-Result<void> validateSculptedBrushes(
+Result<std::vector<size_t>> validateSculptedBrushes(
   const mdl::GroupNode& group,
   const TerrainRegion& region,
   const TerrainHeightField& field,
@@ -415,9 +425,11 @@ Result<void> validateSculptedBrushes(
     return invalid;
 
   constexpr auto Tolerance = 1e-3;
-  auto seen = std::vector<bool>(size_t(field.columns) * size_t(field.rows) * 2);
-  for (const auto* child : group.children())
+  auto indices = std::vector<size_t>(
+    size_t(field.columns) * size_t(field.rows) * 2, std::numeric_limits<size_t>::max());
+  for (auto childIndex = size_t{0}; childIndex < group.children().size(); ++childIndex)
   {
+    const auto* child = group.children()[childIndex];
     const auto* brush = dynamic_cast<const mdl::BrushNode*>(child);
     if (!brush)
       return invalid;
@@ -476,13 +488,25 @@ Result<void> validateSculptedBrushes(
       return invalid;
     const auto triangle =
       (size_t(minRow) * size_t(field.columns) + size_t(minColumn)) * 2 + size_t(acd);
-    if (seen[triangle])
+    if (indices[triangle] != std::numeric_limits<size_t>::max())
       return invalid;
-    seen[triangle] = true;
+    indices[triangle] = childIndex;
   }
-  return {};
+  return indices;
 }
 } // namespace
+
+Result<std::vector<size_t>> terrainHeightFieldBrushIndices(
+  const mdl::GroupNode& group, const TerrainRegion& region)
+{
+  const auto& transform = group.group().transformation();
+  const auto inverse = vm::invert(transform);
+  if (
+    !region.heightField || !inverse || transform[2][2] <= 0
+    || std::hypot(transform[2][0], transform[2][1]) > 1e-6)
+    return Error{"Invalid sculptable terrain or group transformation."};
+  return validateSculptedBrushes(group, region, *region.heightField, *inverse);
+}
 
 Result<std::vector<TerrainSurface>> terrainSurfaces(
   const mdl::GroupNode& group, const TerrainRegion& region)

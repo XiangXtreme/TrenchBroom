@@ -490,8 +490,8 @@ public:
         entry.pending.reset();
         continue;
       }
-      auto wanted = stroke ? stroke->encode() : encoded;
-      auto saved = encoded;
+      auto saved = entry.region ? entry.region->paintCacheKey() : std::string{};
+      auto wanted = stroke ? stroke->paintCacheKey() : saved;
       if (!region->materialAssetId.empty())
       {
         const auto suffix = ":" + std::to_string(m_materialRevision);
@@ -617,6 +617,7 @@ private:
     const mdl::GroupNode& group,
     Entry& entry,
     Display& display,
+    const TerrainRegion& geometryRegion,
     const render::LightmapAssembly* lightmap)
   {
     if (
@@ -624,15 +625,15 @@ private:
     {
       if (
         entry.surfaceRevision != entry.geometryRevision || !entry.surfaceOrigin
-        || !vm::is_equal(*entry.surfaceOrigin, display.region.origin, 1e-6))
+        || !vm::is_equal(*entry.surfaceOrigin, geometryRegion.origin, 1e-6))
       {
         render::RenderTiming::count("terrain.surface_extractions", 1);
-        auto surfaces = terrainSurfaces(group, display.region);
+        auto surfaces = terrainSurfaces(group, geometryRegion);
         entry.surfaces = surfaces.is_success()
                            ? std::optional{std::move(surfaces).value()}
                            : std::nullopt;
         entry.surfaceRevision = entry.geometryRevision;
-        entry.surfaceOrigin = display.region.origin;
+        entry.surfaceOrigin = geometryRegion.origin;
       }
       display.scene = entry.surfaces ? makeScene(
                                          m_document.map(),
@@ -681,7 +682,7 @@ private:
     const auto updatePending = [&] {
       if (!entry.pending)
         return;
-      updateDisplay(group, entry, *entry.pending, lightmap);
+      updateDisplay(group, entry, *entry.pending, region, lightmap);
       if (!entry.pending->scene)
       {
         if (entry.pending->key == entry.wanted)
@@ -816,7 +817,7 @@ private:
     updatePending();
     if (entry.active)
     {
-      updateDisplay(group, entry, *entry.active, lightmap);
+      updateDisplay(group, entry, *entry.active, region, lightmap);
       if (entry.active->scene && entry.active->scene->ready())
         entry.active->scene->renderer.render(batch);
       else if (entry.active->scene)

@@ -66,7 +66,12 @@ struct TerrainRegion
     double hardness = 0.35);
   const Weight& weight(int col, int row) const;
   std::string encode() const;
+  /** Identifies the paint bake independently of editable terrain heights. */
+  std::string paintCacheKey() const;
   static Result<TerrainRegion> decode(std::string_view text);
+
+private:
+  std::string encodeImpl(bool includeHeightField) const;
 };
 
 struct TerrainSurface
@@ -81,6 +86,9 @@ Result<TerrainRegion> createTerrainRegion(const mdl::GroupNode& group);
 /** Sample aligned rectangular planar source brushes without changing their geometry. */
 Result<TerrainHeightField> createTerrainHeightField(
   const mdl::GroupNode& group, const TerrainRegion& region, double spacing);
+/** Map each height-field triangle to its verified child brush index. */
+Result<std::vector<size_t>> terrainHeightFieldBrushIndices(
+  const mdl::GroupNode& group, const TerrainRegion& region);
 Result<std::vector<TerrainSurface>> terrainSurfaces(
   const mdl::GroupNode& group, const TerrainRegion& region);
 double terrainArea(const QPolygonF& polygon);

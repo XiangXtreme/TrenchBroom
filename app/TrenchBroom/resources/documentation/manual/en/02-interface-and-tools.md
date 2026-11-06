@@ -242,3 +242,11 @@ Apply Entity Template (CLASSNAME)
 ## 2D Readable Outlines {#readable_outlines_2d}
 
 In complex or densely structured maps, 2D viewports draw high-contrast readable brush outlines around geometry to make individual brushes distinguishable against background grid lines and adjacent surfaces.
+
+## Terrain Sculpting and Materials {#terrain_editing}
+
+Open a Half-Life Valve 220 map in a project and select contiguous ground brushes or a group containing them. In the terrain inspector, choose Sculpt, set the grid spacing, and click Create Sculptable Terrain. The ground must cover a contiguous rectangle with a common flat bottom, and adjacent brush boundaries must align with the selected spacing. A failed conversion leaves the original ground in place.
+
+Choose Raise, Lower, Smooth, or Flatten and adjust the brush radius, strength, and hardness. Click Sculpt Terrain, then hold the left mouse button in the 3D view. Flatten uses the height at the start of the stroke. Lock terrain edges is enabled by default to avoid moving the boundary accidentally. Release the mouse to finish a stroke, or press Escape to cancel it.
+
+Switch to Material, choose a terrain material and slot, and click Paint Terrain to paint. You can switch back to sculpting without losing the painted material. Locked or hidden terrain and its brushes cannot be edited. Directly modifying generated terrain brushes with the ordinary vertex tool can invalidate the terrain data; use the terrain sculpting tool to change its shape.

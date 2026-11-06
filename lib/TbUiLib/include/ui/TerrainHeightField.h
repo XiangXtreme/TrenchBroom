@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,9 @@ struct TerrainHeightField
   bool valid() const;
   size_t index(int column, int row) const;
   std::optional<double> sample(const vm::vec2d& position) const;
+  /** Sample several positions while validating the field only once. */
+  std::vector<std::optional<double>> sampleMany(
+    std::span<const vm::vec2d> positions) const;
 
   /** Apply one stamp. Position and radius are in terrain-local map units. */
   TerrainSculptResult sculpt(
@@ -63,6 +67,9 @@ struct TerrainHeightField
     double amount,
     double targetHeight,
     bool lockEdges);
+
+private:
+  std::optional<double> sampleValidated(const vm::vec2d& position) const;
 };
 
 /** Build closed convex prisms from the same triangles used by height sampling. */
@@ -73,4 +80,14 @@ Result<std::vector<mdl::Brush>> createTerrainBrushes(
   mdl::MapFormat mapFormat,
   const vm::bbox3d& worldBounds,
   const std::string& materialName);
+
+/** Build only the requested row-major triangles, in the requested order. */
+Result<std::vector<mdl::Brush>> createTerrainBrushes(
+  const TerrainHeightField& field,
+  const vm::vec2d& origin,
+  const vm::mat4x4d& transform,
+  mdl::MapFormat mapFormat,
+  const vm::bbox3d& worldBounds,
+  const std::string& materialName,
+  std::span<const size_t> triangleIndices);
 } // namespace tb::ui

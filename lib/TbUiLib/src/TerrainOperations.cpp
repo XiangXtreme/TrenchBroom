@@ -10,6 +10,7 @@
 #include "mdl/GroupNode.h"
 #include "mdl/LinkedGroupUtils.h"
 #include "mdl/Map.h"
+#include "mdl/Map_Groups.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/NodeContents.h"
 #include "mdl/Transaction.h"
@@ -22,9 +23,12 @@
 
 namespace tb::ui
 {
-Result<void> convertTerrainToHeightField(
-  mdl::Map& map, mdl::GroupNode& group, const double spacing)
+namespace
 {
+Result<void> checkTerrainEditable(mdl::Map& map, mdl::GroupNode& group)
+{
+  if (!group.isDescendantOf(map.worldNode()))
+    return Error{"The terrain does not belong to this map."};
   if (
     !map.editorContext().editable(group) || !map.editorContext().visible(group)
     || std::ranges::any_of(group.children(), [&](const auto* child) {
@@ -39,7 +43,24 @@ Result<void> convertTerrainToHeightField(
     if (const auto* linked = dynamic_cast<const mdl::GroupNode*>(node);
         linked
         && mdl::collectNodesWithLinkId({&map.worldNode()}, linked->linkId()).size() > 1)
-      return Error{"Unlink the terrain group before converting it to a height field."};
+      return Error{"Unlink the terrain group before editing its height field."};
+  return {};
+}
+
+void copyTerrainFaceAttributes(mdl::BrushFace& destination, const mdl::BrushFace& source)
+{
+  destination.copyAttributes(source);
+  if (const auto snapshot = source.takeUvCoordSystemSnapshot())
+    destination.restoreUvCoordSystemSnapshot(*snapshot);
+}
+} // namespace
+
+Result<void> convertTerrainToHeightField(
+  mdl::Map& map, mdl::GroupNode& group, const double spacing)
+{
+  const auto editable = checkTerrainEditable(map, group);
+  if (editable.is_error())
+    return std::get<Error>(editable.error());
   auto regionResult = group.group().terrainPaint().empty()
                         ? createTerrainRegion(group)
                         : TerrainRegion::decode(group.group().terrainPaint());
@@ -83,11 +104,7 @@ Result<void> convertTerrainToHeightField(
         return vm::is_equal(face.boundary(), candidate.boundary(), 1e-6);
       });
       if (match != source.faces().end())
-      {
-        face.copyAttributes(*match);
-        if (const auto snapshot = match->takeUvCoordSystemSnapshot())
-          face.restoreUvCoordSystemSnapshot(*snapshot);
-      }
+        copyTerrainFaceAttributes(face, *match);
     }
   }
 
@@ -116,6 +133,128 @@ Result<void> convertTerrainToHeightField(
   }
   if (!transaction.commit())
     return Error{"Could not commit the terrain conversion."};
+  return {};
+}
+
+Result<void> convertSelectedTerrainToHeightField(mdl::Map& map, const double spacing)
+{
+  const auto& selection = map.selection();
+  if (selection.nodes.size() == 1 && selection.groups.size() == 1)
+    return convertTerrainToHeightField(map, *selection.groups.front(), spacing);
+  if (selection.nodes.empty())
+  {
+    if (auto* group = map.editorContext().currentGroup())
+      return convertTerrainToHeightField(map, *group, spacing);
+    return Error{"Select a ground brush or group to create terrain."};
+  }
+  if (selection.brushes.empty() || selection.nodes.size() != selection.brushes.size())
+    return Error{"Select only ground brushes or a single brush group."};
+  if (std::ranges::any_of(selection.brushes, [&](const auto* brush) {
+        return !map.editorContext().editable(*brush)
+               || !map.editorContext().visible(*brush);
+      }))
+    return Error{"The selected ground is locked or hidden."};
+
+  auto transaction = mdl::Transaction{map, "Create Sculptable Terrain"};
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  if (!group)
+  {
+    transaction.cancel();
+    return Error{"Could not group the selected ground."};
+  }
+  const auto converted = convertTerrainToHeightField(map, *group, spacing);
+  if (converted.is_error())
+  {
+    transaction.cancel();
+    return std::get<Error>(converted.error());
+  }
+  if (!transaction.commit())
+    return Error{"Could not commit the terrain conversion."};
+  return {};
+}
+
+Result<void> updateTerrainHeightField(
+  mdl::Map& map, mdl::GroupNode& group, const TerrainHeightField& heights)
+{
+  const auto editable = checkTerrainEditable(map, group);
+  if (editable.is_error())
+    return std::get<Error>(editable.error());
+  auto decoded = TerrainRegion::decode(group.group().terrainPaint());
+  if (decoded.is_error())
+    return std::get<Error>(decoded.error());
+  auto region = std::move(decoded).value();
+  if (!region.heightField || !heights.valid())
+    return Error{"Invalid sculptable terrain height field."};
+  const auto& previous = *region.heightField;
+  if (
+    previous.columns != heights.columns || previous.rows != heights.rows
+    || previous.spacing != heights.spacing || previous.bottom != heights.bottom)
+    return Error{"Changing the terrain grid requires recreating the terrain."};
+  const auto childIndices = terrainHeightFieldBrushIndices(group, region);
+  if (childIndices.is_error())
+    return std::get<Error>(childIndices.error());
+
+  auto triangles = std::vector<size_t>{};
+  const auto changed = [&](const int column, const int row) {
+    const auto index = previous.index(column, row);
+    return previous.heights[index] != heights.heights[index];
+  };
+  for (auto row = 0; row < heights.rows; ++row)
+    for (auto column = 0; column < heights.columns; ++column)
+    {
+      const auto a = changed(column, row);
+      const auto b = changed(column + 1, row);
+      const auto c = changed(column + 1, row + 1);
+      const auto d = changed(column, row + 1);
+      const auto first = (size_t(row) * size_t(heights.columns) + size_t(column)) * 2;
+      if (a || b || c)
+        triangles.push_back(first);
+      if (a || c || d)
+        triangles.push_back(first + 1);
+    }
+  if (triangles.empty())
+    return {};
+  auto generated = createTerrainBrushes(
+    heights,
+    region.origin,
+    group.group().transformation(),
+    map.worldNode().mapFormat(),
+    map.worldBounds(),
+    "null",
+    triangles);
+  if (generated.is_error())
+    return std::get<Error>(generated.error());
+  auto brushes = std::move(generated).value();
+  auto changes = std::vector<std::pair<mdl::Node*, mdl::NodeContents>>{};
+  changes.reserve(brushes.size() + 1);
+  for (auto i = size_t{0}; i < triangles.size(); ++i)
+  {
+    auto* node =
+      static_cast<mdl::BrushNode*>(group.children()[childIndices.value()[triangles[i]]]);
+    const auto& source = node->brush();
+    const auto oldTop = std::ranges::find_if(
+      source.faces(), [](const auto& face) { return face.normal().z() > 1e-6; });
+    if (oldTop == source.faces().end())
+      return Error{"Terrain brush is missing its top face."};
+    for (auto& face : brushes[i].faces())
+    {
+      const auto match =
+        face.normal().z() > 1e-6
+          ? oldTop
+          : std::ranges::find_if(source.faces(), [&](const auto& candidate) {
+              return vm::is_equal(face.boundary(), candidate.boundary(), 1e-6);
+            });
+      if (match != source.faces().end())
+        copyTerrainFaceAttributes(face, *match);
+    }
+    changes.emplace_back(node, mdl::NodeContents{std::move(brushes[i])});
+  }
+  region.heightField = heights;
+  auto content = group.group();
+  content.setTerrainPaint(region.encode());
+  changes.emplace_back(&group, mdl::NodeContents{std::move(content)});
+  if (!mdl::updateNodeContents(map, "Sculpt Terrain", std::move(changes)))
+    return Error{"Could not update the terrain geometry."};
   return {};
 }
 } // namespace tb::ui

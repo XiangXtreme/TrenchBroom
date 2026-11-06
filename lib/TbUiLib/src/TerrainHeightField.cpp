@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <numeric>
 #include <utility>
 
 namespace tb::ui
@@ -64,10 +65,26 @@ size_t TerrainHeightField::index(const int column, const int row) const
 
 std::optional<double> TerrainHeightField::sample(const vm::vec2d& position) const
 {
+  return valid() ? sampleValidated(position) : std::nullopt;
+}
+
+std::vector<std::optional<double>> TerrainHeightField::sampleMany(
+  const std::span<const vm::vec2d> positions) const
+{
+  auto result = std::vector<std::optional<double>>{};
+  result.reserve(positions.size());
+  const auto isValid = valid();
+  for (const auto& position : positions)
+    result.push_back(isValid ? sampleValidated(position) : std::nullopt);
+  return result;
+}
+
+std::optional<double> TerrainHeightField::sampleValidated(const vm::vec2d& position) const
+{
   if (
-    !valid() || !std::isfinite(position.x()) || !std::isfinite(position.y())
-    || position.x() < 0.0 || position.y() < 0.0
-    || position.x() > double(columns) * spacing || position.y() > double(rows) * spacing)
+    !std::isfinite(position.x()) || !std::isfinite(position.y()) || position.x() < 0.0
+    || position.y() < 0.0 || position.x() > double(columns) * spacing
+    || position.y() > double(rows) * spacing)
     return std::nullopt;
 
   const auto x = position.x() / spacing;
@@ -186,6 +203,24 @@ Result<std::vector<mdl::Brush>> createTerrainBrushes(
   const vm::bbox3d& worldBounds,
   const std::string& materialName)
 {
+  constexpr auto MaxBrushes = size_t{32768};
+  if (!field.valid() || size_t(field.columns) * size_t(field.rows) > MaxBrushes / 2)
+    return Error{"Invalid or excessively dense terrain geometry."};
+  auto indices = std::vector<size_t>(size_t(field.columns) * size_t(field.rows) * 2);
+  std::iota(indices.begin(), indices.end(), size_t{0});
+  return createTerrainBrushes(
+    field, origin, transform, mapFormat, worldBounds, materialName, indices);
+}
+
+Result<std::vector<mdl::Brush>> createTerrainBrushes(
+  const TerrainHeightField& field,
+  const vm::vec2d& origin,
+  const vm::mat4x4d& transform,
+  const mdl::MapFormat mapFormat,
+  const vm::bbox3d& worldBounds,
+  const std::string& materialName,
+  const std::span<const size_t> triangleIndices)
+{
   // A map compiler needs two convex brushes per cell. Reject impractical requests
   // before allocating or building partial geometry.
   constexpr auto MaxBrushes = size_t{32768};
@@ -205,35 +240,36 @@ Result<std::vector<mdl::Brush>> createTerrainBrushes(
 
   const auto builder = mdl::BrushBuilder{mapFormat, worldBounds};
   auto brushes = std::vector<mdl::Brush>{};
-  brushes.reserve(size_t(field.columns) * size_t(field.rows) * 2);
-  for (auto row = 0; row < field.rows; ++row)
+  brushes.reserve(triangleIndices.size());
+  const auto triangleCount = size_t(field.columns) * size_t(field.rows) * 2;
+  for (const auto index : triangleIndices)
   {
-    for (auto column = 0; column < field.columns; ++column)
+    if (index >= triangleCount)
+      return Error{"Invalid terrain triangle index."};
+    const auto cell = index / 2;
+    const auto column = int(cell % size_t(field.columns));
+    const auto row = int(cell / size_t(field.columns));
+    const auto vertices = std::array{
+      std::pair{column, row},
+      std::pair{column + 1, row},
+      std::pair{column + 1, row + 1},
+      std::pair{column, row + 1}};
+    const auto triangle = index % 2 == 0 ? std::array{0, 1, 2} : std::array{0, 2, 3};
+    auto points = std::vector<vm::vec3d>{};
+    points.reserve(6);
+    for (const auto i : triangle)
     {
-      const auto vertices = std::array{
-        std::pair{column, row},
-        std::pair{column + 1, row},
-        std::pair{column + 1, row + 1},
-        std::pair{column, row + 1}};
-      for (const auto& triangle : {std::array{0, 1, 2}, std::array{0, 2, 3}})
-      {
-        auto points = std::vector<vm::vec3d>{};
-        points.reserve(6);
-        for (const auto i : triangle)
-        {
-          const auto [x, y] = vertices[size_t(i)];
-          const auto localX = origin.x() + double(x) * field.spacing;
-          const auto localY = origin.y() - double(y) * field.spacing;
-          points.push_back(
-            transform * vm::vec3d{localX, localY, field.heights[field.index(x, y)]});
-          points.push_back(transform * vm::vec3d{localX, localY, field.bottom});
-        }
-        auto brush = builder.createBrush(points, materialName);
-        if (brush.is_error())
-          return std::get<Error>(brush.error());
-        brushes.push_back(std::move(brush).value());
-      }
+      const auto [x, y] = vertices[size_t(i)];
+      const auto localX = origin.x() + double(x) * field.spacing;
+      const auto localY = origin.y() - double(y) * field.spacing;
+      points.push_back(
+        transform * vm::vec3d{localX, localY, field.heights[field.index(x, y)]});
+      points.push_back(transform * vm::vec3d{localX, localY, field.bottom});
     }
+    auto brush = builder.createBrush(points, materialName);
+    if (brush.is_error())
+      return std::get<Error>(brush.error());
+    brushes.push_back(std::move(brush).value());
   }
   return brushes;
 }

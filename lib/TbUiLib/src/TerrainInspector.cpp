@@ -46,6 +46,7 @@
 #include "ui/SwitchableMapViewContainer.h"
 #include "ui/TerrainExport.h"
 #include "ui/TerrainMaterial.h"
+#include "ui/TerrainOperations.h"
 
 #include <algorithm>
 #include <array>
@@ -53,6 +54,18 @@
 
 namespace tb::ui
 {
+namespace
+{
+bool terrainEditable(const mdl::Map& map, const mdl::GroupNode& group)
+{
+  return map.editorContext().editable(group) && map.editorContext().visible(group)
+         && std::ranges::none_of(group.children(), [&](const auto* child) {
+              return !map.editorContext().editable(*child)
+                     || !map.editorContext().visible(*child);
+            });
+}
+} // namespace
+
 TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   : m_app{app}
   , m_document{document}
@@ -60,6 +73,28 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_status = new QLabel{this};
   m_status->setObjectName(QStringLiteral("TerrainInspector_Status"));
   m_status->setWordWrap(true);
+
+  m_editMode = new QComboBox{this};
+  m_editMode->setObjectName(QStringLiteral("TerrainInspector_EditMode"));
+  m_editMode->addItem(tr("Material"));
+  m_editMode->addItem(tr("Sculpt"));
+
+  m_sculptMode = new QComboBox{this};
+  m_sculptMode->setObjectName(QStringLiteral("TerrainInspector_SculptMode"));
+  m_sculptMode->addItem(tr("Raise"), int(TerrainSculptMode::Raise));
+  m_sculptMode->addItem(tr("Lower"), int(TerrainSculptMode::Lower));
+  m_sculptMode->addItem(tr("Smooth"), int(TerrainSculptMode::Smooth));
+  m_sculptMode->addItem(tr("Flatten"), int(TerrainSculptMode::Flatten));
+
+  m_gridSpacing = new QComboBox{this};
+  m_gridSpacing->setObjectName(QStringLiteral("TerrainInspector_GridSpacing"));
+  for (const auto spacing : {16, 32, 64, 128})
+    m_gridSpacing->addItem(tr("%1 units").arg(spacing), spacing);
+  m_gridSpacing->setCurrentIndex(m_gridSpacing->findData(64));
+
+  m_lockEdges = new QCheckBox{tr("Lock terrain edges"), this};
+  m_lockEdges->setObjectName(QStringLiteral("TerrainInspector_LockEdges"));
+  m_lockEdges->setChecked(true);
 
   m_material = new QComboBox{this};
   m_material->setObjectName(QStringLiteral("TerrainInspector_SlotSelect"));
@@ -136,6 +171,9 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_create = new QPushButton{tr("Create Terrain Region")};
   m_create->setObjectName(QStringLiteral("TerrainInspector_CreateRegion"));
 
+  m_convert = new QPushButton{tr("Create Sculptable Terrain")};
+  m_convert->setObjectName(QStringLiteral("TerrainInspector_Convert"));
+
   m_paint = new QPushButton{tr("Paint Terrain")};
   m_paint->setObjectName(QStringLiteral("TerrainInspector_PaintTerrain"));
   m_paint->setCheckable(true);
@@ -144,6 +182,11 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_generate->setObjectName(QStringLiteral("TerrainInspector_ExportSnapshot"));
 
   auto* form = new QFormLayout{};
+  m_form = form;
+  form->addRow(tr("Edit mode"), m_editMode);
+  form->addRow(tr("Sculpt tool"), m_sculptMode);
+  form->addRow(tr("Grid spacing"), m_gridSpacing);
+  form->addRow(m_lockEdges);
   form->addRow(tr("Terrain Material"), m_terrainMaterial);
   form->addRow(tr("Paint Slot"), m_material);
   form->addRow(tr("Brush radius"), m_radius);
@@ -158,6 +201,7 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   layout->addWidget(m_status);
   layout->addWidget(m_create);
   layout->addLayout(form);
+  layout->addWidget(m_convert);
   layout->addWidget(m_paint);
   layout->addWidget(m_openLibrary);
   layout->addWidget(m_analyze);
@@ -168,6 +212,13 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   setLayout(layout);
 
   connect(m_create, &QPushButton::clicked, this, &TerrainInspector::createRegion);
+  connect(m_convert, &QPushButton::clicked, this, &TerrainInspector::convertSelection);
+  connect(m_editMode, &QComboBox::currentIndexChanged, this, [this] {
+    m_paint->setChecked(false);
+    updateModeControls();
+    refresh();
+    refreshViews();
+  });
   connect(m_generate, &QPushButton::clicked, this, &TerrainInspector::generate);
   connect(m_analyze, &QPushButton::clicked, this, &TerrainInspector::analyze);
   connect(m_showCuts, &QCheckBox::toggled, this, [this] { refreshViews(); });
@@ -222,6 +273,12 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_refreshTimer->setSingleShot(true);
   m_refreshTimer->setInterval(150);
   connect(m_refreshTimer, &QTimer::timeout, this, &TerrainInspector::refresh);
+  m_sculptTimer = new QTimer{this};
+  m_sculptTimer->setInterval(50);
+  connect(m_sculptTimer, &QTimer::timeout, this, [this] {
+    if (m_sculptStroke && m_previousPoint)
+      sculptTo(*m_previousPoint);
+  });
   m_connection +=
     m_document.selectionDidChangeNotifier.connect([this](const auto&) { refresh(); });
   m_connection += m_document.nodesDidChangeNotifier.connect(
@@ -230,6 +287,10 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
     [this](const auto& nodes) { nodesChanged(nodes); });
   m_connection += m_document.nodesWereAddedNotifier.connect(
     [this](const auto& nodes) { nodesChanged(nodes); });
+  m_connection +=
+    m_document.nodeLockingDidChangeNotifier.connect([this](const auto&) { refresh(); });
+  m_connection += m_document.nodeVisibilityDidChangeNotifier.connect(
+    [this](const auto&) { refresh(); });
   m_connection += m_document.groupWasOpenedNotifier.connect([this] { refresh(); });
   m_connection += m_document.groupWasClosedNotifier.connect([this] { refresh(); });
   m_connection += m_document.documentWasLoadedNotifier.connect([this] { refresh(); });
@@ -330,6 +391,21 @@ void TerrainInspector::updateSlotLabels(const std::string& materialAssetId)
   }
 }
 
+void TerrainInspector::updateModeControls()
+{
+  const auto sculpt = m_editMode->currentIndex() == 1;
+  const auto* group = selectedTerrainGroup(m_document.map());
+  const auto region = group ? TerrainRegion::decode(group->group().terrainPaint())
+                            : Result<TerrainRegion>{Error{"No terrain selected."}};
+  const auto hasHeightField =
+    region.is_success() && region.value().heightField.has_value();
+  m_form->setRowVisible(m_sculptMode, sculpt);
+  m_form->setRowVisible(m_lockEdges, sculpt);
+  m_form->setRowVisible(m_gridSpacing, sculpt && !hasHeightField);
+  m_convert->setVisible(sculpt && !hasHeightField);
+  m_paint->setText(sculpt ? tr("Sculpt Terrain") : tr("Paint Terrain"));
+}
+
 void TerrainInspector::refresh()
 {
   m_refreshTimer->stop();
@@ -343,25 +419,34 @@ void TerrainInspector::refresh()
                          && map.gameInfo().gameConfig.name == "Half-Life"
                          && map.worldNode().mapFormat() == mdl::MapFormat::Valve;
   const auto* group = supported ? selectedTerrainGroup(map) : nullptr;
+  if (m_sculptStroke && (!group || group->persistentId() != m_strokeGroup))
+    endStroke(false);
   m_refreshedGroup = group ? group->persistentId() : std::nullopt;
   m_refreshedPaint = group ? group->group().terrainPaint() : std::string{};
   const auto hasRegion = group && !group->group().terrainPaint().empty();
-  m_create->setEnabled(group && !hasRegion);
+  const auto editable = group && terrainEditable(map, *group);
+  const auto& selection = map.selection();
+  const auto selectedBrushes =
+    !selection.brushes.empty() && selection.brushes.size() == selection.nodes.size();
+  m_editMode->setEnabled(supported);
+  m_convert->setEnabled(supported && (editable || selectedBrushes));
+  m_create->setEnabled(editable && !hasRegion);
   m_generate->setEnabled(hasRegion);
-  m_paint->setEnabled(hasRegion);
-  m_material->setEnabled(hasRegion);
-  m_terrainMaterial->setEnabled(hasRegion);
-  m_radius->setEnabled(hasRegion);
-  m_strength->setEnabled(hasRegion);
-  m_hardness->setEnabled(hasRegion);
-  m_faceBudget->setEnabled(hasRegion);
-  m_wadBudget->setEnabled(hasRegion);
-  m_minFaceWidth->setEnabled(hasRegion);
-  m_patchDensity->setEnabled(hasRegion);
+  m_paint->setEnabled(hasRegion && editable);
+  m_material->setEnabled(hasRegion && editable);
+  m_terrainMaterial->setEnabled(hasRegion && editable);
+  m_radius->setEnabled(hasRegion && editable);
+  m_strength->setEnabled(hasRegion && editable);
+  m_hardness->setEnabled(hasRegion && editable);
+  m_faceBudget->setEnabled(hasRegion && editable);
+  m_wadBudget->setEnabled(hasRegion && editable);
+  m_minFaceWidth->setEnabled(hasRegion && editable);
+  m_patchDensity->setEnabled(hasRegion && editable);
   m_analyze->setEnabled(hasRegion);
   m_estimate->setText(
     hasRegion ? tr("Analyze to preview generated terrain statistics.") : QString{});
   m_openLibrary->setEnabled(supported);
+  updateModeControls();
 
   m_refreshingMaterial = true;
   m_terrainMaterial->clear();
@@ -386,7 +471,7 @@ void TerrainInspector::refresh()
     updateSlotLabels({});
     m_refreshingMaterial = false;
     m_status->setText(
-      supported ? tr("Select a brush group to create a terrain region.")
+      supported ? tr("Select ground brushes or a brush group to create terrain.")
                 : tr("Open a Half-Life Valve 220 map in a project to edit terrain."));
     return;
   }
@@ -400,6 +485,11 @@ void TerrainInspector::refresh()
     m_refreshingMaterial = false;
     return;
   }
+
+  if (m_editMode->currentIndex() == 1 && !region.value().heightField)
+    m_paint->setEnabled(false);
+  if (!editable)
+    m_paint->setChecked(false);
 
   {
     const auto facesBlocker = QSignalBlocker{m_faceBudget};
@@ -444,6 +534,11 @@ void TerrainInspector::refresh()
     m_analyze->setEnabled(false);
     return;
   }
+  if (!editable)
+  {
+    m_status->setText(tr("The terrain or one of its brushes is locked or hidden."));
+    return;
+  }
   m_status->setText(tr("%1 · %2 source top faces")
                       .arg(QString::fromStdString(group->name()))
                       .arg(surfaces.value().size()));
@@ -451,6 +546,8 @@ void TerrainInspector::refresh()
 
 void TerrainInspector::nodesChanged(const std::vector<mdl::Node*>& nodes)
 {
+  if (m_sculptApplying)
+    return;
   const auto* group = selectedTerrainGroup(m_document.map());
   if (!group || !std::ranges::any_of(nodes, [&](const auto* node) {
         return node == group || group->isAncestorOf(*node) || node->isAncestorOf(*group);
@@ -542,6 +639,8 @@ void TerrainInspector::refreshViews()
 bool TerrainInspector::saveRegion(
   mdl::GroupNode& group, const TerrainRegion& region, const QString& label)
 {
+  if (!terrainEditable(m_document.map(), group))
+    return false;
   auto content = group.group();
   const auto encoded = region.encode();
   if (content.terrainPaint() == encoded)
@@ -572,6 +671,16 @@ void TerrainInspector::createRegion()
   }
 }
 
+void TerrainInspector::convertSelection()
+{
+  const auto result = convertSelectedTerrainToHeightField(
+    m_document.map(), m_gridSpacing->currentData().toDouble());
+  if (result.is_error())
+    m_status->setText(QString::fromStdString(std::get<Error>(result.error()).msg));
+  else
+    refresh();
+}
+
 bool TerrainInspector::painting() const
 {
   return isVisible() && m_paint->isEnabled() && m_paint->isChecked();
@@ -589,21 +698,38 @@ size_t TerrainInspector::strokeRevision() const
 
 const TerrainRegion* TerrainInspector::previewStroke(const mdl::GroupNode& group) const
 {
-  return m_stroke && group.persistentId() == m_strokeGroup ? &*m_stroke : nullptr;
+  return m_stroke && !m_sculptStroke && group.persistentId() == m_strokeGroup ? &*m_stroke
+                                                                              : nullptr;
 }
 
 void TerrainInspector::beginStroke(const mdl::PickResult& pick)
 {
+  if (m_stroke)
+    endStroke(false);
   const auto* group = selectedTerrainGroup(m_document.map());
-  if (!group)
+  if (!group || !terrainEditable(m_document.map(), *group))
     return;
   auto region = TerrainRegion::decode(group->group().terrainPaint());
   if (region.is_error())
     return;
+  const auto sculpt = m_editMode->currentIndex() == 1;
+  if (sculpt && !region.value().heightField)
+    return;
   ++m_strokeRevision;
   m_stroke = std::move(region).value();
   m_strokeGroup = group->persistentId();
+  m_sculptStroke = sculpt;
+  if (m_sculptStroke)
+    m_document.map().startTransaction(
+      "Sculpt Terrain", mdl::TransactionScope::LongRunning);
   continueStroke(pick);
+  if (m_sculptStroke)
+  {
+    if (m_previousPoint)
+      m_sculptTimer->start();
+    else
+      endStroke(false);
+  }
 }
 
 void TerrainInspector::continueStroke(const mdl::PickResult& pick)
@@ -621,12 +747,24 @@ void TerrainInspector::continueStroke(const mdl::PickResult& pick)
   if (!face || face->node().parent() != group || face->face().normal().z() <= 1e-6)
   {
     m_previousPoint.reset();
+    if (m_sculptStroke)
+      m_sculptTimer->stop();
     return;
   }
   const auto inverse = vm::invert(group->group().transformation());
   if (!inverse)
     return;
-  const auto point = m_stroke->project(*inverse * hit.hitPoint());
+  const auto local = *inverse * hit.hitPoint();
+  const auto point = m_stroke->project(local);
+  if (m_sculptStroke)
+  {
+    if (!m_flattenHeight)
+      m_flattenHeight = local.z();
+    sculptTo(point * TerrainRegion::UnitsPerTexel);
+    if (m_sculptStroke && !m_sculptTimer->isActive())
+      m_sculptTimer->start();
+    return;
+  }
   const auto radius = m_radius->value() / TerrainRegion::UnitsPerTexel;
   const auto material = size_t(m_material->currentIndex());
   const auto previous = m_previousPoint.value_or(point);
@@ -642,11 +780,80 @@ void TerrainInspector::continueStroke(const mdl::PickResult& pick)
   m_previousPoint = point;
 }
 
+void TerrainInspector::sculptTo(const vm::vec2d& point)
+{
+  if (!m_sculptStroke || !m_stroke || !m_stroke->heightField || !m_flattenHeight)
+    return;
+  auto* group = selectedTerrainGroup(m_document.map());
+  if (!group || group->persistentId() != m_strokeGroup)
+  {
+    endStroke(false);
+    return;
+  }
+  auto height = *m_stroke->heightField;
+  const auto mode = TerrainSculptMode(m_sculptMode->currentData().toInt());
+  const auto radius = double(m_radius->value());
+  const auto strength =
+    double(m_strength->value()) / 100.0
+    * (mode == TerrainSculptMode::Smooth || mode == TerrainSculptMode::Flatten ? 0.15 : 1.0);
+  const auto previous = m_previousPoint.value_or(point);
+  const auto delta = point - previous;
+  const auto steps = std::max(1, int(std::ceil(vm::length(delta) / (radius / 4.0))));
+  auto changed = false;
+  for (auto i = 1; i <= steps; ++i)
+  {
+    const auto result = height.sculpt(
+      mode,
+      previous + delta * (double(i) / steps),
+      radius,
+      strength,
+      double(m_hardness->value()) / 100.0,
+      2.0,
+      *m_flattenHeight,
+      m_lockEdges->isChecked());
+    changed = changed || result.changed;
+  }
+  if (changed)
+  {
+    m_sculptApplying = true;
+    const auto result = updateTerrainHeightField(m_document.map(), *group, height);
+    m_sculptApplying = false;
+    if (result.is_error())
+    {
+      const auto message = QString::fromStdString(std::get<Error>(result.error()).msg);
+      endStroke(false);
+      m_status->setText(message);
+      return;
+    }
+    m_stroke->heightField = std::move(height);
+    m_refreshedPaint = group->group().terrainPaint();
+    refreshViews();
+  }
+  m_previousPoint = point;
+}
+
 void TerrainInspector::endStroke(const bool commit)
 {
   auto stroke = std::exchange(m_stroke, std::nullopt);
   auto id = std::exchange(m_strokeGroup, std::nullopt);
+  const auto sculpt = std::exchange(m_sculptStroke, false);
+  m_sculptTimer->stop();
   m_previousPoint.reset();
+  m_flattenHeight.reset();
+  if (sculpt)
+  {
+    auto& map = m_document.map();
+    if (commit)
+    {
+      if (!map.commitTransaction())
+        m_status->setText(tr("Could not save the terrain stroke."));
+    }
+    else
+      map.cancelTransaction();
+    refresh();
+    refreshViews();
+    return;
+  }
   if (commit && stroke)
   {
     if (auto* group = selectedTerrainGroup(m_document.map());
@@ -726,30 +933,67 @@ void TerrainInspector::render(
       const auto& transform = group->group().transformation();
       const auto& plane = face->face().boundary();
       const auto localCenter = *inverse * hit.hitPoint();
+      const auto region = TerrainRegion::decode(group->group().terrainPaint());
       const auto drawRing = [&](const double radius) {
         auto points = std::vector<vm::vec3f>{};
         constexpr auto segments = 64;
         points.reserve(segments + 1);
+        auto locals = std::vector<vm::vec3d>{};
+        auto positions = std::vector<vm::vec2d>{};
+        locals.reserve(segments + 1);
+        positions.reserve(segments + 1);
         for (auto i = 0; i <= segments; ++i)
         {
           const auto angle = 2.0 * vm::Cd::pi() * double(i) / segments;
-          const auto local =
+          locals.push_back(
             localCenter
-            + vm::vec3d{radius * std::cos(angle), radius * std::sin(angle), 0};
-          const auto xy = transform * local;
-          const auto point =
-            vm::vec3d{xy.x(), xy.y(), plane.zAt(vm::vec2d{xy.x(), xy.y()})}
-            + plane.normal * 0.5;
-          points.emplace_back(point);
+            + vm::vec3d{radius * std::cos(angle), radius * std::sin(angle), 0});
+          if (region.is_success() && region.value().heightField)
+            positions.push_back(
+              region.value().project(locals.back()) * TerrainRegion::UnitsPerTexel);
         }
-        renderer.setLineWidth(4.0f);
-        renderer.setForegroundColor(RgbaF{0, 0, 0, 0.85f});
-        renderer.renderLineStrip(points);
-        for (auto& point : points)
-          point = point + vm::vec3f{plane.normal * 0.05};
-        renderer.setLineWidth(2.0f);
-        renderer.setForegroundColor(RgbaF{1, 1, 1, 1});
-        renderer.renderLineStrip(points);
+        const auto heights = positions.empty()
+                               ? std::vector<std::optional<double>>{}
+                               : region.value().heightField->sampleMany(positions);
+        const auto drawSegment = [&] {
+          if (points.size() < 2)
+          {
+            points.clear();
+            return;
+          }
+          renderer.setLineWidth(4.0f);
+          renderer.setForegroundColor(RgbaF{0, 0, 0, 0.85f});
+          renderer.renderLineStrip(points);
+          for (auto& point : points)
+            point = point + vm::vec3f{0, 0, 0.05f};
+          renderer.setLineWidth(2.0f);
+          renderer.setForegroundColor(RgbaF{1, 1, 1, 1});
+          renderer.renderLineStrip(points);
+          points.clear();
+        };
+        for (auto i = 0; i <= segments; ++i)
+        {
+          auto local = locals[size_t(i)];
+          if (!heights.empty())
+          {
+            const auto height = heights[size_t(i)];
+            if (!height)
+            {
+              drawSegment();
+              continue;
+            }
+            local[2] = *height;
+            points.emplace_back(transform * local + vm::vec3d{0, 0, 0.5});
+          }
+          else
+          {
+            const auto xy = transform * local;
+            points.emplace_back(
+              vm::vec3d{xy.x(), xy.y(), plane.zAt(vm::vec2d{xy.x(), xy.y()})}
+              + plane.normal * 0.5);
+          }
+        }
+        drawSegment();
       };
       drawRing(double(m_radius->value()));
       if (m_hardness->value() > 0 && m_hardness->value() < 100)

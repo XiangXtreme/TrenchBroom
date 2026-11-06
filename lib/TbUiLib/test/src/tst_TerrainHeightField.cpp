@@ -15,6 +15,7 @@
 #include "vm/mat_ext.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <utility>
 
@@ -61,6 +62,12 @@ TEST_CASE("Terrain height field")
     CHECK(*terrain.sample({32, 32}) == Catch::Approx(64));
     CHECK_FALSE(terrain.sample({-1, 0}));
     CHECK_FALSE(terrain.sample({0, 33}));
+    const auto samples = terrain.sampleMany(
+      std::array{vm::vec2d{24, 8}, vm::vec2d{8, 24}, vm::vec2d{-1, 0}});
+    REQUIRE(samples.size() == 3);
+    CHECK(samples[0] == terrain.sample({24, 8}));
+    CHECK(samples[1] == terrain.sample({8, 24}));
+    CHECK_FALSE(samples[2]);
   }
 
   SECTION("raises and lowers with falloff without moving locked edges")
@@ -200,6 +207,12 @@ TEST_CASE("Sculptable terrain region preserves heights and paint")
   CHECK(decoded.value().patchDensityPercent == 200);
   CHECK(decoded.value().heightField->heights == region.heightField->heights);
   CHECK(decoded.value().encode() == encoded);
+
+  const auto paintKey = region.paintCacheKey();
+  region.heightField->heights[region.heightField->index(1, 1)] += 8;
+  CHECK(region.paintCacheKey() == paintKey);
+  region.paint({2, 2}, 8, 1);
+  CHECK(region.paintCacheKey() != paintKey);
 
   // Optional, unknown fields can be added without another format version.
   const auto bytes = QByteArray::fromBase64(
