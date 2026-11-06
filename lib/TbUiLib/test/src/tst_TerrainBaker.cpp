@@ -16,6 +16,7 @@
 #include "mdl/EditorContext.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
+#include "mdl/LockState.h"
 #include "mdl/Map.h"
 #include "mdl/Map_CopyPaste.h"
 #include "mdl/Map_Groups.h"
@@ -36,6 +37,7 @@
 #include "ui/TerrainExport.h"
 #include "ui/TerrainHeightField.h"
 #include "ui/TerrainMaterial.h"
+#include "ui/TerrainOperations.h"
 #include "ui/TerrainRegion.h"
 
 #include "kd/task_manager.h"
@@ -190,6 +192,102 @@ TEST_CASE("Terrain conversion joins aligned brushes without seams or gaps")
   CHECK(field.heights[field.index(20, 5)] == Catch::Approx(40));
   CHECK(convert(640, 48).is_error());
   CHECK(convert(704, 40).is_error());
+}
+
+TEST_CASE("Terrain conversion preserves source materials and is one undo step")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* left = new mdl::BrushNode{
+    requireValue(builder.createCuboid(vm::bbox3d{{0, -64, -64}, {64, 0, 0}}, "LEFT"))};
+  auto* right = new mdl::BrushNode{
+    requireValue(builder.createCuboid(vm::bbox3d{{64, -64, -64}, {128, 0, 0}}, "RIGHT"))};
+  const auto sourceTop = [](const auto& brush) {
+    const auto it = std::ranges::find_if(
+      brush.faces(), [](const auto& face) { return face.normal().z() > 0.9; });
+    REQUIRE(it != brush.faces().end());
+    return *it;
+  };
+  const auto leftTop = sourceTop(left->brush());
+  const auto rightTop = sourceTop(right->brush());
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {left, right}}});
+  mdl::selectNodes(map, {left, right});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+  auto region = requireValue(createTerrainRegion(*group));
+  region.paint({32, 32}, 48, 1);
+  const auto originalPaint = region.encode();
+  auto content = group->group();
+  content.setTerrainPaint(originalPaint);
+  REQUIRE(mdl::updateNodeContents(
+    map, "Paint", {{group, mdl::NodeContents{std::move(content)}}}));
+
+  group->setLockState(mdl::LockState::Locked);
+  CHECK(convertTerrainToHeightField(map, *group, 32).is_error());
+  CHECK(group->children().size() == 2);
+  CHECK(group->group().terrainPaint() == originalPaint);
+  group->setLockState(mdl::LockState::Inherited);
+
+  requireValue(convertTerrainToHeightField(map, *group, 32));
+  CHECK(group->children().size() == 16);
+  const auto converted =
+    requireValue(TerrainRegion::decode(group->group().terrainPaint()));
+  REQUIRE(converted.heightField);
+  CHECK(converted.weights == requireValue(TerrainRegion::decode(originalPaint)).weights);
+  REQUIRE(terrainSurfaces(*group, converted).is_success());
+  for (const auto* child : group->children())
+  {
+    const auto& brush = static_cast<const mdl::BrushNode*>(child)->brush();
+    const auto top = std::ranges::find_if(
+      brush.faces(), [](const auto& face) { return face.normal().z() > 0.9; });
+    const auto bottom = std::ranges::find_if(
+      brush.faces(), [](const auto& face) { return face.normal().z() < -0.9; });
+    REQUIRE(top != brush.faces().end());
+    REQUIRE(bottom != brush.faces().end());
+    const auto& source = top->center().x() < 64 ? leftTop : rightTop;
+    CHECK(top->materialName() == source.materialName());
+    CHECK(bottom->materialName() == source.materialName());
+    CHECK(
+      vm::is_equal(top->uvCoords(top->center()), source.uvCoords(top->center()), 1e-5f));
+  }
+  map.undoCommand();
+  CHECK(group->children().size() == 2);
+  CHECK(group->group().terrainPaint() == originalPaint);
+  map.redoCommand();
+  CHECK(group->children().size() == 16);
+  const auto redone = requireValue(TerrainRegion::decode(group->group().terrainPaint()));
+  CHECK(terrainSurfaces(*group, redone).is_success());
+}
+
+TEST_CASE("Terrain conversion does not desynchronize linked groups")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* source = new mdl::BrushNode{requireValue(
+    builder.createCuboid(vm::bbox3d{{0, -64, -64}, {64, 0, 0}}, "TERR_GRASS"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {source}}});
+  mdl::selectNodes(map, {source});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+  auto* linked = mdl::createLinkedDuplicate(map);
+  REQUIRE(linked);
+  mdl::deselectAll(map);
+  mdl::selectNodes(map, {group});
+  const auto result = convertTerrainToHeightField(map, *group, 32);
+  REQUIRE(result.is_error());
+  CHECK(std::get<Error>(result.error()).msg.find("Unlink") != std::string::npos);
+  CHECK(group->children().size() == 1);
+  CHECK(linked->children().size() == 1);
+  CHECK(group->group().terrainPaint().empty());
+  CHECK(linked->group().terrainPaint().empty());
 }
 
 TEST_CASE("Sculptable terrain survives map round trip and compiles its height field")
