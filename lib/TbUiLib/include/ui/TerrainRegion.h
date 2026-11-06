@@ -4,14 +4,17 @@
  */
 #pragma once
 
+#include <QJsonObject>
 #include <QPolygonF>
 
 #include "base/Result.h"
+#include "ui/TerrainHeightField.h"
 
 #include "vm/mat.h"
 #include "vm/vec.h"
 
 #include <array>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -45,6 +48,12 @@ struct TerrainRegion
   // Zero disables the width limit; density is relative to the default patch.
   int minFaceWidth = 0;
   int patchDensityPercent = 100;
+  // Present for sculptable regions; ordinary painted brush groups keep their existing
+  // representation until converted.
+  std::optional<TerrainHeightField> heightField;
+  // Preserve optional fields added by newer editors when this region is edited.
+  QJsonObject extensionFields;
+  QJsonObject heightFieldExtensionFields;
 
   explicit TerrainRegion(vm::vec2d origin, std::string materialAssetId = {});
   vm::vec2d project(const vm::vec3d& local) const;
@@ -69,6 +78,9 @@ struct TerrainSurface
 
 mdl::GroupNode* selectedTerrainGroup(const mdl::Map& map);
 Result<TerrainRegion> createTerrainRegion(const mdl::GroupNode& group);
+/** Sample aligned rectangular planar source brushes without changing their geometry. */
+Result<TerrainHeightField> createTerrainHeightField(
+  const mdl::GroupNode& group, const TerrainRegion& region, double spacing);
 Result<std::vector<TerrainSurface>> terrainSurfaces(
   const mdl::GroupNode& group, const TerrainRegion& region);
 double terrainArea(const QPolygonF& polygon);

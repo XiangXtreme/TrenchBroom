@@ -56,6 +56,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ProjectReference.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ProjectResourceAudit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TerrainBaker.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TerrainHeightField.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TerrainAtlas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PreferenceDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PrefabAsset.cpp

@@ -92,6 +92,7 @@ FaceWidth faceWidth(
 Result<std::unique_ptr<mdl::Node>> makePiece(
   const TerrainSurface& surface,
   const BakeFace& face,
+  QPolygonF clip,
   const TerrainRegion& region,
   const vm::mat4x4d& transform,
   const vm::mat4x4d& inverse,
@@ -127,18 +128,21 @@ Result<std::unique_ptr<mdl::Node>> makePiece(
     return std::get<Error>(textured.error());
   faces[surface.top] = std::move(textured).value();
 
+  if (clip.size() > 1 && clip.front() == clip.back())
+    clip.removeLast();
+  if (clip.size() < 3)
+    return Error{"Terrain generated an invalid cutting polygon."};
+
   // A triangle's bbox center lies on its diagonal. Use the vertex centroid.
   auto centroid = QPointF{};
-  for (const auto& point : face.polygon)
+  for (const auto& point : clip)
     centroid += point;
-  const auto middle =
-    transform * region.unproject(centroid / double(face.polygon.size()));
-  for (auto i = qsizetype{0}; i < face.polygon.size(); ++i)
+  const auto middle = transform * region.unproject(centroid / double(clip.size()));
+  for (auto i = qsizetype{0}; i < clip.size(); ++i)
   {
-    const auto a = transform * region.unproject(face.polygon[i]);
-    const auto b =
-      transform * region.unproject(face.polygon[(i + 1) % face.polygon.size()]);
-    const auto c = transform * region.unproject(face.polygon[i], 1.0);
+    const auto a = transform * region.unproject(clip[i]);
+    const auto b = transform * region.unproject(clip[(i + 1) % clip.size()]);
+    const auto c = transform * region.unproject(clip[i], 1.0);
     const auto plane = vm::from_points(a, b, c);
     if (!plane)
       return Error{"Terrain generated an invalid cutting plane."};
@@ -220,12 +224,22 @@ bool validPieces(
     return false;
   for (const auto& surface : surfaces)
     for (const auto& face : plan.faces)
+    {
+      const auto clipped = surface.outline.intersected(face.polygon);
       if (
-        terrainArea(surface.outline.intersected(face.polygon)) > 1e-7
+        terrainArea(clipped) > 1e-7
         && makePiece(
-             surface, face, region, transform, *inverse, vm::bbox3d{65536.0}, "tbt0_0")
+             surface,
+             face,
+             clipped,
+             region,
+             transform,
+             *inverse,
+             vm::bbox3d{65536.0},
+             "tbt0_0")
              .is_error())
         return false;
+    }
   return true;
 }
 
@@ -348,8 +362,8 @@ Result<void> bakeGroup(
         if (name.empty())
           name = fmt::format("tbt{:x}_{:x}", groupNumber, face.material);
       }
-      auto piece =
-        makePiece(surface, face, region.value(), transform, inverse, bounds, name);
+      auto piece = makePiece(
+        surface, face, clipped, region.value(), transform, inverse, bounds, name);
       if (piece.is_error())
         return std::get<Error>(piece.error());
       coverage += area;

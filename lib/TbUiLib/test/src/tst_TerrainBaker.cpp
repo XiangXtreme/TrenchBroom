@@ -8,6 +8,8 @@
 #include <QPointF>
 #include <QTemporaryDir>
 
+#include "base/Logger.h"
+#include "base/SimpleParserStatus.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushNode.h"
@@ -21,6 +23,8 @@
 #include "mdl/Map_Selection.h"
 #include "mdl/NodeContents.h"
 #include "mdl/PasteType.h"
+#include "mdl/WorldNode.h"
+#include "mdl/WorldReader.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
 #include "ui/ClipTool.h"
@@ -30,8 +34,11 @@
 #include "ui/QPathUtils.h"
 #include "ui/TerrainBaker.h"
 #include "ui/TerrainExport.h"
+#include "ui/TerrainHeightField.h"
 #include "ui/TerrainMaterial.h"
 #include "ui/TerrainRegion.h"
+
+#include "kd/task_manager.h"
 
 #include <algorithm>
 #include <array>
@@ -43,6 +50,7 @@
 #include <utility>
 #include <vector>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 namespace tb::ui
@@ -98,6 +106,248 @@ std::uint8_t sampleIndex(
   return texture.miptex[offset + size_t(wrappedV * width + wrappedU)];
 }
 } // namespace
+
+TEST_CASE("Terrain converts a planar rectangular slope without changing its surface")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* slope = new mdl::BrushNode{requireValue(builder.createBrush(
+    std::vector<vm::vec3d>{
+      {0, 0, 0},
+      {0, -64, 0},
+      {128, 0, 16},
+      {128, -64, 16},
+      {0, 0, -64},
+      {0, -64, -64},
+      {128, 0, -64},
+      {128, -64, -64}},
+    "TERR_GRASS"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {slope}}});
+  mdl::selectNodes(map, {slope});
+  auto* group = mdl::groupSelectedNodes(map, "Slope");
+  REQUIRE(group);
+  const auto region = requireValue(createTerrainRegion(*group));
+  const auto field = requireValue(createTerrainHeightField(*group, region, 32));
+  CHECK(field.columns == 4);
+  CHECK(field.rows == 2);
+  CHECK(field.bottom == Catch::Approx(-64));
+  for (auto row = 0; row <= field.rows; ++row)
+    for (auto column = 0; column <= field.columns; ++column)
+      CHECK(field.heights[field.index(column, row)] == Catch::Approx(column * 4));
+  CHECK(createTerrainHeightField(*group, region, 30).is_error());
+}
+
+TEST_CASE("Terrain conversion joins aligned brushes without seams or gaps")
+{
+  const auto convert = [](const double rightStart, const double rightHeight) {
+    auto fixture = MapDocumentFixture{};
+    auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+    auto& map = fixture.create(config).map();
+    mdl::selectAllNodes(map);
+    mdl::removeSelectedNodes(map);
+    const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+    auto* left = new mdl::BrushNode{requireValue(builder.createBrush(
+      std::vector<vm::vec3d>{
+        {0, 0, 0},
+        {0, -640, 0},
+        {640, 0, 40},
+        {640, -640, 40},
+        {0, 0, -64},
+        {0, -640, -64},
+        {640, 0, -64},
+        {640, -640, -64}},
+      "TERR_GRASS"))};
+    auto* right = new mdl::BrushNode{requireValue(builder.createBrush(
+      std::vector<vm::vec3d>{
+        {rightStart, 0, rightHeight},
+        {rightStart, -640, rightHeight},
+        {1280, 0, rightHeight},
+        {1280, -640, rightHeight},
+        {rightStart, 0, -64},
+        {rightStart, -640, -64},
+        {1280, 0, -64},
+        {1280, -640, -64}},
+      "TERR_GRASS"))};
+    mdl::addNodes(map, {{map.editorContext().currentLayer(), {left, right}}});
+    mdl::selectNodes(map, {left, right});
+    auto* group = mdl::groupSelectedNodes(map, "Terrain");
+    REQUIRE(group);
+    const auto region = requireValue(createTerrainRegion(*group));
+    return createTerrainHeightField(*group, region, 64);
+  };
+
+  const auto result = convert(640, 40);
+  REQUIRE(result.is_success());
+  const auto& field = result.value();
+  CHECK(field.columns == 20);
+  CHECK(field.rows == 10);
+  CHECK(field.heights[field.index(5, 5)] == Catch::Approx(20));
+  CHECK(field.heights[field.index(10, 5)] == Catch::Approx(40));
+  CHECK(field.heights[field.index(20, 5)] == Catch::Approx(40));
+  CHECK(convert(640, 48).is_error());
+  CHECK(convert(704, 40).is_error());
+}
+
+TEST_CASE("Sculptable terrain survives map round trip and compiles its height field")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  auto height = requireValue(TerrainHeightField::create(2, 2, 64, -64, 0));
+  height.heights[height.index(1, 1)] = 24;
+  auto brushes = requireValue(createTerrainBrushes(
+    height,
+    {0, 0},
+    vm::mat4x4d::identity(),
+    mdl::MapFormat::Valve,
+    map.worldBounds(),
+    "TERR_GRASS"));
+  auto nodes = std::vector<mdl::Node*>{};
+  for (auto& brush : brushes)
+    nodes.push_back(new mdl::BrushNode{std::move(brush)});
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), nodes}});
+  mdl::selectNodes(map, nodes);
+  auto* group = mdl::groupSelectedNodes(map, "Sculpted terrain");
+  REQUIRE(group);
+  auto region = requireValue(createTerrainRegion(*group));
+  region.heightField = height;
+  region.paint({32, 32}, 64, 1, 1, 0.5);
+  REQUIRE(terrainSurfaces(*group, region).is_success());
+  auto content = group->group();
+  content.setTerrainPaint(region.encode());
+  REQUIRE(mdl::updateNodeContents(
+    map, "Set sculpted terrain", {{group, mdl::NodeContents{std::move(content)}}}));
+
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("sculpted.map"));
+  requireValue(map.saveTo(path));
+  const auto bytes = readBytes(path);
+  auto logger = NullLogger{};
+  auto status = SimpleParserStatus{logger};
+  auto tasks = kdl::task_manager{2};
+  const auto text =
+    std::string_view{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+  auto world = requireValue(mdl::WorldReader{text, mdl::MapFormat::Valve, {}}.read(
+    map.worldBounds(), status, tasks));
+  auto* loadedGroup = static_cast<mdl::GroupNode*>(nullptr);
+  const auto collect = [&](const auto& self, mdl::Node& node) -> void {
+    if (auto* candidate = dynamic_cast<mdl::GroupNode*>(&node);
+        candidate && !candidate->group().terrainPaint().empty())
+      loadedGroup = candidate;
+    for (auto* child : node.children())
+      self(self, *child);
+  };
+  collect(collect, *world);
+  REQUIRE(loadedGroup);
+  const auto restored =
+    requireValue(TerrainRegion::decode(loadedGroup->group().terrainPaint()));
+  REQUIRE(restored.heightField);
+  CHECK(restored.heightField->heights == height.heights);
+  CHECK(restored.encode() == region.encode());
+  REQUIRE(terrainSurfaces(*loadedGroup, restored).is_success());
+  const auto snapshot = requireValue(bakeTerrainSnapshot(bytes));
+  REQUIRE(snapshot);
+  CHECK(snapshot->topFaces >= brushes.size());
+  CHECK_FALSE(snapshot->textures.empty());
+
+  auto inconsistent = restored;
+  inconsistent.heightField->heights[inconsistent.heightField->index(1, 1)] += 1;
+  CHECK(terrainSurfaces(*loadedGroup, inconsistent).is_error());
+}
+
+TEST_CASE("Terrain supports multiple upward faces without duplicating volume")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  auto* brush = new mdl::BrushNode{requireValue(builder.createBrush(
+    std::vector<vm::vec3d>{
+      {0, 0, 0},
+      {256, 0, 0},
+      {256, -256, 0},
+      {0, -256, 64},
+      {0, 0, -64},
+      {256, 0, -64},
+      {256, -256, -64},
+      {0, -256, -64}},
+    "TERR_GRASS"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {brush}}});
+  mdl::selectNodes(map, {brush});
+  auto* group = mdl::groupSelectedNodes(map, "Terrain");
+  REQUIRE(group);
+
+  auto region = requireValue(createTerrainRegion(*group));
+  const auto surfaces = requireValue(terrainSurfaces(*group, region));
+  REQUIRE(surfaces.size() == 2);
+  region.paint({96, 96}, 64, 1);
+  auto content = group->group();
+  content.setTerrainPaint(region.encode());
+  REQUIRE(mdl::updateNodeContents(
+    map, "Paint terrain", {{group, mdl::NodeContents{std::move(content)}}}));
+
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto path = pathFromQString(directory.filePath("multi-top.map"));
+  requireValue(map.saveTo(path));
+  const auto snapshot = requireValue(bakeTerrainSnapshot(readBytes(path)));
+  REQUIRE(snapshot);
+
+  auto logger = NullLogger{};
+  auto status = SimpleParserStatus{logger};
+  auto tasks = kdl::task_manager{2};
+  const auto text = std::string_view{
+    reinterpret_cast<const char*>(snapshot->map.data()), snapshot->map.size()};
+  auto world = requireValue(mdl::WorldReader{text, mdl::MapFormat::Valve, {}}.read(
+    map.worldBounds(), status, tasks));
+  auto output = std::vector<const mdl::BrushNode*>{};
+  const auto collect = [&](const auto& self, const mdl::Node& node) -> void {
+    if (const auto* found = dynamic_cast<const mdl::BrushNode*>(&node))
+      output.push_back(found);
+    for (const auto* child : node.children())
+      self(self, *child);
+  };
+  collect(collect, *world);
+  REQUIRE(output.size() >= 2);
+
+  auto topOutlines = std::vector<QPolygonF>{};
+  auto area = 0.0;
+  for (const auto* piece : output)
+  {
+    for (const auto& vertex : piece->brush().vertexPositions())
+      for (const auto& face : brush->brush().faces())
+        CHECK(face.boundary().point_distance(vertex) < 1e-4);
+    for (const auto& face : piece->brush().faces())
+    {
+      if (face.normal().z() <= 1e-6)
+        continue;
+      auto outline = QPolygonF{};
+      for (const auto& vertex : face.vertexPositions())
+      {
+        const auto p = region.project(vertex);
+        outline.append(QPointF{p.x(), p.y()});
+      }
+      for (const auto& other : topOutlines)
+        if (outline.boundingRect().intersects(other.boundingRect()))
+          CHECK(terrainArea(outline.intersected(other)) < 1e-4);
+      area += terrainArea(outline);
+      topOutlines.push_back(std::move(outline));
+    }
+  }
+  auto sourceArea = 0.0;
+  for (const auto& surface : surfaces)
+    sourceArea += terrainArea(surface.outline);
+  CHECK(std::abs(area - sourceArea) < 1e-3);
+}
 
 TEST_CASE("Terrain baker shares terrain-aligned custom texture tiles")
 {
