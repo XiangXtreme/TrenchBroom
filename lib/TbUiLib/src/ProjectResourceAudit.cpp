@@ -67,11 +67,16 @@ class ReferenceParser : public mdl::StandardMapParser
 {
   std::string m_classname;
   bool m_hasWorld = false;
+  bool m_includeEditorReferences;
   std::vector<Reference> m_references;
 
 public:
-  ReferenceParser(const std::string& text, const mdl::MapFormat format)
+  ReferenceParser(
+    const std::string& text,
+    const mdl::MapFormat format,
+    const bool includeEditorReferences)
     : StandardMapParser{text, format, format}
+    , m_includeEditorReferences{includeEditorReferences}
   {
   }
 
@@ -161,7 +166,14 @@ private:
       if (model || sprite || gib || shooter)
         m_references.push_back({location.line, where, value, ReferenceKind::File});
       else if (m_classname == "infodecal" && key == "texture")
-        m_references.push_back({location.line, where, value, ReferenceKind::Unsupported});
+        m_references.push_back(
+          {location.line,
+           where,
+           value,
+           m_includeEditorReferences ? ReferenceKind::Texture
+                                     : ReferenceKind::Unsupported});
+      else if (m_includeEditorReferences && normalizeGamePath(value))
+        m_references.push_back({location.line, where, value, ReferenceKind::File});
     }
   }
   void onEndEntity(const FileLocation&, ParserStatus&) override {}
@@ -217,7 +229,8 @@ private:
   }
 };
 
-Result<std::vector<Reference>> scan(const std::vector<std::uint8_t>& bytes)
+Result<std::vector<Reference>> scan(
+  const std::vector<std::uint8_t>& bytes, const bool includeEditorReferences)
 {
   const auto text = std::string{bytes.begin(), bytes.end()};
   auto stream = std::istringstream{text};
@@ -227,14 +240,14 @@ Result<std::vector<Reference>> scan(const std::vector<std::uint8_t>& bytes)
              if (format != mdl::MapFormat::Standard && format != mdl::MapFormat::Valve)
                return Error{
                  "Resource checking requires a Standard or Valve MAP format header."};
-             return ReferenceParser{text, format}.read();
+             return ReferenceParser{text, format, includeEditorReferences}.read();
            });
 }
 
-} // namespace
-
-Result<ProjectResourceAudit> auditGoldSrcProjectResources(
-  const ProjectSession& session, const std::optional<std::string>& mapId)
+Result<ProjectResourceAudit> auditProjectResources(
+  const ProjectSession& session,
+  const std::optional<std::string>& mapId,
+  const bool includeEditorReferences)
 {
   const auto index = ProjectReferenceIndex::build(session);
   if (index.is_error())
@@ -259,7 +272,10 @@ Result<ProjectResourceAudit> auditGoldSrcProjectResources(
   {
     if (map.type != project::AssetType::Map || (mapId && map.id != *mapId))
       continue;
-    const auto references = session.workingMapContents(map.id) | kdl::and_then(scan);
+    const auto references =
+      session.workingMapContents(map.id) | kdl::and_then([&](const auto& bytes) {
+        return scan(bytes, includeEditorReferences);
+      });
     if (references.is_error())
     {
       result.uses.push_back(
@@ -334,6 +350,82 @@ Result<ProjectResourceAudit> auditGoldSrcProjectResources(
           "Expected a safe relative game path without empty, . or .. components.";
       }
       result.uses.push_back(std::move(use));
+    }
+  }
+  return result;
+}
+
+} // namespace
+
+Result<ProjectResourceAudit> auditGoldSrcProjectResources(
+  const ProjectSession& session, const std::optional<std::string>& mapId)
+{
+  return auditProjectResources(session, mapId, false);
+}
+
+Result<std::map<std::string, std::vector<std::string>>> projectAssetMapReferences(
+  const ProjectSession& session)
+{
+  const auto audit = auditProjectResources(session, std::nullopt, true);
+  if (audit.is_error())
+    return std::get<Error>(audit.error());
+  auto roots = std::map<std::string, std::set<std::string>>{};
+  auto unreadableWads = std::set<std::string>{};
+  for (const auto& use : audit.value().uses)
+  {
+    if (use.status == ProjectResourceStatus::ScanError && use.mapId.empty())
+    {
+      // A broken WAD cannot prove its texture names unused, but does not make unrelated
+      // model/sound references unknowable. Keep it while any map remains.
+      unreadableWads.insert(use.assetIds.begin(), use.assetIds.end());
+      continue;
+    }
+    if (
+      use.status == ProjectResourceStatus::ScanError
+      || use.status == ProjectResourceStatus::Unsupported)
+      return Error{QObject::tr("Cannot verify project map references: %1\n%2")
+                     .arg(QString::fromStdString(use.mapPath))
+                     .arg(QString::fromStdString(use.detail))
+                     .toStdString()};
+    roots[use.mapPath].insert(use.assetIds.begin(), use.assetIds.end());
+  }
+  // Explicit catalog dependencies can also originate on a map itself.
+  const auto assets = session.store().assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+  for (const auto& asset : assets.value())
+    if (asset.type == project::AssetType::Map)
+    {
+      roots[asset.virtualPath].insert(unreadableWads.begin(), unreadableWads.end());
+      const auto dependencies = session.store().dependencies(asset.id);
+      if (dependencies.is_error())
+        return std::get<Error>(dependencies.error());
+      for (const auto& dependency : dependencies.value())
+        roots[asset.virtualPath].insert(dependency.dependencyId);
+    }
+  auto result = std::map<std::string, std::vector<std::string>>{};
+  auto dependencyCache = std::map<std::string, std::vector<project::AssetDependency>>{};
+  for (const auto& [mapPath, ids] : roots)
+  {
+    auto pending = std::vector<std::string>{ids.begin(), ids.end()};
+    auto visited = std::set<std::string>{};
+    while (!pending.empty())
+    {
+      auto id = std::move(pending.back());
+      pending.pop_back();
+      if (!visited.insert(id).second)
+        continue;
+      result[id].push_back(mapPath);
+      auto cached = dependencyCache.find(id);
+      if (cached == dependencyCache.end())
+      {
+        auto dependencies = session.store().dependencies(id);
+        if (dependencies.is_error())
+          return std::get<Error>(dependencies.error());
+        cached = dependencyCache.emplace(id, std::move(dependencies).value()).first;
+      }
+      for (const auto& dependency : cached->second)
+        pending.push_back(dependency.dependencyId);
     }
   }
   return result;

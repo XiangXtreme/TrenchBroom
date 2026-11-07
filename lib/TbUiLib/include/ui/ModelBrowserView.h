@@ -238,6 +238,7 @@ signals:
   /** Applies the current library revision to an existing project snapshot. */
   void libraryAssetUpdateRequested(const QString& projectAssetId);
   void libraryAssetFindUsesRequested(const QString& projectAssetId);
+  void projectAssetRemoveRequested(const QString& projectAssetId);
 };
 
 } // namespace tb::ui

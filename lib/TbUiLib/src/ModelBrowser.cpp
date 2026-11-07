@@ -299,6 +299,10 @@ ModelBrowser::ModelBrowser(
   updateSourceControls();
   if (m_project)
   {
+    connect(m_project.get(), &ProjectSession::mapContentsChanged, this, [this]() {
+      if (m_unusedButton->isChecked())
+        m_usageRefreshTimer->start();
+    });
     connect(m_project.get(), &ProjectSession::contentsChanged, this, [this]() {
       markAssetsDirty();
       scheduleAssetRefresh();
@@ -573,11 +577,16 @@ void ModelBrowser::createGui(AppController& appController)
   m_usedButton->setProperty("tbControlRole", "compact");
   m_usedButton->setCheckable(true);
   m_usedButton->setEnabled(bool(m_project));
+  m_unusedButton = new QToolButton{};
+  m_unusedButton->setObjectName("ModelBrowser_Unreferenced");
+  m_unusedButton->setText(tr("No map references"));
+  m_unusedButton->setProperty("tbControlRole", "compact");
+  m_unusedButton->setCheckable(true);
   m_usageRefreshTimer = new QTimer{this};
   m_usageRefreshTimer->setSingleShot(true);
   m_usageRefreshTimer->setInterval(150);
   connect(m_usageRefreshTimer, &QTimer::timeout, this, [this]() {
-    if (m_usedButton->isChecked())
+    if (m_usedButton->isChecked() || m_unusedButton->isChecked())
     {
       refreshUsage();
       applyTypeFilter();
@@ -631,7 +640,22 @@ void ModelBrowser::createGui(AppController& appController)
     m_waveKind = inspection::WaveKind(m_soundCombo->currentData().toInt());
     applyTypeFilter();
   });
-  connect(m_usedButton, &QToolButton::toggled, this, [this]() {
+  connect(m_unusedButton, &QToolButton::toggled, this, [this](const bool checked) {
+    if (checked)
+    {
+      const auto blocker = QSignalBlocker{m_usedButton};
+      m_usedButton->setChecked(false);
+    }
+    m_usageRefreshTimer->stop();
+    refreshUsage();
+    applyTypeFilter();
+  });
+  connect(m_usedButton, &QToolButton::toggled, this, [this](const bool checked) {
+    if (checked)
+    {
+      const auto blocker = QSignalBlocker{m_unusedButton};
+      m_unusedButton->setChecked(false);
+    }
     m_usageRefreshTimer->stop();
     refreshUsage();
     applyTypeFilter();
@@ -662,6 +686,7 @@ void ModelBrowser::createGui(AppController& appController)
   metadataLayout->setContentsMargins(0, 0, 0, 0);
   metadataLayout->setSpacing(6);
   metadataLayout->addWidget(m_usedButton);
+  metadataLayout->addWidget(m_unusedButton);
   metadataLayout->addWidget(m_favoritesButton);
   metadataLayout->addStretch(1);
   filterForm->addRow(metadataRow);
@@ -1187,6 +1212,11 @@ void ModelBrowser::bindEvents(AppController& appController)
     &ModelBrowserView::libraryAssetFindUsesRequested,
     this,
     &ModelBrowser::findProjectAssetUses);
+  connect(
+    m_view,
+    &ModelBrowserView::projectAssetRemoveRequested,
+    this,
+    &ModelBrowser::removeProjectAsset);
 
   connect(
     m_savePrefabButton, &QToolButton::clicked, this, [&]() { saveSelectionAsPrefab(); });
@@ -1225,7 +1255,7 @@ void ModelBrowser::connectMapObservers()
   m_mapNotifierConnection.disconnect();
   m_mapNotifierConnection +=
     m_document->documentDidChangeNotifier.connect([this](const auto&...) {
-      if (m_usedButton->isChecked())
+      if (m_usedButton->isChecked() || m_unusedButton->isChecked())
         m_usageRefreshTimer->start();
     });
   m_mapNotifierConnection +=
@@ -1445,7 +1475,8 @@ void ModelBrowser::updateSearchPlaceholder()
 bool ModelBrowser::includeDefaultRootsForListing() const
 {
   return browserFilterIncludesSource(m_sourceFilter, BrowserSource::GameFiles)
-         && !m_typeFilter && !m_usedButton->isChecked() && !m_favoritesButton->isChecked()
+         && !m_typeFilter && !m_usedButton->isChecked() && !m_unusedButton->isChecked()
+         && !m_favoritesButton->isChecked()
          && m_tagCombo->currentData().toString().isEmpty();
 }
 
@@ -1456,6 +1487,13 @@ void ModelBrowser::refreshResultCount()
     return;
   }
 
+  if (m_unusedButton->isChecked() && !m_projectReferenceError.isEmpty())
+  {
+    m_resultCount->setText(tr("Reference scan failed"));
+    m_resultCount->setToolTip(m_projectReferenceError);
+    return;
+  }
+  m_resultCount->setToolTip({});
   const auto entries = modelBrowserEntries(
     m_folderPath,
     m_view->assets(),
@@ -1530,7 +1568,9 @@ void ModelBrowser::updateFilterSummary()
   {
     ++active;
   }
-  if (m_usedButton && m_usedButton->isChecked())
+  if (
+    (m_usedButton && m_usedButton->isChecked())
+    || (m_unusedButton && m_unusedButton->isChecked()))
   {
     ++active;
   }
@@ -2176,10 +2216,15 @@ void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
   }
   saveBrowsingState();
   if (m_sourceFilter == BrowserSourceFilter::Project)
+  {
     m_projectUsedInMap = m_usedButton->isChecked();
+    m_projectUnused = m_unusedButton->isChecked();
+  }
   m_sourceFilter = source;
   {
     const auto blocker = QSignalBlocker{m_usedButton};
+    const auto unusedBlocker = QSignalBlocker{m_unusedButton};
+    m_unusedButton->setChecked(source == BrowserSourceFilter::Project && m_projectUnused);
     m_usedButton->setChecked(
       source == BrowserSourceFilter::Project && m_projectUsedInMap);
   }
@@ -2270,6 +2315,11 @@ std::vector<BrowserAsset> ModelBrowser::visibleAssets() const
     assets =
       id ? browserAssetsUsedInMap(assets, m_usage, *id) : std::vector<BrowserAsset>{};
   }
+  if (m_unusedButton->isChecked())
+    std::erase_if(assets, [&](const auto& asset) {
+      return !m_projectReferences || asset.type == BrowserCellType::Map
+             || m_projectReferences->contains(asset.assetId);
+    });
   if (m_skyboxFilter)
     std::erase_if(
       assets, [&](const auto& asset) { return asset.skybox != *m_skyboxFilter; });
@@ -2359,6 +2409,7 @@ void ModelBrowser::revealProjectAsset(const std::string& assetId)
   if (!m_selectionOnly)
     m_typeCombo->setCurrentIndex(0);
   m_usedButton->setChecked(false);
+  m_unusedButton->setChecked(false);
   m_favoritesButton->setChecked(false);
   m_tagCombo->setCurrentIndex(0);
   m_searchBox->clear();
@@ -2447,6 +2498,22 @@ void ModelBrowser::refreshUsage()
       if (use.status == ProjectResourceStatus::ScanError)
         m_usageError += QString::fromStdString(use.detail) + "\n";
   }
+  m_projectReferences.reset();
+  m_projectReferenceError.clear();
+  if (m_unusedButton->isChecked() && m_project)
+  {
+    auto references = projectAssetMapReferences(*m_project);
+    if (references.is_success())
+      m_projectReferences = std::move(references).value();
+    else
+      m_projectReferenceError =
+        QString::fromStdString(std::get<Error>(references.error()).msg);
+  }
+  m_unusedButton->setToolTip(
+    m_projectReferenceError.isEmpty()
+      ? tr("Assets unused by all project maps, including unsaved edits and indirect "
+           "dependencies. Maps are excluded.")
+      : tr("Cannot verify unused assets: %1").arg(m_projectReferenceError));
   m_usedButton->setToolTip(
     !id ? tr("An active project map is required")
     : !m_usageError.isEmpty()
@@ -2458,6 +2525,8 @@ void ModelBrowser::refreshUsage()
 void ModelBrowser::updateSourceControls()
 {
   const auto projectMode = m_sourceFilter == BrowserSourceFilter::Project;
+  m_unusedButton->setVisible(projectMode);
+  m_unusedButton->setEnabled(projectMode);
   m_usedButton->setVisible(projectMode);
   m_usedButton->setEnabled(projectMode && m_mapActionsEnabled);
   if (m_sourceCombo)
@@ -2544,6 +2613,32 @@ void ModelBrowser::updateProjectAsset(const QString& projectAssetId)
   scheduleAssetRefresh();
 }
 
+void ModelBrowser::removeProjectAsset(const QString& projectAssetId)
+{
+  if (!m_project)
+    return;
+  const auto asset = m_project->store().findAsset(projectAssetId.toStdString());
+  if (asset.is_error() || !asset.value())
+    return;
+  if (
+    QMessageBox::question(
+      this,
+      tr("Remove from Project"),
+      tr("Remove \"%1\" from this project? The asset library is kept.")
+        .arg(QString::fromStdString(asset.value()->displayName)),
+      QMessageBox::Yes | QMessageBox::Cancel,
+      QMessageBox::Cancel)
+    != QMessageBox::Yes)
+    return;
+  // Recheck live map contents after confirmation; filtering is only a cached listing.
+  const auto removed = m_project->removeAsset(projectAssetId.toStdString());
+  if (removed.is_error())
+    QMessageBox::warning(
+      this,
+      tr("Remove from Project"),
+      QString::fromStdString(std::get<Error>(removed.error()).msg));
+}
+
 void ModelBrowser::findProjectAssetUses(const QString& projectAssetId)
 {
   if (m_project)
@@ -2614,7 +2709,8 @@ void ModelBrowser::rebuildFolderTree()
 
   if (
     m_folderPath.empty() && !m_typeFilter && !m_usedButton->isChecked()
-    && !m_favoritesButton->isChecked() && m_tagCombo->currentData().toString().isEmpty())
+    && !m_unusedButton->isChecked() && !m_favoritesButton->isChecked()
+    && m_tagCombo->currentData().toString().isEmpty())
   {
     for (const auto& [type, rootPath] : assetBrowserRoots())
     {

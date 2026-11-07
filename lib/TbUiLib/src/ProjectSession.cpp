@@ -425,18 +425,15 @@ Result<void> ProjectSession::removeAsset(const std::string& id)
   const auto asset = m_store->findAsset(id);
   if (asset.is_error())
     return std::get<Error>(asset.error());
-  if (asset.value() && asset.value()->type == project::AssetType::Material)
+  const auto references = projectAssetMapReferences(*this);
+  if (references.is_error())
+    return std::get<Error>(references.error());
+  if (const auto uses = references.value().find(id); uses != references.value().end())
   {
-    const auto audit = auditGoldSrcProjectResources(*this);
-    if (audit.is_error())
-      return std::get<Error>(audit.error());
-    for (const auto& use : audit.value().uses)
-    {
-      if (std::ranges::find(use.assetIds, id) != use.assetIds.end())
-        return Error{"Terrain material is referenced by a project map."};
-      if (!use.mapId.empty() && use.status == ProjectResourceStatus::ScanError)
-        return Error{"Cannot verify terrain material references in a project map."};
-    }
+    auto message = tr("Asset is referenced by project maps:").toStdString();
+    for (const auto& mapPath : uses->second)
+      message += "\n" + mapPath;
+    return Error{message};
   }
   return m_store->removeAsset(id) | kdl::transform([&]() { changed(); });
 }

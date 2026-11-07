@@ -98,6 +98,10 @@ private:
     m_waveInfoCache;
   QToolButton* m_usedButton = nullptr;
   bool m_projectUsedInMap = false;
+  QToolButton* m_unusedButton = nullptr;
+  bool m_projectUnused = false;
+  std::optional<std::map<std::string, std::vector<std::string>>> m_projectReferences;
+  QString m_projectReferenceError;
   QToolButton* m_favoritesButton = nullptr;
   QComboBox* m_tagCombo = nullptr;
   QPointer<AssetLibraryWindow> m_libraryWindow;
@@ -233,6 +237,7 @@ private:
   void captureLibraryAsset(const QString& libraryId, const QString& libraryAssetId);
   void updateProjectAsset(const QString& projectAssetId);
   void findProjectAssetUses(const QString& projectAssetId);
+  void removeProjectAsset(const QString& projectAssetId);
   void reloadModels();
   void refreshUsage();
   void refreshMetadataFilters();

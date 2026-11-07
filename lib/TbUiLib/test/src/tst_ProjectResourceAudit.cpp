@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTreeWidget>
 
@@ -120,6 +121,81 @@ TEST_CASE("ProjectResourceAudit")
   const auto path = pathFromQString(temporary.path()) / "audit.tbproj";
   auto session = checked(ProjectSession::create(path, "Audit", "Quake"));
 
+  SECTION("cleanup protects custom property paths and transitive dependencies")
+  {
+    const auto model = addFile(*session, "models/tree.mdl", project::AssetType::Model);
+    const auto texture = addFile(*session, "models/treeT.mdl", project::AssetType::Model);
+    const auto animation =
+      addFile(*session, "models/tree01.mdl", project::AssetType::Model);
+    const auto unused = addFile(*session, "sound/unused.wav");
+    {
+      auto store = checked(project::ProjectStore::open(session->store().path()));
+      checked(store->addDependency(model.id, texture.id, "texture"));
+      checked(store->addDependency(texture.id, animation.id, "animation"));
+    }
+    const auto map = addMap(*session, "maps/custom.map", R"({"classname" "worldspawn"}
+      {"classname" "custom_entity" "custom_model" "MODELS/TREE.MDL"})");
+    const auto references = checked(projectAssetMapReferences(*session));
+    for (const auto& id : {model.id, texture.id, animation.id})
+    {
+      CHECK(references.at(id) == std::vector{map.virtualPath});
+      CHECK(session->removeAsset(id).is_error());
+      CHECK(checked(session->store().findAsset(id)).has_value());
+    }
+    CHECK_FALSE(references.contains(unused.id));
+    checked(session->removeAsset(unused.id));
+    CHECK_FALSE(checked(session->store().findAsset(unused.id)).has_value());
+  }
+
+  SECTION("cleanup uses unsaved map contents and permits removal after unbinding")
+  {
+    const auto model = addFile(*session, "models/live.mdl", project::AssetType::Model);
+    const auto asset = addMap(*session, "maps/live.map", R"({"classname" "worldspawn"})");
+    auto fixture = MapDocumentFixture{};
+    auto& document = fixture.create();
+    checked(session->registerDocument(document, asset.id));
+    const auto cleanup = qScopeGuard([&]() { session->unregisterDocument(document); });
+    REQUIRE(mdl::setEntityProperty(document.map(), "custom_model", "models/live.mdl"));
+    CHECK(checked(projectAssetMapReferences(*session)).contains(model.id));
+    CHECK(session->removeAsset(model.id).is_error());
+    REQUIRE(mdl::setEntityProperty(document.map(), "custom_model", ""));
+    CHECK_FALSE(checked(projectAssetMapReferences(*session)).contains(model.id));
+    checked(session->removeAsset(model.id));
+    CHECK(document.map().modified());
+  }
+
+  SECTION("cleanup retains unreadable WADs while allowing unrelated unused resources")
+  {
+    const auto wad =
+      addFile(*session, "textures/broken.wad", project::AssetType::Texture);
+    const auto model = addFile(*session, "models/unused.mdl", project::AssetType::Model);
+    CHECK(checked(projectAssetMapReferences(*session)).empty());
+    const auto map = addMap(*session, "maps/empty.map", R"({"classname" "worldspawn"})");
+    CHECK(checked(projectAssetMapReferences(*session)).contains(wad.id));
+    checked(session->removeAsset(model.id));
+    CHECK(session->removeAsset(wad.id).is_error());
+    checked(session->removeAsset(map.id));
+    checked(session->removeAsset(wad.id));
+  }
+
+  SECTION("cleanup does not guess sentence catalog dependencies")
+  {
+    const auto sound = addFile(*session, "sound/sentence.wav");
+    addMap(*session, "maps/sentence.map", R"({"classname" "worldspawn"}
+      {"classname" "ambient_generic" "message" "!SENTENCE"})");
+    CHECK(projectAssetMapReferences(*session).is_error());
+    CHECK(session->removeAsset(sound.id).is_error());
+  }
+
+  SECTION("cleanup refuses incomplete map scans")
+  {
+    const auto unused = addFile(*session, "sound/unused.wav");
+    addMap(*session, "maps/broken.map", "broken");
+    CHECK(projectAssetMapReferences(*session).is_error());
+    CHECK(session->removeAsset(unused.id).is_error());
+    CHECK(checked(session->store().findAsset(unused.id)).has_value());
+  }
+
   SECTION("closed maps resolve by publish path and retain concrete locations")
   {
     const auto sound = addFile(*session, "sound/ambience/test.wav");
@@ -230,7 +306,11 @@ TEST_CASE("ProjectResourceAudit")
     CHECK(useOf(audit, "absent").status == ProjectResourceStatus::Missing);
     CHECK(use.location == "worldspawn brush face");
     CHECK(use.line > 1);
-    checked(session->removeAsset(second.id));
+    CHECK(session->removeAsset(second.id).is_error());
+    {
+      auto store = checked(project::ProjectStore::open(session->store().path()));
+      checked(store->removeAsset(second.id));
+    }
     audit = checked(auditGoldSrcProjectResources(*session));
     CHECK(useOf(audit, "WALL").status == ProjectResourceStatus::Embedded);
     CHECK(useOf(audit, "WALL").assetIds == std::vector{first.id});

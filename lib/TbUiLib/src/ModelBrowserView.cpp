@@ -878,6 +878,9 @@ void ModelBrowserView::doContextMenu(
       menu.addAction(tr("Find Uses in Project"), this, [this, id]() {
         emit libraryAssetFindUsesRequested(id);
       });
+      menu.addAction(tr("Remove from Project…"), this, [this, id]() {
+        emit projectAssetRemoveRequested(id);
+      });
       if (!asset->libraryId.empty())
       {
         auto* update = menu.addAction(tr("Update Project Resource"), this, [this, id]() {

@@ -8,6 +8,7 @@
 #include "ui/AssetBrowserModel.h"
 
 #include <cstddef>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -49,6 +50,11 @@ struct ProjectResourceAudit
 // Results are rebuilt from current contents, including open unsaved maps. No mutation.
 Result<ProjectResourceAudit> auditGoldSrcProjectResources(
   const ProjectSession& session, const std::optional<std::string>& mapId = std::nullopt);
+
+// Conservative cleanup gate: all entity property paths and transitive dependencies,
+// including unsaved maps. An incomplete scan returns an error, never an unused result.
+Result<std::map<std::string, std::vector<std::string>>> projectAssetMapReferences(
+  const ProjectSession& session);
 
 // Shared gate for direct project compilation and frozen snapshot export.
 Result<void> validateGoldSrcCompileResources(

@@ -39,6 +39,12 @@
     <context>
         <name>QObject</name>
         <message>
+            <source>Cannot verify project map references: %1
+%2</source>
+            <translation>无法确认工程地图引用：%1
+%2</translation>
+        </message>
+        <message>
             <source>Select Mode</source>
             <translation>选择模式</translation>
             </message>
@@ -3648,6 +3654,30 @@ Please choose a different file name to export to.</source>
     <context>
         <name>tb::ui::ModelBrowser</name>
         <message>
+            <source>No map references</source>
+            <translation>无地图引用</translation>
+        </message>
+        <message>
+            <source>Reference scan failed</source>
+            <translation>引用扫描失败</translation>
+        </message>
+        <message>
+            <source>Assets unused by all project maps, including unsaved edits and indirect dependencies. Maps are excluded.</source>
+            <translation>筛选所有工程地图均未引用的资产，包含未保存修改和间接依赖。不包含地图。</translation>
+        </message>
+        <message>
+            <source>Cannot verify unused assets: %1</source>
+            <translation>无法确认无引用资产：%1</translation>
+        </message>
+        <message>
+            <source>Remove from Project</source>
+            <translation>从工程移除</translation>
+        </message>
+        <message>
+            <source>Remove "%1" from this project? The asset library is kept.</source>
+            <translation>从当前工程移除“%1”？资产库中的原件将保留。</translation>
+        </message>
+        <message>
             <source>Current Project</source>
             <translation>当前工程</translation>
         </message>
@@ -4001,6 +4031,10 @@ Map: %2</source>
 </context>
     <context>
         <name>tb::ui::ModelBrowserView</name>
+        <message>
+            <source>Remove from Project…</source>
+            <translation>从工程移除…</translation>
+        </message>
         <message>
             <source>Use Current View as Preview</source>
             <translation>使用当前视角更新预览</translation>
@@ -8396,6 +8430,10 @@ Removing them frees about %3. Current assets and versions are kept.</source>
     </context>
     <context>
         <name>tb::ui::ProjectSession</name>
+        <message>
+            <source>Asset is referenced by project maps:</source>
+            <translation>以下工程地图仍在引用此资产：</translation>
+        </message>
         <message>
             <source>Updating a captured texture requires a readable single-texture WAD.</source>
             <translation>更新已捕获纹理需要可读取的单纹理 WAD。</translation>

@@ -333,6 +333,74 @@ TEST_CASE("ProjectWindow")
   // The project window owns the icon that its dialogs and the taskbar entry show.
   CHECK_FALSE(window.windowIcon().isNull());
 
+  SECTION("unreferenced filter scans all maps and removal rechecks live references")
+  {
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Sound;
+    input.virtualPath = "sound/cleanup.wav";
+    input.displayName = "Cleanup sound";
+    input.original = input.compatible = {1, 2, 3};
+    const auto asset = require(session->importAsset(input));
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* unused = browser->findChild<QToolButton*>("ModelBrowser_Unreferenced");
+    auto* used = browser->findChild<QToolButton*>("ModelBrowser_UsedInMap");
+    auto* cards = browser->findChild<ModelBrowserView*>();
+    REQUIRE(source);
+    REQUIRE(unused);
+    REQUIRE(used);
+    REQUIRE(cards);
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    unused->setChecked(true);
+    const auto listed = [&]() {
+      return std::ranges::any_of(
+        cards->assets(), [&](const auto& entry) { return entry.assetId == asset.id; });
+    };
+    QTRY_VERIFY(listed());
+    CHECK(std::ranges::none_of(cards->assets(), [](const auto& entry) {
+      return entry.type == BrowserCellType::Map;
+    }));
+    auto* betaDocument = session->documentFor(tabs->tabData(1).toString().toStdString());
+    REQUIRE(betaDocument);
+    REQUIRE(
+      mdl::setEntityProperty(betaDocument->map(), "custom_sound", "sound/cleanup.wav"));
+    QTRY_VERIFY(!listed()); // An inactive tab's unsaved reference counts too.
+    CHECK(session->removeAsset(asset.id).is_error());
+    REQUIRE(mdl::setEntityProperty(betaDocument->map(), "custom_sound", ""));
+    QTRY_VERIFY(listed());
+    used->setChecked(true);
+    CHECK_FALSE(unused->isChecked());
+    unused->setChecked(true);
+    CHECK_FALSE(used->isChecked());
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    CHECK_FALSE(unused->isVisible());
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    CHECK(unused->isChecked());
+    QTRY_VERIFY(listed());
+    auto response = QMessageBox::Cancel;
+    auto timer = QTimer{};
+    QObject::connect(&timer, &QTimer::timeout, [&]() {
+      for (auto* widget : QApplication::topLevelWidgets())
+        if (auto* message = qobject_cast<QMessageBox*>(widget);
+            message && message->isVisible())
+          if (auto* button = message->button(response))
+            button->click();
+    });
+    timer.start(10);
+    emit cards->projectAssetRemoveRequested(QString::fromStdString(asset.id));
+    CHECK(require(session->store().findAsset(asset.id)).has_value());
+    response = QMessageBox::Yes;
+    emit cards->projectAssetRemoveRequested(QString::fromStdString(asset.id));
+    timer.stop();
+    CHECK_FALSE(require(session->store().findAsset(asset.id)).has_value());
+    QTRY_VERIFY(!listed());
+    require(session->save());
+    auto reopened = require(project::ProjectStore::open(session->path()));
+    CHECK_FALSE(require(reopened->findAsset(asset.id)).has_value());
+  }
+
   SECTION("map previews are saved and remain available after closing the view")
   {
     auto& view = alphaWindow->activate3DMapView();
