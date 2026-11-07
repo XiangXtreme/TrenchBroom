@@ -83,6 +83,7 @@ Result<TerrainRegion> decodeSculptableRegion(const std::string& encoded)
   for (const auto* key :
        {"origin",
         "material",
+        "brushEntityClass",
         "weights",
         "maxAddedFaces",
         "maxWadKiB",
@@ -91,6 +92,10 @@ Result<TerrainRegion> decodeSculptableRegion(const std::string& encoded)
         "heightField"})
     region.extensionFields.remove(QLatin1String{key});
   region.materialAssetId = material.toString().toStdString();
+  const auto brushEntity = object.value(QStringLiteral("brushEntityClass"));
+  if (!brushEntity.isUndefined() && !brushEntity.isString())
+    return Error{"Invalid terrain brush entity."};
+  region.brushEntityClass = brushEntity.toString().toStdString();
   const auto maxFaces =
     integerField(object, QStringLiteral("maxAddedFaces"), -1, -1, 100000);
   const auto maxWad = integerField(object, QStringLiteral("maxWadKiB"), -1, -1, 1048576);
@@ -246,6 +251,8 @@ std::string TerrainRegion::encodeImpl(const bool includeHeightField) const
     auto object = extensionFields;
     object.insert(QStringLiteral("origin"), QJsonArray{origin.x(), origin.y()});
     object.insert(QStringLiteral("material"), QString::fromStdString(materialAssetId));
+    object.insert(
+      QStringLiteral("brushEntityClass"), QString::fromStdString(brushEntityClass));
     object.insert(QStringLiteral("weights"), QString::fromLatin1(pixels.toHex()));
     object.insert(QStringLiteral("maxAddedFaces"), maxAddedFaces);
     object.insert(QStringLiteral("maxWadKiB"), maxWadKiB);

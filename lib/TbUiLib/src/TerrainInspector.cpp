@@ -28,6 +28,8 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EditorContext.h"
+#include "mdl/EntityDefinition.h"
+#include "mdl/EntityDefinitionManager.h"
 #include "mdl/EntityNode.h"
 #include "mdl/GameInfo.h"
 #include "mdl/Grid.h"
@@ -193,6 +195,13 @@ TerrainInspector::TerrainInspector(
   m_newThickness->setValue(64);
   m_newThickness->setSuffix(tr(" units"));
 
+  m_brushEntity = new QCheckBox{tr("Brush entity"), this};
+  m_brushEntity->setObjectName(QStringLiteral("TerrainInspector_BrushEntity"));
+  m_brushEntityClass = new QComboBox{this};
+  m_brushEntityClass->setObjectName(QStringLiteral("TerrainInspector_BrushEntityClass"));
+  m_brushEntityClass->setAccessibleName(tr("Terrain brush entity class"));
+  refreshBrushEntityDefinitions();
+
   m_material = new QComboBox{this};
   m_material->setObjectName(QStringLiteral("TerrainInspector_SlotSelect"));
   m_material->addItems({tr("Slot 0: Grass"), tr("Slot 1: Dirt"), tr("Slot 2: Rock")});
@@ -290,6 +299,7 @@ TerrainInspector::TerrainInspector(
   form->addRow(tr("Grid spacing"), m_gridSpacing);
   form->addRow(tr("New terrain height"), m_newHeight);
   form->addRow(tr("New terrain thickness"), m_newThickness);
+  form->addRow(m_brushEntity, m_brushEntityClass);
   form->addRow(m_lockEdges);
   form->addRow(m_softSelection);
   form->addRow(m_selectOccluded);
@@ -351,6 +361,25 @@ TerrainInspector::TerrainInspector(
   connect(m_wadBudget, &QSpinBox::valueChanged, this, updateBudget);
   connect(m_minFaceWidth, &QSpinBox::valueChanged, this, updateBudget);
   connect(m_patchDensity, &QComboBox::currentIndexChanged, this, updateBudget);
+  const auto updateBrushEntity = [this] {
+    m_brushEntityClass->setEnabled(
+      m_brushEntity->isChecked() && m_brushEntity->isEnabled());
+    if (drawingTerrain())
+      return;
+    auto* group = selectedTerrainGroup(m_document.map());
+    if (!group)
+      return;
+    auto region = readTerrainGroup(*group);
+    if (region.is_error() || !region.value().heightField)
+      return;
+    auto updated = std::move(region).value();
+    updated.brushEntityClass = m_brushEntity->isChecked()
+                                 ? m_brushEntityClass->currentText().toStdString()
+                                 : std::string{};
+    saveRegion(*group, updated, tr("Change Terrain Brush Entity"));
+  };
+  connect(m_brushEntity, &QCheckBox::toggled, this, updateBrushEntity);
+  connect(m_brushEntityClass, &QComboBox::currentIndexChanged, this, updateBrushEntity);
   connect(
     m_openLibrary, &QPushButton::clicked, this, &TerrainInspector::openAssetLibrary);
   connect(
@@ -433,6 +462,10 @@ TerrainInspector::TerrainInspector(
   m_connection += m_document.groupWasOpenedNotifier.connect([this] { refresh(); });
   m_connection += m_document.groupWasClosedNotifier.connect([this] { refresh(); });
   m_connection += m_document.documentWasLoadedNotifier.connect([this] { refresh(); });
+  m_connection += m_document.map().entityDefinitionsDidChangeNotifier.connect([this] {
+    refreshBrushEntityDefinitions();
+    refresh();
+  });
   toolBox.terrainTool().setInspector(this);
   const auto syncTerrainTool = [this,
                                 terrain = &toolBox.terrainTool()](const Tool& tool) {
@@ -565,6 +598,25 @@ void TerrainInspector::updateSlotLabels(const std::string& materialAssetId)
   }
 }
 
+void TerrainInspector::refreshBrushEntityDefinitions()
+{
+  const auto blocker = QSignalBlocker{m_brushEntityClass};
+  const auto previous = m_brushEntityClass->currentText();
+  auto names = QStringList{};
+  for (const auto& definition : m_document.map().entityDefinitionManager().definitions())
+    if (
+      mdl::getType(definition) == mdl::EntityDefinitionType::Brush
+      && definition.name != "worldspawn")
+      names.push_back(QString::fromStdString(definition.name));
+  names.sort();
+  m_brushEntityClass->clear();
+  m_brushEntityClass->addItems(names);
+  auto index = m_brushEntityClass->findText(previous);
+  if (index < 0)
+    index = m_brushEntityClass->findText(QStringLiteral("func_detail"));
+  m_brushEntityClass->setCurrentIndex(index >= 0 ? index : 0);
+}
+
 void TerrainInspector::updateModeControls()
 {
   const auto sculpt = m_editMode->currentIndex() == 1;
@@ -596,6 +648,11 @@ void TerrainInspector::updateModeControls()
   m_form->setRowVisible(m_gridSpacing, sculpt && (!hasHeightField || drawing));
   m_form->setRowVisible(m_newHeight, drawing);
   m_form->setRowVisible(m_newThickness, drawing);
+  m_form->setRowVisible(m_brushEntityClass, sculpt && (drawing || hasHeightField));
+  m_brushEntity->setEnabled(
+    m_brushEntityClass->count() > 0 && (drawing || m_canEditHeightField));
+  m_brushEntityClass->setEnabled(
+    m_brushEntity->isEnabled() && m_brushEntity->isChecked());
   m_form->setRowVisible(m_terrainMaterial, material);
   m_form->setRowVisible(m_material, material);
   m_form->setRowVisible(m_radius, !vertices && !drawing);
@@ -739,6 +796,18 @@ void TerrainInspector::refresh()
     m_minFaceWidth->setValue(region.value().minFaceWidth);
     m_patchDensity->setCurrentIndex(
       m_patchDensity->findData(region.value().patchDensityPercent));
+    if (!drawingTerrain())
+    {
+      const auto entityBlocker = QSignalBlocker{m_brushEntity};
+      const auto classBlocker = QSignalBlocker{m_brushEntityClass};
+      const auto& classname = region.value().brushEntityClass;
+      m_brushEntity->setChecked(!classname.empty());
+      if (!classname.empty())
+        m_brushEntityClass->setCurrentIndex(
+          m_brushEntityClass->findText(QString::fromStdString(classname)));
+      m_brushEntityClass->setEnabled(
+        m_brushEntity->isEnabled() && m_brushEntity->isChecked());
+    }
   }
 
   const auto targetMatId = QString::fromStdString(region.value().materialAssetId);
@@ -929,6 +998,7 @@ bool TerrainInspector::saveRegion(
     for (auto& chunk : chunks)
     {
       chunk.region.materialAssetId = region.materialAssetId;
+      chunk.region.brushEntityClass = region.brushEntityClass;
       chunk.region.maxAddedFaces = region.maxAddedFaces;
       chunk.region.maxWadKiB = region.maxWadKiB;
       chunk.region.minFaceWidth = region.minFaceWidth;
@@ -1496,20 +1566,26 @@ void TerrainInspector::createDrawnTerrain(const vm::vec2d& first, const vm::vec2
     std::abs(finish.x() - start.x()) > TerrainRegion::Width * TerrainRegion::UnitsPerTexel
     || std::abs(finish.y() - start.y())
          > TerrainRegion::Height * TerrainRegion::UnitsPerTexel;
+  const auto brushEntityClass =
+    m_brushEntity->isChecked() && m_brushEntityClass->currentIndex() >= 0
+      ? m_brushEntityClass->currentText().toStdString()
+      : std::string{};
   const auto result = large ? createTerrainChunkRectangle(
                                 m_document.map(),
                                 start,
                                 finish,
                                 double(m_newHeight->value()),
                                 double(m_newThickness->value()),
-                                spacing)
+                                spacing,
+                                brushEntityClass)
                             : createTerrainRectangle(
                                 m_document.map(),
                                 start,
                                 finish,
                                 double(m_newHeight->value()),
                                 double(m_newThickness->value()),
-                                spacing);
+                                spacing,
+                                brushEntityClass);
   if (result.is_error())
     m_status->setText(terrainErrorMessage(std::get<Error>(result.error())));
   else

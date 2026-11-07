@@ -8672,6 +8672,10 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Draw New Terrain</source><translation>框选新地形</translation></message>
         <message><source>New terrain height</source><translation>新地形高度</translation></message>
         <message><source>New terrain thickness</source><translation>新地形厚度</translation></message>
+        <message><source>Brush entity</source><translation>刷子实体</translation></message>
+        <message><source>Terrain brush entity class</source><translation>地形刷子实体类型</translation></message>
+        <message><source>Change Terrain Brush Entity</source><translation>更改地形刷子实体</translation></message>
+        <message><source>Invalid terrain brush entity.</source><translation>地形刷子实体无效。</translation></message>
         <message><source>Drag a rectangle in the top (XY) view to create terrain.</source><translation>在俯视图（XY）中拖出矩形以创建地形。</translation></message>
         <message><source>Invalid terrain rectangle, height, thickness or grid spacing.</source><translation>地形范围、高度、厚度或网格间距无效。</translation></message>
         <message><source>Terrain rectangle exceeds the 1280 by 640 unit region.</source><translation>单个地形区域不能超过 1280 × 640 单位。</translation></message>

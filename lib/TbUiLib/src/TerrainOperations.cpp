@@ -301,7 +301,8 @@ Result<void> createTerrainRectangle(
   const vm::vec2d& second,
   const double height,
   const double thickness,
-  const double spacing)
+  const double spacing,
+  const std::string& brushEntityClass)
 {
   const auto minX = std::min(first.x(), second.x());
   const auto maxX = std::max(first.x(), second.x());
@@ -347,6 +348,7 @@ Result<void> createTerrainRectangle(
       return Error{"Unlink the terrain group before editing its height field."};
 
   auto region = TerrainRegion{{minX, maxY}};
+  region.brushEntityClass = brushEntityClass;
   region.heightField = std::move(field).value();
   auto brushes = createTerrainBrushes(
     *region.heightField,
@@ -400,7 +402,8 @@ Result<void> createTerrainChunkRectangle(
   const vm::vec2d& second,
   const double height,
   const double thickness,
-  const double spacing)
+  const double spacing,
+  const std::string& brushEntityClass)
 {
   const auto minX = std::min(first.x(), second.x());
   const auto maxX = std::max(first.x(), second.x());
@@ -437,7 +440,7 @@ Result<void> createTerrainChunkRectangle(
       const auto top = maxY - row * spacing;
       const auto bottom = maxY - std::min(row + chunkRows, depth) * spacing;
       const auto result = createTerrainRectangle(
-        map, {left, bottom}, {right, top}, height, thickness, spacing);
+        map, {left, bottom}, {right, top}, height, thickness, spacing, brushEntityClass);
       if (result.is_error())
       {
         transaction.cancel();

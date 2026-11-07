@@ -75,6 +75,8 @@ private:
   QSpinBox* m_softHardness = nullptr;
   QSpinBox* m_newHeight = nullptr;
   QSpinBox* m_newThickness = nullptr;
+  QCheckBox* m_brushEntity = nullptr;
+  QComboBox* m_brushEntityClass = nullptr;
   QComboBox* m_terrainMaterial = nullptr;
   QComboBox* m_material = nullptr;
   QSpinBox* m_radius = nullptr;
@@ -171,6 +173,7 @@ public:
 
 private:
   void refresh();
+  void refreshBrushEntityDefinitions();
   void nodesChanged(const std::vector<mdl::Node*>& nodes);
   void createRegion();
   void convertSelection();

@@ -59,6 +59,7 @@ Result<TerrainChunks> readTerrainChunks(const mdl::GroupNode& group)
       if (
         field.spacing != reference.spacing || field.bottom != reference.bottom
         || region.materialAssetId != first.materialAssetId
+        || region.brushEntityClass != first.brushEntityClass
         || region.maxAddedFaces != first.maxAddedFaces
         || region.maxWadKiB != first.maxWadKiB
         || region.minFaceWidth != first.minFaceWidth

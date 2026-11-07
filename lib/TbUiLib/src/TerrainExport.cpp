@@ -30,6 +30,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
@@ -286,6 +287,7 @@ Result<TerrainBake> runBaker(
 }
 
 using TerrainTextureIndex = std::unordered_map<size_t, std::vector<std::string>>;
+using TerrainSmoothGroups = std::map<std::string, std::set<size_t>>;
 
 std::string_view textureContent(const std::vector<std::uint8_t>& miptex)
 {
@@ -297,8 +299,10 @@ Result<void> bakeGroup(
   const vm::bbox3d& bounds,
   TerrainSnapshot& snapshot,
   const size_t groupNumber,
+  const size_t smoothGroup,
   const project::ProjectStore* store,
-  TerrainTextureIndex& textureIndex)
+  TerrainTextureIndex& textureIndex,
+  TerrainSmoothGroups& smoothGroups)
 {
   const auto region = TerrainRegion::decode(group.group().terrainPaint());
   if (region.is_error())
@@ -412,6 +416,7 @@ Result<void> bakeGroup(
     if (!used[i])
       continue;
     const auto& name = names[i];
+    smoothGroups[name].insert(smoothGroup);
     if (snapshot.textures.contains(name))
       continue;
     auto& texture = plan.textures[i];
@@ -604,14 +609,51 @@ Result<std::optional<TerrainSnapshot>> bakeTerrainSnapshot(
   }
   auto snapshot = TerrainSnapshot{};
   auto textureIndex = TerrainTextureIndex{};
+  auto smoothGroups = TerrainSmoothGroups{};
+  auto logicalGroups = std::map<mdl::GroupNode*, size_t>{};
+  auto brushEntities = std::map<mdl::GroupNode*, std::string>{};
   for (auto i = size_t{0}; i < groups.size(); ++i)
   {
-    const auto result = bakeGroup(*groups[i], bounds, snapshot, i, store, textureIndex);
+    auto* logicalGroup = groups[i];
+    if (auto* parent = dynamic_cast<mdl::GroupNode*>(logicalGroup->parent());
+        parent && isTerrainChunkGroup(*parent))
+      logicalGroup = parent;
+    const auto entry = logicalGroups.emplace(logicalGroup, logicalGroups.size()).first;
+    const auto region = TerrainRegion::decode(groups[i]->group().terrainPaint());
+    if (region.is_error())
+      return std::get<Error>(region.error());
+    if (!region.value().brushEntityClass.empty())
+      brushEntities[logicalGroup] = region.value().brushEntityClass;
+    const auto result = bakeGroup(
+      *groups[i], bounds, snapshot, i, entry->second, store, textureIndex, smoothGroups);
     if (result.is_error())
       return Error{fmt::format(
         "Terrain group '{}': {}",
         groups[i]->name(),
         std::get<Error>(result.error()).msg)};
+  }
+  for (const auto& [root, classname] : brushEntities)
+  {
+    auto brushes = std::vector<mdl::BrushNode*>{};
+    const auto collectBrushes = [&](const auto& self, mdl::Node& node) -> void {
+      // Keep explicitly authored entities and their properties intact.
+      for (auto* child : node.children())
+        if (auto* brush = dynamic_cast<mdl::BrushNode*>(child))
+          brushes.push_back(brush);
+        else if (dynamic_cast<mdl::GroupNode*>(child))
+          self(self, *child);
+    };
+    collectBrushes(collectBrushes, *root);
+    if (brushes.empty())
+      continue;
+    auto combined = std::make_unique<mdl::EntityNode>(
+      mdl::Entity{{{mdl::EntityPropertyKeys::Classname, classname}}});
+    for (auto* brush : brushes)
+    {
+      brush->parent()->removeChild(brush);
+      combined->addChild(brush);
+    }
+    root->addChild(combined.release());
   }
   for (auto* root : chunkRoots)
   {
@@ -620,6 +662,17 @@ Result<std::optional<TerrainSnapshot>> bakeTerrainSnapshot(
     root->setGroup(std::move(content));
   }
   auto entity = world.entity();
+  for (const auto& [texture, memberships] : smoothGroups)
+  {
+    auto value = std::string{};
+    for (const auto membership : memberships)
+    {
+      if (!value.empty())
+        value += ' ';
+      value += std::to_string(membership);
+    }
+    entity.addOrUpdateProperty("zhlt_smooth_" + texture, value);
+  }
   entity.addOrUpdateProperty(mdl::EntityPropertyKeys::ValveVersion, "220");
   entity.addOrUpdateProperty(mdl::EntityPropertyKeys::Wad, "textures.wad");
   world.setEntity(std::move(entity));

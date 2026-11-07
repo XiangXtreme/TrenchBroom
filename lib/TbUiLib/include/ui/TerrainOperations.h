@@ -8,6 +8,8 @@
 
 #include "vm/vec.h"
 
+#include <string>
+
 namespace tb::mdl
 {
 class GroupNode;
@@ -32,7 +34,8 @@ Result<void> createTerrainRectangle(
   const vm::vec2d& second,
   double height,
   double thickness,
-  double spacing);
+  double spacing,
+  const std::string& brushEntityClass = {});
 
 /** Create a rectangle as a single logical terrain made of paint-sized chunks. */
 Result<void> createTerrainChunkRectangle(
@@ -41,7 +44,8 @@ Result<void> createTerrainChunkRectangle(
   const vm::vec2d& second,
   double height,
   double thickness,
-  double spacing);
+  double spacing,
+  const std::string& brushEntityClass = {});
 
 /** Update the edited heights and only the affected proxy brushes atomically. */
 Result<void> updateTerrainHeightField(

@@ -105,7 +105,7 @@ void main()
     gl_FragColor = clamp(brightnessCorrection * gl_FragColor, 0.0, 1.0);
   }
 
-  if (ShadeFaces && EntityRenderMode != 1 && EntityRenderMode != 3 && EntityRenderMode != 5)
+  if (ShadeFaces && !ApplyLightmap && EntityRenderMode != 1 && EntityRenderMode != 3 && EntityRenderMode != 5)
   {
     // angular dimming ( can be controlled with dimStrength )
     // TODO: make view option

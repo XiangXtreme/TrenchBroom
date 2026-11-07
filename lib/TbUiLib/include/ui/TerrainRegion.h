@@ -42,6 +42,8 @@ struct TerrainRegion
   vm::vec2d origin;
   std::array<Weight, (Columns + 1) * (Rows + 1)> weights;
   std::string materialAssetId;
+  // Wrap the logical terrain's loose brushes only in the disposable compile copy.
+  std::string brushEntityClass;
   // A negative limit leaves the corresponding per-region budget unlimited.
   int maxAddedFaces = -1;
   int maxWadKiB = -1;

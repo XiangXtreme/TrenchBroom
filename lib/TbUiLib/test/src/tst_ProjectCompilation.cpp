@@ -30,6 +30,7 @@
 #include "mdl/CompilationProfile.h"
 #include "mdl/EditorContext.h"
 #include "mdl/EntityDefinition.h"
+#include "mdl/EntityDefinitionFileSpec.h"
 #include "mdl/EntityNode.h"
 #include "mdl/Grid.h"
 #include "mdl/GroupNode.h"
@@ -38,6 +39,7 @@
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
 #include "mdl/MapFormat.h"
+#include "mdl/Map_Assets.h"
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Geometry.h"
 #include "mdl/Map_Groups.h"
@@ -756,6 +758,17 @@ void testTerrainVertexEditing(
 
 } // namespace
 
+namespace
+{
+// TerrainRegion carries an inline paint grid. Keep the long framebuffer scenario's
+// snapshots on the heap so nested Qt layout events retain enough Windows stack.
+std::unique_ptr<TerrainRegion> terrainRegionSnapshot(const mdl::GroupNode& group)
+{
+  return std::make_unique<TerrainRegion>(
+    require(TerrainRegion::decode(group.group().terrainPaint())));
+}
+} // namespace
+
 TEST_CASE("Project terrain panel paints a picked brush")
 {
   if (!qEnvironmentVariableIsSet("TB_TERRAIN_PREVIEW_TEST_CHILD"))
@@ -1272,7 +1285,8 @@ TEST_CASE("Project terrain panel paints a picked brush")
   editMode->setCurrentIndex(1);
   REQUIRE(convert->isEnabled());
   convert->click();
-  const auto converted = require(TerrainRegion::decode(group->group().terrainPaint()));
+  const auto convertedStorage = terrainRegionSnapshot(*group);
+  const auto& converted = *convertedStorage;
   REQUIRE(converted.heightField);
   const auto convertedHeights = converted.heightField->heights;
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
@@ -1293,7 +1307,8 @@ TEST_CASE("Project terrain panel paints a picked brush")
   }
   CHECK(sculptTiming.counters["terrain.bake_starts"] == 0);
   CHECK(sculptTiming.counters["terrain.scene_builds"] > 0);
-  const auto sculpted = require(TerrainRegion::decode(group->group().terrainPaint()));
+  const auto sculptedStorage = terrainRegionSnapshot(*group);
+  const auto& sculpted = *sculptedStorage;
   REQUIRE(sculpted.heightField);
   CHECK(sculpted.heightField->heights != convertedHeights);
   CHECK(sculpted.weights == converted.weights);
@@ -1322,8 +1337,8 @@ TEST_CASE("Project terrain panel paints a picked brush")
   panel->beginStroke(terrainPick());
   REQUIRE(panel->stroking());
   panel->endStroke(true);
-  const auto repaintedRegion =
-    require(TerrainRegion::decode(group->group().terrainPaint()));
+  const auto repaintedStorage = terrainRegionSnapshot(*group);
+  const auto& repaintedRegion = *repaintedStorage;
   CHECK(repaintedRegion.weights != sculpted.weights);
   CHECK(repaintedRegion.heightField->heights == sculpted.heightField->heights);
   activate->click();
@@ -1490,6 +1505,27 @@ TEST_CASE("Project terrain panel paints a picked brush")
   REQUIRE(drawNew);
   REQUIRE(newHeight);
   REQUIRE(newThickness);
+  auto* brushEntity = panel->findChild<QCheckBox*>("TerrainInspector_BrushEntity");
+  auto* brushEntityClass =
+    panel->findChild<QComboBox*>("TerrainInspector_BrushEntityClass");
+  REQUIRE(brushEntity);
+  REQUIRE(brushEntityClass);
+  CHECK_FALSE(brushEntity->isChecked());
+  const auto fgdPath = directory.filePath("terrain.fgd");
+  auto fgd = QFile{fgdPath};
+  REQUIRE(fgd.open(QIODevice::WriteOnly));
+  REQUIRE(
+    fgd.write("@SolidClass = func_wall : \"Wall\" []\n"
+              "@SolidClass = func_detail : \"Detail\" []\n"
+              "@SolidClass = worldspawn : \"World\" []\n"
+              "@PointClass = light : \"Light\" []\n")
+    > 0);
+  fgd.close();
+  mdl::setEntityDefinitionFile(
+    map, mdl::EntityDefinitionFileSpec::makeExternal(pathFromQString(fgdPath)));
+  CHECK(brushEntityClass->count() == 2);
+  CHECK(brushEntityClass->currentText() == QStringLiteral("func_detail"));
+  CHECK_FALSE(brushEntityClass->isEnabled());
   auto* ancestor = view->parentWidget();
   while (ancestor && !qobject_cast<MapEditorView*>(ancestor))
     ancestor = ancestor->parentWidget();
@@ -1517,6 +1553,8 @@ TEST_CASE("Project terrain panel paints a picked brush")
     newThickness->setValue(96);
     drawNew->click();
     REQUIRE(panel->drawingTerrain());
+    brushEntity->setChecked(true);
+    REQUIRE(brushEntityClass->isEnabled());
     const auto oldGridSize = map.grid().size();
     map.grid().setSize(7);
     const auto snapped = panel->drawnTerrainBounds({139, 119}, {-119, -139});
@@ -1539,6 +1577,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
     if (!capturePath.isEmpty())
     {
       REQUIRE(top.grabFramebuffer().save(capturePath));
+      REQUIRE(panel->grab().save(capturePath + ".panel.png"));
       auto& previewCamera = static_cast<MapViewBase*>(view)->camera();
       const auto oldPosition = previewCamera.position();
       const auto oldDirection = previewCamera.direction();
@@ -1560,6 +1599,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
     const auto newRegion =
       require(TerrainRegion::decode(created->group().terrainPaint()));
     REQUIRE(newRegion.heightField);
+    CHECK(newRegion.brushEntityClass == "func_detail");
     CHECK(newRegion.heightField->columns == 4);
     CHECK(newRegion.heightField->rows == 4);
     CHECK(newRegion.heightField->bottom == -64);

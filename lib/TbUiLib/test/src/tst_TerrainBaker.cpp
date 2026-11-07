@@ -1348,6 +1348,72 @@ TEST_CASE("Terrain baker packs only patches covered by terrain")
   CHECK(compared > 0);
 }
 
+TEST_CASE("Terrain compile snapshot combines a logical terrain into one brush entity")
+{
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& map = fixture.create(config).map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  auto classname = std::string{};
+  SECTION("world brushes") {}
+  SECTION("detail entity")
+  {
+    classname = "func_detail";
+  }
+  SECTION("another brush entity")
+  {
+    classname = "func_wall";
+  }
+  requireValue(
+    createTerrainChunkRectangle(map, {0, -64}, {1408, 0}, 0, 64, 64, classname));
+  auto* root = map.selection().groups.front();
+  const auto chunks = requireValue(readTerrainChunks(*root));
+  REQUIRE(chunks.chunks.size() == 2);
+  for (const auto& chunk : chunks.chunks)
+    CHECK(chunk.region.brushEntityClass == classname);
+  const auto path = pathFromQString(directory.filePath("terrain.map"));
+  requireValue(map.saveTo(path));
+  const auto snapshot = requireValue(bakeTerrainSnapshot(readBytes(path)));
+  REQUIRE(snapshot);
+  auto logger = NullLogger{};
+  auto status = SimpleParserStatus{logger};
+  auto tasks = kdl::task_manager{2};
+  const auto text = std::string_view{
+    reinterpret_cast<const char*>(snapshot->map.data()), snapshot->map.size()};
+  auto world = requireValue(mdl::WorldReader{text, mdl::MapFormat::Valve, {}}.read(
+    map.worldBounds(), status, tasks));
+  auto entities = std::vector<const mdl::EntityNode*>{};
+  const auto collect = [&](const auto& self, const mdl::Node& node) -> void {
+    for (const auto* child : node.children())
+    {
+      if (const auto* entity = dynamic_cast<const mdl::EntityNode*>(child))
+        entities.push_back(entity);
+      self(self, *child);
+    }
+  };
+  collect(collect, *world);
+  if (classname.empty())
+    CHECK(entities.empty());
+  else
+  {
+    REQUIRE(entities.size() == 1);
+    CHECK(entities.front()->entity().classname() == classname);
+    CHECK(entities.front()->children().size() == snapshot->topFaces);
+  }
+  for (const auto& [name, texture] : snapshot->textures)
+  {
+    const auto* membership = world->entity().property("zhlt_smooth_" + name);
+    REQUIRE(membership);
+    CHECK(*membership == "0");
+  }
+  // Compilation leaves the live terrain split and editable.
+  CHECK(root->children().size() == 2);
+  CHECK(readTerrainChunks(*root).is_success());
+}
+
 TEST_CASE("Project terrain reuses identical textures across groups")
 {
   auto directory = QTemporaryDir{};
