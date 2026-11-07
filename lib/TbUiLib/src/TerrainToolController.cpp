@@ -96,11 +96,12 @@ bool TerrainToolController::cancel()
   return m_tool.cancelInteraction();
 }
 void TerrainToolController::render(
-  const InputState&, render::RenderContext& context, render::RenderBatch& batch)
+  const InputState& input, render::RenderContext& context, render::RenderBatch& batch)
 {
   if (const auto* inspector = m_tool.inspector())
   {
-    inspector->renderVertices(context, batch);
+    inspector->renderVertices(
+      context, batch, input.pickResult(), QPointF{input.mouseX(), input.mouseY()});
   }
 }
 } // namespace tb::ui

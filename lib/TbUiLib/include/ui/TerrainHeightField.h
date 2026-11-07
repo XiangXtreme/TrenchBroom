@@ -59,6 +59,15 @@ struct TerrainHeightField
   std::vector<std::optional<double>> sampleMany(
     std::span<const vm::vec2d> positions) const;
 
+  /** Spherical influence in world units, with a smooth falloff outside the hard core. */
+  std::vector<double> softSelectionWeights(
+    const vm::vec3d& center,
+    const vm::vec2d& origin,
+    const vm::mat4x4d& transform,
+    double radius,
+    double hardness,
+    bool lockEdges) const;
+
   /** Apply one stamp. Position and radius are in terrain-local map units. */
   TerrainSculptResult sculpt(
     TerrainSculptMode mode,

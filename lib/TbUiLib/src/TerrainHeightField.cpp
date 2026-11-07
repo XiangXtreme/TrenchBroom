@@ -21,6 +21,37 @@ constexpr auto MaxVertices = size_t{4 * 1024 * 1024};
 constexpr auto MinimumThickness = 1.0;
 } // namespace
 
+std::vector<double> TerrainHeightField::softSelectionWeights(
+  const vm::vec3d& center,
+  const vm::vec2d& origin,
+  const vm::mat4x4d& transform,
+  const double radius,
+  const double hardness,
+  const bool lockEdges) const
+{
+  if (!valid() || !std::isfinite(radius) || radius <= 0.0 || !std::isfinite(hardness))
+    return {};
+  auto weights = std::vector<double>(heights.size(), 0.0);
+  const auto edge = radius * std::max(1e-6, 1.0 - std::clamp(hardness, 0.0, 1.0));
+  for (auto row = 0; row <= rows; ++row)
+    for (auto column = 0; column <= columns; ++column)
+    {
+      if (lockEdges && (row == 0 || column == 0 || row == rows || column == columns))
+        continue;
+      const auto i = index(column, row);
+      const auto world =
+        transform
+        * vm::vec3d{
+          origin.x() + column * spacing, origin.y() - row * spacing, heights[i]};
+      const auto distance = vm::length(world - center);
+      if (!std::isfinite(distance) || distance >= radius)
+        continue;
+      const auto t = std::clamp((radius - distance) / edge, 0.0, 1.0);
+      weights[i] = t * t * (3.0 - 2.0 * t);
+    }
+  return weights;
+}
+
 Result<TerrainHeightField> TerrainHeightField::create(
   const int columns,
   const int rows,

@@ -592,6 +592,80 @@ void testTerrainVertexEditing(
   CHECK_FALSE(panel->vertexInteracting());
   CHECK(testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
 
+  auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+  const auto coverCenter = (vm::vec3d{camera.position()} + vm::vec3d{centerVertex}) / 2.0;
+  auto* cover = new mdl::BrushNode{require(builder.createCuboid(
+    vm::bbox3d{coverCenter - vm::vec3d{32, 32, 32}, coverCenter + vm::vec3d{32, 32, 32}},
+    "grass"))};
+  mdl::addNodes(map, {{map.editorContext().currentLayer(), {cover}}});
+  auto* through = panel->findChild<QCheckBox*>("TerrainInspector_SelectOccluded");
+  REQUIRE(through);
+  panel->beginVertexInteraction(
+    camera, *view, vertexPosition, false, mdl::PickResult::byDistance());
+  panel->moveVertexInteraction(raisedPosition);
+  panel->endVertexInteraction(camera, raisedPosition, true);
+  CHECK(testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
+  through->setChecked(true);
+  panel->beginVertexInteraction(
+    camera, *view, vertexPosition, false, mdl::PickResult::byDistance());
+  panel->moveVertexInteraction(raisedPosition);
+  panel->endVertexInteraction(camera, raisedPosition, true);
+  CHECK(
+    testTerrainRegion(*group)->heightField->heights[vertexIndex]
+    > sculpted.heightField->heights[vertexIndex]);
+  map.undoCommand();
+  map.undoCommand(); // Remove the occluder.
+  through->setChecked(false);
+
+  auto* soft = panel->findChild<QCheckBox*>("TerrainInspector_SoftSelection");
+  auto* softRadius = panel->findChild<QSpinBox*>("TerrainInspector_SelectionRadius");
+  REQUIRE(soft);
+  REQUIRE(softRadius);
+  softRadius->setValue(128);
+  soft->setChecked(true);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, vertexPosition);
+  view->grabFramebuffer();
+  REQUIRE(panel->vertexInteracting());
+  const auto capturePath = qEnvironmentVariable("TB_TERRAIN_VERTEX_CAPTURE_PATH");
+  if (!capturePath.isEmpty())
+    REQUIRE(view->grabFramebuffer().save(capturePath));
+  terrainMouseEvent(
+    view, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, raisedPosition);
+  view->grabFramebuffer();
+  QTest::qWait(110);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, raisedPosition);
+  view->grabFramebuffer();
+  const auto softened = testTerrainRegion(*group);
+  const auto centerDelta = softened->heightField->heights[vertexIndex]
+                           - sculpted.heightField->heights[vertexIndex];
+  CHECK(centerDelta > 0.0);
+  const auto neighbor = sculpted.heightField->index(3, 2);
+  const auto neighborDelta =
+    softened->heightField->heights[neighbor] - sculpted.heightField->heights[neighbor];
+  CHECK(neighborDelta > 0.0);
+  CHECK(neighborDelta < centerDelta);
+  CHECK(softened->heightField->heights[0] == sculpted.heightField->heights[0]);
+  CHECK(softened->weights == sculpted.weights);
+  map.undoCommand();
+  CHECK(testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
+  map.redoCommand();
+  CHECK(
+    testTerrainRegion(*group)->heightField->heights == softened->heightField->heights);
+  map.undoCommand();
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, vertexPosition);
+  view->grabFramebuffer();
+  terrainMouseEvent(
+    view, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, raisedPosition);
+  view->grabFramebuffer();
+  QTest::keyClick(view, Qt::Key_Escape);
+  view->grabFramebuffer();
+  CHECK_FALSE(panel->vertexInteracting());
+  CHECK(testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
+  soft->setChecked(false);
+
   auto* vertexAncestor = view->parentWidget();
   while (vertexAncestor && !qobject_cast<MapEditorView*>(vertexAncestor))
     vertexAncestor = vertexAncestor->parentWidget();

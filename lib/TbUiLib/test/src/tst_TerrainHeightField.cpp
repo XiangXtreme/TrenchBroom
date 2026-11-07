@@ -36,6 +36,30 @@ TerrainHeightField field(const int columns = 2, const int rows = 2)
 
 TEST_CASE("Terrain height field")
 {
+  SECTION("soft selection uses world-space spherical distance and locks edges")
+  {
+    auto terrain = field(4, 4);
+    const auto center = terrain.index(2, 2);
+    const auto neighbor = terrain.index(3, 2);
+    auto weights = terrain.softSelectionWeights(
+      {64, -64, 0}, {0, 0}, vm::mat4x4d::identity(), 64, 0, true);
+    CHECK(weights[center] == 1.0);
+    CHECK(weights[neighbor] == Catch::Approx(0.5));
+    CHECK(weights[terrain.index(4, 2)] == 0.0);
+    terrain.heights[neighbor] = 64;
+    weights = terrain.softSelectionWeights(
+      {64, -64, 0}, {0, 0}, vm::mat4x4d::identity(), 64, 0, true);
+    CHECK(weights[neighbor] == 0.0);
+    const auto transform = vm::translation_matrix(vm::vec3d{100, 200, 300})
+                           * vm::scaling_matrix(vm::vec3d{2, 2, 2});
+    weights =
+      terrain.softSelectionWeights({228, 72, 300}, {0, 0}, transform, 64, 0, false);
+    CHECK(weights[center] == 1.0);
+    CHECK(weights[terrain.index(1, 2)] == 0.0);
+    CHECK(
+      terrain.softSelectionWeights({0, 0, 0}, {0, 0}, transform, 0, 0, false).empty());
+  }
+
   SECTION("validates its dimensions and heights")
   {
     CHECK(TerrainHeightField::create(0, 2, 32, -64, 0).is_error());

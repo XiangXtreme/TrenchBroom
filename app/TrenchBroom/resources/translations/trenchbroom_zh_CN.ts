@@ -8578,6 +8578,34 @@ Removing them frees about %3. Current assets and versions are kept.</source>
     </context>
     <context>
         <name>tb::ui::TerrainInspector</name>
+        <message>
+            <source>Soft selection (3D sphere)</source>
+            <translation>软选择（三维球形）</translation>
+        </message>
+        <message>
+            <source>Select occluded vertices</source>
+            <translation>选择被遮挡的顶点</translation>
+        </message>
+        <message>
+            <source>Selection radius</source>
+            <translation>选择半径</translation>
+        </message>
+        <message>
+            <source>Selection hardness</source>
+            <translation>选择硬度</translation>
+        </message>
+        <message>
+            <source>Drag the terrain surface to move vertices inside a 3D sphere with distance falloff.</source>
+            <translation>拖动地形表面，按距离衰减移动三维球形范围内的顶点。</translation>
+        </message>
+        <message>
+            <source>Drag the terrain surface to move vertices within the sphere. Orange shows the influence; Esc cancels the drag.</source>
+            <translation>拖动地形表面以移动球形范围内的顶点。橙色表示影响程度；Esc 取消拖动。</translation>
+        </message>
+        <message>
+            <source>Click or box-select vertices, then drag along the height direction. Hold Ctrl or Shift to add to the selection.</source>
+            <translation>点选或框选顶点，然后沿高度方向拖动。按住 Ctrl 或 Shift 可追加选择。</translation>
+        </message>
         <message><source>
 Base: %1 · Shared: %2 · Local: %3</source><translation>
 底材：%1 · 共享过渡：%2 · 局部烘焙：%3</translation></message>

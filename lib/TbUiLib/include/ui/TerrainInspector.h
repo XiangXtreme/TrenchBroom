@@ -67,6 +67,10 @@ private:
   QComboBox* m_sculptMode = nullptr;
   QComboBox* m_gridSpacing = nullptr;
   QCheckBox* m_lockEdges = nullptr;
+  QCheckBox* m_softSelection = nullptr;
+  QCheckBox* m_selectOccluded = nullptr;
+  QSpinBox* m_softRadius = nullptr;
+  QSpinBox* m_softHardness = nullptr;
   QSpinBox* m_newHeight = nullptr;
   QSpinBox* m_newThickness = nullptr;
   QComboBox* m_terrainMaterial = nullptr;
@@ -101,6 +105,10 @@ private:
   mutable std::unique_ptr<TerrainRegion> m_vertexCachedRegion;
   std::set<size_t> m_selectedVertices;
   std::vector<double> m_vertexOriginalHeights;
+  std::vector<double> m_vertexDragWeights;
+  std::optional<vm::vec3d> m_vertexSoftCenter;
+  double m_vertexHeightDelta = 0.0;
+  QPointF m_vertexScreenAxis{0.0, -1.0};
   QPointF m_vertexStart;
   QPointer<QRubberBand> m_vertexBox;
   bool m_vertexSelecting = false;
@@ -126,11 +134,19 @@ public:
   bool vertexEditing() const;
   bool vertexInteracting() const;
   void beginVertexInteraction(
-    const gl::Camera& camera, QWidget& view, const QPointF& point, bool additive);
+    const gl::Camera& camera,
+    QWidget& view,
+    const QPointF& point,
+    bool additive,
+    const mdl::PickResult& pick);
   void moveVertexInteraction(const QPointF& point);
   void endVertexInteraction(const gl::Camera& camera, const QPointF& point, bool commit);
   void cancelVertexInteraction();
-  void renderVertices(render::RenderContext& context, render::RenderBatch& batch) const;
+  void renderVertices(
+    render::RenderContext& context,
+    render::RenderBatch& batch,
+    const mdl::PickResult& pick,
+    const QPointF& point) const;
   bool drawingTerrain() const;
   void createDrawnTerrain(const vm::vec2d& first, const vm::vec2d& second);
   void cancelDrawing();
@@ -151,6 +167,18 @@ private:
   void createRegion();
   void convertSelection();
   void updateModeControls();
+  std::optional<size_t> nearestVertex(
+    const gl::Camera& camera,
+    const TerrainRegion& region,
+    const mdl::GroupNode& group,
+    const QPointF& point) const;
+  bool vertexVisible(const gl::Camera& camera, const vm::vec3d& position) const;
+  std::optional<vm::vec3d> softSelectionCenter(
+    const gl::Camera& camera,
+    const TerrainRegion& region,
+    const mdl::GroupNode& group,
+    const mdl::PickResult& pick,
+    const QPointF& point) const;
   const TerrainRegion* vertexRegion(const mdl::GroupNode& group) const;
   void sculptTo(const vm::vec2d& point);
   void generate();

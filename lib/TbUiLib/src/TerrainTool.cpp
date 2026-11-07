@@ -86,7 +86,11 @@ bool TerrainTool::begin(const InputState& input, QWidget& view, const bool persp
   if (m_mode == TerrainToolMode::Vertices)
   {
     m_inspector->beginVertexInteraction(
-      input.camera(), view, point, input.modifierKeys() != ModifierKeys::None);
+      input.camera(),
+      view,
+      point,
+      input.modifierKeys() != ModifierKeys::None,
+      input.pickResult());
     if (!m_inspector->vertexInteracting())
       return false;
   }

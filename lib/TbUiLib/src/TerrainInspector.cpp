@@ -35,11 +35,13 @@
 #include "mdl/HitFilter.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Nodes.h"
+#include "mdl/Map_Picking.h"
 #include "mdl/NodeContents.h"
 #include "mdl/PickResult.h"
 #include "mdl/TransactionScope.h"
 #include "mdl/WorldNode.h"
 #include "project/ProjectStore.h"
+#include "render/RenderContext.h"
 #include "render/RenderService.h"
 #include "render/RenderTiming.h"
 #include "ui/AppController.h"
@@ -161,6 +163,23 @@ TerrainInspector::TerrainInspector(
   m_lockEdges->setObjectName(QStringLiteral("TerrainInspector_LockEdges"));
   m_lockEdges->setChecked(true);
 
+  m_softSelection = new QCheckBox{tr("Soft selection (3D sphere)"), this};
+  m_softSelection->setObjectName(QStringLiteral("TerrainInspector_SoftSelection"));
+  m_softSelection->setToolTip(
+    tr("Drag the terrain surface to move vertices inside a 3D sphere with distance "
+       "falloff."));
+  m_selectOccluded = new QCheckBox{tr("Select occluded vertices"), this};
+  m_selectOccluded->setObjectName(QStringLiteral("TerrainInspector_SelectOccluded"));
+  m_softRadius = new QSpinBox{this};
+  m_softRadius->setObjectName(QStringLiteral("TerrainInspector_SelectionRadius"));
+  m_softRadius->setRange(1, 4096);
+  m_softRadius->setValue(128);
+  m_softRadius->setSuffix(tr(" units"));
+  m_softHardness = new QSpinBox{this};
+  m_softHardness->setObjectName(QStringLiteral("TerrainInspector_SelectionHardness"));
+  m_softHardness->setRange(0, 100);
+  m_softHardness->setSuffix(QStringLiteral("%"));
+
   m_newHeight = new QSpinBox{this};
   m_newHeight->setObjectName(QStringLiteral("TerrainInspector_NewHeight"));
   m_newHeight->setRange(-65536, 65536);
@@ -269,6 +288,10 @@ TerrainInspector::TerrainInspector(
   form->addRow(tr("New terrain height"), m_newHeight);
   form->addRow(tr("New terrain thickness"), m_newThickness);
   form->addRow(m_lockEdges);
+  form->addRow(m_softSelection);
+  form->addRow(m_selectOccluded);
+  form->addRow(tr("Selection radius"), m_softRadius);
+  form->addRow(tr("Selection hardness"), m_softHardness);
   form->addRow(tr("Terrain Material"), m_terrainMaterial);
   form->addRow(tr("Paint Slot"), m_material);
   form->addRow(tr("Brush radius"), m_radius);
@@ -362,9 +385,23 @@ TerrainInspector::TerrainInspector(
     syncToolButtons();
     refreshViews();
   });
+  const auto selectionSettingsChanged = [this] {
+    if (m_toolBox && m_toolBox->dragging())
+      m_toolBox->cancelMouseDrag();
+    cancelVertexInteraction();
+    updateModeControls();
+    refreshViews();
+  };
+  connect(m_softSelection, &QCheckBox::toggled, this, selectionSettingsChanged);
+  connect(m_selectOccluded, &QCheckBox::toggled, this, selectionSettingsChanged);
+  connect(m_softRadius, &QSpinBox::valueChanged, this, selectionSettingsChanged);
+  connect(m_softHardness, &QSpinBox::valueChanged, this, selectionSettingsChanged);
   connect(m_radius, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
   connect(m_hardness, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
   connect(m_lockEdges, &QCheckBox::toggled, this, [this] {
+    if (m_toolBox && m_toolBox->dragging())
+      m_toolBox->cancelMouseDrag();
+    cancelVertexInteraction();
     refresh();
     refreshViews();
   });
@@ -536,6 +573,21 @@ void TerrainInspector::updateModeControls()
   const auto hasHeightField =
     region.is_success() && region.value().heightField.has_value();
   const auto drawing = sculpt && m_drawNew->isChecked();
+  const auto soft = vertices && m_softSelection->isChecked();
+  m_form->setRowVisible(m_softSelection, vertices);
+  m_form->setRowVisible(m_selectOccluded, vertices && !soft);
+  m_form->setRowVisible(m_softRadius, soft);
+  m_form->setRowVisible(m_softHardness, soft);
+  m_softSelection->setEnabled(m_canEditHeightField);
+  m_selectOccluded->setEnabled(m_canEditHeightField);
+  m_softRadius->setEnabled(m_canEditHeightField);
+  m_softHardness->setEnabled(m_canEditHeightField);
+  if (vertexEditing())
+    m_status->setText(
+      soft ? tr("Drag the terrain surface to move vertices within the sphere. Orange "
+                "shows the influence; Esc cancels the drag.")
+           : tr("Click or box-select vertices, then drag along the height direction. "
+                "Hold Ctrl or Shift to add to the selection."));
   m_form->setRowVisible(m_sculptMode, sculpt && !drawing);
   m_form->setRowVisible(m_lockEdges, (sculpt && !drawing) || vertices);
   m_form->setRowVisible(m_gridSpacing, sculpt && (!hasHeightField || drawing));
@@ -668,6 +720,7 @@ void TerrainInspector::refresh()
 
   m_canPaint = editable;
   m_canEditHeightField = editable && region.value().heightField.has_value();
+  updateModeControls();
   if (m_editMode->currentIndex() != 0 && !region.value().heightField)
     m_paint->setEnabled(false);
   if (!editable)
@@ -991,8 +1044,76 @@ const TerrainRegion* TerrainInspector::vertexRegion(const mdl::GroupNode& group)
   return m_vertexCachedRegion.get();
 }
 
+bool TerrainInspector::vertexVisible(
+  const gl::Camera& camera, const vm::vec3d& position) const
+{
+  if (camera.orthographicProjection() || m_selectOccluded->isChecked())
+    return true;
+  const auto ray = vm::ray3d{camera.pickRay(vm::vec3f{position})};
+  auto pick = mdl::PickResult::byDistance();
+  mdl::pick(m_document.map(), ray, pick);
+  const auto& hit = pick.first(mdl::HitFilters::type(mdl::BrushNode::BrushHitType));
+  return !hit.isMatch() || hit.distance() + 0.5 >= vm::length(position - ray.origin);
+}
+
+std::optional<size_t> TerrainInspector::nearestVertex(
+  const gl::Camera& camera,
+  const TerrainRegion& region,
+  const mdl::GroupNode& group,
+  const QPointF& point) const
+{
+  const auto& field = *region.heightField;
+  auto nearest = std::optional<size_t>{};
+  auto nearestDistance = 8.0 * 8.0;
+  auto nearestDepth = 1.0f;
+  for (auto i = size_t{0}; i < field.heights.size(); ++i)
+  {
+    if (m_lockEdges->isChecked() && terrainEdgeVertex(field, i))
+      continue;
+    const auto position = terrainVertex(region, group, i);
+    const auto screen = terrainVertexScreenPosition(camera, position);
+    if (!screen)
+      continue;
+    const auto delta = *screen - point;
+    const auto distance = delta.x() * delta.x() + delta.y() * delta.y();
+    const auto depth = camera.project(vm::vec3f{position}).z();
+    if (
+      distance < nearestDistance || (distance == nearestDistance && depth < nearestDepth))
+    {
+      if (!vertexVisible(camera, position))
+        continue;
+      nearest = i;
+      nearestDistance = distance;
+      nearestDepth = depth;
+    }
+  }
+
+  return nearest;
+}
+
+std::optional<vm::vec3d> TerrainInspector::softSelectionCenter(
+  const gl::Camera& camera,
+  const TerrainRegion& region,
+  const mdl::GroupNode& group,
+  const mdl::PickResult& pick,
+  const QPointF& point) const
+{
+  const auto& hit = pick.first(mdl::HitFilters::type(mdl::BrushNode::BrushHitType));
+  const auto face = mdl::hitToFaceHandle(hit);
+  if (face && terrainOwnsBrush(group, face->node()) && face->face().normal().z() > 1e-6)
+    return hit.hitPoint();
+  if (camera.orthographicProjection())
+    if (const auto nearest = nearestVertex(camera, region, group, point))
+      return terrainVertex(region, group, *nearest);
+  return std::nullopt;
+}
+
 void TerrainInspector::beginVertexInteraction(
-  const gl::Camera& camera, QWidget& view, const QPointF& point, const bool additive)
+  const gl::Camera& camera,
+  QWidget& view,
+  const QPointF& point,
+  const bool additive,
+  const mdl::PickResult& pick)
 {
   if (!vertexEditing() || vertexInteracting())
     return;
@@ -1004,32 +1125,18 @@ void TerrainInspector::beginVertexInteraction(
   if (!region || !region->heightField)
     return;
   const auto& field = *region->heightField;
-  auto nearest = std::optional<size_t>{};
-  auto nearestDistance = 8.0 * 8.0;
-  auto nearestDepth = 1.0f;
-  for (auto i = size_t{0}; i < field.heights.size(); ++i)
-  {
-    if (m_lockEdges->isChecked() && terrainEdgeVertex(field, i))
-      continue;
-    const auto position = terrainVertex(*region, *group, i);
-    const auto screen = terrainVertexScreenPosition(camera, position);
-    if (!screen)
-      continue;
-    const auto delta = *screen - point;
-    const auto distance = delta.x() * delta.x() + delta.y() * delta.y();
-    const auto depth = camera.project(vm::vec3f{position}).z();
-    if (
-      distance < nearestDistance || (distance == nearestDistance && depth < nearestDepth))
-    {
-      nearest = i;
-      nearestDistance = distance;
-      nearestDepth = depth;
-    }
-  }
+  const auto nearest = m_softSelection->isChecked()
+                         ? std::optional<size_t>{}
+                         : nearestVertex(camera, *region, *group, point);
+  const auto softCenter = m_softSelection->isChecked()
+                            ? softSelectionCenter(camera, *region, *group, pick, point)
+                            : std::optional<vm::vec3d>{};
+  if (m_softSelection->isChecked() && !softCenter)
+    return;
 
   m_vertexStart = point;
   m_vertexAdditive = additive;
-  if (!nearest)
+  if (!nearest && !softCenter)
   {
     m_vertexSelecting = true;
     if (!m_vertexBox || m_vertexBox->parentWidget() != &view)
@@ -1042,29 +1149,55 @@ void TerrainInspector::beginVertexInteraction(
     return;
   }
 
-  if (!m_selectedVertices.contains(*nearest))
+  if (nearest && !m_selectedVertices.contains(*nearest))
   {
     if (!additive)
       m_selectedVertices.clear();
     m_selectedVertices.insert(*nearest);
   }
-  const auto world = terrainVertex(*region, *group, *nearest);
+  const auto world = softCenter ? *softCenter : terrainVertex(*region, *group, *nearest);
+  m_vertexDragWeights.assign(field.heights.size(), 0.0);
+  if (softCenter)
+    m_vertexDragWeights = field.softSelectionWeights(
+      *softCenter,
+      region->origin,
+      group->group().transformation(),
+      double(m_softRadius->value()),
+      double(m_softHardness->value()) / 100.0,
+      m_lockEdges->isChecked());
+  else
+    for (const auto i : m_selectedVertices)
+      if (
+        i < m_vertexDragWeights.size()
+        && (!m_lockEdges->isChecked() || !terrainEdgeVertex(field, i)))
+        m_vertexDragWeights[i] = 1.0;
+  if (std::ranges::none_of(
+        m_vertexDragWeights, [](const auto weight) { return weight > 0.0; }))
+    return;
   const auto& transform = group->group().transformation();
   const auto vertical = transform * vm::vec3d{0, 0, 1} - transform * vm::vec3d{0, 0, 0};
   const auto projected = camera.project(vm::vec3f{world});
-  const auto projectedUp = camera.project(vm::vec3f{world + vertical});
-  const auto pixelsPerUnit = double(projectedUp.y() - projected.y());
-  if (std::abs(pixelsPerUnit) > 0.01)
+  const auto projectedUp = camera.project(vm::vec3f{world + vertical * 64.0});
+  const auto axis = QPointF{
+    double(projectedUp.x() - projected.x()), double(projected.y() - projectedUp.y())};
+  const auto pixelsPerUnit = std::hypot(axis.x(), axis.y()) / 64.0;
+  if (pixelsPerUnit > 0.01)
+  {
+    m_vertexScreenAxis = axis / (pixelsPerUnit * 64.0);
     m_vertexUnitsPerPixel = 1.0 / pixelsPerUnit;
+  }
   else
   {
     const auto a = camera.unproject(float(point.x()), float(point.y()), projected.z());
     const auto b =
       camera.unproject(float(point.x()), float(point.y() + 1), projected.z());
+    m_vertexScreenAxis = QPointF{0.0, -1.0};
     m_vertexUnitsPerPixel = double(vm::length(b - a)) / vm::length(vertical);
   }
   if (!std::isfinite(m_vertexUnitsPerPixel))
     return;
+  m_vertexSoftCenter = softCenter;
+  m_vertexHeightDelta = 0.0;
 
   m_vertexOriginalHeights = field.heights;
   m_stroke = *region;
@@ -1095,15 +1228,16 @@ void TerrainInspector::moveVertexInteraction(const QPointF& point)
     return;
   }
   auto field = *m_stroke->heightField;
-  const auto delta =
-    map.grid().snap(-(point.y() - m_vertexStart.y()) * m_vertexUnitsPerPixel);
-  for (const auto i : m_selectedVertices)
-  {
-    if (
-      i < field.heights.size()
-      && (!m_lockEdges->isChecked() || !terrainEdgeVertex(field, i)))
-      field.heights[i] = std::max(field.bottom + 1.0, m_vertexOriginalHeights[i] + delta);
-  }
+  const auto displacement = point - m_vertexStart;
+  const auto delta = map.grid().snap(
+    (displacement.x() * m_vertexScreenAxis.x()
+     + displacement.y() * m_vertexScreenAxis.y())
+    * m_vertexUnitsPerPixel);
+  m_vertexHeightDelta = delta;
+  for (auto i = size_t{0}; i < field.heights.size(); ++i)
+    if (m_vertexDragWeights[i] > 0.0)
+      field.heights[i] = std::max(
+        field.bottom + 1.0, m_vertexOriginalHeights[i] + delta * m_vertexDragWeights[i]);
   if (field.heights == m_stroke->heightField->heights)
     return;
   m_sculptApplying = true;
@@ -1136,6 +1270,8 @@ void TerrainInspector::endVertexInteraction(
     {
       m_vertexDragging = false;
       m_vertexOriginalHeights.clear();
+      m_vertexDragWeights.clear();
+      m_vertexSoftCenter.reset();
       endStroke(true);
     }
     return;
@@ -1161,7 +1297,9 @@ void TerrainInspector::endVertexInteraction(
       continue;
     const auto screen =
       terrainVertexScreenPosition(camera, terrainVertex(*region, *group, i));
-    if (screen && rectangle.contains(*screen))
+    if (
+      screen && rectangle.contains(*screen)
+      && vertexVisible(camera, terrainVertex(*region, *group, i)))
       m_selectedVertices.insert(i);
   }
   refreshViews();
@@ -1170,6 +1308,8 @@ void TerrainInspector::endVertexInteraction(
 void TerrainInspector::cancelVertexInteraction()
 {
   m_vertexSelecting = false;
+  m_vertexDragWeights.clear();
+  m_vertexSoftCenter.reset();
   if (m_vertexBox)
     m_vertexBox->hide();
   if (std::exchange(m_vertexDragging, false))
@@ -1180,7 +1320,10 @@ void TerrainInspector::cancelVertexInteraction()
 }
 
 void TerrainInspector::renderVertices(
-  render::RenderContext& context, render::RenderBatch& batch) const
+  render::RenderContext& context,
+  render::RenderBatch& batch,
+  const mdl::PickResult& pick,
+  const QPointF& point) const
 {
   if (!vertexEditing())
     return;
@@ -1191,21 +1334,66 @@ void TerrainInspector::renderVertices(
   if (!region || !region->heightField)
     return;
   const auto& field = *region->heightField;
-  auto regular = std::vector<vm::vec3f>{};
-  auto selected = std::vector<vm::vec3f>{};
+  const auto soft = m_softSelection->isChecked();
+  auto center =
+    soft ? (m_vertexDragging
+              ? m_vertexSoftCenter
+              : softSelectionCenter(context.camera(), *region, *group, pick, point))
+         : std::optional<vm::vec3d>{};
+  auto previewWeights = std::vector<double>{};
+  if (center && !m_vertexDragging)
+    previewWeights = field.softSelectionWeights(
+      *center,
+      region->origin,
+      group->group().transformation(),
+      double(m_softRadius->value()),
+      double(m_softHardness->value()) / 100.0,
+      m_lockEdges->isChecked());
+  const auto& weights = m_vertexDragging ? m_vertexDragWeights : previewWeights;
+  auto handles = std::array<std::vector<vm::vec3f>, 5>{};
   for (auto i = size_t{0}; i < field.heights.size(); ++i)
   {
     if (m_lockEdges->isChecked() && terrainEdgeVertex(field, i))
       continue;
-    auto& handles = m_selectedVertices.contains(i) ? selected : regular;
-    handles.push_back(vm::vec3f{terrainVertex(*region, *group, i)});
+    const auto weight = soft ? (i < weights.size() ? weights[i] : 0.0)
+                             : (m_selectedVertices.contains(i) ? 1.0 : 0.0);
+    const auto bucket = weight > 0.0 ? size_t(std::ceil(weight * 4.0)) : size_t{0};
+    handles[bucket].push_back(vm::vec3f{terrainVertex(*region, *group, i)});
   }
   auto renderer = render::RenderService{context, batch};
-  renderer.setShowOccludedObjectsTransparent();
-  renderer.setForegroundColor(RgbaF{0.9f, 0.9f, 0.9f, 1.0f});
-  renderer.renderHandles(regular);
-  renderer.setForegroundColor(RgbaF{1.0f, 0.55f, 0.1f, 1.0f});
-  renderer.renderHandles(selected);
+  if (soft || m_selectOccluded->isChecked() || context.camera().orthographicProjection())
+    renderer.setShowOccludedObjectsTransparent();
+  else
+    renderer.setHideOccludedObjects();
+  for (auto bucket = size_t{0}; bucket < handles.size(); ++bucket)
+  {
+    const auto weight = float(bucket) / 4.0f;
+    renderer.setForegroundColor(
+      bucket == 0 ? RgbaF{0.9f, 0.9f, 0.9f, 1.0f}
+                  : RgbaF{1.0f, 0.85f - 0.3f * weight, 0.55f - 0.45f * weight, 1.0f});
+    renderer.renderHandles(handles[bucket]);
+  }
+  if (center)
+  {
+    if (m_vertexDragging)
+    {
+      const auto& transform = group->group().transformation();
+      *center = *center + transform * vm::vec3d{0, 0, m_vertexHeightDelta}
+                - transform * vm::vec3d{0, 0, 0};
+    }
+    renderer.setShowOccludedObjectsTransparent();
+    renderer.setForegroundColor(RgbaF{1.0f, 0.55f, 0.1f, 1.0f});
+    for (const auto axis : {vm::axis::x, vm::axis::y, vm::axis::z})
+    {
+      renderer.renderCircle(vm::vec3f{*center}, axis, 64, float(m_softRadius->value()));
+      if (m_softHardness->value() > 0 && m_softHardness->value() < 100)
+        renderer.renderCircle(
+          vm::vec3f{*center},
+          axis,
+          64,
+          float(m_softRadius->value()) * float(m_softHardness->value()) / 100.0f);
+    }
+  }
 }
 
 bool TerrainInspector::drawingTerrain() const
