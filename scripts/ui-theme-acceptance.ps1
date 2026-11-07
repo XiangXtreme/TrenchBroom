@@ -16,6 +16,8 @@ param(
     "face-inspector",
     "material-browser-empty",
     "plugin-inspector",
+    "terrain",
+    "terrain-collapsed",
     "supporting",
     "output-log",
     "python-console",
@@ -269,6 +271,8 @@ foreach ($target in $normalizedTargets) {
       "face-inspector",
       "material-browser-empty",
       "plugin-inspector",
+      "terrain",
+      "terrain-collapsed",
       "supporting",
       "output-log",
       "path-tool-preview",
@@ -287,7 +291,7 @@ foreach ($target in $normalizedTargets) {
       "preferences-misc",
       "preferences-kreedzbroom"
     )) {
-    throw "Unsupported target '$target'. Expected welcome, workbench, map-areas, map-area-split-preview, map-area-join-preview, map-area-partial-join-preview, map-area-dock-preview, project-empty, project-drawer, project-pinned, project-map-switch, project-all-closed, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, goldsrc-entity-links, face-inspector, material-browser-empty, plugin-inspector, supporting, output-log, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
+    throw "Unsupported target '$target'. Expected welcome, workbench, map-areas, map-area-split-preview, map-area-join-preview, map-area-partial-join-preview, map-area-dock-preview, project-empty, project-drawer, project-pinned, project-map-switch, project-all-closed, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, goldsrc-entity-links, face-inspector, material-browser-empty, plugin-inspector, terrain, terrain-collapsed, supporting, output-log, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
   }
 }
 foreach ($theme in $Themes) {
@@ -346,6 +350,8 @@ $resolvedMapPath = if (
   $normalizedTargets -contains "entity-browser" -or
   $normalizedTargets -contains "entity-browser-empty" -or
   $normalizedTargets -contains "plugin-inspector" -or
+  $normalizedTargets -contains "terrain" -or
+  $normalizedTargets -contains "terrain-collapsed" -or
   $normalizedTargets -contains "supporting" -or
   $normalizedTargets -contains "output-log" -or
   $normalizedTargets -contains "path-tool-preview" -or
@@ -429,6 +435,8 @@ foreach ($target in $normalizedTargets) {
         $target -eq "face-inspector" -or
         $target -eq "material-browser-empty" -or
         $target -eq "plugin-inspector" -or
+        $target -eq "terrain" -or
+        $target -eq "terrain-collapsed" -or
         $target -eq "supporting" -or
         $target -eq "output-log" -or
         $target -eq "path-tool-preview" -or

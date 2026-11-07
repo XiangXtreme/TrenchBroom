@@ -24,7 +24,6 @@
 #include "ui/TitleBar.h"
 
 class QLabel;
-class QIcon;
 class QKeyEvent;
 class QToolButton;
 
@@ -44,7 +43,7 @@ public:
     const QString& title, const QString& stateText, QWidget* parent = nullptr);
 
   void setStateText(const QString& stateText);
-  void setStateIcon(const QIcon& icon, const QString& tooltip);
+  void setStateArrow(Qt::ArrowType arrow, const QString& tooltip);
 signals:
   void titleBarClicked();
 

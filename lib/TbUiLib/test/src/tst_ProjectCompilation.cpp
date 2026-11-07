@@ -57,6 +57,7 @@
 #include "project/ProjectStore.h"
 #include "render/RenderTiming.h"
 #include "ui/AppControllerFixture.h"
+#include "ui/ClickableTitleBar.h"
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/CompilationDialog.h"
 #include "ui/Inspector.h"
@@ -858,6 +859,31 @@ void testTerrainPanelInteraction(MapWindow* window, TerrainInspector* panel)
     auto* editing = panel->findChild<CollapsibleTitledPanel*>("TerrainInspector_Editing");
     REQUIRE(creation);
     REQUIRE(editing);
+    for (auto cycle = 0; cycle < 12; ++cycle)
+    {
+      panel->setFixedWidth(cycle % 2 == 0 ? 320 : 480);
+      // Mode changes also show/hide form rows while their section is collapsed.
+      mode->setCurrentIndex(cycle % 3);
+      for (auto* section : {creation, editing, compile})
+      {
+        section->expand();
+        auto* bar = section->findChild<ClickableTitleBar*>();
+        REQUIRE(bar);
+        QTest::mouseClick(bar, Qt::LeftButton);
+        REQUIRE_FALSE(section->expanded());
+      }
+      REQUIRE(QTest::qWaitFor(
+        [&] {
+          return std::ranges::all_of(
+            std::initializer_list{creation, editing, compile}, [](auto* section) {
+              return section->height()
+                     == section->template findChild<ClickableTitleBar*>()->height();
+            });
+        },
+        2000));
+    }
+    panel->setFixedWidth(320);
+    mode->setCurrentIndex(2);
     creation->collapse();
     editing->collapse();
     compile->collapse();

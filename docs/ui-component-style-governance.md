@@ -120,6 +120,14 @@ These are logical Qt pixels and scale through Qt's device-pixel handling. A feat
 may constrain width for its content, but it must not redefine the component's visual
 metrics.
 
+Shared collapsible sections use `ClickableTitleBar` with a fixed vertical size policy;
+`CollapsibleTitledPanel` constrains its layout to the visible children's minimum and
+maximum sizes. A collapsed section occupies only its title row, including in resizable
+scroll areas. Expanded content retains its own growth policy. `ApplicationStyle` paints
+the disclosure button's `tbDisclosure` arrow using the same chevron and theme colors as
+tree branches. The `components`, `terrain` and `terrain-collapsed` snapshots cover these
+states; feature panels do not supply their own title geometry or arrow rendering.
+
 ## Exceptions
 
 Exceptions are limited to domain renderers whose content is itself visual data, including

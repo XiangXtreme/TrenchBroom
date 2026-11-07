@@ -23,7 +23,6 @@
 #include <QDataStream>
 #include <QIODevice>
 #include <QLayout>
-#include <QStyle>
 
 #include "ui/BorderLine.h"
 #include "ui/ClickableTitleBar.h"
@@ -46,6 +45,9 @@ CollapsibleTitledPanel::CollapsibleTitledPanel(
   auto* sizer = new QVBoxLayout{};
   sizer->setContentsMargins(0, 0, 0, 0);
   sizer->setSpacing(0);
+  // Recompute the maximum height when content is hidden, even in a resizable
+  // scroll area. Expanded bodies keep their own vertical growth policy.
+  sizer->setSizeConstraint(QLayout::SetMinAndMaxSize);
   sizer->addWidget(m_titleBar, 0);
   sizer->addWidget(m_divider, 0);
   sizer->addWidget(m_panel, 1);
@@ -120,14 +122,17 @@ void CollapsibleTitledPanel::updateExpanded()
   {
     m_divider->show();
     m_panel->show();
-    m_titleBar->setStateIcon(style()->standardIcon(QStyle::SP_ArrowDown), tr("Collapse"));
+    m_titleBar->setStateArrow(Qt::DownArrow, tr("Collapse"));
   }
   else
   {
     m_divider->hide();
     m_panel->hide();
-    m_titleBar->setStateIcon(style()->standardIcon(QStyle::SP_ArrowRight), tr("Expand"));
+    m_titleBar->setStateArrow(Qt::RightArrow, tr("Expand"));
   }
+  layout()->invalidate();
+  layout()->activate();
+  updateGeometry();
 }
 
 } // namespace tb::ui

@@ -1405,9 +1405,10 @@ QWidget#FaceAttribsEditor_Attributes QDoubleSpinBox {
 }
 
 QWidget#ClickableTitleBar {
-  background: @tb-panel-background;
+  background: @tb-alternate-background;
   border: 1px solid transparent;
-  min-height: 28px;
+  border-radius: 4px;
+  min-height: 26px;
 }
 
 QWidget#ClickableTitleBar:hover {
@@ -1424,6 +1425,11 @@ QWidget#ClickableTitleBar QLabel#ClickableTitleBar_Title {
 
 QWidget#ClickableTitleBar QLabel#ClickableTitleBar_StateText {
   color: @tb-secondary-text;
+}
+
+QWidget#ClickableTitleBar QLabel#ClickableTitleBar_Title:disabled,
+QWidget#ClickableTitleBar QLabel#ClickableTitleBar_StateText:disabled {
+  color: @tb-disabled-text;
 }
 
 QWidget#ClickableTitleBar QToolButton[tbControlRole="compact"] {

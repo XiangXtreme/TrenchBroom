@@ -335,6 +335,7 @@ if(WIN32 OR ${CMAKE_SYSTEM_NAME} MATCHES "Linux|FreeBSD")
     tb_add_post_build_copy_directory(TrenchBroom "${TB_RESOURCE_DIR}/shader" "${APP_RESOURCE_DEST_DIR}/shader")
 
     # Copy Qt stylesheet files to resources directory
+    set_property(TARGET TrenchBroom APPEND PROPERTY LINK_DEPENDS "${TB_RESOURCE_DIR}/stylesheets/base.qss")
     tb_add_post_build_copy_directory(TrenchBroom "${TB_RESOURCE_DIR}/stylesheets" "${APP_RESOURCE_DEST_DIR}/stylesheets")
 
     # Copy update scripts to resources directory

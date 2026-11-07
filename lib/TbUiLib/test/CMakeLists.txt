@@ -154,11 +154,13 @@ file(GLOB TB_UI_TEST_SHADERS CONFIGURE_DEPENDS
   "${TB_RESOURCE_DIR}/shader/*.vertsh"
   "${TB_RESOURCE_DIR}/shader/*.fragsh")
 set_property(TARGET TbUiLibTest APPEND PROPERTY LINK_DEPENDS ${TB_UI_TEST_SHADERS})
+set_property(TARGET TbUiLibTest APPEND PROPERTY LINK_DEPENDS "${TB_RESOURCE_DIR}/stylesheets/base.qss")
 
 set(TEST_FIXTURE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/fixture)
 set(TEST_FIXTURE_DEST_DIR $<TARGET_FILE_DIR:TbUiLibTest>/fixture)
 
 add_custom_command(TARGET TbUiLibTest POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${TB_RESOURCE_DIR}/stylesheets" "$<TARGET_FILE_DIR:TbUiLibTest>/stylesheets"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${TB_RESOURCE_DIR}/shader" "$<TARGET_FILE_DIR:TbUiLibTest>/shader"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${TB_RESOURCE_DIR}/fonts" "$<TARGET_FILE_DIR:TbUiLibTest>/fonts"
   COMMAND ${CMAKE_COMMAND} -E rm -rf "${TEST_FIXTURE_DEST_DIR}"

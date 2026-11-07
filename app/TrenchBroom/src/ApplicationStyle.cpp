@@ -58,6 +58,35 @@ QColor blendColor(const QColor& background, const QColor& foreground, const doub
     channel(background.blue(), foreground.blue())};
 }
 
+void drawChevron(
+  QPainter* painter, const QRect& rect, const QColor& color, const Qt::ArrowType arrow)
+{
+  const auto center = QRectF{rect}.center();
+  auto chevron = QPainterPath{};
+  if (arrow == Qt::DownArrow)
+  {
+    chevron.moveTo(center.x() - 3.0, center.y() - 1.5);
+    chevron.lineTo(center.x(), center.y() + 1.5);
+    chevron.lineTo(center.x() + 3.0, center.y() - 1.5);
+  }
+  else
+  {
+    const auto direction = arrow == Qt::LeftArrow ? -1.0 : 1.0;
+    chevron.moveTo(center.x() - direction * 1.5, center.y() - 3.0);
+    chevron.lineTo(center.x() + direction * 1.5, center.y());
+    chevron.lineTo(center.x() - direction * 1.5, center.y() + 3.0);
+  }
+  painter->save();
+  painter->setRenderHint(QPainter::Antialiasing);
+  auto pen = QPen{color, 1.25};
+  pen.setCapStyle(Qt::RoundCap);
+  pen.setJoinStyle(Qt::RoundJoin);
+  painter->setPen(pen);
+  painter->setBrush(Qt::NoBrush);
+  painter->drawPath(chevron);
+  painter->restore();
+}
+
 class TrenchBroomProxyStyle : public QProxyStyle
 {
 private:
@@ -228,32 +257,32 @@ public:
       const auto color = !enabled   ? m_themeTokens.disabledText
                          : selected ? m_themeTokens.inverseText
                                     : m_themeTokens.secondaryText;
-      const auto center = QRectF{option->rect}.center();
       const auto open = option->state.testFlag(QStyle::State_Open);
       const auto rtl = option->direction == Qt::RightToLeft;
-      auto chevron = QPainterPath{};
-      if (open)
-      {
-        chevron.moveTo(center.x() - 3.0, center.y() - 1.5);
-        chevron.lineTo(center.x(), center.y() + 1.5);
-        chevron.lineTo(center.x() + 3.0, center.y() - 1.5);
-      }
-      else
-      {
-        const auto direction = rtl ? -1.0 : 1.0;
-        chevron.moveTo(center.x() - direction * 1.5, center.y() - 3.0);
-        chevron.lineTo(center.x() + direction * 1.5, center.y());
-        chevron.lineTo(center.x() - direction * 1.5, center.y() + 3.0);
-      }
-      painter->save();
-      painter->setRenderHint(QPainter::Antialiasing);
-      auto pen = QPen{color, 1.25};
-      pen.setCapStyle(Qt::RoundCap);
-      pen.setJoinStyle(Qt::RoundJoin);
-      painter->setPen(pen);
-      painter->setBrush(Qt::NoBrush);
-      painter->drawPath(chevron);
-      painter->restore();
+      drawChevron(
+        painter,
+        option->rect,
+        color,
+        open  ? Qt::DownArrow
+        : rtl ? Qt::LeftArrow
+              : Qt::RightArrow);
+      return;
+    }
+
+    if (
+      widget && widget->property("tbDisclosure").toBool()
+      && (element == QStyle::PE_IndicatorArrowDown || element == QStyle::PE_IndicatorArrowRight || element == QStyle::PE_IndicatorArrowLeft))
+    {
+      const auto color = option->state.testFlag(QStyle::State_Enabled)
+                           ? m_themeTokens.secondaryText
+                           : m_themeTokens.disabledText;
+      drawChevron(
+        painter,
+        option->rect,
+        color,
+        element == QStyle::PE_IndicatorArrowDown   ? Qt::DownArrow
+        : element == QStyle::PE_IndicatorArrowLeft ? Qt::LeftArrow
+                                                   : Qt::RightArrow);
       return;
     }
 

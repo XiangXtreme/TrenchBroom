@@ -355,11 +355,6 @@ TerrainInspector::TerrainInspector(
   editingLayout->addWidget(m_help);
   editingLayout->addWidget(m_openLibrary);
 
-  // Inspector sections follow their content height, including when collapsed.
-  // Only the space below them grows with the viewport.
-  for (auto* section : {creation, editing, compilation})
-    section->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-
   auto* content = new QWidget{};
   auto* sections = new QVBoxLayout{content};
   sections->setContentsMargins(0, 0, 0, 0);

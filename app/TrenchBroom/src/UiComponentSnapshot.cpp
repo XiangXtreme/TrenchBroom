@@ -50,6 +50,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/WorkbenchSurface.h"
 
 #include <initializer_list>
@@ -417,6 +418,19 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
   leftColumn->setSpacing(12);
   leftColumn->addWidget(inputSection);
   leftColumn->addWidget(selectionSection);
+  auto* disclosureSection = makeSection(QStringLiteral("Collapsible sections"));
+  auto* expandedPanel = new CollapsibleTitledPanel{QStringLiteral("Terrain properties")};
+  auto* expandedLayout = new QFormLayout{expandedPanel->getPanel()};
+  expandedLayout->addRow(QStringLiteral("Radius"), new QSpinBox{});
+  auto* collapsedPanel =
+    new CollapsibleTitledPanel{QStringLiteral("Compile settings"), false};
+  auto* disabledPanel =
+    new CollapsibleTitledPanel{QStringLiteral("Unavailable section"), false};
+  disabledPanel->setEnabled(false);
+  sectionLayout(*disclosureSection)->addRow(expandedPanel);
+  sectionLayout(*disclosureSection)->addRow(collapsedPanel);
+  sectionLayout(*disclosureSection)->addRow(disabledPanel);
+  leftColumn->addWidget(disclosureSection);
   leftColumn->addStretch(1);
 
   auto* rightColumn = new QVBoxLayout{};

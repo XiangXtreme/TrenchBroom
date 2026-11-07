@@ -41,20 +41,22 @@ ClickableTitleBar::ClickableTitleBar(
   setAttribute(Qt::WA_StyledBackground, true);
   setFocusPolicy(Qt::StrongFocus);
   setAccessibleName(title);
+  setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
   m_titleLabel->setObjectName("ClickableTitleBar_Title");
 
   m_stateIcon->setObjectName("ClickableTitleBar_StateIcon");
   m_stateIcon->setProperty("tbControlRole", "compact");
+  m_stateIcon->setProperty("tbDisclosure", true);
   m_stateIcon->setAutoRaise(true);
   m_stateIcon->setFixedSize(QSize{22, 22});
-  m_stateIcon->setIconSize(QSize{12, 12});
   m_stateIcon->setFocusPolicy(Qt::NoFocus);
   m_stateIcon->hide();
 
   if (auto* boxLayout = qobject_cast<QBoxLayout*>(layout()))
   {
     boxLayout->insertWidget(0, m_stateIcon);
+    boxLayout->setSpacing(LayoutConstants::NarrowHMargin);
   }
 
   m_stateText->setObjectName("ClickableTitleBar_StateText");
@@ -63,7 +65,10 @@ ClickableTitleBar::ClickableTitleBar(
 
   layout()->addWidget(m_stateText);
 
-  connect(m_stateIcon, &QToolButton::clicked, this, &ClickableTitleBar::titleBarClicked);
+  connect(m_stateIcon, &QToolButton::clicked, this, [this] {
+    setFocus(Qt::MouseFocusReason);
+    emit titleBarClicked();
+  });
 }
 
 void ClickableTitleBar::setStateText(const QString& stateText)
@@ -73,9 +78,9 @@ void ClickableTitleBar::setStateText(const QString& stateText)
   m_stateIcon->hide();
 }
 
-void ClickableTitleBar::setStateIcon(const QIcon& icon, const QString& tooltip)
+void ClickableTitleBar::setStateArrow(const Qt::ArrowType arrow, const QString& tooltip)
 {
-  m_stateIcon->setIcon(icon);
+  m_stateIcon->setArrowType(arrow);
   m_stateIcon->setToolTip(tooltip);
   m_stateIcon->setAccessibleName(tooltip);
   m_stateIcon->show();

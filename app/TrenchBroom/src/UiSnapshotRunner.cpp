@@ -77,6 +77,8 @@
 #include "ui/AppController.h"
 #include "ui/AreaMapView.h"
 #include "ui/AssetInspector.h"
+#include "ui/ClickableTitleBar.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/CommandPaletteDialog.h"
 #include "ui/CyclingMapView.h"
 #include "ui/InfoPanel.h"
@@ -130,6 +132,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("face-inspector"),
     QStringLiteral("material-browser-empty"),
     QStringLiteral("plugin-inspector"),
+    QStringLiteral("terrain"),
+    QStringLiteral("terrain-collapsed"),
     QStringLiteral("supporting"),
     QStringLiteral("output-log"),
     QStringLiteral("path-tool-preview"),
@@ -781,6 +785,24 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
 
 UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& targetName)
 {
+  if (targetName == "terrain" || targetName == "terrain-collapsed")
+  {
+    for (const auto* name : {"Creation", "Editing", "Compilation"})
+    {
+      const auto* section = targetWidget.findChild<CollapsibleTitledPanel*>(
+        QStringLiteral("TerrainInspector_%1").arg(name));
+      const auto* bar = section ? section->findChild<ClickableTitleBar*>() : nullptr;
+      if (!bar || !section->isVisible())
+        return {UiSnapshotReadinessState::Failed, "Terrain section is missing or hidden"};
+      const auto expanded = targetName == "terrain" && QString{name} == "Editing";
+      if (
+        section->expanded() != expanded
+        || bar->height() != bar->sizeHint().expandedTo(bar->minimumSize()).height()
+        || (!expanded && section->height() != bar->height()))
+        return {UiSnapshotReadinessState::Pending, "Terrain section layout is settling"};
+    }
+    return {UiSnapshotReadinessState::Ready, "Terrain section state and geometry ready"};
+  }
   if (targetName == "map-areas" || targetName.startsWith("map-area-"))
   {
     auto* areas = targetWidget.findChild<AreaMapView*>();
@@ -1130,7 +1152,27 @@ void configureMapAreaSnapshot(QWidget& targetWidget, const QString& targetName)
 
 void configureSnapshot(QWidget& targetWidget, const QString& targetName)
 {
-  if (targetName == "map-areas" || targetName.startsWith("map-area-"))
+  if (targetName == "terrain" || targetName == "terrain-collapsed")
+  {
+    if (auto* window = qobject_cast<MapWindow*>(&targetWidget))
+    {
+      window->switchToInspectorPage(InspectorPage::Terrain);
+      for (const auto* name : {"Creation", "Editing", "Compilation"})
+      {
+        if (
+          auto* section = window->findChild<CollapsibleTitledPanel*>(
+            QStringLiteral("TerrainInspector_%1").arg(name)))
+        {
+          section->setExpanded(targetName == "terrain" && QString{name} == "Editing");
+          if (QString{name} == "Editing")
+            section->findChild<ClickableTitleBar*>()->setFocus(Qt::OtherFocusReason);
+        }
+      }
+      if (auto* splitter = window->findChild<QSplitter*>("MapWindow_HorizontalSplitter"))
+        splitter->setSizes({1100, 340});
+    }
+  }
+  else if (targetName == "map-areas" || targetName.startsWith("map-area-"))
   {
     configureMapAreaSnapshot(targetWidget, targetName);
   }
