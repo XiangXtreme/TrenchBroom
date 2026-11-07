@@ -47,19 +47,18 @@ private:
   std::shared_ptr<const mdl::Map> m_snapshot;
   const mdl::Map* m_map = nullptr;
   const gl::PerspectiveCamera* m_camera = nullptr;
-  std::unique_ptr<el::VariableStore> m_variables;
+  el::VariableTable m_variables;
 
   TextOutputAdapter m_output;
   bool m_test;
 
 public:
   // A standalone tool needs only the captured variables and never accesses the map.
-  CompilationContext(
-    const el::VariableStore& variables, TextOutputAdapter output, bool test);
+  CompilationContext(el::VariableTable variables, TextOutputAdapter output, bool test);
   CompilationContext(
     const mdl::Map& map,
     const gl::PerspectiveCamera& camera,
-    const el::VariableStore& variables,
+    el::VariableTable variables,
     TextOutputAdapter output,
     bool test,
     std::shared_ptr<const mdl::Map> snapshot = {});

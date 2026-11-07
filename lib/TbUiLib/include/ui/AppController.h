@@ -37,6 +37,7 @@ class QMenu;
 class QNetworkAccessManager;
 class QOffscreenSurface;
 class QOpenGLContext;
+class QTemporaryFile;
 class QTimer;
 
 namespace kdl
@@ -114,6 +115,8 @@ private:
   std::vector<QPointer<ProjectWindow>> m_projectWindows;
   bool m_showProjectWindows = true;
 
+  QTemporaryFile* m_manualRedirectFile = nullptr;
+
 public:
   AppController(
     std::unique_ptr<kdl::task_manager> taskManager,
@@ -172,7 +175,7 @@ public:
 
   void showWelcomeWindow();
 
-  void showManual();
+  void showManual(const QString& fragment = "");
   void showPreferences();
   void showPieMenuSettings();
   void showPythonPluginManager();

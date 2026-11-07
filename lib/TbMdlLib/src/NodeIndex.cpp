@@ -27,7 +27,6 @@
 #include "mdl/EntityNodeBase.h"
 #include "mdl/Group.h"
 #include "mdl/GroupNode.h"
-#include "mdl/Layer.h"
 #include "mdl/LayerNode.h"
 #include "mdl/Node.h"
 #include "mdl/PatchNode.h"
@@ -37,6 +36,7 @@
 #include "kd/vector_utils.h"
 
 #include <algorithm>
+#include <iterator>
 
 namespace tb::mdl
 {

@@ -979,3 +979,45 @@ Each element in the list is an object that must have a `name` key and may option
       { "name": "q3map2", "description": "Path to your q3map2 executable, which performs the main bsp/vis/light compilation phases" },
       { "name": "bspc", "description": "Path to your bspc or mbspc executable, which creates .aas files for bot support" }
     ]
+
+## Query Language {#query_language}
+
+The [search box](#searching) accepts plain text or an [expression](#expression_language). Text searches ignore case and match names, classnames, property keys and values, materials, tags, and containing layer or group names. Wildcards `*`, `?` and `%` match whole values. Text searches select objects, not individual faces.
+
+A single name or literal is treated as text. The fields `visible` and `locked` are exceptions and work as queries on their own; quote them to search for those words. Invalid expressions or unknown field/function names are treated as text. Queries select only results that evaluate to `true`; evaluation errors do not match.
+
+### Fields {#query_fields}
+
+Field | Meaning
+--- | ---
+`type` | Object type: world, layer, group, entity, brush, patch, face.
+`name` | Layer or group name.
+`classname`, `properties` | Entity class and property map.
+`entity` | Owning entity of a brush, patch or face.
+`materials`, `material` | Brush/patch materials, or an individual face material.
+`normal` | Face normal.
+`tags` | Matching smart tag names.
+`bounds`, `center` | Bounding box and its center.
+`layerName`, `groupName` | Containing layer and innermost group.
+`visible`, `locked` | Visibility and lock state.
+
+Unavailable fields evaluate to `undefined`. Property values are strings, but numeric comparisons convert them to numbers. Equality is case sensitive; `like` ignores case. Function-style operators bind more tightly than ordinary operators; use parentheses when negating a comparison.
+
+### Search Domain {#query_domain}
+
+Fields restrict searches to object types that provide them. Type conditions further restrict the search. Logical AND uses the intersection of domains; OR uses their union and evaluates each branch only for its applicable types. A query selects faces only when its domain contains faces alone. Layers likewise require a layer-only domain. Otherwise searches omit faces and layers, avoiding selection of an entire layer just because its bounds overlap a query box.
+
+### Examples {#query_examples}
+
+Query | Selects
+--- | ---
+`classname is "light"` | Light entities.
+`classname like "monster_*"` | Monster entities.
+`classname is "light" && properties.light > 300` | Lights brighter than 300.
+`properties contains "target"` | Entities with a target property.
+`type in [brush, patch]` | Brushes and patches.
+`materials like "*trigger*"` | Brushes or patches using trigger materials.
+`material like "sky*"` | Individual sky faces.
+`type is layer && name like "Combat*"` | Contents of matching layers.
+`visible && !locked` | Visible, unlocked objects.
+`bounds intersects bbox(vec(-512, -512, 0), vec(512, 512, 256))` | Objects intersecting a box.

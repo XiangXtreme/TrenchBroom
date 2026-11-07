@@ -25,16 +25,21 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_CollapsibleTitledPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ViewEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityDefinitionFileChooser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityPropertyGrid.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityPropertyModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcSpritePreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GlFunctions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_FlyModeHelper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_InputEvent.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_IssueBrowserView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_KeyboardShortcutUtils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LaunchGameEngine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LaunchGameEngineDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapViewToolBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_AreaMapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapViewAreaGeometry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LayerListBox.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapViewBar.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MaterialBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MiscPreferencePane.cpp
@@ -84,9 +89,9 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartFaceSelectionPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartModelEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartSkyboxEditor.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_KeyboardShortcutUtils.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LayerListBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_KreedzBroomPreferencePane.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SearchPanel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SignalDelayer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SystemPaths.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TabBook.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TestWindowPolicy.cpp

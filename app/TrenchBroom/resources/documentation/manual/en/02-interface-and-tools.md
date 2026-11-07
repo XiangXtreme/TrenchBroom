@@ -38,6 +38,13 @@ Finally, you can deselect everything by left clicking in the void, or by choosin
 
 To select a brush face, you need to hold #key(Shift) and left click it in the 3D viewport. You can select multiple brush faces by additionally holding #key(Ctrl). To select all faces of a brush, you can left double click that brush while holding #key(Shift). If you additionally hold #key(Ctrl), the faces are added to the current selection. To flood fill a whole coplanar surface at once - even where it spans several touching brushes - left double click a face while holding #key(Shift)#key(Alt). Again, hold #key(Ctrl) to add the faces to the current selection. To paint select brush faces, first select one brush face, then left drag while holding #key(Ctrl) and #key(Shift). To deselect all brush faces, simply click in the void or choose #menu(Menu/Edit/Deselect All).
 
+
+## Searching {#searching}
+
+![Search box](images/SearchBox.png)
+
+Type in the search box beside View to select matching objects or brush faces. The search runs after a short pause; press #key(Return) to run it immediately. Clearing the box deselects everything. Hidden, locked and otherwise unselectable matches are omitted. Press #key(Esc) to close the help popup. See [Query Language](#query_language).
+
 ## Map Setup {#map-setup}
 
 The first step when creating a new map is the setup of mods, entity definitions, and material collections.

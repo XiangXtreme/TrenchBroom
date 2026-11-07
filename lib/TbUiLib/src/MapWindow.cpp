@@ -84,12 +84,14 @@
 #include "ui/ColorButton.h"
 #include "ui/CommandPaletteDialog.h"
 #include "ui/CompilationDialog.h"
+#include "ui/CompilationRun.h"
 #include "ui/Console.h"
 #include "ui/CrashReporter.h"
 #include "ui/FaceInspector.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/LaunchGameEngineDialog.h"
+#include "ui/LightmapPreview.h"
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorController.h"
@@ -99,8 +101,6 @@
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapViewLayout.h"
-#include "ui/CompilationRun.h"
-#include "ui/LightmapPreview.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ObjExportDialog.h"
@@ -545,6 +545,7 @@ void MapWindow::createGui()
 
   m_infoPanel = m_editor->infoPanel();
   m_inspector = m_editor->inspector();
+  m_editor->currentMapViewBase()->setFocus();
   if (!m_embedded)
   {
     m_tools = new WorkspaceToolPanel{WorkspaceKind::Map, m_editor, m_infoPanel, this};
@@ -584,14 +585,13 @@ void MapWindow::createGui()
 
   if (timeCreateGui)
   {
-    const auto path =
-      QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-      + QStringLiteral("/tb-create-gui-timing.log");
+    const auto path = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                      + QStringLiteral("/tb-create-gui-timing.log");
     auto file = QFile{path};
     if (file.open(QIODevice::Append | QIODevice::Text))
     {
-      QTextStream{&file} << QStringLiteral("MapWindow::createGui %1 ms\n")
-                              .arg(createGuiTimer.elapsed());
+      QTextStream{&file}
+        << QStringLiteral("MapWindow::createGui %1 ms\n").arg(createGuiTimer.elapsed());
     }
   }
 }

@@ -29,6 +29,7 @@
 #include <QOpenGLContext>
 #include <QOpenGLFunctions_2_1>
 #include <QSurfaceFormat>
+#include <QTemporaryFile>
 #include <QTimer>
 
 #include "base/Logger.h"
@@ -182,6 +183,44 @@ std::optional<std::tuple<std::string, mdl::MapFormat>> detectOrQueryGameAndForma
          | kdl::transform_error([](const auto&) { return std::nullopt; }) | kdl::value();
 }
 
+/**
+ * Opens the given URL in the default browser.
+ *
+ * Not every platform retains the fragment of a file URL when asked to open it (macOS
+ * doesn't, for example), so for such a URL, the browser is always sent to the given
+ * temporary page instead, which is overwritten to redirect to the URL.
+ */
+void openInBrowser(const QUrl& url, QTemporaryFile& redirectFile)
+{
+  if (!url.isLocalFile() || !url.hasFragment())
+  {
+    QDesktopServices::openUrl(url);
+    return;
+  }
+
+  const auto target = url.toString(QUrl::FullyEncoded).toHtmlEscaped().toStdString();
+  const auto html = fmt::format(
+    R"(<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url={0}">
+</head>
+<body>
+<a href="{0}">{0}</a>
+</body>
+</html>
+)",
+    target);
+
+  const auto written =
+    redirectFile.open() && redirectFile.resize(0)
+    && redirectFile.write(html.data(), qint64(html.size())) == qint64(html.size());
+  redirectFile.close();
+
+  QDesktopServices::openUrl(written ? QUrl::fromLocalFile(redirectFile.fileName()) : url);
+}
+
 } // namespace
 
 AppController::AppController(
@@ -205,6 +244,9 @@ AppController::AppController(
   , m_mcpBridgeServer{std::make_unique<McpBridgeServer>(*this)}
   , m_mcpHttpServer{std::make_unique<McpHttpServer>(*m_mcpBridgeServer)}
   , m_showProjectWindows{options.showMapWindows}
+  , m_manualRedirectFile{new QTemporaryFile{
+      pathAsQString(SystemPaths::tempDirectory() / "TrenchBroom-redirect-XXXXXX.html"),
+      this}}
 {
   using namespace std::chrono_literals;
 
@@ -611,11 +653,15 @@ void AppController::showWelcomeWindow()
   m_welcomeWindow->raise();
 }
 
-void AppController::showManual()
+void AppController::showManual(const QString& fragment)
 {
   const auto manualPath = SystemPaths::findResourceFile("manual/index.html");
-  const auto manualPathUrl = QUrl::fromLocalFile(pathAsQString(manualPath));
-  QDesktopServices::openUrl(manualPathUrl);
+  auto manualPathUrl = QUrl::fromLocalFile(pathAsQString(manualPath));
+  if (!fragment.isEmpty())
+  {
+    manualPathUrl.setFragment(fragment);
+  }
+  openInBrowser(manualPathUrl, *m_manualRedirectFile);
 }
 
 void AppController::showPreferences()

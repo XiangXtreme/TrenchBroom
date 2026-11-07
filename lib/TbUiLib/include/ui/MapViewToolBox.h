@@ -74,7 +74,7 @@ private:
   std::function<ActionExecutionContext(MapViewBase*)> m_actionContextFactory;
   bool m_selectMode;
   std::unique_ptr<TerrainTool> m_terrainTool;
-  QStackedLayout* m_bookCtrl = nullptr;
+  QStackedLayout* m_toolPages = nullptr;
 
   std::unique_ptr<ClipTool> m_clipTool;
   std::unique_ptr<ChamferTool> m_chamferTool;
@@ -107,7 +107,7 @@ private:
 public:
   Notifier<> baseToolDidChangeNotifier;
 
-  MapViewToolBox(MapDocument& map, QStackedLayout* bookCtrl);
+  MapViewToolBox(MapDocument& map, QStackedLayout* toolPages);
   ~MapViewToolBox() override;
 
   void setActionContextFactory(
@@ -239,7 +239,7 @@ public: // tools
   void moveNodeHandles(const vm::vec3d& delta);
 
 private: // Tool related methods
-  void createTools(QStackedLayout* bookCtrl);
+  void createTools(QStackedLayout* toolPages);
 
 private: // notification
   void connectObservers();

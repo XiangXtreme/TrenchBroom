@@ -29,8 +29,8 @@ namespace tb::ui
 {
 
 CompilationContext::CompilationContext(
-  const el::VariableStore& variables, TextOutputAdapter output, const bool test)
-  : m_variables{variables.clone()}
+  el::VariableTable variables, TextOutputAdapter output, const bool test)
+  : m_variables{std::move(variables)}
   , m_output{std::move(output)}
   , m_test{test}
 {
@@ -39,14 +39,14 @@ CompilationContext::CompilationContext(
 CompilationContext::CompilationContext(
   const mdl::Map& map,
   const gl::PerspectiveCamera& camera,
-  const el::VariableStore& variables,
+  el::VariableTable variables,
   TextOutputAdapter output,
   bool test,
   std::shared_ptr<const mdl::Map> snapshot)
   : m_snapshot{std::move(snapshot)}
   , m_map{m_snapshot ? m_snapshot.get() : &map}
   , m_camera{&camera}
-  , m_variables{variables.clone()}
+  , m_variables{std::move(variables)}
   , m_output{std::move(output)}
   , m_test{test}
 {
@@ -71,7 +71,7 @@ bool CompilationContext::test() const
 
 Result<std::string> CompilationContext::interpolate(const std::string& input) const
 {
-  return el::interpolate(*m_variables, input);
+  return el::interpolate(m_variables, input);
 }
 
 Result<std::string> CompilationContext::variableValue(
@@ -83,7 +83,7 @@ Result<std::string> CompilationContext::variableValue(
         .convertTo(el::ValueType::String)
         .stringValue();
     },
-    *m_variables);
+    m_variables);
 }
 
 } // namespace tb::ui

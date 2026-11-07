@@ -979,3 +979,45 @@ color            指定默认表面颜色的字符串（仅适用于 Daikatana�
       { "name": "q3map2", "description": "Path to your q3map2 executable, which performs the main bsp/vis/light compilation phases" },
       { "name": "bspc", "description": "Path to your bspc or mbspc executable, which creates .aas files for bot support" }
     ]
+
+## 查询语言 {#query_language}
+
+[搜索框](#searching)支持普通文本或[表达式](#expression_language)。文本搜索忽略大小写，匹配名称、实体类名、属性键和值、材质、标签及所属图层或组名称。通配符 `*`、`?` 和 `%` 匹配整个值。文本搜索选择对象，不选择单独的面。
+
+单独的名称或字面量视为文本。`visible` 和 `locked` 字段是例外，可独立作为查询；若要搜索这两个单词本身，请加引号。无效表达式或未知字段、函数名视为文本。查询仅选择求值结果为 `true` 的项，求值错误不会匹配。
+
+### 字段 {#query_fields}
+
+字段 | 含义
+--- | ---
+`type` | 对象类型：世界、图层、组、实体、刷子、曲面、面。
+`name` | 图层或组名称。
+`classname`, `properties` | 实体类名及属性映射。
+`entity` | 刷子、曲面或面所属的实体。
+`materials`, `material` | 刷子、曲面的材质，或单个面的材质。
+`normal` | 面法线。
+`tags` | 匹配的智能标签名称。
+`bounds`, `center` | 包围盒及其中心。
+`layerName`, `groupName` | 所属图层及最内层组。
+`visible`, `locked` | 可见性及锁定状态。
+
+对象不具备的字段求值为 `undefined`。属性值是字符串，但与数字比较时会转为数字。相等比较区分大小写，`like` 忽略大小写。函数形式运算符的优先级高于普通运算符，对比较取反时请使用括号。
+
+### 搜索范围 {#query_domain}
+
+字段将搜索限制在具备该字段的对象类型中，类型条件会进一步缩小范围。逻辑与采用范围的交集，逻辑或采用并集，并且每个分支只对适用类型求值。仅当范围只含面时，查询才选择面；图层也要求范围只含图层。其他查询会排除面和图层，避免仅因图层包围盒与查询区域重叠就选中整个图层。
+
+### 示例 {#query_examples}
+
+查询 | 选择结果
+--- | ---
+`classname is "light"` | 灯光实体。
+`classname like "monster_*"` | 怪物实体。
+`classname is "light" && properties.light > 300` | 亮度大于 300 的灯光。
+`properties contains "target"` | 具有目标属性的实体。
+`type in [brush, patch]` | 刷子和曲面。
+`materials like "*trigger*"` | 使用触发器材质的刷子或曲面。
+`material like "sky*"` | 单独的天空面。
+`type is layer && name like "Combat*"` | 名称匹配的图层内容。
+`visible && !locked` | 可见且未锁定的对象。
+`bounds intersects bbox(vec(-512, -512, 0), vec(512, 512, 256))` | 与指定包围盒相交的对象。

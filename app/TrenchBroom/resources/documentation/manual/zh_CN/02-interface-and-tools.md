@@ -38,6 +38,13 @@
 
 要选择 Brush 面，请在 3D 视图中按住 #key(Shift)并单击。额外按住 #key(Ctrl)可以选择多个面。按住 #key(Shift)双击 Brush 可选择其所有面；再按住 #key(Ctrl)可将这些面添加到当前选择。按住 #key(Shift)#key(Alt)双击一个面，可以一次填充整个共面表面，即使它跨越多个相接的 Brush。再次按住 #key(Ctrl)可将面添加到当前选择。要涂选 Brush 面，先选择一个面，然后按住 #key(Ctrl)和 #key(Shift)拖动。要取消所有 Brush 面的选择，只需单击空白处或选择 #menu(Menu/Edit/Deselect All)。
 
+
+## 搜索 {#searching}
+
+![搜索框](images/SearchBox.png)
+
+在视图按钮旁的搜索框输入内容，可以选中匹配的对象或刷子面。停止输入片刻后会自动搜索，按 #key(Return) 可立即执行。清空搜索框会取消所有选择。隐藏、锁定以及其他无法选择的匹配项会被排除。按 #key(Esc) 关闭帮助弹窗。详见[查询语言](#query_language)。
+
 ## 地图设置 {#map-setup}
 
 创建新地图的第一步是设置 Mod、实体定义和材质集合。
