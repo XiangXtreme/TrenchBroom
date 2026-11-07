@@ -246,6 +246,17 @@ void doubleClickTexture(ModelBrowserView& view)
 }
 } // namespace
 
+namespace
+{
+int sourceTabIndex(const QTabBar& tabs, const BrowserSourceFilter source)
+{
+  for (auto i = 0; i < tabs.count(); ++i)
+    if (tabs.tabData(i).toInt() == int(source))
+      return i;
+  return -1;
+}
+} // namespace
+
 TEST_CASE("ProjectWindow")
 {
   // Layout tests must neither read user preferences nor race other CTest processes.
@@ -344,7 +355,7 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* unused = browser->findChild<QToolButton*>("ModelBrowser_Unreferenced");
     auto* used = browser->findChild<QToolButton*>("ModelBrowser_UsedInMap");
     auto* cards = browser->findChild<ModelBrowserView*>();
@@ -352,7 +363,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(unused);
     REQUIRE(used);
     REQUIRE(cards);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     unused->setChecked(true);
     const auto listed = [&]() {
       return std::ranges::any_of(
@@ -374,9 +385,9 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(unused->isChecked());
     unused->setChecked(true);
     CHECK_FALSE(used->isChecked());
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     CHECK_FALSE(unused->isVisible());
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     CHECK(unused->isChecked());
     QTRY_VERIFY(listed());
     auto response = QMessageBox::Cancel;
@@ -433,8 +444,8 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     auto* cards = browser->findChild<ModelBrowserView*>();
     REQUIRE(cards);
     QTRY_VERIFY(std::ranges::any_of(cards->assets(), [&](const auto& entry) {
@@ -466,9 +477,9 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser != nullptr);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     REQUIRE(source);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     CHECK(window.findChildren<ModelBrowser*>().size() == 1);
     CHECK(alphaWindow->findChildren<ModelBrowser*>().empty());
     auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
@@ -1149,7 +1160,7 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
     auto* view = browser->findChild<ModelBrowserView*>();
     auto* savePrefab = browser->findChild<QToolButton*>("ModelBrowser_SavePrefabButton");
@@ -1157,9 +1168,11 @@ TEST_CASE("ProjectWindow")
     REQUIRE(type);
     REQUIRE(view);
     REQUIRE(savePrefab);
-    CHECK(source->findData(int(BrowserSourceFilter::GameFiles)) == -1);
+    CHECK(sourceTabIndex(*source, BrowserSourceFilter::GameFiles) == -1);
     CHECK(source->count() == 2);
-    CHECK(source->currentData().toInt() == int(BrowserSourceFilter::AssetLibrary));
+    CHECK(
+      source->tabData(source->currentIndex()).toInt()
+      == int(BrowserSourceFilter::AssetLibrary));
     CHECK(savePrefab->isHidden());
     auto* filters = browser->findChild<QWidget*>("ModelBrowser_FilterPopup");
     REQUIRE(filters);
@@ -1175,13 +1188,22 @@ TEST_CASE("ProjectWindow")
       && hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
     CHECK_FALSE(hasAsset(view->assets(), "game-only.wav", BrowserSource::GameFiles));
 
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    QTest::mouseClick(
+      source,
+      Qt::LeftButton,
+      Qt::NoModifier,
+      source->tabRect(sourceTabIndex(*source, BrowserSourceFilter::Project)).center());
     QTRY_VERIFY(
       hasAsset(view->assets(), "project-only.wav", BrowserSource::Project)
       && !hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
     CHECK_FALSE(hasAsset(view->assets(), "game-only.wav", BrowserSource::GameFiles));
     CHECK_FALSE(savePrefab->isHidden());
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    QTest::mouseClick(
+      source,
+      Qt::LeftButton,
+      Qt::NoModifier,
+      source->tabRect(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary))
+        .center());
     QTRY_VERIFY(
       hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
     CHECK_FALSE(hasAsset(view->assets(), "game-only.wav", BrowserSource::GameFiles));
@@ -1201,7 +1223,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(used);
     REQUIRE(folders);
     CHECK(used->isHidden());
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     QTRY_VERIFY(hasAsset(view->assets(), "project-only.wav", BrowserSource::Project));
     CHECK_FALSE(used->isHidden());
     CHECK(
@@ -1214,11 +1236,11 @@ TEST_CASE("ProjectWindow")
       view->assets(), [&](const auto& entry) { return entry.assetId == captured.id; }));
     used->setChecked(true);
     QTRY_VERIFY(view->assets().empty());
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     QTRY_VERIFY(
       hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
     CHECK_FALSE(used->isChecked());
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     QTRY_VERIFY(view->assets().empty());
     CHECK(used->isChecked());
     used->setChecked(false);
@@ -1235,13 +1257,14 @@ TEST_CASE("ProjectWindow")
     auto standaloneBrowser = ModelBrowser{appController, *standaloneDocument};
     standaloneBrowser.resize(800, 400);
     standaloneBrowser.show();
-    auto* standaloneSource =
-      standaloneBrowser.findChild<QComboBox*>("ModelBrowser_Source");
+    auto* standaloneSource = standaloneBrowser.findChild<QTabBar*>("ModelBrowser_Source");
     auto* standaloneView = standaloneBrowser.findChild<ModelBrowserView*>();
     REQUIRE(standaloneSource);
     REQUIRE(standaloneView);
-    CHECK(standaloneSource->currentData().toInt() == int(BrowserSourceFilter::GameFiles));
-    CHECK(standaloneSource->findData(int(BrowserSourceFilter::Project)) == -1);
+    CHECK(
+      standaloneSource->tabData(standaloneSource->currentIndex()).toInt()
+      == int(BrowserSourceFilter::GameFiles));
+    CHECK(sourceTabIndex(*standaloneSource, BrowserSourceFilter::Project) == -1);
     QTRY_VERIFY(
       hasAsset(standaloneView->assets(), "game-only.wav", BrowserSource::GameFiles));
     CHECK_FALSE(
@@ -1265,7 +1288,7 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
     auto* scroll = browser->findChild<QScrollBar*>("ModelBrowser_ScrollBar");
     auto* view = browser->findChild<ModelBrowserView*>();
@@ -1275,7 +1298,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(scroll);
     REQUIRE(view);
     REQUIRE(folders);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
     emit view->folderActivated("sound");
     QTRY_VERIFY(scroll->maximum() > 100);
@@ -1286,17 +1309,17 @@ TEST_CASE("ProjectWindow")
     QTRY_COMPARE(scroll->value(), 100);
     REQUIRE(folders->currentItem());
     CHECK(folders->currentItem()->data(0, Qt::UserRole).toString() == "sound");
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     QApplication::processEvents();
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     QTRY_COMPARE(scroll->value(), 100);
     auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
     REQUIRE(search);
     search->setText("Clip");
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     CHECK(search->text().isEmpty());
     search->setText("Library query");
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     CHECK(search->text() == "Clip");
     search->clear();
     tabs->setCurrentIndex(1);
@@ -1322,7 +1345,7 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
     auto* sounds = browser->findChild<QComboBox*>("ModelBrowser_SoundKind");
     auto* view = browser->findChild<ModelBrowserView*>();
@@ -1330,7 +1353,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(type);
     REQUIRE(sounds);
     REQUIRE(view);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
     emit view->folderActivated("sound");
     QTRY_COMPARE(view->assets().size(), 2);
@@ -1361,13 +1384,13 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* used = browser->findChild<QToolButton*>("ModelBrowser_UsedInMap");
     auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
     REQUIRE(source);
     REQUIRE(used);
     REQUIRE(folders);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     used->setChecked(true);
     QApplication::processEvents();
     CHECK(folders->findItems("Skybox", Qt::MatchRecursive).empty());
@@ -1487,18 +1510,18 @@ TEST_CASE("ProjectWindow")
     require(source->replaceFile(pathFromQString(path), "clip.wav"));
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* sourceChoice = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* sourceChoice = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* kind = browser->findChild<QComboBox*>("ModelBrowser_SoundKind");
     auto* view = browser->findChild<ModelBrowserView*>();
     REQUIRE(sourceChoice);
     REQUIRE(kind);
     REQUIRE(view);
     sourceChoice->setCurrentIndex(
-      sourceChoice->findData(int(BrowserSourceFilter::AssetLibrary)));
+      sourceTabIndex(*sourceChoice, BrowserSourceFilter::AssetLibrary));
     kind->setCurrentIndex(kind->findData(int(inspection::WaveKind::OneShot)));
     QTRY_COMPARE(view->assets().size(), 1u);
     sourceChoice->setCurrentIndex(
-      sourceChoice->findData(int(BrowserSourceFilter::Project)));
+      sourceTabIndex(*sourceChoice, BrowserSourceFilter::Project));
     QTRY_VERIFY(view->assets().empty());
     kind->setCurrentIndex(kind->findData(int(inspection::WaveKind::Looping)));
     QTRY_COMPARE(view->assets().size(), 1u);
@@ -2242,13 +2265,13 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
     auto* cards = browser->findChild<ModelBrowserView*>();
     REQUIRE(source);
     REQUIRE(folders);
     REQUIRE(cards);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     QTRY_COMPARE(cards->assets().size(), 3);
     for (const auto& asset : cards->assets())
       CHECK(asset.absolutePath.empty());
@@ -2467,9 +2490,9 @@ TEST_CASE("ProjectWindow")
     betaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
     auto* browser = window.findChild<ModelBrowserView*>();
     REQUIRE(browser != nullptr);
-    auto* source = window.findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = window.findChild<QTabBar*>("ModelBrowser_Source");
     REQUIRE(source != nullptr);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
 
     closeTab(*tabs, 0);
     REQUIRE(tabs->count() == 1);
@@ -2553,7 +2576,7 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
     auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
     auto* cards = browser->findChild<ModelBrowserView*>();
@@ -2564,7 +2587,7 @@ TEST_CASE("ProjectWindow")
     const auto materialIndex = type->findData(int(BrowserCellType::Material));
     REQUIRE(materialIndex >= 0);
     type->setCurrentIndex(materialIndex);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     QTRY_COMPARE(cards->assets().size(), 1);
     auto libraryEntry = cards->assets().front();
     CHECK(libraryEntry.type == BrowserCellType::Material);
@@ -2587,7 +2610,7 @@ TEST_CASE("ProjectWindow")
 
     const auto captured =
       require(session->captureLibraryAsset(library->info().id, material.id));
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
     QTRY_VERIFY(
       cards->assets().size() == 1
       && cards->assets().front().source == BrowserSource::Project);
@@ -2661,7 +2684,7 @@ TEST_CASE("ProjectWindow")
     }));
 
     type->setCurrentIndex(materialIndex);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     QTRY_VERIFY(
       cards->assets().size() == 1
       && cards->assets().front().source == BrowserSource::AssetLibrary);
@@ -2727,7 +2750,7 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* sourceCombo = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* sourceCombo = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
     auto* cards = browser->findChild<ModelBrowserView*>();
     auto* typeCombo = browser->findChild<QComboBox*>("ModelBrowser_Type");
@@ -2736,7 +2759,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(cards);
     REQUIRE(typeCombo);
     sourceCombo->setCurrentIndex(
-      sourceCombo->findData(int(BrowserSourceFilter::AssetLibrary)));
+      sourceTabIndex(*sourceCombo, BrowserSourceFilter::AssetLibrary));
     QTRY_COMPARE(cards->assets().size(), 1);
     REQUIRE(cards->assets().front().skybox);
     CHECK(cards->assets().front().catalogPath == std::filesystem::path{"skybox/desert"});
@@ -2827,7 +2850,7 @@ TEST_CASE("ProjectWindow")
       return asset.type == project::AssetType::Texture;
     }));
     sourceCombo->setCurrentIndex(
-      sourceCombo->findData(int(BrowserSourceFilter::Project)));
+      sourceTabIndex(*sourceCombo, BrowserSourceFilter::Project));
     QTRY_VERIFY(std::ranges::any_of(
       cards->assets(), [](const auto& asset) { return asset.skybox; }));
     CHECK(std::ranges::none_of(cards->assets(), [](const auto& asset) {
@@ -2898,7 +2921,7 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
-    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
     auto* groups = browser->findChild<QCheckBox*>("ModelBrowser_GroupWadTextures");
     auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
     auto* assetView = browser->findChild<ModelBrowserView*>();
@@ -2907,7 +2930,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(folders);
     REQUIRE(assetView);
     CHECK_FALSE(groups->isChecked());
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     QTRY_COMPARE(folders->findItems("Texture", Qt::MatchRecursive).size(), 1);
     CHECK(folders->findItems("custom.wad", Qt::MatchRecursive).empty());
     groups->setChecked(true);
@@ -2995,7 +3018,7 @@ TEST_CASE("ProjectWindow")
     map.undoCommand();
     if (doubleClick)
     {
-      source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+      source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
       QTRY_VERIFY(!assetView->assets().empty());
       emit assetView->folderActivated("textures");
       doubleClickTexture(*assetView);
@@ -3019,9 +3042,9 @@ TEST_CASE("ProjectWindow")
     require(session->attachLibrary(pathFromQString(folder)));
     require(session->save());
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);
-    auto* source = window.findChild<QComboBox*>("ModelBrowser_Source");
+    auto* source = window.findChild<QTabBar*>("ModelBrowser_Source");
     REQUIRE(source != nullptr);
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
     QApplication::processEvents();
     QTest::qWait(100);
     auto* browser = window.findChild<ModelBrowserView*>();

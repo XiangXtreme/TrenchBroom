@@ -41,6 +41,7 @@
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStringList>
+#include <QTabBar>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -386,21 +387,26 @@ void ModelBrowser::createGui(AppController& appController)
   updateIconSizeCombo();
 
   // Project browsers list project and library content; standalone maps list game files.
-  m_sourceCombo = new QComboBox{};
-  m_sourceCombo->setObjectName("ModelBrowser_Source");
-  m_sourceCombo->setMinimumWidth(96);
-  m_sourceCombo->setToolTip(tr("Content browser mode"));
+  m_sourceTabs = new QTabBar{};
+  m_sourceTabs->setObjectName("ModelBrowser_Source");
+  m_sourceTabs->setAccessibleName(tr("Content browser mode"));
+  m_sourceTabs->setToolTip(tr("Content browser mode"));
+  m_sourceTabs->setExpanding(false);
+  m_sourceTabs->setDrawBase(false);
+  m_sourceTabs->setUsesScrollButtons(false);
   if (m_project)
   {
-    m_sourceCombo->addItem(tr("Asset Library"), int(BrowserSourceFilter::AssetLibrary));
-    m_sourceCombo->addItem(tr("Current Project"), int(BrowserSourceFilter::Project));
+    m_sourceTabs->setTabData(
+      m_sourceTabs->addTab(tr("Asset Library")), int(BrowserSourceFilter::AssetLibrary));
+    m_sourceTabs->setTabData(
+      m_sourceTabs->addTab(tr("Current Project")), int(BrowserSourceFilter::Project));
   }
   else
   {
-    m_sourceCombo->addItem(tr("Game Files"), int(BrowserSourceFilter::GameFiles));
+    m_sourceTabs->setTabData(
+      m_sourceTabs->addTab(tr("Game Files")), int(BrowserSourceFilter::GameFiles));
   }
-
-  m_sourceCombo->setVisible(bool(m_project));
+  m_sourceTabs->setVisible(bool(m_project));
 
   // The unified listing mixes maps, textures, models and sounds, so the type filter is a
   // second axis next to the source layer.
@@ -452,7 +458,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_searchScopeCombo->setMinimumWidth(104);
   updateSearchPlaceholder();
 
-  for (auto* combo : {m_sourceCombo, m_typeCombo, m_iconSizeCombo, m_searchScopeCombo})
+  for (auto* combo : {m_typeCombo, m_iconSizeCombo, m_searchScopeCombo})
   {
     combo->setProperty("tbControlRole", "compact");
   }
@@ -478,7 +484,7 @@ void ModelBrowser::createGui(AppController& appController)
   auto* pathRowLayout = new QHBoxLayout{};
   pathRowLayout->setContentsMargins(8, 3, 8, 3);
   pathRowLayout->setSpacing(6);
-  pathRowLayout->addWidget(m_sourceCombo);
+  pathRowLayout->addWidget(m_sourceTabs);
   pathRowLayout->addWidget(m_backButton);
   pathRowLayout->addWidget(m_forwardButton);
   pathRowLayout->addWidget(m_savePrefabButton);
@@ -1175,13 +1181,9 @@ void ModelBrowser::bindEvents(AppController& appController)
     rescanWatchedDirectory();
   });
 
-  connect(
-    m_sourceCombo,
-    QOverload<int>::of(&QComboBox::currentIndexChanged),
-    this,
-    [&](const int index) {
-      setAssetSource(BrowserSourceFilter(m_sourceCombo->itemData(index).toInt()));
-    });
+  connect(m_sourceTabs, &QTabBar::currentChanged, this, [&](const int index) {
+    setAssetSource(BrowserSourceFilter(m_sourceTabs->tabData(index).toInt()));
+  });
 
   connect(
     m_typeCombo,
@@ -2404,8 +2406,7 @@ void ModelBrowser::revealProjectAsset(const std::string& assetId)
   if (asset.is_error() || !asset.value())
     return;
   emit m_project->browserFocusRequested();
-  m_sourceCombo->setCurrentIndex(
-    m_sourceCombo->findData(int(BrowserSourceFilter::Project)));
+  setAssetSource(BrowserSourceFilter::Project);
   if (!m_selectionOnly)
     m_typeCombo->setCurrentIndex(0);
   m_usedButton->setChecked(false);
@@ -2529,14 +2530,14 @@ void ModelBrowser::updateSourceControls()
   m_unusedButton->setEnabled(projectMode);
   m_usedButton->setVisible(projectMode);
   m_usedButton->setEnabled(projectMode && m_mapActionsEnabled);
-  if (m_sourceCombo)
+  if (m_sourceTabs)
   {
-    const QSignalBlocker blocker{m_sourceCombo};
-    for (auto index = 0; index < m_sourceCombo->count(); ++index)
+    const QSignalBlocker blocker{m_sourceTabs};
+    for (auto index = 0; index < m_sourceTabs->count(); ++index)
     {
-      if (BrowserSourceFilter(m_sourceCombo->itemData(index).toInt()) == m_sourceFilter)
+      if (BrowserSourceFilter(m_sourceTabs->tabData(index).toInt()) == m_sourceFilter)
       {
-        m_sourceCombo->setCurrentIndex(index);
+        m_sourceTabs->setCurrentIndex(index);
         break;
       }
     }

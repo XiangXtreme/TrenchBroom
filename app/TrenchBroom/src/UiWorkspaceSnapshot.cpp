@@ -121,8 +121,10 @@ void configureWorkspaceSnapshot(QWidget& widget, const QString& target)
     tools->showContent();
     // Exercise both content modes across the workspace captures.
     if (target == "project-pinned")
-      if (auto* source = window->findChild<QComboBox*>("ModelBrowser_Source"))
-        source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+      if (auto* source = window->findChild<QTabBar*>("ModelBrowser_Source"))
+        for (auto i = 0; i < source->count(); ++i)
+          if (source->tabData(i).toInt() == int(BrowserSourceFilter::Project))
+            source->setCurrentIndex(i);
     if (target == "project-pinned")
       if (auto* cards = window->findChild<ModelBrowserView*>())
         emit cards->folderActivated("maps");

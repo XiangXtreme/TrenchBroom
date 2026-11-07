@@ -51,6 +51,7 @@ class QScrollBar;
 class QShowEvent;
 class QStackedWidget;
 class QToolButton;
+class QTabBar;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QTimer;
@@ -87,7 +88,7 @@ private:
   QFormLayout* m_filterLayout = nullptr;
   QLabel* m_resultCount = nullptr;
   QComboBox* m_searchScopeCombo = nullptr;
-  QComboBox* m_sourceCombo = nullptr;
+  QTabBar* m_sourceTabs = nullptr;
   QComboBox* m_typeCombo = nullptr;
   QString m_libraryName;
   QComboBox* m_iconSizeCombo = nullptr;
