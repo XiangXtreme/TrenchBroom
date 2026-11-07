@@ -98,6 +98,32 @@ TEST_CASE("ProjectStore")
 {
   auto workspace = Workspace{};
 
+  SECTION("map thumbnails persist independently of content revisions")
+  {
+    auto store = require(ProjectStore::create(workspace.path, "Maps", "Half-Life"));
+    const auto asset = require(store->importAsset(map("maps/preview.map")));
+    const auto image = std::vector<std::uint8_t>{1, 2, 3};
+    CHECK(require(store->mapThumbnail(asset.id)).empty());
+    CHECK(require(store->mapThumbnailHashes()).empty());
+    require(store->setMapThumbnail(asset.id, image));
+    CHECK(require(store->findAsset(asset.id))->revision == asset.revision);
+    CHECK(require(store->mapThumbnailHashes()).at(asset.id) == contentHash(image));
+    store.reset();
+    store = require(ProjectStore::open(workspace.path));
+    CHECK(require(store->mapThumbnail(asset.id)) == image);
+    const auto copy = workspace.directory / "copy.tbproj";
+    require(store->saveCopy(copy));
+    CHECK(require(require(ProjectStore::open(copy))->mapThumbnail(asset.id)) == image);
+    require(store->setMapThumbnail(asset.id, {4, 5}));
+    CHECK(require(store->mapThumbnail(asset.id)) == std::vector<std::uint8_t>{4, 5});
+    CHECK(store->setMapThumbnail(asset.id, {}).is_error());
+    const auto nonMap = require(store->importAsset(texture()));
+    CHECK(store->setMapThumbnail(nonMap.id, image).is_error());
+    require(store->removeAsset(asset.id));
+    CHECK(require(store->mapThumbnail(asset.id)).empty());
+    CHECK(require(store->mapThumbnailHashes()).empty());
+  }
+
   SECTION("keeps terrain compilation data tied to a saved map revision")
   {
     auto store = require(ProjectStore::create(workspace.path, "Terrain", "Half-Life"));

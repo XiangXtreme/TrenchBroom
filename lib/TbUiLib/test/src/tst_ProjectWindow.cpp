@@ -48,6 +48,7 @@
 
 #include "el/Expression.h"
 #include "gl/GlManager.h"
+#include "gl/PerspectiveCamera.h"
 #include "gl/Resource.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushFace.h"
@@ -331,6 +332,66 @@ TEST_CASE("ProjectWindow")
   CHECK(alphaWindow->findAction("Menu/Edit/Undo")->shortcut().isEmpty());
   // The project window owns the icon that its dialogs and the taskbar entry show.
   CHECK_FALSE(window.windowIcon().isNull());
+
+  SECTION("map previews are saved and remain available after closing the view")
+  {
+    auto& view = alphaWindow->activate3DMapView();
+    REQUIRE(QTest::qWaitFor([&]() { return view.isValid(); }, 3000));
+    mdl::selectAllNodes(alphaDocument->map());
+    const auto cameraPosition = view.perspectiveCamera().position();
+    const auto selected = alphaDocument->map().selection().nodes;
+    require(session->save());
+    const auto savedAsset = require(session->store().findAsset(alphaId));
+    REQUIRE(savedAsset);
+    const auto png = require(session->store().mapThumbnail(alphaId));
+    REQUIRE_FALSE(png.empty());
+    auto image = QImage{};
+    REQUIRE(image.loadFromData(png.data(), int(png.size()), "PNG"));
+    CHECK(image.width() <= 512);
+    CHECK(image.height() <= 512);
+    CHECK_FALSE(image.hasAlphaChannel());
+    CHECK(view.perspectiveCamera().position() == cameraPosition);
+    CHECK(alphaDocument->map().selection().nodes == selected);
+    CHECK_FALSE(alphaDocument->map().modified());
+    emit session->mapThumbnailRequested(QString::fromStdString(alphaId));
+    CHECK(require(session->store().findAsset(alphaId))->revision == savedAsset->revision);
+    require(session->save());
+    auto reopened = require(project::ProjectStore::open(session->path()));
+    CHECK_FALSE(require(reopened->mapThumbnail(alphaId)).empty());
+    reopened.reset();
+    const auto lastPreview = require(session->store().mapThumbnail(alphaId));
+    closeTab(*tabs, 0);
+    CHECK(require(session->store().mapThumbnail(alphaId)) == lastPreview);
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    auto* cards = browser->findChild<ModelBrowserView*>();
+    REQUIRE(cards);
+    QTRY_VERIFY(std::ranges::any_of(cards->assets(), [&](const auto& entry) {
+      return entry.assetId == alphaId
+             && entry.previewIdentity.find("/thumbnail/") != std::string::npos;
+    }));
+    emit cards->folderActivated("maps");
+    auto preview = QImage{128, 96, QImage::Format_RGB32};
+    const auto hasPreviewPixels = [&](const QColor& expected) {
+      const auto rendered = cards->grabFramebuffer();
+      auto count = 0;
+      for (auto y = 0; y < rendered.height(); y += 2)
+        for (auto x = 0; x < rendered.width(); x += 2)
+          if (rendered.pixelColor(x, y) == expected)
+            ++count;
+      return count > 100;
+    };
+    preview.fill(Qt::red);
+    require(session->setMapThumbnail(alphaId, preview));
+    REQUIRE(QTest::qWaitFor([&]() { return hasPreviewPixels(Qt::red); }, 3000));
+    preview.fill(Qt::blue);
+    require(session->setMapThumbnail(alphaId, preview));
+    REQUIRE(QTest::qWaitFor([&]() { return hasPreviewPixels(Qt::blue); }, 3000));
+    CHECK_FALSE(hasPreviewPixels(Qt::red));
+  }
 
   SECTION("one project browser survives map switches and closing all map tabs")
   {

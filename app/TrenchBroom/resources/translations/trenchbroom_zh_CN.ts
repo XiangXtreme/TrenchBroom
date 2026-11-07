@@ -4002,6 +4002,10 @@ Map: %2</source>
     <context>
         <name>tb::ui::ModelBrowserView</name>
         <message>
+            <source>Use Current View as Preview</source>
+            <translation>使用当前视角更新预览</translation>
+        </message>
+        <message>
             <location filename="../../../../lib/TbUiLib/src/ModelBrowserView.cpp" line="464" />
             <source>Scale MDL...</source>
             <translation>缩放 MDL...</translation>
@@ -7858,6 +7862,10 @@ Projects keep their captured copies.</source>
     </context>
     <context>
         <name>tb::ui::ProjectWindow</name>
+        <message>
+            <source>Open this map in a 3D view to update its preview.</source>
+            <translation>请在三维视图中打开此地图以更新预览。</translation>
+        </message>
         <message>
             <source>Content Browser</source>
             <translation>内容浏览器</translation>

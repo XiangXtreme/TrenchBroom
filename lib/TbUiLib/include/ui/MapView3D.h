@@ -81,6 +81,7 @@ public:
   MapView3D(AppController& appController, MapDocument& document, MapViewToolBox& toolBox);
   ~MapView3D() override;
 
+  QImage grabMapThumbnailFramebuffer();
   QImage grabPrefabThumbnailFramebuffer(const std::vector<mdl::Node*>& nodes);
   const gl::PerspectiveCamera& perspectiveCamera() const;
 

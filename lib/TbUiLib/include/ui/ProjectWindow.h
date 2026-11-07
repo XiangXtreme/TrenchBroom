@@ -103,6 +103,7 @@ private:
   void restoreCheckpoint();
   void cleanUnusedRevisions();
   void autosaveProject();
+  void captureMapThumbnails(const QString& assetId = {});
   bool save();
   std::optional<std::string> selectedAsset() const;
   bool report(const Result<void>& result);

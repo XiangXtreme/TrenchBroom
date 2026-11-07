@@ -24,6 +24,7 @@
 #include <vector>
 
 class QLockFile;
+class QImage;
 
 namespace tb::ui
 {
@@ -356,6 +357,7 @@ public:
   void unregisterDocument(MapDocument& document);
   Result<std::vector<project::Asset>> applyAssetCapturePlan(
     const std::vector<project::AssetCapture>& plan);
+  Result<void> setMapThumbnail(const std::string& id, const QImage& image);
   Result<void> save();
   Result<void> saveCopy(const std::filesystem::path& path);
   /**
@@ -368,6 +370,8 @@ public:
   Result<project::RevisionCleanup> pruneUnreferencedRevisions();
 
 signals:
+  void mapThumbnailsRequested();
+  void mapThumbnailRequested(const QString& assetId);
   void runtimeError(const QString& message);
   void contentsChanged();
   void mapContentsChanged();

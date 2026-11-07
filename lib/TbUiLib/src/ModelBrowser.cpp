@@ -1936,6 +1936,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
   if (catalog.is_error())
     return std::nullopt;
   const auto keys = assetPreviewKeys(m_project->store());
+  const auto thumbnails = m_project->store().mapThumbnailHashes();
   auto assets = std::vector<BrowserAsset>{};
   for (const auto& asset : catalog.value())
   {
@@ -1964,6 +1965,10 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanProjectAssets() const
     if (asset.type == project::AssetType::Texture && !asset.library.sourceMember.empty())
       entry.textureCollection =
         pathFromQString(QString::fromStdString(asset.library.sourceContainer));
+    if (asset.type == project::AssetType::Map && thumbnails.is_success())
+      if (const auto thumbnail = thumbnails.value().find(asset.id);
+          thumbnail != thumbnails.value().end())
+        entry.previewIdentity += "/thumbnail/" + thumbnail->second;
     entry.projectAssetId = asset.id;
     entry.projectRevision = asset.revision;
     entry.projectPublishPath = path;

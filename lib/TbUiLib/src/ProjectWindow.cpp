@@ -48,6 +48,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapStatus.h"
+#include "ui/MapView3D.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ProjectAssetPanel.h"
@@ -393,6 +394,14 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
     refreshTitle();
   });
   connect(m_assets, &QTreeWidget::itemDoubleClicked, this, [this]() { openSelected(); });
+  connect(m_session.get(), &ProjectSession::mapThumbnailsRequested, this, [this]() {
+    captureMapThumbnails();
+  });
+  connect(
+    m_session.get(),
+    &ProjectSession::mapThumbnailRequested,
+    this,
+    [this](const QString& id) { captureMapThumbnails(id); });
   connect(
     m_session.get(), &ProjectSession::contentsChanged, this, &ProjectWindow::refresh);
   connect(
@@ -897,6 +906,37 @@ void ProjectWindow::refresh()
   }
   refreshTitle();
   refreshMapTabs();
+}
+
+void ProjectWindow::captureMapThumbnails(const QString& assetId)
+{
+  auto captured = false;
+  for (auto* window : m_appController.mapWindowManager().mapWindows())
+  {
+    if (window->project() != m_session)
+      continue;
+    const auto id = m_session->assetFor(window->document());
+    if (!id || (!assetId.isEmpty() && *id != assetId.toStdString()))
+      continue;
+    // Capture initialized views only; saving must never open or switch map tabs.
+    auto* view = window->currentOrFirstVisible3DMapView();
+    if (!view)
+      continue;
+    auto image = view->grabMapThumbnailFramebuffer();
+    if (image.isNull())
+      continue;
+    const auto result = m_session->setMapThumbnail(*id, image);
+    if (result.is_error())
+    {
+      m_notifications->showMessage(
+        QString::fromStdString(std::get<Error>(result.error()).msg), 5000);
+      continue;
+    }
+    captured = true;
+  }
+  if (!assetId.isEmpty() && !captured)
+    m_notifications->showMessage(
+      tr("Open this map in a 3D view to update its preview."), 5000);
 }
 
 bool ProjectWindow::save()

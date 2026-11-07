@@ -1028,6 +1028,65 @@ Result<std::vector<std::uint8_t>> ProjectStore::readAsset(
   });
 }
 
+Result<void> ProjectStore::setMapThumbnail(
+  const std::string& id, const std::vector<std::uint8_t>& png)
+{
+  return attempt([&] {
+    const auto asset = findAsset(id);
+    if (asset.is_error() || !asset.value() || asset.value()->type != AssetType::Map)
+      throw StoreError{"Map asset not found."};
+    if (png.empty() || png.size() > 4 * 1024 * 1024)
+      throw StoreError{"Invalid map thumbnail size."};
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    // Optional derived metadata: older format-4 readers can safely ignore this table.
+    execute(
+      db,
+      "CREATE TABLE IF NOT EXISTS map_thumbnails("
+      "asset_id TEXT PRIMARY KEY REFERENCES heads(asset_id) ON DELETE CASCADE,"
+      "hash TEXT NOT NULL,png BLOB NOT NULL)");
+    auto write = Statement{
+      db,
+      "INSERT INTO map_thumbnails(asset_id,hash,png) VALUES(?,?,?) "
+      "ON CONFLICT(asset_id) DO UPDATE SET hash=excluded.hash,png=excluded.png"};
+    write.bind(1, id);
+    write.bind(2, contentHash(png));
+    write.bind(3, png);
+    write.run();
+    transaction.commit();
+  });
+}
+
+Result<std::vector<std::uint8_t>> ProjectStore::mapThumbnail(const std::string& id) const
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto table = Statement{
+      db, "SELECT 1 FROM sqlite_master WHERE name='map_thumbnails' AND type='table'"};
+    if (!table.next())
+      return std::vector<std::uint8_t>{};
+    auto query = Statement{db, "SELECT png FROM map_thumbnails WHERE asset_id=?"};
+    query.bind(1, id);
+    return query.next() ? query.bytes(0) : std::vector<std::uint8_t>{};
+  });
+}
+
+Result<std::map<std::string, std::string>> ProjectStore::mapThumbnailHashes() const
+{
+  return attempt([&] {
+    auto result = std::map<std::string, std::string>{};
+    auto* db = m_impl->database.get();
+    auto table = Statement{
+      db, "SELECT 1 FROM sqlite_master WHERE name='map_thumbnails' AND type='table'"};
+    if (!table.next())
+      return result;
+    auto query = Statement{db, "SELECT asset_id,hash FROM map_thumbnails"};
+    while (query.next())
+      result.emplace(query.text(0), query.text(1));
+    return result;
+  });
+}
+
 Result<std::optional<TerrainCompile>> ProjectStore::terrainCompile(
   const std::string& id) const
 {

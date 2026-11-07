@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -122,6 +123,12 @@ public:
   Result<std::optional<TerrainCompile>> terrainCompile(const std::string& id) const;
   Result<void> setTerrainCompile(const std::string& id, const TerrainCompile& data);
   Result<void> clearTerrainCompile(const std::string& id);
+
+  // Optional editor images are replaceable metadata, independent of map revisions.
+  Result<void> setMapThumbnail(
+    const std::string& id, const std::vector<std::uint8_t>& png);
+  Result<std::vector<std::uint8_t>> mapThumbnail(const std::string& id) const;
+  Result<std::map<std::string, std::string>> mapThumbnailHashes() const;
 
   // Snapshot provenance. A project only ever knows the library revisions it captured.
   Result<std::vector<Asset>> libraryLinkedAssets() const;

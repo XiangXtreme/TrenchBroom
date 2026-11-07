@@ -20,6 +20,7 @@
 #include "ui/MapStatus.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ModelBrowserView.h"
 #include "ui/ProjectSession.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
@@ -122,6 +123,9 @@ void configureWorkspaceSnapshot(QWidget& widget, const QString& target)
     if (target == "project-pinned")
       if (auto* source = window->findChild<QComboBox*>("ModelBrowser_Source"))
         source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    if (target == "project-pinned")
+      if (auto* cards = window->findChild<ModelBrowserView*>())
+        emit cards->folderActivated("maps");
   }
   if (mode->currentIndex() == 1)
     tools->findChild<QSplitter*>("ProjectToolsSplitter")->setSizes({560, 300});
@@ -169,6 +173,15 @@ QString workspaceSnapshotPendingReason(QWidget& widget, const QString& target)
       target == "project-map-switch"
       && (tabs->tabText(tabs->currentIndex()) != "beta" || grid->currentData().toInt() != 5))
       return "Workspace status has not followed the beta map";
+  }
+  if (target == "project-pinned")
+  {
+    const auto hashes = window->session()->store().mapThumbnailHashes();
+    if (hashes.is_error() || hashes.value().empty())
+    {
+      emit window->session()->mapThumbnailsRequested();
+      return "Waiting for the current map thumbnail";
+    }
   }
   return {};
 }

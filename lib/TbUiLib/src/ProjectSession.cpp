@@ -4,6 +4,7 @@
  */
 #include "ui/ProjectSession.h"
 
+#include <QBuffer>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -1255,8 +1256,35 @@ Result<void> ProjectSession::writeProject(
   return {};
 }
 
+Result<void> ProjectSession::setMapThumbnail(const std::string& id, const QImage& image)
+{
+  if (image.isNull())
+    return Error{"Cannot capture map thumbnail."};
+  auto bytes = QByteArray{};
+  auto buffer = QBuffer{&bytes};
+  if (
+    !buffer.open(QIODevice::WriteOnly)
+    || !image.scaled(512, 512, Qt::KeepAspectRatio, Qt::SmoothTransformation)
+          .save(&buffer, "PNG"))
+    return Error{"Cannot encode map thumbnail."};
+  const auto* begin = reinterpret_cast<const std::uint8_t*>(bytes.constData());
+  const auto png = std::vector<std::uint8_t>{begin, begin + bytes.size()};
+  const auto previous = m_store->mapThumbnail(id);
+  if (previous.is_success() && previous.value() == png)
+    return {};
+  auto result = m_store->setMapThumbnail(id, png);
+  if (result.is_success())
+  {
+    m_modified = true;
+    emit contentsChanged();
+    emit stateChanged();
+  }
+  return result;
+}
+
 Result<void> ProjectSession::save()
 {
+  emit mapThumbnailsRequested();
   auto result = stageMaps() | kdl::and_then([&]() { return writeProject(m_path, true); })
                 | kdl::transform([&]() {
                     m_stagedMaps.clear();
@@ -1276,6 +1304,7 @@ Result<void> ProjectSession::save()
 }
 Result<void> ProjectSession::saveCopy(const std::filesystem::path& path)
 {
+  emit mapThumbnailsRequested();
   const auto result =
     stageMaps() | kdl::and_then([&]() { return writeProject(path, false); });
   const auto reset = unstageMaps();

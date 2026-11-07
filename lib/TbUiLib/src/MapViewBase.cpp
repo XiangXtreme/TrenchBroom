@@ -1174,6 +1174,16 @@ void MapViewBase::renderContents(gl::Gl& gl)
 
   setupGL(renderContext);
   setRenderOptions(renderContext);
+  if (m_renderingThumbnail)
+  {
+    renderContext.setShowGrid(false);
+    renderContext.setShowEdges(false);
+    renderContext.setShowEntityClassnames(false);
+    renderContext.setShowGroupBounds(false);
+    renderContext.setShowBrushEntityBounds(false);
+    renderContext.setShowPointEntityBounds(false);
+    renderContext.setForceHideSelectionGuide();
+  }
 
   auto renderBatch = render::RenderBatch{vboManager()};
 

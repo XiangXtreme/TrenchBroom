@@ -181,7 +181,8 @@ bool shouldRenderErrorText(const BrowserCellType type, const AssetPreviewState* 
 bool canRenderImagePreview(const BrowserCellType type)
 {
   return type == BrowserCellType::Sprite || type == BrowserCellType::Prefab
-         || type == BrowserCellType::Texture || type == BrowserCellType::Material;
+         || type == BrowserCellType::Texture || type == BrowserCellType::Material
+         || type == BrowserCellType::Map;
 }
 
 bool canLoadPreview(const BrowserCellType type)
@@ -578,6 +579,24 @@ void ModelBrowserView::loadMissingVisiblePreviews(
           && !m_modelPreviewFiles.contains(item.path)
           && !m_assetPreviews.contains(item.path))
           models.push_back(*asset);
+        if (
+          asset && asset->type == BrowserCellType::Map && m_project
+          && asset->source == BrowserSource::Project)
+        {
+          if (!m_assetPreviews.contains(item.path))
+          {
+            const auto bytes = m_project->store().mapThumbnail(asset->assetId);
+            auto image = QImage{};
+            if (bytes.is_success() && !bytes.value().empty())
+              image.loadFromData(bytes.value().data(), int(bytes.value().size()), "PNG");
+            m_assetPreviews.emplace(
+              item.path,
+              image.isNull()
+                ? AssetPreviewState{AssetPreviewStatus::Missing, std::nullopt}
+                : assetImagePreview(image));
+          }
+          continue;
+        }
         if (asset && (asset->skybox || asset->type == BrowserCellType::Material))
         {
           if (!m_assetPreviews.contains(item.path))
@@ -850,6 +869,12 @@ void ModelBrowserView::doContextMenu(
     if (asset->source == BrowserSource::Project)
     {
       const auto id = QString::fromStdString(asset->projectAssetId);
+      if (asset->type == BrowserCellType::Map && m_project)
+      {
+        menu.addAction(tr("Use Current View as Preview"), this, [this, id]() {
+          emit m_project->mapThumbnailRequested(id);
+        });
+      }
       menu.addAction(tr("Find Uses in Project"), this, [this, id]() {
         emit libraryAssetFindUsesRequested(id);
       });
@@ -1249,7 +1274,8 @@ void ModelBrowserView::renderAssetPlaceholders(
                 iconColor);
             }
             if (
-              item.type == BrowserCellType::Map
+              (item.type == BrowserCellType::Map
+               && (!preview || preview->status != AssetPreviewStatus::Ready))
               || shouldRenderErrorText(item.type, preview))
             {
               const auto errorText =
@@ -1865,7 +1891,8 @@ void ModelBrowserView::renderPreviewBackgrounds(
 
       for (const auto& cell : row.cells())
       {
-        if (!canRenderImagePreview(cellData(cell).type))
+        const auto type = cellData(cell).type;
+        if (!canRenderImagePreview(type) || type == BrowserCellType::Map)
         {
           continue;
         }
@@ -2211,7 +2238,9 @@ QString ModelBrowserView::tooltip(const Cell& cell)
         status = tr("Preview failed: %1").arg(QString::fromStdString(preview->error));
       else if (preview->status == AssetPreviewStatus::Error)
         status = tr("Preview failed: the resource could not be decoded.");
-      else if (preview->status == AssetPreviewStatus::Missing)
+      else if (
+        preview->status == AssetPreviewStatus::Missing
+        && asset->type != BrowserCellType::Map)
         status = tr("Preview file is missing.");
     }
     if (!status.isEmpty())
