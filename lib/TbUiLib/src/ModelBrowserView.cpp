@@ -1678,14 +1678,17 @@ void ModelBrowserView::renderSourceBadges(
         {
           continue;
         }
-        const auto glyph = sourceBadgeGlyph(asset->source);
+        if (asset->source != BrowserSource::AssetLibrary || asset->projectAssetId.empty())
+          continue;
+        const auto badgeSource = BrowserSource::Project;
+        const auto glyph = sourceBadgeGlyph(badgeSource);
         if (!glyph)
         {
           continue;
         }
 
-        const auto [chipColor, glyphColor] = sourceBadgeColors(asset->source, palette());
-        const auto textureId = ensureSourceBadgeTexture(gl, asset->source, glyphColor);
+        const auto [chipColor, glyphColor] = sourceBadgeColors(badgeSource, palette());
+        const auto textureId = ensureSourceBadgeTexture(gl, badgeSource, glyphColor);
         if (textureId == 0)
         {
           continue;

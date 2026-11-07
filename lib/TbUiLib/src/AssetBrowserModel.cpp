@@ -277,8 +277,6 @@ bool browserFilterIncludesSource(
 {
   switch (filter)
   {
-  case BrowserSourceFilter::All:
-    return source != BrowserSource::GameFiles;
   case BrowserSourceFilter::GameFiles:
     return source == BrowserSource::GameFiles;
   case BrowserSourceFilter::Project:
@@ -405,81 +403,6 @@ std::vector<std::filesystem::path> entityModelAssetPaths(
         asset.projectPublishPath.empty() ? asset.path : asset.projectPublishPath);
     }
   }
-  return result;
-}
-
-std::vector<BrowserAsset> mergeBrowserAssets(
-  std::vector<BrowserAsset> projectAssets, std::vector<BrowserAsset> libraryAssets)
-{
-  const auto libraryIdentity = [](const BrowserAsset& asset) {
-    return std::pair{asset.libraryId, asset.libraryAssetId};
-  };
-  auto snapshots = std::map<std::pair<std::string, std::string>, size_t>{};
-  for (size_t i = 0; i < projectAssets.size(); ++i)
-    if (!projectAssets[i].libraryAssetId.empty())
-      snapshots.try_emplace(libraryIdentity(projectAssets[i]), i);
-
-  // The project snapshot is the authoritative copy of a captured library resource, so the
-  // library's current state is reported on the snapshot instead of listing the resource
-  // twice.
-  for (const auto& libraryAsset : libraryAssets)
-  {
-    if (libraryAsset.libraryAssetId.empty())
-    {
-      continue;
-    }
-
-    const auto snapshot = snapshots.find(libraryIdentity(libraryAsset));
-    if (snapshot != snapshots.end())
-    {
-      auto& projectAsset = projectAssets[snapshot->second];
-      projectAsset.projectUpdateAvailable =
-        projectAsset.projectUpdateAvailable || libraryAsset.projectUpdateAvailable;
-      projectAsset.missing = projectAsset.missing || libraryAsset.missing;
-    }
-  }
-
-  const auto enginePathKey = [](const BrowserAsset& asset) {
-    return pathAsGenericQString(asset.path.lexically_normal()).toLower().toStdString();
-  };
-
-  auto result = std::vector<BrowserAsset>{};
-  result.reserve(projectAssets.size() + libraryAssets.size());
-  auto seen = std::set<std::pair<BrowserCellType, std::string>>{};
-  const auto append = [&](const BrowserAsset& asset) {
-    if (asset.path.empty())
-    {
-      return;
-    }
-
-    if (seen.emplace(asset.type, enginePathKey(asset)).second)
-    {
-      result.push_back(asset);
-    }
-  };
-
-  for (const auto& asset : projectAssets)
-  {
-    append(asset);
-  }
-  for (const auto& asset : libraryAssets)
-  {
-    if (asset.libraryAssetId.empty() || !snapshots.contains(libraryIdentity(asset)))
-    {
-      append(asset);
-    }
-  }
-  std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {
-    if (lhs.path != rhs.path)
-    {
-      return lhs.path < rhs.path;
-    }
-    if (lhs.type != rhs.type)
-    {
-      return lhs.type < rhs.type;
-    }
-    return lhs.source < rhs.source;
-  });
   return result;
 }
 

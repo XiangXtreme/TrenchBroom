@@ -89,7 +89,7 @@ private:
   QComboBox* m_searchScopeCombo = nullptr;
   QComboBox* m_sourceCombo = nullptr;
   QComboBox* m_typeCombo = nullptr;
-  QComboBox* m_libraryCombo = nullptr;
+  QString m_libraryName;
   QComboBox* m_iconSizeCombo = nullptr;
   QComboBox* m_soundCombo = nullptr;
   QCheckBox* m_groupWadTextures = nullptr;
@@ -97,6 +97,7 @@ private:
   mutable std::unordered_map<std::string, std::optional<inspection::WaveInfo>>
     m_waveInfoCache;
   QToolButton* m_usedButton = nullptr;
+  bool m_projectUsedInMap = false;
   QToolButton* m_favoritesButton = nullptr;
   QComboBox* m_tagCombo = nullptr;
   QPointer<AssetLibraryWindow> m_libraryWindow;
@@ -188,6 +189,7 @@ private:
   void connectObservers();
   void connectMapObservers();
 
+  QString listingTitle() const;
   void rebuildBreadcrumbBar();
   bool searchAllAssets() const;
   void updateSearchPlaceholder();
@@ -227,7 +229,7 @@ private:
   std::vector<BrowserAsset> visibleAssets() const;
   std::optional<inspection::WaveInfo> waveInfoFor(const BrowserAsset& asset) const;
   void updateSourceControls();
-  void refreshLibraryChoices();
+  void refreshLibraryConnection();
   void captureLibraryAsset(const QString& libraryId, const QString& libraryAssetId);
   void updateProjectAsset(const QString& projectAssetId);
   void findProjectAssetUses(const QString& projectAssetId);

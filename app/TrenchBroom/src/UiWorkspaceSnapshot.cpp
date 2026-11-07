@@ -15,6 +15,7 @@
 #include "mdl/Map.h"
 #include "mdl/MapHeader.h"
 #include "ui/AppController.h"
+#include "ui/AssetBrowserModel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapStatus.h"
 #include "ui/MapWindow.h"
@@ -115,7 +116,13 @@ void configureWorkspaceSnapshot(QWidget& widget, const QString& target)
     tools->showInfoPage(InfoPanelPage::PythonConsole);
   }
   else
+  {
     tools->showContent();
+    // Exercise both content modes across the workspace captures.
+    if (target == "project-pinned")
+      if (auto* source = window->findChild<QComboBox*>("ModelBrowser_Source"))
+        source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+  }
   if (mode->currentIndex() == 1)
     tools->findChild<QSplitter*>("ProjectToolsSplitter")->setSizes({560, 300});
 }

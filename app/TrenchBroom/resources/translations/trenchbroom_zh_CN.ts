@@ -3648,6 +3648,14 @@ Please choose a different file name to export to.</source>
     <context>
         <name>tb::ui::ModelBrowser</name>
         <message>
+            <source>Current Project</source>
+            <translation>当前工程</translation>
+        </message>
+        <message>
+            <source>Content browser mode</source>
+            <translation>内容浏览器模式</translation>
+        </message>
+        <message>
             <source>Skyboxes</source>
             <translation>天空盒</translation>
         </message>

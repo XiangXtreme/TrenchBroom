@@ -337,6 +337,9 @@ TEST_CASE("ProjectWindow")
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser != nullptr);
+    auto* source = browser->findChild<QComboBox*>("ModelBrowser_Source");
+    REQUIRE(source);
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
     CHECK(window.findChildren<ModelBrowser*>().size() == 1);
     CHECK(alphaWindow->findChildren<ModelBrowser*>().empty());
     auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
@@ -1026,8 +1029,12 @@ TEST_CASE("ProjectWindow")
     REQUIRE(view);
     REQUIRE(savePrefab);
     CHECK(source->findData(int(BrowserSourceFilter::GameFiles)) == -1);
-    CHECK(source->currentData().toInt() == int(BrowserSourceFilter::All));
-    CHECK_FALSE(savePrefab->isHidden());
+    CHECK(source->count() == 2);
+    CHECK(source->currentData().toInt() == int(BrowserSourceFilter::AssetLibrary));
+    CHECK(savePrefab->isHidden());
+    auto* filters = browser->findChild<QWidget*>("ModelBrowser_FilterPopup");
+    REQUIRE(filters);
+    CHECK_FALSE(filters->isAncestorOf(source));
     type->setCurrentIndex(type->findData(int(BrowserCellType::Sound)));
     const auto hasAsset = [](const auto& assets, const auto& name, const auto expected) {
       return std::ranges::any_of(assets, [&](const auto& asset) {
@@ -1035,7 +1042,7 @@ TEST_CASE("ProjectWindow")
       });
     };
     QTRY_VERIFY(
-      hasAsset(view->assets(), "project-only.wav", BrowserSource::Project)
+      !hasAsset(view->assets(), "project-only.wav", BrowserSource::Project)
       && hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
     CHECK_FALSE(hasAsset(view->assets(), "game-only.wav", BrowserSource::GameFiles));
 
@@ -1050,6 +1057,42 @@ TEST_CASE("ProjectWindow")
       hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
     CHECK_FALSE(hasAsset(view->assets(), "game-only.wav", BrowserSource::GameFiles));
     CHECK(savePrefab->isHidden());
+    const auto resource = require(library->assets()).front();
+    require(library->setGroup({resource.id}, "sound/Custom"));
+    const auto captured =
+      require(session->captureLibraryAsset(library->info().id, resource.id));
+    QTRY_VERIFY(std::ranges::any_of(view->assets(), [&](const auto& entry) {
+      return entry.source == BrowserSource::AssetLibrary
+             && entry.projectAssetId == captured.id
+             && entry.catalogPath
+                  == std::filesystem::path{"sound/Custom/library-only.wav"};
+    }));
+    auto* used = browser->findChild<QToolButton*>("ModelBrowser_UsedInMap");
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    REQUIRE(used);
+    REQUIRE(folders);
+    CHECK(used->isHidden());
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    QTRY_VERIFY(hasAsset(view->assets(), "project-only.wav", BrowserSource::Project));
+    CHECK_FALSE(used->isHidden());
+    CHECK(
+      folders->topLevelItem(0)->text(0)
+      == QString::fromStdString(session->store().info().name));
+    CHECK(std::ranges::all_of(view->assets(), [](const auto& entry) {
+      return entry.source == BrowserSource::Project;
+    }));
+    CHECK(std::ranges::any_of(
+      view->assets(), [&](const auto& entry) { return entry.assetId == captured.id; }));
+    used->setChecked(true);
+    QTRY_VERIFY(view->assets().empty());
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    QTRY_VERIFY(
+      hasAsset(view->assets(), "library-only.wav", BrowserSource::AssetLibrary));
+    CHECK_FALSE(used->isChecked());
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    QTRY_VERIFY(view->assets().empty());
+    CHECK(used->isChecked());
+    used->setChecked(false);
 
     auto standaloneDocument = require(MapDocument::createDocument(
       appController.environmentConfig(),
@@ -1114,10 +1157,19 @@ TEST_CASE("ProjectWindow")
     QTRY_COMPARE(scroll->value(), 100);
     REQUIRE(folders->currentItem());
     CHECK(folders->currentItem()->data(0, Qt::UserRole).toString() == "sound");
-    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::All)));
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
     QApplication::processEvents();
     source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
     QTRY_COMPARE(scroll->value(), 100);
+    auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
+    REQUIRE(search);
+    search->setText("Clip");
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::AssetLibrary)));
+    CHECK(search->text().isEmpty());
+    search->setText("Library query");
+    source->setCurrentIndex(source->findData(int(BrowserSourceFilter::Project)));
+    CHECK(search->text() == "Clip");
+    search->clear();
     tabs->setCurrentIndex(1);
     QApplication::processEvents();
     QTRY_COMPARE(scroll->value(), 100);
@@ -2845,6 +2897,8 @@ TEST_CASE("ProjectWindow")
     QTest::qWait(100);
     auto* browser = window.findChild<ModelBrowserView*>();
     REQUIRE(browser != nullptr);
+    emit browser->folderActivated("sound");
+    QApplication::processEvents();
     auto sawPreview = false;
     auto close = QTimer{};
     QObject::connect(&close, &QTimer::timeout, [&]() {

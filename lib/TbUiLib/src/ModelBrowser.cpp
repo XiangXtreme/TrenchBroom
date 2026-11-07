@@ -274,8 +274,8 @@ ModelBrowser::ModelBrowser(
 {
   if (m_project)
   {
-    // Show project resources and the attached library together by default.
-    m_sourceFilter = BrowserSourceFilter::All;
+    // Start in the reusable library; project snapshots have their own listing.
+    m_sourceFilter = BrowserSourceFilter::AssetLibrary;
   }
   createGui(appController);
   bindEvents(appController);
@@ -294,7 +294,7 @@ ModelBrowser::ModelBrowser(
         scheduleAssetRefresh();
       },
       Qt::QueuedConnection);
-    refreshLibraryChoices();
+    refreshLibraryConnection();
   }
   updateSourceControls();
   if (m_project)
@@ -304,7 +304,7 @@ ModelBrowser::ModelBrowser(
       scheduleAssetRefresh();
     });
     connect(m_project.get(), &ProjectSession::libraryLinksChanged, this, [this]() {
-      refreshLibraryChoices();
+      refreshLibraryConnection();
       markAssetsDirty();
       scheduleAssetRefresh();
     });
@@ -385,23 +385,18 @@ void ModelBrowser::createGui(AppController& appController)
   m_sourceCombo = new QComboBox{};
   m_sourceCombo->setObjectName("ModelBrowser_Source");
   m_sourceCombo->setMinimumWidth(96);
-  m_sourceCombo->setToolTip(tr("Asset source filter"));
+  m_sourceCombo->setToolTip(tr("Content browser mode"));
   if (m_project)
   {
-    m_sourceCombo->addItem(tr("All Sources"), int(BrowserSourceFilter::All));
-    m_sourceCombo->addItem(tr("Project"), int(BrowserSourceFilter::Project));
     m_sourceCombo->addItem(tr("Asset Library"), int(BrowserSourceFilter::AssetLibrary));
+    m_sourceCombo->addItem(tr("Current Project"), int(BrowserSourceFilter::Project));
   }
   else
   {
     m_sourceCombo->addItem(tr("Game Files"), int(BrowserSourceFilter::GameFiles));
   }
 
-  m_libraryCombo = new QComboBox{};
-  m_libraryCombo->setObjectName("ModelBrowser_Library");
-  m_libraryCombo->setMinimumWidth(120);
-  m_libraryCombo->setToolTip(tr("Asset library"));
-  m_libraryCombo->setVisible(false);
+  m_sourceCombo->setVisible(bool(m_project));
 
   // The unified listing mixes maps, textures, models and sounds, so the type filter is a
   // second axis next to the source layer.
@@ -453,8 +448,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_searchScopeCombo->setMinimumWidth(104);
   updateSearchPlaceholder();
 
-  for (auto* combo :
-       {m_sourceCombo, m_typeCombo, m_libraryCombo, m_iconSizeCombo, m_searchScopeCombo})
+  for (auto* combo : {m_sourceCombo, m_typeCombo, m_iconSizeCombo, m_searchScopeCombo})
   {
     combo->setProperty("tbControlRole", "compact");
   }
@@ -480,6 +474,7 @@ void ModelBrowser::createGui(AppController& appController)
   auto* pathRowLayout = new QHBoxLayout{};
   pathRowLayout->setContentsMargins(8, 3, 8, 3);
   pathRowLayout->setSpacing(6);
+  pathRowLayout->addWidget(m_sourceCombo);
   pathRowLayout->addWidget(m_backButton);
   pathRowLayout->addWidget(m_forwardButton);
   pathRowLayout->addWidget(m_savePrefabButton);
@@ -490,7 +485,6 @@ void ModelBrowser::createGui(AppController& appController)
   pathRowLayout->addWidget(m_filterButton);
   pathRowLayout->addWidget(m_viewButton);
   m_toolbarLayout = pathRowLayout;
-  m_libraryCombo->setMaximumWidth(200);
 
   auto* controls = new QWidget{};
   controls->setObjectName("ModelBrowser_Controls");
@@ -656,14 +650,11 @@ void ModelBrowser::createGui(AppController& appController)
   filterForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
   filterForm->setSizeConstraint(QLayout::SetFixedSize);
   // A popover reads best when every field lines up, so the filter fields share a width.
-  for (auto* combo :
-       {m_sourceCombo, m_typeCombo, m_libraryCombo, m_soundCombo, m_tagCombo})
+  for (auto* combo : {m_typeCombo, m_soundCombo, m_tagCombo})
   {
     combo->setMinimumWidth(190);
   }
-  filterForm->addRow(tr("Source"), m_sourceCombo);
   filterForm->addRow(tr("Type"), m_typeCombo);
-  filterForm->addRow(tr("Library"), m_libraryCombo);
   filterForm->addRow(tr("Sound"), m_soundCombo);
   filterForm->addRow(tr("Tag"), m_tagCombo);
   auto* metadataRow = new QWidget{};
@@ -802,7 +793,7 @@ void ModelBrowser::previewAsset(AppController&, const QString& path)
 void ModelBrowser::setMapActionsEnabled(const bool enabled)
 {
   m_mapActionsEnabled = enabled;
-  m_usedButton->setEnabled(enabled && bool(m_project));
+  updateSourceControls();
   refreshUsage();
   applyTypeFilter();
   emit actionContextChanged();
@@ -1155,7 +1146,7 @@ void ModelBrowser::bindEvents(AppController& appController)
     m_lastWriteTimes.clear();
     m_assetRefreshPending = false;
     if (m_sourceFilter != BrowserSourceFilter::GameFiles)
-      refreshLibraryChoices();
+      refreshLibraryConnection();
     rescanWatchedDirectory();
   });
 
@@ -1179,16 +1170,6 @@ void ModelBrowser::bindEvents(AppController& appController)
         setTypeFilter(
           value < 0 ? std::nullopt : std::optional{BrowserCellType(value)},
           value == int(BrowserCellType::Texture) ? std::optional{false} : std::nullopt);
-    });
-
-  connect(
-    m_libraryCombo,
-    QOverload<int>::of(&QComboBox::currentIndexChanged),
-    this,
-    [&](const int index) {
-      m_libraryId = m_libraryCombo->itemData(index).toString().toStdString();
-      markAssetsDirty();
-      scheduleAssetRefresh();
     });
 
   connect(
@@ -1334,6 +1315,15 @@ bool ModelBrowser::eventFilter(QObject* obj, QEvent* event)
   return QWidget::eventFilter(obj, event);
 }
 
+QString ModelBrowser::listingTitle() const
+{
+  if (!m_project)
+    return tr("Game Files");
+  if (m_sourceFilter == BrowserSourceFilter::Project)
+    return QString::fromStdString(m_project->store().info().name);
+  return m_libraryName.isEmpty() ? tr("Asset Library") : m_libraryName;
+}
+
 void ModelBrowser::rebuildBreadcrumbBar()
 {
   if (!m_breadcrumbLayout)
@@ -1371,7 +1361,7 @@ void ModelBrowser::rebuildBreadcrumbBar()
   // The root crumb names the listing the paths are relative to, so "sprites" reads as
   // assets/sprites instead of looking like a top-level folder.
   const auto rootTitle = m_folderPath.filename().empty()
-                           ? QStringLiteral("assets")
+                           ? listingTitle()
                            : pathAsGenericQString(m_folderPath.filename());
   addCrumb(rootTitle, std::filesystem::path{});
 
@@ -1507,10 +1497,6 @@ void ModelBrowser::updateFilterVisibility()
     });
   };
 
-  m_filterLayout->setRowVisible(m_sourceCombo, m_sourceCombo->count() > 1);
-  m_filterLayout->setRowVisible(
-    m_libraryCombo,
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::AssetLibrary));
   m_filterLayout->setRowVisible(
     m_soundCombo,
     hasType(BrowserCellType::Sound) || m_waveKind != inspection::WaveKind::All);
@@ -1536,14 +1522,6 @@ void ModelBrowser::updateFilterSummary()
   }
 
   auto active = 0;
-  // A single-source browser is not filtering; the axis only exists on the unified
-  // listing, which is also when the control is shown.
-  if (
-    m_sourceCombo && m_sourceCombo->count() > 1
-    && m_sourceFilter != BrowserSourceFilter::All)
-  {
-    ++active;
-  }
   if (m_typeFilter)
   {
     ++active;
@@ -2053,7 +2031,8 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
     entry.libraryRevision = asset.revision;
     entry.libraryContentHash = asset.contentHash;
     entry.displayName = asset.displayName;
-    entry.catalogPath = entry.path;
+    entry.catalogPath =
+      pathFromQString(QString::fromStdString(asset.group)) / entry.path.filename();
     if (keys.is_success())
       if (const auto key = keys.value().find(asset.id); key != keys.value().end())
         entry.previewIdentity = key->second.toStdString();
@@ -2114,21 +2093,8 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets()
     return scanLibraryAssets();
   case BrowserSourceFilter::GameFiles:
     return m_project ? std::nullopt : scanGameAssets();
-  case BrowserSourceFilter::All:
-    break;
   }
-
-  // A project without an attached library still lists its own resources.
-  auto projectAssets = scanProjectAssets();
-  auto libraryAssets = scanLibraryAssets();
-  if (!projectAssets && !libraryAssets)
-  {
-    return std::nullopt;
-  }
-
-  return mergeBrowserAssets(
-    projectAssets ? std::move(*projectAssets) : std::vector<BrowserAsset>{},
-    libraryAssets ? std::move(*libraryAssets) : std::vector<BrowserAsset>{});
+  return std::nullopt;
 }
 
 std::optional<std::vector<BrowserAsset>> ModelBrowser::scanGameAssets()
@@ -2204,7 +2170,14 @@ void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
     return;
   }
   saveBrowsingState();
+  if (m_sourceFilter == BrowserSourceFilter::Project)
+    m_projectUsedInMap = m_usedButton->isChecked();
   m_sourceFilter = source;
+  {
+    const auto blocker = QSignalBlocker{m_usedButton};
+    m_usedButton->setChecked(
+      source == BrowserSourceFilter::Project && m_projectUsedInMap);
+  }
   m_folderPath.clear();
   m_currentFolderPath.clear();
   restoreBrowsingState();
@@ -2213,7 +2186,7 @@ void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
   m_folderHistoryIndex = -1;
   recordFolderHistory();
   updateFolderEdit();
-  refreshLibraryChoices();
+  refreshLibraryConnection();
   updateSourceControls();
   m_assetRefreshPending = true;
   scheduleAssetRefresh();
@@ -2479,10 +2452,9 @@ void ModelBrowser::refreshUsage()
 
 void ModelBrowser::updateSourceControls()
 {
-  const auto includesLibrary =
-    browserFilterIncludesSource(m_sourceFilter, BrowserSource::AssetLibrary);
-  if (m_libraryCombo)
-    m_libraryCombo->setVisible(includesLibrary);
+  const auto projectMode = m_sourceFilter == BrowserSourceFilter::Project;
+  m_usedButton->setVisible(projectMode);
+  m_usedButton->setEnabled(projectMode && m_mapActionsEnabled);
   if (m_sourceCombo)
   {
     const QSignalBlocker blocker{m_sourceCombo};
@@ -2504,45 +2476,25 @@ void ModelBrowser::updateSourceControls()
   }
 }
 
-void ModelBrowser::refreshLibraryChoices()
+void ModelBrowser::refreshLibraryConnection()
 {
-  if (!m_libraryCombo)
-    return;
-
-  const QSignalBlocker blocker{m_libraryCombo};
-  m_libraryCombo->clear();
+  m_libraryName = tr("No asset library");
   m_libraryError.clear();
   m_libraryId.clear();
   if (!m_project)
-  {
-    m_libraryCombo->setEnabled(false);
     return;
-  }
 
   const auto libraries = m_project->libraries();
   if (libraries.is_success() && !libraries.value().empty())
   {
-    // A single application-wide library backs every project, so the combo is only an
-    // indicator of which catalog the browser lists.
     const auto& library = libraries.value().front();
     const auto name = QString::fromStdString(library.info.name);
-    m_libraryCombo->addItem(
-      library.available ? name : tr("%1 (unavailable)").arg(name),
-      QString::fromStdString(library.info.id));
-    if (!library.error.empty())
-      m_libraryCombo->setItemData(
-        0, QString::fromStdString(library.error), Qt::ToolTipRole);
+    m_libraryName = library.available ? name : tr("%1 (unavailable)").arg(name);
     m_libraryId = library.info.id;
-    m_libraryCombo->setCurrentIndex(0);
+    m_libraryError = QString::fromStdString(library.error);
   }
-  else
-  {
-    m_libraryCombo->addItem(tr("No asset library"), QString{});
-    m_libraryCombo->setCurrentIndex(0);
-  }
-  m_libraryCombo->setEnabled(false);
+  rebuildBreadcrumbBar();
 }
-
 
 void ModelBrowser::captureLibraryAsset(
   const QString& libraryId, const QString& libraryAssetId)
@@ -2622,7 +2574,7 @@ void ModelBrowser::reloadModels()
 
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(includeDefaultRootsForListing());
-  m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
+  m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::AssetLibrary);
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
   m_view->setSearchAllAssets(searchAllAssets());
@@ -2647,16 +2599,10 @@ void ModelBrowser::rebuildFolderTree()
 
   const auto folderIcon = loadSVGIcon(std::filesystem::path{"BrowserFolderSmall.svg"});
 
-  auto rootTitle = m_folderPath.filename().empty() ? std::filesystem::path{"assets"}
-                                                   : m_folderPath.filename();
-  auto rootTitleText = rootTitle.generic_string();
-  if (rootTitleText.empty())
-  {
-    rootTitleText = ".";
-  }
-
-  auto* rootItem =
-    new QTreeWidgetItem{m_folderTree, QStringList{QString::fromStdString(rootTitleText)}};
+  const auto rootTitle = m_folderPath.filename().empty()
+                           ? listingTitle()
+                           : pathAsGenericQString(m_folderPath.filename());
+  auto* rootItem = new QTreeWidgetItem{m_folderTree, QStringList{rootTitle}};
   rootItem->setData(0, Qt::UserRole, QString{});
   rootItem->setIcon(0, folderIcon);
   m_folderTreeItems.emplace(std::filesystem::path{}, rootItem);
@@ -2839,7 +2785,7 @@ void ModelBrowser::rescanWatchedDirectory()
   m_lastWriteTimes = std::move(newLastWriteTimes);
   rebuildFolderTree();
   m_view->setIncludeDefaultRoots(includeDefaultRootsForListing());
-  m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::All);
+  m_view->setShowSourceMarkers(m_sourceFilter == BrowserSourceFilter::AssetLibrary);
   m_view->setAssets(m_folderPath, visibleAssets());
   m_view->setCurrentFolderPath(m_currentFolderPath);
   refreshResultCount();
