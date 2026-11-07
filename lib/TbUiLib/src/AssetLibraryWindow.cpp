@@ -914,23 +914,17 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
       == QMessageBox::Yes;
     if (!create)
       return;
+    auto initialImport = project::LibraryScan{};
     auto created = project::AssetLibrary::create(
       path,
-      path.filename().empty() ? std::string{"Asset Library"} : path.filename().string());
+      path.filename().empty() ? std::string{"Asset Library"} : path.filename().string(),
+      &initialImport);
     if (created.is_error())
     {
       QMessageBox::critical(
         this,
         tr("Asset Library"),
         QString::fromStdString(std::get<Error>(created.error()).msg));
-      return;
-    }
-    if (const auto scanned = created.value()->importDirectory(path); scanned.is_error())
-    {
-      QMessageBox::critical(
-        this,
-        tr("Asset Library"),
-        QString::fromStdString(std::get<Error>(scanned.error()).msg));
       return;
     }
   }

@@ -27,6 +27,7 @@
 #include "mdl/Hit.h"
 #include "mdl/HitFilter.h"
 #include "mdl/Map.h"
+#include "mdl/Map_Geometry.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/PickResult.h"
@@ -614,7 +615,7 @@ bool ClipTool::canClip() const
 
 void ClipTool::performClip()
 {
-  if (!m_dragging && canClip())
+  if (!m_dragging && canClip() && mdl::canEditBrushGeometry(m_document.map()))
   {
     const auto ignoreNotifications = kdl::set_temp{m_ignoreNotifications};
 
@@ -959,7 +960,9 @@ bool ClipTool::keepBackBrushes() const
 
 bool ClipTool::doActivate()
 {
-  if (!m_document.map().selection().hasOnlyBrushes())
+  if (
+    !m_document.map().selection().hasOnlyBrushes()
+    || !mdl::canEditBrushGeometry(m_document.map()))
   {
     return false;
   }

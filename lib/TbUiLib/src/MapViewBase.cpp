@@ -1185,6 +1185,7 @@ void MapViewBase::renderContents(gl::Gl& gl)
   if (m_renderingThumbnail)
   {
     renderContext.setShowGrid(false);
+    renderContext.setShowSelectionHighlight(false);
     renderContext.setShowEdges(false);
     renderContext.setShowEntityClassnames(false);
     renderContext.setShowGroupBounds(false);

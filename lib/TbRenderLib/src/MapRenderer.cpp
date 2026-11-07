@@ -249,12 +249,22 @@ void MapRenderer::render(RenderContext& renderContext, RenderBatch& renderBatch)
 {
   const auto timing = RenderTimingScope{"cpu.scene.build"};
   renderContext.setGoldSrcRendering(usesGoldSrcRendering(m_map.gameInfo().gameConfig));
+  const auto highlight = renderContext.showSelectionHighlight();
+  m_selectionRenderer->setTint(highlight);
+  m_selectionRenderer->setShowBrushEdges(highlight);
+  m_selectionRenderer->setShowOccludedObjects(highlight);
+  m_selectionRenderer->setShowEntityAngles(highlight);
+  m_selectionRenderer->setTransparencyAlpha(
+    highlight ? 1.0f : pref(Preferences::TransparentFaceAlpha));
   setupGL(renderBatch);
   updateSkyFaceRendering(renderContext);
   renderSky(renderContext, renderBatch);
   renderEntityDecals(renderContext, renderBatch);
-  renderEntityLinks(renderContext, renderBatch);
-  renderGroupLinks(renderContext, renderBatch);
+  if (highlight)
+  {
+    renderEntityLinks(renderContext, renderBatch);
+    renderGroupLinks(renderContext, renderBatch);
+  }
 
   renderDefaultOpaque(renderContext, renderBatch);
   renderLockedOpaque(renderContext, renderBatch);

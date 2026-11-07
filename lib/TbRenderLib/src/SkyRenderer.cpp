@@ -235,7 +235,10 @@ public:
     gl.depthFunc(GL_LEQUAL);
     shader.set("Material", 0);
     shader.set("CameraPosition", renderContext.camera().position());
-    shader.set("TintColor", m_selectionColor);
+    shader.set(
+      "TintColor",
+      renderContext.showSelectionHighlight() ? m_selectionColor
+                                             : Color{RgbaF{0, 0, 0, 0}});
 
     if (m_vertexArray.setup(gl, shader.program()))
     {

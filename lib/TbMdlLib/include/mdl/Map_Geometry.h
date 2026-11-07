@@ -36,6 +36,9 @@ namespace tb::mdl
 class Map;
 class Node;
 
+/** Whether ordinary brush geometry tools may edit the current selection. */
+bool canEditBrushGeometry(Map& map);
+
 bool transformSelection(
   Map& map, const std::string& commandName, const vm::mat4x4d& transformation);
 

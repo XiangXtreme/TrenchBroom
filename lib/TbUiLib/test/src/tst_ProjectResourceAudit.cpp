@@ -21,6 +21,8 @@
 #include "ui/ProjectResourceDialog.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
+#include "ui/TerrainChunks.h"
+#include "ui/TerrainRegion.h"
 
 #include <algorithm>
 #include <sstream>
@@ -145,6 +147,37 @@ TEST_CASE("ProjectResourceAudit")
     CHECK_FALSE(references.contains(unused.id));
     checked(session->removeAsset(unused.id));
     CHECK_FALSE(checked(session->store().findAsset(unused.id)).has_value());
+  }
+
+  SECTION("chunk containers retain child terrain material references")
+  {
+    const auto material =
+      addFile(*session, "materials/terrain.tbmat", project::AssetType::Material);
+    auto region = TerrainRegion{{0, 0}};
+    region.materialAssetId = material.id;
+    const auto body = std::string{R"({"classname" "worldspawn"}
+      {"classname" "func_group" "_tb_terrain_paint" ")"}
+                      + terrainChunkGroupMarker() + R"("}
+      {"classname" "func_group" "_tb_terrain_paint" ")"
+                      + region.encode() + R"("})";
+    const auto map = addMap(*session, "maps/chunks.map", body);
+    const auto audit = checked(auditGoldSrcProjectResources(*session));
+    checked(validateGoldSrcCompileResources(audit, map.id));
+    const auto references = checked(projectAssetMapReferences(*session));
+    CHECK(references.at(material.id) == std::vector{map.virtualPath});
+  }
+
+  SECTION("a broken map can be removed while other resource deletion stays guarded")
+  {
+    const auto broken = addMap(*session, "maps/broken.map", "broken");
+    const auto other = addMap(*session, "maps/other-broken.map", "broken");
+    const auto unused = addFile(*session, "sound/unused.wav");
+    CHECK(session->removeAsset(unused.id).is_error());
+    checked(session->removeAsset(broken.id));
+    CHECK(session->removeAsset(unused.id).is_error());
+    checked(session->removeAsset(other.id));
+    CHECK_FALSE(checked(session->store().findAsset(broken.id)).has_value());
+    checked(session->removeAsset(unused.id));
   }
 
   SECTION("cleanup uses unsaved map contents and permits removal after unbinding")

@@ -98,6 +98,7 @@ private:
   float m_dpiScale = 1.0;
 
   bool m_hideSelection = false;
+  bool m_showSelectionHighlight = true;
   bool m_tintSelection = false;
 
   ShowSelectionGuide m_showSelectionGuide = ShowSelectionGuide::Hide;
@@ -200,6 +201,8 @@ public:
   void setDpiScale(float dpiScale);
 
   bool hideSelection() const;
+  bool showSelectionHighlight() const;
+  void setShowSelectionHighlight(bool show);
   void setHideSelection();
 
   bool tintSelection() const;

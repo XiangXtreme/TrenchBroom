@@ -664,7 +664,9 @@ AssetLibrary::AssetLibrary(AssetLibrary&&) noexcept = default;
 AssetLibrary& AssetLibrary::operator=(AssetLibrary&&) noexcept = default;
 
 Result<std::unique_ptr<AssetLibrary>> AssetLibrary::create(
-  const std::filesystem::path& folder, const std::string& name)
+  const std::filesystem::path& folder,
+  const std::string& name,
+  LibraryScan* initialImport)
 {
   return detail::attempt([&] {
     detail::validateText(name, "library name");
@@ -679,20 +681,35 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::create(
     auto* db = impl->database.get();
     detail::execute(
       db, "PRAGMA foreign_keys=ON; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;");
-    auto transaction = detail::Transaction{db};
-    detail::execute(db, Schema);
-    const auto now = nowText(db);
-    impl->info = {generateUuid(), name, pathText(folder), now, now};
-    auto insert = detail::Statement{
-      db, "INSERT INTO library(id,name,created_at,updated_at) VALUES(?,?,?,?)"};
-    insert.bind(1, impl->info.id);
-    insert.bind(2, impl->info.name);
-    insert.bind(3, impl->info.createdAt);
-    insert.bind(4, impl->info.updatedAt);
-    insert.run();
-    transaction.commit();
+    {
+      auto transaction = detail::Transaction{db};
+      detail::execute(db, Schema);
+      const auto now = nowText(db);
+      impl->info = {generateUuid(), name, pathText(folder), now, now};
+      auto insert = detail::Statement{
+        db, "INSERT INTO library(id,name,created_at,updated_at) VALUES(?,?,?,?)"};
+      insert.bind(1, impl->info.id);
+      insert.bind(2, impl->info.name);
+      insert.bind(3, impl->info.createdAt);
+      insert.bind(4, impl->info.updatedAt);
+      insert.run();
+      transaction.commit();
+    }
+    auto library = std::unique_ptr<AssetLibrary>{new AssetLibrary{std::move(impl)}};
+    if (initialImport)
+    {
+      auto imported = library->importDirectory(folder);
+      if (imported.is_error())
+      {
+        const auto message = std::get<Error>(imported.error()).msg;
+        // Close SQLite before the file reservation removes the failed catalog.
+        library.reset();
+        throw detail::StoreError{message};
+      }
+      *initialImport = std::move(imported).value();
+    }
     reservation.keep();
-    return std::unique_ptr<AssetLibrary>{new AssetLibrary{std::move(impl)}};
+    return library;
   });
 }
 
@@ -789,34 +806,20 @@ namespace
 struct IndexedAsset
 {
   std::string id;
-  std::string virtualPath;
-  std::string sourceRelPath;
-  std::string sourceMember;
-  std::string identity;
   std::string contentHash;
   std::uint64_t revision = 0;
   bool missing = false;
-  bool claimed = false;
 };
 
 std::unordered_map<std::string, IndexedAsset> loadIndexedAssets(sqlite3* db)
 {
-  auto query = detail::Statement{
-    db,
-    "SELECT id,virtual_path,source_rel_path,source_member,identity,content_hash,"
-    "revision,missing FROM assets"};
+  auto query =
+    detail::Statement{db, "SELECT id,content_hash,revision,missing FROM assets"};
   auto result = std::unordered_map<std::string, IndexedAsset>{};
   while (query.next())
   {
-    auto asset = IndexedAsset{
-      query.text(0),
-      query.text(1),
-      query.text(2),
-      query.text(3),
-      query.text(4),
-      query.text(5),
-      query.integer(6),
-      query.flag(7) != 0};
+    auto asset =
+      IndexedAsset{query.text(0), query.text(1), query.integer(2), query.flag(3) != 0};
     result.emplace(asset.id, std::move(asset));
   }
   return result;

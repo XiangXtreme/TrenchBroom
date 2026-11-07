@@ -68,22 +68,30 @@ namespace tb::mdl
 
 kdl_reflect_impl(TransformVerticesResult);
 
-namespace
-{
 bool canEditBrushGeometry(Map& map)
 {
-  for (const auto* brush : map.selection().allBrushes())
+  const auto protectedBrush = [](const auto* brush) {
     for (auto* parent = brush->parent(); parent; parent = parent->parent())
       if (const auto* group = dynamic_cast<const GroupNode*>(parent);
           group && group->group().hasSculptableTerrain())
-      {
-        map.logger().error()
-          << "Use the terrain inspector to edit sculptable terrain geometry.";
-        return false;
-      }
+        return true;
+    return false;
+  };
+  if (
+    std::ranges::any_of(map.selection().allBrushes(), protectedBrush)
+    || std::ranges::any_of(map.selection().brushFaces, [&](const auto& face) {
+         return protectedBrush(&face.node());
+       }))
+  {
+    map.logger().error()
+      << "Use the terrain inspector to edit sculptable terrain geometry.";
+    return false;
+  }
   return true;
 }
 
+namespace
+{
 bool canTransformTerrainNodes(Map& map, const std::vector<Node*>& nodes)
 {
   const auto transformed = std::unordered_set<const Node*>{nodes.begin(), nodes.end()};
@@ -934,6 +942,8 @@ bool csgConvexMerge(Map& map)
 
 bool csgConvexMerge(Map& map, const std::string& commandName)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   if (!map.selection().hasBrushFaces() && !map.selection().hasOnlyBrushes())
   {
     return false;
@@ -1017,6 +1027,8 @@ bool csgSubtract(Map& map)
 
 bool csgSubtract(Map& map, const std::string& commandName)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   const auto subtrahendNodes = std::vector<BrushNode*>{map.selection().brushes};
   if (subtrahendNodes.empty())
   {
@@ -1026,6 +1038,12 @@ bool csgSubtract(Map& map, const std::string& commandName)
   auto transaction = Transaction{map, commandName};
   // Select touching, but don't delete the subtrahends yet
   selectTouchingNodes(map, false);
+
+  if (!canEditBrushGeometry(map))
+  {
+    transaction.cancel();
+    return false;
+  }
 
   const auto minuendNodes = std::vector<BrushNode*>{map.selection().brushes};
   const auto subtrahends = subtrahendNodes
@@ -1087,6 +1105,8 @@ bool csgIntersect(Map& map)
 
 bool csgIntersect(Map& map, const std::string& commandName)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   const auto brushes = map.selection().brushes;
   if (brushes.size() < 2u)
   {
@@ -1139,6 +1159,8 @@ bool csgHollow(Map& map)
 
 bool csgHollow(Map& map, const std::string& commandName)
 {
+  if (!canEditBrushGeometry(map))
+    return false;
   const auto brushNodes = map.selection().brushes;
   if (brushNodes.empty())
   {

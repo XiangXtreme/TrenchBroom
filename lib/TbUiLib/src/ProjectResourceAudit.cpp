@@ -15,6 +15,7 @@
 #include "mdl/StandardMapParser.h"
 #include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
+#include "ui/TerrainChunks.h"
 #include "ui/TerrainRegion.h"
 
 #include <algorithm>
@@ -101,7 +102,7 @@ private:
     m_hasWorld |= m_classname == "worldspawn";
     auto terrainPaint = mdl::findEntityPropertyOrDefault(
       properties, mdl::EntityPropertyKeys::TbTerrainPaint);
-    if (!terrainPaint.empty())
+    if (!terrainPaint.empty() && terrainPaint != terrainChunkGroupMarker())
     {
       // Serialized group properties are split into 900-byte chunks.
       for (auto index = 1;; ++index)

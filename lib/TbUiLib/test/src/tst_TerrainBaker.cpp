@@ -535,6 +535,67 @@ TEST_CASE("Large terrain rectangle creates one undoable chunk group")
   CHECK(readTerrainChunks(*map.selection().groups.front()).is_success());
 }
 
+TEST_CASE("Terrain rejects CSG and clipping without changing its height field")
+{
+  auto fixture = MapDocumentFixture{};
+  auto config = mdl::MapFixtureConfig{.mapFormat = mdl::MapFormat::Valve};
+  auto& document = fixture.create(config);
+  auto& map = document.map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  requireValue(createTerrainRectangle(map, {0, -64}, {64, 0}, 0, 64, 64));
+  auto* group = map.selection().groups.front();
+  mdl::openGroup(map, *group);
+  mdl::selectNodes(map, group->children());
+  const auto nodes = map.selection().nodes;
+  const auto encoded = group->group().terrainPaint();
+
+  SECTION("convex merge")
+  {
+    CHECK_FALSE(mdl::csgConvexMerge(map));
+  }
+  SECTION("convex merge selected terrain faces")
+  {
+    auto* brush = static_cast<mdl::BrushNode*>(nodes.front());
+    mdl::deselectAll(map);
+    mdl::selectBrushFaces(map, {mdl::BrushFaceHandle{*brush, 0}});
+    CHECK_FALSE(mdl::csgConvexMerge(map));
+    CHECK(group->children() == nodes);
+  }
+  SECTION("subtract selected terrain")
+  {
+    CHECK_FALSE(mdl::csgSubtract(map));
+  }
+  SECTION("intersect")
+  {
+    CHECK_FALSE(mdl::csgIntersect(map));
+  }
+  SECTION("hollow")
+  {
+    CHECK_FALSE(mdl::csgHollow(map));
+  }
+  SECTION("clip tool")
+  {
+    auto clip = ClipTool{document};
+    CHECK_FALSE(clip.activate());
+  }
+  SECTION("subtract terrain using an ordinary brush")
+  {
+    const auto builder = mdl::BrushBuilder{mdl::MapFormat::Valve, map.worldBounds()};
+    auto* cutter = new mdl::BrushNode{requireValue(
+      builder.createCuboid(vm::bbox3d{{16, -48, -48}, {48, -16, 16}}, "null"))};
+    REQUIRE_FALSE(
+      mdl::addNodes(map, {{map.editorContext().currentLayer(), {cutter}}}).empty());
+    mdl::deselectAll(map);
+    mdl::selectNodes(map, {cutter});
+    CHECK_FALSE(mdl::csgSubtract(map));
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{cutter});
+    CHECK(group->children() == nodes);
+  }
+  CHECK(group->group().terrainPaint() == encoded);
+  CHECK(terrainSurfaces(*group, requireValue(readTerrainGroup(*group))).is_success());
+}
+
 TEST_CASE("Ordinary brush editing protects sculptable terrain")
 {
   auto fixture = MapDocumentFixture{};

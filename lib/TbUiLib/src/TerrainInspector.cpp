@@ -1109,6 +1109,7 @@ const TerrainRegion* TerrainInspector::vertexRegion(const mdl::GroupNode& group)
   {
     m_vertexCachedGroup = group.persistentId();
     m_vertexCachedPaint = encoded;
+    render::RenderTiming::count("terrain.region_decodes", 1);
     auto decoded = readTerrainGroup(group);
     m_vertexCachedRegion = decoded.is_success()
                              ? std::make_unique<TerrainRegion>(std::move(decoded).value())
@@ -1886,7 +1887,7 @@ void TerrainInspector::render(
       const auto& transform = group->group().transformation();
       const auto& plane = face->face().boundary();
       const auto localCenter = *inverse * hit.hitPoint();
-      const auto region = readTerrainGroup(*group);
+      const auto* region = vertexRegion(*group);
       const auto drawRing = [&](const double radius) {
         auto points = std::vector<vm::vec3f>{};
         constexpr auto segments = 64;
@@ -1901,13 +1902,13 @@ void TerrainInspector::render(
           locals.push_back(
             localCenter
             + vm::vec3d{radius * std::cos(angle), radius * std::sin(angle), 0});
-          if (region.is_success() && region.value().heightField)
+          if (region && region->heightField)
             positions.push_back(
-              region.value().project(locals.back()) * TerrainRegion::UnitsPerTexel);
+              region->project(locals.back()) * TerrainRegion::UnitsPerTexel);
         }
         const auto heights = positions.empty()
                                ? std::vector<std::optional<double>>{}
-                               : region.value().heightField->sampleMany(positions);
+                               : region->heightField->sampleMany(positions);
         const auto drawSegment = [&] {
           if (points.size() < 2)
           {

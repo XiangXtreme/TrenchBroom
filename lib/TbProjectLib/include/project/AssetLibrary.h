@@ -32,8 +32,12 @@ public:
   static std::filesystem::path indexPath(const std::filesystem::path& folder);
   static bool isLibraryFolder(const std::filesystem::path& folder);
 
+  // If initialImport is supplied, import the folder before keeping the new catalog.
+  // A failed initial import removes only the newly reserved catalog.
   static Result<std::unique_ptr<AssetLibrary>> create(
-    const std::filesystem::path& folder, const std::string& name);
+    const std::filesystem::path& folder,
+    const std::string& name,
+    LibraryScan* initialImport = nullptr);
   static Result<std::unique_ptr<AssetLibrary>> open(const std::filesystem::path& folder);
 
   ~AssetLibrary();

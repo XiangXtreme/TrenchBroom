@@ -970,6 +970,17 @@ TEST_CASE("Project terrain panel paints a picked brush")
   };
   // Preview must use the captured texture even before painting.
   REQUIRE(QTest::qWaitFor([&] { return centerIs(false); }, 15000));
+  // Thumbnail capture must preserve the editing tool and selection.
+  REQUIRE(panel->painting());
+  const auto selectedNodes = map.selection().nodes;
+  const auto thumbnail = view->grabMapThumbnailFramebuffer();
+  REQUIRE_FALSE(thumbnail.isNull());
+  const auto thumbnailColor =
+    thumbnail.pixelColor(thumbnail.width() / 2 + 10, thumbnail.height() / 2 + 10);
+  CHECK(thumbnailColor.green() > thumbnailColor.red() * 2);
+  CHECK(panel->painting());
+  CHECK(map.selection().nodes == selectedNodes);
+
   const auto center = view->rect().center();
   const auto withoutCursor = view->grabFramebuffer();
   auto hover = QMouseEvent{
@@ -997,7 +1008,13 @@ TEST_CASE("Project terrain panel paints a picked brush")
     Qt::NoButton,
     Qt::NoModifier};
   QApplication::sendEvent(view, &movedHover);
-  CHECK(view->grabFramebuffer() != withCursor);
+  auto movedTiming = render::RenderTiming{};
+  {
+    const auto capture = render::RenderTiming::Capture{movedTiming};
+    CHECK(view->grabFramebuffer() != withCursor);
+  }
+  CHECK(movedTiming.counters["terrain.brush_cursors"] == 1);
+  CHECK(movedTiming.counters["terrain.region_decodes"] == 0);
   QApplication::sendEvent(view, &hover);
   auto* radius = panel->findChild<QSpinBox*>("TerrainInspector_Radius");
   REQUIRE(radius);
@@ -1964,4 +1981,27 @@ TEST_CASE("ProjectCompilation.directProfileSelection")
     CHECK_FALSE(isDirectProjectCompilation(profile));
   }
 }
+TEST_CASE("Project library attachment recovers after an initial import failure")
+{
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto root = pathFromQString(directory.path());
+  auto session =
+    require(ProjectSession::create(root / "retry.tbproj", "Retry", "Half-Life"));
+  const auto library = root / "library";
+  REQUIRE(std::filesystem::create_directory(library));
+  const auto write = [&](const char* name, const QByteArray& bytes) {
+    auto file = QFile{pathAsQString(library / name)};
+    REQUIRE(file.open(QIODevice::WriteOnly));
+    REQUIRE(file.write(bytes) == bytes.size());
+  };
+  write("bad.wad", "not a WAD");
+  write("good.wav", "RIFF");
+  CHECK(session->attachLibrary(library, true).is_error());
+  REQUIRE(std::filesystem::remove(library / "bad.wad"));
+  const auto retry = require(session->attachLibrary(library, true));
+  CHECK(retry.created);
+  CHECK(retry.assets == 1);
+}
+
 } // namespace tb::ui

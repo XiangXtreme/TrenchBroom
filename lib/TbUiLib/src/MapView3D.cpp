@@ -45,7 +45,6 @@
 #include "mdl/PatchNode.h"
 #include "mdl/PickResult.h"
 #include "mdl/PointTrace.h"
-#include "mdl/Transaction.h"
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "render/BoundsGuideRenderer.h"
@@ -137,10 +136,7 @@ QImage MapView3D::grabMapThumbnailFramebuffer()
 {
   if (!isValid() || playModeActive())
     return {};
-  auto transaction = mdl::Transaction{m_document.map(), "Capture Map Thumbnail"};
-  mdl::deselectAll(m_document.map());
   auto image = grabPrefabThumbnailFramebuffer({});
-  transaction.cancel();
   update();
   // The GL background carries zero alpha; map previews keep its visible RGB colour.
   return image.convertToFormat(QImage::Format_RGB32);

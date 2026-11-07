@@ -425,6 +425,10 @@ Result<void> ProjectSession::removeAsset(const std::string& id)
   const auto asset = m_store->findAsset(id);
   if (asset.is_error())
     return std::get<Error>(asset.error());
+  // MAP files are not runtime reference targets. Keep the store's explicit dependency
+  // guard, but allow broken maps to be removed even when other maps cannot be scanned.
+  if (asset.value() && asset.value()->type == project::AssetType::Map)
+    return m_store->removeAsset(id) | kdl::transform([&]() { changed(); });
   const auto references = projectAssetMapReferences(*this);
   if (references.is_error())
     return std::get<Error>(references.error());
@@ -1508,18 +1512,16 @@ Result<ProjectSession::LibraryAttachSummary> ProjectSession::attachLibrary(
         "'" + folder.filename().string()
         + "' is not an asset library folder yet. Create the library first."};
     auto name = folder.filename().string();
+    auto scan = project::LibraryScan{};
     auto created = project::AssetLibrary::create(
-      folder, name.empty() ? std::string{"Asset Library"} : name);
+      folder, name.empty() ? std::string{"Asset Library"} : name, &scan);
     if (created.is_error())
       return std::get<Error>(created.error());
     library = std::move(created).value();
     summary.created = true;
-    auto scan = library->importDirectory(folder);
-    if (scan.is_error())
-      return std::get<Error>(scan.error());
-    summary.invalid = scan.value().invalidEntries;
-    if (!scan.value().warning.empty())
-      summary.warnings.push_back(scan.value().warning);
+    summary.invalid = scan.invalidEntries;
+    if (!scan.warning.empty())
+      summary.warnings.push_back(scan.warning);
   }
 
   const auto assets = library->assets();

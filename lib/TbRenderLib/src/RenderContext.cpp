@@ -309,6 +309,16 @@ bool RenderContext::hideSelection() const
   return m_hideSelection;
 }
 
+bool RenderContext::showSelectionHighlight() const
+{
+  return m_showSelectionHighlight;
+}
+
+void RenderContext::setShowSelectionHighlight(const bool show)
+{
+  m_showSelectionHighlight = show;
+}
+
 void RenderContext::setHideSelection()
 {
   m_hideSelection = true;

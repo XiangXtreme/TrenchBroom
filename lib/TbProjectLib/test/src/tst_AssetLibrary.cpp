@@ -113,6 +113,23 @@ TEST_CASE("AssetLibrary")
   const auto wall = test::makeMiptex("WALL01", 32, 16, 1);
   const auto floor = test::makeMiptex("FLOOR01", 16, 16, 2);
 
+  SECTION("failed initial import removes the catalog and permits retry")
+  {
+    workspace.write(
+      "broken.wad", std::vector<std::uint8_t>{'n', 'o', 't', ' ', 'a', 'W', 'A', 'D'});
+    workspace.write("good.wad", require(buildGoldSrcWad({wall})));
+    auto scan = LibraryScan{};
+    CHECK(AssetLibrary::create(workspace.folder, "Library", &scan).is_error());
+    CHECK_FALSE(AssetLibrary::isLibraryFolder(workspace.folder));
+    CHECK(std::filesystem::exists(workspace.folder / "good.wad"));
+    workspace.remove("broken.wad");
+    auto library = require(AssetLibrary::create(workspace.folder, "Library", &scan));
+    CHECK(require(library->assets()).size() == 1);
+    CHECK(AssetLibrary::create(workspace.folder, "Other", &scan).is_error());
+    CHECK(AssetLibrary::isLibraryFolder(workspace.folder));
+    CHECK(require(library->assets()).size() == 1);
+  }
+
   SECTION("adopts stored content from version three without following sources")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall})));
