@@ -48,6 +48,8 @@ namespace tb::ui
 {
 class AppController;
 class MapDocument;
+class MapViewToolBox;
+enum class TerrainToolMode;
 
 class TerrainInspector : public TabBookPage
 {
@@ -56,6 +58,7 @@ class TerrainInspector : public TabBookPage
 private:
   AppController& m_app;
   MapDocument& m_document;
+  QPointer<MapViewToolBox> m_toolBox;
   QLabel* m_status = nullptr;
   QFormLayout* m_form = nullptr;
   QComboBox* m_editMode = nullptr;
@@ -109,14 +112,14 @@ private:
   bool m_materialPreviewValid = true;
   bool m_sculptStroke = false;
   bool m_sculptApplying = false;
-  bool m_toolBoxObserved = false;
-  bool m_switchingTool = false;
   std::string m_previewIdentity;
   std::optional<mdl::IdType> m_refreshedGroup;
   std::string m_refreshedPaint;
 
 public:
-  TerrainInspector(AppController& app, MapDocument& document);
+  TerrainInspector(AppController& app, MapDocument& document, MapViewToolBox& toolBox);
+  ~TerrainInspector() override;
+  bool canActivate(TerrainToolMode mode) const;
   bool painting() const;
   bool vertexEditing() const;
   bool vertexInteracting() const;
@@ -150,7 +153,7 @@ private:
   void sculptTo(const vm::vec2d& point);
   void generate();
   void analyze();
-  void activateTerrainTool();
+  void syncToolButtons();
   void refreshViews();
   void openAssetLibrary();
   void updateSlotLabels(const std::string& materialAssetId);

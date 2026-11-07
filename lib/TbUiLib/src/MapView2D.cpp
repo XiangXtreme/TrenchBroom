@@ -19,10 +19,6 @@
 
 #include "ui/MapView2D.h"
 
-#include <QKeyEvent>
-#include <QMouseEvent>
-#include <QRubberBand>
-
 #include "base/Macros.h"
 #include "gl/OrthographicCamera.h"
 #include "mdl/BrushFace.h"
@@ -58,7 +54,6 @@
 #include "ui/FaceTool.h" // IWYU pragma: keep
 #include "ui/FaceToolController.h"
 #include "ui/MapDocument.h"
-#include "ui/MapEditorView.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MoveObjectsToolController.h"
 #include "ui/PathToolController.h"
@@ -68,7 +63,7 @@
 #include "ui/SelectionTool.h"
 #include "ui/ShearToolController.h"
 #include "ui/SweepToolController.h"
-#include "ui/TerrainInspector.h"
+#include "ui/TerrainToolController.h"
 #include "ui/VertexTool.h"
 #include "ui/VertexToolController.h"
 
@@ -140,6 +135,8 @@ void MapView2D::initializeToolChain(MapViewToolBox& toolBox)
 {
   addToolController(std::make_unique<CameraTool2D>(*m_camera));
   addToolController(
+    std::make_unique<TerrainToolController>(toolBox.terrainTool(), *this, false));
+  addToolController(
     std::make_unique<MoveObjectsToolController>(toolBox.moveObjectsTool()));
   addToolController(std::make_unique<RotateToolController2D>(toolBox.rotateTool()));
   addToolController(std::make_unique<SweepToolController2D>(toolBox.sweepTool()));
@@ -178,138 +175,6 @@ void MapView2D::connectObservers()
 void MapView2D::cameraDidChange(const gl::Camera&)
 {
   update();
-}
-
-TerrainInspector* MapView2D::terrainInspector() const
-{
-  for (auto* widget = parentWidget(); widget; widget = widget->parentWidget())
-    if (auto* editor = qobject_cast<MapEditorView*>(widget))
-      return editor->findChild<TerrainInspector*>();
-  return nullptr;
-}
-
-void MapView2D::keyPressEvent(QKeyEvent* event)
-{
-  if (event->key() == Qt::Key_Escape)
-  {
-    if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
-    {
-      terrain->cancelVertexInteraction();
-      update();
-      event->accept();
-      return;
-    }
-    if (auto* terrain = terrainInspector(); terrain && terrain->drawingTerrain())
-    {
-      m_terrainDrawStart.reset();
-      if (m_terrainDrawOutline)
-        m_terrainDrawOutline->hide();
-      terrain->cancelDrawing();
-      event->accept();
-      return;
-    }
-  }
-  MapViewBase::keyPressEvent(event);
-}
-
-void MapView2D::mousePressEvent(QMouseEvent* event)
-{
-  if (event->button() == Qt::LeftButton && !m_toolBox.anyModalToolActive())
-  {
-    const auto modifiers = event->modifiers();
-    if (
-      modifiers == Qt::NoModifier || modifiers == Qt::ControlModifier
-      || modifiers == Qt::ShiftModifier
-      || modifiers == (Qt::ControlModifier | Qt::ShiftModifier))
-    {
-      if (auto* terrain = terrainInspector(); terrain && terrain->vertexEditing())
-      {
-        terrain->beginVertexInteraction(
-          *m_camera, *this, event->position(), modifiers != Qt::NoModifier);
-        update();
-        event->accept();
-        return;
-      }
-    }
-  }
-  if (
-    event->button() == Qt::LeftButton && event->modifiers() == Qt::NoModifier
-    && !m_toolBox.anyModalToolActive())
-  {
-    if (auto* terrain = terrainInspector(); terrain && terrain->drawingTerrain())
-    {
-      if (std::abs(m_camera->direction().z()) > 0.9f)
-      {
-        const auto ray =
-          m_camera->pickRay(float(event->position().x()), float(event->position().y()));
-        m_terrainDrawOrigin = vm::vec2d{ray.origin.x(), ray.origin.y()};
-        m_terrainDrawStart = event->position().toPoint();
-        if (!m_terrainDrawOutline)
-          m_terrainDrawOutline = new QRubberBand{QRubberBand::Rectangle, this};
-        m_terrainDrawOutline->setGeometry(
-          QRect{*m_terrainDrawStart, *m_terrainDrawStart});
-        m_terrainDrawOutline->show();
-      }
-      event->accept();
-      return;
-    }
-  }
-  MapViewBase::mousePressEvent(event);
-}
-
-void MapView2D::mouseMoveEvent(QMouseEvent* event)
-{
-  if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
-  {
-    terrain->moveVertexInteraction(event->position());
-    update();
-    event->accept();
-    return;
-  }
-  if (m_terrainDrawStart)
-  {
-    m_terrainDrawOutline->setGeometry(
-      QRect{*m_terrainDrawStart, event->position().toPoint()}.normalized());
-    event->accept();
-    return;
-  }
-  MapViewBase::mouseMoveEvent(event);
-}
-
-void MapView2D::mouseReleaseEvent(QMouseEvent* event)
-{
-  if (event->button() == Qt::LeftButton)
-  {
-    if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
-    {
-      terrain->endVertexInteraction(*m_camera, event->position(), true);
-      update();
-      event->accept();
-      return;
-    }
-  }
-  if (event->button() == Qt::LeftButton && m_terrainDrawStart)
-  {
-    m_terrainDrawStart.reset();
-    m_terrainDrawOutline->hide();
-    const auto ray =
-      m_camera->pickRay(float(event->position().x()), float(event->position().y()));
-    if (auto* terrain = terrainInspector())
-      terrain->createDrawnTerrain(m_terrainDrawOrigin, {ray.origin.x(), ray.origin.y()});
-    event->accept();
-    return;
-  }
-  MapViewBase::mouseReleaseEvent(event);
-}
-
-void MapView2D::focusOutEvent(QFocusEvent* event)
-{
-  if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
-    terrain->cancelVertexInteraction();
-  m_terrainDrawStart.reset();
-  if (m_terrainDrawOutline)
-    m_terrainDrawOutline->hide();
-  MapViewBase::focusOutEvent(event);
 }
 
 PickRequest MapView2D::pickRequest(const float x, const float y) const
@@ -559,8 +424,6 @@ void MapView2D::renderTools(
   render::RenderBatch& renderBatch)
 {
   ToolBoxConnector::renderTools(renderContext, renderBatch);
-  if (const auto* terrain = terrainInspector())
-    terrain->renderVertices(renderContext, renderBatch);
 }
 
 void MapView2D::renderSoftWorldBounds(

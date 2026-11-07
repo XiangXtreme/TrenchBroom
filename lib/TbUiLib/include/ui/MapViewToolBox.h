@@ -54,6 +54,8 @@ class ExtrudeTool;
 class RotateTool;
 class SweepTool;
 class TerrainPreviewRenderer;
+class TerrainTool;
+enum class TerrainToolMode;
 class ScaleTool;
 class ShearTool;
 class VertexTool;
@@ -71,6 +73,7 @@ private:
   std::unique_ptr<TerrainPreviewRenderer> m_terrainPreview;
   std::function<ActionExecutionContext(MapViewBase*)> m_actionContextFactory;
   bool m_selectMode;
+  std::unique_ptr<TerrainTool> m_terrainTool;
   QStackedLayout* m_bookCtrl = nullptr;
 
   std::unique_ptr<ClipTool> m_clipTool;
@@ -115,6 +118,10 @@ public:
   TerrainPreviewRenderer& terrainPreview(AppController& app);
 
 public: // tools
+  TerrainTool& terrainTool();
+  bool terrainToolActive() const;
+  void setTerrainMode(TerrainToolMode mode);
+
   bool selectMode() const;
   bool selectModeActive() const;
   bool brushCreationModeActive() const;
@@ -228,8 +235,6 @@ public: // tools
   bool canToggleControlPointTool() const;
   void toggleControlPointTool();
   bool controlPointToolActive() const;
-
-  bool anyModalToolActive() const;
 
   void moveNodeHandles(const vm::vec3d& delta);
 

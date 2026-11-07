@@ -54,6 +54,7 @@
 #include "ui/SweepTool.h"
 #include "ui/SweepToolPage.h"
 #include "ui/TerrainPreviewRenderer.h"
+#include "ui/TerrainTool.h"
 #include "ui/VertexTool.h"
 
 #include "kd/contracts.h"
@@ -77,6 +78,8 @@ MapViewToolBox::~MapViewToolBox()
   m_notifierConnection.disconnect();
   disconnectObservers();
   clearTransientState(InputState{0.0f, 0.0f});
+  setTerrainMode(TerrainToolMode::None);
+  m_terrainTool->setInspector(nullptr);
   m_prefabTool->clearPreview();
 }
 
@@ -607,11 +610,29 @@ bool MapViewToolBox::controlPointToolActive() const
   return m_controlPointTool->active();
 }
 
-bool MapViewToolBox::anyModalToolActive() const
+TerrainTool& MapViewToolBox::terrainTool()
 {
-  return assembleBrushToolActive() || clipToolActive() || rotateToolActive()
-         || sweepToolActive() || scaleToolActive() || shearToolActive()
-         || anyNodeHandleToolActive() || pathToolActive();
+  return *m_terrainTool;
+}
+bool MapViewToolBox::terrainToolActive() const
+{
+  return m_terrainTool->active();
+}
+void MapViewToolBox::setTerrainMode(const TerrainToolMode mode)
+{
+  if (mode != TerrainToolMode::None && !terrainTool().canActivate(mode))
+    return;
+  if (terrainTool().mode() == TerrainToolMode::None && mode == TerrainToolMode::None)
+    return;
+  if (terrainToolActive() && terrainTool().mode() == mode)
+    return;
+  if (terrainToolActive())
+    toggleTool(terrainTool());
+  if (mode != TerrainToolMode::None)
+  {
+    terrainTool().setMode(mode);
+    toggleTool(terrainTool());
+  }
 }
 
 void MapViewToolBox::moveNodeHandles(const vm::vec3d& delta)
@@ -643,6 +664,7 @@ void MapViewToolBox::moveNodeHandles(const vm::vec3d& delta)
 void MapViewToolBox::createTools(QStackedLayout* bookCtrl)
 {
   m_bookCtrl = bookCtrl;
+  m_terrainTool = std::make_unique<TerrainTool>();
 
   m_clipTool = std::make_unique<ClipTool>(m_document);
   m_chamferTool = std::make_unique<ChamferTool>(m_document);
@@ -663,6 +685,7 @@ void MapViewToolBox::createTools(QStackedLayout* bookCtrl)
   m_controlPointTool = std::make_unique<ControlPointTool>(m_document);
 
   addExclusiveToolGroup(
+    terrainTool(),
     assembleBrushTool(),
     rotateTool(),
     sweepTool(),
@@ -676,6 +699,7 @@ void MapViewToolBox::createTools(QStackedLayout* bookCtrl)
     pathTool());
 
   addExclusiveToolGroup(
+    terrainTool(),
     assembleBrushTool(),
     vertexTool(),
     sweepTool(),
@@ -701,6 +725,8 @@ void MapViewToolBox::createTools(QStackedLayout* bookCtrl)
   suppressWhileActive(clipTool(), moveObjectsTool(), extrudeTool(), drawShapeTool());
   suppressWhileActive(pathTool(), moveObjectsTool(), extrudeTool(), drawShapeTool());
 
+  suppressWhileActive(terrainTool(), moveObjectsTool(), extrudeTool(), drawShapeTool());
+  addTool(terrainTool());
   addTool(moveObjectsTool());
   addTool(rotateTool());
   addTool(sweepTool());

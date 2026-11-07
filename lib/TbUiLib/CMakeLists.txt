@@ -125,6 +125,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainChunks.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainHeightField.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainOperations.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainTool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainToolController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainPreviewRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/TerrainMaterial.cpp
@@ -432,6 +434,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView2D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView3D.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TerrainTool.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TerrainToolController.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TerrainInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TerrainPreviewRenderer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapViewActivationTracker.h

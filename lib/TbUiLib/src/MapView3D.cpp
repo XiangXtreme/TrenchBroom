@@ -72,7 +72,6 @@
 #include "ui/FaceToolController.h"
 #include "ui/FlyModeHelper.h"
 #include "ui/MapDocument.h"
-#include "ui/MapEditorView.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MoveObjectsToolController.h"
 #include "ui/PathToolController.h"
@@ -88,6 +87,8 @@
 #include "ui/SweepToolController.h"
 #include "ui/TerrainInspector.h"
 #include "ui/TerrainPreviewRenderer.h"
+#include "ui/TerrainTool.h"
+#include "ui/TerrainToolController.h"
 #include "ui/VertexTool.h"
 #include "ui/VertexToolController.h"
 
@@ -328,6 +329,8 @@ void MapView3D::initializeToolChain(MapViewToolBox& toolBox)
 {
   addToolController(std::make_unique<CameraTool3D>(*m_camera));
   addToolController(
+    std::make_unique<TerrainToolController>(toolBox.terrainTool(), *this, true));
+  addToolController(
     std::make_unique<MoveObjectsToolController>(toolBox.moveObjectsTool()));
   addToolController(std::make_unique<RotateToolController3D>(toolBox.rotateTool()));
   addToolController(std::make_unique<SweepToolController3D>(toolBox.sweepTool()));
@@ -437,24 +440,6 @@ void MapView3D::keyPressEvent(QKeyEvent* event)
     return;
   }
 
-  if (event->key() == Qt::Key_Escape)
-  {
-    if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
-    {
-      terrain->cancelVertexInteraction();
-      update();
-      event->accept();
-      return;
-    }
-    if (auto* terrain = terrainInspector(); terrain && terrain->stroking())
-    {
-      terrain->endStroke(false);
-      update();
-      event->accept();
-      return;
-    }
-  }
-
   m_flyModeHelper->keyDown(event);
 
   MapViewBase::keyPressEvent(event);
@@ -473,41 +458,11 @@ void MapView3D::keyReleaseEvent(QKeyEvent* event)
   MapViewBase::keyReleaseEvent(event);
 }
 
-TerrainInspector* MapView3D::terrainInspector() const
-{
-  for (auto* widget = parentWidget(); widget; widget = widget->parentWidget())
-  {
-    if (auto* editor = qobject_cast<MapEditorView*>(widget))
-      return editor->findChild<TerrainInspector*>();
-  }
-  return nullptr;
-}
-
-mdl::PickResult MapView3D::terrainPick(const QMouseEvent& event) const
-{
-  return pick(vm::ray3d{
-    m_camera->pickRay(float(event.position().x()), float(event.position().y()))});
-}
-
 void MapView3D::mouseMoveEvent(QMouseEvent* event)
 {
   if (!m_playMode->active())
   {
     m_terrainCursorPosition = event->position();
-    if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
-    {
-      terrain->moveVertexInteraction(event->position());
-      update();
-      event->accept();
-      return;
-    }
-    if (auto* terrain = terrainInspector(); terrain && terrain->stroking())
-    {
-      terrain->continueStroke(terrainPick(*event));
-      update();
-      event->accept();
-      return;
-    }
     MapViewBase::mouseMoveEvent(event);
     return;
   }
@@ -554,38 +509,6 @@ void MapView3D::mousePressEvent(QMouseEvent* event)
 {
   if (!m_playMode->active())
     m_terrainCursorPosition = event->position();
-  if (
-    !m_playMode->active() && event->button() == Qt::LeftButton
-    && !m_toolBox.anyModalToolActive())
-  {
-    const auto modifiers = event->modifiers();
-    if (
-      modifiers == Qt::NoModifier || modifiers == Qt::ControlModifier
-      || modifiers == Qt::ShiftModifier
-      || modifiers == (Qt::ControlModifier | Qt::ShiftModifier))
-    {
-      if (auto* terrain = terrainInspector(); terrain && terrain->vertexEditing())
-      {
-        terrain->beginVertexInteraction(
-          *m_camera, *this, event->position(), modifiers != Qt::NoModifier);
-        update();
-        event->accept();
-        return;
-      }
-    }
-  }
-  if (
-    !m_playMode->active() && event->button() == Qt::LeftButton
-    && event->modifiers() == Qt::NoModifier && !m_toolBox.anyModalToolActive())
-  {
-    if (auto* terrain = terrainInspector(); terrain && terrain->painting())
-    {
-      terrain->beginStroke(terrainPick(*event));
-      update();
-      event->accept();
-      return;
-    }
-  }
   if (event->button() == Qt::RightButton)
   {
     m_rightMouseDown = true;
@@ -601,23 +524,6 @@ void MapView3D::mouseReleaseEvent(QMouseEvent* event)
 {
   if (!m_playMode->active())
     m_terrainCursorPosition = event->position();
-  if (event->button() == Qt::LeftButton)
-  {
-    if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
-    {
-      terrain->endVertexInteraction(*m_camera, event->position(), true);
-      update();
-      event->accept();
-      return;
-    }
-    if (auto* terrain = terrainInspector(); terrain && terrain->stroking())
-    {
-      terrain->endStroke(true);
-      update();
-      event->accept();
-      return;
-    }
-  }
   if (event->button() == Qt::RightButton)
   {
     m_rightMouseDown = false;
@@ -631,14 +537,6 @@ void MapView3D::mouseReleaseEvent(QMouseEvent* event)
 
 void MapView3D::mouseDoubleClickEvent(QMouseEvent* event)
 {
-  if (auto* terrain = terrainInspector();
-      terrain && (terrain->painting() || terrain->vertexEditing())
-      && event->button() == Qt::LeftButton && event->modifiers() == Qt::NoModifier
-      && !m_toolBox.anyModalToolActive())
-  {
-    mousePressEvent(event);
-    return;
-  }
   if (!m_playMode->active())
   {
     MapViewBase::mouseDoubleClickEvent(event);
@@ -676,13 +574,6 @@ void MapView3D::focusInEvent(QFocusEvent* event)
 
 void MapView3D::focusOutEvent(QFocusEvent* event)
 {
-  if (auto* terrain = terrainInspector(); terrain && terrain->vertexInteracting())
-    terrain->cancelVertexInteraction();
-  if (auto* terrain = terrainInspector(); terrain && terrain->stroking())
-  {
-    terrain->endStroke(false);
-    update();
-  }
   m_rightMouseDown = false;
   m_flyModeHelper->resetKeys();
   if (!m_changingPlayPresentation)
@@ -1097,7 +988,7 @@ void MapView3D::renderMap(
   m_toolBox.terrainPreview(m_appController)
     .render(
       renderBatch,
-      terrainInspector(),
+      m_toolBox.terrainTool().inspector(),
       renderContext.showFaces() && renderContext.showMaterials(),
       lightmapAssembly);
 
@@ -1127,10 +1018,9 @@ void MapView3D::renderTools(
   }
 
   ToolBoxConnector::renderTools(renderContext, renderBatch);
-  if (const auto* terrain = terrainInspector())
+  if (const auto* terrain = m_toolBox.terrainTool().inspector())
   {
-    terrain->renderVertices(renderContext, renderBatch);
-    if (terrain->painting() && m_terrainCursorPosition && !m_toolBox.anyModalToolActive())
+    if (terrain->painting() && m_terrainCursorPosition)
     {
       const auto& position = *m_terrainCursorPosition;
       const auto cursorPick =

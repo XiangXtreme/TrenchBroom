@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFile>
+#include <QFocusEvent>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QProcess>
@@ -65,6 +66,7 @@
 #include "ui/TerrainChunks.h"
 #include "ui/TerrainExport.h"
 #include "ui/TerrainInspector.h"
+#include "ui/TerrainTool.h"
 
 #include <algorithm>
 #include <cmath>
@@ -253,6 +255,36 @@ std::unique_ptr<TerrainChunks> testTerrainChunks(const mdl::GroupNode& group)
   return std::make_unique<TerrainChunks>(require(readTerrainChunks(group)));
 }
 
+// Supply both widget and window coordinates, as native Qt mouse events do.
+// The viewport recorder deliberately uses window coordinates for full precision.
+void terrainMouseEvent(
+  MapViewBase* view,
+  const QEvent::Type type,
+  const Qt::MouseButton button,
+  const Qt::KeyboardModifiers modifiers,
+  const QPoint& position)
+{
+  const auto buttons = type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton;
+  auto event = QMouseEvent{
+    type,
+    QPointF{position},
+    QPointF{view->mapTo(view->window(), position)},
+    QPointF{view->mapToGlobal(position)},
+    button,
+    buttons,
+    modifiers};
+  QApplication::sendEvent(view, &event);
+}
+void terrainMouseClick(
+  MapViewBase* view,
+  const Qt::MouseButton button,
+  const Qt::KeyboardModifiers modifiers,
+  const QPoint& position)
+{
+  terrainMouseEvent(view, QEvent::MouseButtonPress, button, modifiers, position);
+  terrainMouseEvent(view, QEvent::MouseButtonRelease, button, modifiers, position);
+}
+
 void testChunkedTerrainEditing(
   AppController& app,
   MapWindow* window,
@@ -311,9 +343,15 @@ void testChunkedTerrainEditing(
     REQUIRE(top.rect().contains(second));
     drawNew->click();
     REQUIRE(panel->drawingTerrain());
-    QTest::mousePress(&top, Qt::LeftButton, Qt::NoModifier, first);
-    QTest::mouseMove(&top, second);
-    QTest::mouseRelease(&top, Qt::LeftButton, Qt::NoModifier, second);
+    terrainMouseEvent(
+      &top, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, first);
+    top.grabFramebuffer();
+    terrainMouseEvent(&top, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, second);
+    top.grabFramebuffer();
+    QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+    terrainMouseEvent(
+      &top, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, second);
+    top.grabFramebuffer();
     REQUIRE_FALSE(panel->drawingTerrain());
     top.hide();
   }
@@ -342,7 +380,8 @@ void testChunkedTerrainEditing(
   REQUIRE(window->toolBox().rotateToolActive());
   activate->click();
   REQUIRE(panel->painting());
-  REQUIRE_FALSE(window->toolBox().anyModalToolActive());
+  REQUIRE(window->toolBox().anyModalToolActive());
+  REQUIRE_FALSE(window->toolBox().rotateToolActive());
   window->toolBox().toggleRotateTool();
   REQUIRE(window->toolBox().rotateToolActive());
   REQUIRE_FALSE(panel->painting());
@@ -352,10 +391,16 @@ void testChunkedTerrainEditing(
   REQUIRE(testTerrainChunks(*group)->chunks[0].region.materialAssetId == materialId);
   REQUIRE(selectedTerrainGroup(map) == group);
   // The first click activates the viewport after using the terrain inspector.
-  QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, point);
-  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, point);
+  terrainMouseClick(view, Qt::LeftButton, Qt::NoModifier, point);
+  view->grabFramebuffer();
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, point);
+  view->grabFramebuffer();
   REQUIRE(panel->stroking());
-  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, point);
+  QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+  terrainMouseEvent(
+    view, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, point);
+  view->grabFramebuffer();
   auto painted = testTerrainChunks(*group);
   CHECK(painted->chunks[0].region.weights != initial->chunks[0].region.weights);
   CHECK(painted->chunks[1].region.weights != initial->chunks[1].region.weights);
@@ -379,9 +424,14 @@ void testChunkedTerrainEditing(
   material->setCurrentIndex(2);
   REQUIRE(activate->isEnabled());
   activate->click();
-  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, point);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, point);
+  view->grabFramebuffer();
   REQUIRE(panel->stroking());
-  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, point);
+  QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+  terrainMouseEvent(
+    view, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, point);
+  view->grabFramebuffer();
   const auto repainted = testTerrainChunks(*group);
   CHECK(repainted->chunks[0].region.weights != painted->chunks[0].region.weights);
   CHECK(repainted->chunks[1].region.weights != painted->chunks[1].region.weights);
@@ -391,9 +441,14 @@ void testChunkedTerrainEditing(
   editMode->setCurrentIndex(1);
   REQUIRE(activate->isEnabled());
   activate->click();
-  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, point);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, point);
+  view->grabFramebuffer();
   REQUIRE(panel->stroking());
-  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, point);
+  QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+  terrainMouseEvent(
+    view, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, point);
+  view->grabFramebuffer();
   auto sculpted = testTerrainChunks(*group);
   CHECK(
     sculpted->combined->heightField->heights[seam]
@@ -408,10 +463,21 @@ void testChunkedTerrainEditing(
     camera.project({2304, 0, float(sculpted->combined->heightField->heights[seam])});
   const auto handle = QPoint{
     int(std::lround(vertex.x())), int(std::lround(float(view->height()) - vertex.y()))};
-  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, handle);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, handle);
+  view->grabFramebuffer();
   REQUIRE(panel->vertexInteracting());
-  QTest::mouseMove(view, handle + QPoint{0, -80});
-  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, handle + QPoint{0, -80});
+  terrainMouseEvent(
+    view, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, handle + QPoint{0, -80});
+  view->grabFramebuffer();
+  QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+  terrainMouseEvent(
+    view,
+    QEvent::MouseButtonRelease,
+    Qt::LeftButton,
+    Qt::NoModifier,
+    handle + QPoint{0, -80});
+  view->grabFramebuffer();
   auto edited = testTerrainChunks(*group);
   CHECK(
     edited->combined->heightField->heights[seam]
@@ -465,11 +531,18 @@ void testTerrainVertexEditing(
   const auto vertexPosition = QPoint{
     int(std::lround(projected.x())),
     int(std::lround(float(view->height()) - projected.y()))};
-  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, vertexPosition);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, vertexPosition);
+  view->grabFramebuffer();
   REQUIRE(panel->vertexInteracting());
   const auto raisedPosition = vertexPosition + QPoint{0, -80};
-  QTest::mouseMove(view, raisedPosition);
-  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, raisedPosition);
+  terrainMouseEvent(
+    view, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, raisedPosition);
+  view->grabFramebuffer();
+  QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+  terrainMouseEvent(
+    view, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, raisedPosition);
+  view->grabFramebuffer();
   auto vertexEdited = testTerrainRegion(*group);
   REQUIRE(vertexEdited->heightField);
   CHECK(
@@ -484,9 +557,14 @@ void testTerrainVertexEditing(
     testTerrainRegion(*group)->heightField->heights
     == vertexEdited->heightField->heights);
   map.undoCommand();
-  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, vertexPosition);
-  QTest::mouseMove(view, raisedPosition);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, vertexPosition);
+  view->grabFramebuffer();
+  terrainMouseEvent(
+    view, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, raisedPosition);
+  view->grabFramebuffer();
   QTest::keyClick(view, Qt::Key_Escape);
+  view->grabFramebuffer();
   CHECK_FALSE(panel->vertexInteracting());
   CHECK(testTerrainRegion(*group)->heightField->heights == sculpted.heightField->heights);
 
@@ -522,15 +600,44 @@ void testTerrainVertexEditing(
       }
     selectedBounds.adjust(-12, -12, 12, 12);
     REQUIRE(side.rect().contains(selectedBounds));
-    QTest::mousePress(&side, Qt::LeftButton, Qt::NoModifier, selectedBounds.topLeft());
-    QTest::mouseMove(&side, selectedBounds.bottomRight());
-    QTest::mouseRelease(
-      &side, Qt::LeftButton, Qt::NoModifier, selectedBounds.bottomRight());
+    terrainMouseEvent(
+      &side,
+      QEvent::MouseButtonPress,
+      Qt::LeftButton,
+      Qt::NoModifier,
+      selectedBounds.topLeft());
+    side.grabFramebuffer();
+    terrainMouseEvent(
+      &side,
+      QEvent::MouseMove,
+      Qt::NoButton,
+      Qt::NoModifier,
+      selectedBounds.bottomRight());
+    side.grabFramebuffer();
+    QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+    terrainMouseEvent(
+      &side,
+      QEvent::MouseButtonRelease,
+      Qt::LeftButton,
+      Qt::NoModifier,
+      selectedBounds.bottomRight());
+    side.grabFramebuffer();
     const auto handle = screen(centerVertex);
-    QTest::mousePress(&side, Qt::LeftButton, Qt::NoModifier, handle);
+    terrainMouseEvent(
+      &side, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, handle);
+    side.grabFramebuffer();
     REQUIRE(panel->vertexInteracting());
-    QTest::mouseMove(&side, handle + QPoint{0, -32});
-    QTest::mouseRelease(&side, Qt::LeftButton, Qt::NoModifier, handle + QPoint{0, -32});
+    terrainMouseEvent(
+      &side, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, handle + QPoint{0, -32});
+    side.grabFramebuffer();
+    QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+    terrainMouseEvent(
+      &side,
+      QEvent::MouseButtonRelease,
+      Qt::LeftButton,
+      Qt::NoModifier,
+      handle + QPoint{0, -32});
+    side.grabFramebuffer();
     vertexEdited = testTerrainRegion(*group);
     auto changed = 0;
     for (auto i = size_t{0}; i < vertexEdited->heightField->heights.size(); ++i)
@@ -718,6 +825,23 @@ TEST_CASE("Project terrain panel paints a picked brush")
   button("Paint Terrain")->click();
   QApplication::processEvents();
   REQUIRE(panel->painting());
+  CHECK(window->toolBox().terrainToolActive());
+  CHECK_FALSE(window->toolBox().selectModeActive());
+  CHECK_FALSE(window->toolBox().brushCreationModeActive());
+  window->switchToInspectorPage(InspectorPage::Map);
+  CHECK(panel->painting());
+  window->toolBox().setSelectMode(true);
+  CHECK_FALSE(panel->painting());
+  CHECK_FALSE(button("Paint Terrain")->isChecked());
+  CHECK(window->toolBox().selectModeActive());
+  window->switchToInspectorPage(InspectorPage::Terrain);
+  button("Paint Terrain")->click();
+  window->toolBox().togglePathTool();
+  CHECK_FALSE(panel->painting());
+  CHECK(window->toolBox().pathToolActive());
+  button("Paint Terrain")->click();
+  CHECK_FALSE(window->toolBox().pathToolActive());
+  REQUIRE(panel->painting());
   auto* view = window->currentOrFirstVisible3DMapView();
   REQUIRE(view);
   auto& camera = static_cast<MapViewBase&>(*view).camera();
@@ -826,6 +950,39 @@ TEST_CASE("Project terrain panel paints a picked brush")
   panel->endStroke(false);
   CHECK(centerIs(false));
   CHECK(group->group().terrainPaint() == initial);
+  panel->beginStroke(pick);
+  REQUIRE(panel->stroking());
+  window->toolBox().setSelectMode(false);
+  CHECK_FALSE(panel->stroking());
+  CHECK_FALSE(panel->painting());
+  CHECK(group->group().terrainPaint() == initial);
+  CHECK(window->toolBox().brushCreationModeActive());
+  button("Paint Terrain")->click();
+  terrainMouseClick(view, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
+  REQUIRE(panel->stroking());
+  CHECK_FALSE(window->toolBox().dragging());
+  CHECK(view->cancelMouseDrag());
+  CHECK_FALSE(panel->stroking());
+  CHECK(panel->painting());
+  terrainMouseEvent(
+    view, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
+  REQUIRE(panel->stroking());
+  auto focusOut = QFocusEvent{QEvent::FocusOut};
+  QApplication::sendEvent(view, &focusOut);
+  CHECK_FALSE(panel->stroking());
+  CHECK(panel->painting());
+  CHECK(group->group().terrainPaint() == initial);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
   strength->setValue(originalStrength);
 
   // Exercise the uncommitted stroke separately from native focus, which the
@@ -855,10 +1012,16 @@ TEST_CASE("Project terrain panel paints a picked brush")
   panel->endStroke(false);
   REQUIRE(QTest::qWaitFor([&] { return centerIs(false); }, 15000));
   // The first left click activates a viewport after working in the inspector.
-  QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, center);
-  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, center);
+  terrainMouseClick(view, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
   REQUIRE(panel->stroking());
-  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, center);
+  QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+  terrainMouseEvent(
+    view, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
   const auto painted = group->group().terrainPaint();
   REQUIRE(painted != initial);
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
@@ -1067,9 +1230,14 @@ TEST_CASE("Project terrain panel paints a picked brush")
   activate->click();
   editMode->setCurrentIndex(1);
   activate->click();
-  QTest::mousePress(view, Qt::LeftButton, Qt::NoModifier, center);
+  terrainMouseEvent(
+    view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
   REQUIRE(panel->stroking());
-  QTest::mouseRelease(view, Qt::LeftButton, Qt::NoModifier, center);
+  QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+  terrainMouseEvent(
+    view, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, center);
+  view->grabFramebuffer();
   const auto resculpted = require(TerrainRegion::decode(group->group().terrainPaint()));
   CHECK(resculpted.weights == repaintedRegion.weights);
   CHECK(resculpted.heightField->heights != repaintedRegion.heightField->heights);
@@ -1077,6 +1245,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
   panel->beginStroke(terrainPick());
   REQUIRE(panel->stroking());
   QTest::keyClick(view, Qt::Key_Escape);
+  view->grabFramebuffer();
   CHECK_FALSE(panel->stroking());
   CHECK(
     require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
@@ -1249,12 +1418,18 @@ TEST_CASE("Project terrain panel paints a picked brush")
     newThickness->setValue(96);
     drawNew->click();
     REQUIRE(panel->drawingTerrain());
-    QTest::mousePress(&top, Qt::LeftButton, Qt::NoModifier, start);
-    QTest::mouseMove(&top, finish);
+    terrainMouseEvent(
+      &top, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, start);
+    top.grabFramebuffer();
+    terrainMouseEvent(&top, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, finish);
+    top.grabFramebuffer();
     const auto* outline = top.findChild<QRubberBand*>();
     REQUIRE(outline);
     CHECK(outline->isVisible());
-    QTest::mouseRelease(&top, Qt::LeftButton, Qt::NoModifier, finish);
+    QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+    terrainMouseEvent(
+      &top, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, finish);
+    top.grabFramebuffer();
     CHECK_FALSE(panel->drawingTerrain());
     REQUIRE(map.selection().groups.size() == 1);
     auto* created = map.selection().groups.front();
@@ -1272,10 +1447,20 @@ TEST_CASE("Project terrain panel paints a picked brush")
       require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
       == sculpted.heightField->heights);
     drawNew->click();
-    QTest::mousePress(&top, Qt::LeftButton, Qt::NoModifier, start);
+    terrainMouseEvent(
+      &top, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, start);
+    top.grabFramebuffer();
     QTest::keyClick(&top, Qt::Key_Escape);
+    top.grabFramebuffer();
+    CHECK(panel->drawingTerrain());
+    CHECK_FALSE(window->toolBox().terrainTool().interacting());
+    QTest::keyClick(&top, Qt::Key_Escape);
+    top.grabFramebuffer();
     CHECK_FALSE(panel->drawingTerrain());
-    QTest::mouseRelease(&top, Qt::LeftButton, Qt::NoModifier, finish);
+    QTest::qWait(110); // Pass the editor's accidental-drag threshold.
+    terrainMouseEvent(
+      &top, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, finish);
+    top.grabFramebuffer();
     CHECK(map.selection().groups.front() == group);
     top.hide();
   }

@@ -107,6 +107,7 @@ public: // event handling
   void mouseDoubleClick(ToolChain& chain, const InputState& inputState) const;
   void mouseMove(ToolChain& chain, const InputState& inputState) const;
 
+  bool anyModalToolActive() const;
   bool dragging() const;
   void startMouseDrag(ToolChain& chain, const InputState& inputState);
   bool mouseDrag(const InputState& inputState);

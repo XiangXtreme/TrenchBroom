@@ -19,16 +19,10 @@
 
 #pragma once
 
-#include <QPoint>
-
 #include "base/NotifierConnection.h"
 #include "ui/MapViewBase.h"
 
 #include "vm/vec.h"
-
-#include <optional>
-
-class QRubberBand;
 
 namespace tb
 {
@@ -53,8 +47,6 @@ enum class RenderMode;
 
 namespace ui
 {
-class TerrainInspector;
-
 class MapView2D : public MapViewBase
 {
   Q_OBJECT
@@ -68,9 +60,6 @@ public:
 
 private:
   std::unique_ptr<gl::OrthographicCamera> m_camera;
-  std::optional<QPoint> m_terrainDrawStart;
-  vm::vec2d m_terrainDrawOrigin;
-  QRubberBand* m_terrainDrawOutline = nullptr;
 
   NotifierConnection m_notifierConnection;
 
@@ -88,7 +77,6 @@ private:
 private: // notification
   void connectObservers();
   void cameraDidChange(const gl::Camera& camera);
-  TerrainInspector* terrainInspector() const;
 
 private: // implement ToolBoxConnector interface
   PickRequest pickRequest(float x, float y) const override;
@@ -96,11 +84,6 @@ private: // implement ToolBoxConnector interface
 
 protected: // QOpenGLWidget overrides
   void initializeGL() override;
-  void keyPressEvent(QKeyEvent* event) override;
-  void mousePressEvent(QMouseEvent* event) override;
-  void mouseMoveEvent(QMouseEvent* event) override;
-  void mouseReleaseEvent(QMouseEvent* event) override;
-  void focusOutEvent(QFocusEvent* event) override;
 
 private: // implement RenderView interface
   void updateViewport(int x, int y, int width, int height) override;

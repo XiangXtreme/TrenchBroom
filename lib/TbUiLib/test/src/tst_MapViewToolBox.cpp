@@ -46,12 +46,17 @@
 #include "ui/ChamferTool.h"
 #include "ui/ChamferToolPage.h"
 #include "ui/CreateEntityTool.h"
+#include "ui/GestureTracker.h"
+#include "ui/InputState.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/PathTool.h"
 #include "ui/SweepTool.h"
 #include "ui/SweepToolPage.h"
+#include "ui/TerrainTool.h"
+#include "ui/ToolChain.h"
+#include "ui/ToolController.h"
 
 #include "kd/result.h"
 
@@ -161,6 +166,91 @@ TEST_CASE("MapViewToolBox")
   auto parent = QWidget{};
   auto bookCtrl = QStackedLayout{&parent};
   auto toolBox = MapViewToolBox{document, &bookCtrl};
+
+  SECTION("terrain requires an editable parameter provider")
+  {
+    toolBox.setSelectMode(true);
+    toolBox.setTerrainMode(TerrainToolMode::Paint);
+    CHECK_FALSE(toolBox.terrainToolActive());
+    CHECK(toolBox.terrainTool().mode() == TerrainToolMode::None);
+    CHECK(toolBox.selectModeActive());
+    toolBox.togglePathTool();
+    toolBox.setTerrainMode(TerrainToolMode::Draw);
+    CHECK(toolBox.pathToolActive());
+    CHECK_FALSE(toolBox.terrainToolActive());
+  }
+
+  SECTION("gesture callbacks can synchronously cancel or switch tools")
+  {
+    class ReentrantTracker : public GestureTracker
+    {
+      ToolBox& m_box;
+      int& m_completed;
+
+    public:
+      ReentrantTracker(ToolBox& box, int& completed)
+        : m_box{box}
+        , m_completed{completed}
+      {
+      }
+      bool update(const InputState&) override { return true; }
+      void end(const InputState&) override
+      {
+        CHECK_FALSE(m_box.dragging());
+        m_box.deactivateAllTools();
+        ++m_completed;
+      }
+      void cancel() override
+      {
+        CHECK_FALSE(m_box.dragging());
+        m_box.deactivateAllTools();
+        ++m_completed;
+      }
+    };
+    class Controller : public ToolController, public Tool
+    {
+      ToolBox& m_box;
+      int& m_completed;
+
+    public:
+      Controller(ToolBox& box, int& completed)
+        : Tool{true}
+        , m_box{box}
+        , m_completed{completed}
+      {
+      }
+      Tool& tool() override { return *this; }
+      const Tool& tool() const override { return *this; }
+      std::unique_ptr<GestureTracker> acceptMouseDrag(const InputState&) override
+      {
+        return std::make_unique<ReentrantTracker>(m_box, m_completed);
+      }
+    };
+    auto chain = ToolChain{};
+    auto completed = 0;
+    chain.append(std::make_unique<Controller>(toolBox, completed));
+    const auto input = InputState{0, 0};
+    toolBox.togglePathTool();
+    toolBox.startMouseDrag(chain, input);
+    toolBox.endMouseDrag(input);
+    CHECK(completed == 1);
+    CHECK_FALSE(toolBox.pathToolActive());
+    toolBox.togglePathTool();
+    toolBox.startMouseDrag(chain, input);
+    toolBox.cancelMouseDrag();
+    CHECK(completed == 2);
+    CHECK_FALSE(toolBox.pathToolActive());
+    toolBox.togglePathTool();
+    toolBox.startMouseDrag(chain, input);
+    toolBox.clearTransientState(input);
+    CHECK(completed == 3);
+    CHECK_FALSE(toolBox.pathToolActive());
+    toolBox.togglePathTool();
+    toolBox.startMouseDrag(chain, input);
+    toolBox.togglePathTool();
+    CHECK(completed == 4);
+    CHECK_FALSE(toolBox.pathToolActive());
+  }
 
   SECTION("base mode survives modal tools and document refresh")
   {

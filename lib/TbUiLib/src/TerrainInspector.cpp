@@ -18,7 +18,6 @@
 #include <QPushButton>
 #include <QRubberBand>
 #include <QScopeGuard>
-#include <QScopedValueRollback>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
@@ -46,14 +45,13 @@
 #include "ui/AppController.h"
 #include "ui/AssetLibraryWindow.h"
 #include "ui/MapDocument.h"
-#include "ui/MapEditorView.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
-#include "ui/SwitchableMapViewContainer.h"
 #include "ui/TerrainExport.h"
 #include "ui/TerrainMaterial.h"
 #include "ui/TerrainOperations.h"
+#include "ui/TerrainTool.h"
 
 #include <algorithm>
 #include <array>
@@ -130,9 +128,11 @@ std::optional<QPointF> terrainVertexScreenPosition(
 }
 } // namespace
 
-TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
+TerrainInspector::TerrainInspector(
+  AppController& app, MapDocument& document, MapViewToolBox& toolBox)
   : m_app{app}
   , m_document{document}
+  , m_toolBox{&toolBox}
 {
   m_status = new QLabel{this};
   m_status->setObjectName(QStringLiteral("TerrainInspector_Status"));
@@ -297,8 +297,8 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   connect(m_create, &QPushButton::clicked, this, &TerrainInspector::createRegion);
   connect(m_convert, &QPushButton::clicked, this, &TerrainInspector::convertSelection);
   connect(m_editMode, &QComboBox::currentIndexChanged, this, [this] {
-    m_paint->setChecked(false);
-    m_drawNew->setChecked(false);
+    if (m_toolBox)
+      m_toolBox->setTerrainMode(TerrainToolMode::None);
     updateModeControls();
     refresh();
     refreshViews();
@@ -347,30 +347,25 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
       }
     });
   connect(m_paint, &QPushButton::toggled, this, [this](const bool on) {
-    if (on)
-    {
-      m_drawNew->setChecked(false);
-      activateTerrainTool();
-    }
-    else
-    {
-      cancelVertexInteraction();
-      endStroke(false);
-    }
-    if (on && m_editMode->currentIndex() == 2)
+    if (m_toolBox)
+      m_toolBox->setTerrainMode(
+        on ? (m_editMode->currentIndex() == 2   ? TerrainToolMode::Vertices
+              : m_editMode->currentIndex() == 1 ? TerrainToolMode::Sculpt
+                                                : TerrainToolMode::Paint)
+           : TerrainToolMode::None);
+    syncToolButtons();
+    if (vertexEditing())
       m_status->setText(
         tr("Click or box-select vertices, then drag vertically. Hold Ctrl or Shift to "
            "add to the selection."));
     refreshViews();
   });
   connect(m_drawNew, &QPushButton::toggled, this, [this](const bool on) {
+    if (m_toolBox)
+      m_toolBox->setTerrainMode(on ? TerrainToolMode::Draw : TerrainToolMode::None);
+    syncToolButtons();
     if (on)
-    {
-      m_paint->setChecked(false);
-      activateTerrainTool();
       m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
-    }
-    updateModeControls();
     refreshViews();
   });
   connect(m_radius, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
@@ -404,7 +399,32 @@ TerrainInspector::TerrainInspector(AppController& app, MapDocument& document)
   m_connection += m_document.groupWasOpenedNotifier.connect([this] { refresh(); });
   m_connection += m_document.groupWasClosedNotifier.connect([this] { refresh(); });
   m_connection += m_document.documentWasLoadedNotifier.connect([this] { refresh(); });
+  toolBox.terrainTool().setInspector(this);
+  const auto syncTerrainTool = [this,
+                                terrain = &toolBox.terrainTool()](const Tool& tool) {
+    if (&tool == terrain)
+      syncToolButtons();
+  };
+  m_connection += toolBox.toolActivatedNotifier.connect(syncTerrainTool);
+  m_connection += toolBox.toolDeactivatedNotifier.connect(syncTerrainTool);
   refresh();
+}
+
+TerrainInspector::~TerrainInspector()
+{
+  m_connection.disconnect();
+  if (m_toolBox)
+  {
+    m_toolBox->setTerrainMode(TerrainToolMode::None);
+    m_toolBox->terrainTool().setInspector(nullptr);
+  }
+}
+
+bool TerrainInspector::canActivate(const TerrainToolMode mode) const
+{
+  return mode == TerrainToolMode::Draw
+           ? m_drawNew->isEnabled()
+           : mode != TerrainToolMode::None && m_paint->isEnabled();
 }
 
 void TerrainInspector::openAssetLibrary()
@@ -544,6 +564,12 @@ void TerrainInspector::updateModeControls()
 void TerrainInspector::refresh()
 {
   m_refreshTimer->stop();
+  const auto validateTool = qScopeGuard([this] {
+    if (
+      m_toolBox && m_toolBox->terrainToolActive()
+      && !canActivate(m_toolBox->terrainTool().mode()))
+      m_toolBox->setTerrainMode(TerrainToolMode::None);
+  });
   render::RenderTiming::count("terrain.inspector_refreshes", 1);
   m_cutPreview.clear();
   m_cutPreviewGroup.reset();
@@ -569,6 +595,8 @@ void TerrainInspector::refresh()
   const auto& selection = map.selection();
   const auto selectedBrushes =
     !selection.brushes.empty() && selection.brushes.size() == selection.nodes.size();
+  if (!supported && m_toolBox)
+    m_toolBox->setTerrainMode(TerrainToolMode::None);
   m_editMode->setEnabled(supported);
   m_drawNew->setEnabled(supported);
   m_convert->setEnabled(supported && (editable || selectedBrushes));
@@ -624,6 +652,7 @@ void TerrainInspector::refresh()
   if (region.is_error())
   {
     m_status->setText(terrainErrorMessage(std::get<Error>(region.error())));
+    m_paint->setChecked(false);
     m_paint->setEnabled(false);
     m_generate->setEnabled(false);
     m_analyze->setEnabled(false);
@@ -674,6 +703,7 @@ void TerrainInspector::refresh()
   if (surfaces.is_error())
   {
     m_status->setText(terrainErrorMessage(std::get<Error>(surfaces.error())));
+    m_paint->setChecked(false);
     m_paint->setEnabled(false);
     m_generate->setEnabled(false);
     m_analyze->setEnabled(false);
@@ -786,43 +816,24 @@ void TerrainInspector::analyze()
   m_showCuts->setChecked(!m_cutPreview.empty());
 }
 
-void TerrainInspector::activateTerrainTool()
+void TerrainInspector::syncToolButtons()
 {
-  for (auto* widget = parentWidget(); widget; widget = widget->parentWidget())
-  {
-    if (auto* editor = qobject_cast<MapEditorView*>(widget))
-    {
-      auto& toolBox = editor->toolBox();
-      if (!m_toolBoxObserved)
-      {
-        m_connection +=
-          toolBox.toolActivatedNotifier.connect([this, box = &toolBox](const auto&) {
-            if (!m_switchingTool && box->anyModalToolActive())
-            {
-              m_paint->setChecked(false);
-              m_drawNew->setChecked(false);
-            }
-          });
-        m_toolBoxObserved = true;
-      }
-      const auto switching = QScopedValueRollback{m_switchingTool, true};
-      toolBox.deactivateAllTools();
-      return;
-    }
-  }
+  const auto mode = m_toolBox && m_toolBox->terrainToolActive()
+                      ? m_toolBox->terrainTool().mode()
+                      : TerrainToolMode::None;
+  const auto paintBlocker = QSignalBlocker{m_paint};
+  const auto drawBlocker = QSignalBlocker{m_drawNew};
+  m_paint->setChecked(
+    mode == TerrainToolMode::Paint || mode == TerrainToolMode::Sculpt
+    || mode == TerrainToolMode::Vertices);
+  m_drawNew->setChecked(mode == TerrainToolMode::Draw);
+  updateModeControls();
 }
 
 void TerrainInspector::refreshViews()
 {
-  for (auto* widget = parentWidget(); widget; widget = widget->parentWidget())
-  {
-    if (auto* editor = qobject_cast<MapEditorView*>(widget))
-    {
-      if (auto* view = editor->mapView())
-        view->refreshViews();
-      return;
-    }
-  }
+  if (m_toolBox)
+    m_toolBox->terrainTool().refreshViews();
 }
 
 bool TerrainInspector::saveRegion(
@@ -924,14 +935,15 @@ void TerrainInspector::convertSelection()
 
 bool TerrainInspector::painting() const
 {
-  return isVisible() && m_paint->isEnabled() && m_paint->isChecked()
-         && m_editMode->currentIndex() != 2;
+  return m_toolBox && m_toolBox->terrainToolActive()
+    && (m_toolBox->terrainTool().mode() == TerrainToolMode::Paint
+      || m_toolBox->terrainTool().mode() == TerrainToolMode::Sculpt);
 }
 
 bool TerrainInspector::vertexEditing() const
 {
-  return isVisible() && m_paint->isEnabled() && m_paint->isChecked()
-         && m_editMode->currentIndex() == 2;
+  return m_toolBox && m_toolBox->terrainToolActive()
+         && m_toolBox->terrainTool().mode() == TerrainToolMode::Vertices;
 }
 
 bool TerrainInspector::vertexInteracting() const
@@ -1175,7 +1187,8 @@ void TerrainInspector::renderVertices(
 
 bool TerrainInspector::drawingTerrain() const
 {
-  return isVisible() && m_drawNew->isEnabled() && m_drawNew->isChecked();
+  return m_toolBox && m_toolBox->terrainToolActive()
+         && m_toolBox->terrainTool().mode() == TerrainToolMode::Draw;
 }
 
 void TerrainInspector::createDrawnTerrain(const vm::vec2d& first, const vm::vec2d& second)
@@ -1484,7 +1497,7 @@ void TerrainInspector::render(
   render::RenderBatch& batch,
   const mdl::PickResult* cursorPick) const
 {
-  if (!isVisible())
+  if (!isVisible() && !painting())
     return;
   if ((!painting() || !cursorPick) && (!m_showCuts->isChecked() || m_stroke))
     return;

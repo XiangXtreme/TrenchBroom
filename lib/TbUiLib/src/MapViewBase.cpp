@@ -102,6 +102,7 @@
 #include "ui/SelectionTool.h"
 #include "ui/SignalDelayer.h"
 #include "ui/SmartFaceSelectionPanel.h"
+#include "ui/TerrainTool.h"
 
 #include "kd/contracts.h"
 #include "kd/ranges/to.h"
@@ -1050,6 +1051,8 @@ void MapViewBase::focusInEvent(QFocusEvent* event)
 
 void MapViewBase::focusOutEvent(QFocusEvent* event)
 {
+  if (m_toolBox.terrainTool().interactingWith(*this))
+    cancelMouseDrag();
   clearModifierKeys();
   update();
   RenderView::focusOutEvent(event);
@@ -1070,6 +1073,7 @@ ActionContext::Type MapViewBase::actionContext() const
     : m_toolBox.scaleToolActive()        ? ActionContext::ScaleTool
     : m_toolBox.shearToolActive()        ? ActionContext::ShearTool
     : m_toolBox.pathToolActive()         ? ActionContext::PathTool
+    : m_toolBox.terrainToolActive()      ? ActionContext::TerrainTool
                                          : ActionContext::NoTool;
   const auto selectionContext =
     m_toolBox.selectionOwnedByTool()  ? ActionContext::SelectionOwnedByTool
@@ -1096,7 +1100,11 @@ MapViewBase* MapViewBase::firstMapViewBase()
 
 bool MapViewBase::cancelMouseDrag()
 {
-  return ToolBoxConnector::cancelDrag();
+  const auto cancelledDrag = ToolBoxConnector::cancelDrag();
+  // Terrain starts a dab on press, before the recorder's drag threshold is reached.
+  const auto cancelledTerrain = m_toolBox.terrainTool().interactingWith(*this)
+                                && m_toolBox.terrainTool().cancelInteraction();
+  return cancelledDrag || cancelledTerrain;
 }
 
 void MapViewBase::flashSelection()

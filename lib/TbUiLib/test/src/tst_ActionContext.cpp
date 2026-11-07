@@ -30,10 +30,25 @@ TEST_CASE("actionContextName")
 {
   CHECK(actionContextName(ActionContext::ScaleTool) == "scale tool");
   CHECK(actionContextName(ActionContext::ShearTool) == "shear tool");
+  CHECK(actionContextName(ActionContext::TerrainTool) == "terrain tool");
 }
 
 TEST_CASE("actionContextMatches")
 {
+  SECTION("terrain reserves selection without enabling ordinary object shortcuts")
+  {
+    const auto terrain = ActionContext::View3D | ActionContext::TerrainTool
+                         | ActionContext::SelectionOwnedByTool;
+    CHECK(actionContextMatches(ActionContext::Any, terrain));
+    CHECK_FALSE(actionContextMatches(
+      ActionContext::AnyView | ActionContext::NoTool
+        | ActionContext::SelectionOwnedByTool,
+      terrain));
+    CHECK_FALSE(actionContextMatches(
+      ActionContext::AnyView | ActionContext::AnyTool | ActionContext::NodeSelection,
+      terrain));
+  }
+
   SECTION("with mask")
   {
     using T =

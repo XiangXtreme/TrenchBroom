@@ -127,6 +127,10 @@ std::string actionContextName(const ActionContext::Type actionContext)
     {
       actionContexts.emplace_back("shear tool");
     }
+    if (actionContext & ActionContext::TerrainTool)
+    {
+      actionContexts.emplace_back("terrain tool");
+    }
     if (actionContext & ActionContext::PathTool)
     {
       actionContexts.emplace_back("path tool");

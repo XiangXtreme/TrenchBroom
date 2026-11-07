@@ -32,6 +32,7 @@ class AppController;
 class FaceInspector;
 class EntityInspector;
 class MapDocument;
+class MapViewToolBox;
 class MapInspector;
 class MapViewBar;
 class OutlinerInspector;
@@ -73,7 +74,10 @@ private:
 
 public:
   Inspector(
-    AppController& appController, MapDocument& document, QWidget* parent = nullptr);
+    AppController& appController,
+    MapDocument& document,
+    MapViewToolBox& toolBox,
+    QWidget* parent = nullptr);
   ~Inspector() override;
 
   void connectTopWidgets(MapViewBar* mapViewBar);

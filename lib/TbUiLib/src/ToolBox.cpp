@@ -52,8 +52,7 @@ void ToolBox::clearTransientState(const InputState& inputState)
 {
   if (m_gestureTracker)
   {
-    m_gestureTracker->cancel();
-    m_gestureTracker = nullptr;
+    cancelMouseDrag();
   }
   if (m_dropTracker)
   {
@@ -196,6 +195,11 @@ void ToolBox::mouseMove(ToolChain& chain, const InputState& inputState) const
   }
 }
 
+bool ToolBox::anyModalToolActive() const
+{
+  return !m_modalToolStack.empty();
+}
+
 bool ToolBox::dragging() const
 {
   return m_gestureTracker != nullptr;
@@ -220,16 +224,16 @@ void ToolBox::endMouseDrag(const InputState& inputState)
 {
   contract_pre(enabled() && dragging());
 
-  m_gestureTracker->end(inputState);
-  m_gestureTracker = nullptr;
+  auto tracker = std::move(m_gestureTracker);
+  tracker->end(inputState);
 }
 
 void ToolBox::cancelMouseDrag()
 {
   contract_pre(dragging());
 
-  m_gestureTracker->cancel();
-  m_gestureTracker = nullptr;
+  auto tracker = std::move(m_gestureTracker);
+  tracker->cancel();
 }
 
 void ToolBox::mouseScroll(ToolChain& chain, const InputState& inputState)
@@ -421,6 +425,10 @@ void ToolBox::deactivateTool(Tool& tool)
   {
     cancelMouseDrag();
   }
+
+  // Cancelling a gesture may already have deactivated its tool via document observers.
+  if (!tool.active())
+    return;
 
   const auto previouslySuppressedTools = currentlySuppressedTools();
 

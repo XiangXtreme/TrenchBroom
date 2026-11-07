@@ -65,7 +65,7 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_infoPanel->setObjectName("MapWindow_InfoPanel");
 
   m_mapView = new SwitchableMapViewContainer{m_appController, m_document, this};
-  m_inspector = new Inspector{m_appController, m_document, this};
+  m_inspector = new Inspector{m_appController, m_document, toolBox(), this};
   m_inspector->setObjectName("Inspector");
 
   m_mapView->connectTopWidgets(m_inspector);
@@ -136,8 +136,7 @@ void MapEditorView::connectOutlinerWidgets()
   }
 
   const auto trees = m_inspector->findChildren<OutlinerTreeWidget*>();
-  const auto propertyEditors =
-    m_inspector->findChildren<OutlinerEntityPropertyEditor*>();
+  const auto propertyEditors = m_inspector->findChildren<OutlinerEntityPropertyEditor*>();
   if (trees.isEmpty() && propertyEditors.isEmpty())
   {
     return;

@@ -44,7 +44,11 @@
 
 namespace tb::ui
 {
-Inspector::Inspector(AppController& appController, MapDocument& document, QWidget* parent)
+Inspector::Inspector(
+  AppController& appController,
+  MapDocument& document,
+  MapViewToolBox& toolBox,
+  QWidget* parent)
   : QWidget{parent}
   , m_appController{&appController}
   , m_document{&document}
@@ -52,12 +56,10 @@ Inspector::Inspector(AppController& appController, MapDocument& document, QWidge
   m_tabBook = new TabBook{};
   m_tabBook->setObjectName("Inspector_TabBook");
 
-  // Only the default page and the terrain page are needed up front: the 3D views
-  // look up the TerrainInspector for brush state even while its tab is hidden.
-  // The remaining pages are created on first use so opening a map does not have
-  // to build every inspector widget (and style every one of them) up front.
+  // Keep the terrain parameter/operation provider alive for the tool session.
+  // Other pages are prepared lazily.
   m_mapInspector = new MapInspector{document};
-  m_terrainInspector = new TerrainInspector{appController, document};
+  m_terrainInspector = new TerrainInspector{appController, document, toolBox};
 
   m_tabBook->addPage(m_mapInspector, "Map");
   m_tabBook->addPlaceholderPage("Entity");

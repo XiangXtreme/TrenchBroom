@@ -50,7 +50,6 @@ class FlyModeHelper;
 class PlayModeController;
 class PlayModeFullScreen;
 class PlayModeRawMouse;
-class TerrainInspector;
 
 class MapView3D : public MapViewBase
 {
@@ -97,8 +96,6 @@ private:
   void stopPlayMode(bool deferPresentationRestore);
   void initializeCamera();
   void initializeToolChain(MapViewToolBox& toolBox);
-  TerrainInspector* terrainInspector() const;
-  mdl::PickResult terrainPick(const QMouseEvent& event) const;
 
 private: // notification
   void connectObservers();
