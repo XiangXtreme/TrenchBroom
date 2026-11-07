@@ -354,18 +354,12 @@ TerrainInspector::TerrainInspector(
                                                 : TerrainToolMode::Paint)
            : TerrainToolMode::None);
     syncToolButtons();
-    if (vertexEditing())
-      m_status->setText(
-        tr("Click or box-select vertices, then drag vertically. Hold Ctrl or Shift to "
-           "add to the selection."));
     refreshViews();
   });
   connect(m_drawNew, &QPushButton::toggled, this, [this](const bool on) {
     if (m_toolBox)
       m_toolBox->setTerrainMode(on ? TerrainToolMode::Draw : TerrainToolMode::None);
     syncToolButtons();
-    if (on)
-      m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
     refreshViews();
   });
   connect(m_radius, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
@@ -422,9 +416,19 @@ TerrainInspector::~TerrainInspector()
 
 bool TerrainInspector::canActivate(const TerrainToolMode mode) const
 {
-  return mode == TerrainToolMode::Draw
-           ? m_drawNew->isEnabled()
-           : mode != TerrainToolMode::None && m_paint->isEnabled();
+  switch (mode)
+  {
+  case TerrainToolMode::Draw:
+    return m_drawNew->isEnabled();
+  case TerrainToolMode::Paint:
+    return m_canPaint;
+  case TerrainToolMode::Sculpt:
+  case TerrainToolMode::Vertices:
+    return m_canEditHeightField;
+  case TerrainToolMode::None:
+    return false;
+  }
+  return false;
 }
 
 void TerrainInspector::openAssetLibrary()
@@ -570,6 +574,8 @@ void TerrainInspector::refresh()
       && !canActivate(m_toolBox->terrainTool().mode()))
       m_toolBox->setTerrainMode(TerrainToolMode::None);
   });
+  m_canPaint = false;
+  m_canEditHeightField = false;
   render::RenderTiming::count("terrain.inspector_refreshes", 1);
   m_cutPreview.clear();
   m_cutPreviewGroup.reset();
@@ -660,6 +666,8 @@ void TerrainInspector::refresh()
     return;
   }
 
+  m_canPaint = editable;
+  m_canEditHeightField = editable && region.value().heightField.has_value();
   if (m_editMode->currentIndex() != 0 && !region.value().heightField)
     m_paint->setEnabled(false);
   if (!editable)
@@ -821,12 +829,27 @@ void TerrainInspector::syncToolButtons()
   const auto mode = m_toolBox && m_toolBox->terrainToolActive()
                       ? m_toolBox->terrainTool().mode()
                       : TerrainToolMode::None;
+  const auto modeBlocker = QSignalBlocker{m_editMode};
+  if (mode == TerrainToolMode::Paint)
+    m_editMode->setCurrentIndex(0);
+  else if (mode == TerrainToolMode::Sculpt || mode == TerrainToolMode::Draw)
+    m_editMode->setCurrentIndex(1);
+  else if (mode == TerrainToolMode::Vertices)
+    m_editMode->setCurrentIndex(2);
   const auto paintBlocker = QSignalBlocker{m_paint};
   const auto drawBlocker = QSignalBlocker{m_drawNew};
   m_paint->setChecked(
     mode == TerrainToolMode::Paint || mode == TerrainToolMode::Sculpt
     || mode == TerrainToolMode::Vertices);
   m_drawNew->setChecked(mode == TerrainToolMode::Draw);
+  m_paint->setEnabled(
+    m_editMode->currentIndex() == 0 ? m_canPaint : m_canEditHeightField);
+  if (mode == TerrainToolMode::Draw)
+    m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
+  else if (mode == TerrainToolMode::Vertices)
+    m_status->setText(
+      tr("Click or box-select vertices, then drag vertically. Hold Ctrl or Shift to "
+         "add to the selection."));
   updateModeControls();
 }
 

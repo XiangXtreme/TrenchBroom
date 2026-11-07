@@ -59,6 +59,8 @@ private:
   AppController& m_app;
   MapDocument& m_document;
   QPointer<MapViewToolBox> m_toolBox;
+  bool m_canPaint = false;
+  bool m_canEditHeightField = false;
   QLabel* m_status = nullptr;
   QFormLayout* m_form = nullptr;
   QComboBox* m_editMode = nullptr;

@@ -65,6 +65,8 @@ public:
   void replaceMaterial();
   void moveSelectedObjects();
   bool canMoveSelectedObjects() const;
+  void toggleTerrainTool();
+  bool canToggleTerrainTool() const;
   void togglePathTool();
   bool canTogglePathTool() const;
   bool pathToolActive() const;

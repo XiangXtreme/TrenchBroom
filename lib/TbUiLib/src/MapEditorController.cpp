@@ -32,6 +32,7 @@
 #include "ui/Console.h"
 #include "ui/EdgeTool.h"
 #include "ui/FaceTool.h"
+#include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapViewToolBox.h"
@@ -39,6 +40,7 @@
 #include "ui/QVecUtils.h"
 #include "ui/ReplaceMaterialDialog.h"
 #include "ui/SwitchableMapViewContainer.h"
+#include "ui/TerrainTool.h"
 #include "ui/VertexTool.h"
 #include "ui/ViewUtils.h"
 
@@ -497,6 +499,26 @@ bool MapEditorController::canMoveSelectedObjects() const
   auto& map = m_document.map();
   return map.selection().hasNodes()
          && !m_editor.mapView()->toolBox().anyModalToolActive();
+}
+
+void MapEditorController::toggleTerrainTool()
+{
+  if (!canToggleTerrainTool())
+    return;
+  auto& tools = m_editor.toolBox();
+  if (tools.terrainToolActive())
+    tools.setTerrainMode(TerrainToolMode::None);
+  else
+  {
+    tools.setTerrainMode(tools.terrainTool().activationMode());
+    m_editor.showInspectorPage(InspectorPage::Terrain);
+  }
+}
+
+bool MapEditorController::canToggleTerrainTool() const
+{
+  return m_editor.toolBox().terrainToolActive()
+         || m_editor.toolBox().terrainTool().canActivate(TerrainToolMode::Draw);
 }
 
 void MapEditorController::togglePathTool()

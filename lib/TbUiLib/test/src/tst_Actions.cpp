@@ -143,6 +143,7 @@ TEST_CASE("Actions")
   {
     const auto& actions = actionManager.actionsMap();
     CHECK(actions.contains("Menu/Edit/Tools/Path Tool"));
+    CHECK(actions.contains("Menu/Edit/Tools/Terrain Tool"));
     CHECK(
       pref(actions.at("Menu/Edit/Tools/Path Tool").preference())
       == std::vector{KeySequence{"P"}});

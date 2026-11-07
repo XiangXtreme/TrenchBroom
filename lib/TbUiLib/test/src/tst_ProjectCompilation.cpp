@@ -54,6 +54,7 @@
 #include "ui/CompilationDialog.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorController.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
@@ -314,6 +315,20 @@ void testChunkedTerrainEditing(
   while (ancestor && !qobject_cast<MapEditorView*>(ancestor))
     ancestor = ancestor->parentWidget();
   REQUIRE(ancestor);
+  auto& editor = *qobject_cast<MapEditorView*>(ancestor);
+  auto& controller = editor.controller();
+  REQUIRE(controller.canToggleTerrainTool());
+  REQUIRE_FALSE(window->toolBox().terrainToolActive());
+  editor.showInspectorPage(InspectorPage::Terrain);
+  REQUIRE_FALSE(window->toolBox().terrainToolActive());
+  controller.toggleTerrainTool();
+  REQUIRE(panel->drawingTerrain());
+  REQUIRE(editMode->currentIndex() == 1);
+  REQUIRE(newHeight->isVisible());
+  REQUIRE(drawNew->isVisible());
+  REQUIRE(panel->isVisible());
+  controller.toggleTerrainTool();
+  REQUIRE_FALSE(window->toolBox().terrainToolActive());
 
   editMode->setCurrentIndex(1);
   newHeight->setValue(0);
@@ -441,6 +456,15 @@ void testChunkedTerrainEditing(
   editMode->setCurrentIndex(1);
   REQUIRE(activate->isEnabled());
   activate->click();
+  window->toolBox().setSelectMode(true);
+  editMode->setCurrentIndex(0);
+  editor.toggleInspector();
+  controller.toggleTerrainTool();
+  REQUIRE(window->toolBox().terrainTool().mode() == TerrainToolMode::Sculpt);
+  REQUIRE(editMode->currentIndex() == 1);
+  REQUIRE(activate->isChecked());
+  REQUIRE(activate->isEnabled());
+  REQUIRE(panel->isVisible());
   terrainMouseEvent(
     view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, point);
   view->grabFramebuffer();

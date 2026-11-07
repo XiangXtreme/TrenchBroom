@@ -134,6 +134,10 @@
             <translation>倒角工具</translation>
             </message>
         <message>
+            <source>Terrain Tool</source>
+            <translation>地形工具</translation>
+            </message>
+        <message>
             <source>Control Point Tool</source>
             <translation>控制点工具</translation>
             </message>

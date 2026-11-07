@@ -1721,6 +1721,21 @@ void ActionManager::createToolsMenu()
     std::filesystem::path{"Path.svg"},
   }));
   toolsMenu.addItem(addAction(Action{
+    "Menu/Edit/Tools/Terrain Tool",
+    "Terrain Tool",
+    ActionContext::Any,
+    KeySequence{},
+    [](auto& context) { context.editorView().controller().toggleTerrainTool(); },
+    [](const auto& context) {
+      return context.hasDocument()
+             && context.editorView().controller().canToggleTerrainTool();
+    },
+    [](const auto& context) {
+      return context.hasDocument() && context.editorView().toolBox().terrainToolActive();
+    },
+    std::filesystem::path{"InspectorTerrain.svg"},
+  }));
+  toolsMenu.addItem(addAction(Action{
     "Menu/Edit/Tools/Control Point Tool",
     "Control Point Tool",
     ActionContext::Any,
@@ -2288,6 +2303,7 @@ void ActionManager::createToolbar()
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Create Brush Mode"));
   m_toolBar.addSeparator();
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Brush Tool"));
+  m_toolBar.addItem(existingAction("Menu/Edit/Tools/Terrain Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Clip Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Vertex Tool"));
   m_toolBar.addItem(existingAction("Menu/Edit/Tools/Edge Tool"));

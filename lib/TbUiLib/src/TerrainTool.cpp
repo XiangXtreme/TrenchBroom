@@ -27,6 +27,10 @@ TerrainToolMode TerrainTool::mode() const
 {
   return m_mode;
 }
+TerrainToolMode TerrainTool::activationMode() const
+{
+  return canActivate(m_lastMode) ? m_lastMode : TerrainToolMode::Draw;
+}
 bool TerrainTool::canActivate(const TerrainToolMode mode) const
 {
   return m_inspector && m_inspector->canActivate(mode);
@@ -34,6 +38,8 @@ bool TerrainTool::canActivate(const TerrainToolMode mode) const
 void TerrainTool::setMode(const TerrainToolMode mode)
 {
   m_mode = mode;
+  if (mode != TerrainToolMode::None)
+    m_lastMode = mode;
 }
 void TerrainTool::setInspector(TerrainInspector* inspector)
 {

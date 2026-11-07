@@ -34,6 +34,7 @@ class TerrainTool : public Tool
 {
 private:
   TerrainToolMode m_mode = TerrainToolMode::None;
+  TerrainToolMode m_lastMode = TerrainToolMode::Draw;
   QPointer<TerrainInspector> m_inspector;
   QPointer<QWidget> m_view;
   QPointer<QRubberBand> m_outline;
@@ -44,6 +45,7 @@ public:
   TerrainTool();
   ~TerrainTool() override;
   TerrainToolMode mode() const;
+  TerrainToolMode activationMode() const;
   bool canActivate(TerrainToolMode mode) const;
   void setInspector(TerrainInspector* inspector);
   TerrainInspector* inspector() const;
