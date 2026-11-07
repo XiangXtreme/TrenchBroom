@@ -93,7 +93,7 @@ struct LibraryAsset
   friend bool operator==(const LibraryAsset&, const LibraryAsset&) = default;
 };
 
-/** One source file the library indexed, for rescan reporting and diagnostics. */
+/** Import provenance recorded by the library, for diagnostics. */
 struct LibrarySource
 {
   std::string relativePath;
@@ -106,7 +106,7 @@ struct LibrarySource
   friend bool operator==(const LibrarySource&, const LibrarySource&) = default;
 };
 
-/** Result summary of a library rescan. */
+/** Result summary of an explicit library import. */
 struct LibraryScan
 {
   std::size_t added = 0;

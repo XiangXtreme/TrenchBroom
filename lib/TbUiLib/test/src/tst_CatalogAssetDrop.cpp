@@ -84,7 +84,7 @@ TEST_CASE("CatalogAssetDrop")
   write(source, "RIFF original");
   auto library =
     require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-  require(library->scan());
+  require(library->importDirectory(library->folder()));
   const auto entries = require(library->assets());
   REQUIRE(entries.size() == 1);
   const auto& entry = entries.front();
@@ -116,7 +116,7 @@ TEST_CASE("CatalogAssetDrop")
   {
     auto pending = require(PreparedAssetDrop::prepare(session, text));
     write(source, "RIFF changed");
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     require(pending->commit());
     const auto captured = require(session->store().assets());
     REQUIRE(captured.size() == 1);
@@ -133,7 +133,7 @@ TEST_CASE("CatalogAssetDrop")
     const auto foreign = catalogAssetDragData(asset, "another-project");
     CHECK(PreparedAssetDrop::prepare(session, foreign).is_error());
     write(source, "RIFF changed");
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     CHECK(PreparedAssetDrop::prepare(session, text).is_error());
     CHECK(require(session->store().assets()).empty());
     CHECK_FALSE(session->modified());
@@ -220,7 +220,7 @@ TEST_CASE("CatalogAssetDrop")
     write(textureFolder + "/custom.wad", textureWad("WALL01"));
     auto textureLibrary =
       require(project::AssetLibrary::create(pathFromQString(textureFolder), "Textures"));
-    require(textureLibrary->scan());
+    require(textureLibrary->importDirectory(textureLibrary->folder()));
     const auto textureEntries = require(textureLibrary->assets());
     REQUIRE(textureEntries.size() == 1);
     auto textureSession = require(ProjectSession::create(
@@ -280,7 +280,7 @@ TEST_CASE("CatalogAssetDrop")
       write(skyboxFolder + "/env/desert" + face + ".png", pngBytes(QColor{80, 120, 160}));
     auto skyboxLibrary =
       require(project::AssetLibrary::create(pathFromQString(skyboxFolder), "Skyboxes"));
-    require(skyboxLibrary->scan());
+    require(skyboxLibrary->importDirectory(skyboxLibrary->folder()));
     const auto skyboxEntries = require(skyboxLibrary->assets());
     const auto skybox = std::ranges::find_if(skyboxEntries, [](const auto& entry) {
       return entry.type == project::AssetType::Skybox;

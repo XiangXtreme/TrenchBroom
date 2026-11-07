@@ -10,6 +10,7 @@
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibrarySource.h"
 
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -109,49 +110,33 @@ TEST_CASE("AssetLibraryImport")
     CHECK(goldSrcTextureNameFromStem("averylongtexturename", true) == "{averylongtextu");
   }
 
-  SECTION("imports files and refuses an existing target")
+  SECTION("imports own their content and replacement is atomic")
   {
     auto workspace = Workspace{};
-    const auto source = workspace.write("source/wall01.tga", makeTga(16, 16, false));
-
-    const auto imported =
-      require(importFileIntoLibrary(workspace.folder, source, "textures/wall01.tga"));
-    CHECK(imported == "textures/wall01.tga");
-    CHECK(std::filesystem::exists(workspace.folder / "textures/wall01.tga"));
+    const auto bytes = makeTga(16, 16, false);
+    const auto source = workspace.write("source/wall.tga", bytes);
+    auto library = require(project::AssetLibrary::create(workspace.folder, "Test"));
+    require(library->importFiles({{source, "textures/wall.tga"}}));
+    const auto id = require(library->assets()).front().id;
+    CHECK_FALSE(std::filesystem::exists(workspace.folder / "textures/wall.tga"));
+    CHECK(library->importFiles({{source, "textures/wall.tga"}}).is_error());
     CHECK(
-      importFileIntoLibrary(workspace.folder, source, "textures/wall01.tga").is_error());
-  }
-
-  SECTION("failed replacement preserves the existing source and rejects escaping paths")
-  {
-    auto workspace = Workspace{};
-    const auto source = workspace.write("source/wall.tga", makeTga(16, 16, false));
-    require(importFileIntoLibrary(workspace.folder, source, "textures/wall.tga"));
-    CHECK(importFileIntoLibrary(
-            workspace.folder, workspace.directory / "missing", "textures/wall.tga", true)
-            .is_error());
-    CHECK(
-      std::filesystem::file_size(workspace.folder / "textures/wall.tga")
-      == makeTga(16, 16, false).size());
-    const auto replacement =
-      workspace.write("replacement/wall.tga", makeTga(32, 16, false));
-    require(
-      importFileIntoLibrary(workspace.folder, replacement, "textures/wall.tga", true));
-    CHECK(
-      std::filesystem::file_size(workspace.folder / "textures/wall.tga")
-      == makeTga(32, 16, false).size());
-    CHECK(importFileIntoLibrary(workspace.folder, source, "../escaped.tga").is_error());
-    CHECK_FALSE(std::filesystem::exists(workspace.directory / "escaped.tga"));
+      library->importFiles({{workspace.directory / "missing", "textures/wall.tga"}}, true)
+        .is_error());
+    CHECK(require(library->readOriginal(id)) == bytes);
+    CHECK(library->importFiles({{source, "../escaped.tga"}}).is_error());
+    std::filesystem::remove(source);
+    library = require(project::AssetLibrary::open(workspace.folder));
+    CHECK(require(library->readOriginal(id)) == bytes);
+    CHECK_FALSE(require(library->findAsset(id))->missing);
   }
 
   SECTION("converts an imported image into GoldSrc texture content")
   {
     auto workspace = Workspace{};
     const auto source = workspace.write("source/wall01.tga", makeTga(16, 16, false));
-    require(importFileIntoLibrary(workspace.folder, source, "textures/wall01.tga"));
-
     auto library = require(project::AssetLibrary::create(workspace.folder, "Test"));
-    require(library->scan());
+    require(library->importFiles({{source, "textures/" + source.filename().string()}}));
 
     const auto assets = require(library->assets(project::AssetType::Texture));
     REQUIRE(assets.size() == 1);
@@ -189,9 +174,19 @@ TEST_CASE("AssetLibraryImport")
     REQUIRE(source);
     require(source->importFile(modelPath, "models/test.mdl"));
 
-    CHECK(std::filesystem::exists(workspace.folder / "models/test.mdl"));
-    CHECK(std::filesystem::exists(workspace.folder / "models/testT.mdl"));
-    CHECK(std::filesystem::exists(workspace.folder / "models/test01.mdl"));
+    std::filesystem::remove_all(workspace.directory / "source");
+    const auto library = require(project::AssetLibrary::open(workspace.folder));
+    const auto assets = require(library->assets());
+    REQUIRE(assets.size() == 3);
+    for (const auto& asset : assets)
+    {
+      CHECK_FALSE(require(library->readContent(asset.id)).empty());
+      CHECK_FALSE(asset.missing);
+    }
+    const auto main =
+      std::ranges::find(assets, "models/test.mdl", &project::LibraryAsset::virtualPath);
+    REQUIRE(main != assets.end());
+    CHECK(require(library->dependencies(main->id)).size() == 2);
   }
 
   SECTION("non-model imports do not discover model siblings from their contents")
@@ -211,7 +206,8 @@ TEST_CASE("AssetLibraryImport")
     const auto source = openLocalAssetLibrary(workspace.folder);
     REQUIRE(source);
     require(source->importFile(path, "sound/test.wav"));
-    CHECK(std::filesystem::exists(workspace.folder / "sound/test.wav"));
+    CHECK(require(source->allAssets()).size() == 1);
+    CHECK_FALSE(std::filesystem::exists(workspace.folder / "sound/test.wav"));
     CHECK_FALSE(std::filesystem::exists(workspace.folder / "sound/testT.wav"));
     CHECK_FALSE(std::filesystem::exists(workspace.folder / "sound/test01.wav"));
   }
@@ -220,10 +216,8 @@ TEST_CASE("AssetLibraryImport")
   {
     auto workspace = Workspace{};
     const auto source = workspace.write("source/glass.tga", makeTga(16, 16, true));
-    require(importFileIntoLibrary(workspace.folder, source, "textures/glass.tga"));
-
     auto library = require(project::AssetLibrary::create(workspace.folder, "Test"));
-    require(library->scan());
+    require(library->importFiles({{source, "textures/" + source.filename().string()}}));
 
     const auto assets = require(library->assets(project::AssetType::Texture));
     REQUIRE(assets.size() == 1);

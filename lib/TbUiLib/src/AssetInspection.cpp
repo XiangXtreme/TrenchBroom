@@ -583,9 +583,6 @@ Result<Asset> readLibraryAsset(
   result.resource.libraryRevision = asset.revision;
   result.resource.libraryContentHash = asset.contentHash;
   result.resource.path = pathFromQString(QString::fromStdString(asset.virtualPath));
-  result.resource.absolutePath =
-    pathFromQString(source.location())
-    / pathFromQString(QString::fromStdString(asset.sourceContainer));
   result.resource.missing = asset.missing;
   result.name = QString::fromStdString(asset.displayName);
   result.source = source.name();

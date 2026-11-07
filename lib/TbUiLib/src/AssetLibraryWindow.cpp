@@ -13,12 +13,10 @@
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
-#include <QEventLoop>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
-#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QImage>
 #include <QInputDialog>
@@ -47,7 +45,6 @@
 #include <QTreeWidgetItemIterator>
 #include <QUrl>
 #include <QVBoxLayout>
-#include <QtConcurrent/QtConcurrentRun>
 
 #include "base/PreferenceManager.h"
 #include "img/DecodeImage.h"
@@ -90,14 +87,6 @@ namespace
 constexpr auto DefaultThumbSide = 112;
 constexpr auto ThumbMinSide = 72;
 constexpr auto ThumbMaxSide = 192;
-
-// A scan owns an atomic database transaction and cannot be cancelled partway through.
-class LibraryScanProgress : public QProgressDialog
-{
-public:
-  using QProgressDialog::QProgressDialog;
-  void reject() override {}
-};
 
 /** Resolves the thumbnail role on demand, so offscreen cards do not decode assets. */
 class AssetLibraryItem : public QListWidgetItem
@@ -395,8 +384,6 @@ void AssetLibraryWindow::buildUi()
   m_createMaterialButton = createActionButton(
     header, tr("New Material…"), tr("Create a composite terrain material"));
   m_createMaterialButton->setObjectName(QStringLiteral("AssetLibraryCreateMaterial"));
-  m_rescanButton =
-    createActionButton(header, tr("Rescan"), tr("Re-read the library contents"));
   m_convertButton = createActionButton(
     header, tr("Convert Pending"), tr("Convert source textures to GoldSrc miptex"));
   m_convertButton->setObjectName("AssetLibraryConvert");
@@ -409,8 +396,6 @@ void AssetLibraryWindow::buildUi()
     assetLibraryGlyphIcon(AssetLibraryGlyph::Import, textColor, 15));
   m_createMaterialButton->setIcon(
     assetLibraryGlyphIcon(AssetLibraryGlyph::Texture, textColor, 15));
-  m_rescanButton->setIcon(
-    assetLibraryGlyphIcon(AssetLibraryGlyph::Rescan, textColor, 15));
   m_convertButton->setIcon(
     assetLibraryGlyphIcon(AssetLibraryGlyph::Convert, textColor, 15));
   m_revealButton->setIcon(
@@ -434,7 +419,6 @@ void AssetLibraryWindow::buildUi()
 
   headerLayout->addWidget(m_importButton);
   headerLayout->addWidget(m_createMaterialButton);
-  headerLayout->addWidget(m_rescanButton);
   headerLayout->addWidget(m_convertButton);
   headerLayout->addWidget(m_revealButton);
   headerLayout->addWidget(separator);
@@ -466,6 +450,11 @@ void AssetLibraryWindow::buildUi()
   foldersLayout->setContentsMargins(0, 0, 0, 0);
   foldersLayout->addWidget(new QLabel{tr("Folders"), foldersPanel});
   m_folders = new QTreeWidget{foldersPanel};
+  connect(m_folders, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item, int) {
+    const auto path = item->data(0, Qt::UserRole).toString();
+    const auto name = item->text(0);
+    QTimer::singleShot(0, this, [this, path, name] { renameFolder(path, name); });
+  });
   m_folders->setObjectName(QStringLiteral("AssetLibraryFolders"));
   m_folders->setHeaderHidden(true);
   m_folders->setUniformRowHeights(true);
@@ -649,8 +638,7 @@ void AssetLibraryWindow::buildUi()
   m_deleteButton = new QPushButton{tr("Delete…"), actionRow};
   m_deleteButton->setObjectName(QStringLiteral("AssetLibraryDeleteButton"));
   m_deleteButton->setToolTip(
-    tr("Remove selected assets from the library. The source files stay on disk, and a "
-       "later rescan will not add them back."));
+    tr("Remove selected assets from the library. Projects keep their captured copies."));
   m_favoriteButton->setEnabled(false);
   m_renameButton->setEnabled(false);
   m_deleteButton->setEnabled(false);
@@ -771,7 +759,6 @@ void AssetLibraryWindow::buildUi()
     &QListWidget::itemSelectionChanged,
     this,
     &AssetLibraryWindow::updateSelectionActions);
-  connect(m_rescanButton, &QPushButton::clicked, this, &AssetLibraryWindow::runRescan);
   connect(
     m_convertButton, &QPushButton::clicked, this, &AssetLibraryWindow::runConvertPending);
   connect(
@@ -938,7 +925,7 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
         QString::fromStdString(std::get<Error>(created.error()).msg));
       return;
     }
-    if (const auto scanned = created.value()->scan(); scanned.is_error())
+    if (const auto scanned = created.value()->importDirectory(path); scanned.is_error())
     {
       QMessageBox::critical(
         this,
@@ -1078,7 +1065,6 @@ void AssetLibraryWindow::updateActions()
   const auto hasSource = m_source != nullptr;
   m_importButton->setEnabled(hasSource && m_source->canImport());
   m_createMaterialButton->setEnabled(hasSource && m_source->canManage());
-  m_rescanButton->setEnabled(hasSource);
   m_convertButton->setEnabled(
     hasSource && m_source->canConvert() && pendingCount() > 0
     && !m_convertTimer->isActive());
@@ -1159,7 +1145,6 @@ void AssetLibraryWindow::refreshCategories()
 
   addSection(tr("Attention"));
   add(QStringLiteral("pending"), tr("Pending"), pendingCount());
-  add(QStringLiteral("missing"), tr("Missing sources"), missingCount());
 
   for (auto row = 0; row < m_categories->count(); ++row)
   {
@@ -1186,6 +1171,43 @@ void AssetLibraryWindow::refreshCategories()
       return;
     }
   }
+}
+
+void AssetLibraryWindow::renameFolder(const QString& oldPath, const QString& title)
+{
+  if (!m_source || !m_source->canManage())
+    return;
+  if (oldPath.isEmpty() || !oldPath.contains('/'))
+    return;
+  const auto name = title.trimmed();
+  if (
+    name.isEmpty() || name.contains('/') || name.contains('\\') || name == "."
+    || name == "..")
+  {
+    refreshFolders();
+    return;
+  }
+  const auto newPath = oldPath.left(oldPath.lastIndexOf('/') + 1) + name;
+  if (oldPath == newPath)
+    return;
+  auto changes = std::map<std::string, std::string>{};
+  for (const auto& asset : m_assets)
+  {
+    const auto path = libraryFolder(asset);
+    if (folderContains(oldPath, path))
+      changes.emplace(asset.id, (newPath + path.mid(oldPath.size())).toStdString());
+  }
+  if (const auto result = m_source->setGroups(changes); result.is_error())
+  {
+    QMessageBox::critical(
+      this,
+      tr("Asset Library"),
+      QString::fromStdString(std::get<Error>(result.error()).msg));
+    reload();
+    return;
+  }
+  m_folderPath = newPath;
+  reload();
 }
 
 void AssetLibraryWindow::refreshFolders()
@@ -1215,6 +1237,8 @@ void AssetLibraryWindow::refreshFolders()
           parent == root ? browserFolderDisplayName(pathFromQString(path)) : part;
         auto* item = new QTreeWidgetItem{parent, QStringList{title}};
         item->setData(0, Qt::UserRole, path);
+        if (parent != root && m_source && m_source->canManage())
+          item->setFlags(item->flags() | Qt::ItemIsEditable);
         items.insert(path, item);
         parent = item;
       }
@@ -1287,7 +1311,6 @@ void AssetLibraryWindow::refreshGrid()
     const auto matchesType =
       m_filter == QStringLiteral("all") || (typeFilter && asset.type == *typeFilter)
       || (m_filter == QStringLiteral("pending") && needsConversion(asset))
-      || (m_filter == QStringLiteral("missing") && asset.missing)
       || (m_filter == QStringLiteral("favourites") && m_favorites.contains(asset.id));
     if (!matchesType)
       continue;
@@ -1508,8 +1531,18 @@ QImage AssetLibraryWindow::loadThumbnail(const project::LibraryAsset& asset) con
   }
 
   if (asset.type == project::AssetType::Model)
-    return renderModelThumbnail(
-      pathFromQString(m_source->location()), asset.sourceContainer, 256);
+  {
+    const auto inspected = inspection::readLibraryAsset(*m_source, asset);
+    if (inspected.is_error())
+      return {};
+    const auto& loaded = inspected.value();
+    const auto external = mdl::GoldSrcStudioExternalData{
+      &loaded.studioExternal.textureHeader, &loaded.studioExternal.sequenceGroups};
+    const auto scene = loadGoldSrcStudioPreviewScene(loaded.compatible, external);
+    return scene && !scene->frames.empty()
+             ? renderModelPreview(scene->frames.front(), 256)
+             : QImage{};
+  }
   if (asset.type == project::AssetType::Material)
     return inspection::libraryTerrainMaterialPreview(*m_source, asset.id);
   const auto bytes = m_source->readContent(asset.id);
@@ -1536,13 +1569,8 @@ QImage AssetLibraryWindow::loadThumbnail(const project::LibraryAsset& asset) con
   }
   if (asset.type == project::AssetType::Prefab)
   {
-    // An editor-saved thumbnail wins; otherwise draw the authored footprint so the card
+    // Draw the authored footprint so the card
     // shows the prefab's volume instead of a generic type icon.
-    const auto location = pathFromQString(m_source->location());
-    const auto saved = QImage{pathAsQString(
-      prefabThumbnailPath(location / std::filesystem::path{asset.virtualPath}))};
-    if (!saved.isNull())
-      return saved;
     const auto& contentsBytes = bytes.value();
     if (const auto contents =
           readPrefabContents(std::string{contentsBytes.begin(), contentsBytes.end()});
@@ -1585,11 +1613,7 @@ void AssetLibraryWindow::updateStatus()
 {
   const auto total = int(m_assets.size());
   const auto pending = pendingCount();
-  const auto missing = missingCount();
-  auto text = tr("%1 assets · %2 pending conversion · %3 missing")
-                .arg(total)
-                .arg(pending)
-                .arg(missing);
+  auto text = tr("%1 assets · %2 pending conversion").arg(total).arg(pending);
   if (m_source)
   {
     text +=
@@ -1606,12 +1630,6 @@ int AssetLibraryWindow::pendingCount() const
   }));
 }
 
-int AssetLibraryWindow::missingCount() const
-{
-  return int(std::count_if(
-    m_assets.begin(), m_assets.end(), [](const auto& asset) { return asset.missing; }));
-}
-
 const project::LibraryAsset* AssetLibraryWindow::selectedAsset() const
 {
   if (!m_selectedId)
@@ -1620,47 +1638,6 @@ const project::LibraryAsset* AssetLibraryWindow::selectedAsset() const
     return asset.id == *m_selectedId;
   });
   return it == m_assets.end() ? nullptr : &*it;
-}
-
-Result<void> AssetLibraryWindow::rescanLibrary()
-{
-  // Keep the source and dialog alive while the worker owns a separate catalog handle.
-  // Application modality prevents concurrent imports, library switching and closing.
-  const auto converting = m_convertTimer->isActive();
-  m_convertTimer->stop();
-  auto progress = LibraryScanProgress{tr("Rescan"), QString{}, 0, 0, this};
-  progress.setCancelButton(nullptr);
-  progress.setWindowFlag(Qt::WindowCloseButtonHint, false);
-  progress.setWindowModality(Qt::ApplicationModal);
-  auto watcher = QFutureWatcher<Result<void>>{};
-  auto loop = QEventLoop{};
-  connect(&watcher, &QFutureWatcher<Result<void>>::finished, &loop, &QEventLoop::quit);
-  watcher.setFuture(QtConcurrent::run(m_source->rescanTask()));
-  progress.show();
-  loop.exec();
-  // The event loop keeps UI painting and input processing active until completion.
-  progress.close();
-  const auto scanned = watcher.result();
-  if (converting)
-    m_convertTimer->start();
-  if (scanned.is_success())
-    emit AssetLibraryChanges::instance().changed(
-      QString::fromStdString(m_source -> libraryId()));
-  return scanned;
-}
-
-void AssetLibraryWindow::runRescan()
-{
-  if (!m_source)
-    return;
-  if (const auto scanned = rescanLibrary(); scanned.is_error())
-  {
-    QMessageBox::critical(
-      this, tr("Rescan"), QString::fromStdString(std::get<Error>(scanned.error()).msg));
-    return;
-  }
-  reload();
-  m_footer->setText(tr("Rescanned %1 asset(s).").arg(int(m_assets.size())));
 }
 
 void AssetLibraryWindow::retryFailedConversions()
@@ -1999,7 +1976,15 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
     std::filesystem::path relative;
     bool conflict = false;
   };
-  const auto folder = pathFromQString(m_source->location());
+  auto occupied = std::set<std::string>{};
+  const auto stored = m_source->allAssets();
+  if (stored.is_error())
+    return;
+  for (const auto& asset : stored.value())
+  {
+    occupied.insert(asset.virtualPath);
+    occupied.insert(asset.sourceContainer);
+  }
   auto entries = std::vector<Entry>{};
   auto report = QStringList{};
   auto retry = QStringList{};
@@ -2014,8 +1999,7 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
       continue;
     }
     const auto relative = subfolder / source.filename();
-    auto ec = std::error_code{};
-    entries.push_back({source, relative, std::filesystem::exists(folder / relative, ec)});
+    entries.push_back({source, relative, occupied.contains(relative.generic_string())});
   }
   auto overwrite = false;
   if (std::ranges::any_of(entries, [](const auto& entry) { return entry.conflict; }))
@@ -2045,11 +2029,10 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
     progress.setValue(copied);
     if (progress.wasCanceled())
       break;
-    auto ec = std::error_code{};
     if (!overwrite)
     {
       const auto requested = entry.relative;
-      for (auto counter = 1; std::filesystem::exists(folder / entry.relative, ec);
+      for (auto counter = 1; occupied.contains(entry.relative.generic_string());
            ++counter)
         entry.relative = requested.parent_path() / (requested.stem().string() + "_" + std::to_string(counter) + requested.extension().string());
     }
@@ -2067,18 +2050,12 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
     else
     {
       imported.push_back(added.value());
+      occupied.insert(added.value());
       report << tr("%1: imported as %2")
                   .arg(
                     pathAsQString(entry.source), QString::fromStdString(added.value()));
     }
     ++copied;
-  }
-  if (!imported.empty())
-  {
-    const auto scanned = rescanLibrary();
-    if (scanned.is_error())
-      report << tr("Index failed: %1")
-                  .arg(QString::fromStdString(std::get<Error>(scanned.error()).msg));
   }
   reload();
   // Copy IDs before converting: each publication can invalidate a browser's listing.
@@ -2487,19 +2464,14 @@ void AssetLibraryWindow::deleteSelected()
     assetIds.push_back(
       item->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString());
   const auto libraryId = m_source->libraryId();
-  const auto message = selected.size() == 1
-                         ? tr(
-                             "Remove '%1' from the library?\n\nThe source file is kept "
-                             "and a later rescan will not add the asset back. Projects "
-                             "keep their captured copies. Import the source again to "
-                             "restore it.")
-                             .arg(selected.front()->text())
-                         : tr(
-                             "Remove %1 selected assets from the library?\n\nThe source "
-                             "files are kept and a later rescan will not add the assets "
-                             "back. Projects keep their captured copies. Import the "
-                             "sources again to restore them.")
-                             .arg(selected.size());
+  const auto message =
+    selected.size() == 1
+      ? tr("Remove '%1' from the library?\n\nProjects keep their captured copies.")
+          .arg(selected.front()->text())
+      : tr(
+          "Remove %1 selected assets from the library?\n\nProjects keep their captured "
+          "copies.")
+          .arg(selected.size());
   const auto answer = QMessageBox::question(
     this, tr("Delete Asset"), message, QMessageBox::Yes | QMessageBox::Cancel);
   if (answer != QMessageBox::Yes || !m_source || m_source->libraryId() != libraryId)

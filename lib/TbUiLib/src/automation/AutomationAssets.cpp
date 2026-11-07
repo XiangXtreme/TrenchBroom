@@ -417,7 +417,7 @@ Result<std::vector<AutomationAssetSummary>> searchAutomationLibraryAssets(
     {
       continue;
     }
-    const auto state = project.libraryState(connection.info.id, false);
+    const auto state = project.libraryState(connection.info.id);
     if (state.is_error())
     {
       // An unreadable library must not hide the assets of the readable ones.
@@ -493,7 +493,7 @@ Result<std::optional<AutomationAssetSummary>> findAutomationLibraryAsset(
     {
       continue;
     }
-    const auto state = project.libraryState(connection.info.id, false);
+    const auto state = project.libraryState(connection.info.id);
     if (state.is_error())
     {
       continue;

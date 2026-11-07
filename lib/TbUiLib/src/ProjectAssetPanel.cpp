@@ -224,7 +224,7 @@ void ProjectAssetPanel::refreshDetails()
       snapshotLookupFailed = true;
       add(tr("Error"), text(std::get<Error>(captured.error()).msg));
     }
-    const auto state = m_session->libraryState(selected.libraryId, false);
+    const auto state = m_session->libraryState(selected.libraryId);
     if (state.is_success() && state.value().available)
     {
       const auto found = std::ranges::find(

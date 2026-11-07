@@ -113,6 +113,37 @@ TEST_CASE("AssetLibrary")
   const auto wall = test::makeMiptex("WALL01", 32, 16, 1);
   const auto floor = test::makeMiptex("FLOOR01", 16, 16, 2);
 
+  SECTION("adopts stored content from version three without following sources")
+  {
+    workspace.write("custom.wad", require(buildGoldSrcWad({wall})));
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->importDirectory(workspace.folder));
+    auto asset = require(library->assets()).front();
+    require(library->setGroup({asset.id}, "curated/stone"));
+    const auto content = require(library->readContent(asset.id));
+    library.reset();
+    {
+      auto database = RawDatabase{AssetLibrary::indexPath(workspace.folder)};
+      REQUIRE(
+        sqlite3_exec(
+          database.db,
+          "PRAGMA user_version=3; UPDATE assets SET missing=1; UPDATE sources SET "
+          "missing=1; CREATE TABLE removed_assets(virtual_path TEXT)",
+          nullptr,
+          nullptr,
+          nullptr)
+        == SQLITE_OK);
+    }
+    workspace.remove("custom.wad");
+    library = require(AssetLibrary::open(workspace.folder));
+    const auto restored = require(library->findAsset(asset.id));
+    REQUIRE(restored);
+    CHECK_FALSE(restored->missing);
+    CHECK(restored->group == "curated/stone");
+    CHECK(restored->revision == asset.revision);
+    CHECK(require(library->readContent(asset.id)) == content);
+  }
+
   SECTION("indexes WAD members as independent grouped assets")
   {
     workspace.write("wads/custom.wad", require(buildGoldSrcWad({wall, floor})));
@@ -121,7 +152,7 @@ TEST_CASE("AssetLibrary")
     const auto libraryId = library->info().id;
     REQUIRE_FALSE(libraryId.empty());
 
-    const auto scan = require(library->scan());
+    const auto scan = require(library->importDirectory(library->folder()));
     CHECK(scan.added == 2);
     CHECK(scan.updated == 0);
     CHECK(scan.missing == 0);
@@ -145,8 +176,8 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->readOriginal(wallAsset.id)) == wall);
     CHECK(require(library->groups()) == std::vector<std::string>{"wads/custom.wad"});
 
-    // A rescan of unchanged content must not invent revisions or new IDs.
-    const auto again = require(library->scan());
+    // An explicit reimport of unchanged content must not invent revisions or new IDs.
+    const auto again = require(library->importDirectory(library->folder()));
     CHECK(again.added == 0);
     CHECK(again.updated == 0);
     CHECK(require(library->assets()).size() == 2);
@@ -162,7 +193,7 @@ TEST_CASE("AssetLibrary")
     const auto bytes = std::vector<std::uint8_t>{text.begin(), text.end()};
     workspace.write("prefabs/crate.tbprefab", bytes);
     auto library = require(AssetLibrary::create(workspace.folder, "Prefab library"));
-    const auto scan = require(library->scan());
+    const auto scan = require(library->importDirectory(library->folder()));
     CHECK(scan.added == 1);
 
     const auto assets = require(library->assets());
@@ -180,14 +211,14 @@ TEST_CASE("AssetLibrary")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto before = require(library->assets());
     const auto wallId = findByMember(before, "WALL01").id;
     const auto floorId = findByMember(before, "FLOOR01").id;
 
     const auto changedWall = test::makeMiptex("WALL01", 32, 16, 200);
     workspace.write("custom.wad", require(buildGoldSrcWad({changedWall, floor})));
-    const auto scan = require(library->scan());
+    const auto scan = require(library->importDirectory(library->folder()));
     CHECK(scan.updated == 1);
     CHECK(scan.added == 0);
 
@@ -211,54 +242,52 @@ TEST_CASE("AssetLibrary")
     CHECK(history[0].contentHash == contentHash(changedWall));
   }
 
-  SECTION("keeps missing assets readable after a source disappears")
+  SECTION("keeps owned assets available after a source disappears")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto indexed = require(library->assets());
     REQUIRE(indexed.size() == 1);
     const auto id = indexed.front().id;
 
     workspace.remove("custom.wad");
-    const auto scan = require(library->scan());
-    CHECK(scan.missing == 1);
+    const auto scan = require(library->importDirectory(library->folder()));
+    CHECK(scan.missing == 0);
     const auto asset = require(library->findAsset(id));
     REQUIRE(asset);
-    CHECK(asset->missing);
+    CHECK_FALSE(asset->missing);
     CHECK(asset->revision == 1);
     // The catalog still serves the snapshot; the source file is not required to read it.
     CHECK(require(library->readContent(id)) == wall);
 
     workspace.write("custom.wad", require(buildGoldSrcWad({wall})));
-    const auto restored = require(library->scan());
-    CHECK(restored.restored == 1);
+    const auto restored = require(library->importDirectory(library->folder()));
+    CHECK(restored.restored == 0);
     CHECK_FALSE(require(library->findAsset(id))->missing);
     CHECK(require(library->findAsset(id))->revision == 1);
   }
 
-  SECTION("preserves identity when a source is moved inside the library")
+  SECTION("catalog organization is independent of source layout")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
-    const auto indexed = require(library->assets());
-    REQUIRE(indexed.size() == 1);
-    const auto before = indexed.front();
-
-    std::filesystem::create_directories(workspace.folder / "archive");
-    workspace.rename("custom.wad", "archive/custom.wad");
-    const auto scan = require(library->scan());
-    CHECK(scan.relocated == 1);
-    CHECK(scan.added == 0);
-    CHECK(scan.missing == 0);
-
-    const auto after = require(library->findAsset(before.id));
+    require(library->importDirectory(workspace.folder));
+    const auto before = require(library->assets()).front();
+    require(library->setGroup({before.id}, "Favorites/Walls"));
+    workspace.rename("custom.wad", "renamed.wad");
+    auto reopened = require(AssetLibrary::open(workspace.folder));
+    const auto after = require(reopened->findAsset(before.id));
     REQUIRE(after);
-    CHECK(after->id == before.id);
+    CHECK(after->group == "Favorites/Walls");
+    CHECK(after->virtualPath == before.virtualPath);
     CHECK(after->revision == before.revision);
-    CHECK(after->virtualPath == "archive/custom.wad/WALL01");
-    CHECK(require(library->assets()).size() == 1);
+    CHECK(require(reopened->readContent(before.id)) == wall);
+    require(reopened->importFiles(
+      {{workspace.folder / "renamed.wad", "custom.wad", std::nullopt}}, true));
+    CHECK(require(reopened->findAsset(before.id))->group == "Favorites/Walls");
+    CHECK(reopened->setGroup({before.id, "unknown"}, "Other").is_error());
+    CHECK(require(reopened->findAsset(before.id))->group == "Favorites/Walls");
   }
 
   SECTION("distinguishes same named assets with different content")
@@ -267,7 +296,7 @@ TEST_CASE("AssetLibrary")
     workspace.write(
       "b/tex.wad", require(buildGoldSrcWad({test::makeMiptex("WALL01", 32, 16, 99)})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
 
     const auto assets = require(library->assets());
     REQUIRE(assets.size() == 2);
@@ -284,7 +313,7 @@ TEST_CASE("AssetLibrary")
     workspace.write("sprites/flare.spr", {'S', 'P', 'R', 1});
     workspace.write("sound/step.wav", {'R', 'I', 'F', 'F'});
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    const auto scan = require(library->scan());
+    const auto scan = require(library->importDirectory(library->folder()));
     CHECK(scan.added == 4);
     const auto assets = require(library->assets());
     REQUIRE(assets.size() == 4);
@@ -311,7 +340,7 @@ TEST_CASE("AssetLibrary")
   {
     workspace.write("a/duplicate.wad", require(buildGoldSrcWad({wall})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto indexed = require(library->assets());
     REQUIRE(indexed.size() == 1);
     const auto original = indexed.front();
@@ -319,7 +348,7 @@ TEST_CASE("AssetLibrary")
     // Adding a container with identical bytes must not relocate the identity of the
     // texture that is still present where it was indexed.
     workspace.write("b/duplicate.wad", require(buildGoldSrcWad({wall})));
-    const auto scan = require(library->scan());
+    const auto scan = require(library->importDirectory(library->folder()));
     CHECK(scan.added == 1);
     CHECK(scan.relocated == 0);
     CHECK(scan.missing == 0);
@@ -343,7 +372,7 @@ TEST_CASE("AssetLibrary")
     // A same-stem texture must never be pulled in by name matching.
     workspace.write("models/props/crate.png", {'P', 'N', 'G', 1});
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
 
     const auto assets = require(library->assets());
     const auto model = std::ranges::find_if(assets, [](const auto& asset) {
@@ -381,13 +410,12 @@ TEST_CASE("AssetLibrary")
         "models/props/crateT.mdl"});
 
     // Re-scanning keeps the edges without duplicating them.
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     CHECK(require(library->dependencies(model->id)).size() == 3);
 
-    // A group that disappears keeps its edge but is reported missing, so a project can
-    // tell "the model needs this" apart from "the library lost it".
+    // Imported animation content remains available after its source is deleted.
     workspace.remove("models/props/crate02.mdl");
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto afterRemoval = require(library->dependencies(model->id));
     REQUIRE(afterRemoval.size() == 3);
     auto missingPath = std::string{};
@@ -398,7 +426,7 @@ TEST_CASE("AssetLibrary")
       if (target->missing)
         missingPath = target->virtualPath;
     }
-    CHECK(missingPath == "models/props/crate02.mdl");
+    CHECK(missingPath.empty());
   }
   SECTION("same named dependencies stay within their source directory")
   {
@@ -412,7 +440,7 @@ TEST_CASE("AssetLibrary")
         workspace.write(prefix + "desert" + face + ".png", {'P', 'N', 'G', 1});
     }
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     for (const auto& asset : require(library->assets()))
     {
       if (asset.virtualPath.ends_with("/crate.mdl") || asset.type == AssetType::Skybox)
@@ -427,7 +455,7 @@ TEST_CASE("AssetLibrary")
         }
       }
     }
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
   }
 
   SECTION("groups the six faces of a skybox into one asset")
@@ -437,7 +465,7 @@ TEST_CASE("AssetLibrary")
         std::string{"env/desert"} + face + ".png",
         std::vector<std::uint8_t>{'P', 'N', 'G', std::uint8_t(face[0])});
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
 
     const auto assets = require(library->assets());
     const auto skybox = std::ranges::find_if(
@@ -454,7 +482,7 @@ TEST_CASE("AssetLibrary")
     // Losing a face invalidates the group. The catalog keeps the row but reports it as
     // missing instead of silently shrinking the skybox to five faces.
     workspace.remove("env/desertdn.png");
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto remaining = require(library->assets());
     const auto skyboxes = std::ranges::count_if(
       remaining, [](const auto& asset) { return asset.type == AssetType::Skybox; });
@@ -462,7 +490,7 @@ TEST_CASE("AssetLibrary")
     const auto grouped = std::ranges::find_if(
       remaining, [](const auto& asset) { return asset.type == AssetType::Skybox; });
     REQUIRE(grouped != remaining.end());
-    CHECK(grouped->missing);
+    CHECK_FALSE(grouped->missing);
   }
 
   SECTION("indexes a skybox whose faces are in the library root")
@@ -472,7 +500,7 @@ TEST_CASE("AssetLibrary")
         std::string{"desert"} + face + ".png",
         std::vector<std::uint8_t>{'P', 'N', 'G', std::uint8_t(face[0])});
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
 
     const auto assets = require(library->assets());
     REQUIRE(assets.size() == 7);
@@ -486,7 +514,7 @@ TEST_CASE("AssetLibrary")
 
     auto reopened = require(AssetLibrary::open(workspace.folder));
     CHECK(require(reopened->assets(AssetType::Skybox)).size() == 1);
-    require(reopened->scan());
+    require(reopened->importDirectory(reopened->folder()));
     CHECK(require(reopened->assets()).size() == 7);
   }
 
@@ -497,29 +525,16 @@ TEST_CASE("AssetLibrary")
         std::string{"env/desert"} + face + ".png",
         std::vector<std::uint8_t>{'P', 'N', 'G', std::uint8_t(face[0])});
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto assets = require(library->assets());
     const auto skybox = std::ranges::find_if(
       assets, [](const auto& asset) { return asset.type == AssetType::Skybox; });
     REQUIRE(skybox != assets.end());
 
     require(library->removeAsset(skybox->id));
-    require(library->scan());
-    CHECK(require(library->assets(AssetType::Texture)).size() == 6);
     CHECK(require(library->assets(AssetType::Skybox)).empty());
-
-    // Similar names, non-image suffixes and descendants must not restore this group.
-    for (const auto* unrelated :
-         {"env/deserted.png", "env/desertdn.wav", "env/desert/other.png"})
-    {
-      require(library->clearRemovedSource(unrelated));
-      require(library->scan());
-      CHECK(require(library->assets(AssetType::Skybox)).empty());
-    }
-
-    // Importing a face clears the group exclusion: the six faces are still on disk.
-    require(library->clearRemovedSource("env/desertdn.png"));
-    require(library->scan());
+    require(library->importFiles(
+      {{workspace.folder / "env/desertdn.png", "env/desertdn.png", std::nullopt}}, true));
     CHECK(require(library->assets(AssetType::Skybox)).size() == 1);
   }
 
@@ -528,7 +543,7 @@ TEST_CASE("AssetLibrary")
     const auto duplicate = test::makeMiptex("WALL01", 16, 16, 5);
     workspace.write("dup.wad", require(buildGoldSrcWad({wall, duplicate})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    const auto scan = require(library->scan());
+    const auto scan = require(library->importDirectory(library->folder()));
     CHECK(scan.added == 1);
     CHECK(scan.invalidEntries == 1);
     CHECK_FALSE(scan.warning.empty());
@@ -541,7 +556,7 @@ TEST_CASE("AssetLibrary")
     workspace.write("one/wall.png", bytes);
     workspace.write("two/wall.png", bytes);
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto assets = require(library->assets());
     REQUIRE(assets.size() == 2);
     CHECK(assets[0].id != assets[1].id);
@@ -555,7 +570,7 @@ TEST_CASE("AssetLibrary")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall})));
     auto library = require(AssetLibrary::create(workspace.folder, "Studio"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto id = library->info().id;
     library.reset();
 
@@ -575,7 +590,7 @@ TEST_CASE("AssetLibrary")
     workspace.write("textures/wall.png", imageBytes);
     workspace.write("wads/custom.wad", require(buildGoldSrcWad({wall})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
 
     const auto assets = require(library->assets());
     const auto image = std::ranges::find_if(
@@ -602,8 +617,8 @@ TEST_CASE("AssetLibrary")
     CHECK(revisions.back().nativeFormat == "goldsrc-wad");
     CHECK(revisions.back().contentHash == image->contentHash);
 
-    // A rescan must recognize the unchanged source and keep the conversion.
-    require(library->scan());
+    // An explicit reimport must recognize the unchanged source and keep the conversion.
+    require(library->importDirectory(library->folder()));
     const auto rescanned = require(library->findAsset(image->id));
     REQUIRE(rescanned.has_value());
     CHECK(rescanned->revision == converted.revision);
@@ -622,7 +637,7 @@ TEST_CASE("AssetLibrary")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto assets = require(library->assets());
     const auto wallId = findByMember(assets, "WALL01").id;
     const auto floorId = findByMember(assets, "FLOOR01").id;
@@ -637,7 +652,7 @@ TEST_CASE("AssetLibrary")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto assets = require(library->assets());
     const auto wallId = findByMember(assets, "WALL01").id;
     const auto floorId = findByMember(assets, "FLOOR01").id;
@@ -651,15 +666,11 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->assets()).size() == assets.size() - 1);
     CHECK(library->removeAsset(wallId).is_error());
 
-    // The source file stays on disk, but the removal is remembered so a rescan does not
-    // silently recreate the catalog entry.
-    require(library->scan());
-    CHECK_FALSE(require(library->findAsset(wallId)).has_value());
-    CHECK(require(library->assets()).size() == assets.size() - 1);
+    auto reopened = require(AssetLibrary::open(workspace.folder));
+    CHECK_FALSE(require(reopened->findAsset(wallId)).has_value());
 
     // Importing the source again is the explicit restore.
-    require(library->clearRemovedSource("custom.wad"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     CHECK(require(library->findAsset(wallId)).has_value());
   }
 
@@ -668,7 +679,7 @@ TEST_CASE("AssetLibrary")
     const auto source =
       workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto assets = require(library->assets());
     const auto wallId = findByMember(assets, "WALL01").id;
     const auto floorId = findByMember(assets, "FLOOR01").id;
@@ -678,7 +689,7 @@ TEST_CASE("AssetLibrary")
     CHECK(require(library->findAsset(wallId)).has_value());
     CHECK(require(library->findAsset(floorId)).has_value());
     CHECK(require(library->dependencies(wallId)).size() == 1);
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     CHECK(require(library->findAsset(wallId)).has_value());
 
     require(library->removeAssets({wallId, floorId, wallId}));
@@ -686,21 +697,19 @@ TEST_CASE("AssetLibrary")
     CHECK_FALSE(require(library->findAsset(floorId)).has_value());
     CHECK(require(library->assets()).size() == assets.size() - 2);
     CHECK(std::filesystem::exists(source));
-    require(library->scan());
-    CHECK_FALSE(require(library->findAsset(wallId)).has_value());
-    CHECK_FALSE(require(library->findAsset(floorId)).has_value());
-
-    require(library->clearRemovedSource("custom.wad"));
-    require(library->scan());
+    auto reopened = require(AssetLibrary::open(workspace.folder));
+    CHECK_FALSE(require(reopened->findAsset(wallId)).has_value());
+    CHECK_FALSE(require(reopened->findAsset(floorId)).has_value());
+    require(library->importDirectory(workspace.folder));
     CHECK(require(library->findAsset(wallId)).has_value());
     CHECK(require(library->findAsset(floorId)).has_value());
   }
 
-  SECTION("keeps user metadata and a renamed display name across rescans")
+  SECTION("keeps user metadata and a renamed display name across explicit reimports")
   {
     workspace.write("custom.wad", require(buildGoldSrcWad({wall})));
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto assets = require(library->assets());
     const auto wallId = findByMember(assets, "WALL01").id;
 
@@ -716,8 +725,8 @@ TEST_CASE("AssetLibrary")
     const auto renamed = require(library->setDisplayName(wallId, "Castle Brick"));
     CHECK(renamed.displayName == "Castle Brick");
 
-    // The catalog name survives a rescan; the engine texture name does not change.
-    require(library->scan());
+    // The catalog name survives reimport; the engine texture name does not change.
+    require(library->importDirectory(library->folder()));
     CHECK(require(library->findAsset(wallId)).value().displayName == "Castle Brick");
 
     CHECK(library->setDisplayName("missing", "x").is_error());
@@ -733,7 +742,7 @@ TEST_CASE("AssetLibrary")
     workspace.write("nature.wad", require(buildGoldSrcWad({grass, dirt, rock})));
 
     auto library = require(AssetLibrary::create(workspace.folder, "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto initialAssets = require(library->assets());
     const auto grassId = findByMember(initialAssets, "GRASS").id;
     const auto dirtId = findByMember(initialAssets, "DIRT").id;
@@ -776,7 +785,7 @@ TEST_CASE("AssetLibrary")
     // A duplicate name must not replace an existing user source file.
     CHECK(library->createTerrainMaterial(def).is_error());
     CHECK(require(library->readContent(matAsset.id)) == content);
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     CHECK(require(library->dependencies(matAsset.id)) == deps);
 
     def.folder = "材质";

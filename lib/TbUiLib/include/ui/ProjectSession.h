@@ -222,10 +222,9 @@ public:
   Result<void> relocateLibrary(
     const std::string& libraryId, const std::filesystem::path& folder);
   Result<std::vector<LibraryConnection>> libraries() const;
-  /** Reads one library's current catalog; `rescan` also picks up external file changes.
+  /** Reads one library's current catalog; source files are never consulted.
    */
-  Result<project::LibraryState> libraryState(
-    const std::string& libraryId, bool rescan) const;
+  Result<project::LibraryState> libraryState(const std::string& libraryId) const;
   /** Copies the current library revision into the project immediately. */
   Result<project::Asset> captureLibraryAsset(
     const std::string& libraryId, const std::string& libraryAssetId);
@@ -248,7 +247,7 @@ public:
   Result<std::map<std::string, std::filesystem::path>> libraryAssetFiles(
     const std::string& libraryId, const std::vector<std::string>& libraryAssetIds);
   /** Compares captured snapshots with the libraries; never modifies the project. */
-  Result<std::vector<project::LibraryUpdate>> checkLibraryUpdates(bool rescan = false);
+  Result<std::vector<project::LibraryUpdate>> checkLibraryUpdates();
   /** Applies selected updates as one project transaction, or none at all. */
   Result<std::vector<project::Asset>> updateLibraryAssets(
     const std::vector<std::string>& projectAssetIds);

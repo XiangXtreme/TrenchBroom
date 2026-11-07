@@ -1488,7 +1488,7 @@ Result<ProjectSession::LibraryAttachSummary> ProjectSession::attachLibrary(
       return std::get<Error>(created.error());
     library = std::move(created).value();
     summary.created = true;
-    auto scan = library->scan();
+    auto scan = library->importDirectory(folder);
     if (scan.is_error())
       return std::get<Error>(scan.error());
     summary.invalid = scan.value().invalidEntries;
@@ -1562,7 +1562,7 @@ Result<std::vector<ProjectSession::LibraryConnection>> ProjectSession::libraries
 }
 
 Result<project::LibraryState> ProjectSession::libraryState(
-  const std::string& libraryId, const bool rescan) const
+  const std::string& libraryId) const
 {
   // Unavailable libraries are a normal state, not an error: the project must keep working
   // and reporting its own snapshot.
@@ -1585,15 +1585,6 @@ Result<project::LibraryState> ProjectSession::libraryState(
   {
     state.error = std::get<Error>(library.error()).msg;
     return state;
-  }
-  if (rescan)
-  {
-    const auto scan = library.value()->scan();
-    if (scan.is_error())
-    {
-      state.error = std::get<Error>(scan.error()).msg;
-      return state;
-    }
   }
   auto assets = library.value()->assets();
   if (assets.is_error())
@@ -2583,8 +2574,7 @@ Result<bool> snapshotNeedsRefresh(
 }
 } // namespace
 
-Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
-  const bool rescan)
+Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates()
 {
   const auto linked = m_store->libraryLinkedAssets();
   if (linked.is_error())
@@ -2598,7 +2588,7 @@ Result<std::vector<project::LibraryUpdate>> ProjectSession::checkLibraryUpdates(
     if (std::ranges::find(visited, asset.library.libraryId) != visited.end())
       continue;
     visited.push_back(asset.library.libraryId);
-    auto state = libraryState(asset.library.libraryId, rescan);
+    auto state = libraryState(asset.library.libraryId);
     if (state.is_error())
       return std::get<Error>(state.error());
     states.push_back(std::move(state).value());

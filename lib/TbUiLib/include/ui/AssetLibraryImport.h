@@ -19,7 +19,7 @@ class AssetLibrary;
 namespace tb::ui
 {
 /**
- * Folder a source file is stored in when it is imported into an asset library.
+ * Default virtual category for an imported source file.
  *
  * Returns an empty path for file types a library cannot hold. GoldSrc containers and
  * images share `textures`; the catalog splits WAD members into individual textures.
@@ -38,18 +38,6 @@ std::string goldSrcTextureNameFromStem(const std::string& stem, bool masked);
 /** Conversion recipe stored next to a converted library texture. */
 std::string goldSrcTextureRecipe(
   const std::string& name, std::uint32_t width, std::uint32_t height, bool masked);
-
-/**
- * Copies `source` to `libraryFolder/relativePath`, creating parent folders.
- *
- * Fails when the target already exists, so conflict handling stays with the caller.
- * Returns the relative path as recorded by the catalog.
- */
-Result<std::string> importFileIntoLibrary(
-  const std::filesystem::path& libraryFolder,
-  const std::filesystem::path& source,
-  const std::string& relativePath,
-  bool overwrite = false);
 
 /**
  * Converts one uncompiled library image into GoldSrc texture content.

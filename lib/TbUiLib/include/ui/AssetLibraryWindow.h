@@ -80,7 +80,6 @@ class AssetLibraryWindow : public QDialog
   QPushButton* m_importButton = nullptr;
   QPushButton* m_createMaterialButton = nullptr;
   QAction* m_createMaterialFromSelection = nullptr;
-  QPushButton* m_rescanButton = nullptr;
   QPushButton* m_convertButton = nullptr;
   QPushButton* m_revealButton = nullptr;
   QPushButton* m_favoriteButton = nullptr;
@@ -153,6 +152,7 @@ private:
   void focusAsset(const std::string& assetId, const QString& category);
   void refreshCategories();
   void refreshFolders();
+  void renameFolder(const QString& oldPath, const QString& title);
   void refreshGrid();
   void showAsset(const project::LibraryAsset* asset);
   void clearInspector();
@@ -166,8 +166,6 @@ private:
   void runCreateTerrainMaterial();
   std::optional<std::array<std::string, 3>> selectedTextures() const;
   void importFiles(const QStringList& files);
-  Result<void> rescanLibrary();
-  void runRescan();
   void runConvertPending();
   void retryFailedConversions();
   void stepConvertQueue();
@@ -192,6 +190,5 @@ private:
 
   const project::LibraryAsset* selectedAsset() const;
   int pendingCount() const;
-  int missingCount() const;
 };
 } // namespace tb::ui

@@ -132,7 +132,7 @@ Result<std::unique_ptr<PreparedAssetDrop>> PreparedAssetDrop::prepare(
   else if (source == "library")
   {
     const auto libraryId = object.value("libraryId").toString().toStdString();
-    const auto state = result->m_session->libraryState(libraryId, false);
+    const auto state = result->m_session->libraryState(libraryId);
     if (state.is_error())
       return std::get<Error>(state.error());
     if (!state.value().available)

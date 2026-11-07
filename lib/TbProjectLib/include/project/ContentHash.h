@@ -29,9 +29,8 @@ std::string contentHash(std::string_view bytes);
 /**
  * Deterministic, ID-shaped digest for a natural key.
  *
- * Library assets are enumerated from files that can be rescanned at any time. The
- * asset ID has to survive a rescan so that a project snapshot can still be matched to
- * its library origin after the library was moved or rebuilt. Deriving the ID from
+ * Library asset IDs survive explicit replacement so project snapshots can be matched
+ * to their library origin after the library is moved. Deriving the ID from
  * (library ID, container, member) keeps it stable without storing a lookup table,
  * while the library ID in the key prevents two libraries from minting the same ID.
  */

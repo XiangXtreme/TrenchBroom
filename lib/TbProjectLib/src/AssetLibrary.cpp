@@ -302,27 +302,22 @@ std::string storeDiscoveredContent(
 
 void discoverFile(
   sqlite3* db,
-  const std::filesystem::path& folder,
+  const std::string& relativePath,
   const std::filesystem::path& file,
   const std::string& libraryId,
-  const std::unordered_set<std::string>& removedVirtualPaths,
   Discovery& discovery,
-  std::unordered_set<std::string>& seenIds)
+  std::unordered_set<std::string>& seenIds,
+  const std::optional<std::vector<std::uint8_t>>& supplied = std::nullopt)
 {
-  auto error = std::error_code{};
-  const auto relative = std::filesystem::relative(file, folder, error);
-  if (error || relative.empty())
-    return;
-  const auto relativePath = pathText(relative);
-  const auto format = sourceFormatFor(file.extension());
+  const auto format = sourceFormatFor(pathFromText(relativePath).extension());
   if (format == SourceFormat::Unknown)
     return;
 
-  const auto bytesResult = readFile(file);
+  const auto bytesResult =
+    supplied ? Result<std::vector<std::uint8_t>>{*supplied} : readFile(file);
   if (bytesResult.is_error())
   {
-    discovery.warnings.push_back(relativePath + ": cannot read source file");
-    return;
+    throw detail::StoreError{relativePath + ": cannot read import file"};
   }
   const auto& bytes = bytesResult.value();
   auto& source = discovery.sources.emplace_back(DiscoveredSource{
@@ -337,9 +332,7 @@ void discoverFile(
     const auto wad = readGoldSrcWad(bytes);
     if (wad.is_error())
     {
-      discovery.warnings.push_back(
-        relativePath + ": " + std::get<Error>(wad.error()).msg);
-      return;
+      throw detail::StoreError{relativePath + ": " + std::get<Error>(wad.error()).msg};
     }
     for (const auto& entry : wad.value().textures)
     {
@@ -362,8 +355,6 @@ void discoverFile(
       asset.type = AssetType::Texture;
       asset.displayName = entry.name;
       asset.virtualPath = relativePath + "/" + entry.name;
-      if (removedVirtualPaths.contains(asset.virtualPath))
-        continue;
       asset.group = relativePath;
       asset.sourceRelPath = relativePath;
       asset.sourceMember = entry.name;
@@ -396,10 +387,6 @@ void discoverFile(
   asset.recipe = recipeFor(format, relativePath);
   asset.size = std::uint64_t(bytes.size());
   asset.contentHash = source.contentHash;
-  // The source stays indexed, but a catalog removal keeps its asset hidden until the
-  // source is imported again.
-  if (removedVirtualPaths.contains(asset.virtualPath))
-    return;
   if (format == SourceFormat::Material)
   {
     const auto contentText =
@@ -458,11 +445,7 @@ void discoverFile(
  * A skybox is a logical asset: the faces stay independently editable textures, and the
  * group only records which six belong together so a capture can pull the whole set.
  */
-void addSkyboxGroups(
-  sqlite3* db,
-  const std::string& libraryId,
-  const std::unordered_set<std::string>& removedVirtualPaths,
-  Discovery& discovery)
+void addSkyboxGroups(sqlite3* db, const std::string& libraryId, Discovery& discovery)
 {
   static constexpr std::array<std::string_view, 6> Faces{
     "bk", "rt", "lf", "ft", "up", "dn"};
@@ -474,7 +457,24 @@ void addSkyboxGroups(
   };
 
   auto groups = std::map<std::string, FaceSet>{};
+  auto faces = discovery.assets;
+  auto importedPaths = std::unordered_set<std::string>{};
   for (const auto& asset : discovery.assets)
+    importedPaths.insert(asset.virtualPath);
+  auto knownPaths = importedPaths;
+  auto stored = detail::Statement{
+    db,
+    "SELECT virtual_path FROM assets WHERE native_format='image' OR "
+    "native_format='goldsrc-wad'"};
+  while (stored.next())
+  {
+    auto asset = Discovered{};
+    asset.virtualPath = stored.text(0);
+    asset.nativeFormat = "image";
+    if (knownPaths.insert(asset.virtualPath).second)
+      faces.push_back(std::move(asset));
+  }
+  for (const auto& asset : faces)
   {
     if (asset.nativeFormat != "image")
       continue;
@@ -501,10 +501,12 @@ void addSkyboxGroups(
   {
     if (group.faces.size() != Faces.size())
       continue;
+    const auto touched = std::ranges::any_of(
+      group.faces, [&](const auto& face) { return importedPaths.contains(face.second); });
+    if (!touched)
+      continue;
     const auto virtualPath =
       (group.folder.empty() ? std::string{} : group.folder + "/") + group.stem;
-    if (removedVirtualPaths.contains(virtualPath))
-      continue;
     auto asset = Discovered{};
     asset.id = stableId(libraryKey(libraryId, virtualPath, {}));
     asset.type = AssetType::Skybox;
@@ -532,57 +534,6 @@ void addSkyboxGroups(
     asset.contentRow = storeDiscoveredContent(db, bytes, asset.contentHash, asset.id);
     discovery.assets.push_back(std::move(asset));
   }
-}
-
-Discovery discover(
-  sqlite3* db,
-  const std::filesystem::path& folder,
-  const std::string& libraryId,
-  const std::unordered_set<std::string>& removedVirtualPaths)
-{
-  auto discovery = Discovery{};
-  auto seenIds = std::unordered_set<std::string>{};
-  auto iterator = std::filesystem::recursive_directory_iterator{
-    folder, std::filesystem::directory_options::skip_permission_denied};
-  const auto end = std::filesystem::recursive_directory_iterator{};
-  for (auto error = std::error_code{}; iterator != end; iterator.increment(error))
-  {
-    if (error)
-    {
-      discovery.warnings.push_back("cannot enumerate part of the library folder");
-      error.clear();
-      continue;
-    }
-    const auto& entry = *iterator;
-    auto status = entry.symlink_status(error);
-    if (error)
-    {
-      error.clear();
-      continue;
-    }
-    if (std::filesystem::is_directory(status))
-    {
-      // The catalog itself and hidden folders are not library content.
-      const auto name = pathText(entry.path().filename());
-      if (name.starts_with('.'))
-        iterator.disable_recursion_pending();
-      continue;
-    }
-    if (entry.path().filename() == IndexFileName)
-      continue;
-    if (!std::filesystem::is_regular_file(status))
-      continue;
-    discoverFile(
-      db, folder, entry.path(), libraryId, removedVirtualPaths, discovery, seenIds);
-  }
-  addSkyboxGroups(db, libraryId, removedVirtualPaths, discovery);
-  std::ranges::sort(discovery.assets, [](const auto& a, const auto& b) {
-    return a.virtualPath < b.virtualPath;
-  });
-  std::ranges::sort(discovery.sources, [](const auto& a, const auto& b) {
-    return a.relativePath < b.relativePath;
-  });
-  return discovery;
 }
 
 constexpr auto AssetColumns =
@@ -620,7 +571,7 @@ LibraryAsset readAssetRow(const detail::Statement& query)
 }
 
 constexpr auto Schema =
-  "PRAGMA application_id=0x54424153; PRAGMA user_version=3;"
+  "PRAGMA application_id=0x54424153; PRAGMA user_version=4;"
   "CREATE TABLE library(id TEXT PRIMARY KEY,name TEXT NOT NULL,"
   "created_at TEXT NOT NULL,updated_at TEXT NOT NULL);"
   "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
@@ -649,10 +600,8 @@ constexpr auto Schema =
   "dependency_id TEXT NOT NULL REFERENCES assets(id),kind TEXT NOT NULL,"
   "PRIMARY KEY(asset_id,dependency_id,kind),CHECK(asset_id<>dependency_id));"
   "CREATE TABLE asset_meta(asset_id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE "
-  "CASCADE,favorite INTEGER NOT NULL DEFAULT 0,tags TEXT NOT NULL DEFAULT '');"
-  "CREATE TABLE removed_assets(virtual_path TEXT PRIMARY KEY,"
-  "source_rel_path TEXT NOT NULL,removed_at TEXT NOT NULL);"
-  "CREATE INDEX removed_assets_source ON removed_assets(source_rel_path);";
+  "CASCADE,favorite INTEGER NOT NULL DEFAULT 0,tags TEXT NOT NULL DEFAULT '');";
+
 
 void configure(detail::Database& database)
 {
@@ -757,13 +706,15 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::open(
       throw detail::StoreError{"Folder is not an asset library."};
     auto impl = std::make_unique<Impl>(folder, false);
     auto* db = impl->database.get();
+    auto adoptStoredContent = false;
     {
       auto version = detail::Statement{
         db, "SELECT * FROM pragma_application_id(),pragma_user_version()"};
       if (
         !version.next() || version.integer(0) != 0x54424153
-        || (version.integer(1) != 1 && version.integer(1) != 2 && version.integer(1) != 3))
-        throw detail::StoreError{"Not a supported TB asset library (format version 3)."};
+        || (version.integer(1) != 1 && version.integer(1) != 2 && version.integer(1) != 3 && version.integer(1) != 4))
+        throw detail::StoreError{"Not a supported TB asset library (format version 4)."};
+      adoptStoredContent = version.integer(1) < 4;
     }
     auto info =
       detail::Statement{db, "SELECT id,name,created_at,updated_at FROM library"};
@@ -799,17 +750,15 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::open(
         "CREATE TABLE IF NOT EXISTS asset_meta(asset_id TEXT PRIMARY KEY REFERENCES "
         "assets(id) ON DELETE CASCADE,favorite INTEGER NOT NULL DEFAULT 0,"
         "tags TEXT NOT NULL DEFAULT '')");
-
-      // Version 3 remembers catalog removals so rescans do not bring deleted assets back.
+    }
+    if (adoptStoredContent)
+    {
+      auto transaction = detail::Transaction{db};
       detail::execute(
         db,
-        "CREATE TABLE IF NOT EXISTS removed_assets(virtual_path TEXT PRIMARY KEY,"
-        "source_rel_path TEXT NOT NULL,removed_at TEXT NOT NULL)");
-      detail::execute(
-        db,
-        "CREATE INDEX IF NOT EXISTS removed_assets_source ON "
-        "removed_assets(source_rel_path)");
-      detail::execute(db, "PRAGMA user_version=3");
+        "DROP TABLE IF EXISTS removed_assets; UPDATE assets SET missing=0; UPDATE "
+        "sources SET missing=0; PRAGMA user_version=4");
+      transaction.commit();
     }
     // Fail closed on missing tables or columns.
     auto probe = detail::Statement{db, "SELECT id FROM assets LIMIT 1"};
@@ -870,15 +819,6 @@ std::unordered_map<std::string, IndexedAsset> loadIndexedAssets(sqlite3* db)
       query.flag(7) != 0};
     result.emplace(asset.id, std::move(asset));
   }
-  return result;
-}
-
-std::unordered_set<std::string> loadRemovedVirtualPaths(sqlite3* db)
-{
-  auto query = detail::Statement{db, "SELECT virtual_path FROM removed_assets"};
-  auto result = std::unordered_set<std::string>{};
-  while (query.next())
-    result.insert(query.text(0));
   return result;
 }
 
@@ -998,13 +938,53 @@ void resolveDependencies(sqlite3* db)
 
 } // namespace
 
-Result<LibraryScan> AssetLibrary::scan()
+Result<LibraryScan> AssetLibrary::importDirectory(
+  const std::filesystem::path& sourceFolder)
+{
+  return detail::attempt([&]() -> LibraryScan {
+    auto files = std::vector<ImportFile>{};
+    for (const auto& entry : std::filesystem::recursive_directory_iterator{sourceFolder})
+    {
+      if (
+        entry.is_regular_file()
+        && sourceFormatFor(entry.path().extension()) != SourceFormat::Unknown)
+        files.push_back(
+          {entry.path(),
+           pathText(std::filesystem::relative(entry.path(), sourceFolder)),
+           std::nullopt});
+    }
+    auto result = importFiles(files, true);
+    if (result.is_error())
+      throw detail::StoreError{std::get<Error>(result.error()).msg};
+    return std::move(result).value();
+  });
+}
+
+Result<LibraryScan> AssetLibrary::importFiles(
+  const std::vector<ImportFile>& files, const bool overwrite)
 {
   return detail::attempt([&] {
     auto* db = m_impl->database.get();
-    const auto removed = loadRemovedVirtualPaths(db);
     auto transaction = detail::Transaction{db};
-    const auto discovery = discover(db, m_impl->folder, m_impl->info.id, removed);
+    auto discovery = Discovery{};
+    auto seen = std::unordered_set<std::string>{};
+    for (const auto& file : files)
+    {
+      detail::validatePath(file.virtualPath);
+      if (
+        sourceFormatFor(pathFromText(file.virtualPath).extension())
+        == SourceFormat::Unknown)
+        throw detail::StoreError{"Unsupported asset format."};
+      auto conflict = detail::Statement{
+        db, "SELECT 1 FROM assets WHERE source_rel_path=? OR virtual_path=?"};
+      conflict.bind(1, file.virtualPath);
+      conflict.bind(2, file.virtualPath);
+      if (conflict.next() && !overwrite)
+        throw detail::StoreError{"An asset already uses this import path."};
+      discoverFile(
+        db, file.virtualPath, file.source, m_impl->info.id, discovery, seen, file.bytes);
+    }
+    addSkyboxGroups(db, m_impl->info.id, discovery);
     auto result = LibraryScan{};
     result.invalidEntries = discovery.invalid;
     if (!discovery.warnings.empty())
@@ -1015,22 +995,12 @@ Result<LibraryScan> AssetLibrary::scan()
     }
 
     auto indexed = loadIndexedAssets(db);
-    // A row may only be relocated when its own location is gone. Without this, a WAD
-    // whose bytes happen to match another WAD could steal the row of an asset that is
-    // still present at its recorded path.
-    auto discoveredIds = std::unordered_set<std::string>{};
-    discoveredIds.reserve(discovery.assets.size());
-    for (const auto& discovered : discovery.assets)
-      discoveredIds.insert(discovered.id);
-
-    auto claimed = std::unordered_set<std::string>{};
     for (const auto& discovered : discovery.assets)
     {
       const auto existing = indexed.find(discovered.id);
       if (existing != indexed.end())
       {
         auto& asset = existing->second;
-        claimed.insert(asset.id);
         if (asset.contentHash != discovered.contentHash)
         {
           auto row = LibraryAsset{
@@ -1052,26 +1022,25 @@ Result<LibraryScan> AssetLibrary::scan()
             db,
             "UPDATE assets SET type=?,display_name=CASE WHEN custom_display_name<>'' "
             "THEN "
-            "custom_display_name ELSE ? END,virtual_path=?,group_path=?,"
+            "custom_display_name ELSE ? END,virtual_path=?,group_path=group_path,"
             "source_rel_path=?,source_member=?,native_format=?,identity=?,recipe=?,"
             "revision=?,content_hash=?,content=?,original=?,size=?,dependency_hints=?,"
             "missing=0 WHERE id=?"};
           update.bind(1, assetTypeName(row.type));
           update.bind(2, row.displayName);
           update.bind(3, row.virtualPath);
-          update.bind(4, row.group);
-          update.bind(5, row.sourceContainer);
-          update.bind(6, row.sourceMember);
-          update.bind(7, row.nativeFormat);
-          update.bind(8, discovered.identity);
-          update.bind(9, row.recipe);
-          update.bind(10, row.revision);
-          update.bind(11, row.contentHash);
+          update.bind(4, row.sourceContainer);
+          update.bind(5, row.sourceMember);
+          update.bind(6, row.nativeFormat);
+          update.bind(7, discovered.identity);
+          update.bind(8, row.recipe);
+          update.bind(9, row.revision);
+          update.bind(10, row.contentHash);
+          update.bind(11, stored);
           update.bind(12, stored);
-          update.bind(13, stored);
-          update.bind(14, row.size);
-          update.bind(15, joinedHints(discovered.hints));
-          update.bind(16, row.id);
+          update.bind(13, row.size);
+          update.bind(14, joinedHints(discovered.hints));
+          update.bind(15, row.id);
           update.run();
           writeRevisionRow(db, row.id, row, stored, stored);
           ++result.updated;
@@ -1093,25 +1062,8 @@ Result<LibraryScan> AssetLibrary::scan()
         continue;
       }
 
-      // The natural key of an indexed asset can disappear because the user renamed or
-      // moved the source. Identical bytes under the same member or file name keep the
-      // identity, so the project link survives a library-side reorganization without
-      // pretending the content changed.
-      auto relocated = std::optional<IndexedAsset*>{};
-      for (auto& [id, asset] : indexed)
-      {
-        if (asset.claimed || claimed.contains(id) || discoveredIds.contains(id))
-          continue;
-        if (
-          asset.contentHash == discovered.contentHash
-          && asset.identity == discovered.identity)
-        {
-          relocated = &asset;
-          break;
-        }
-      }
       auto row = LibraryAsset{
-        relocated ? (*relocated)->id : discovered.id,
+        discovered.id,
         discovered.type,
         discovered.displayName,
         discovered.virtualPath,
@@ -1120,43 +1072,10 @@ Result<LibraryScan> AssetLibrary::scan()
         discovered.sourceMember,
         discovered.nativeFormat,
         discovered.recipe,
-        relocated ? (*relocated)->revision : 1,
+        1,
         discovered.contentHash,
         discovered.size,
         false};
-      if (relocated)
-      {
-        auto update = detail::Statement{
-          db,
-          "UPDATE assets SET "
-          "display_name=?,virtual_path=?,group_path=?,source_rel_path=?,"
-          "source_member=?,native_format=?,recipe=?,dependency_hints=?,missing=0 WHERE "
-          "id=?"};
-        update.bind(1, row.displayName);
-        update.bind(2, row.virtualPath);
-        update.bind(3, row.group);
-        update.bind(4, row.sourceContainer);
-        update.bind(5, row.sourceMember);
-        update.bind(6, row.nativeFormat);
-        update.bind(7, row.recipe);
-        update.bind(8, joinedHints(discovered.hints));
-        update.bind(9, row.id);
-        update.run();
-        auto revision = detail::Statement{
-          db,
-          "UPDATE asset_revisions SET display_name=?,virtual_path=? "
-          "WHERE asset_id=? AND revision=?"};
-        revision.bind(1, row.displayName);
-        revision.bind(2, row.virtualPath);
-        revision.bind(3, row.id);
-        revision.bind(4, row.revision);
-        revision.run();
-        (*relocated)->claimed = true;
-        claimed.insert(row.id);
-        ++result.relocated;
-        continue;
-      }
-
       const auto& stored = discovered.contentRow;
       auto insert = detail::Statement{
         db,
@@ -1182,33 +1101,11 @@ Result<LibraryScan> AssetLibrary::scan()
       insert.bind(16, joinedHints(discovered.hints));
       insert.run();
       writeRevisionRow(db, row.id, row, stored, stored);
-      claimed.insert(row.id);
       ++result.added;
     }
 
-    for (auto& [id, asset] : indexed)
-    {
-      if (claimed.contains(id) || asset.claimed)
-        continue;
-      if (!asset.missing)
-      {
-        auto update = detail::Statement{db, "UPDATE assets SET missing=1 WHERE id=?"};
-        update.bind(1, id);
-        update.run();
-      }
-      ++result.missing;
-    }
-
-    auto existingSources = std::unordered_set<std::string>{};
-    {
-      auto query = detail::Statement{db, "SELECT relative_path FROM sources"};
-      while (query.next())
-        existingSources.insert(query.text(0));
-    }
-    auto discoveredSources = std::unordered_set<std::string>{};
     for (const auto& source : discovery.sources)
     {
-      discoveredSources.insert(source.relativePath);
       auto upsert = detail::Statement{
         db,
         "INSERT INTO sources(relative_path,type,content_hash,size,asset_count,missing) "
@@ -1223,16 +1120,6 @@ Result<LibraryScan> AssetLibrary::scan()
       upsert.run();
       ++result.sources;
     }
-    for (const auto& relativePath : existingSources)
-    {
-      if (discoveredSources.contains(relativePath))
-        continue;
-      auto update =
-        detail::Statement{db, "UPDATE sources SET missing=1 WHERE relative_path=?"};
-      update.bind(1, relativePath);
-      update.run();
-    }
-
     resolveDependencies(db);
 
     auto update = detail::Statement{db, "UPDATE library SET updated_at=?"};
@@ -1240,6 +1127,35 @@ Result<LibraryScan> AssetLibrary::scan()
     update.run();
     transaction.commit();
     return result;
+  });
+}
+
+Result<void> AssetLibrary::setGroup(
+  const std::vector<std::string>& assetIds, const std::string& group)
+{
+  auto groups = std::map<std::string, std::string>{};
+  for (const auto& id : assetIds)
+    groups.emplace(id, group);
+  return setGroups(groups);
+}
+
+Result<void> AssetLibrary::setGroups(const std::map<std::string, std::string>& groups)
+{
+  return detail::attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    for (const auto& [id, group] : groups)
+    {
+      detail::validatePath(group, true);
+      const auto asset = findAsset(id);
+      if (asset.is_error() || !asset.value())
+        throw detail::StoreError{"Asset not found."};
+      auto update = detail::Statement{db, "UPDATE assets SET group_path=? WHERE id=?"};
+      update.bind(1, group);
+      update.bind(2, id);
+      update.run();
+    }
+    transaction.commit();
   });
 }
 
@@ -1534,17 +1450,12 @@ Result<void> AssetLibrary::removeAssets(const std::vector<std::string>& assetIds
     auto transaction = detail::Transaction{db};
     auto exists =
       detail::Statement{db, "SELECT virtual_path,source_rel_path FROM assets WHERE id=?"};
-    auto exclude = detail::Statement{
-      db,
-      "INSERT OR REPLACE INTO removed_assets(virtual_path,source_rel_path,removed_at) "
-      "VALUES(?,?,?)"};
     auto deleteDependencies = detail::Statement{
       db, "DELETE FROM dependencies WHERE asset_id=? OR dependency_id=?"};
     auto deleteRevisions =
       detail::Statement{db, "DELETE FROM asset_revisions WHERE asset_id=?"};
     auto deleteAsset = detail::Statement{db, "DELETE FROM assets WHERE id=?"};
     auto seen = std::unordered_set<std::string>{};
-    const auto removedAt = nowText(db);
     for (const auto& assetId : assetIds)
     {
       if (!seen.insert(assetId).second)
@@ -1554,14 +1465,7 @@ Result<void> AssetLibrary::removeAssets(const std::vector<std::string>& assetIds
       if (!exists.next())
         throw detail::StoreError{"Library asset not found."};
 
-      // Preserve each removal across rescans before dropping its catalog row.
-      exclude.bind(1, exists.text(0));
-      exclude.bind(2, exists.text(1));
-      exclude.bind(3, removedAt);
-      exclude.run();
       exists.reset();
-      exclude.reset();
-
       deleteDependencies.bind(1, assetId);
       deleteDependencies.bind(2, assetId);
       deleteDependencies.run();
@@ -1577,36 +1481,6 @@ Result<void> AssetLibrary::removeAssets(const std::vector<std::string>& assetIds
   });
 }
 
-Result<void> AssetLibrary::clearRemovedSource(const std::string& sourceRelPath)
-{
-  return detail::attempt([&] {
-    detail::validatePath(sourceRelPath);
-    // Restore this source and, for an actual sky face, its exact logical group.
-    auto skyboxPath = std::string{};
-    const auto path = std::filesystem::path{sourceRelPath};
-    if (sourceFormatFor(path.extension()) == SourceFormat::Image)
-    {
-      const auto stem = path.stem().string();
-      const auto lowerStem = lowered(stem);
-      for (const auto suffix : {"bk", "rt", "lf", "ft", "up", "dn"})
-        if (stem.size() > 2 && lowerStem.ends_with(suffix))
-        {
-          skyboxPath =
-            (path.parent_path() / stem.substr(0, stem.size() - 2)).generic_string();
-          break;
-        }
-    }
-    auto statement = detail::Statement{
-      m_impl->database.get(),
-      "DELETE FROM removed_assets WHERE source_rel_path=? OR "
-      "(?<>'' AND lower(virtual_path)=lower(?) AND source_rel_path=?)"};
-    statement.bind(1, sourceRelPath);
-    statement.bind(2, skyboxPath);
-    statement.bind(3, skyboxPath);
-    statement.bind(4, path.parent_path().generic_string());
-    statement.run();
-  });
-}
 
 namespace
 {
@@ -1810,17 +1684,7 @@ Result<LibraryAsset> AssetLibrary::createTerrainMaterial(
 
     const auto subfolder = def.folder.empty() ? std::string{"materials"} : def.folder;
     detail::validatePath(subfolder, true);
-    const auto targetDir = m_impl->folder / pathFromText(subfolder);
-    auto ec = std::error_code{};
-    std::filesystem::create_directories(targetDir, ec);
-    if (ec)
-      throw detail::StoreError{"Cannot create material directory."};
-
     const auto fileName = def.name + ".tbmat";
-    const auto filePath = targetDir / pathFromText(fileName);
-    // Reserve the path exclusively so a duplicate name never truncates user data.
-    auto newFile = detail::NewFile{filePath};
-
     auto json = fmt::format(
       "{{\n"
       "  \"format\": \"goldsrc-terrain-material\",\n"
@@ -1840,15 +1704,10 @@ Result<LibraryAsset> AssetLibrary::createTerrainMaterial(
       jsonQuote(def.materialSlots[2].name.empty() ? "Rock" : def.materialSlots[2].name),
       jsonQuote(def.materialSlots[2].texture));
 
-    auto file = std::ofstream{filePath, std::ios::binary};
-    if (!file)
-      throw detail::StoreError{"Cannot write material file."};
-    file << json;
-    file.close();
-    if (!file)
-      throw detail::StoreError{"Cannot write material file."};
-
-    const auto scanResult = scan();
+    const auto scanResult = importFiles(
+      {{pathFromText(fileName),
+        subfolder + "/" + fileName,
+        std::vector<std::uint8_t>{json.begin(), json.end()}}});
     if (scanResult.is_error())
       throw detail::StoreError{std::get<Error>(scanResult.error()).msg};
 
@@ -1884,7 +1743,6 @@ Result<LibraryAsset> AssetLibrary::createTerrainMaterial(
       revision.run();
       transaction.commit();
     }
-    newFile.keep();
     return asset;
   });
 }

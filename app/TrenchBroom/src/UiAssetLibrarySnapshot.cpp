@@ -250,12 +250,12 @@ std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(
   createTextures(folder);
   createOtherSources(folder);
 
-  if (library.scan().is_error())
+  if (library.importDirectory(library.folder()).is_error())
     return {};
 
   convertSomeTextures(library, 3);
   dropOneSource(folder);
-  if (library.scan().is_error())
+  if (library.importDirectory(library.folder()).is_error())
     return {};
 
   auto terrainId = std::optional<std::string>{};

@@ -7410,7 +7410,31 @@ The source files are kept and a later rescan will not add the assets back. Proje
             <source>Create Asset Library</source>
             <translation>创建资产库</translation>
             </message>
-        </context>
+            <message>
+        <source>Remove selected assets from the library. Projects keep their captured copies.</source>
+        <translation>从资产库移除所选资产。工程保留已捕获的副本。</translation>
+    </message>
+    <message>
+        <source>%1 assets · %2 pending conversion</source>
+        <translation>%1 项资产 · %2 项待转换</translation>
+    </message>
+    <message>
+        <source>Remove '%1' from the library?
+
+Projects keep their captured copies.</source>
+        <translation>从资产库移除“%1”？
+
+工程保留已捕获的副本。</translation>
+    </message>
+    <message>
+        <source>Remove %1 selected assets from the library?
+
+Projects keep their captured copies.</source>
+        <translation>从资产库移除所选的 %1 项资产？
+
+工程保留已捕获的副本。</translation>
+    </message>
+</context>
         <context>
         <name>tb::ui::ProjectAssetPanel</name>
         <message>

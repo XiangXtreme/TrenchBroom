@@ -137,12 +137,10 @@ public:
 
   // Mutating operations. A read-only source reports the matching capability as false and
   // the browser hides the action instead of calling these.
-  // The returned job owns its inputs and creates its database connection on the worker.
-  virtual std::function<Result<void>()> rescanTask() const
+  virtual Result<void> setGroups(const std::map<std::string, std::string>&)
   {
-    return []() -> Result<void> { return Error{"This asset library is read only."}; };
+    return Error{"This asset library is read only."};
   }
-  virtual Result<void> rescan() { return Error{"This asset library is read only."}; }
   virtual Result<std::string> importFile(
     const std::filesystem::path& /*source*/, const std::string& /*relativePath*/)
   {

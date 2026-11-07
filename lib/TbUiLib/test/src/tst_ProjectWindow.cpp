@@ -1002,7 +1002,7 @@ TEST_CASE("ProjectWindow")
     writeWave(libraryRoot + "/sound/library-only.wav");
     auto library =
       require(project::AssetLibrary::create(pathFromQString(libraryRoot), "Browser"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     require(session->attachLibrary(pathFromQString(libraryRoot)));
 
     auto input = project::AssetImport{};
@@ -1293,7 +1293,7 @@ TEST_CASE("ProjectWindow")
     writeSound(true);
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     require(session->attachLibrary(pathFromQString(folder)));
     const auto resource = require(library->assets()).front();
     auto libraryWindow = AssetLibraryWindow{folder, false, &window};
@@ -1303,7 +1303,7 @@ TEST_CASE("ProjectWindow")
       require(session->projectAssetForLibraryAsset(library->info().id, resource.id)));
     writeSound(false);
     auto source = openLocalAssetLibrary(pathFromQString(folder));
-    require(source->rescan());
+    require(source->replaceFile(pathFromQString(path), "clip.wav"));
     auto* browser = window.findChild<ModelBrowser*>();
     REQUIRE(browser);
     auto* sourceChoice = browser->findChild<QComboBox*>("ModelBrowser_Source");
@@ -1333,7 +1333,7 @@ TEST_CASE("ProjectWindow")
     file.close();
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     require(session->attachLibrary(pathFromQString(folder)));
     auto source = openLocalAssetLibrary(pathFromQString(folder));
     const auto resource = require(library->assets()).front();
@@ -1351,6 +1351,32 @@ TEST_CASE("ProjectWindow")
     CHECK(inspected.prefabIssues.isEmpty());
   }
 
+  SECTION("library category renaming changes only catalog organization")
+  {
+    const auto folder = directory.filePath("category-library");
+    REQUIRE(QDir{}.mkpath(folder + "/textures/nature"));
+    auto image = QImage{32, 32, QImage::Format_RGB32};
+    image.fill(Qt::green);
+    REQUIRE(image.save(folder + "/textures/nature/grass.png"));
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
+    require(library->importDirectory(library->folder()));
+    const auto asset = require(library->assets()).front();
+    auto browser = AssetLibraryWindow{folder, false, &window};
+    auto* folders = browser.findChild<QTreeWidget*>("AssetLibraryFolders");
+    REQUIRE(folders);
+    auto* category = folders->topLevelItem(0)->child(0)->child(0);
+    REQUIRE(category);
+    REQUIRE(category->flags().testFlag(Qt::ItemIsEditable));
+    category->setText(0, "Landscape");
+    QTRY_COMPARE(require(library->findAsset(asset.id))->group, "textures/Landscape");
+    const auto renamed = require(library->findAsset(asset.id));
+    CHECK(renamed->virtualPath == asset.virtualPath);
+    CHECK(renamed->revision == asset.revision);
+    REQUIRE(QFile::remove(folder + "/textures/nature/grass.png"));
+    CHECK_FALSE(require(library->readContent(asset.id)).empty());
+  }
+
   SECTION("library thumbnails survive filtering and invalidate on source reload")
   {
     const auto folder = directory.filePath("thumbnail-library");
@@ -1361,7 +1387,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(image.save(path));
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     auto browser = AssetLibraryWindow{folder, false, &window};
     auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
     auto* search = browser.findChild<QLineEdit*>("AssetLibrarySearch");
@@ -1385,11 +1411,11 @@ TEST_CASE("ProjectWindow")
     CHECK(thumbnail().pixelColor(0, 0) == QColor{Qt::red});
     auto source = openLocalAssetLibrary(pathFromQString(folder));
     REQUIRE(source);
-    require(source->rescan());
+    require(source->replaceFile(pathFromQString(path), "color.png"));
     QTRY_COMPARE(thumbnail().pixelColor(0, 0), QColor{Qt::blue});
   }
 
-  SECTION("deleting a library asset survives a rescan")
+  SECTION("deleting a library asset survives reopening the library")
   {
     const auto folder = directory.filePath("delete-library");
     REQUIRE(QDir{}.mkdir(folder));
@@ -1399,7 +1425,7 @@ TEST_CASE("ProjectWindow")
     REQUIRE(image.save(path));
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
 
     auto browser = AssetLibraryWindow{folder, false, &window};
     auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
@@ -1423,11 +1449,9 @@ TEST_CASE("ProjectWindow")
     timer.stop();
     QTRY_COMPARE(grid->count(), 0);
 
-    // The source file stays on disk, but rescanning the folder must not resurrect the
-    // catalog entry that the user deleted.
+    // Opening the catalog cannot restore assets from the original files.
     auto source = openLocalAssetLibrary(pathFromQString(folder));
     REQUIRE(source);
-    require(source->rescan());
     CHECK(require(source->assets()).empty());
     CHECK(QFile::exists(path));
   }
@@ -1448,7 +1472,7 @@ TEST_CASE("ProjectWindow")
     }
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto libraryId = library->info().id;
     require(session->attachLibrary(pathFromQString(folder)));
 
@@ -1546,7 +1570,6 @@ TEST_CASE("ProjectWindow")
     QTRY_COMPARE(grid->count(), 0);
     auto source = openLocalAssetLibrary(pathFromQString(folder));
     REQUIRE(source);
-    require(source->rescan());
     CHECK(require(source->assets()).empty());
     for (const auto* name : names)
       CHECK(QFile::exists(folder + "/" + name));
@@ -1568,7 +1591,7 @@ TEST_CASE("ProjectWindow")
     }
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Shared library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto resources = require(library->assets());
     const auto found =
       std::ranges::find(resources, "sound/clip.wav", &project::LibraryAsset::virtualPath);
@@ -1717,7 +1740,8 @@ TEST_CASE("ProjectWindow")
     REQUIRE(replacement.open(QIODevice::WriteOnly | QIODevice::Truncate));
     REQUIRE(replacement.write("RIFF changed source") > 0);
     replacement.close();
-    require(source->rescan());
+    require(
+      source->replaceFile(pathFromQString(folder + "/sound/clip.wav"), "sound/clip.wav"));
     auto* update = libraryWindow.findChild<QPushButton*>("AssetInspector_Update");
     REQUIRE(update);
     QTRY_VERIFY(!update->isHidden());
@@ -1750,7 +1774,7 @@ TEST_CASE("ProjectWindow")
     file.close();
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto resources = require(library->assets());
     REQUIRE(resources.size() == 1);
     const auto resource = resources.front();
@@ -2032,7 +2056,7 @@ TEST_CASE("ProjectWindow")
     }
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Models"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     require(session->attachLibrary(pathFromQString(folder)));
     emit session->browserFocusRequested();
     auto* browser = window.findChild<ModelBrowser*>();
@@ -2169,7 +2193,7 @@ TEST_CASE("ProjectWindow")
     output.close();
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto resources = require(library->assets());
     REQUIRE(resources.size() == 1);
     require(session->attachLibrary(pathFromQString(folder)));
@@ -2328,7 +2352,7 @@ TEST_CASE("ProjectWindow")
     }
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Terrain"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto textures = require(library->assets(project::AssetType::Texture));
     REQUIRE(textures.size() == 3);
     auto definition = project::AssetLibrary::TerrainMaterialDefinition{};
@@ -2464,7 +2488,11 @@ TEST_CASE("ProjectWindow")
     REQUIRE(QFile::remove(folder + "/layer0.png"));
     auto librarySource = openLocalAssetLibrary(pathFromQString(folder));
     REQUIRE(librarySource);
-    require(librarySource->rescan());
+    CHECK(cards->assets().front().previewIdentity == previewIdentity);
+    const auto layer = std::ranges::find(
+      textures, std::string{"layer0.png"}, &project::LibraryAsset::virtualPath);
+    REQUIRE(layer != textures.end());
+    require(librarySource->removeAsset(layer->id));
     QTRY_VERIFY(
       !cards->assets().empty()
       && cards->assets().front().previewIdentity != previewIdentity);
@@ -2500,7 +2528,7 @@ TEST_CASE("ProjectWindow")
     }
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Skyboxes"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto entries = require(library->assets());
     const auto skybox = std::ranges::find_if(entries, [](const auto& entry) {
       return entry.type == project::AssetType::Skybox;
@@ -2565,7 +2593,12 @@ TEST_CASE("ProjectWindow")
     }
     auto source = openLocalAssetLibrary(pathFromQString(folder));
     REQUIRE(source);
-    require(source->rescan());
+    for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+    {
+      const auto relative = std::string{"env/desert"} + face + ".png";
+      require(source->replaceFile(
+        pathFromQString(folder + "/" + QString::fromStdString(relative)), relative));
+    }
     QTRY_VERIFY(cards->assets().front().previewIdentity != previewIdentity);
     REQUIRE(QTest::qWaitFor([&]() { return hasSkyPixels(true); }, 3000));
     const auto payload = catalogAssetDragData(texture, session->store().info().id);
@@ -2675,7 +2708,7 @@ TEST_CASE("ProjectWindow")
     wadFile.close();
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Textures"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     const auto entries = require(library->assets());
     REQUIRE(entries.size() == 1);
     require(session->attachLibrary(pathFromQString(folder)));
@@ -2801,7 +2834,7 @@ TEST_CASE("ProjectWindow")
     file.close();
     auto library =
       require(project::AssetLibrary::create(pathFromQString(folder), "Library"));
-    require(library->scan());
+    require(library->importDirectory(library->folder()));
     require(session->attachLibrary(pathFromQString(folder)));
     require(session->save());
     alphaWindow->switchToInfoPanelPage(InfoPanelPage::Assets);

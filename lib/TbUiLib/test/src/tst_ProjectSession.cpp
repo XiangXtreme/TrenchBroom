@@ -206,7 +206,7 @@ struct LibrarySandbox
   void createLibrary(const std::string& name = "Studio") const
   {
     auto library = requireProject(project::AssetLibrary::create(libraryFolder, name));
-    requireProject(library->scan());
+    requireProject(library->importDirectory(library->folder()));
   }
 
   std::vector<project::LibraryAsset> libraryAssets() const
@@ -220,7 +220,8 @@ struct LibrarySandbox
   }
   void rescanLibrary() const
   {
-    requireProject(requireProject(project::AssetLibrary::open(libraryFolder))->scan());
+    requireProject(requireProject(project::AssetLibrary::open(libraryFolder))
+                     ->importDirectory(libraryFolder));
   }
 };
 } // namespace
@@ -1018,7 +1019,7 @@ TEST_CASE("Project terrain bakes captured material and invalidates changed textu
   const auto material =
     requireProject(library->createTerrainMaterial(definition, package));
   CHECK(requireProject(library->readContent(material.id)) == package);
-  requireProject(library->scan());
+  requireProject(library->importDirectory(library->folder()));
   CHECK(requireProject(library->readContent(material.id)) == package);
   requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
   const auto captured =
@@ -1908,7 +1909,7 @@ TEST_CASE("ProjectSessionAssetLibrary")
       otherFolder / "custom.wad",
       requireProject(project::buildGoldSrcWad({miptexFor("WALL01", 16, 64)})));
     auto other = requireProject(project::AssetLibrary::create(otherFolder, "Other"));
-    requireProject(other->scan());
+    requireProject(other->importDirectory(other->folder()));
     const auto otherLibraryId = other->info().id;
     const auto otherWall = [&]() {
       const auto assets = requireProject(other->assets());
@@ -2158,9 +2159,13 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(sandbox.session->updateLibraryAssets({captured.id, unrelated.id}).is_error());
     CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
 
-    // A missing library source also aborts without touching the snapshot.
+    // Only removing the owned catalog asset makes the update unavailable.
     std::filesystem::remove(sandbox.libraryFolder / "custom.wad");
-    sandbox.rescanLibrary();
+    CHECK(
+      updateFor(requireProject(sandbox.session->checkLibraryUpdates()), captured.id).state
+      == project::LibraryUpdateState::NewVersion);
+    auto library = requireProject(project::AssetLibrary::open(sandbox.libraryFolder));
+    requireProject(library->removeAsset(wallLibraryId));
     CHECK(sandbox.session->updateLibraryAssets({captured.id}).is_error());
     CHECK(requireProject(sandbox.session->store().findAsset(captured.id)) == captured);
     CHECK(

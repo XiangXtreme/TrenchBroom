@@ -682,8 +682,8 @@ void AssetInspector::refreshPreview()
       && !m_asset->resource.absolutePath.empty())
       m_studioExternal = loadGoldSrcStudioExternalData(
         m_asset->compatible, m_asset->resource.absolutePath, m_studioExternalFiles);
-    if (auto studio =
-          loadGoldSrcStudioPreviewScene(m_asset->compatible, m_studioExternal))
+    if (
+      auto studio = loadGoldSrcStudioPreviewScene(m_asset->compatible, m_studioExternal))
     {
       m_model = std::move(studio);
       m_studioModel = m_model->studioModel;
@@ -703,9 +703,10 @@ void AssetInspector::refreshPreview()
       m_summary->setText(tr("The studio model has no readable bind pose."));
       return;
     }
-    m_model = loadModelPreviewScene(
-      m_asset->resource.absolutePath.parent_path(),
-      m_asset->resource.absolutePath.filename());
+    if (!m_asset->resource.absolutePath.empty())
+      m_model = loadModelPreviewScene(
+        m_asset->resource.absolutePath.parent_path(),
+        m_asset->resource.absolutePath.filename());
     if (m_model)
     {
       m_modelFrame->setVisible(true);
@@ -925,14 +926,12 @@ void AssetInspector::configureStudioModel()
           m_studioExternal.sequenceGroups
           && sequence.group <= m_studioExternal.sequenceGroups->size()
           && !(*m_studioExternal.sequenceGroups)[sequence.group - 1].empty();
-        suffix = available ? tr(" · external group")
-                           : tr(" · external group missing");
+        suffix = available ? tr(" · external group") : tr(" · external group missing");
       }
-      m_studioSequence->addItem(
-        tr("%1 · %2 frames%3")
-          .arg(label)
-          .arg(qulonglong(sequence.frameCount))
-          .arg(suffix));
+      m_studioSequence->addItem(tr("%1 · %2 frames%3")
+                                  .arg(label)
+                                  .arg(qulonglong(sequence.frameCount))
+                                  .arg(suffix));
     }
   }
   const auto animated = !studio.sequenceList.empty();
@@ -948,8 +947,7 @@ void AssetInspector::configureStudioModel()
   m_studioFrameIndex = 0;
   if (animated)
   {
-    const auto frames =
-      std::max<std::size_t>(1, studio.sequenceList.front().frameCount);
+    const auto frames = std::max<std::size_t>(1, studio.sequenceList.front().frameCount);
     const auto blocker = QSignalBlocker{m_studioFrame};
     m_studioFrame->setRange(0, int(frames) - 1);
     m_studioFrame->setValue(0);
@@ -987,12 +985,11 @@ void AssetInspector::configureStudioModel()
       loadedGroups += group.empty() ? 0 : 1;
   add(
     tr("Sequences"),
-    studio.sequenceGroups > 1
-      ? tr("%1 in %2 external groups (%3 loaded)")
-          .arg(qulonglong(studio.sequences))
-          .arg(qulonglong(studio.sequenceGroups))
-          .arg(qulonglong(loadedGroups))
-      : QString::number(qulonglong(studio.sequences)));
+    studio.sequenceGroups > 1 ? tr("%1 in %2 external groups (%3 loaded)")
+                                  .arg(qulonglong(studio.sequences))
+                                  .arg(qulonglong(studio.sequenceGroups))
+                                  .arg(qulonglong(loadedGroups))
+                              : QString::number(qulonglong(studio.sequences)));
   add(
     tr("Body variants"),
     tr("%1 in %2 part(s)")
@@ -1002,8 +999,8 @@ void AssetInspector::configureStudioModel()
   auto textures = QStringList{};
   for (const auto& texture : studio.textures)
     textures << QString::fromStdString(texture);
-  auto textureList = textures.isEmpty() ? tr("None")
-                                        : textures.join(QStringLiteral(", "));
+  auto textureList =
+    textures.isEmpty() ? tr("None") : textures.join(QStringLiteral(", "));
   if (studio.externalTextures)
     textureList += tr(" (external header)");
   add(tr("Textures"), textureList);
@@ -1076,7 +1073,9 @@ void AssetInspector::showStudioFrame()
 
 void AssetInspector::stepStudioAnimation()
 {
-  if (!m_studioModel || m_studioSequenceIndex >= m_studioModel->sequenceList.size() || !isVisible())
+  if (
+    !m_studioModel || m_studioSequenceIndex >= m_studioModel->sequenceList.size()
+    || !isVisible())
   {
     m_studioTimer->stop();
     m_studioPlay->setChecked(false);

@@ -83,59 +83,61 @@ Result<AssetPreviewKeys> previewKeys(
   return keys;
 }
 
-/**
- * Copies the texture header and animation group files that live beside a GoldSrc model.
- *
- * Importing a lone .mdl used to leave the library with an untextured, bind-pose-only
- * preview. The engine expects these files to be siblings, so importing the model brings
- * its siblings along; existing files and non-MDL sources are ignored.
- */
-void importModelSiblings(
+Result<std::string> importLibraryFile(
   project::AssetLibrary& library,
   const std::filesystem::path& source,
   const std::string& relativePath,
   const bool overwrite)
 {
-  if (librarySubfolderForFile(source) != "models")
-    return;
-  const auto& libraryFolder = library.folder();
-  auto stream = std::ifstream{source, std::ios::binary};
-  if (!stream)
-    return;
-  // Dependency discovery needs only studiohdr_t, regardless of the source's size.
-  auto header = std::array<char, 244>{};
-  if (!stream.read(header.data(), std::streamsize(header.size())))
-    return;
-  const auto dependencies = project::readGoldSrcModelDependencies(
-    std::vector<std::uint8_t>{header.begin(), header.end()});
-  if (dependencies.is_error())
-    return;
-
-  auto names =
-    project::modelAnimationGroupNames(relativePath, dependencies.value().sequenceGroups);
-  if (const auto companion = project::modelCompanionName(
-        std::filesystem::path{relativePath}.filename().string());
-      !companion.empty())
-    names.push_back(companion);
-
-  const auto relative = std::filesystem::path{relativePath};
-  const auto sourceFolder = source.parent_path();
-  for (const auto& name : names)
+  auto files =
+    std::vector<project::AssetLibrary::ImportFile>{{source, relativePath, std::nullopt}};
+  if (librarySubfolderForFile(source) == "models")
   {
-    const auto file = std::filesystem::path{name}.filename();
-    if (file.empty())
-      continue;
-    const auto sourcePath = sourceFolder / file;
-    auto error = std::error_code{};
-    if (!std::filesystem::exists(sourcePath, error) || error)
-      continue;
-    const auto targetRelative = (relative.parent_path() / file).generic_string();
-    if (!overwrite && std::filesystem::exists(libraryFolder / targetRelative, error))
-      continue;
-    if (importFileIntoLibrary(libraryFolder, sourcePath, targetRelative, overwrite)
-          .is_success())
-      (void)library.clearRemovedSource(targetRelative);
+    auto stream = std::ifstream{source, std::ios::binary};
+    auto header = std::array<char, 244>{};
+    if (stream.read(header.data(), std::streamsize(header.size())))
+    {
+      const auto dependencies = project::readGoldSrcModelDependencies(
+        std::vector<std::uint8_t>{header.begin(), header.end()});
+      if (dependencies.is_success())
+      {
+        auto names = project::modelAnimationGroupNames(
+          source.filename().string(), dependencies.value().sequenceGroups);
+        const auto companion = project::modelCompanionName(source.filename().string());
+        if (!companion.empty())
+          names.push_back(companion);
+        const auto existing = library.assets();
+        if (existing.is_error())
+          return std::get<Error>(existing.error());
+        for (const auto& name : names)
+        {
+          const auto file = std::filesystem::path{name}.filename();
+          const auto sourcePath = source.parent_path() / file;
+          if (!std::filesystem::is_regular_file(sourcePath))
+            continue;
+          // Renaming an import also renames its companion's virtual filename.
+          auto targetFile = file;
+          const auto sourceStem = source.stem().string();
+          if (file.string().starts_with(sourceStem))
+            targetFile = std::filesystem::path{relativePath}.stem().string()
+                         + file.string().substr(sourceStem.size());
+          const auto target =
+            (std::filesystem::path{relativePath}.parent_path() / targetFile)
+              .generic_string();
+          if (!overwrite && std::ranges::any_of(existing.value(), [&](const auto& asset) {
+                return asset.virtualPath == target;
+              }))
+            return Error{"A model dependency already uses this import path."};
+          files.push_back({sourcePath, target, std::nullopt});
+        }
+      }
+    }
   }
+  const auto imported = library.importFiles(files, overwrite);
+  if (imported.is_error())
+    return std::get<Error>(imported.error());
+  emit AssetLibraryChanges::instance().changed(QString::fromStdString(library.info().id));
+  return relativePath;
 }
 } // namespace
 
@@ -298,52 +300,24 @@ public:
 
   bool canReveal() const override { return true; }
 
-  std::function<Result<void>()> rescanTask() const override
-  {
-    return [folder = m_library->folder()]() -> Result<void> {
-      auto library = project::AssetLibrary::open(folder);
-      if (library.is_error())
-        return std::get<Error>(library.error());
-      const auto scanned = library.value()->scan();
-      if (scanned.is_error())
-        return std::get<Error>(scanned.error());
-      return {};
-    };
-  }
-
-  Result<void> rescan() override
-  {
-    const auto scanned = m_library->scan();
-    if (scanned.is_error())
-      return std::get<Error>(scanned.error());
-    emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
-    return {};
-  }
-
   Result<std::string> importFile(
     const std::filesystem::path& source, const std::string& relativePath) override
   {
-    auto imported = importFileIntoLibrary(m_library->folder(), source, relativePath);
-    if (imported.is_error())
-      return imported;
-    // Importing a source is an explicit restore: a previously removed asset may return.
-    if (auto cleared = m_library->clearRemovedSource(relativePath); cleared.is_error())
-      return std::get<Error>(cleared.error());
-    importModelSiblings(*m_library, source, relativePath, false);
-    return imported;
+    return importLibraryFile(*m_library, source, relativePath, false);
   }
 
   Result<std::string> replaceFile(
     const std::filesystem::path& source, const std::string& relativePath) override
   {
-    auto imported =
-      importFileIntoLibrary(m_library->folder(), source, relativePath, true);
-    if (imported.is_error())
-      return imported;
-    if (auto cleared = m_library->clearRemovedSource(relativePath); cleared.is_error())
-      return std::get<Error>(cleared.error());
-    importModelSiblings(*m_library, source, relativePath, true);
-    return imported;
+    return importLibraryFile(*m_library, source, relativePath, true);
+  }
+
+  Result<void> setGroups(const std::map<std::string, std::string>& groups) override
+  {
+    auto result = m_library->setGroups(groups);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
   }
 
   Result<bool> convertAsset(const std::string& assetId) override

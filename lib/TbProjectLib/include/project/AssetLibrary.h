@@ -20,26 +20,9 @@
 namespace tb::project
 {
 
-/**
- * An asset library is a folder of GoldSrc sources with its own catalog.
- *
- * The library is deliberately not a project: it owns no map, no editor state and no
- * references. It publishes stable asset identities, immutable content revisions and
- * content hashes so that a project can copy exactly the revisions it uses and stop
- * depending on the library afterwards.
- *
- * The catalog lives in `<folder>/.tbassets` (SQLite). Sources stay where the user put
- * them; the catalog only indexes them. Rescanning is the only way library content
- * changes, and a rescan never touches any project. Revisions are not retained: a changed
- * source or a new conversion replaces the previous content instead of growing a history,
- * and projects detect the change through the content hash.
- *
- * Granularity rules:
- *  - a WAD is a *container*: each miptex entry becomes an independent asset grouped
- *    under the WAD's relative path (for example `custom.wad/WALL01`),
- *  - an image, model, sprite or sound file is one asset,
- *  - non-native formats keep their original bytes and conversion recipe; the
- *    compatible GoldSrc result is produced when the project captures the asset.
+/** A self-contained asset catalog. Imported bytes and dependencies are owned by the
+ * SQLite library; source files are read only during explicit imports. Projects capture
+ * their own independent snapshots of library revisions.
  */
 class AssetLibrary
 {
@@ -62,10 +45,19 @@ public:
   const std::filesystem::path& folder() const;
   const LibraryInfo& info() const;
 
-  // Rescans the folder and advances revision numbers for changed content. Assets that
-  // disappeared are flagged missing instead of deleted, so a project can report the
-  // loss and keep using its own snapshot.
-  Result<LibraryScan> scan();
+  struct ImportFile
+  {
+    std::filesystem::path source;
+    std::string virtualPath;
+    std::optional<std::vector<std::uint8_t>> bytes = std::nullopt;
+  };
+  // Explicit ingestion only. Replacing an existing path preserves its identity and group.
+  Result<LibraryScan> importFiles(
+    const std::vector<ImportFile>& files, bool overwrite = false);
+  Result<LibraryScan> importDirectory(const std::filesystem::path& sourceFolder);
+  Result<void> setGroups(const std::map<std::string, std::string>& groups);
+  Result<void> setGroup(
+    const std::vector<std::string>& assetIds, const std::string& group);
 
   Result<std::vector<LibraryAsset>> assets(
     std::optional<AssetType> type = std::nullopt, const std::string& group = {}) const;
@@ -83,8 +75,8 @@ public:
 
   // Publishes a converted GoldSrc result for an image asset.
   //
-  // The source bytes and their hash stay untouched, so a rescan still recognizes the
-  // file as unchanged; the revision advances so projects see a new library version, and
+  // The source bytes and their hash stay untouched, so explicit reimports recognize
+  // unchanged content; the revision advances so projects see a new library version, and
   // the native format becomes `goldsrc-wad` so captures copy the converted bytes
   // verbatim instead of converting the image again.
   Result<LibraryAsset> publishCompatibleContent(
@@ -98,19 +90,11 @@ public:
   Result<std::vector<AssetDependency>> allDependencies() const;
   Result<std::vector<AssetDependency>> dependents(const std::string& dependencyId) const;
 
-  // Removes the asset from the catalog together with its dependency edges. The source
-  // file on disk is left alone: a container (a WAD) may hold other assets, and deleting
-  // user files is the caller's decision. The removal is remembered, so a later scan does
-  // not silently bring the asset back; importing the source again clears it.
+  // Removes owned assets and their dependency edges. Projects keep their snapshots.
   Result<void> removeAsset(const std::string& assetId);
   // Removes all selected assets in one transaction. If any asset cannot be removed,
   // the catalog remains unchanged.
   Result<void> removeAssets(const std::vector<std::string>& assetIds);
-
-  // Clears the catalog removals recorded for a source. Importing or replacing a source
-  // calls this so its assets can be indexed again; a group whose virtual path prefixes
-  // the imported file is restored too, so re-importing a skybox face revives its group.
-  Result<void> clearRemovedSource(const std::string& sourceRelPath);
 
   struct AssetMetadata
   {
@@ -124,7 +108,7 @@ public:
   Result<void> setFavorite(const std::string& assetId, bool favorite);
   Result<void> setTags(const std::string& assetId, const std::vector<std::string>& tags);
 
-  // Gives the asset a catalog name that a rescan keeps. The engine texture name is
+  // Gives the asset a catalog name that the library keeps. The engine texture name is
   // separate: it lives in the converted miptex and only changes by converting again.
   Result<LibraryAsset> setDisplayName(
     const std::string& assetId, const std::string& name);

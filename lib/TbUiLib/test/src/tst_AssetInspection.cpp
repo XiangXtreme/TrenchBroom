@@ -326,7 +326,7 @@ TEST_CASE("AssetInspection")
     const auto converted = require(img::convertGoldSrcTexture(image, "WALL01"));
     write(folder / "liquids.wad", converted.wad);
     auto library = require(project::AssetLibrary::create(folder, "Textures"));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     const auto entries = require(library->assets());
     REQUIRE(entries.size() == 1);
     REQUIRE(entries.front().nativeFormat == "goldsrc-miptex");
@@ -370,7 +370,7 @@ TEST_CASE("AssetInspection")
     write(folder / "texture.png", png(Qt::red));
     write(folder / "model.mdl", studioModel());
     auto library = require(project::AssetLibrary::create(folder, "Library"));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     const auto assets = require(library->assets());
     REQUIRE(assets.size() == 2);
 
@@ -441,7 +441,7 @@ TEST_CASE("AssetInspection")
     write(root / buildings / "wall.png", png(Qt::red));
     write(root / trees / "tree.mdl", studioModel());
     auto library = require(project::AssetLibrary::create(root, "Folders"));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     const auto assets = require(library->assets());
     REQUIRE(assets.size() == 4);
     auto browser = AssetLibraryWindow{temporary.path(), false};
@@ -513,7 +513,7 @@ TEST_CASE("AssetInspection")
     const auto file = folder / "red.png";
     write(file, png(Qt::red));
     auto library = require(project::AssetLibrary::create(folder, "Library"));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     auto entries = require(library->assets());
     REQUIRE(entries.size() == 1);
     REQUIRE(require(convertLibraryImage(*library, entries.front().id)));
@@ -529,7 +529,7 @@ TEST_CASE("AssetInspection")
     CHECK(
       second.findChild<QComboBox*>("AssetInspector_ContentKind")->currentIndex() == 0);
     write(file, png(Qt::blue));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     CHECK(
       require(inspection::decodeImage(snapshot.original)).pixelColor(0, 0)
       == QColor{Qt::red});
@@ -543,24 +543,21 @@ TEST_CASE("AssetInspection")
       second.findChild<QLabel*>("AssetInspector_Status")->text() == "source unavailable");
     CHECK(second.findChild<QMediaPlayer*>()->sourceDevice() == nullptr);
   }
-  SECTION("rescan tasks own their catalog connection and outlive their source")
+  SECTION("library contents survive deletion of imported files")
   {
     auto temporary = QTemporaryDir{};
     REQUIRE(temporary.isValid());
     const auto folder = pathFromQString(temporary.path());
+    write(folder / "stored.png", png(Qt::red));
     auto library = require(project::AssetLibrary::create(folder, "Library"));
-    REQUIRE(library->scan().is_success());
+    require(library->importDirectory(folder));
+    const auto asset = require(library->assets()).front();
+    std::filesystem::remove(folder / "stored.png");
     auto source = openLocalAssetLibrary(folder);
-    REQUIRE(source);
-    auto scan = source->rescanTask();
-    source.reset();
-    write(folder / "added.png", png(Qt::red));
-    auto future = QtConcurrent::run(std::move(scan));
-    QTRY_VERIFY_WITH_TIMEOUT(future.isFinished(), 15000);
-    REQUIRE(future.result().is_success());
-    const auto assets = require(library->assets());
-    REQUIRE(assets.size() == 1);
-    CHECK(assets.front().virtualPath == "added.png");
+    const auto snapshot = require(inspection::readLibraryAsset(*source, asset));
+    CHECK(snapshot.resource.absolutePath.empty());
+    REQUIRE(inspection::decodeImage(snapshot.original, "image").is_success());
+    CHECK_FALSE(snapshot.resource.missing);
   }
 
   SECTION(
@@ -573,7 +570,7 @@ TEST_CASE("AssetInspection")
     for (auto i = 0; i < 80; ++i)
       write(folder / ("color" + std::to_string(i) + ".png"), red);
     auto library = require(project::AssetLibrary::create(folder, "Library"));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     auto browser = AssetLibraryWindow{temporary.path(), false};
     auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
     auto* search = browser.findChild<QLineEdit*>("AssetLibrarySearch");
@@ -593,14 +590,17 @@ TEST_CASE("AssetInspection")
     const auto blue = png(Qt::blue);
     for (const auto& entry : entries)
       write(folder / entry.sourceContainer, blue);
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     search->setText("color");
     CHECK(thumbnail(0).pixelColor(0, 0) == QColor{Qt::red});
     CHECK(thumbnail(79).pixelColor(0, 0) == QColor{Qt::blue});
 
     auto source = openLocalAssetLibrary(folder);
     REQUIRE(source);
-    REQUIRE(source->rescan().is_success());
+    REQUIRE(source
+              ->replaceFile(
+                folder / entries.front().sourceContainer, entries.front().virtualPath)
+              .is_success());
     QTRY_COMPARE(thumbnail(0).pixelColor(0, 0), QColor{Qt::blue});
     // Metadata edits preserve content and keep the cached thumbnail valid.
     const auto id = entries.front().id;
@@ -617,7 +617,7 @@ TEST_CASE("AssetInspection")
     for (const auto* name : {"one.png", "two.png", "three.png"})
       write(folder / name, png(Qt::red));
     auto library = require(project::AssetLibrary::create(folder, "Library"));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     auto browser = AssetLibraryWindow{temporary.path(), false};
     auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
     auto* convert = browser.findChild<QPushButton*>("AssetLibraryConvert");
@@ -645,7 +645,7 @@ TEST_CASE("AssetInspection")
     for (auto i = 0; i < 20; ++i)
       write(folder / ("broken" + std::to_string(i) + ".png"), {1, 2, 3});
     auto library = require(project::AssetLibrary::create(folder, "First"));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     auto other =
       require(project::AssetLibrary::create(pathFromQString(second.path()), "Second"));
     auto browser = AssetLibraryWindow{first.path(), false};
@@ -696,7 +696,7 @@ TEST_CASE("AssetInspection")
     const auto bytes = studioModel();
     write(folder / "models/test.mdl", bytes);
     write(folder / "models/testT.mdl", bytes);
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
 
     const auto entries = require(library->assets());
     const auto entry = std::ranges::find_if(entries, [](const auto& candidate) {
@@ -719,7 +719,7 @@ TEST_CASE("AssetInspection")
     std::filesystem::create_directories(folder / "env");
     for (const auto face : {"bk", "rt", "lf", "ft", "up", "dn"})
       write(folder / "env" / (std::string{"desert"} + face + ".png"), png(Qt::blue));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
 
     const auto source = openLocalAssetLibrary(folder);
     REQUIRE(source);
@@ -753,7 +753,10 @@ TEST_CASE("AssetInspection")
     // Faces change independently of the manifest revision in both browser hosts.
     for (const auto face : {"bk", "rt", "lf", "ft", "up", "dn"})
       write(folder / "env" / (std::string{"desert"} + face + ".png"), png(Qt::red));
-    REQUIRE(source->rescan().is_success());
+    REQUIRE(project::AssetLibrary::open(pathFromQString(source->location()))
+              .value()
+              ->importDirectory(pathFromQString(source->location()))
+              .is_success());
     CHECK(require(source->assets()).front().revision == entries.front().revision);
     CHECK(
       require(assetPreviewKeys(*source)).at(entries.front().id)
@@ -1334,7 +1337,7 @@ TEST_CASE("AssetInspection")
     for (auto i = size_t{0}; i < colors.size(); ++i)
       write(folder / (std::string{names[i]} + ".png"), png(colors[i], 64));
     auto library = require(project::AssetLibrary::create(folder, "Textures"));
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     for (const auto& asset : require(library->assets()))
       REQUIRE(library->setTags(asset.id, {"terrain"}).is_success());
     auto browser = AssetLibraryWindow{temporary.path(), false};
@@ -1452,7 +1455,7 @@ TEST_CASE("AssetInspection")
     REQUIRE(decoded);
     CHECK_FALSE(decoded->baseLevels[0][0].empty());
     CHECK_FALSE(decoded->pairLevels[0][0].empty());
-    REQUIRE(library->scan().is_success());
+    REQUIRE(library->importDirectory(library->folder()).is_success());
     CHECK(require(library->readContent(materials.front().id)) == package);
     sound->setCurrentIndex(1);
     REQUIRE(browser.revealAsset(library->info().id, materials.front().id).is_success());
@@ -1467,7 +1470,7 @@ TEST_CASE("AssetInspection")
       // Skybox faces remain usable dependencies even when hidden from the asset grid.
       for (const auto* suffix : {"rt", "lf", "ft", "up", "dn"})
         write(folder / (std::string{"texture1"} + suffix + ".png"), png(Qt::green, 64));
-      REQUIRE(library->scan().is_success());
+      REQUIRE(library->importDirectory(library->folder()).is_success());
       auto groupedBrowser = AssetLibraryWindow{temporary.path(), false};
       REQUIRE(groupedBrowser.revealAsset(library->info().id, materials.front().id)
                 .is_success());
@@ -1487,16 +1490,14 @@ TEST_CASE("AssetInspection")
 
       const auto before = require(assetPreviewKeys(*source)).at(materials.front().id);
       REQUIRE(std::filesystem::remove(folder / "texture1bk.png"));
-      REQUIRE(source->rescan().is_success());
-      CHECK(require(assetPreviewKeys(*source)).at(materials.front().id) != before);
-      QTRY_VERIFY(
-        groupedGrid->currentItem()
-        && groupedGrid->currentItem()
-             ->data(AssetLibraryItemDelegate::ThumbnailRole)
-             .value<QPixmap>()
-             .isNull());
+      CHECK(require(assetPreviewKeys(*source)).at(materials.front().id) == before);
+      CHECK_FALSE(groupedGrid->currentItem()
+                    ->data(AssetLibraryItemDelegate::ThumbnailRole)
+                    .value<QPixmap>()
+                    .isNull());
       write(folder / "texture1bk.png", png(Qt::green, 64));
-      REQUIRE(source->rescan().is_success());
+      REQUIRE(
+        source->replaceFile(folder / "texture1bk.png", "texture1bk.png").is_success());
       QTRY_VERIFY(
         groupedGrid->currentItem()
         && !groupedGrid->currentItem()
