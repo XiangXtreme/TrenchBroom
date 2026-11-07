@@ -41,6 +41,8 @@ CollapsibleTitledPanel::CollapsibleTitledPanel(
 {
   setProperty("expanded", m_expanded);
   m_titleBar->setProperty("collapsible", true);
+  m_divider->setObjectName(QStringLiteral("CollapsibleTitledPanel_Divider"));
+  m_panel->setObjectName(QStringLiteral("CollapsibleTitledPanel_Panel"));
 
   auto* sizer = new QVBoxLayout{};
   sizer->setContentsMargins(0, 0, 0, 0);

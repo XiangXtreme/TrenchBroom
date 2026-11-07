@@ -325,6 +325,8 @@ TerrainInspector::TerrainInspector(
   m_creation = creation;
   creation->setObjectName(QStringLiteral("TerrainInspector_Creation"));
   auto* creationLayout = new QVBoxLayout{creation->getPanel()};
+  creationLayout->setContentsMargins(12, 8, 12, 12);
+  creationLayout->setSpacing(8);
   creationLayout->addLayout(createForm);
   creationLayout->addWidget(m_drawNew);
   creationLayout->addWidget(m_convert);
@@ -341,6 +343,8 @@ TerrainInspector::TerrainInspector(
   auto* compilation = new CollapsibleTitledPanel{tr("Compile Settings"), false, this};
   compilation->setObjectName(QStringLiteral("TerrainInspector_Compilation"));
   auto* compilationLayout = new QVBoxLayout{compilation->getPanel()};
+  compilationLayout->setContentsMargins(12, 8, 12, 12);
+  compilationLayout->setSpacing(8);
   compilationLayout->addLayout(m_compileForm);
   compilationLayout->addWidget(m_analyze);
   compilationLayout->addWidget(m_showCuts);
@@ -350,6 +354,8 @@ TerrainInspector::TerrainInspector(
   auto* editing = new CollapsibleTitledPanel{tr("Edit Terrain"), true, this};
   editing->setObjectName(QStringLiteral("TerrainInspector_Editing"));
   auto* editingLayout = new QVBoxLayout{editing->getPanel()};
+  editingLayout->setContentsMargins(12, 8, 12, 12);
+  editingLayout->setSpacing(8);
   editingLayout->addLayout(form);
   editingLayout->addWidget(m_paint);
   editingLayout->addWidget(m_help);
@@ -357,7 +363,8 @@ TerrainInspector::TerrainInspector(
 
   auto* content = new QWidget{};
   auto* sections = new QVBoxLayout{content};
-  sections->setContentsMargins(0, 0, 0, 0);
+  sections->setContentsMargins(8, 8, 8, 12);
+  sections->setSpacing(8);
   sections->addWidget(creation);
   sections->addWidget(editing);
   sections->addWidget(compilation);
