@@ -31,6 +31,7 @@
 #include "mdl/EditorContext.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityNode.h"
+#include "mdl/Grid.h"
 #include "mdl/GroupNode.h"
 #include "mdl/HitAdapter.h"
 #include "mdl/HitFilter.h"
@@ -1516,19 +1517,44 @@ TEST_CASE("Project terrain panel paints a picked brush")
     newThickness->setValue(96);
     drawNew->click();
     REQUIRE(panel->drawingTerrain());
+    const auto oldGridSize = map.grid().size();
+    map.grid().setSize(7);
+    const auto snapped = panel->drawnTerrainBounds({139, 119}, {-119, -139});
+    REQUIRE(snapped);
+    CHECK(snapped->min == vm::vec3d{-128, -128, -64});
+    CHECK(snapped->max == vm::vec3d{128, 128, 32});
+    CHECK_FALSE(panel->drawnTerrainBounds({1, 1}, {2, 2}));
+    map.grid().setSize(oldGridSize);
     terrainMouseEvent(
       &top, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, start);
     top.grabFramebuffer();
     terrainMouseEvent(&top, QEvent::MouseMove, Qt::NoButton, Qt::NoModifier, finish);
     top.grabFramebuffer();
-    const auto* outline = top.findChild<QRubberBand*>();
-    REQUIRE(outline);
-    CHECK(outline->isVisible());
+    const auto preview = window->toolBox().terrainTool().drawPreviewBounds();
+    REQUIRE(preview);
+    CHECK(preview->min == vm::vec3d{-128, -128, -64});
+    CHECK(preview->max == vm::vec3d{128, 128, 32});
+    CHECK(map.selection().groups.front() == group);
+    const auto capturePath = qEnvironmentVariable("TB_TERRAIN_DRAW_CAPTURE_PATH");
+    if (!capturePath.isEmpty())
+    {
+      REQUIRE(top.grabFramebuffer().save(capturePath));
+      auto& previewCamera = static_cast<MapViewBase*>(view)->camera();
+      const auto oldPosition = previewCamera.position();
+      const auto oldDirection = previewCamera.direction();
+      const auto oldUp = previewCamera.up();
+      previewCamera.moveTo(vm::vec3f{384, -384, 320});
+      previewCamera.lookAt(vm::vec3f{0, 0, 0}, vm::vec3f{0, 0, 1});
+      REQUIRE(view->grabFramebuffer().save(capturePath + ".3d.png"));
+      previewCamera.moveTo(oldPosition);
+      previewCamera.setDirection(oldDirection, oldUp);
+    }
     QTest::qWait(110); // Pass the editor's accidental-drag threshold.
     terrainMouseEvent(
       &top, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoModifier, finish);
     top.grabFramebuffer();
     CHECK_FALSE(panel->drawingTerrain());
+    CHECK_FALSE(window->toolBox().terrainTool().drawPreviewBounds());
     REQUIRE(map.selection().groups.size() == 1);
     auto* created = map.selection().groups.front();
     const auto newRegion =
@@ -1538,6 +1564,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
     CHECK(newRegion.heightField->rows == 4);
     CHECK(newRegion.heightField->bottom == -64);
     CHECK(newRegion.heightField->heights.front() == 32);
+    CHECK(created->logicalBounds() == *preview);
     CHECK(terrainSurfaces(*created, newRegion).is_success());
     map.undoCommand();
     CHECK(map.selection().groups.front() == group);
@@ -1552,6 +1579,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
     top.grabFramebuffer();
     CHECK(panel->drawingTerrain());
     CHECK_FALSE(window->toolBox().terrainTool().interacting());
+    CHECK_FALSE(window->toolBox().terrainTool().drawPreviewBounds());
     QTest::keyClick(&top, Qt::Key_Escape);
     top.grabFramebuffer();
     CHECK_FALSE(panel->drawingTerrain());

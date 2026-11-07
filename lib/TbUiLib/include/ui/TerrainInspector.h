@@ -14,6 +14,8 @@
 #include "ui/TerrainExport.h"
 #include "ui/TerrainRegion.h"
 
+#include "vm/bbox.h"
+
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -148,6 +150,12 @@ public:
     const mdl::PickResult& pick,
     const QPointF& point) const;
   bool drawingTerrain() const;
+  std::optional<vm::bbox3d> drawnTerrainBounds(
+    const vm::vec2d& first, const vm::vec2d& second) const;
+  void renderDrawnTerrain(
+    render::RenderContext& context,
+    render::RenderBatch& batch,
+    const vm::bbox3d& bounds) const;
   void createDrawnTerrain(const vm::vec2d& first, const vm::vec2d& second);
   void cancelDrawing();
   bool stroking() const;

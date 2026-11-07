@@ -23,6 +23,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include "base/PreferenceManager.h"
 #include "gl/Camera.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
@@ -40,10 +41,12 @@
 #include "mdl/PickResult.h"
 #include "mdl/TransactionScope.h"
 #include "mdl/WorldNode.h"
+#include "prefs/Preferences.h"
 #include "project/ProjectStore.h"
 #include "render/RenderContext.h"
 #include "render/RenderService.h"
 #include "render/RenderTiming.h"
+#include "render/SelectionBoundsRenderer.h"
 #include "ui/AppController.h"
 #include "ui/AssetLibraryWindow.h"
 #include "ui/MapDocument.h"
@@ -1402,18 +1405,93 @@ bool TerrainInspector::drawingTerrain() const
          && m_toolBox->terrainTool().mode() == TerrainToolMode::Draw;
 }
 
+std::optional<vm::bbox3d> TerrainInspector::drawnTerrainBounds(
+  const vm::vec2d& first, const vm::vec2d& second) const
+{
+  const auto spacing = m_gridSpacing->currentData().toDouble();
+  const auto& grid = m_document.map().grid();
+  const auto increment = grid.snap() ? std::max(spacing, grid.actualSize()) : spacing;
+  const auto snap = [increment](const double value) {
+    return std::round(value / increment) * increment;
+  };
+  const auto height = double(m_newHeight->value());
+  const auto bounds = vm::bbox3d{
+    {snap(std::min(first.x(), second.x())),
+     snap(std::min(first.y(), second.y())),
+     height - double(m_newThickness->value())},
+    {snap(std::max(first.x(), second.x())),
+     snap(std::max(first.y(), second.y())),
+     height}};
+  if (bounds.is_empty() || !m_document.map().worldBounds().contains(bounds))
+    return std::nullopt;
+  return bounds;
+}
+
+void TerrainInspector::renderDrawnTerrain(
+  render::RenderContext& context,
+  render::RenderBatch& batch,
+  const vm::bbox3d& bounds) const
+{
+  auto renderer = render::RenderService{context, batch};
+  renderer.setShowOccludedObjectsTransparent();
+  renderer.setShowBackfaces();
+  const auto spacing = m_gridSpacing->currentData().toDouble();
+  const auto columns = int(std::lround(bounds.size().x() / spacing));
+  const auto rows = int(std::lround(bounds.size().y() / spacing));
+  const auto valid = double(columns) * double(rows) * 2.0 <= MaxTerrainBrushes;
+  const auto color =
+    valid ? pref(Preferences::SelectedEdgeColor) : Color{RgbaF{1, 0.2f, 0.2f, 1}};
+  const auto a = vm::vec3f{vm::vec3d{bounds.min.x(), bounds.min.y(), bounds.max.z()}};
+  const auto b = vm::vec3f{vm::vec3d{bounds.max.x(), bounds.min.y(), bounds.max.z()}};
+  const auto c = vm::vec3f{bounds.max};
+  const auto d = vm::vec3f{vm::vec3d{bounds.min.x(), bounds.max.y(), bounds.max.z()}};
+  const auto down = vm::vec3f{0, 0, -float(bounds.size().z())};
+  renderer.setForegroundColor(RgbaF{color.to<RgbF>(), 0.25f});
+  renderer.renderFilledPolygon({a, b, c, d});
+  renderer.renderFilledPolygon({a + down, b + down, b, a});
+  renderer.renderFilledPolygon({b + down, c + down, c, b});
+  renderer.renderFilledPolygon({c + down, d + down, d, c});
+  renderer.renderFilledPolygon({d + down, a + down, a, d});
+  renderer.setForegroundColor(color);
+  renderer.renderBounds(vm::bbox3f{bounds});
+  // Keep preview work bounded even when the proposed rectangle exceeds the brush budget.
+  if (valid)
+  {
+    auto lines = std::vector<vm::vec3f>{};
+    for (auto column = 0; column <= columns; ++column)
+    {
+      const auto x = float(bounds.min.x() + column * spacing);
+      lines.insert(lines.end(), {{x, a.y(), a.z()}, {x, d.y(), a.z()}});
+    }
+    for (auto row = 0; row <= rows; ++row)
+    {
+      const auto y = float(bounds.min.y() + row * spacing);
+      lines.insert(lines.end(), {{a.x(), y, a.z()}, {b.x(), y, a.z()}});
+      if (row < rows)
+        for (auto column = 0; column < columns; ++column)
+        {
+          const auto x = float(bounds.min.x() + column * spacing);
+          lines.insert(
+            lines.end(),
+            {{x, y + float(spacing), a.z()}, {x + float(spacing), y, a.z()}});
+        }
+    }
+    renderer.renderLines(lines);
+  }
+  auto dimensions = render::SelectionBoundsRenderer{bounds};
+  dimensions.render(context, batch);
+}
+
 void TerrainInspector::createDrawnTerrain(const vm::vec2d& first, const vm::vec2d& second)
 {
   if (!drawingTerrain())
     return;
   const auto spacing = m_gridSpacing->currentData().toDouble();
-  const auto snap = [spacing](const vm::vec2d& point) {
-    return vm::vec2d{
-      std::round(point.x() / spacing) * spacing,
-      std::round(point.y() / spacing) * spacing};
-  };
-  const auto start = snap(first);
-  const auto finish = snap(second);
+  const auto bounds = drawnTerrainBounds(first, second);
+  if (!bounds)
+    return;
+  const auto start = vm::vec2d{bounds->min.x(), bounds->min.y()};
+  const auto finish = vm::vec2d{bounds->max.x(), bounds->max.y()};
   const auto large =
     std::abs(finish.x() - start.x()) > TerrainRegion::Width * TerrainRegion::UnitsPerTexel
     || std::abs(finish.y() - start.y())

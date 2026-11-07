@@ -4,7 +4,6 @@
  */
 #include "ui/TerrainTool.h"
 
-#include <QRubberBand>
 #include <QWidget>
 
 #include "gl/Camera.h"
@@ -102,10 +101,8 @@ bool TerrainTool::begin(const InputState& input, QWidget& view, const bool persp
       return false;
     const auto& ray = input.pickRay();
     m_origin = {ray.origin.x(), ray.origin.y()};
-    m_start = point;
-    m_outline = new QRubberBand{QRubberBand::Rectangle, &view};
-    m_outline->setGeometry(QRect{point.toPoint(), point.toPoint()});
-    m_outline->show();
+    m_current = m_origin;
+    m_drawing = true;
   }
   else
   {
@@ -124,8 +121,8 @@ void TerrainTool::update(const InputState& input)
   if (!m_view || !m_inspector)
     return;
   const auto point = QPointF{input.mouseX(), input.mouseY()};
-  if (m_outline)
-    m_outline->setGeometry(QRect{m_start.toPoint(), point.toPoint()}.normalized());
+  if (m_drawing)
+    m_current = {input.pickRay().origin.x(), input.pickRay().origin.y()};
   else if (m_inspector->vertexInteracting())
     m_inspector->moveVertexInteraction(point);
   else if (m_inspector->stroking())
@@ -137,10 +134,9 @@ void TerrainTool::end(const InputState& input)
   if (!m_view || !m_inspector)
     return;
   m_view.clear();
-  if (m_outline)
+  if (m_drawing)
   {
-    delete m_outline.data();
-    m_outline.clear();
+    m_drawing = false;
     const auto& ray = input.pickRay();
     m_inspector->createDrawnTerrain(m_origin, {ray.origin.x(), ray.origin.y()});
   }
@@ -151,12 +147,23 @@ void TerrainTool::end(const InputState& input)
     m_inspector->endStroke(true);
   refreshViews();
 }
+std::optional<vm::bbox3d> TerrainTool::drawPreviewBounds() const
+{
+  return m_drawing && m_inspector ? m_inspector->drawnTerrainBounds(m_origin, m_current)
+                                  : std::nullopt;
+}
+void TerrainTool::renderDrawPreview(
+  render::RenderContext& context, render::RenderBatch& batch) const
+{
+  if (const auto bounds = drawPreviewBounds())
+    m_inspector->renderDrawnTerrain(context, batch, *bounds);
+}
+
 bool TerrainTool::cancelInteraction()
 {
   const auto hadInteraction = interacting();
   m_view.clear();
-  delete m_outline.data();
-  m_outline.clear();
+  m_drawing = false;
   if (m_inspector)
   {
     m_inspector->cancelVertexInteraction();

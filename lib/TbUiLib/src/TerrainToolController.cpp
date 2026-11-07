@@ -98,6 +98,7 @@ bool TerrainToolController::cancel()
 void TerrainToolController::render(
   const InputState& input, render::RenderContext& context, render::RenderBatch& batch)
 {
+  m_tool.renderDrawPreview(context, batch);
   if (const auto* inspector = m_tool.inspector())
   {
     inspector->renderVertices(

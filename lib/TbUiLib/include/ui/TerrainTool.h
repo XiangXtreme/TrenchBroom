@@ -4,15 +4,22 @@
  */
 #pragma once
 
-#include <QPointF>
 #include <QPointer>
 
 #include "ui/Tool.h"
 
+#include "vm/bbox.h"
 #include "vm/vec.h"
 
+#include <optional>
+
+namespace tb::render
+{
+class RenderContext;
+class RenderBatch;
+} // namespace tb::render
+
 class QWidget;
-class QRubberBand;
 
 namespace tb::ui
 {
@@ -37,8 +44,8 @@ private:
   TerrainToolMode m_lastMode = TerrainToolMode::Draw;
   QPointer<TerrainInspector> m_inspector;
   QPointer<QWidget> m_view;
-  QPointer<QRubberBand> m_outline;
-  QPointF m_start;
+  bool m_drawing = false;
+  vm::vec2d m_current;
   vm::vec2d m_origin;
 
 public:
@@ -56,6 +63,9 @@ public:
   void update(const InputState& input);
   void end(const InputState& input);
   bool cancelInteraction();
+  std::optional<vm::bbox3d> drawPreviewBounds() const;
+  void renderDrawPreview(
+    render::RenderContext& context, render::RenderBatch& batch) const;
 
 private:
   friend class MapViewToolBox;
