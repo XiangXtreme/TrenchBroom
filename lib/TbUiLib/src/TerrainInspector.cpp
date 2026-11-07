@@ -146,6 +146,7 @@ TerrainInspector::TerrainInspector(
   m_status = new QLabel{this};
   m_status->setObjectName(QStringLiteral("TerrainInspector_Status"));
   m_status->setWordWrap(true);
+  m_status->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
   m_help = new QLabel{this};
   m_help->setObjectName(QStringLiteral("TerrainInspector_Help"));
   m_help->setWordWrap(true);
@@ -354,6 +355,11 @@ TerrainInspector::TerrainInspector(
   editingLayout->addWidget(m_help);
   editingLayout->addWidget(m_openLibrary);
 
+  // Inspector sections follow their content height, including when collapsed.
+  // Only the space below them grows with the viewport.
+  for (auto* section : {creation, editing, compilation})
+    section->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+
   auto* content = new QWidget{};
   auto* sections = new QVBoxLayout{content};
   sections->setContentsMargins(0, 0, 0, 0);
@@ -368,7 +374,7 @@ TerrainInspector::TerrainInspector(
   scroll->setWidget(content);
   auto* layout = new QVBoxLayout{};
   layout->addWidget(m_status);
-  layout->addWidget(scroll);
+  layout->addWidget(scroll, 1);
   setLayout(layout);
 
   connect(m_create, &QPushButton::clicked, this, &TerrainInspector::createRegion);

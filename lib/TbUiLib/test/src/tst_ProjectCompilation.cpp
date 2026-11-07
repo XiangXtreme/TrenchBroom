@@ -853,7 +853,30 @@ void testTerrainPanelInteraction(MapWindow* window, TerrainInspector* panel)
     auto* scroll = panel->findChild<QScrollArea*>("TerrainInspector_Scroll");
     REQUIRE(scroll);
     CHECK(scroll->horizontalScrollBar()->maximum() == 0);
+    auto* creation =
+      panel->findChild<CollapsibleTitledPanel*>("TerrainInspector_Creation");
+    auto* editing = panel->findChild<CollapsibleTitledPanel*>("TerrainInspector_Editing");
+    REQUIRE(creation);
+    REQUIRE(editing);
+    creation->collapse();
+    editing->collapse();
+    compile->collapse();
+    REQUIRE(QTest::qWaitFor(
+      [&] { return compile->height() <= compile->sizeHint().height(); }, 2000));
+    const auto compactHeight = compile->height();
+    CHECK(compactHeight <= compile->sizeHint().height());
+    CHECK(editing->height() == compactHeight);
+    CHECK(creation->height() == compactHeight);
+    // Test the user's all-collapsed case as well as expanding and collapsing again.
+    CHECK(compile->geometry().bottom() < scroll->viewport()->height() / 2);
     const auto capturePath = qEnvironmentVariable("TB_TERRAIN_PANEL_CAPTURE_PATH");
+    if (!capturePath.isEmpty())
+      REQUIRE(panel->grab().save(capturePath + ".collapsed.png"));
+    editing->expand();
+    compile->expand();
+    QApplication::processEvents();
+    CHECK(creation->height() == compactHeight);
+    CHECK(scroll->horizontalScrollBar()->maximum() == 0);
     if (!capturePath.isEmpty())
       REQUIRE(panel->grab().save(capturePath));
   }
