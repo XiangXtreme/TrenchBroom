@@ -8773,6 +8773,17 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
             <source>Exported %1 terrain top faces · %2 WAD textures · %3 MB</source>
             <translation>已导出 %1 个地形顶面 · %2 张 WAD 纹理 · %3 MB</translation>
         </message>
+        <message><source>Compile as brush entity</source><translation>编译时合并为刷子实体</translation></message>
+        <message><source>Create Terrain</source><translation>创建地形</translation></message>
+        <message><source>Compile Settings</source><translation>编译设置</translation></message>
+        <message><source>Edit Terrain</source><translation>编辑地形</translation></message>
+        <message><source>Finish Editing</source><translation>结束编辑</translation></message>
+        <message><source>Finish Drawing</source><translation>结束框选</translation></message>
+        <message><source>Choose an edit mode, then start editing the selected terrain.</source><translation>选择编辑模式，然后开始编辑选中的地形。</translation></message>
+        <message><source>Sculpt: %1. Drag in the 3D view; Esc cancels the stroke.</source><translation>雕刻：%1。在三维视图中拖动；Esc 取消本次笔触。</translation></message>
+        <message><source>Paint the selected slot in the 3D view; Esc cancels the stroke.</source><translation>在三维视图中绘制选中的材质槽；Esc 取消本次笔触。</translation></message>
+        <message><source>Terrain changed. Analyze again to update the statistics.</source><translation>地形已更改，请重新分析以更新统计信息。</translation></message>
+        <message><source>Entity class</source><translation>实体类型</translation></message>
     </context>
     <context>
         <name>tb::ui::CreateTerrainMaterialDialog</name>

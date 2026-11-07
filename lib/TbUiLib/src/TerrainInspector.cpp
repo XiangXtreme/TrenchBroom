@@ -18,6 +18,7 @@
 #include <QPushButton>
 #include <QRubberBand>
 #include <QScopeGuard>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
@@ -51,6 +52,7 @@
 #include "render/SelectionBoundsRenderer.h"
 #include "ui/AppController.h"
 #include "ui/AssetLibraryWindow.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/ProjectSession.h"
@@ -144,6 +146,9 @@ TerrainInspector::TerrainInspector(
   m_status = new QLabel{this};
   m_status->setObjectName(QStringLiteral("TerrainInspector_Status"));
   m_status->setWordWrap(true);
+  m_help = new QLabel{this};
+  m_help->setObjectName(QStringLiteral("TerrainInspector_Help"));
+  m_help->setWordWrap(true);
 
   m_editMode = new QComboBox{this};
   m_editMode->setObjectName(QStringLiteral("TerrainInspector_EditMode"));
@@ -195,7 +200,7 @@ TerrainInspector::TerrainInspector(
   m_newThickness->setValue(64);
   m_newThickness->setSuffix(tr(" units"));
 
-  m_brushEntity = new QCheckBox{tr("Brush entity"), this};
+  m_brushEntity = new QCheckBox{tr("Compile as brush entity"), this};
   m_brushEntity->setObjectName(QStringLiteral("TerrainInspector_BrushEntity"));
   m_brushEntityClass = new QComboBox{this};
   m_brushEntityClass->setObjectName(QStringLiteral("TerrainInspector_BrushEntityClass"));
@@ -226,6 +231,8 @@ TerrainInspector::TerrainInspector(
   m_hardness->setRange(0, 100);
   m_hardness->setValue(35);
   m_hardness->setSuffix(QStringLiteral("%"));
+  for (auto i = size_t{1}; i < m_brushSettings.size(); ++i)
+    m_brushSettings[i].strength = 25;
 
   m_faceBudget = new QSpinBox{};
   m_faceBudget->setObjectName(QStringLiteral("TerrainInspector_FaceBudget"));
@@ -293,13 +300,10 @@ TerrainInspector::TerrainInspector(
   m_generate->setObjectName(QStringLiteral("TerrainInspector_ExportSnapshot"));
 
   auto* form = new QFormLayout{};
+  form->setRowWrapPolicy(QFormLayout::WrapLongRows);
   m_form = form;
   form->addRow(tr("Edit mode"), m_editMode);
   form->addRow(tr("Sculpt tool"), m_sculptMode);
-  form->addRow(tr("Grid spacing"), m_gridSpacing);
-  form->addRow(tr("New terrain height"), m_newHeight);
-  form->addRow(tr("New terrain thickness"), m_newThickness);
-  form->addRow(m_brushEntity, m_brushEntityClass);
   form->addRow(m_lockEdges);
   form->addRow(m_softSelection);
   form->addRow(m_selectOccluded);
@@ -310,33 +314,85 @@ TerrainInspector::TerrainInspector(
   form->addRow(tr("Brush radius"), m_radius);
   form->addRow(tr("Brush strength"), m_strength);
   form->addRow(tr("Brush hardness"), m_hardness);
-  form->addRow(tr("Extra top face limit"), m_faceBudget);
-  form->addRow(tr("Minimum top face width"), m_minFaceWidth);
-  form->addRow(tr("Terrain WAD limit"), m_wadBudget);
-  form->addRow(tr("Local patch density"), m_patchDensity);
 
+  auto* createForm = new QFormLayout{};
+  createForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+  createForm->addRow(tr("Grid spacing"), m_gridSpacing);
+  createForm->addRow(tr("New terrain height"), m_newHeight);
+  createForm->addRow(tr("New terrain thickness"), m_newThickness);
+  auto* creation = new CollapsibleTitledPanel{tr("Create Terrain"), false, this};
+  m_creation = creation;
+  creation->setObjectName(QStringLiteral("TerrainInspector_Creation"));
+  auto* creationLayout = new QVBoxLayout{creation->getPanel()};
+  creationLayout->addLayout(createForm);
+  creationLayout->addWidget(m_drawNew);
+  creationLayout->addWidget(m_convert);
+  creationLayout->addWidget(m_create);
+
+  m_compileForm = new QFormLayout{};
+  m_compileForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+  m_compileForm->addRow(m_brushEntity);
+  m_compileForm->addRow(tr("Entity class"), m_brushEntityClass);
+  m_compileForm->addRow(tr("Extra top face limit"), m_faceBudget);
+  m_compileForm->addRow(tr("Minimum top face width"), m_minFaceWidth);
+  m_compileForm->addRow(tr("Terrain WAD limit"), m_wadBudget);
+  m_compileForm->addRow(tr("Local patch density"), m_patchDensity);
+  auto* compilation = new CollapsibleTitledPanel{tr("Compile Settings"), false, this};
+  compilation->setObjectName(QStringLiteral("TerrainInspector_Compilation"));
+  auto* compilationLayout = new QVBoxLayout{compilation->getPanel()};
+  compilationLayout->addLayout(m_compileForm);
+  compilationLayout->addWidget(m_analyze);
+  compilationLayout->addWidget(m_showCuts);
+  compilationLayout->addWidget(m_estimate);
+  compilationLayout->addWidget(m_generate);
+
+  auto* editing = new CollapsibleTitledPanel{tr("Edit Terrain"), true, this};
+  editing->setObjectName(QStringLiteral("TerrainInspector_Editing"));
+  auto* editingLayout = new QVBoxLayout{editing->getPanel()};
+  editingLayout->addLayout(form);
+  editingLayout->addWidget(m_paint);
+  editingLayout->addWidget(m_help);
+  editingLayout->addWidget(m_openLibrary);
+
+  auto* content = new QWidget{};
+  auto* sections = new QVBoxLayout{content};
+  sections->setContentsMargins(0, 0, 0, 0);
+  sections->addWidget(creation);
+  sections->addWidget(editing);
+  sections->addWidget(compilation);
+  sections->addStretch();
+  auto* scroll = new QScrollArea{this};
+  scroll->setObjectName(QStringLiteral("TerrainInspector_Scroll"));
+  scroll->setWidgetResizable(true);
+  scroll->setFrameShape(QFrame::NoFrame);
+  scroll->setWidget(content);
   auto* layout = new QVBoxLayout{};
   layout->addWidget(m_status);
-  layout->addWidget(m_create);
-  layout->addLayout(form);
-  layout->addWidget(m_convert);
-  layout->addWidget(m_drawNew);
-  layout->addWidget(m_paint);
-  layout->addWidget(m_openLibrary);
-  layout->addWidget(m_analyze);
-  layout->addWidget(m_showCuts);
-  layout->addWidget(m_estimate);
-  layout->addWidget(m_generate);
-  layout->addStretch();
+  layout->addWidget(scroll);
   setLayout(layout);
 
   connect(m_create, &QPushButton::clicked, this, &TerrainInspector::createRegion);
   connect(m_convert, &QPushButton::clicked, this, &TerrainInspector::convertSelection);
   connect(m_editMode, &QComboBox::currentIndexChanged, this, [this] {
+    const auto wasEditing = m_toolBox && m_toolBox->terrainToolActive();
+    // Deactivation notifies the panel synchronously. Keep the requested page while
+    // cancelling a stroke, then activate its tool after the controls are refreshed.
     if (m_toolBox)
       m_toolBox->setTerrainMode(TerrainToolMode::None);
-    updateModeControls();
+    updateBrushSettings();
     refresh();
+    if (wasEditing && m_toolBox)
+      m_toolBox->setTerrainMode(
+        m_editMode->currentIndex() == 2   ? TerrainToolMode::Vertices
+        : m_editMode->currentIndex() == 1 ? TerrainToolMode::Sculpt
+                                          : TerrainToolMode::Paint);
+    refreshViews();
+  });
+  connect(m_sculptMode, &QComboBox::currentIndexChanged, this, [this] {
+    if (m_toolBox)
+      m_toolBox->terrainTool().cancelInteraction();
+    updateBrushSettings();
+    updateToolHelp();
     refreshViews();
   });
   connect(m_generate, &QPushButton::clicked, this, &TerrainInspector::generate);
@@ -428,8 +484,14 @@ TerrainInspector::TerrainInspector(
   connect(m_selectOccluded, &QCheckBox::toggled, this, selectionSettingsChanged);
   connect(m_softRadius, &QSpinBox::valueChanged, this, selectionSettingsChanged);
   connect(m_softHardness, &QSpinBox::valueChanged, this, selectionSettingsChanged);
-  connect(m_radius, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
-  connect(m_hardness, &QSpinBox::valueChanged, this, [this] { refreshViews(); });
+  const auto brushSettingsChanged = [this] {
+    m_brushSettings[m_brushSettingsIndex] = {
+      m_radius->value(), m_strength->value(), m_hardness->value()};
+    refreshViews();
+  };
+  connect(m_radius, &QSpinBox::valueChanged, this, brushSettingsChanged);
+  connect(m_strength, &QSpinBox::valueChanged, this, brushSettingsChanged);
+  connect(m_hardness, &QSpinBox::valueChanged, this, brushSettingsChanged);
   connect(m_lockEdges, &QCheckBox::toggled, this, [this] {
     if (m_toolBox && m_toolBox->dragging())
       m_toolBox->cancelMouseDrag();
@@ -637,18 +699,10 @@ void TerrainInspector::updateModeControls()
   m_selectOccluded->setEnabled(m_canEditHeightField);
   m_softRadius->setEnabled(m_canEditHeightField);
   m_softHardness->setEnabled(m_canEditHeightField);
-  if (vertexEditing())
-    m_status->setText(
-      soft ? tr("Drag the terrain surface to move vertices within the sphere. Orange "
-                "shows the influence; Esc cancels the drag.")
-           : tr("Click or box-select vertices, then drag along the height direction. "
-                "Hold Ctrl or Shift to add to the selection."));
   m_form->setRowVisible(m_sculptMode, sculpt && !drawing);
   m_form->setRowVisible(m_lockEdges, (sculpt && !drawing) || vertices);
-  m_form->setRowVisible(m_gridSpacing, sculpt && (!hasHeightField || drawing));
-  m_form->setRowVisible(m_newHeight, drawing);
-  m_form->setRowVisible(m_newThickness, drawing);
-  m_form->setRowVisible(m_brushEntityClass, sculpt && (drawing || hasHeightField));
+  m_compileForm->setRowVisible(m_brushEntityClass, drawing || hasHeightField);
+  m_compileForm->setRowVisible(m_brushEntity, drawing || hasHeightField);
   m_brushEntity->setEnabled(
     m_brushEntityClass->count() > 0 && (drawing || m_canEditHeightField));
   m_brushEntityClass->setEnabled(
@@ -658,23 +712,66 @@ void TerrainInspector::updateModeControls()
   m_form->setRowVisible(m_radius, !vertices && !drawing);
   m_form->setRowVisible(m_strength, !vertices && !drawing);
   m_form->setRowVisible(m_hardness, !vertices && !drawing);
-  m_form->setRowVisible(m_faceBudget, material);
-  m_form->setRowVisible(m_wadBudget, material);
-  m_form->setRowVisible(m_minFaceWidth, material);
-  m_form->setRowVisible(m_patchDensity, material);
-  m_create->setVisible(material);
-  m_convert->setVisible(sculpt && !hasHeightField && !drawing);
-  m_drawNew->setVisible(sculpt);
+  m_create->setVisible(!group || group->group().terrainPaint().empty());
+  m_convert->setVisible(!hasHeightField && !drawing);
   m_paint->setVisible(!drawing);
   m_openLibrary->setVisible(material);
-  m_analyze->setVisible(material);
-  m_showCuts->setVisible(material);
-  m_estimate->setVisible(material);
-  m_generate->setVisible(material);
   m_paint->setText(
-    vertices ? tr("Edit Terrain Vertices")
-    : sculpt ? tr("Sculpt Terrain")
-             : tr("Paint Terrain"));
+    m_paint->isChecked() ? tr("Finish Editing")
+    : vertices           ? tr("Edit Terrain Vertices")
+    : sculpt             ? tr("Sculpt Terrain")
+                         : tr("Paint Terrain"));
+  m_drawNew->setText(drawing ? tr("Finish Drawing") : tr("Draw New Terrain"));
+  updateToolHelp();
+}
+
+void TerrainInspector::updateBrushSettings()
+{
+  // Vertex editing has separate selection controls and does not replace the last brush.
+  if (m_editMode->currentIndex() == 2)
+    return;
+  const auto index = m_editMode->currentIndex() == 0
+                       ? size_t{0}
+                       : size_t(m_sculptMode->currentIndex() + 1);
+  m_brushSettingsIndex = index;
+  const auto& settings = m_brushSettings[index];
+  const auto radiusBlocker = QSignalBlocker{m_radius};
+  const auto strengthBlocker = QSignalBlocker{m_strength};
+  const auto hardnessBlocker = QSignalBlocker{m_hardness};
+  m_radius->setValue(settings.radius);
+  m_strength->setValue(settings.strength);
+  m_hardness->setValue(settings.hardness);
+}
+
+void TerrainInspector::updateToolHelp()
+{
+  if (drawingTerrain())
+    m_help->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
+  else if (!m_paint->isChecked())
+    m_help->setText(tr("Choose an edit mode, then start editing the selected terrain."));
+  else if (m_editMode->currentIndex() == 2)
+    m_help->setText(
+      m_softSelection->isChecked()
+        ? tr("Drag the terrain surface to move vertices within the sphere. Orange "
+             "shows the influence; Esc cancels the drag.")
+        : tr("Click or box-select vertices, then drag along the height direction. "
+             "Hold Ctrl or Shift to add to the selection."));
+  else if (m_editMode->currentIndex() == 1)
+    m_help->setText(tr("Sculpt: %1. Drag in the 3D view; Esc cancels the stroke.")
+                      .arg(m_sculptMode->currentText()));
+  else
+    m_help->setText(
+      tr("Paint the selected slot in the 3D view; Esc cancels the stroke."));
+}
+
+void TerrainInspector::invalidateAnalysis()
+{
+  if (m_cutPreviewGroup)
+    m_estimate->setText(tr("Terrain changed. Analyze again to update the statistics."));
+  m_cutPreview.clear();
+  m_cutPreviewGroup.reset();
+  m_showCuts->setChecked(false);
+  m_showCuts->setEnabled(false);
 }
 
 void TerrainInspector::refresh()
@@ -689,10 +786,6 @@ void TerrainInspector::refresh()
   m_canPaint = false;
   m_canEditHeightField = false;
   render::RenderTiming::count("terrain.inspector_refreshes", 1);
-  m_cutPreview.clear();
-  m_cutPreviewGroup.reset();
-  m_showCuts->setChecked(false);
-  m_showCuts->setEnabled(false);
   const auto& map = m_document.map();
   const auto supported = m_app.projectFor(m_document)
                          && map.gameInfo().gameConfig.name == "Half-Life"
@@ -706,8 +799,16 @@ void TerrainInspector::refresh()
   }
   if (m_sculptStroke && (!group || group->persistentId() != m_strokeGroup))
     endStroke(false);
-  m_refreshedGroup = group ? group->persistentId() : std::nullopt;
-  m_refreshedPaint = group ? terrainGroupRevision(*group) : std::string{};
+  const auto groupId = group ? group->persistentId() : std::nullopt;
+  const auto revision = group ? terrainGroupRevision(*group) : std::string{};
+  if (m_refreshedGroup != groupId || m_refreshedPaint != revision)
+  {
+    invalidateAnalysis();
+    if (m_refreshedGroup != groupId)
+      m_estimate->clear();
+  }
+  m_refreshedGroup = groupId;
+  m_refreshedPaint = revision;
   const auto hasRegion = group && !group->group().terrainPaint().empty();
   const auto editable = group && terrainEditable(map, *group);
   const auto& selection = map.selection();
@@ -731,8 +832,10 @@ void TerrainInspector::refresh()
   m_minFaceWidth->setEnabled(hasRegion && editable);
   m_patchDensity->setEnabled(hasRegion && editable);
   m_analyze->setEnabled(hasRegion);
-  m_estimate->setText(
-    hasRegion ? tr("Analyze to preview generated terrain statistics.") : QString{});
+  if (!hasRegion)
+    m_estimate->clear();
+  else if (m_estimate->text().isEmpty())
+    m_estimate->setText(tr("Analyze to preview generated terrain statistics."));
   m_openLibrary->setEnabled(supported);
   updateModeControls();
 
@@ -821,7 +924,10 @@ void TerrainInspector::refresh()
   }
   m_refreshingMaterial = false;
 
+  const auto previousPreview = m_previewIdentity;
   updateSlotLabels(region.value().materialAssetId);
+  if (previousPreview != m_previewIdentity || !m_materialPreviewValid)
+    invalidateAnalysis();
 
   if (foundIndex == -1 || !m_materialPreviewValid)
   {
@@ -858,10 +964,6 @@ void TerrainInspector::refresh()
   }
   if (m_drawNew->isChecked())
     m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
-  else if (vertexEditing())
-    m_status->setText(
-      tr("Click or box-select vertices, then drag vertically. Hold Ctrl or Shift to add "
-         "to the selection."));
   else
     m_status->setText(tr("%1 · %2 source top faces")
                         .arg(QString::fromStdString(group->name()))
@@ -886,10 +988,7 @@ void TerrainInspector::nodesChanged(const std::vector<mdl::Node*>& nodes)
   }
   // Geometry changes can arrive for every mouse movement. Refresh validation and
   // material controls once after the edit settles, not during each drag event.
-  m_cutPreview.clear();
-  m_cutPreviewGroup.reset();
-  m_showCuts->setChecked(false);
-  m_showCuts->setEnabled(false);
+  invalidateAnalysis();
   m_refreshTimer->start();
 }
 
@@ -967,14 +1066,11 @@ void TerrainInspector::syncToolButtons()
     mode == TerrainToolMode::Paint || mode == TerrainToolMode::Sculpt
     || mode == TerrainToolMode::Vertices);
   m_drawNew->setChecked(mode == TerrainToolMode::Draw);
+  if (mode == TerrainToolMode::Draw)
+    m_creation->expand();
   m_paint->setEnabled(
     m_editMode->currentIndex() == 0 ? m_canPaint : m_canEditHeightField);
-  if (mode == TerrainToolMode::Draw)
-    m_status->setText(tr("Drag a rectangle in the top (XY) view to create terrain."));
-  else if (mode == TerrainToolMode::Vertices)
-    m_status->setText(
-      tr("Click or box-select vertices, then drag vertically. Hold Ctrl or Shift to "
-         "add to the selection."));
+  updateBrushSettings();
   updateModeControls();
 }
 
@@ -1325,6 +1421,7 @@ void TerrainInspector::moveVertexInteraction(const QPointF& point)
     return;
   }
   m_stroke->heightField = std::move(field);
+  invalidateAnalysis();
   m_refreshedPaint = terrainGroupRevision(*group);
   refreshViews();
 }
@@ -1778,6 +1875,7 @@ void TerrainInspector::sculptTo(const vm::vec2d& point)
       return;
     }
     m_stroke->heightField = std::move(height);
+    invalidateAnalysis();
     m_refreshedPaint = terrainGroupRevision(*group);
     refreshViews();
   }

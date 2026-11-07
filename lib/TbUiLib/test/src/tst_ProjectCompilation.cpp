@@ -9,11 +9,14 @@
 #include <QFocusEvent>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QPixmap>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QPushButton>
 #include <QRubberBand>
 #include <QScopeGuard>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QTemporaryDir>
 #include <QToolButton>
@@ -54,6 +57,7 @@
 #include "project/ProjectStore.h"
 #include "render/RenderTiming.h"
 #include "ui/AppControllerFixture.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/CompilationDialog.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
@@ -767,6 +771,113 @@ std::unique_ptr<TerrainRegion> terrainRegionSnapshot(const mdl::GroupNode& group
   return std::make_unique<TerrainRegion>(
     require(TerrainRegion::decode(group.group().terrainPaint())));
 }
+
+void testTerrainPanelInteraction(MapWindow* window, TerrainInspector* panel)
+{
+  auto* mode = panel->findChild<QComboBox*>("TerrainInspector_EditMode");
+  auto* sculpt = panel->findChild<QComboBox*>("TerrainInspector_SculptMode");
+  auto* activate = panel->findChild<QPushButton*>("TerrainInspector_PaintTerrain");
+  auto* radius = panel->findChild<QSpinBox*>("TerrainInspector_Radius");
+  auto* strength = panel->findChild<QSpinBox*>("TerrainInspector_Strength");
+  auto* hardness = panel->findChild<QSpinBox*>("TerrainInspector_Hardness");
+  auto* soft = panel->findChild<QCheckBox*>("TerrainInspector_SoftSelection");
+  auto* lock = panel->findChild<QCheckBox*>("TerrainInspector_LockEdges");
+  auto* help = panel->findChild<QLabel*>("TerrainInspector_Help");
+  auto* compile =
+    panel->findChild<CollapsibleTitledPanel*>("TerrainInspector_Compilation");
+  REQUIRE(mode);
+  REQUIRE(sculpt);
+  REQUIRE(activate);
+  REQUIRE(radius);
+  REQUIRE(strength);
+  REQUIRE(hardness);
+  REQUIRE(soft);
+  REQUIRE(lock);
+  REQUIRE(help);
+  REQUIRE(compile);
+  REQUIRE_FALSE(compile->expanded());
+
+  mode->setCurrentIndex(0);
+  REQUIRE_FALSE(window->toolBox().terrainToolActive());
+  const auto paintRadius = radius->value();
+  const auto paintStrength = strength->value();
+  const auto paintHardness = hardness->value();
+  radius->setValue(80);
+  strength->setValue(85);
+  hardness->setValue(45);
+  mode->setCurrentIndex(1);
+  CHECK_FALSE(window->toolBox().terrainToolActive());
+
+  // Every sculpt operation has an independent brush, and editing switches directly.
+  activate->click();
+  CHECK(activate->text() == "Finish Editing");
+  for (auto i = 0; i < sculpt->count(); ++i)
+  {
+    sculpt->setCurrentIndex(i);
+    radius->setValue(100 + i * 10);
+    strength->setValue(20 + i);
+    hardness->setValue(30 + i);
+  }
+  for (auto i = 0; i < sculpt->count(); ++i)
+  {
+    sculpt->setCurrentIndex(i);
+    CHECK(radius->value() == 100 + i * 10);
+    CHECK(strength->value() == 20 + i);
+    CHECK(hardness->value() == 30 + i);
+    CHECK(help->text().contains(sculpt->currentText()));
+  }
+  mode->setCurrentIndex(0);
+  CHECK(window->toolBox().terrainTool().mode() == TerrainToolMode::Paint);
+  CHECK(radius->value() == 80);
+  CHECK(strength->value() == 85);
+  CHECK(hardness->value() == 45);
+  mode->setCurrentIndex(2);
+  CHECK(window->toolBox().terrainTool().mode() == TerrainToolMode::Vertices);
+  soft->setChecked(true);
+  lock->setChecked(false);
+  lock->setChecked(true); // Refreshing the panel must keep the soft selection help.
+  CHECK(help->text().contains("sphere"));
+  compile->expand();
+  CHECK_FALSE(panel->findChild<QCheckBox*>("TerrainInspector_BrushEntity")->isHidden());
+  CHECK_FALSE(panel->findChild<QSpinBox*>("TerrainInspector_FaceBudget")->isHidden());
+  {
+    const auto minWidth = panel->minimumWidth();
+    const auto maxWidth = panel->maximumWidth();
+    const auto restoreWidth = qScopeGuard([&] {
+      panel->setMinimumWidth(minWidth);
+      panel->setMaximumWidth(maxWidth);
+      QApplication::processEvents();
+    });
+    panel->setFixedWidth(320);
+    QApplication::processEvents();
+    auto* scroll = panel->findChild<QScrollArea*>("TerrainInspector_Scroll");
+    REQUIRE(scroll);
+    CHECK(scroll->horizontalScrollBar()->maximum() == 0);
+    const auto capturePath = qEnvironmentVariable("TB_TERRAIN_PANEL_CAPTURE_PATH");
+    if (!capturePath.isEmpty())
+      REQUIRE(panel->grab().save(capturePath));
+  }
+  compile->collapse();
+  soft->setChecked(false);
+  mode->setCurrentIndex(1);
+  CHECK(window->toolBox().terrainTool().mode() == TerrainToolMode::Sculpt);
+  activate->click();
+  CHECK_FALSE(window->toolBox().terrainToolActive());
+  // Restore the brushes used by the framebuffer scenario below.
+  for (auto i = 0; i < sculpt->count(); ++i)
+  {
+    sculpt->setCurrentIndex(i);
+    radius->setValue(60);
+    strength->setValue(25);
+    hardness->setValue(35);
+  }
+  sculpt->setCurrentIndex(0);
+  mode->setCurrentIndex(0);
+  radius->setValue(paintRadius);
+  strength->setValue(paintStrength);
+  hardness->setValue(paintHardness);
+  mode->setCurrentIndex(1);
+}
 } // namespace
 
 TEST_CASE("Project terrain panel paints a picked brush")
@@ -866,6 +977,8 @@ TEST_CASE("Project terrain panel paints a picked brush")
   navigation->click();
   auto* panel = window->findChild<TerrainInspector*>();
   REQUIRE(panel);
+  auto* activate = panel->findChild<QPushButton*>("TerrainInspector_PaintTerrain");
+  REQUIRE(activate);
   const auto controls = panel->findChildren<QPushButton*>();
   const auto button = [&](const QString& text) {
     const auto found = std::ranges::find_if(
@@ -916,9 +1029,18 @@ TEST_CASE("Project terrain panel paints a picked brush")
   CHECK(estimate->text().contains("Base:"));
   CHECK(showCuts->isEnabled());
   CHECK(showCuts->isChecked());
+  const auto analysis = estimate->text();
+  auto* modes = panel->findChild<QComboBox*>("TerrainInspector_EditMode");
+  REQUIRE(modes);
+  modes->setCurrentIndex(1);
+  modes->setCurrentIndex(0);
+  CHECK(estimate->text() == analysis);
+  CHECK(showCuts->isEnabled());
+  CHECK(showCuts->isChecked());
   wadBudget->setValue(0);
   CHECK_FALSE(showCuts->isEnabled());
   CHECK_FALSE(showCuts->isChecked());
+  CHECK(estimate->text().contains("Analyze again"));
   button("Analyze Terrain")->click();
   CHECK(estimate->text().contains("exceeds the configured limit"));
   faceBudget->setValue(-1);
@@ -934,7 +1056,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
   CHECK(material->itemText(0).contains("Moss"));
   CHECK(material->itemText(1).contains("Terrain texture"));
   material->setCurrentIndex(1);
-  button("Paint Terrain")->click();
+  activate->click();
   QApplication::processEvents();
   REQUIRE(panel->painting());
   CHECK(window->toolBox().terrainToolActive());
@@ -944,14 +1066,14 @@ TEST_CASE("Project terrain panel paints a picked brush")
   CHECK(panel->painting());
   window->toolBox().setSelectMode(true);
   CHECK_FALSE(panel->painting());
-  CHECK_FALSE(button("Paint Terrain")->isChecked());
+  CHECK_FALSE(activate->isChecked());
   CHECK(window->toolBox().selectModeActive());
   window->switchToInspectorPage(InspectorPage::Terrain);
-  button("Paint Terrain")->click();
+  activate->click();
   window->toolBox().togglePathTool();
   CHECK_FALSE(panel->painting());
   CHECK(window->toolBox().pathToolActive());
-  button("Paint Terrain")->click();
+  activate->click();
   CHECK_FALSE(window->toolBox().pathToolActive());
   REQUIRE(panel->painting());
   auto* view = window->currentOrFirstVisible3DMapView();
@@ -1086,7 +1208,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
   CHECK_FALSE(panel->painting());
   CHECK(group->group().terrainPaint() == initial);
   CHECK(window->toolBox().brushCreationModeActive());
-  button("Paint Terrain")->click();
+  activate->click();
   terrainMouseClick(view, Qt::LeftButton, Qt::NoModifier, center);
   view->grabFramebuffer();
   terrainMouseEvent(
@@ -1171,7 +1293,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
   const auto repainted = group->group().terrainPaint() == painted;
   CHECK(repainted);
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
-  button("Paint Terrain")->click();
+  activate->click();
   mdl::deselectAll(map);
   window->switchToInspectorPage(InspectorPage::Entity);
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
@@ -1295,7 +1417,6 @@ TEST_CASE("Project terrain panel paints a picked brush")
   navigation->click();
   auto* editMode = panel->findChild<QComboBox*>("TerrainInspector_EditMode");
   auto* convert = panel->findChild<QPushButton*>("TerrainInspector_Convert");
-  auto* activate = panel->findChild<QPushButton*>("TerrainInspector_PaintTerrain");
   REQUIRE(editMode);
   REQUIRE(convert);
   REQUIRE(activate);
@@ -1307,6 +1428,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
   REQUIRE(converted.heightField);
   const auto convertedHeights = converted.heightField->heights;
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
+  testTerrainPanelInteraction(window, panel);
   activate->click();
   REQUIRE(panel->painting());
   const auto terrainPick = [&] {
@@ -1341,10 +1463,14 @@ TEST_CASE("Project terrain panel paints a picked brush")
     == sculpted.heightField->heights);
   panel->beginStroke(terrainPick());
   REQUIRE(panel->stroking());
-  panel->endStroke(false);
+  editMode->setCurrentIndex(0);
+  CHECK_FALSE(panel->stroking());
+  CHECK(window->toolBox().terrainTool().mode() == TerrainToolMode::Paint);
   CHECK(
     require(TerrainRegion::decode(group->group().terrainPaint())).heightField->heights
     == sculpted.heightField->heights);
+  editMode->setCurrentIndex(1);
+  CHECK(window->toolBox().terrainTool().mode() == TerrainToolMode::Sculpt);
   activate->click();
 
   // Paint after sculpting, then sculpt again without losing the new paint.

@@ -16,6 +16,7 @@
 
 #include "vm/bbox.h"
 
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -49,6 +50,7 @@ class RenderContext;
 namespace tb::ui
 {
 class AppController;
+class CollapsibleTitledPanel;
 class MapDocument;
 class MapViewToolBox;
 enum class TerrainToolMode;
@@ -64,7 +66,10 @@ private:
   bool m_canPaint = false;
   bool m_canEditHeightField = false;
   QLabel* m_status = nullptr;
+  QLabel* m_help = nullptr;
   QFormLayout* m_form = nullptr;
+  QFormLayout* m_compileForm = nullptr;
+  CollapsibleTitledPanel* m_creation = nullptr;
   QComboBox* m_editMode = nullptr;
   QComboBox* m_sculptMode = nullptr;
   QComboBox* m_gridSpacing = nullptr;
@@ -82,6 +87,15 @@ private:
   QSpinBox* m_radius = nullptr;
   QSpinBox* m_strength = nullptr;
   QSpinBox* m_hardness = nullptr;
+  struct BrushSettings
+  {
+    int radius = 60;
+    int strength = 100;
+    int hardness = 35;
+  };
+  // Paint and each sculpt operation retain their own settings for this editor.
+  std::array<BrushSettings, 5> m_brushSettings;
+  size_t m_brushSettingsIndex = 0;
   QSpinBox* m_faceBudget = nullptr;
   QSpinBox* m_wadBudget = nullptr;
   QSpinBox* m_minFaceWidth = nullptr;
@@ -178,6 +192,9 @@ private:
   void createRegion();
   void convertSelection();
   void updateModeControls();
+  void updateBrushSettings();
+  void updateToolHelp();
+  void invalidateAnalysis();
   std::optional<size_t> nearestVertex(
     const gl::Camera& camera,
     const TerrainRegion& region,
