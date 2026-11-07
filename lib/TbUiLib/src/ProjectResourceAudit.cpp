@@ -9,6 +9,7 @@
 #include "base/FileLocation.h"
 #include "base/Logger.h"
 #include "base/SimpleParserStatus.h"
+#include "mdl/BrushFace.h"
 #include "mdl/EntityProperties.h"
 #include "mdl/MapHeader.h"
 #include "mdl/StandardMapParser.h"
@@ -16,7 +17,10 @@
 #include "ui/ProjectSession.h"
 #include "ui/TerrainRegion.h"
 
+#include <algorithm>
+#include <cctype>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <unordered_set>
 
@@ -333,6 +337,76 @@ Result<ProjectResourceAudit> auditGoldSrcProjectResources(
     }
   }
   return result;
+}
+
+Result<void> validateGoldSrcCompileResources(
+  const ProjectResourceAudit& audit, const std::string& mapId)
+{
+  static const auto ToolTextures = std::set<std::string>{
+    "aaatrigger",
+    "bevel",
+    "clip",
+    "hint",
+    "hintskip",
+    "light",
+    "null",
+    "origin",
+    "skip",
+    "split",
+    "trigger",
+    "waterskip"};
+  auto problems = std::vector<std::string>{};
+  auto emptyMaterial = mdl::BrushFace::NoMaterialName;
+  std::ranges::transform(emptyMaterial, emptyMaterial.begin(), [](const unsigned char c) {
+    return char(std::tolower(c));
+  });
+  for (const auto& use : audit.uses)
+  {
+    if (use.mapId != mapId)
+      continue;
+    auto name = use.reference;
+    std::ranges::transform(
+      name, name.begin(), [](const unsigned char c) { return char(std::tolower(c)); });
+    auto reason = std::string{};
+    switch (use.status)
+    {
+    case ProjectResourceStatus::Embedded:
+    case ProjectResourceStatus::Unsupported:
+      break;
+    case ProjectResourceStatus::Missing:
+      // Compiler tool/empty textures and installed engine skies are intentionally
+      // external. All other explicit references must be captured before compiling.
+      if (
+        name != emptyMaterial && !ToolTextures.contains(name)
+        && !name.starts_with("gfx/env/"))
+        reason = " is not embedded in the project";
+      break;
+    case ProjectResourceStatus::Ambiguous:
+      reason = " matches more than one project asset";
+      break;
+    case ProjectResourceStatus::InvalidPath:
+      reason = " is not a usable game path";
+      break;
+    case ProjectResourceStatus::ScanError:
+      reason = " could not be scanned";
+      break;
+    }
+    if (!reason.empty())
+      problems.push_back(
+        use.reference + " (" + use.mapPath + ":" + std::to_string(use.line) + ")"
+        + reason);
+  }
+  if (problems.empty())
+    return {};
+  auto text = std::string{};
+  const auto count = std::min(problems.size(), std::size_t{12});
+  for (auto i = std::size_t{0}; i < count; ++i)
+    text += "\n  " + problems[i];
+  if (problems.size() > count)
+    text += "\n  ... and " + std::to_string(problems.size() - count) + " more";
+  return Error{
+    "The compile snapshot would be incomplete or ambiguous:" + text
+    + "\nCapture the missing resources into the project first."};
 }
 
 std::vector<BrowserAsset> browserAssetsUsedInMap(

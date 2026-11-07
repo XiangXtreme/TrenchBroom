@@ -25,6 +25,7 @@
 #include <QTest>
 #include <QTimer>
 #include <QTreeWidget>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include "img/DecodeImage.h"
 #include "img/GoldSrcTexture.h"
@@ -542,6 +543,26 @@ TEST_CASE("AssetInspection")
       second.findChild<QLabel*>("AssetInspector_Status")->text() == "source unavailable");
     CHECK(second.findChild<QMediaPlayer*>()->sourceDevice() == nullptr);
   }
+  SECTION("rescan tasks own their catalog connection and outlive their source")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    auto library = require(project::AssetLibrary::create(folder, "Library"));
+    REQUIRE(library->scan().is_success());
+    auto source = openLocalAssetLibrary(folder);
+    REQUIRE(source);
+    auto scan = source->rescanTask();
+    source.reset();
+    write(folder / "added.png", png(Qt::red));
+    auto future = QtConcurrent::run(std::move(scan));
+    QTRY_VERIFY_WITH_TIMEOUT(future.isFinished(), 15000);
+    REQUIRE(future.result().is_success());
+    const auto assets = require(library->assets());
+    REQUIRE(assets.size() == 1);
+    CHECK(assets.front().virtualPath == "added.png");
+  }
+
   SECTION(
     "library cards load thumbnails on demand and retain them across metadata reloads")
   {

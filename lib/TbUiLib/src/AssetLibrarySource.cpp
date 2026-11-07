@@ -298,6 +298,19 @@ public:
 
   bool canReveal() const override { return true; }
 
+  std::function<Result<void>()> rescanTask() const override
+  {
+    return [folder = m_library->folder()]() -> Result<void> {
+      auto library = project::AssetLibrary::open(folder);
+      if (library.is_error())
+        return std::get<Error>(library.error());
+      const auto scanned = library.value()->scan();
+      if (scanned.is_error())
+        return std::get<Error>(scanned.error());
+      return {};
+    };
+  }
+
   Result<void> rescan() override
   {
     const auto scanned = m_library->scan();

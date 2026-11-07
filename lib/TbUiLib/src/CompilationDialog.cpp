@@ -43,6 +43,7 @@
 #include "ui/LaunchGameEngineDialog.h"
 #include "ui/MapDocument.h" // IWYU pragma: keep
 #include "ui/MapWindow.h"
+#include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
@@ -291,6 +292,12 @@ Result<void> CompilationDialog::runProfile(
 
     if (isDirectProjectCompilation(profile))
     {
+      const auto audit = auditGoldSrcProjectResources(*project, *assetId);
+      if (audit.is_error())
+        return std::get<Error>(audit.error());
+      if (const auto valid = validateGoldSrcCompileResources(audit.value(), *assetId);
+          valid.is_error())
+        return std::get<Error>(valid.error());
       return m_run.runProjectTool(profile, map, m_camera, m_output, projectInfo, test);
     }
 

@@ -50,6 +50,10 @@ struct ProjectResourceAudit
 Result<ProjectResourceAudit> auditGoldSrcProjectResources(
   const ProjectSession& session, const std::optional<std::string>& mapId = std::nullopt);
 
+// Shared gate for direct project compilation and frozen snapshot export.
+Result<void> validateGoldSrcCompileResources(
+  const ProjectResourceAudit& audit, const std::string& mapId);
+
 std::vector<BrowserAsset> browserAssetsUsedInMap(
   const std::vector<BrowserAsset>& assets,
   const ProjectResourceAudit& audit,

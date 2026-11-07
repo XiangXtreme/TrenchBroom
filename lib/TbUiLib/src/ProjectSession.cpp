@@ -185,7 +185,7 @@ std::string publishPathFor(
   }
   if (asset.virtualPath == root || asset.virtualPath.starts_with(root + "/"))
     return asset.virtualPath;
-  return root + "/" + fileNameOf(asset.virtualPath);
+  return root + "/" + asset.virtualPath;
 }
 
 // The game path a library resource would publish when captured, without reading or
@@ -195,7 +195,7 @@ std::string libraryPublishPath(const project::LibraryAsset& asset)
   const auto root = std::string{publishRoot(asset.type)};
   if (asset.virtualPath == root || asset.virtualPath.starts_with(root + "/"))
     return asset.virtualPath;
-  return root + "/" + fileNameOf(asset.virtualPath);
+  return root + "/" + asset.virtualPath;
 }
 
 std::string captureRecipeFor(
@@ -462,41 +462,17 @@ Result<void> ProjectSession::exportCompileSnapshot(
   if (audit.is_error())
     return std::get<Error>(audit.error());
 
-  // A snapshot exists to be compiled without asking questions later, so anything the
-  // audit could not resolve is reported now instead of producing a broken BSP.
-  auto problems = std::vector<std::string>{};
+  if (const auto valid = validateGoldSrcCompileResources(audit.value(), mapAssetId);
+      valid.is_error())
+    return std::get<Error>(valid.error());
   auto externals = std::vector<std::string>{};
   auto directAssets = std::vector<std::string>{};
   auto directTextures = std::map<std::string, std::vector<std::string>>{};
   auto needsEmptyTexture = false;
-  // The compiler recognizes these by name and never embeds them, so a missing entry says
-  // nothing about the completeness of the project.
-  const auto isToolTexture = [](const std::string& name) {
-    static const auto names = std::set<std::string>{
-      "aaatrigger",
-      "bevel",
-      "clip",
-      "hint",
-      "hintskip",
-      "light",
-      "null",
-      "origin",
-      "skip",
-      "split",
-      "trigger",
-      "waterskip"};
-    return names.contains(normalizedTextureName(name));
-  };
-  // Uncaptured skies can be supplied by the installed game. Captured groups resolve
-  // through the reference index and must provide all six faces below.
-  const auto isEngineExternal = [](const std::string& reference) {
-    return normalizedTextureName(reference).starts_with("gfx/env/");
-  };
   for (const auto& use : audit.value().uses)
   {
     if (use.mapId != mapAssetId)
       continue;
-    const auto where = fmt::format("{} ({}:{})", use.reference, use.mapPath, use.line);
     switch (use.status)
     {
     case ProjectResourceStatus::Embedded:
@@ -520,34 +496,14 @@ Result<void> ProjectSession::exportCompileSnapshot(
         normalizedTextureName(use.reference)
         == normalizedTextureName(mdl::BrushFace::NoMaterialName))
         needsEmptyTexture = true;
-      else if (isToolTexture(use.reference) || isEngineExternal(use.reference))
-        externals.push_back(use.reference);
       else
-        problems.push_back(where + " is not embedded in the project");
+        externals.push_back(use.reference);
       break;
     case ProjectResourceStatus::Ambiguous:
-      problems.push_back(where + " matches more than one project asset");
-      break;
     case ProjectResourceStatus::InvalidPath:
-      problems.push_back(where + " is not a usable game path");
-      break;
     case ProjectResourceStatus::ScanError:
-      problems.push_back(where + " could not be scanned");
-      break;
+      break; // Rejected by the shared compile validation above.
     }
-  }
-  if (!problems.empty())
-  {
-    constexpr auto MaxProblems = std::size_t{12};
-    auto text = std::string{};
-    const auto count = std::min(problems.size(), MaxProblems);
-    for (auto index = std::size_t{0}; index < count; ++index)
-      text += "\n  " + problems[index];
-    if (problems.size() > count)
-      text += fmt::format("\n  ... and {} more", problems.size() - count);
-    return Error{
-      "The compile snapshot would be incomplete or ambiguous:" + text
-      + "\nCapture the missing resources into the project first."};
   }
 
   // The dependency closure is part of the fixed input: a model without its separate
@@ -2085,9 +2041,15 @@ Result<ProjectSession::MapReferenceCapture> ProjectSession::captureMapReferences
   if (connections.is_error())
     return std::get<Error>(connections.error());
 
+  struct Candidate
+  {
+    std::string libraryId;
+    project::LibraryAsset asset;
+  };
+  auto candidates = std::map<std::string, std::vector<Candidate>>{};
   for (const auto& connection : connections.value())
   {
-    if (!connection.available || pending.empty())
+    if (!connection.available)
       continue;
     const auto library = openLibrary(connection.info.id);
     if (library.is_error())
@@ -2095,45 +2057,123 @@ Result<ProjectSession::MapReferenceCapture> ProjectSession::captureMapReferences
     const auto assets = library.value()->assets();
     if (assets.is_error())
       continue;
-
     for (const auto& asset : assets.value())
     {
-      if (pending.empty())
-        break;
       if (asset.missing)
         continue;
-
-      // Face materials are engine texture names; everything else is referenced by the
-      // game path the resource would publish.
-      auto key = std::string{};
-      if (asset.type == project::AssetType::Texture)
-        key = lowered(asset.displayName);
-      else if (
-        asset.type == project::AssetType::Model
-        || asset.type == project::AssetType::Sprite
-        || asset.type == project::AssetType::Sound)
-        key = lowered(libraryPublishPath(asset));
-      else
+      const auto texture = asset.type == project::AssetType::Texture;
+      if (
+        !texture && asset.type != project::AssetType::Model
+        && asset.type != project::AssetType::Sprite
+        && asset.type != project::AssetType::Sound)
         continue;
-
-      const auto it = pending.find(key);
-      if (it == pending.end())
-        continue;
-
-      const auto captured =
-        captureLibraryAssetResolving(connection.info.id, asset.id, resolveConflict);
-      if (captured.is_error())
-        return std::get<Error>(captured.error());
-      if (captured.value())
-        result.captured.push_back(*captured.value());
+      const auto addCandidate = [&](const std::string& key) {
+        if (pending.contains(key))
+          candidates[key].push_back({connection.info.id, asset});
+      };
+      if (texture)
+        addCandidate(lowered(asset.displayName));
       else
-        result.unresolved.push_back(it->second);
-      pending.erase(it);
+      {
+        const auto path = lowered(libraryPublishPath(asset));
+        const auto root = std::string{publishRoot(asset.type)} + "/";
+        // Index each directory suffix once. Matching cost depends on path depth,
+        // rather than multiplying library size by the number of map references.
+        for (auto slash = path.find('/'); slash != std::string::npos;
+             slash = path.find('/', slash + 1))
+          addCandidate(root + path.substr(slash + 1));
+      }
     }
   }
-
   for (const auto& [key, reference] : pending)
-    result.unresolved.push_back(reference);
+  {
+    const auto found = candidates.find(key);
+    // Ambiguity is left for explicit capture and publish-path editing. Library order
+    // must never decide which version of a resource a map receives.
+    if (found == candidates.end() || found->second.size() != 1)
+    {
+      result.unresolved.push_back(reference);
+      continue;
+    }
+    const auto& candidate = found->second.front();
+    auto indices = std::vector<std::size_t>{};
+    auto built = buildCapturePlan(candidate.libraryId, {candidate.asset.id}, indices);
+    if (built.is_error())
+      return std::get<Error>(built.error());
+    auto plan = std::move(built).value();
+    auto& requested = plan.at(indices.front());
+    if (candidate.asset.type != project::AssetType::Texture)
+    {
+      const auto oldFolder = libraryPublishPath(candidate.asset);
+      const auto slash = oldFolder.find_last_of('/');
+      const auto prefix = oldFolder.substr(0, slash + 1);
+      const auto targetPrefix = reference.substr(0, reference.find_last_of('/') + 1);
+      // Model companions and animation groups must remain siblings after mapping a
+      // categorized library folder to the path explicitly requested by the map.
+      for (auto& entry : plan)
+        if (!entry.assetId && entry.import.virtualPath.starts_with(prefix))
+          entry.import.virtualPath =
+            targetPrefix + entry.import.virtualPath.substr(prefix.size());
+      if (requested.assetId && lowered(requested.import.virtualPath) != key)
+      {
+        result.unresolved.push_back(reference);
+        continue;
+      }
+      requested.import.virtualPath = reference;
+      auto misplacedDependency = false;
+      const auto folder = [&](const std::string& path) {
+        return lowered(path.substr(0, path.find_last_of('/') + 1));
+      };
+      for (const auto& entry : plan)
+        for (const auto& dependency : entry.dependencies)
+        {
+          if (
+            dependency.kind != "model-companion" && dependency.kind != "model-animation")
+            continue;
+          auto path = std::string{};
+          if (dependency.assetId.empty())
+            path = plan.at(dependency.target).import.virtualPath;
+          else
+          {
+            const auto existing = m_store->findAsset(dependency.assetId);
+            if (existing.is_error())
+              return std::get<Error>(existing.error());
+            if (existing.value())
+              path = existing.value()->publishPath;
+          }
+          if (path.empty() || folder(path) != folder(entry.import.virtualPath))
+            misplacedDependency = true;
+        }
+      // Existing snapshots must not be moved implicitly to satisfy a new map path.
+      if (misplacedDependency)
+      {
+        result.unresolved.push_back(reference);
+        continue;
+      }
+    }
+    const auto conflicts = captureConflicts(plan);
+    if (conflicts.is_error())
+      return std::get<Error>(conflicts.error());
+    auto cancelled = false;
+    for (const auto& conflict : conflicts.value())
+    {
+      if (resolveConflict(conflict) == CaptureConflictChoice::Cancel)
+      {
+        cancelled = true;
+        break;
+      }
+      resolveCaptureConflict(plan, conflict, CaptureConflictChoice::Replace);
+    }
+    if (cancelled)
+    {
+      result.unresolved.push_back(reference);
+      continue;
+    }
+    const auto captured = applyAssetCapturePlan(plan);
+    if (captured.is_error())
+      return std::get<Error>(captured.error());
+    result.captured.push_back(captured.value().at(indices.front()));
+  }
   return result;
 }
 

@@ -1252,11 +1252,16 @@ TEST_CASE("Project terrain bakes captured material and invalidates changed textu
     requireProject(project::buildGoldSrcWad({coloredMiptex("RED", QColor{255, 255, 0})}));
   replacement.original = replacement.compatible;
   requireProject(sandbox.session->replaceAsset(texture->id, replacement));
-  capturedImages = requireProject(loadTerrainMaterialImages(sandbox.session->store(), captured.id));
+  capturedImages =
+    requireProject(loadTerrainMaterialImages(sandbox.session->store(), captured.id));
   CHECK_FALSE(decodeTerrainMaterialPackage(
-    package, requireProject(normalizeTerrainMaterialImages(capturedImages))).has_value());
-  CHECK(requireProject(loadTerrainMaterial(sandbox.session->store(), captured.id))
-          .images[0].pixelColor(0, 0) == QColor{255, 255, 0});
+                package, requireProject(normalizeTerrainMaterialImages(capturedImages)))
+                .has_value());
+  CHECK(
+    requireProject(loadTerrainMaterial(sandbox.session->store(), captured.id))
+      .images[0]
+      .pixelColor(0, 0)
+    == QColor{255, 255, 0});
   CHECK_FALSE(requireProject(sandbox.session->store().terrainCompile(mapAsset.id)));
   CHECK(requireProject(sandbox.session->terrainCompileNeedsSave(mapAsset.id)));
   requireProject(sandbox.session->save());
@@ -1947,6 +1952,83 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(replaced->library.libraryId == otherLibraryId);
   }
 
+  SECTION("manual model capture retains categorized directories")
+  {
+    sandbox.write(
+      "nature/trees/bush.mdl",
+      readProjectFile(getFixtureRoot() / "test/publish-model.mdl"));
+    sandbox.rescanLibrary();
+    const auto assets = sandbox.libraryAssets();
+    const auto model = std::ranges::find(
+      assets, "nature/trees/bush.mdl", &project::LibraryAsset::virtualPath);
+    REQUIRE(model != assets.end());
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    const auto captured =
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, model->id));
+    CHECK(captured.publishPath == "models/nature/trees/bush.mdl");
+  }
+
+  SECTION("automatic model capture requires a unique directory suffix")
+  {
+    const auto ambiguous = GENERATE(false, true);
+    const auto capturedCompanion = GENERATE(false, true);
+    const auto bytes = readProjectFile(getFixtureRoot() / "test/publish-model.mdl");
+    sandbox.write("nature/trees/bush.mdl", bytes);
+    sandbox.write("nature/trees/bushT.mdl", bytes);
+    // A basename collision in a different subdirectory is not a candidate.
+    sandbox.write("nature/rocks/bush.mdl", bytes);
+    if (ambiguous)
+      sandbox.write("other/trees/bush.mdl", bytes);
+    sandbox.rescanLibrary();
+    requireProject(sandbox.session->attachLibrary(sandbox.libraryFolder));
+    if (capturedCompanion)
+    {
+      const auto assets = sandbox.libraryAssets();
+      const auto companion = std::ranges::find(
+        assets, "nature/trees/bushT.mdl", &project::LibraryAsset::virtualPath);
+      REQUIRE(companion != assets.end());
+      requireProject(sandbox.session->captureLibraryAsset(libraryId, companion->id));
+    }
+    auto stream = std::ostringstream{};
+    mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Standard, "Test");
+    stream << R"({"classname" "worldspawn"}
+      {"classname" "cycler" "model" "models/trees/bush.mdl"})";
+    const auto text = stream.str();
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.displayName = "test";
+    input.virtualPath = "maps/test.map";
+    input.original = input.compatible = {text.begin(), text.end()};
+    const auto map = requireProject(sandbox.session->importAsset(input));
+    const auto before = requireProject(sandbox.session->store().assets());
+    const auto captured = requireProject(sandbox.session->captureMapReferences(
+      map.id, [](const CaptureConflict&) { return CaptureConflictChoice::Replace; }));
+    if (ambiguous || capturedCompanion)
+    {
+      CHECK(captured.captured.empty());
+      CHECK(captured.unresolved == std::vector<std::string>{"models/trees/bush.mdl"});
+      CHECK(requireProject(sandbox.session->store().assets()) == before);
+    }
+    else
+    {
+      REQUIRE(captured.captured.size() == 1);
+      CHECK(captured.unresolved.empty());
+      CHECK(captured.captured.front().publishPath == "models/trees/bush.mdl");
+      const auto dependencies = requireProject(
+        sandbox.session->store().dependencies(captured.captured.front().id));
+      REQUIRE(dependencies.size() == 1);
+      const auto companion = requireProject(
+        sandbox.session->store().findAsset(dependencies.front().dependencyId));
+      REQUIRE(companion.has_value());
+      CHECK(companion->publishPath == "models/trees/bushT.mdl");
+      CHECK(requireProject(
+              sandbox.session->captureMapReferences(
+                map.id,
+                [](const CaptureConflict&) { return CaptureConflictChoice::Replace; }))
+              .captured.empty());
+    }
+  }
+
   SECTION("captures map references from the attached library")
   {
     // The map uses a sound and a sprite that the project does not embed yet.
@@ -2350,8 +2432,7 @@ TEST_CASE("ProjectSessionAssetLibrary")
     std::ranges::sort(kinds);
     CHECK(
       kinds
-      == std::vector<std::string>{
-        "terrain-slot-0", "terrain-slot-1", "terrain-slot-2"});
+      == std::vector<std::string>{"terrain-slot-0", "terrain-slot-1", "terrain-slot-2"});
 
     const auto file = requireProject(sandbox.session->assetFile(captured));
     CHECK(std::filesystem::exists(file));

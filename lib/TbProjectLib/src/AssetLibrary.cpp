@@ -227,7 +227,7 @@ struct Discovered
   std::string identity;
   std::string nativeFormat;
   std::string recipe;
-  std::vector<std::uint8_t> content;
+  std::string contentRow;
   std::string contentHash;
   std::uint64_t size = 0;
   // Dependency hints as `<kind>:<normalized key>`; resolved once every asset is known.
@@ -283,7 +283,25 @@ std::string stemOf(const std::string& path)
   return dot == std::string::npos ? name : name.substr(0, dot);
 }
 
+// Discovery retains metadata only. Persist each payload while its source is in memory;
+// the surrounding scan transaction rolls back both blobs and catalog on failure.
+std::string storeDiscoveredContent(
+  sqlite3* db,
+  const std::vector<std::uint8_t>& bytes,
+  const std::string& hash,
+  const std::string& assetId)
+{
+  auto existing =
+    detail::Statement{db, "SELECT original FROM assets WHERE id=? AND content_hash=?"};
+  existing.bind(1, assetId);
+  existing.bind(2, hash);
+  if (existing.next())
+    return existing.text(0);
+  return detail::storeContent(db, bytes);
+}
+
 void discoverFile(
+  sqlite3* db,
   const std::filesystem::path& folder,
   const std::filesystem::path& file,
   const std::string& libraryId,
@@ -352,9 +370,10 @@ void discoverFile(
       asset.identity = lowered(entry.name);
       asset.nativeFormat = "goldsrc-miptex";
       asset.recipe = recipeFor(format, relativePath);
-      asset.content = entry.miptex;
       asset.size = std::uint64_t(entry.miptex.size());
-      asset.contentHash = contentHash(asset.content);
+      asset.contentHash = contentHash(entry.miptex);
+      asset.contentRow =
+        storeDiscoveredContent(db, entry.miptex, asset.contentHash, asset.id);
       source.assetCount += 1;
       discovery.assets.push_back(std::move(asset));
     }
@@ -375,9 +394,8 @@ void discoverFile(
   asset.identity = lowered(pathText(file.filename()));
   asset.nativeFormat = nativeFormatFor(format);
   asset.recipe = recipeFor(format, relativePath);
-  asset.content = bytes;
   asset.size = std::uint64_t(bytes.size());
-  asset.contentHash = contentHash(asset.content);
+  asset.contentHash = source.contentHash;
   // The source stays indexed, but a catalog removal keeps its asset hidden until the
   // source is imported again.
   if (removedVirtualPaths.contains(asset.virtualPath))
@@ -425,11 +443,11 @@ void discoverFile(
     if (const auto model = readGoldSrcModelDependencies(bytes); model.is_success())
       for (const auto& group :
            modelAnimationGroupNames(relativePath, model.value().sequenceGroups))
-        asset.hints.push_back("model-animation:" + modelDependencyKey(group));
-    if (const auto companion = modelCompanionName(pathText(file.filename()));
-        !companion.empty())
-      asset.hints.push_back("model-companion:" + modelDependencyKey(companion));
+        asset.hints.push_back("model-animation:/" + lowered(group));
+    if (const auto companion = modelCompanionName(relativePath); !companion.empty())
+      asset.hints.push_back("model-companion:/" + lowered(companion));
   }
+  asset.contentRow = storeDiscoveredContent(db, bytes, asset.contentHash, asset.id);
   source.assetCount = 1;
   discovery.assets.push_back(std::move(asset));
 }
@@ -441,6 +459,7 @@ void discoverFile(
  * group only records which six belong together so a capture can pull the whole set.
  */
 void addSkyboxGroups(
+  sqlite3* db,
   const std::string& libraryId,
   const std::unordered_set<std::string>& removedVirtualPaths,
   Discovery& discovery)
@@ -451,7 +470,7 @@ void addSkyboxGroups(
   {
     std::string folder;
     std::string stem;
-    std::map<std::string, const Discovered*> faces;
+    std::map<std::string, std::string> faces;
   };
 
   auto groups = std::map<std::string, FaceSet>{};
@@ -473,7 +492,7 @@ void addSkyboxGroups(
       group.folder = folder;
       if (group.stem.empty())
         group.stem = originalStem;
-      group.faces.emplace(std::string{suffix}, &asset);
+      group.faces.emplace(std::string{suffix}, asset.virtualPath);
       break;
     }
   }
@@ -504,17 +523,19 @@ void addSkyboxGroups(
     for (const auto suffix : Faces)
     {
       const auto& face = group.faces.at(std::string{suffix});
-      manifest += fmt::format("{} {}\n", suffix, face->virtualPath);
-      asset.hints.push_back("skybox-face:" + modelDependencyKey(face->virtualPath));
+      manifest += fmt::format("{} {}\n", suffix, face);
+      asset.hints.push_back("skybox-face:/" + lowered(face));
     }
-    asset.content.assign(manifest.begin(), manifest.end());
-    asset.size = std::uint64_t(asset.content.size());
-    asset.contentHash = contentHash(asset.content);
+    const auto bytes = std::vector<std::uint8_t>{manifest.begin(), manifest.end()};
+    asset.size = std::uint64_t(bytes.size());
+    asset.contentHash = contentHash(bytes);
+    asset.contentRow = storeDiscoveredContent(db, bytes, asset.contentHash, asset.id);
     discovery.assets.push_back(std::move(asset));
   }
 }
 
 Discovery discover(
+  sqlite3* db,
   const std::filesystem::path& folder,
   const std::string& libraryId,
   const std::unordered_set<std::string>& removedVirtualPaths)
@@ -552,9 +573,9 @@ Discovery discover(
     if (!std::filesystem::is_regular_file(status))
       continue;
     discoverFile(
-      folder, entry.path(), libraryId, removedVirtualPaths, discovery, seenIds);
+      db, folder, entry.path(), libraryId, removedVirtualPaths, discovery, seenIds);
   }
-  addSkyboxGroups(libraryId, removedVirtualPaths, discovery);
+  addSkyboxGroups(db, libraryId, removedVirtualPaths, discovery);
   std::ranges::sort(discovery.assets, [](const auto& a, const auto& b) {
     return a.virtualPath < b.virtualPath;
   });
@@ -895,22 +916,29 @@ void writeRevisionRow(
 /**
  * Resolves the dependency hints recorded during discovery into real catalog edges.
  *
- * Hints are matched by normalized file/member stem, which is the only identity a model
- * skin name and a library file share. Edge kinds produced here are rebuilt from scratch
+ * Model and skybox hints match full library paths; legacy texture-name hints only
+ * resolve when unique. Edge kinds produced here are rebuilt from scratch
  * on every scan; edges added by hand with any other kind survive.
  */
 void resolveDependencies(sqlite3* db)
 {
   auto keys = std::unordered_map<std::string, std::string>{};
   auto textureIds = std::unordered_set<std::string>{};
+  auto paths = std::unordered_map<std::string, std::string>{};
   {
-    auto query =
-      detail::Statement{db, "SELECT id,identity,type FROM assets ORDER BY virtual_path"};
+    auto query = detail::Statement{
+      db, "SELECT id,identity,type,virtual_path FROM assets ORDER BY virtual_path"};
     while (query.next())
     {
-      keys.emplace(modelDependencyKey(query.text(1)), query.text(0));
+      paths.emplace("/" + lowered(query.text(3)), query.text(0));
       if (query.text(2) == "texture")
+      {
         textureIds.insert(query.text(0));
+        const auto [it, inserted] =
+          keys.emplace(modelDependencyKey(query.text(1)), query.text(0));
+        if (!inserted)
+          it->second.clear(); // Ambiguous legacy names must not select the first row.
+      }
     }
   }
 
@@ -948,6 +976,11 @@ void resolveDependencies(sqlite3* db)
         if (!textureIds.contains(targetId))
           continue;
       }
+      else if (key.starts_with('/'))
+      {
+        if (const auto target = paths.find(key); target != paths.end())
+          targetId = target->second;
+      }
       else if (const auto target = keys.find(key); target != keys.end())
       {
         targetId = target->second;
@@ -970,7 +1003,8 @@ Result<LibraryScan> AssetLibrary::scan()
   return detail::attempt([&] {
     auto* db = m_impl->database.get();
     const auto removed = loadRemovedVirtualPaths(db);
-    const auto discovery = discover(m_impl->folder, m_impl->info.id, removed);
+    auto transaction = detail::Transaction{db};
+    const auto discovery = discover(db, m_impl->folder, m_impl->info.id, removed);
     auto result = LibraryScan{};
     result.invalidEntries = discovery.invalid;
     if (!discovery.warnings.empty())
@@ -980,7 +1014,6 @@ Result<LibraryScan> AssetLibrary::scan()
         result.warning += fmt::format(" (and {} more)", discovery.warnings.size() - 1);
     }
 
-    auto transaction = detail::Transaction{db};
     auto indexed = loadIndexedAssets(db);
     // A row may only be relocated when its own location is gone. Without this, a WAD
     // whose bytes happen to match another WAD could steal the row of an asset that is
@@ -993,14 +1026,6 @@ Result<LibraryScan> AssetLibrary::scan()
     auto claimed = std::unordered_set<std::string>{};
     for (const auto& discovered : discovery.assets)
     {
-      // Reading content back for an unchanged asset would compare the whole payload
-      // against stored blobs, so the row is only materialized when it is needed.
-      auto contentRow = std::optional<std::string>{};
-      const auto contentRowFor = [&]() -> const std::string& {
-        if (!contentRow)
-          contentRow = detail::storeContent(db, discovered.content);
-        return *contentRow;
-      };
       const auto existing = indexed.find(discovered.id);
       if (existing != indexed.end())
       {
@@ -1022,7 +1047,7 @@ Result<LibraryScan> AssetLibrary::scan()
             discovered.contentHash,
             discovered.size,
             false};
-          const auto& stored = contentRowFor();
+          const auto& stored = discovered.contentRow;
           auto update = detail::Statement{
             db,
             "UPDATE assets SET type=?,display_name=CASE WHEN custom_display_name<>'' "
@@ -1058,6 +1083,13 @@ Result<LibraryScan> AssetLibrary::scan()
           update.run();
           ++result.restored;
         }
+        // Discovery rules may change without source bytes changing (for example,
+        // replacing basename dependencies with full paths). Refresh derived hints.
+        auto hints =
+          detail::Statement{db, "UPDATE assets SET dependency_hints=? WHERE id=?"};
+        hints.bind(1, joinedHints(discovered.hints));
+        hints.bind(2, asset.id);
+        hints.run();
         continue;
       }
 
@@ -1125,7 +1157,7 @@ Result<LibraryScan> AssetLibrary::scan()
         continue;
       }
 
-      const auto& stored = contentRowFor();
+      const auto& stored = discovered.contentRow;
       auto insert = detail::Statement{
         db,
         "INSERT INTO assets(id,type,display_name,virtual_path,group_path,source_rel_path,"

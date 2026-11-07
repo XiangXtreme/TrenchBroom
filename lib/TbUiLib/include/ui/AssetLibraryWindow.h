@@ -166,6 +166,7 @@ private:
   void runCreateTerrainMaterial();
   std::optional<std::array<std::string, 3>> selectedTextures() const;
   void importFiles(const QStringList& files);
+  Result<void> rescanLibrary();
   void runRescan();
   void runConvertPending();
   void retryFailedConversions();

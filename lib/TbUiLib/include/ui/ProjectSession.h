@@ -333,9 +333,11 @@ public:
    *
    * Only explicit GoldSrc MAP references are considered: face materials and the entity
    * keys the resource audit understands (model, shootmodel, gibmodel, message, skybox
-   * faces). Textures match by engine name, other resources by the game path they would
-   * publish. Embedded, ambiguous and unsupported references are left alone, and a
-   * reference the user declines to replace is reported as unresolved.
+   * faces). Textures match by engine name; other resources match a full game-relative
+   * directory suffix and retain the path requested by the map. Multiple library
+   * candidates are reported as unresolved instead of depending on library order.
+   * Embedded, ambiguous and unsupported references are left alone, and a reference the
+   * user declines to replace is reported as unresolved.
    */
   Result<MapReferenceCapture> captureMapReferences(
     const std::string& mapAssetId, const CaptureConflictResolver& resolveConflict);

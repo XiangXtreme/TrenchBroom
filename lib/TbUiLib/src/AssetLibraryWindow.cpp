@@ -13,10 +13,12 @@
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QEventLoop>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QImage>
 #include <QInputDialog>
@@ -45,6 +47,7 @@
 #include <QTreeWidgetItemIterator>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include "base/PreferenceManager.h"
 #include "img/DecodeImage.h"
@@ -87,6 +90,14 @@ namespace
 constexpr auto DefaultThumbSide = 112;
 constexpr auto ThumbMinSide = 72;
 constexpr auto ThumbMaxSide = 192;
+
+// A scan owns an atomic database transaction and cannot be cancelled partway through.
+class LibraryScanProgress : public QProgressDialog
+{
+public:
+  using QProgressDialog::QProgressDialog;
+  void reject() override {}
+};
 
 /** Resolves the thumbnail role on demand, so offscreen cards do not decode assets. */
 class AssetLibraryItem : public QListWidgetItem
@@ -1611,11 +1622,38 @@ const project::LibraryAsset* AssetLibraryWindow::selectedAsset() const
   return it == m_assets.end() ? nullptr : &*it;
 }
 
+Result<void> AssetLibraryWindow::rescanLibrary()
+{
+  // Keep the source and dialog alive while the worker owns a separate catalog handle.
+  // Application modality prevents concurrent imports, library switching and closing.
+  const auto converting = m_convertTimer->isActive();
+  m_convertTimer->stop();
+  auto progress = LibraryScanProgress{tr("Rescan"), QString{}, 0, 0, this};
+  progress.setCancelButton(nullptr);
+  progress.setWindowFlag(Qt::WindowCloseButtonHint, false);
+  progress.setWindowModality(Qt::ApplicationModal);
+  auto watcher = QFutureWatcher<Result<void>>{};
+  auto loop = QEventLoop{};
+  connect(&watcher, &QFutureWatcher<Result<void>>::finished, &loop, &QEventLoop::quit);
+  watcher.setFuture(QtConcurrent::run(m_source->rescanTask()));
+  progress.show();
+  loop.exec();
+  // The event loop keeps UI painting and input processing active until completion.
+  progress.close();
+  const auto scanned = watcher.result();
+  if (converting)
+    m_convertTimer->start();
+  if (scanned.is_success())
+    emit AssetLibraryChanges::instance().changed(
+      QString::fromStdString(m_source -> libraryId()));
+  return scanned;
+}
+
 void AssetLibraryWindow::runRescan()
 {
   if (!m_source)
     return;
-  if (const auto scanned = m_source->rescan(); scanned.is_error())
+  if (const auto scanned = rescanLibrary(); scanned.is_error())
   {
     QMessageBox::critical(
       this, tr("Rescan"), QString::fromStdString(std::get<Error>(scanned.error()).msg));
@@ -2037,7 +2075,7 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
   }
   if (!imported.empty())
   {
-    const auto scanned = m_source->rescan();
+    const auto scanned = rescanLibrary();
     if (scanned.is_error())
       report << tr("Index failed: %1")
                   .arg(QString::fromStdString(std::get<Error>(scanned.error()).msg));

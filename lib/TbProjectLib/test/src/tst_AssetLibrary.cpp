@@ -400,6 +400,36 @@ TEST_CASE("AssetLibrary")
     }
     CHECK(missingPath == "models/props/crate02.mdl");
   }
+  SECTION("same named dependencies stay within their source directory")
+  {
+    for (const auto* folder : {"a", "b"})
+    {
+      const auto prefix = std::string{folder} + "/";
+      workspace.write(prefix + "crate.mdl", test::makeModel(2));
+      workspace.write(prefix + "crate01.mdl", test::makeModel());
+      workspace.write(prefix + "crateT.mdl", test::makeModel());
+      for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
+        workspace.write(prefix + "desert" + face + ".png", {'P', 'N', 'G', 1});
+    }
+    auto library = require(AssetLibrary::create(workspace.folder, "Library"));
+    require(library->scan());
+    for (const auto& asset : require(library->assets()))
+    {
+      if (asset.virtualPath.ends_with("/crate.mdl") || asset.type == AssetType::Skybox)
+      {
+        const auto edges = require(library->dependencies(asset.id));
+        REQUIRE(edges.size() == (asset.type == AssetType::Skybox ? 6 : 2));
+        for (const auto& edge : edges)
+        {
+          const auto target = require(library->findAsset(edge.dependencyId));
+          REQUIRE(target.has_value());
+          CHECK(target->virtualPath.substr(0, 2) == asset.virtualPath.substr(0, 2));
+        }
+      }
+    }
+    require(library->scan());
+  }
+
   SECTION("groups the six faces of a skybox into one asset")
   {
     for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})

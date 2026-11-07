@@ -1497,8 +1497,9 @@ TEST_CASE("ProjectCompilation")
 
 TEST_CASE("ProjectCompilation.projectAwareProfilesSkipTheSnapshot")
 {
+  const auto missingResource = GENERATE(false, true);
   const auto restoreProject = GENERATE(false, true);
-  // The default brush references a placeholder texture that snapshot export rejects.
+  // Empty editor textures are allowed by the shared resource gate.
   // A project-only tool must still run, even if restoring replaces the open map.
   auto directory = QTemporaryDir{};
   REQUIRE(directory.isValid());
@@ -1529,6 +1530,23 @@ TEST_CASE("ProjectCompilation.projectAwareProfilesSkipTheSnapshot")
 
   auto camera = gl::PerspectiveCamera{};
   auto dialog = CompilationDialog{appController, *document, camera};
+
+  if (missingResource)
+  {
+    auto* entity = new mdl::EntityNode{
+      mdl::Entity{{{"classname", "cycler"}, {"model", "models/missing.mdl"}}}};
+    mdl::addNodes(
+      document->map(), {{document->map().editorContext().currentLayer(), {entity}}});
+    REQUIRE(dialog.runProfileByName("ProjectAware"));
+    CHECK_FALSE(dialog.isRunning());
+    CHECK(dialog.outputText().contains("models/missing.mdl"));
+    CHECK_FALSE(dialog.outputText().contains("project="));
+    CHECK(session
+            ->exportCompileSnapshot(
+              mapAsset->id, pathFromQString(directory.filePath("rejected")), "alpha.map")
+            .is_error());
+    return;
+  }
 
   REQUIRE(dialog.runProfileByName("ProjectAware"));
   REQUIRE(dialog.isRunning());
