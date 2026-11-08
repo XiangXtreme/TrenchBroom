@@ -40,6 +40,7 @@
 #include "project/GoldSrcWad.h"
 #include "project/LibrarySync.h"
 #include "ui/AssetInspection.h"
+#include "ui/BuiltinAssetLibrary.h"
 #include "ui/BuiltinGoldSrcAssets.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/ClipTool.h"
@@ -1510,7 +1511,8 @@ TEST_CASE("ProjectSessionAssetLibrary")
       requireProject(sandbox.session->assetFile(captured)).filename() == "WALL01.wad");
 
     const auto libraries = requireProject(sandbox.session->libraries());
-    REQUIRE(libraries.size() == 1);
+    REQUIRE(libraries.size() == 2);
+    CHECK(libraries.back().info.id == BuiltinAssetLibraryId);
     CHECK_FALSE(libraries.front().available);
     const auto updates = requireProject(sandbox.session->checkLibraryUpdates());
     REQUIRE(updates.size() == 1);
@@ -1863,7 +1865,8 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto moved = sandbox.root / "moved-library";
     std::filesystem::rename(sandbox.libraryFolder, moved);
     const auto unavailable = requireProject(sandbox.session->libraries());
-    REQUIRE(unavailable.size() == 1);
+    REQUIRE(unavailable.size() == 2);
+    CHECK(unavailable.back().info.id == BuiltinAssetLibraryId);
     CHECK_FALSE(unavailable.front().available);
     CHECK(
       requireProject(sandbox.session->checkLibraryUpdates()).front().state
@@ -1877,7 +1880,8 @@ TEST_CASE("ProjectSessionAssetLibrary")
 
     requireProject(sandbox.session->relocateLibrary(libraryId, moved));
     const auto relinked = requireProject(sandbox.session->libraries());
-    REQUIRE(relinked.size() == 1);
+    REQUIRE(relinked.size() == 2);
+    CHECK(relinked.back().info.id == BuiltinAssetLibraryId);
     CHECK(relinked.front().available);
     CHECK(
       requireProject(sandbox.session->checkLibraryUpdates()).front().state
@@ -1892,7 +1896,8 @@ TEST_CASE("ProjectSessionAssetLibrary")
     sandbox.session.reset();
     sandbox.session = requireProject(ProjectSession::open(sandbox.projectPath));
     const auto reopened = requireProject(sandbox.session->libraries());
-    REQUIRE(reopened.size() == 1);
+    REQUIRE(reopened.size() == 2);
+    CHECK(reopened.back().info.id == BuiltinAssetLibraryId);
     CHECK(reopened.front().available);
   }
 
@@ -2223,7 +2228,8 @@ TEST_CASE("ProjectSessionAssetLibrary")
     CHECK(attached.groups == 1);
     CHECK(project::AssetLibrary::isLibraryFolder(plain));
     const auto libraries = requireProject(sandbox.session->libraries());
-    REQUIRE(libraries.size() == 1);
+    REQUIRE(libraries.size() == 2);
+    CHECK(libraries.back().info.id == BuiltinAssetLibraryId);
     CHECK(libraries.front().available);
     CHECK(libraries.front().info.id == attached.libraryId);
 
@@ -2231,7 +2237,7 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto reopened = requireProject(sandbox.session->attachLibrary(plain));
     CHECK_FALSE(reopened.created);
     CHECK(reopened.libraryId == attached.libraryId);
-    CHECK(requireProject(sandbox.session->libraries()).size() == 1);
+    CHECK(requireProject(sandbox.session->libraries()).size() == 2);
     CHECK(reopened.assets == 1);
   }
   SECTION("browses library resources without adding them to the project")

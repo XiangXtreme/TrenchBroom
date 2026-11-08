@@ -499,6 +499,32 @@ void detail::precomputeTerrainMaterialLevels(TerrainMaterial& material)
   }
 }
 
+const std::vector<project::WadTextureEntry>& builtinTerrainTextures()
+{
+  static const auto textures = [] {
+    auto result = std::vector<project::WadTextureEntry>{};
+    auto nearestColors = std::unordered_map<std::uint32_t, std::uint8_t>{};
+    constexpr auto names = std::array{"tm_grass", "tm_dirt", "tm_rock"};
+    for (auto slot = size_t{0}; slot < names.size(); ++slot)
+      result.push_back(generateTexture(
+        names[slot],
+        [slot](double, double) {
+          auto weights = std::array<double, 3>{};
+          weights[slot] = 1.0;
+          return weights;
+        },
+        0.0,
+        0.0,
+        Period,
+        getPalette(),
+        getDetails(),
+        nullptr,
+        nearestColors));
+    return result;
+  }();
+  return textures;
+}
+
 Result<TerrainBake> runTerrainBaker(
   const TerrainRegion& region,
   const TerrainMaterial* material,
@@ -678,6 +704,11 @@ Result<TerrainBake> runTerrainBaker(
   bases.reserve(3);
   for (size_t idx = 0; idx < 3; ++idx)
   {
+    if (!material)
+    {
+      bases.push_back(builtinTerrainTextures()[idx]);
+      continue;
+    }
     if (usePrecomputed && hasMaterialLevels(material->baseLevels[idx]))
     {
       bases.push_back(makeTexture(

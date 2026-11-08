@@ -149,6 +149,7 @@ protected:
 private:
   void buildUi();
   void chooseLibrary();
+  void openBuiltinLibrary();
   void openLibrary(const QString& folder, bool remember = true);
   void reload();
   void focusAsset(const std::string& assetId, const QString& category);

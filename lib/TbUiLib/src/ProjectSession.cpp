@@ -27,6 +27,7 @@
 #include "project/ContentHash.h"
 #include "project/GoldSrcWad.h"
 #include "project/ProjectStore.h"
+#include "ui/BuiltinAssetLibrary.h"
 #include "ui/BuiltinGoldSrcAssets.h"
 #include "ui/MapDocument.h"
 #include "ui/ProjectReference.h"
@@ -1459,6 +1460,10 @@ Result<void> ProjectSession::restore(const std::string& id)
 
 Result<std::vector<project::LibraryInfo>> ProjectSession::libraryInfos() const
 {
+  auto storedInfos = m_store->libraries();
+  if (storedInfos.is_error())
+    return std::get<Error>(storedInfos.error());
+  auto infos = std::move(storedInfos).value();
   const auto folder =
     PreferenceManager::instance().get(Preferences::AssetLibraryDirectory);
   if (!folder.empty() && project::AssetLibrary::isLibraryFolder(folder))
@@ -1466,11 +1471,18 @@ Result<std::vector<project::LibraryInfo>> ProjectSession::libraryInfos() const
     auto library = project::AssetLibrary::open(folder);
     if (library.is_error())
       return std::get<Error>(library.error());
-    return std::vector<project::LibraryInfo>{library.value()->info()};
+    infos = std::vector<project::LibraryInfo>{library.value()->info()};
   }
-  // Projects captured before the library became application-wide keep their own links so
-  // their snapshots can still report updates.
-  return m_store->libraries();
+  // Browsing the built-in catalog does not attach it or modify the project. A capture
+  // stores its own bytes and provenance through the same path as a user library.
+  const auto builtin = builtinAssetLibraryInfo();
+  if (builtin.is_success())
+  {
+    std::erase_if(
+      infos, [](const auto& info) { return info.id == BuiltinAssetLibraryId; });
+    infos.push_back(builtin.value());
+  }
+  return infos;
 }
 
 Result<std::unique_ptr<project::AssetLibrary>> ProjectSession::openLibrary(

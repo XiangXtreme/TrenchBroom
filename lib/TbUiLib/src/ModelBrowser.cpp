@@ -2233,97 +2233,104 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
   const auto connections = m_project->libraries();
   if (connections.is_error())
     return std::nullopt;
-  const auto connection = std::ranges::find_if(
-    connections.value(), [&](const auto& entry) { return entry.info.id == m_libraryId; });
-  if (connection == connections.value().end() || !connection->available)
-    return std::nullopt;
-  const auto source = openLocalAssetLibrary(connection->info.path);
-  if (!source || source->libraryId() != m_libraryId)
-    return std::nullopt;
-  const auto catalog = source->assets();
-  if (catalog.is_error())
-    return std::nullopt;
-  const auto keys = assetPreviewKeys(*source);
 
   // Update state is project state, so it is queried once per scan instead of per entry.
   auto updates = std::vector<project::LibraryUpdate>{};
   if (auto result = m_project->checkLibraryUpdates(); result.is_success())
     updates = std::move(result).value();
 
-  auto capturedAssets = std::unordered_map<std::string, project::Asset>{};
-  if (const auto linked = m_project->store().libraryLinkedAssets(); linked.is_success())
-    for (const auto& asset : linked.value())
-      if (asset.library.libraryId == m_libraryId)
-        capturedAssets.try_emplace(asset.library.libraryAssetId, asset);
+  const auto linked = m_project->store().libraryLinkedAssets();
   auto updatesByAsset = std::unordered_map<std::string, project::LibraryUpdateState>{};
   for (const auto& update : updates)
     updatesByAsset.try_emplace(update.projectAssetId, update.state);
-
   auto assets = std::vector<BrowserAsset>{};
-  for (const auto& asset : catalog.value())
+  for (const auto& connection : connections.value())
   {
-    const auto type = catalogCellType(
-      asset.type, pathFromQString(QString::fromStdString(asset.virtualPath)));
-    if (type == BrowserCellType::Folder)
+    if (!connection.available)
       continue;
-    auto entry = BrowserAsset{};
-    entry.type = type;
-    entry.path = pathFromQString(QString::fromStdString(asset.virtualPath));
-    entry.source = BrowserSource::AssetLibrary;
-    // A non-empty project ID marks a catalog-backed entry, which is what makes the
-    // browser show display names and search them.
-    entry.projectId = m_libraryId;
-    entry.libraryId = m_libraryId;
-    entry.libraryAssetId = asset.id;
-    entry.libraryRevision = asset.revision;
-    entry.libraryContentHash = asset.contentHash;
-    entry.displayName = asset.displayName;
-    entry.catalogPath =
-      pathFromQString(QString::fromStdString(asset.group)) / entry.path.filename();
-    if (keys.is_success())
-      if (const auto key = keys.value().find(asset.id); key != keys.value().end())
-        entry.previewIdentity = key->second.toStdString();
-    if (asset.type == project::AssetType::Texture && !asset.sourceMember.empty())
-      entry.textureCollection =
-        pathFromQString(QString::fromStdString(asset.sourceContainer));
-    entry.missing = asset.missing;
-    entry.skybox = asset.type == project::AssetType::Skybox;
-    if (const auto captured = capturedAssets.find(asset.id);
-        captured != capturedAssets.end())
+    const auto source = openLocalAssetLibrary(connection.info.path);
+    if (!source || source->libraryId() != connection.info.id)
+      continue;
+    const auto catalog = source->assets();
+    if (catalog.is_error())
+      continue;
+    const auto keys = assetPreviewKeys(*source);
+    auto capturedAssets = std::unordered_map<std::string, project::Asset>{};
+    if (linked.is_success())
+      for (const auto& asset : linked.value())
+        if (asset.library.libraryId == connection.info.id)
+          capturedAssets.try_emplace(asset.library.libraryAssetId, asset);
+
+    for (const auto& asset : catalog.value())
     {
-      const auto& projectAsset = captured->second;
-      entry.assetId = projectAsset.id;
-      entry.projectAssetId = projectAsset.id;
-      entry.projectRevision = projectAsset.revision;
-      entry.projectPublishPath =
-        pathFromQString(QString::fromStdString(projectAsset.publishPath));
-
-      const auto update = updatesByAsset.find(projectAsset.id);
-      entry.projectUpdateAvailable =
-        update != updatesByAsset.end()
-        && (update->second == project::LibraryUpdateState::NewVersion || update->second == project::LibraryUpdateState::DependenciesChanged);
-    }
-    assets.push_back(std::move(entry));
-  }
-
-  // Models, textures and terrain materials are resolved when their previews are visible.
-  auto fileIds = std::vector<std::string>{};
-  for (const auto& entry : assets)
-    if (
-      entry.type != BrowserCellType::Texture && entry.type != BrowserCellType::Material
-      && entry.type != BrowserCellType::Model)
-      fileIds.push_back(entry.libraryAssetId);
-
-  if (const auto files = m_project->libraryAssetFiles(m_libraryId, fileIds);
-      files.is_success())
-  {
-    for (auto& entry : assets)
-    {
-      if (entry.libraryAssetId.empty())
+      const auto type = catalogCellType(
+        asset.type, pathFromQString(QString::fromStdString(asset.virtualPath)));
+      if (type == BrowserCellType::Folder)
         continue;
-      if (const auto file = files.value().find(entry.libraryAssetId);
-          file != files.value().end())
-        entry.absolutePath = file->second;
+      auto entry = BrowserAsset{};
+      entry.type = type;
+      // View selection and preview caches use path keys. Scope those keys by catalog
+      // so identically organized user and built-in assets cannot select each other.
+      // catalogPath below retains the folder names shown to the user.
+      entry.path = pathFromQString(QString::fromStdString(connection.info.id))
+                   / pathFromQString(QString::fromStdString(asset.virtualPath));
+      entry.source = BrowserSource::AssetLibrary;
+      // A non-empty project ID marks a catalog-backed entry, which is what makes the
+      // browser show display names and search them.
+      entry.projectId = connection.info.id;
+      entry.libraryId = connection.info.id;
+      entry.libraryAssetId = asset.id;
+      entry.libraryRevision = asset.revision;
+      entry.libraryContentHash = asset.contentHash;
+      entry.displayName = asset.displayName;
+      entry.catalogPath =
+        pathFromQString(QString::fromStdString(asset.group)) / entry.path.filename();
+      if (keys.is_success())
+        if (const auto key = keys.value().find(asset.id); key != keys.value().end())
+          entry.previewIdentity = key->second.toStdString();
+      if (asset.type == project::AssetType::Texture && !asset.sourceMember.empty())
+        entry.textureCollection =
+          pathFromQString(QString::fromStdString(asset.sourceContainer));
+      entry.missing = asset.missing;
+      entry.skybox = asset.type == project::AssetType::Skybox;
+      if (const auto captured = capturedAssets.find(asset.id);
+          captured != capturedAssets.end())
+      {
+        const auto& projectAsset = captured->second;
+        entry.assetId = projectAsset.id;
+        entry.projectAssetId = projectAsset.id;
+        entry.projectRevision = projectAsset.revision;
+        entry.projectPublishPath =
+          pathFromQString(QString::fromStdString(projectAsset.publishPath));
+
+        const auto update = updatesByAsset.find(projectAsset.id);
+        entry.projectUpdateAvailable =
+          update != updatesByAsset.end()
+          && (update->second == project::LibraryUpdateState::NewVersion || update->second == project::LibraryUpdateState::DependenciesChanged);
+      }
+      assets.push_back(std::move(entry));
+    }
+
+    // Models, textures and terrain materials are resolved when their previews are
+    // visible.
+    auto fileIds = std::vector<std::string>{};
+    for (const auto& entry : assets)
+      if (entry.libraryId == connection.info.id && (
+      entry.type != BrowserCellType::Texture && entry.type != BrowserCellType::Material
+      && entry.type != BrowserCellType::Model))
+        fileIds.push_back(entry.libraryAssetId);
+
+    if (const auto files = m_project->libraryAssetFiles(connection.info.id, fileIds);
+        files.is_success())
+    {
+      for (auto& entry : assets)
+      {
+        if (entry.libraryId != connection.info.id || entry.libraryAssetId.empty())
+          continue;
+        if (const auto file = files.value().find(entry.libraryAssetId);
+            file != files.value().end())
+          entry.absolutePath = file->second;
+      }
     }
   }
 
@@ -2772,7 +2779,9 @@ void ModelBrowser::refreshLibraryConnection()
   {
     const auto& library = libraries.value().front();
     const auto name = QString::fromStdString(library.info.name);
-    m_libraryName = library.available ? name : tr("%1 (unavailable)").arg(name);
+    m_libraryName = libraries.value().size() > 1 ? tr("Asset Library")
+                    : library.available          ? name
+                                                 : tr("%1 (unavailable)").arg(name);
     m_libraryId = library.info.id;
     m_libraryError = QString::fromStdString(library.error);
   }

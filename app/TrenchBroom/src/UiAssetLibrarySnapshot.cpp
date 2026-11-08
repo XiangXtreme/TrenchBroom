@@ -20,6 +20,7 @@
 #include "ui/AssetInspection.h"
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryWindow.h"
+#include "ui/BuiltinAssetLibrary.h"
 #include "ui/ProjectReference.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
@@ -241,6 +242,25 @@ std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(
     holder = std::make_unique<TemporaryLibrary>(nullptr);
     return holder->folder();
   }();
+
+  if (kind == UiAssetLibrarySnapshotKind::Builtin)
+  {
+    const auto info = ensureBuiltinAssetLibrary(folder / "builtin");
+    if (info.is_error())
+      return {};
+    auto library = project::AssetLibrary::open(folder / "builtin");
+    if (library.is_error())
+      return {};
+    const auto materials = library.value()->assets(project::AssetType::Material);
+    if (materials.is_error() || materials.value().size() != 1)
+      return {};
+    auto window =
+      std::make_unique<AssetLibraryWindow>(pathAsQString(folder / "builtin"), false);
+    if (window->revealAsset(info.value().id, materials.value().front().id).is_error())
+      return {};
+    holder->setParent(window.get());
+    return window;
+  }
 
   auto created = project::AssetLibrary::create(folder, "Snapshot Library");
   if (created.is_error())

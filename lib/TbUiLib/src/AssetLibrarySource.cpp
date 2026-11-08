@@ -11,6 +11,7 @@
 #include "project/GoldSrcModel.h"
 #include "project/ProjectStore.h"
 #include "ui/AssetLibraryImport.h"
+#include "ui/BuiltinAssetLibrary.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
@@ -232,12 +233,13 @@ Result<std::optional<project::LibraryAsset>> AssetLibrarySource::findAsset(
 namespace
 {
 
-class LocalAssetLibrarySource : public AssetLibrarySource
+class CatalogAssetLibrarySource : public AssetLibrarySource
 {
+protected:
   std::unique_ptr<project::AssetLibrary> m_library;
 
 public:
-  explicit LocalAssetLibrarySource(std::unique_ptr<project::AssetLibrary> library)
+  explicit CatalogAssetLibrarySource(std::unique_ptr<project::AssetLibrary> library)
     : m_library{std::move(library)}
   {
   }
@@ -294,6 +296,36 @@ public:
     return m_library->allDependencies();
   }
 
+  Result<std::vector<std::string>> folders() const override
+  {
+    return m_library->folders();
+  }
+
+  Result<std::map<std::string, Metadata>> allMetadata() override
+  {
+    const auto entries = m_library->allMetadata();
+    if (entries.is_error())
+      return std::get<Error>(entries.error());
+    auto result = std::map<std::string, Metadata>{};
+    for (const auto& [id, meta] : entries.value())
+      result.emplace(id, Metadata{meta.favorite, meta.tags});
+    return result;
+  }
+
+  Result<Metadata> metadata(const std::string& assetId) override
+  {
+    const auto meta = m_library->metadata(assetId);
+    if (meta.is_error())
+      return std::get<Error>(meta.error());
+    return Metadata{meta.value().favorite, meta.value().tags};
+  }
+};
+
+class LocalAssetLibrarySource : public CatalogAssetLibrarySource
+{
+public:
+  using CatalogAssetLibrarySource::CatalogAssetLibrarySource;
+
   bool canImport() const override { return true; }
 
   bool canConvert() const override { return true; }
@@ -330,10 +362,6 @@ public:
 
   bool canManage() const override { return true; }
 
-  Result<std::vector<std::string>> folders() const override
-  {
-    return m_library->folders();
-  }
   Result<void> createFolder(const std::string& path) override
   {
     auto result = m_library->createFolder(path);
@@ -362,25 +390,6 @@ public:
     if (result.is_success())
       emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
     return result;
-  }
-
-  Result<std::map<std::string, Metadata>> allMetadata() override
-  {
-    const auto entries = m_library->allMetadata();
-    if (entries.is_error())
-      return std::get<Error>(entries.error());
-    auto result = std::map<std::string, Metadata>{};
-    for (const auto& [id, meta] : entries.value())
-      result.emplace(id, Metadata{meta.favorite, meta.tags});
-    return result;
-  }
-
-  Result<Metadata> metadata(const std::string& assetId) override
-  {
-    const auto meta = m_library->metadata(assetId);
-    if (meta.is_error())
-      return std::get<Error>(meta.error());
-    return Metadata{meta.value().favorite, meta.value().tags};
   }
 
   Result<void> setFavorite(const std::string& assetId, const bool favorite) override
@@ -453,6 +462,8 @@ std::unique_ptr<AssetLibrarySource> openLocalAssetLibrary(
       *error = QString::fromStdString(std::get<Error>(opened.error()).msg);
     return nullptr;
   }
+  if (opened.value()->info().id == BuiltinAssetLibraryId)
+    return std::make_unique<CatalogAssetLibrarySource>(std::move(opened).value());
   return std::make_unique<LocalAssetLibrarySource>(std::move(opened).value());
 }
 

@@ -32,12 +32,14 @@ public:
   static std::filesystem::path indexPath(const std::filesystem::path& folder);
   static bool isLibraryFolder(const std::filesystem::path& folder);
 
+  // A supplied catalogId gives application-owned catalogs a portable identity.
   // If initialImport is supplied, import the folder before keeping the new catalog.
   // A failed initial import removes only the newly reserved catalog.
   static Result<std::unique_ptr<AssetLibrary>> create(
     const std::filesystem::path& folder,
     const std::string& name,
-    LibraryScan* initialImport = nullptr);
+    LibraryScan* initialImport = nullptr,
+    const std::string& catalogId = {});
   static Result<std::unique_ptr<AssetLibrary>> open(const std::filesystem::path& folder);
 
   ~AssetLibrary();

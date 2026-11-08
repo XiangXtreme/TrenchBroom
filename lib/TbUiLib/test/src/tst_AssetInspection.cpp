@@ -17,6 +17,7 @@
 #include <QListView>
 #include <QListWidget>
 #include <QMediaPlayer>
+#include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -755,7 +756,15 @@ TEST_CASE("AssetInspection")
     auto* timer = browser.findChild<QTimer*>("AssetLibraryConvertTimer");
     REQUIRE(timer);
     REQUIRE(timer->isActive());
-    change->click();
+    auto* menu = change->menu();
+    REQUIRE(menu);
+    REQUIRE(QMetaObject::invokeMethod(menu, "aboutToShow", Qt::DirectConnection));
+    const auto actions = menu->actions();
+    const auto choose = std::ranges::find_if(actions, [](const auto* action) {
+      return action->text() == "Choose Asset Library…";
+    });
+    REQUIRE(choose != actions.end());
+    (*choose)->trigger();
     CHECK_FALSE(timer->isActive());
     CHECK(browser.libraryId() == other->info().id);
     CHECK(retry->isHidden());

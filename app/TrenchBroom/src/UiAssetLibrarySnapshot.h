@@ -17,6 +17,7 @@ enum class UiAssetLibrarySnapshotKind
   Library,
   Project,
   TerrainMaterial,
+  Builtin,
 };
 
 /**

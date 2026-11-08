@@ -49,6 +49,9 @@ enum class TerrainBakeMode
   Shared,
 };
 
+/** The same three base miptex entries used by procedural terrain. */
+const std::vector<project::WadTextureEntry>& builtinTerrainTextures();
+
 Result<TerrainBake> runTerrainBaker(
   const TerrainRegion& region,
   const TerrainMaterial* material = nullptr,

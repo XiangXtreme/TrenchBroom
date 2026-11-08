@@ -748,10 +748,13 @@ AssetLibrary& AssetLibrary::operator=(AssetLibrary&&) noexcept = default;
 Result<std::unique_ptr<AssetLibrary>> AssetLibrary::create(
   const std::filesystem::path& folder,
   const std::string& name,
-  LibraryScan* initialImport)
+  LibraryScan* initialImport,
+  const std::string& catalogId)
 {
   return detail::attempt([&] {
     detail::validateText(name, "library name");
+    if (!catalogId.empty())
+      detail::validateAssetId(catalogId);
     auto error = std::error_code{};
     if (!std::filesystem::is_directory(folder, error))
       throw detail::StoreError{"Asset library folder does not exist."};
@@ -768,7 +771,8 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::create(
       detail::execute(db, Schema);
       detail::execute(db, FolderSchema);
       const auto now = nowText(db);
-      impl->info = {generateUuid(), name, pathText(folder), now, now};
+      impl->info = {
+        catalogId.empty() ? generateUuid() : catalogId, name, pathText(folder), now, now};
       auto insert = detail::Statement{
         db, "INSERT INTO library(id,name,created_at,updated_at) VALUES(?,?,?,?)"};
       insert.bind(1, impl->info.id);

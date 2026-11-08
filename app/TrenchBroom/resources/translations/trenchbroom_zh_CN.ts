@@ -7013,6 +7013,22 @@ Pick a sequence and frame, or press Play. Drag to orbit, wheel to zoom.</source>
         </context>
         <context>
         <name>tb::ui::AssetLibraryWindow</name>
+        <message>
+            <source>Built-in Assets</source>
+            <translation>内置资产</translation>
+        </message>
+        <message>
+            <source>User Asset Library</source>
+            <translation>用户资产库</translation>
+        </message>
+        <message>
+            <source>Choose Asset Library…</source>
+            <translation>选择资产库…</translation>
+        </message>
+        <message>
+            <source>Built-in</source>
+            <translation>内置</translation>
+        </message>
         <message><source>Folders</source><translation>文件夹</translation></message>
         <message><source>All folders</source><translation>所有文件夹</translation></message>
         <message><source>Create Terrain Material from Selected Textures…</source><translation>用选中的贴图创建地形材质…</translation></message>

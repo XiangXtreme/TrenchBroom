@@ -148,6 +148,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("components"),
     QStringLiteral("asset-library"),
     QStringLiteral("asset-library-material"),
+    QStringLiteral("asset-library-builtin"),
     QStringLiteral("asset-library-project"),
     QStringLiteral("asset-library-narrow"),
     QStringLiteral("asset-library-project-narrow"),
@@ -848,7 +849,9 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
                            : UiSnapshotReadinessState::Failed,
       "Output log must meet the drawer tab strip without a blank spacer"};
   }
-  if (targetName == QStringLiteral("asset-library-material"))
+  if (
+    targetName == QStringLiteral("asset-library-material")
+    || targetName == QStringLiteral("asset-library-builtin"))
   {
     const auto* inspector = targetWidget.findChild<AssetInspector*>();
     if (
@@ -1418,7 +1421,9 @@ int runUiSnapshot(
   else if (options.page.startsWith(QStringLiteral("asset-library")))
   {
     const auto kind =
-      options.page == QStringLiteral("asset-library-material")
+      options.page == QStringLiteral("asset-library-builtin")
+        ? UiAssetLibrarySnapshotKind::Builtin
+      : options.page == QStringLiteral("asset-library-material")
         ? UiAssetLibrarySnapshotKind::TerrainMaterial
       : (options.page == QStringLiteral("asset-library-project")
          || options.page == QStringLiteral("asset-library-project-narrow"))

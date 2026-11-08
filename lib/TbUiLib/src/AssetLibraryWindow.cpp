@@ -60,6 +60,7 @@
 #include "ui/AssetLibraryImport.h"
 #include "ui/AssetLibraryItemDelegate.h"
 #include "ui/AssetLibrarySource.h"
+#include "ui/BuiltinAssetLibrary.h"
 #include "ui/CreateTerrainMaterialDialog.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
@@ -279,7 +280,7 @@ AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   if (!folder.empty() && project::AssetLibrary::isLibraryFolder(folder))
     openLibrary(pathAsQString(folder));
   else
-    reload();
+    openBuiltinLibrary();
 }
 
 AssetLibraryWindow::AssetLibraryWindow(
@@ -744,8 +745,22 @@ void AssetLibraryWindow::buildUi()
   m_footer->setContentsMargins(14, 5, 14, 5);
   layout->addWidget(m_footer);
 
-  connect(
-    m_changeButton, &QPushButton::clicked, this, &AssetLibraryWindow::chooseLibrary);
+  auto* libraryMenu = new QMenu{m_changeButton};
+  connect(libraryMenu, &QMenu::aboutToShow, this, [this, libraryMenu] {
+    libraryMenu->clear();
+    libraryMenu->addAction(
+      tr("Built-in Assets"), this, &AssetLibraryWindow::openBuiltinLibrary);
+    const auto folder =
+      PreferenceManager::instance().get(Preferences::AssetLibraryDirectory);
+    if (!folder.empty() && project::AssetLibrary::isLibraryFolder(folder))
+      libraryMenu->addAction(tr("User Asset Library"), this, [this, folder] {
+        openLibrary(pathAsQString(folder));
+      });
+    libraryMenu->addSeparator();
+    libraryMenu->addAction(
+      tr("Choose Asset Library…"), this, &AssetLibraryWindow::chooseLibrary);
+  });
+  m_changeButton->setMenu(libraryMenu);
   connect(m_importButton, &QPushButton::clicked, this, &AssetLibraryWindow::runImport);
   connect(
     m_createMaterialButton,
@@ -894,6 +909,20 @@ void AssetLibraryWindow::buildUi()
 
 AssetLibraryWindow::~AssetLibraryWindow() = default;
 
+void AssetLibraryWindow::openBuiltinLibrary()
+{
+  const auto builtin = builtinAssetLibraryInfo();
+  if (builtin.is_error())
+  {
+    QMessageBox::critical(
+      this,
+      tr("Asset Library"),
+      QString::fromStdString(std::get<Error>(builtin.error()).msg));
+    return;
+  }
+  openLibrary(pathAsQString(builtin.value().path), false);
+}
+
 void AssetLibraryWindow::chooseLibrary()
 {
   const auto folder = QFileDialog::getExistingDirectory(
@@ -947,7 +976,7 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
   m_selectedId.reset();
   m_filter = QStringLiteral("all");
   m_folderPath.clear();
-  if (remember)
+  if (remember && m_source->libraryId() != BuiltinAssetLibraryId)
     PreferenceManager::instance().set(Preferences::AssetLibraryDirectory, path);
   reload();
 }
@@ -1047,7 +1076,10 @@ void AssetLibraryWindow::updateHeader()
     m_libraryPath->setText(m_source->location());
     m_libraryPath->setToolTip(m_source->location());
     const auto remote = m_source->isRemote();
-    m_libraryChip->setText(remote ? tr("Remote") : tr("Local"));
+    m_libraryChip->setText(
+      m_source->libraryId() == BuiltinAssetLibraryId ? tr("Built-in")
+      : remote                                       ? tr("Remote")
+                                                     : tr("Local"));
     m_libraryChip->setProperty(
       "libraryState", remote ? QStringLiteral("remote") : QStringLiteral("local"));
   }
