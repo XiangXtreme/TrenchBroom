@@ -844,9 +844,12 @@ void testTerrainPanelInteraction(MapWindow* window, TerrainInspector* panel)
   {
     const auto minWidth = panel->minimumWidth();
     const auto maxWidth = panel->maximumWidth();
+    auto* topLevel = window->window();
+    const auto windowSize = topLevel->size();
     const auto restoreWidth = qScopeGuard([&] {
       panel->setMinimumWidth(minWidth);
       panel->setMaximumWidth(maxWidth);
+      topLevel->resize(windowSize);
       QApplication::processEvents();
     });
     panel->setFixedWidth(320);
@@ -859,9 +862,28 @@ void testTerrainPanelInteraction(MapWindow* window, TerrainInspector* panel)
     auto* editing = panel->findChild<CollapsibleTitledPanel*>("TerrainInspector_Editing");
     REQUIRE(creation);
     REQUIRE(editing);
+    auto* drawNew = panel->findChild<QPushButton*>("TerrainInspector_DrawNew");
+    auto* thickness = panel->findChild<QSpinBox*>("TerrainInspector_NewThickness");
+    REQUIRE(drawNew);
+    REQUIRE(thickness);
+    // A selected heightfield hides two creation actions. The remaining action
+    // must stay next to the form even when there is spare viewport height.
+    creation->expand();
+    editing->collapse();
+    compile->collapse();
+    REQUIRE(QTest::qWaitFor([&] { return drawNew->isVisible(); }, 2000));
+    const auto creationIsCompact = [&] {
+      const auto* body = creation->getPanel();
+      const auto formBottom = thickness->mapTo(body, QPoint{0, thickness->height()}).y();
+      const auto gap = drawNew->mapTo(body, QPoint{}).y() - formBottom;
+      return gap >= 0 && gap <= 16;
+    };
+    CHECK(QTest::qWaitFor(creationIsCompact, 2000));
+    const auto capturePath = qEnvironmentVariable("TB_TERRAIN_PANEL_CAPTURE_PATH");
     for (auto cycle = 0; cycle < 12; ++cycle)
     {
       panel->setFixedWidth(cycle % 2 == 0 ? 320 : 480);
+      topLevel->resize(1200, cycle % 3 == 0 ? 600 : 1100);
       // Mode changes also show/hide form rows while their section is collapsed.
       mode->setCurrentIndex(cycle % 3);
       for (auto* section : {creation, editing, compile})
@@ -881,6 +903,14 @@ void testTerrainPanelInteraction(MapWindow* window, TerrainInspector* panel)
             });
         },
         2000));
+      creation->expand();
+      CHECK(QTest::qWaitFor(creationIsCompact, 2000));
+      editing->expand();
+      compile->expand();
+      CHECK(QTest::qWaitFor(creationIsCompact, 2000));
+      CHECK(scroll->horizontalScrollBar()->maximum() == 0);
+      if (!capturePath.isEmpty() && cycle == 1)
+        REQUIRE(panel->grab().save(capturePath + ".creation.png"));
     }
     panel->setFixedWidth(320);
     mode->setCurrentIndex(2);
@@ -888,14 +918,17 @@ void testTerrainPanelInteraction(MapWindow* window, TerrainInspector* panel)
     editing->collapse();
     compile->collapse();
     REQUIRE(QTest::qWaitFor(
-      [&] { return compile->height() <= compile->sizeHint().height(); }, 2000));
+      [&] {
+        return compile->height() <= compile->sizeHint().height()
+               && compile->geometry().bottom() < scroll->viewport()->height() / 2;
+      },
+      2000));
     const auto compactHeight = compile->height();
     CHECK(compactHeight <= compile->sizeHint().height());
     CHECK(editing->height() == compactHeight);
     CHECK(creation->height() == compactHeight);
     // Test the user's all-collapsed case as well as expanding and collapsing again.
     CHECK(compile->geometry().bottom() < scroll->viewport()->height() / 2);
-    const auto capturePath = qEnvironmentVariable("TB_TERRAIN_PANEL_CAPTURE_PATH");
     if (!capturePath.isEmpty())
       REQUIRE(panel->grab().save(capturePath + ".collapsed.png"));
     editing->expand();

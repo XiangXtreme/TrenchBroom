@@ -794,7 +794,7 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
       const auto* bar = section ? section->findChild<ClickableTitleBar*>() : nullptr;
       if (!bar || !section->isVisible())
         return {UiSnapshotReadinessState::Failed, "Terrain section is missing or hidden"};
-      const auto expanded = targetName == "terrain" && QString{name} == "Editing";
+      const auto expanded = targetName == "terrain" && QString{name} != "Compilation";
       if (
         section->expanded() != expanded
         || bar->height() != bar->sizeHint().expandedTo(bar->minimumSize()).height()
@@ -1163,7 +1163,7 @@ void configureSnapshot(QWidget& targetWidget, const QString& targetName)
           auto* section = window->findChild<CollapsibleTitledPanel*>(
             QStringLiteral("TerrainInspector_%1").arg(name)))
         {
-          section->setExpanded(targetName == "terrain" && QString{name} == "Editing");
+          section->setExpanded(targetName == "terrain" && QString{name} != "Compilation");
           if (QString{name} == "Editing")
             section->findChild<ClickableTitleBar*>()->setFocus(Qt::OtherFocusReason);
         }

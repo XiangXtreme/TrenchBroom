@@ -368,7 +368,9 @@ TerrainInspector::TerrainInspector(
   sections->addWidget(creation);
   sections->addWidget(editing);
   sections->addWidget(compilation);
-  sections->addStretch();
+  // Expanded sections can grow. Reserve surplus height for the bottom spacer
+  // instead of distributing it into their forms and between their actions.
+  sections->addStretch(1);
   auto* scroll = new QScrollArea{this};
   scroll->setObjectName(QStringLiteral("TerrainInspector_Scroll"));
   scroll->setWidgetResizable(true);
