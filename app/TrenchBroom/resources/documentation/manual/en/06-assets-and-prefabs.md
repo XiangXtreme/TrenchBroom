@@ -12,6 +12,14 @@ Drag a model or sprite into a viewport to create an entity using that asset. Dra
 
 ![Asset Browser](images/AssetBrowser.png)
 
+### Asset Library Folders {#asset_library_folders}
+
+Open **Asset Library…** from the welcome window, or right-click a library asset in a project and choose **Show in Asset Library**. Select a type directory such as Model or Texture, then click **+** beside Folders or choose **New folder…** from the folder context menu. Subfolders can contain more subfolders, and empty folders remain available after reopening the library.
+
+Use the folder context menu to rename a subfolder or delete an empty folder and its empty descendants. Select one or more assets of the same type, then right-click and choose **Move to folder…**. Assets stay under their type directory. Importing uses the selected folder when its type matches the imported file; other file types use their own type roots. Newly created terrain materials use the selected Material folder.
+
+These folders organize the catalog. Moving assets or renaming folders preserves asset IDs, content versions, and existing project references.
+
 ### Reusable Prefabs {#reusable_prefabs}
 
 Select map objects and click **Save selection as prefab** in the Assets toolbar. A standalone map creates a `.tbprefab` file and thumbnail in the directory configured under **Preferences > Misc > Tools**; a project stores the prefab in the project. Prefabs appear under the `prefabs` root and can be dragged into the map; right-click a prefab to rename or delete it.

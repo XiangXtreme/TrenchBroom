@@ -209,6 +209,25 @@ TEST_CASE("AssetBrowserModel")
     CHECK_FALSE(sameBrowserAssetContent(sky, changed));
     CHECK(sky.path == std::filesystem::path{"gfx/env/desert.v2"});
   }
+  SECTION("library organization overrides WAD and skybox source paths")
+  {
+    auto asset = BrowserAsset{BrowserCellType::Texture, "original.wad/WALL01"};
+    asset.source = BrowserSource::AssetLibrary;
+    asset.textureCollection = "original.wad";
+    asset.catalogPath = "original.wad/WALL01";
+    CHECK(browserAssetDisplayPath(asset, false) == "textures/WALL01");
+    CHECK(browserAssetDisplayPath(asset, true) == "textures/original.wad/WALL01");
+    asset.catalogPath = "textures/Architecture/WALL01";
+    CHECK(browserAssetDisplayPath(asset, false) == "textures/Architecture/WALL01");
+    CHECK(browserAssetDisplayPath(asset, true) == "textures/Architecture/WALL01");
+    asset.skybox = true;
+    asset.path = "gfx/env/desert";
+    asset.catalogPath = asset.path;
+    CHECK(browserAssetDisplayPath(asset, true) == "skybox/desert");
+    asset.catalogPath = "skybox/Day/desert";
+    CHECK(browserAssetDisplayPath(asset, true) == "skybox/Day/desert");
+    CHECK(asset.path == "gfx/env/desert");
+  }
   SECTION("library entries report snapshot state")
   {
     auto wall = BrowserAsset{BrowserCellType::Texture, "custom.wad/WALL01"};

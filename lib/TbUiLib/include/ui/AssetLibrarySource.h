@@ -100,6 +100,28 @@ public:
   /** Whether this source supports catalog edits (favourite, rename, delete). */
   virtual bool canManage() const { return false; }
 
+  virtual Result<std::vector<std::string>> folders() const
+  {
+    return Error{"This asset library does not support folders."};
+  }
+  virtual Result<void> createFolder(const std::string&)
+  {
+    return Error{"This asset library is read only."};
+  }
+  virtual Result<void> renameFolder(const std::string&, const std::string&)
+  {
+    return Error{"This asset library is read only."};
+  }
+  virtual Result<void> removeFolder(const std::string&)
+  {
+    return Error{"This asset library is read only."};
+  }
+  virtual Result<void> moveAssetsToFolder(
+    const std::vector<std::string>&, const std::string&)
+  {
+    return Error{"This asset library is read only."};
+  }
+
   using Metadata = BrowserAssetMetadata;
   virtual Result<std::map<std::string, Metadata>> allMetadata()
   {

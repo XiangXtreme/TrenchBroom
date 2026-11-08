@@ -330,6 +330,40 @@ public:
 
   bool canManage() const override { return true; }
 
+  Result<std::vector<std::string>> folders() const override
+  {
+    return m_library->folders();
+  }
+  Result<void> createFolder(const std::string& path) override
+  {
+    auto result = m_library->createFolder(path);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
+  }
+  Result<void> renameFolder(const std::string& path, const std::string& newPath) override
+  {
+    auto result = m_library->renameFolder(path, newPath);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
+  }
+  Result<void> removeFolder(const std::string& path) override
+  {
+    auto result = m_library->removeFolder(path);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
+  }
+  Result<void> moveAssetsToFolder(
+    const std::vector<std::string>& ids, const std::string& path) override
+  {
+    auto result = m_library->moveAssetsToFolder(ids, path);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
+  }
+
   Result<std::map<std::string, Metadata>> allMetadata() override
   {
     const auto entries = m_library->allMetadata();

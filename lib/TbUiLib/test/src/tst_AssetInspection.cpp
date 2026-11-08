@@ -11,6 +11,7 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QImage>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
@@ -24,6 +25,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -504,6 +506,80 @@ TEST_CASE("AssetInspection")
     CHECK(grid->count() == 4);
     CHECK(std::filesystem::exists(root / trees / "tree.mdl"));
     CHECK(std::filesystem::exists(root / trees / "tree.png"));
+  }
+  SECTION("library folder commands create empty folders and move selected assets")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    write(folder / "texture.png", png(Qt::red));
+    auto library = require(project::AssetLibrary::create(folder, "Folders"));
+    REQUIRE(library->importDirectory(folder).is_success());
+    const auto asset = require(library->assets()).front();
+    auto browser = AssetLibraryWindow{temporary.path(), false};
+    auto* tree = browser.findChild<QTreeWidget*>("AssetLibraryFolders");
+    auto* grid = browser.findChild<QListWidget*>("AssetLibraryGrid");
+    auto* create = browser.findChild<QToolButton*>("AssetLibrary_NewFolder");
+    auto* move = browser.findChild<QAction*>("AssetLibrary_MoveSelected");
+    REQUIRE(tree);
+    REQUIRE(grid);
+    REQUIRE(create);
+    REQUIRE(move);
+    const auto findFolder = [&](const QString& path) -> QTreeWidgetItem* {
+      for (auto it = QTreeWidgetItemIterator{tree}; *it; ++it)
+        if ((*it)->data(0, Qt::UserRole).toString() == path)
+          return *it;
+      return nullptr;
+    };
+    auto* textures = findFolder("textures");
+    REQUIRE(textures);
+    CHECK_FALSE(textures->flags().testFlag(Qt::ItemIsEditable));
+    tree->setCurrentItem(textures);
+    auto answered = false;
+    QTimer::singleShot(0, &browser, [&] {
+      if (auto* dialog = browser.findChild<QInputDialog*>())
+      {
+        answered = true;
+        dialog->setTextValue("Stone");
+        dialog->accept();
+      }
+    });
+    create->click();
+    REQUIRE(answered);
+    REQUIRE(tree->currentItem());
+    CHECK(tree->currentItem()->data(0, Qt::UserRole).toString() == "textures/Stone");
+    CHECK(grid->count() == 0);
+    REQUIRE(findFolder("textures"));
+    tree->setCurrentItem(findFolder("textures"));
+    REQUIRE(grid->count() == 1);
+    grid->item(0)->setSelected(true);
+    REQUIRE(move->isEnabled());
+    answered = false;
+    QTimer::singleShot(0, &browser, [&] {
+      if (auto* dialog = browser.findChild<QInputDialog*>())
+      {
+        auto* choices = dialog->findChild<QComboBox*>();
+        REQUIRE(choices);
+        CHECK(choices->findText("models") == -1);
+        choices->setCurrentText("textures/Stone");
+        answered = true;
+        dialog->accept();
+      }
+    });
+    move->trigger();
+    REQUIRE(answered);
+    CHECK(require(library->findAsset(asset.id))->group == "textures/Stone");
+    REQUIRE(grid->count() == 1);
+    auto* stone = findFolder("textures/Stone");
+    REQUIRE(stone);
+    stone->setText(0, "Rock");
+    QApplication::processEvents();
+    CHECK(require(library->findAsset(asset.id))->group == "textures/Rock");
+    REQUIRE(findFolder("textures/Rock"));
+    auto reopened = AssetLibraryWindow{temporary.path(), false};
+    auto* reopenedTree = reopened.findChild<QTreeWidget*>("AssetLibraryFolders");
+    REQUIRE(reopenedTree);
+    CHECK(reopenedTree->findItems("Rock", Qt::MatchRecursive).size() == 1);
   }
   SECTION("source snapshots and host selection are independent")
   {

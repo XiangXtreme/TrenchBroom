@@ -1661,7 +1661,10 @@ TEST_CASE("ProjectWindow")
     auto browser = AssetLibraryWindow{folder, false, &window};
     auto* folders = browser.findChild<QTreeWidget*>("AssetLibraryFolders");
     REQUIRE(folders);
-    auto* category = folders->topLevelItem(0)->child(0)->child(0);
+    auto* category = static_cast<QTreeWidgetItem*>(nullptr);
+    for (auto it = QTreeWidgetItemIterator{folders}; *it; ++it)
+      if ((*it)->data(0, Qt::UserRole).toString() == "textures/nature")
+        category = *it;
     REQUIRE(category);
     REQUIRE(category->flags().testFlag(Qt::ItemIsEditable));
     category->setText(0, "Landscape");

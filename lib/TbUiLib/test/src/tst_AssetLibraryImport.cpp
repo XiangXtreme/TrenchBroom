@@ -98,6 +98,14 @@ TEST_CASE("AssetLibraryImport")
     CHECK(librarySubfolderForFile("step.wav") == "sound");
     CHECK(librarySubfolderForFile("notes.txt").empty());
     CHECK(librarySubfolderForFile("no_extension").empty());
+    CHECK(
+      librarySubfolderForFile("tree.mdl", "models/nature/trees")
+      == "models/nature/trees");
+    CHECK(librarySubfolderForFile("wall.png", "textures/stone") == "textures/stone");
+    CHECK(librarySubfolderForFile("custom.wad", "textures/stone") == "textures/stone");
+    CHECK(librarySubfolderForFile("wall.png", "models/nature") == "textures");
+    CHECK(librarySubfolderForFile("tree.mdl", "models2/nature") == "models");
+    CHECK(librarySubfolderForFile("notes.txt", "models/nature").empty());
   }
 
   SECTION("normalizes file stems into GoldSrc texture names")

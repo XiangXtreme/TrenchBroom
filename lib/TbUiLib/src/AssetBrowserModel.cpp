@@ -211,6 +211,16 @@ std::filesystem::path browserAssetDisplayPath(
   const BrowserAsset& asset, const bool groupWadTextures)
 {
   const auto& path = asset.catalogPath.empty() ? asset.path : asset.catalogPath;
+  // Preserve manually curated library folders. Unorganized WADs still honour the
+  // container toggle, and skyboxes inferred from source faces keep their flat root.
+  const auto curatedWadFolder =
+    !asset.textureCollection.empty()
+    && browserPathUnderType(asset.type, false, path.parent_path())
+         != browserPathUnderType(asset.type, false, asset.textureCollection);
+  if (asset.source == BrowserSource::AssetLibrary
+      && (asset.skybox ? !path.empty() && *path.begin() == "skybox"
+                       : asset.textureCollection.empty() || curatedWadFolder))
+    return browserPathUnderType(asset.type, asset.skybox, path);
   if (asset.skybox)
     return std::filesystem::path{"skybox"} / path.filename();
   if (asset.type != BrowserCellType::Texture || asset.textureCollection.empty())

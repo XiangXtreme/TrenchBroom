@@ -63,6 +63,15 @@ public:
   Result<void> setGroup(
     const std::vector<std::string>& assetIds, const std::string& group);
 
+  // Catalog folders live below fixed asset-type roots. Moving and renaming only
+  // changes organization; asset IDs, revisions, source paths and content stay intact.
+  Result<std::vector<std::string>> folders() const;
+  Result<void> createFolder(const std::string& path);
+  Result<void> renameFolder(const std::string& path, const std::string& newPath);
+  Result<void> removeFolder(const std::string& path);
+  Result<void> moveAssetsToFolder(
+    const std::vector<std::string>& assetIds, const std::string& path);
+
   Result<std::vector<LibraryAsset>> assets(
     std::optional<AssetType> type = std::nullopt, const std::string& group = {}) const;
   Result<std::vector<LibrarySource>> sources() const;
@@ -143,5 +152,6 @@ private:
 
 /** Catalog names for library source kinds. Only used for display and diagnostics. */
 const char* librarySourceKindName(AssetType type);
+std::string libraryAssetFolder(const LibraryAsset& asset);
 
 } // namespace tb::project

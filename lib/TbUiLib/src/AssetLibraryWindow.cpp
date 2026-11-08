@@ -25,6 +25,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
@@ -144,41 +145,15 @@ QString typeText(const project::AssetType type)
 
 QString libraryFolder(const project::AssetType assetType, const std::string& group)
 {
-  auto type = BrowserCellType::Folder;
-  switch (assetType)
-  {
-  case project::AssetType::Model:
-    type = BrowserCellType::Model;
-    break;
-  case project::AssetType::Sprite:
-    type = BrowserCellType::Sprite;
-    break;
-  case project::AssetType::Sound:
-    type = BrowserCellType::Sound;
-    break;
-  case project::AssetType::Prefab:
-    type = BrowserCellType::Prefab;
-    break;
-  case project::AssetType::Map:
-    type = BrowserCellType::Map;
-    break;
-  case project::AssetType::Texture:
-  case project::AssetType::Skybox:
-    type = BrowserCellType::Texture;
-    break;
-  case project::AssetType::Material:
-    type = BrowserCellType::Material;
-    break;
-  }
-  return pathAsGenericQString(browserPathUnderType(
-    type,
-    assetType == project::AssetType::Skybox,
-    pathFromQString(QString::fromStdString(group))));
+  auto asset = project::LibraryAsset{};
+  asset.type = assetType;
+  asset.group = group;
+  return QString::fromStdString(project::libraryAssetFolder(asset));
 }
 
 QString libraryFolder(const project::LibraryAsset& asset)
 {
-  return libraryFolder(asset.type, asset.group);
+  return QString::fromStdString(project::libraryAssetFolder(asset));
 }
 
 bool folderContains(const QString& folder, const QString& path)
@@ -449,16 +424,51 @@ void AssetLibraryWindow::buildUi()
   auto* foldersPanel = new QWidget{sideSplitter};
   auto* foldersLayout = new QVBoxLayout{foldersPanel};
   foldersLayout->setContentsMargins(0, 0, 0, 0);
-  foldersLayout->addWidget(new QLabel{tr("Folders"), foldersPanel});
+  auto* folderTitle = createPanelActions();
+  folderTitle->addWidget(new QLabel{tr("Folders"), foldersPanel}, 1);
+  m_newFolderButton = new QToolButton{foldersPanel};
+  m_newFolderButton->setObjectName("AssetLibrary_NewFolder");
+  m_newFolderButton->setText("+");
+  m_newFolderButton->setProperty("tbControlRole", "compact");
+  m_newFolderButton->setToolTip(tr("New folder…"));
+  m_newFolderButton->setAccessibleName(tr("New folder…"));
+  connect(
+    m_newFolderButton, &QToolButton::clicked, this, &AssetLibraryWindow::createFolder);
+  folderTitle->addWidget(m_newFolderButton);
+  foldersLayout->addLayout(folderTitle);
   m_folders = new QTreeWidget{foldersPanel};
   connect(m_folders, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item, int) {
     const auto path = item->data(0, Qt::UserRole).toString();
     const auto name = item->text(0);
-    QTimer::singleShot(0, this, [this, path, name] { renameFolder(path, name); });
+    const auto library = libraryId();
+    QTimer::singleShot(0, this, [this, path, name, library] {
+      if (libraryId() == library)
+        renameFolder(path, name);
+    });
   });
   m_folders->setObjectName(QStringLiteral("AssetLibraryFolders"));
   m_folders->setHeaderHidden(true);
   m_folders->setUniformRowHeights(true);
+  m_folders->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(
+    m_folders, &QWidget::customContextMenuRequested, this, [this](const QPoint& point) {
+      if (!m_source || !m_source->canManage())
+        return;
+      if (auto* item = m_folders->itemAt(point))
+        m_folders->setCurrentItem(item);
+      auto menu = QMenu{this};
+      menu.addAction(tr("New folder…"), this, &AssetLibraryWindow::createFolder);
+      if (m_folderPath.contains('/'))
+      {
+        menu.addAction(tr("Rename folder…"), this, [this] {
+          if (auto* item = m_folders->currentItem())
+            m_folders->editItem(item);
+        });
+        menu.addAction(
+          tr("Delete empty folder…"), this, &AssetLibraryWindow::deleteFolder);
+      }
+      menu.exec(m_folders->viewport()->mapToGlobal(point));
+    });
   foldersLayout->addWidget(m_folders, 1);
   sideSplitter->addWidget(foldersPanel);
   sideSplitter->setStretchFactor(0, 3);
@@ -584,6 +594,11 @@ void AssetLibraryWindow::buildUi()
   m_grid->setFrameShape(QFrame::NoFrame);
   m_grid->setSelectionMode(QAbstractItemView::ExtendedSelection);
   m_grid->setContextMenuPolicy(Qt::ActionsContextMenu);
+  m_moveAction = new QAction{tr("Move to folder…"), m_grid};
+  m_moveAction->setObjectName("AssetLibrary_MoveSelected");
+  connect(
+    m_moveAction, &QAction::triggered, this, &AssetLibraryWindow::moveSelectedToFolder);
+  m_grid->addAction(m_moveAction);
   m_createMaterialFromSelection =
     new QAction{tr("Create Terrain Material from Selected Textures…"), m_grid};
   m_createMaterialFromSelection->setObjectName(
@@ -1044,6 +1059,7 @@ void AssetLibraryWindow::updateHeader()
 
 void AssetLibraryWindow::updateActions()
 {
+  m_newFolderButton->setEnabled(m_source && m_source->canManage());
   const auto hasSource = m_source != nullptr;
   m_importButton->setEnabled(hasSource && m_source->canImport());
   m_createMaterialButton->setEnabled(hasSource && m_source->canManage());
@@ -1061,6 +1077,7 @@ void AssetLibraryWindow::updateSelectionActions()
     m_source && m_source->canManage() && !m_grid->selectedItems().empty();
   m_deleteButton->setEnabled(canDelete);
   m_deleteAction->setEnabled(canDelete);
+  m_moveAction->setEnabled(canDelete);
 }
 
 void AssetLibraryWindow::applyViewMode()
@@ -1172,14 +1189,9 @@ void AssetLibraryWindow::renameFolder(const QString& oldPath, const QString& tit
   const auto newPath = oldPath.left(oldPath.lastIndexOf('/') + 1) + name;
   if (oldPath == newPath)
     return;
-  auto changes = std::map<std::string, std::string>{};
-  for (const auto& asset : m_assets)
-  {
-    const auto path = libraryFolder(asset);
-    if (folderContains(oldPath, path))
-      changes.emplace(asset.id, (newPath + path.mid(oldPath.size())).toStdString());
-  }
-  if (const auto result = m_source->setGroups(changes); result.is_error())
+  if (const auto result =
+        m_source->renameFolder(oldPath.toStdString(), newPath.toStdString());
+      result.is_error())
   {
     QMessageBox::critical(
       this,
@@ -1189,6 +1201,133 @@ void AssetLibraryWindow::renameFolder(const QString& oldPath, const QString& tit
     return;
   }
   m_folderPath = newPath;
+  reload();
+}
+
+void AssetLibraryWindow::createFolder()
+{
+  if (!m_source || !m_source->canManage())
+    return;
+  const auto library = libraryId();
+  auto parent = m_folderPath;
+  if (parent.isEmpty())
+  {
+    const auto folders = m_source->folders();
+    if (folders.is_error())
+      return;
+    auto roots = QStringList{};
+    auto titles = QStringList{};
+    for (const auto& path : folders.value())
+      if (path.find('/') == std::string::npos)
+      {
+        roots.push_back(QString::fromStdString(path));
+        titles.push_back(browserFolderDisplayName(pathFromQString(roots.back())));
+      }
+    auto accepted = false;
+    const auto title = QInputDialog::getItem(
+      this, tr("New folder"), tr("Asset type"), titles, 0, false, &accepted);
+    if (!accepted || libraryId() != library)
+      return;
+    parent = roots.at(titles.indexOf(title));
+  }
+  auto accepted = false;
+  const auto name =
+    QInputDialog::getText(
+      this, tr("New folder"), tr("Folder name"), QLineEdit::Normal, {}, &accepted)
+      .trimmed();
+  if (!accepted || name.isEmpty() || libraryId() != library)
+    return;
+  if (name.contains('/') || name.contains('\\'))
+  {
+    QMessageBox::warning(this, tr("New folder"), tr("Enter a single folder name."));
+    return;
+  }
+  const auto path = parent + "/" + name;
+  const auto result = m_source->createFolder(path.toStdString());
+  if (result.is_error())
+    QMessageBox::warning(
+      this,
+      tr("New folder"),
+      QString::fromStdString(std::get<Error>(result.error()).msg));
+  else
+    m_folderPath = path;
+  reload();
+}
+
+void AssetLibraryWindow::deleteFolder()
+{
+  if (!m_source || !m_source->canManage() || !m_folderPath.contains('/'))
+    return;
+  const auto path = m_folderPath;
+  const auto library = libraryId();
+  if (
+    QMessageBox::question(
+      this,
+      tr("Delete empty folder"),
+      tr("Delete '%1' and its empty subfolders?").arg(path),
+      QMessageBox::Yes | QMessageBox::Cancel)
+      != QMessageBox::Yes
+    || libraryId() != library)
+    return;
+  if (const auto result = m_source->removeFolder(path.toStdString()); result.is_error())
+    QMessageBox::warning(
+      this,
+      tr("Delete empty folder"),
+      QString::fromStdString(std::get<Error>(result.error()).msg));
+  else
+    m_folderPath = path.left(path.lastIndexOf('/'));
+  reload();
+}
+
+void AssetLibraryWindow::moveSelectedToFolder()
+{
+  if (!m_source || !m_source->canManage())
+    return;
+  auto ids = std::vector<std::string>{};
+  auto root = QString{};
+  for (const auto* item : m_grid->selectedItems())
+  {
+    const auto id =
+      item->data(AssetLibraryItemDelegate::AssetIdRole).toString().toStdString();
+    const auto found =
+      std::ranges::find_if(m_assets, [&](const auto& asset) { return asset.id == id; });
+    if (found == m_assets.end())
+      return;
+    const auto typeRoot = libraryFolder(found->type, {});
+    if (!root.isEmpty() && root != typeRoot)
+    {
+      QMessageBox::information(
+        this,
+        tr("Move to folder"),
+        tr("Select assets of the same type to move them together."));
+      return;
+    }
+    root = typeRoot;
+    ids.push_back(id);
+  }
+  if (ids.empty())
+    return;
+  const auto folders = m_source->folders();
+  if (folders.is_error())
+    return;
+  auto choices = QStringList{};
+  for (const auto& path : folders.value())
+    if (folderContains(root, QString::fromStdString(path)))
+      choices.push_back(QString::fromStdString(path));
+  const auto library = libraryId();
+  auto accepted = false;
+  const auto path = QInputDialog::getItem(
+    this, tr("Move to folder"), tr("Destination folder"), choices, 0, false, &accepted);
+  if (!accepted || libraryId() != library)
+    return;
+  if (const auto result = m_source->moveAssetsToFolder(ids, path.toStdString());
+      result.is_error())
+    QMessageBox::warning(
+      this,
+      tr("Move to folder"),
+      QString::fromStdString(std::get<Error>(result.error()).msg));
+  else
+    m_folderPath = path;
   reload();
 }
 
@@ -1204,11 +1343,20 @@ void AssetLibraryWindow::refreshFolders()
   auto* root = new QTreeWidgetItem{m_folders, QStringList{tr("All folders")}};
   root->setData(0, Qt::UserRole, QString{});
   auto items = QHash<QString, QTreeWidgetItem*>{{QString{}, root}};
+  auto paths = QStringList{};
+  if (m_source)
+    if (const auto folders = m_source->folders(); folders.is_success())
+      for (const auto& path : folders.value())
+        paths.push_back(QString::fromStdString(path));
   for (const auto& asset : m_assets)
+    paths.push_back(libraryFolder(asset));
+  paths.removeDuplicates();
+  paths.sort();
+  for (const auto& folder : paths)
   {
     auto path = QString{};
     auto* parent = root;
-    for (const auto& part : libraryFolder(asset).split('/', Qt::SkipEmptyParts))
+    for (const auto& part : folder.split('/', Qt::SkipEmptyParts))
     {
       path += (path.isEmpty() ? QString{} : QStringLiteral("/")) + part;
       if (const auto found = items.constFind(path); found != items.cend())
@@ -1802,6 +1950,8 @@ void AssetLibraryWindow::runCreateTerrainMaterial()
       textures.push_back(asset);
   }
   auto dialog = CreateTerrainMaterialDialog{textures, this};
+  const auto library = libraryId();
+  const auto folder = m_folderPath;
   if (const auto selected = selectedTextures())
     dialog.setSelectedTextures(*selected);
   auto def = project::AssetLibrary::TerrainMaterialDefinition{};
@@ -1810,7 +1960,11 @@ void AssetLibraryWindow::runCreateTerrainMaterial()
   {
     if (dialog.exec() != QDialog::Accepted)
       return;
+    if (libraryId() != library)
+      return;
     def = dialog.definition();
+    if (folderContains(QStringLiteral("materials"), folder))
+      def.folder = folder.toStdString();
     auto images = std::array<QImage, 3>{};
     auto input = std::array<std::vector<std::uint8_t>, 3>{};
     auto convert = std::array<bool, 3>{};
@@ -1974,7 +2128,7 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
   for (const auto& file : files)
   {
     const auto source = pathFromQString(file);
-    const auto subfolder = librarySubfolderForFile(source);
+    const auto subfolder = librarySubfolderForFile(source, pathFromQString(m_folderPath));
     if (subfolder.empty())
     {
       report << tr("%1: unsupported file type").arg(file);

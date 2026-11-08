@@ -33,22 +33,26 @@ std::string stemOfVirtualPath(const std::string& virtualPath)
 }
 } // namespace
 
-std::filesystem::path librarySubfolderForFile(const std::filesystem::path& file)
+std::filesystem::path librarySubfolderForFile(
+  const std::filesystem::path& file, const std::filesystem::path& selectedFolder)
 {
   const auto extension = lowerExtension(file);
+  auto root = std::filesystem::path{};
   if (
     extension == ".png" || extension == ".jpg" || extension == ".jpeg"
     || extension == ".bmp" || extension == ".tga" || extension == ".wad")
-    return "textures";
-  if (extension == ".mdl")
-    return "models";
-  if (extension == ".spr")
-    return "sprites";
-  if (extension == ".wav")
-    return "sound";
-  if (extension == ".tbprefab")
-    return "prefabs";
-  return {};
+    root = "textures";
+  else if (extension == ".mdl")
+    root = "models";
+  else if (extension == ".spr")
+    root = "sprites";
+  else if (extension == ".wav")
+    root = "sound";
+  else if (extension == ".tbprefab")
+    root = "prefabs";
+  if (!root.empty() && !selectedFolder.empty() && *selectedFolder.begin() == root)
+    return selectedFolder;
+  return root;
 }
 
 std::string goldSrcTextureNameFromStem(const std::string& stem, const bool masked)

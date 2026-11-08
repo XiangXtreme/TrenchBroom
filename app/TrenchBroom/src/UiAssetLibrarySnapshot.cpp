@@ -253,6 +253,9 @@ std::unique_ptr<QWidget> createUiAssetLibrarySnapshot(
   if (library.importDirectory(library.folder()).is_error())
     return {};
 
+  if (library.createFolder("textures/Environment/Unsorted").is_error())
+    return {};
+
   convertSomeTextures(library, 3);
   dropOneSource(folder);
   if (library.importDirectory(library.folder()).is_error())

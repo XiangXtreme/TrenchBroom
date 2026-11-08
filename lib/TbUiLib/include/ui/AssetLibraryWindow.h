@@ -86,6 +86,8 @@ class AssetLibraryWindow : public QDialog
   QPushButton* m_renameButton = nullptr;
   QPushButton* m_deleteButton = nullptr;
   QAction* m_deleteAction = nullptr;
+  QAction* m_moveAction = nullptr;
+  QToolButton* m_newFolderButton = nullptr;
   QLineEdit* m_tagsEdit = nullptr;
   QProgressBar* m_convertProgress = nullptr;
   QPushButton* m_convertCancel = nullptr;
@@ -153,6 +155,9 @@ private:
   void refreshCategories();
   void refreshFolders();
   void renameFolder(const QString& oldPath, const QString& title);
+  void createFolder();
+  void deleteFolder();
+  void moveSelectedToFolder();
   void refreshGrid();
   void showAsset(const project::LibraryAsset* asset);
   void clearInspector();

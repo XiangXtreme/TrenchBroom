@@ -7693,6 +7693,58 @@ Projects keep their captured copies.</source>
 
 工程保留已捕获的副本。</translation>
     </message>
+    <message>
+        <source>New folder…</source>
+        <translation>新建文件夹…</translation>
+    </message>
+    <message>
+        <source>Rename folder…</source>
+        <translation>重命名文件夹…</translation>
+    </message>
+    <message>
+        <source>Delete empty folder…</source>
+        <translation>删除空文件夹…</translation>
+    </message>
+    <message>
+        <source>Move to folder…</source>
+        <translation>移动到文件夹…</translation>
+    </message>
+    <message>
+        <source>New folder</source>
+        <translation>新建文件夹</translation>
+    </message>
+    <message>
+        <source>Asset type</source>
+        <translation>资产类型</translation>
+    </message>
+    <message>
+        <source>Folder name</source>
+        <translation>文件夹名称</translation>
+    </message>
+    <message>
+        <source>Enter a single folder name.</source>
+        <translation>请输入单个文件夹名称。</translation>
+    </message>
+    <message>
+        <source>Delete empty folder</source>
+        <translation>删除空文件夹</translation>
+    </message>
+    <message>
+        <source>Delete '%1' and its empty subfolders?</source>
+        <translation>删除“%1”及其空子文件夹？</translation>
+    </message>
+    <message>
+        <source>Move to folder</source>
+        <translation>移动到文件夹</translation>
+    </message>
+    <message>
+        <source>Select assets of the same type to move them together.</source>
+        <translation>请选择同类型资产进行批量移动。</translation>
+    </message>
+    <message>
+        <source>Destination folder</source>
+        <translation>目标文件夹</translation>
+    </message>
 </context>
         <context>
         <name>tb::ui::ProjectAssetPanel</name>

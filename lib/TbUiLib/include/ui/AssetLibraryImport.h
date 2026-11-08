@@ -23,8 +23,10 @@ namespace tb::ui
  *
  * Returns an empty path for file types a library cannot hold. GoldSrc containers and
  * images share `textures`; the catalog splits WAD members into individual textures.
+ * A selected folder below the matching type root takes precedence over the default.
  */
-std::filesystem::path librarySubfolderForFile(const std::filesystem::path& file);
+std::filesystem::path librarySubfolderForFile(
+  const std::filesystem::path& file, const std::filesystem::path& selectedFolder = {});
 
 /**
  * Normalizes a file stem into a GoldSrc texture name.

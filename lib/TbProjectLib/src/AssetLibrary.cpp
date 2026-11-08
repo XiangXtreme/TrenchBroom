@@ -28,6 +28,69 @@ namespace
 
 constexpr auto IndexFileName = ".tbassets";
 
+constexpr auto FolderSchema = "CREATE TABLE IF NOT EXISTS folders(path TEXT PRIMARY KEY)";
+
+const char* folderRoot(const AssetType type)
+{
+  switch (type)
+  {
+  case AssetType::Map:
+    return "maps";
+  case AssetType::Texture:
+    return "textures";
+  case AssetType::Material:
+    return "materials";
+  case AssetType::Model:
+    return "models";
+  case AssetType::Sprite:
+    return "sprites";
+  case AssetType::Sound:
+    return "sound";
+  case AssetType::Skybox:
+    return "skybox";
+  case AssetType::Prefab:
+    return "prefabs";
+  }
+  throw detail::StoreError{"Unknown asset type."};
+}
+
+bool containsFolder(const std::string& parent, const std::string& path)
+{
+  return path == parent || path.starts_with(parent + "/");
+}
+
+void validateFolder(const std::string& path)
+{
+  detail::validatePath(path);
+  const auto slash = path.find('/');
+  const auto root = path.substr(0, slash);
+  if (
+    slash == std::string::npos
+    || std::ranges::none_of(
+      std::array{
+        "maps",
+        "textures",
+        "materials",
+        "models",
+        "sprites",
+        "sound",
+        "skybox",
+        "prefabs"},
+      [&](const auto* value) { return root == value; }))
+    throw detail::StoreError{"Folders must be below an asset-type directory."};
+}
+
+void keepFolder(sqlite3* db, std::string path)
+{
+  while (path.find('/') != std::string::npos)
+  {
+    auto insert = detail::Statement{db, "INSERT OR IGNORE INTO folders(path) VALUES(?)"};
+    insert.bind(1, path);
+    insert.run();
+    path.resize(path.rfind('/'));
+  }
+}
+
 std::string pathText(const std::filesystem::path& path)
 {
   const auto text = path.generic_u8string();
@@ -620,6 +683,25 @@ std::string nowText(sqlite3* db)
 
 } // namespace
 
+std::string libraryAssetFolder(const LibraryAsset& asset)
+{
+  const auto root = std::string{folderRoot(asset.type)};
+  const auto slash = asset.group.find('/');
+  const auto first = asset.group.substr(0, slash);
+  static const auto aliases = std::map<std::string, std::string>{
+    {"maps", "地图"},
+    {"textures", "纹理"},
+    {"materials", "材质"},
+    {"models", "模型"},
+    {"sprites", "精灵"},
+    {"sound", "声音"},
+    {"skybox", "天空盒"},
+    {"prefabs", "预制件"}};
+  if (lowered(first) == root || first == aliases.at(root))
+    return slash == std::string::npos ? root : root + asset.group.substr(slash);
+  return asset.group.empty() ? root : root + "/" + asset.group;
+}
+
 const char* AssetLibrary::indexFileName()
 {
   return IndexFileName;
@@ -684,6 +766,7 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::create(
     {
       auto transaction = detail::Transaction{db};
       detail::execute(db, Schema);
+      detail::execute(db, FolderSchema);
       const auto now = nowText(db);
       impl->info = {generateUuid(), name, pathText(folder), now, now};
       auto insert = detail::Statement{
@@ -786,6 +869,8 @@ Result<std::unique_ptr<AssetLibrary>> AssetLibrary::open(
     while (probeSources.next())
       ;
     configure(impl->database);
+    // Additive metadata, like asset_meta: old catalogs acquire empty-folder storage.
+    detail::execute(db, FolderSchema);
     return std::unique_ptr<AssetLibrary>{new AssetLibrary{std::move(impl)}};
   });
 }
@@ -1130,6 +1215,172 @@ Result<LibraryScan> AssetLibrary::importFiles(
     update.run();
     transaction.commit();
     return result;
+  });
+}
+
+Result<std::vector<std::string>> AssetLibrary::folders() const
+{
+  return detail::attempt([&] {
+    auto paths = std::set<std::string>{
+      "maps", "textures", "materials", "models", "sprites", "sound", "skybox", "prefabs"};
+    auto add = [&](std::string path) {
+      while (!path.empty())
+      {
+        paths.insert(path);
+        const auto slash = path.rfind('/');
+        if (slash == std::string::npos)
+          break;
+        path.resize(slash);
+      }
+    };
+    auto query = detail::Statement{m_impl->database.get(), "SELECT path FROM folders"};
+    while (query.next())
+      add(query.text(0));
+    auto groups = detail::Statement{
+      m_impl->database.get(), "SELECT DISTINCT type,group_path FROM assets"};
+    while (groups.next())
+    {
+      auto asset = LibraryAsset{};
+      const auto type = parseAssetType(groups.text(0));
+      if (type.is_error())
+        throw detail::StoreError{"Unknown asset type."};
+      asset.type = type.value();
+      asset.group = groups.text(1);
+      add(libraryAssetFolder(asset));
+    }
+    return std::vector<std::string>{paths.begin(), paths.end()};
+  });
+}
+
+Result<void> AssetLibrary::createFolder(const std::string& path)
+{
+  return detail::attempt([&] {
+    validateFolder(path);
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    const auto existing = folders();
+    if (existing.is_error())
+      throw detail::StoreError{std::get<Error>(existing.error()).msg};
+    if (std::ranges::any_of(existing.value(), [&](const auto& folder) {
+          return lowered(folder) == lowered(path);
+        }))
+      throw detail::StoreError{"A folder with that name already exists."};
+    keepFolder(db, path);
+    transaction.commit();
+  });
+}
+
+Result<void> AssetLibrary::renameFolder(
+  const std::string& path, const std::string& newPath)
+{
+  return detail::attempt([&] {
+    validateFolder(path);
+    validateFolder(newPath);
+    if (path.substr(0, path.find('/')) != newPath.substr(0, newPath.find('/')))
+      throw detail::StoreError{"Folders must stay below the same asset-type directory."};
+    if (path == newPath)
+      return;
+    if (
+      containsFolder(lowered(path), lowered(newPath))
+      && lowered(path) != lowered(newPath))
+      throw detail::StoreError{"Cannot move a folder into itself."};
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    const auto existing = folders();
+    const auto stored = assets();
+    if (existing.is_error() || stored.is_error())
+      throw detail::StoreError{"Cannot read asset folders."};
+    if (std::ranges::find(existing.value(), path) == existing.value().end())
+      throw detail::StoreError{"Folder not found."};
+    if (std::ranges::any_of(existing.value(), [&](const auto& folder) {
+          return folder != path && lowered(folder) == lowered(newPath);
+        }))
+      throw detail::StoreError{"A folder with that name already exists."};
+    auto changes = std::map<std::string, std::string>{};
+    for (const auto& asset : stored.value())
+      if (const auto folder = libraryAssetFolder(asset); containsFolder(path, folder))
+        changes.emplace(asset.id, newPath + folder.substr(path.size()));
+    auto update = detail::Statement{db, "UPDATE assets SET group_path=? WHERE id=?"};
+    for (const auto& [id, folder] : changes)
+    {
+      update.reset();
+      update.bind(1, folder);
+      update.bind(2, id);
+      update.run();
+    }
+    for (const auto& folder : existing.value())
+      if (containsFolder(path, folder))
+      {
+        auto remove = detail::Statement{db, "DELETE FROM folders WHERE path=?"};
+        remove.bind(1, folder);
+        remove.run();
+      }
+    for (const auto& folder : existing.value())
+      if (containsFolder(path, folder))
+        keepFolder(db, newPath + folder.substr(path.size()));
+    keepFolder(db, path.substr(0, path.rfind('/')));
+    transaction.commit();
+  });
+}
+
+Result<void> AssetLibrary::removeFolder(const std::string& path)
+{
+  return detail::attempt([&] {
+    validateFolder(path);
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    const auto existing = folders();
+    const auto stored = assets();
+    if (existing.is_error() || stored.is_error())
+      throw detail::StoreError{"Cannot read asset folders."};
+    if (std::ranges::find(existing.value(), path) == existing.value().end())
+      throw detail::StoreError{"Folder not found."};
+    if (std::ranges::any_of(stored.value(), [&](const auto& asset) {
+          return containsFolder(path, libraryAssetFolder(asset));
+        }))
+      throw detail::StoreError{
+        "This folder contains assets. Move them before deleting the folder."};
+    for (const auto& folder : existing.value())
+      if (containsFolder(path, folder))
+      {
+        auto remove = detail::Statement{db, "DELETE FROM folders WHERE path=?"};
+        remove.bind(1, folder);
+        remove.run();
+      }
+    keepFolder(db, path.substr(0, path.rfind('/')));
+    transaction.commit();
+  });
+}
+
+Result<void> AssetLibrary::moveAssetsToFolder(
+  const std::vector<std::string>& assetIds, const std::string& path)
+{
+  return detail::attempt([&] {
+    detail::validatePath(path);
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    const auto existing = folders();
+    if (existing.is_error())
+      throw detail::StoreError{std::get<Error>(existing.error()).msg};
+    if (std::ranges::find(existing.value(), path) == existing.value().end())
+      throw detail::StoreError{"Destination folder not found."};
+    auto update = detail::Statement{db, "UPDATE assets SET group_path=? WHERE id=?"};
+    for (const auto& id : assetIds)
+    {
+      const auto asset = findAsset(id);
+      if (asset.is_error() || !asset.value())
+        throw detail::StoreError{"Asset not found."};
+      if (!containsFolder(folderRoot(asset.value()->type), path))
+        throw detail::StoreError{
+          "Assets must stay below their own asset-type directory."};
+      keepFolder(db, libraryAssetFolder(*asset.value()));
+      update.reset();
+      update.bind(1, path);
+      update.bind(2, id);
+      update.run();
+    }
+    keepFolder(db, path);
+    transaction.commit();
   });
 }
 

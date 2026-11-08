@@ -113,6 +113,93 @@ TEST_CASE("AssetLibrary")
   const auto wall = test::makeMiptex("WALL01", 32, 16, 1);
   const auto floor = test::makeMiptex("FLOOR01", 16, 16, 2);
 
+  SECTION("empty typed folders survive reopen and older catalogs acquire storage")
+  {
+    auto library = require(AssetLibrary::create(workspace.folder, "Folders"));
+    library.reset();
+    {
+      auto db = RawDatabase{AssetLibrary::indexPath(workspace.folder)};
+      REQUIRE(
+        sqlite3_exec(db.db, "DROP TABLE folders", nullptr, nullptr, nullptr)
+        == SQLITE_OK);
+    }
+    library = require(AssetLibrary::open(workspace.folder));
+    require(library->createFolder("models/自然/树木"));
+    library.reset();
+    library = require(AssetLibrary::open(workspace.folder));
+    const auto folders = require(library->folders());
+    CHECK(std::ranges::find(folders, "models/自然") != folders.end());
+    CHECK(std::ranges::find(folders, "models/自然/树木") != folders.end());
+    for (const auto* invalid :
+         {"models",
+          "other/test",
+          "models/../test",
+          "models//test",
+          "models/con",
+          "models/自然/树木"})
+    {
+      CAPTURE(invalid);
+      CHECK(library->createFolder(invalid).is_error());
+    }
+    CHECK(library->renameFolder("models", "models/renamed").is_error());
+    CHECK(library->removeFolder("models").is_error());
+    require(library->removeFolder("models/自然"));
+    CHECK(require(library->folders()).size() == 8);
+  }
+
+  SECTION("folder rename and asset moves preserve identity content and sibling paths")
+  {
+    workspace.write("custom.wad", require(buildGoldSrcWad({wall, floor})));
+    auto library = require(AssetLibrary::create(workspace.folder, "Folders"));
+    require(library->importDirectory(workspace.folder));
+    const auto assets = require(library->assets());
+    const auto first = assets.front();
+    const auto second = assets.back();
+    require(library->setGroup({first.id}, "curated/stone"));
+    require(library->setGroup({second.id}, "curated/stonework"));
+    require(library->setTags(first.id, {"stone"}));
+    require(library->addDependency(first.id, second.id, "texture"));
+    const auto bytes = require(library->readContent(first.id));
+    require(library->createFolder("textures/curated/stone/empty/nested"));
+    require(library->renameFolder("textures/curated/stone", "textures/curated/rock"));
+    auto renamed = *require(library->findAsset(first.id));
+    CHECK(renamed.group == "textures/curated/rock");
+    CHECK(require(library->findAsset(second.id))->group == "curated/stonework");
+    auto folders = require(library->folders());
+    CHECK(
+      std::ranges::find(folders, "textures/curated/rock/empty/nested") != folders.end());
+    CHECK(std::ranges::find(folders, "textures/curated/stone") == folders.end());
+    CHECK(library->removeFolder("textures/curated/rock").is_error());
+    CHECK(library->renameFolder("textures/curated/rock", "models/rock").is_error());
+    CHECK(library->renameFolder("textures/curated/rock", "textures/curated/rock/child")
+            .is_error());
+    require(library->createFolder("textures/destination"));
+    CHECK(library->moveAssetsToFolder({first.id, "missing"}, "textures/destination")
+            .is_error());
+    CHECK(require(library->findAsset(first.id))->group == renamed.group);
+    CHECK(library->moveAssetsToFolder({first.id}, "models").is_error());
+    require(library->moveAssetsToFolder({first.id, second.id}, "textures/destination"));
+    renamed = *require(library->findAsset(first.id));
+    CHECK(renamed.group == "textures/destination");
+    CHECK(renamed.id == first.id);
+    CHECK(renamed.virtualPath == first.virtualPath);
+    CHECK(renamed.sourceContainer == first.sourceContainer);
+    CHECK(renamed.sourceMember == first.sourceMember);
+    CHECK(renamed.revision == first.revision);
+    CHECK(renamed.contentHash == first.contentHash);
+    CHECK(require(library->dependencies(first.id)).front().dependencyId == second.id);
+    CHECK(require(library->readContent(first.id)) == bytes);
+    CHECK(require(library->metadata(first.id)).tags == std::vector<std::string>{"stone"});
+    require(library->removeFolder("textures/curated/rock"));
+    library.reset();
+    library = require(AssetLibrary::open(workspace.folder));
+    CHECK(require(library->findAsset(first.id))->group == "textures/destination");
+    require(library->renameFolder("textures/destination", "textures/Destination"));
+    CHECK(require(library->findAsset(first.id))->group == "textures/Destination");
+    folders = require(library->folders());
+    CHECK(std::ranges::find(folders, "textures/curated/stonework") != folders.end());
+  }
+
   SECTION("failed initial import removes the catalog and permits retry")
   {
     workspace.write(
