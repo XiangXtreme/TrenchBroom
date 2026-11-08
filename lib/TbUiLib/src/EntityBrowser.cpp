@@ -58,7 +58,6 @@ void EntityBrowser::setDocument(MapDocument& document)
 {
   if (m_document == &document)
     return;
-  const auto folder = m_view->folder();
   const auto filter = m_view->filterText();
   const auto sort = m_view->sortOrder();
   const auto group = m_view->group();
@@ -67,7 +66,6 @@ void EntityBrowser::setDocument(MapDocument& document)
   delete m_content;
   m_document = &document;
   createGui();
-  m_view->setFolder(folder);
   m_view->setFilterText(filter);
   m_view->setSortOrder(sort);
   m_view->setGroup(group);
@@ -150,25 +148,18 @@ void EntityBrowser::refreshSelection()
 {
   const auto* definition = m_document->map().entityDefinitionManager().definition(
     m_view->selectedDefinitionName());
-  const auto point = definition && definition->pointEntityDefinition.has_value();
   const auto summary =
     definition
       ? QString::fromStdString(definition->name + " — " + definition->description)
       : tr("Select an entity type. Drag a point entity into a map view to place it.");
   m_summary->setText(summary.simplified());
   m_summary->setToolTip(summary);
-  m_create->setText(
-    !definition || point ? tr("Create in current view")
-                         : tr("Turn selection into entity"));
-  m_create->setEnabled(
-    m_mapActionsEnabled && definition
-    && (point || m_document->map().selection().hasOnlyGeometryNodes()));
+  m_create->setText(tr("Create in current view"));
+  m_create->setEnabled(m_mapActionsEnabled && definition);
   m_create->setToolTip(
     !m_mapActionsEnabled ? tr("Open a map to create entities")
-    : point
-      ? tr(
-          "Create at the current view position, or drag the type into a view to place it")
-      : tr("Select brushes, then convert them to this entity type"));
+                         : tr("Create at the current view position, or drag the type "
+                              "into a view to place it"));
 }
 
 void EntityBrowser::showSettings()

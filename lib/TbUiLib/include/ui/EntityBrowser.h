@@ -40,13 +40,6 @@ class AppController;
 class EntityBrowserView;
 class MapDocument;
 
-enum class EntityBrowserFolder
-{
-  All,
-  Point,
-  Brush
-};
-
 // Entity content canvas. Navigation, search and view controls belong to ModelBrowser.
 class EntityBrowser : public QWidget
 {

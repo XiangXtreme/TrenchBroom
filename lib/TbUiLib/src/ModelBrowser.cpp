@@ -836,24 +836,22 @@ void ModelBrowser::showEntityBrowser()
 {
   if (m_selectionOnly)
     return;
-  setEntityFolder(EntityBrowserFolder::All);
+  setEntityMode(true);
   m_searchBox->setFocus(Qt::ShortcutFocusReason);
 }
 
 bool ModelBrowser::isShowingEntities() const
 {
-  return m_entityFolder.has_value();
+  return m_showingEntities;
 }
 
-void ModelBrowser::setEntityFolder(const std::optional<EntityBrowserFolder> folder)
+void ModelBrowser::setEntityMode(const bool entities)
 {
-  if (m_selectionOnly || m_entityFolder == folder)
+  if (m_selectionOnly || m_showingEntities == entities)
     return;
   const auto wasEntities = isShowingEntities();
-  if (wasEntities != folder.has_value())
-    saveBrowsingState();
-  m_entityFolder = folder;
-  const auto entities = isShowingEntities();
+  saveBrowsingState();
+  m_showingEntities = entities;
   if (entities && !m_entityBrowser)
   {
     m_entityBrowser = new EntityBrowser{m_appController, *m_document, this};
@@ -873,7 +871,6 @@ void ModelBrowser::setEntityFolder(const std::optional<EntityBrowserFolder> fold
   if (entities)
   {
     auto& view = m_entityBrowser->view();
-    view.setFolder(*folder);
     view.setSortOrder(
       m_entitySort->currentIndex() == 0 ? mdl::EntityDefinitionSortOrder::Name
                                         : mdl::EntityDefinitionSortOrder::Usage);
@@ -1271,7 +1268,7 @@ void ModelBrowser::bindEvents(AppController& appController)
       const auto entity = current->data(0, EntityFolderRole);
       if (entity.isValid())
       {
-        setEntityFolder(EntityBrowserFolder(entity.toInt()));
+        setEntityMode(true);
         return;
       }
       const auto rel = current->data(0, Qt::UserRole).toString();
@@ -1543,17 +1540,8 @@ void ModelBrowser::rebuildBreadcrumbBar()
     root->setText(tr("Entities"));
     root->setAutoRaise(true);
     root->setProperty("tbControlRole", "compact");
-    connect(root, &QToolButton::clicked, this, [this] {
-      setEntityFolder(EntityBrowserFolder::All);
-    });
+    connect(root, &QToolButton::clicked, this, [this] { setEntityMode(true); });
     m_breadcrumbLayout->addWidget(root);
-    if (*m_entityFolder != EntityBrowserFolder::All)
-    {
-      addSeparator();
-      m_breadcrumbLayout->addWidget(new QLabel{
-        *m_entityFolder == EntityBrowserFolder::Point ? tr("Point entities")
-                                                      : tr("Brush entities")});
-    }
     m_breadcrumbLayout->addStretch(1);
     return;
   }
@@ -1786,7 +1774,7 @@ void ModelBrowser::recordFolderHistory()
 
   // Navigating somewhere new drops the forward branch, like a browser history.
   m_folderHistory.resize(size_t(m_folderHistoryIndex + 1));
-  const auto location = BrowserLocation{m_currentFolderPath, m_entityFolder};
+  const auto location = BrowserLocation{m_currentFolderPath, m_showingEntities};
   if (m_folderHistory.empty() || m_folderHistory.back() != location)
   {
     m_folderHistory.push_back(location);
@@ -1819,7 +1807,7 @@ void ModelBrowser::navigateHistory(const int offset)
   m_navigatingHistory = true;
   const auto location = m_folderHistory[size_t(target)];
   if (location.entities)
-    setEntityFolder(location.entities);
+    setEntityMode(true);
   else
     setCurrentFolderPath(location.folder);
   m_navigatingHistory = false;
@@ -2061,7 +2049,7 @@ void ModelBrowser::removePrefabFromBrowser(const std::filesystem::path& prefabPa
 
 void ModelBrowser::setFolderPath(std::filesystem::path folderPath)
 {
-  setEntityFolder(std::nullopt);
+  setEntityMode(false);
   folderPath = folderPath.lexically_normal();
   if (m_folderPath == folderPath)
   {
@@ -2085,7 +2073,7 @@ void ModelBrowser::setCurrentFolderPath(std::filesystem::path currentFolderPath)
   {
     const auto navigating = m_navigatingHistory;
     m_navigatingHistory = true;
-    setEntityFolder(std::nullopt);
+    setEntityMode(false);
     m_navigatingHistory = navigating;
   }
   currentFolderPath = currentFolderPath.lexically_normal();
@@ -2418,7 +2406,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanGameAssets()
 
 void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
 {
-  setEntityFolder(std::nullopt);
+  setEntityMode(false);
   if (m_sourceFilter == source)
   {
     return;
@@ -2986,23 +2974,10 @@ void ModelBrowser::rebuildFolderTree()
   {
     auto* entityRoot = new QTreeWidgetItem{m_folderTree, {tr("Entities")}};
     entityRoot->setIcon(0, folderIcon);
-    entityRoot->setData(0, EntityFolderRole, int(EntityBrowserFolder::All));
-    QTreeWidgetItem* entitySelection = entityRoot;
-    for (const auto folder : {EntityBrowserFolder::Point, EntityBrowserFolder::Brush})
-    {
-      auto* item = new QTreeWidgetItem{
-        entityRoot,
-        {folder == EntityBrowserFolder::Point ? tr("Point entities")
-                                              : tr("Brush entities")}};
-      item->setData(0, EntityFolderRole, int(folder));
-      item->setIcon(0, folderIcon);
-      if (m_entityFolder == folder)
-        entitySelection = item;
-    }
-    entityRoot->setExpanded(true);
+    entityRoot->setData(0, EntityFolderRole, true);
     if (isShowingEntities())
     {
-      m_folderTree->setCurrentItem(entitySelection);
+      m_folderTree->setCurrentItem(entityRoot);
       return;
     }
   }

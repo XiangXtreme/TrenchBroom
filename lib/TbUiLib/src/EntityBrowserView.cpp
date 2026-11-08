@@ -126,17 +126,6 @@ void EntityBrowserView::setFilterText(const std::string& filterText)
   }
 }
 
-void EntityBrowserView::setFolder(const EntityBrowserFolder folder)
-{
-  if (m_folder == folder)
-    return;
-  m_folder = folder;
-  refreshDefinitions();
-}
-EntityBrowserFolder EntityBrowserView::folder() const
-{
-  return m_folder;
-}
 const std::string& EntityBrowserView::filterText() const
 {
   return m_filterText;
@@ -170,9 +159,7 @@ std::vector<const mdl::EntityDefinition*> EntityBrowserView::filteredDefinitions
   {
     const auto point = definition.pointEntityDefinition.has_value();
     if (
-      definition.name == mdl::EntityPropertyValues::WorldspawnClassname
-      || (m_folder == EntityBrowserFolder::Point && !point)
-      || (m_folder == EntityBrowserFolder::Brush && point)
+      definition.name == mdl::EntityPropertyValues::WorldspawnClassname || !point
       || (m_hideUnused && definition.usageCount() == 0))
       continue;
     const auto text = definition.name + " " + definition.description;

@@ -82,7 +82,7 @@ private:
   QCheckBox* m_entityGroup = nullptr;
   QCheckBox* m_entityUsed = nullptr;
   QToolButton* m_entitySettings = nullptr;
-  std::optional<EntityBrowserFolder> m_entityFolder;
+  bool m_showingEntities = false;
   QString m_entitySearch;
   int m_entityScroll = 0;
   std::shared_ptr<ProjectSession> m_project;
@@ -158,7 +158,7 @@ private:
   struct BrowserLocation
   {
     std::filesystem::path folder;
-    std::optional<EntityBrowserFolder> entities;
+    bool entities = false;
     bool operator==(const BrowserLocation&) const = default;
   };
   std::vector<BrowserLocation> m_folderHistory;
@@ -211,7 +211,7 @@ protected:
 
 private:
   void showEvent(QShowEvent* event) override;
-  void setEntityFolder(std::optional<EntityBrowserFolder> folder);
+  void setEntityMode(bool entities);
 
   void previewAsset(AppController& appController, const QString& path);
   void applyAssetToMap(BrowserAsset asset);

@@ -44,6 +44,11 @@ TEST_CASE("EntityBrowser")
      "Illuminates the room",
      {},
      mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}}},
+    {"info_player_start",
+     {},
+     "Player start",
+     {},
+     mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}}},
     {"func_door", {}, "A moving brush door", {}},
     {"worldspawn", {}, "World", {}},
   });
@@ -69,31 +74,24 @@ TEST_CASE("EntityBrowser")
     CHECK(requested.front().front().toString() == "light");
     CHECK(map.selection().nodes == selection);
   }
-  SECTION("shared search and folders filter the grid and clear hidden selections")
+  SECTION("shared search filters point definitions and clears hidden selections")
   {
     REQUIRE(browser.view().selectDefinition("light"));
     browser.view().setFilterText("moving");
-    auto definitions = browser.view().filteredDefinitions();
-    REQUIRE(definitions.size() == 1);
-    CHECK(definitions.front()->name == "func_door");
+    CHECK(browser.view().filteredDefinitions().empty());
     CHECK_FALSE(create->isEnabled());
-    browser.view().setFilterText("");
-    browser.view().setFolder(EntityBrowserFolder::Point);
-    definitions = browser.view().filteredDefinitions();
+    CHECK(browser.view().selectedDefinitionName().empty());
+    browser.view().setFilterText("room");
+    const auto definitions = browser.view().filteredDefinitions();
     REQUIRE(definitions.size() == 1);
     CHECK(definitions.front()->name == "light");
-    browser.view().setFolder(EntityBrowserFolder::Brush);
-    definitions = browser.view().filteredDefinitions();
-    REQUIRE(definitions.size() == 1);
-    CHECK(definitions.front()->name == "func_door");
-    REQUIRE(browser.view().selectDefinition("func_door"));
-    CHECK_FALSE(create->isEnabled());
-    CHECK(create->text() == "Turn selection into entity");
+    browser.view().setFilterText("");
+    CHECK_FALSE(browser.view().selectDefinition("func_door"));
     CHECK_FALSE(browser.view().selectDefinition("worldspawn"));
   }
   SECTION("sorting and grouping preserve selection")
   {
-    CHECK(browser.view().filteredDefinitions().front()->name == "func_door");
+    CHECK(browser.view().filteredDefinitions().front()->name == "info_player_start");
     REQUIRE(browser.view().selectDefinition("light"));
     map.entityDefinitionManager().definition("light")->incUsageCount();
     browser.view().setSortOrder(mdl::EntityDefinitionSortOrder::Usage);
@@ -154,9 +152,9 @@ TEST_CASE("EntityBrowser")
     auto* grid = content.findChild<EntityBrowserView*>();
     REQUIRE(grid);
     CHECK_FALSE(grid->grabFramebuffer().isNull());
-    // The first cell is a brush definition: rendering and clicking it uses the same grid.
+    // Point definitions use the original 3D grid for rendering and selection.
     QTest::mouseClick(grid, Qt::LeftButton, Qt::NoModifier, QPoint{40, 40});
-    CHECK(grid->selectedDefinitionName() == "func_door");
+    CHECK(grid->selectedDefinitionName() == "info_player_start");
     search->setText("room");
     REQUIRE(grid->filteredDefinitions().size() == 1);
     CHECK(grid->filteredDefinitions().front()->name == "light");
@@ -167,20 +165,13 @@ TEST_CASE("EntityBrowser")
     forward->click();
     CHECK(content.isShowingEntities());
     CHECK(search->text() == "room");
-    // Virtual folder navigation participates in the same back/forward history.
-    search->clear();
+    // The entity folder directly lists point types, without redundant type subfolders.
     auto* root = folders->currentItem();
     REQUIRE(root);
-    REQUIRE(root->childCount() == 2);
-    folders->setCurrentItem(root->child(1));
-    CHECK(grid->folder() == EntityBrowserFolder::Brush);
-    REQUIRE(grid->filteredDefinitions().size() == 1);
-    CHECK(grid->filteredDefinitions().front()->name == "func_door");
-    back->click();
-    CHECK(grid->folder() == EntityBrowserFolder::All);
-    REQUIRE(forward->isEnabled());
-    forward->click();
-    CHECK(grid->folder() == EntityBrowserFolder::Brush);
+    CHECK(root->childCount() == 0);
+    search->clear();
+    CHECK(grid->filteredDefinitions().size() == 2);
+    CHECK_FALSE(grid->selectDefinition("func_door"));
     // File-only filters do not leak into the entity listing.
     auto* used = content.findChild<QCheckBox*>("ModelBrowser_EntityUsed");
     REQUIRE(used);

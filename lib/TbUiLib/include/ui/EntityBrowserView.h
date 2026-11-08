@@ -24,7 +24,6 @@
 #include "gl/FontDescriptor.h"
 #include "gl/VertexType.h"
 #include "ui/CellView.h"
-#include "ui/EntityBrowser.h"
 
 #include "kd/flat_map.h"
 
@@ -99,7 +98,6 @@ private:
   bool m_hideUnused = false;
   mdl::EntityDefinitionSortOrder m_sortOrder;
   std::string m_filterText;
-  EntityBrowserFolder m_folder = EntityBrowserFolder::All;
   std::string m_selectedDefinitionName;
   bool m_mapActionsEnabled = true;
 
@@ -118,8 +116,6 @@ public:
   void setGroup(bool group);
   void setHideUnused(bool hideUnused);
   void setFilterText(const std::string& filterText);
-  void setFolder(EntityBrowserFolder folder);
-  EntityBrowserFolder folder() const;
   const std::string& filterText() const;
   mdl::EntityDefinitionSortOrder sortOrder() const;
   bool group() const;

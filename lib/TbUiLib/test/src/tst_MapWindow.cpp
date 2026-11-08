@@ -781,12 +781,14 @@ TEST_CASE("MapWindow")
     mdl::addNodes(map, {{&mdl::parentForNodes(map), {brush}}});
     mdl::deselectAll(map);
     window.editorView().showEntityBrowser();
-    choose("func_door");
-    CHECK_FALSE(create->isEnabled());
+    CHECK_FALSE(grid->selectDefinition("func_door"));
+    auto* view = window.currentMapViewBase();
+    REQUIRE(view);
+    CHECK_FALSE(view->canCreateBrushEntity());
     mdl::selectNodes(map, {brush});
-    REQUIRE(create->isEnabled());
+    REQUIRE(view->canCreateBrushEntity());
     auto* previousParent = brush->parent();
-    create->click();
+    view->createEntity(*map.entityDefinitionManager().definition("func_door"));
     auto* door = dynamic_cast<mdl::EntityNode*>(brush->parent());
     REQUIRE(door);
     CHECK(door->entity().classname() == "func_door");
