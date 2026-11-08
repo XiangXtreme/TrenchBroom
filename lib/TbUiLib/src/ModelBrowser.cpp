@@ -1165,8 +1165,14 @@ void ModelBrowser::applyAssetToMap(BrowserAsset asset)
   // the captured resource remains an explicit project snapshot.
   if (asset.skybox)
     mdl::setWorldProperty(target->map(), "skyname", name);
-  else
-    mdl::setBrushFaceAttributes(target->map(), faces, {.materialName = name});
+  else if (!mdl::setBrushFaceAttributes(target->map(), faces, {.materialName = name}))
+  {
+    QMessageBox::warning(
+      this,
+      tr("Apply Asset"),
+      tr("The selected texture could not be applied to the selected brush faces."));
+    return;
+  }
   emit actionContextChanged();
 }
 
