@@ -39,6 +39,10 @@
     <context>
         <name>QObject</name>
         <message>
+            <source>Show Terrain Inspector</source>
+            <translation>显示地形检查器</translation>
+        </message>
+        <message>
             <source>Cannot verify project map references: %1
 %2</source>
             <translation>无法确认工程地图引用：%1

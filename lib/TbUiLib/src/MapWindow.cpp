@@ -450,6 +450,7 @@ void MapWindow::createMenus()
 void MapWindow::updateShortcuts()
 {
   m_commands->updateShortcuts();
+  m_inspector->updateShortcuts();
   emit commandStateChanged();
 }
 

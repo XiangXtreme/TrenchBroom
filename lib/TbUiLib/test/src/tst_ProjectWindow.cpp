@@ -230,12 +230,13 @@ void closeTab(QTabBar& tabs, const int index)
   QApplication::processEvents();
 }
 
-void doubleClickTexture(ModelBrowserView& view)
+void doubleClickTexture(ModelBrowserView& view, const std::filesystem::path& path = {})
 {
   view.setScrollPosition(0);
   auto position = std::optional<QPoint>{};
   view.scrollToCell([&](const auto& cell) {
-    if (cell.template itemAs<BrowserCellData>().type == BrowserCellType::Texture)
+    const auto& data = cell.template itemAs<BrowserCellData>();
+    if (data.type == BrowserCellType::Texture && (path.empty() || data.path == path))
     {
       const auto& bounds = cell.itemBounds();
       position = QPoint{
@@ -3050,17 +3051,24 @@ TEST_CASE("ProjectWindow")
     const auto beforeCapture = require(session->store().assets()).size();
     if (doubleClick)
     {
+      const auto target =
+        std::ranges::find_if(assetView->assets(), [&](const auto& asset) {
+          return asset.libraryId == texture.libraryId
+                 && asset.libraryAssetId == texture.libraryAssetId;
+        });
+      REQUIRE(target != assetView->assets().end());
+      const auto texturePath = target->path;
       browser->setMapActionsEnabled(false);
-      doubleClickTexture(*assetView);
+      doubleClickTexture(*assetView, texturePath);
       CHECK(face.face().materialName() == previous);
       CHECK(require(session->store().assets()).size() == beforeCapture);
       browser->setMapActionsEnabled(true);
       mdl::deselectAll(map);
-      doubleClickTexture(*assetView);
+      doubleClickTexture(*assetView, texturePath);
       CHECK(face.face().materialName() == previous);
       CHECK(require(session->store().assets()).size() == beforeCapture);
       mdl::selectBrushFaces(map, {face});
-      doubleClickTexture(*assetView);
+      doubleClickTexture(*assetView, texturePath);
     }
     else
     {
@@ -3114,9 +3122,18 @@ TEST_CASE("ProjectWindow")
     if (doubleClick)
     {
       source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::Project));
-      QTRY_VERIFY(!assetView->assets().empty());
+      QTRY_VERIFY(std::ranges::any_of(assetView->assets(), [&](const auto& asset) {
+        return asset.source == BrowserSource::Project
+               && asset.assetId == textureAsset->id;
+      }));
       emit assetView->folderActivated("textures");
-      doubleClickTexture(*assetView);
+      const auto target =
+        std::ranges::find_if(assetView->assets(), [&](const auto& asset) {
+          return asset.source == BrowserSource::Project
+                 && asset.assetId == textureAsset->id;
+        });
+      REQUIRE(target != assetView->assets().end());
+      doubleClickTexture(*assetView, target->path);
       CHECK(face.face().materialName() == "WALL01");
       CHECK(require(session->store().assets()).size() == assets.size());
       map.undoCommand();

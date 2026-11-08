@@ -28,6 +28,7 @@
 #include "kd/ranges/concat_view.h"
 #include "kd/ranges/to.h"
 
+#include <array>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -137,6 +138,16 @@ TEST_CASE("Actions")
     CHECK(actions.contains("Menu/View/Switch to Face Inspector"));
     CHECK(actions.contains("Menu/View/Switch to Outliner Inspector"));
     CHECK(actions.contains("Menu/View/Switch to Plugin Inspector"));
+    const auto shortcuts = std::array{
+      std::pair{"Menu/View/Switch to Entity Inspector", "Ctrl+1"},
+      std::pair{"Menu/View/Switch to Face Inspector", "Ctrl+2"},
+      std::pair{"Menu/View/Switch to Plugin Inspector", "Ctrl+3"},
+      std::pair{"Menu/View/Switch to Terrain Inspector", "Ctrl+4"},
+      std::pair{"Menu/View/Toggle Inspector", "Ctrl+5"},
+      std::pair{"Menu/View/Toggle Info Panel", "Ctrl+6"},
+      std::pair{"Menu/View/Switch to Map Inspector", "Ctrl+Shift+1"}};
+    for (const auto& [path, shortcut] : shortcuts)
+      CHECK(pref(actions.at(path).preference()) == std::vector{KeySequence{shortcut}});
   }
 
   SECTION("Custom tools have menu actions")

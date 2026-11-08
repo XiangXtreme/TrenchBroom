@@ -39,24 +39,24 @@
 namespace tb::ui
 {
 
+QString actionToolTip(const Action& action)
+{
+  auto tooltip = translateUiText(action.label());
+  for (const auto& sequence : pref(action.preference()))
+  {
+    const auto key = toQKeySequence(sequence);
+    if (!key.isEmpty())
+      tooltip.append(QObject::tr(" (%1)").arg(key.toString(QKeySequence::NativeText)));
+  }
+  return tooltip;
+}
+
 void updateActionKeySequence(QAction& qAction, const Action& tAction)
 {
-  const auto& keySequences = pref(tAction.preference());
-
-  auto tooltip = translateUiText(tAction.label());
-  auto qKeySequences =
-    keySequences | std::views::transform(toQKeySequence) | kdl::ranges::to<QList>();
-  for (const auto& qKeySequence : qKeySequences)
-  {
-    if (!qKeySequence.isEmpty())
-    {
-      tooltip.append(
-        QObject::tr(" (%1)").arg(qKeySequence.toString(QKeySequence::NativeText)));
-    }
-  }
-
-  qAction.setToolTip(tooltip);
-  qAction.setShortcuts(qKeySequences);
+  qAction.setToolTip(actionToolTip(tAction));
+  qAction.setShortcuts(
+    pref(tAction.preference()) | std::views::transform(toQKeySequence)
+    | kdl::ranges::to<QList>());
 }
 
 QAction& findOrCreateQtAction(

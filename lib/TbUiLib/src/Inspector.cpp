@@ -28,6 +28,9 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include "ui/ActionBuilder.h"
+#include "ui/ActionManager.h"
+#include "ui/AppController.h"
 #include "ui/FaceInspector.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapSettingsDialog.h"
@@ -39,10 +42,26 @@
 #include "ui/TerrainInspector.h"
 #include "ui/outliner/OutlinerInspector.h"
 
+#include <algorithm>
 #include <array>
 
 namespace tb::ui
 {
+namespace
+{
+// InspectorPage values also identify legacy commands. Keep their identities independent
+// of the order shown in the rail and stacked pages.
+constexpr auto PageOrder = std::array{
+  InspectorPage::Outliner,
+  InspectorPage::Face,
+  InspectorPage::Plugin,
+  InspectorPage::Terrain};
+int pageIndex(const InspectorPage page)
+{
+  return static_cast<int>(std::ranges::find(PageOrder, page) - PageOrder.begin());
+}
+} // namespace
+
 Inspector::Inspector(
   AppController& appController,
   MapDocument& document,
@@ -59,8 +78,8 @@ Inspector::Inspector(
   // Other pages are prepared lazily.
   m_terrainInspector = new TerrainInspector{appController, document, toolBox};
 
-  m_tabBook->addPlaceholderPage("Face");
   m_tabBook->addPlaceholderPage("Outliner");
+  m_tabBook->addPlaceholderPage("Face");
   m_tabBook->addPlaceholderPage("Plugin");
   m_tabBook->addPage(m_terrainInspector, "Terrain");
 
@@ -108,17 +127,17 @@ Inspector::Inspector(
   };
 
   addNavigationButton(
-    InspectorPage::Face,
-    tr("Face Inspector"),
-    tr("Face Inspector (Ctrl+3)"),
-    "Inspector_NavigationFace",
-    "InspectorFace.svg");
-  addNavigationButton(
     InspectorPage::Outliner,
     tr("Scene"),
-    tr("Scene tree and properties (Ctrl+2)"),
+    tr("Scene tree and properties"),
     "Inspector_NavigationOutliner",
     "InspectorOutliner.svg");
+  addNavigationButton(
+    InspectorPage::Face,
+    tr("Face Inspector"),
+    tr("Face Inspector"),
+    "Inspector_NavigationFace",
+    "InspectorFace.svg");
   addNavigationButton(
     InspectorPage::Plugin,
     tr("Plugins"),
@@ -158,6 +177,7 @@ Inspector::Inspector(
 
   connect(m_tabBook, &TabBook::pageChanged, this, &Inspector::updateNavigation);
   updateNavigation(m_tabBook->currentPageIndex());
+  updateShortcuts();
 }
 
 Inspector::~Inspector() = default;
@@ -174,7 +194,7 @@ void Inspector::connectTopWidgets(MapViewBar* mapViewBar)
 
 void Inspector::ensurePage(const InspectorPage page)
 {
-  const auto index = static_cast<int>(page) - 2;
+  const auto index = pageIndex(page);
   switch (page)
   {
   case InspectorPage::Face:
@@ -211,6 +231,7 @@ void Inspector::ensurePage(const InspectorPage page)
   case InspectorPage::Terrain:
     break;
   }
+  updateShortcuts();
 }
 
 void Inspector::switchToPage(const InspectorPage page)
@@ -221,12 +242,12 @@ void Inspector::switchToPage(const InspectorPage page)
   ensurePage(destination);
   if (page == InspectorPage::Entity)
     m_outlinerInspector->showProperties();
-  m_tabBook->switchToPage(static_cast<int>(destination) - 2);
+  m_tabBook->switchToPage(pageIndex(destination));
 }
 
 InspectorPage Inspector::currentPage() const
 {
-  return static_cast<InspectorPage>(m_tabBook->currentPageIndex() + 2);
+  return PageOrder.at(static_cast<size_t>(m_tabBook->currentPageIndex()));
 }
 
 void Inspector::updateNavigation(const int page)
@@ -236,9 +257,26 @@ void Inspector::updateNavigation(const int page)
     return;
   }
 
-  const auto titles = std::array{tr("Face"), tr("Scene"), tr("Plugins"), tr("Terrain")};
+  const auto titles = std::array{tr("Scene"), tr("Face"), tr("Plugins"), tr("Terrain")};
   m_pageTitle->setText(titles.at(static_cast<size_t>(page)).toUpper());
   m_navigationButtons.at(static_cast<size_t>(page))->setChecked(true);
+}
+
+void Inspector::updateShortcuts()
+{
+  const auto& actions = m_appController->actionManager().actionsMap();
+  constexpr auto paths = std::array{
+    "Menu/View/Switch to Entity Inspector",
+    "Menu/View/Switch to Face Inspector",
+    "Menu/View/Switch to Plugin Inspector",
+    "Menu/View/Switch to Terrain Inspector"};
+  for (auto i = size_t{0}; i < paths.size(); ++i)
+    m_navigationButtons[i]->setToolTip(actionToolTip(actions.at(paths[i])));
+  if (m_outlinerInspector)
+    if (
+      auto* button =
+        m_outlinerInspector->findChild<QToolButton*>("OutlinerInspector_MapSettings"))
+      button->setToolTip(actionToolTip(actions.at("Menu/View/Switch to Map Inspector")));
 }
 
 void Inspector::showMapSettings()

@@ -99,6 +99,7 @@
 #include "ui/PieMenu.h"
 #include "ui/PlayModeFullScreen.h"
 #include "ui/PythonConsole.h"
+#include "ui/QKeySequenceUtils.h"
 #include "ui/QPathUtils.h"
 #include "ui/SelectionPropertyEditor.h"
 #include "ui/SpinControl.h"
@@ -127,6 +128,11 @@ namespace tb::ui
 {
 namespace
 {
+
+QString nativeShortcut(const char* value)
+{
+  return toQKeySequence(KeySequence{value}).toString(QKeySequence::NativeText);
+}
 
 struct CurrentPathGuard
 {
@@ -962,6 +968,43 @@ TEST_CASE("MapWindow")
     }
   }
 
+  SECTION(
+    "inspector numbered actions follow rail order and tooltips follow custom shortcuts")
+  {
+    auto* inspector = window.findChild<Inspector*>();
+    REQUIRE(inspector);
+    auto context =
+      ActionExecutionContext{appController, &window, window.currentMapViewBase()};
+    const auto& actions = appController.actionManager().actionsMap();
+    for (const auto& [path, page] : std::array{
+           std::pair{"Menu/View/Switch to Entity Inspector", InspectorPage::Outliner},
+           std::pair{"Menu/View/Switch to Face Inspector", InspectorPage::Face},
+           std::pair{"Menu/View/Switch to Plugin Inspector", InspectorPage::Plugin},
+           std::pair{"Menu/View/Switch to Terrain Inspector", InspectorPage::Terrain}})
+    {
+      const auto& action = actions.at(path);
+      REQUIRE(action.enabled(context));
+      action.execute(context);
+      CHECK(inspector->currentPage() == page);
+    }
+    const auto& scene = actions.at("Menu/View/Switch to Entity Inspector");
+    const auto original = pref(scene.preference());
+    const auto setSceneShortcut = [&](std::vector<KeySequence> shortcuts) {
+      auto& prefs = PreferenceManager::instance();
+      prefs.set(scene.preference(), std::move(shortcuts));
+      prefs.saveChanges();
+    };
+    const auto restore = qScopeGuard([&] { setSceneShortcut(original); });
+    setSceneShortcut({KeySequence{"Ctrl+Alt+1"}});
+    QApplication::processEvents();
+    auto* button = window.findChild<QToolButton*>("Inspector_NavigationOutliner");
+    REQUIRE(button);
+    CHECK(button->toolTip().contains(nativeShortcut("Ctrl+Alt+1")));
+    setSceneShortcut({});
+    QApplication::processEvents();
+    CHECK_FALSE(button->toolTip().contains(nativeShortcut("Ctrl+Alt+1")));
+  }
+
   SECTION("uses a synchronized vertical inspector navigation rail")
   {
     auto* navigationRail = window.findChild<QWidget*>("Inspector_NavigationRail");
@@ -1018,8 +1061,13 @@ TEST_CASE("MapWindow")
       CHECK(iconImage.deviceIndependentSize() == QSizeF{20, 20});
       CHECK(iconImage.isGrayscale());
     }
-    CHECK(outlinerButton->toolTip().contains("Ctrl+2"));
-    CHECK(faceButton->toolTip().contains("Ctrl+3"));
+    CHECK(outlinerButton->toolTip().contains(nativeShortcut("Ctrl+1")));
+    CHECK(faceButton->toolTip().contains(nativeShortcut("Ctrl+2")));
+    CHECK(pluginButton->toolTip().contains(nativeShortcut("Ctrl+3")));
+    CHECK(terrainButton->toolTip().contains(nativeShortcut("Ctrl+4")));
+    CHECK(outlinerButton->y() < faceButton->y());
+    CHECK(faceButton->y() < pluginButton->y());
+    CHECK(pluginButton->y() < terrainButton->y());
 
     auto* inspector = window.findChild<Inspector*>();
     REQUIRE(inspector);
@@ -1096,7 +1144,7 @@ TEST_CASE("MapWindow")
       window.findChild<QToolButton*>("OutlinerInspector_MapSettings");
     REQUIRE(settingsButton);
     CHECK_FALSE(settingsButton->icon().isNull());
-    CHECK(settingsButton->toolTip().contains("Ctrl+1"));
+    CHECK(settingsButton->toolTip().contains(nativeShortcut("Ctrl+Shift+1")));
     CHECK(window.findChild<QToolButton*>("Inspector_NavigationMap") == nullptr);
     CHECK(window.findChild<QWidget*>("MapInspector_MapPropertiesPanel") == nullptr);
     auto* inspector = window.findChild<Inspector*>();

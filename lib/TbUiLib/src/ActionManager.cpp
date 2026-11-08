@@ -2034,7 +2034,7 @@ void ActionManager::createViewMenu()
     "Menu/View/Switch to Map Inspector",
     "Map Settings…",
     ActionContext::Any,
-    KeySequence{"Ctrl+1"},
+    KeySequence{"Ctrl+Shift+1"},
     [](auto& context) { context.editorView().showMapSettings(); },
     [](const auto& context) { return context.hasDocument(); },
   }));
@@ -2042,7 +2042,7 @@ void ActionManager::createViewMenu()
     "Menu/View/Switch to Entity Inspector",
     "Show Scene and Properties",
     ActionContext::Any,
-    KeySequence{"Ctrl+2"},
+    KeySequence{"Ctrl+1"},
     [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Entity); },
     [](const auto& context) { return context.hasDocument(); },
   }));
@@ -2058,7 +2058,7 @@ void ActionManager::createViewMenu()
     "Menu/View/Switch to Face Inspector",
     "Show Face Inspector",
     ActionContext::Any,
-    KeySequence{"Ctrl+3"},
+    KeySequence{"Ctrl+2"},
     [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Face); },
     [](const auto& context) { return context.hasDocument(); },
   }));
@@ -2076,8 +2076,16 @@ void ActionManager::createViewMenu()
     "Menu/View/Switch to Plugin Inspector",
     "Show Plugin Inspector",
     ActionContext::Any,
-    KeySequence{},
+    KeySequence{"Ctrl+3"},
     [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Plugin); },
+    [](const auto& context) { return context.hasDocument(); },
+  }));
+  viewMenu.addItem(addAction(Action{
+    "Menu/View/Switch to Terrain Inspector",
+    "Show Terrain Inspector",
+    ActionContext::Any,
+    KeySequence{"Ctrl+4"},
+    [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Terrain); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   viewMenu.addSeparator();
@@ -2096,7 +2104,7 @@ void ActionManager::createViewMenu()
     "Menu/View/Toggle Info Panel",
     "Toggle Info Panel",
     ActionContext::Any,
-    KeySequence{"Ctrl+4"},
+    KeySequence{"Ctrl+6"},
     [](auto& context) { context.editorView().toggleInfoPanel(); },
     [](const auto& context) { return context.hasDocument(); },
     [](const auto& context) {

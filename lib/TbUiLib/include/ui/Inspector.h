@@ -80,6 +80,7 @@ public:
   ~Inspector() override;
 
   void connectTopWidgets(MapViewBar* mapViewBar);
+  void updateShortcuts();
   void switchToPage(InspectorPage page);
   InspectorPage currentPage() const;
   void showMapSettings();

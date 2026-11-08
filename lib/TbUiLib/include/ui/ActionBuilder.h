@@ -26,6 +26,7 @@ class QMenu;
 class QMenuBar;
 class QObject;
 class QToolBar;
+class QString;
 
 namespace tb::ui
 {
@@ -40,6 +41,8 @@ QAction& findOrCreateQtAction(
   const TriggerFn& triggerFn,
   QObject* owner = nullptr);
 
+/** Translated action label followed by its currently configured shortcuts. */
+QString actionToolTip(const Action& action);
 void updateActionKeySequence(QAction& qAction, const Action& tAction);
 
 struct PopulateMenuResult

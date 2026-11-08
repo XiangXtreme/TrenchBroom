@@ -94,8 +94,8 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
   addLayerButton->setIconSize(QSize{16, 16});
   topRow->addWidget(addLayerButton);
 
-  auto* mapSettings = createBitmapButton(
-    "GeneralPreferences.svg", tr("Map Settings… (Ctrl+1)"), topRowWidget);
+  auto* mapSettings =
+    createBitmapButton("GeneralPreferences.svg", tr("Map Settings…"), topRowWidget);
   mapSettings->setObjectName("OutlinerInspector_MapSettings");
   mapSettings->setProperty("tbControlRole", "compact");
   mapSettings->setAccessibleName(tr("Map Settings…"));
