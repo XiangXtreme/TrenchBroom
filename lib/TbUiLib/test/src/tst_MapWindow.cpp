@@ -75,6 +75,7 @@
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "ui/ActionExecutionContext.h"
+#include "ui/ActionManager.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/CatchConfig.h"
 #include "ui/CommandPaletteDialog.h"
@@ -85,6 +86,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 #include "ui/MapEditorView.h"
+#include "ui/MapSettingsDialog.h"
 #include "ui/MapStatus.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
@@ -104,6 +106,7 @@
 #include "ui/TransformCard.h"
 #include "ui/WorkspaceLayout.h"
 #include "ui/WorkspaceToolPanel.h"
+#include "ui/outliner/OutlinerTreeWidget.h"
 #include "ui/python/PythonScripting.h"
 
 #include <utility>
@@ -963,7 +966,7 @@ TEST_CASE("MapWindow")
     REQUIRE(navigationRail != nullptr);
     REQUIRE(pageTitle != nullptr);
     REQUIRE(legacyTabBar != nullptr);
-    REQUIRE(mapButton != nullptr);
+    CHECK(mapButton == nullptr);
     CHECK(entityButton == nullptr);
     REQUIRE(faceButton != nullptr);
     REQUIRE(outlinerButton != nullptr);
@@ -994,20 +997,16 @@ TEST_CASE("MapWindow")
 
     CHECK(navigationRail->width() == 40);
     CHECK(legacyTabBar->isHidden());
-    CHECK_FALSE(mapButton->icon().isNull());
     CHECK_FALSE(faceButton->icon().isNull());
     CHECK_FALSE(outlinerButton->icon().isNull());
     CHECK_FALSE(pluginButton->icon().isNull());
     CHECK_FALSE(terrainButton->icon().isNull());
-    for (const auto* button :
-         {mapButton, faceButton, outlinerButton, pluginButton, terrainButton})
+    for (const auto* button : {faceButton, outlinerButton, pluginButton, terrainButton})
     {
       const auto iconImage = button->icon().pixmap(QSize{20, 20}).toImage();
       CHECK(iconImage.deviceIndependentSize() == QSizeF{20, 20});
       CHECK(iconImage.isGrayscale());
     }
-    CHECK(mapButton->accessibleName() == "Map Inspector");
-    CHECK(mapButton->toolTip().contains("Ctrl+1"));
     CHECK(outlinerButton->toolTip().contains("Ctrl+2"));
     CHECK(faceButton->toolTip().contains("Ctrl+3"));
 
@@ -1064,13 +1063,60 @@ TEST_CASE("MapWindow")
     CHECK(pageTitle->text() == "TERRAIN");
     checkSingleNavigation();
     window.switchToInspectorPage(InspectorPage::Map);
-    CHECK(mapButton->isChecked());
-    CHECK(pageTitle->text() == "MAP");
+    CHECK(terrainButton->isChecked());
+    CHECK(pageTitle->text() == "TERRAIN");
+    auto* settings = window.findChild<MapSettingsDialog*>();
+    REQUIRE(settings);
+    CHECK(settings->isVisible());
+    settings->close();
     checkSingleNavigation();
     window.hide();
     window.show();
     QApplication::processEvents();
     checkSingleNavigation();
+  }
+
+  SECTION(
+    "scene toolbar and map shortcut share settings without changing inspector state")
+  {
+    window.show();
+    window.switchToInspectorPage(InspectorPage::Outliner);
+    auto* settingsButton =
+      window.findChild<QToolButton*>("OutlinerInspector_MapSettings");
+    REQUIRE(settingsButton);
+    CHECK_FALSE(settingsButton->icon().isNull());
+    CHECK(settingsButton->toolTip().contains("Ctrl+1"));
+    CHECK(window.findChild<QToolButton*>("Inspector_NavigationMap") == nullptr);
+    CHECK(window.findChild<QWidget*>("MapInspector_MapPropertiesPanel") == nullptr);
+    auto* inspector = window.findChild<Inspector*>();
+    auto* tree = window.findChild<OutlinerTreeWidget*>();
+    REQUIRE(tree);
+    const auto selection = window.document().map().selection().nodes;
+    settingsButton->click();
+    auto settings = QPointer<MapSettingsDialog>{window.findChild<MapSettingsDialog*>()};
+    REQUIRE(settings);
+    CHECK(settings->isVisible());
+    CHECK(inspector->currentPage() == InspectorPage::Outliner);
+    CHECK(window.document().map().selection().nodes == selection);
+    auto context =
+      ActionExecutionContext{appController, &window, window.currentMapViewBase()};
+    const auto& action =
+      appController.actionManager().actionsMap().at("Menu/View/Switch to Map Inspector");
+    REQUIRE(action.enabled(context));
+    action.execute(context);
+    CHECK(window.findChildren<MapSettingsDialog*>().size() == 1);
+    CHECK(window.findChild<MapSettingsDialog*>() == settings);
+    settings->close();
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    CHECK(settings.isNull());
+    CHECK(window.findChild<OutlinerTreeWidget*>() == tree);
+    window.editorView().toggleInspector();
+    REQUIRE_FALSE(window.editorView().isInspectorVisible());
+    action.execute(context);
+    REQUIRE(window.findChild<MapSettingsDialog*>());
+    CHECK(window.findChild<MapSettingsDialog*>()->isVisible());
+    CHECK_FALSE(window.editorView().isInspectorVisible());
+    window.findChild<MapSettingsDialog*>()->close();
   }
 
   SECTION("uses a focused command palette structure")

@@ -2,7 +2,7 @@
 
 日期：2026-11-08
 
-状态：第一轮与第二轮已交付；按后续确认追加实体浏览器迁移和独立实体检查器移除。面材质与其余资源轮次仍按后文推进。
+状态：第一轮与第二轮已交付；按后续确认追加实体浏览器迁移、独立实体检查器移除，以及地图设置与图层入口整合。面材质与其余资源轮次仍按后文推进。
 
 本文细化[功能与工作流清单](workspace-function-workflow-inventory.md)，与现行
 [工作空间 UI 架构](workspace-ui-architecture.md)共同使用：后者负责宿主、上下文、生命周期
@@ -21,10 +21,10 @@
 
 | 区域 | 建议内容 | 使用结果 |
 | --- | --- | --- |
-| 右侧场景 | 图层、组、实体及对象树；搜索、排序、显隐和锁定；下方属性与变换 | 选择对象后同屏检查和编辑；可单独扩大树或属性区域。图层操作集中此处，地图页的原入口可作为跳转或兼容视图。 |
+| 右侧场景 | 图层、组、实体及对象树；搜索、排序、显隐和锁定；下方属性与变换 | 选择对象后同屏检查和编辑；可单独扩大树或属性区域。图层操作集中此处，工具栏提供“地图设置…”入口。 |
 | 实体入口 | Ctrl+2 打开右侧场景与属性；“显示实体浏览器”打开底部实体分类 | 右侧保留一个属性入口，定义浏览、说明、创建和 FGD 设置在底部完成。 |
 | 右侧面 | 面属性、UV 和面标志；打开底部材质浏览的入口 | 不再长期占据右侧空间显示另一套材质列表；`Ctrl+3` 仍直达面编辑。 |
-| 右侧地图设置 | 地图边界、Mods 等地图级配置 | 原 `Ctrl+1` 仍可到达地图设置与图层管理，导航迁移必须保留可发现性。 |
+| 地图设置窗口 | 地图软边界、Mods 等地图级配置 | 场景工具栏、视图菜单和 `Ctrl+1` 打开同一个地图设置窗口。 |
 | 右侧 Terrain | 创建、编辑模式、笔刷、材质槽、分析、预算和导出 | 保留独立工具会话；资源入口定位到底部匹配的 Terrain Material，工具切换不重置正在使用的设置。 |
 | 右侧插件 | 已注册插件面板和关闭操作 | 保留注册、卸载和生命周期；底部 Extensions 可继续跳转。 |
 | 底部 Content Browser | 来源、类型、搜索、预览、详情；实体类型已迁入，地图材质集合视图和面材质应用能力待后续整合 | 一个主要浏览区域承载地图材质、工程、库和游戏文件；根据来源与目标显示适当操作，不假装不同资源具有同样能力。 |
@@ -46,7 +46,7 @@
 | Terrain Material | Terrain 当前从工程资源选择复合材质 ID，并使用三个绘制槽；资源库可创建材质，Content Browser 可筛选，缺失材质有反馈。 | 从库浏览、捕获到工程、绑定所选 Terrain 的路径可发现；默认三通道、依赖纹理、缺失和非法状态保持可见。普通面纹理与 Terrain Material 保持各自语义。现有路径是否能一步完成须人工验证，不能当作已实现。 |
 | 插件 | 底部入口跳转右侧插件；插件面板有独立注册和生命周期。 | 不改变已公开的注册、卸载、定时器、文档解绑与关闭行为；未来扩展面板依照工作空间契约声明作用域。 |
 
-图层证据：[LayerEditor](../lib/TbUiLib/src/LayerEditor.cpp)、[创建图层](../lib/TbMdlLib/src/Map_Layers.cpp)、[OutlinerTreeWidget](../lib/TbUiLib/src/outliner/OutlinerTreeWidget.cpp)。属性证据：[EntityPropertyGrid](../lib/TbUiLib/src/EntityPropertyGrid.cpp)、[智能编辑器注册](../lib/TbUiLib/src/SmartPropertyEditorManager.cpp)、[Outliner 属性](../lib/TbUiLib/src/outliner/OutlinerEntityPropertyEditor.cpp)。材质证据：[FaceInspector](../lib/TbUiLib/src/FaceInspector.cpp)、[MaterialBrowser](../lib/TbUiLib/src/MaterialBrowser.cpp)、[ModelBrowser](../lib/TbUiLib/src/ModelBrowser.cpp)、[TerrainInspector](../lib/TbUiLib/src/TerrainInspector.cpp)。
+图层证据：[LayerActions](../lib/TbUiLib/src/LayerActions.cpp)、[创建图层](../lib/TbMdlLib/src/Map_Layers.cpp)、[OutlinerTreeWidget](../lib/TbUiLib/src/outliner/OutlinerTreeWidget.cpp)。属性证据：[EntityPropertyGrid](../lib/TbUiLib/src/EntityPropertyGrid.cpp)、[智能编辑器注册](../lib/TbUiLib/src/SmartPropertyEditorManager.cpp)、[Outliner 属性](../lib/TbUiLib/src/outliner/OutlinerEntityPropertyEditor.cpp)。材质证据：[FaceInspector](../lib/TbUiLib/src/FaceInspector.cpp)、[MaterialBrowser](../lib/TbUiLib/src/MaterialBrowser.cpp)、[ModelBrowser](../lib/TbUiLib/src/ModelBrowser.cpp)、[TerrainInspector](../lib/TbUiLib/src/TerrainInspector.cpp)。
 
 ## 关键工作流
 
@@ -132,6 +132,23 @@ Terrain 的推荐路径是从材质控制打开底部浏览器并筛选 Terrain 
 
 点实体浏览复验（Windows Release，Qt 6.11.1）：相关四组回归共 2838 条断言通过；最终预检完成 Release 构建、5 个编译单元严格检查及 5 项 CTest。原生窗口下实体浏览与创建/转换撤销用例共 109 条断言通过。实体浏览、空结果与 workbench 的三主题 9 张快照通过捕获完整性检查，结果位于 `build-release-codex/codex-logs/ui-theme-acceptance/20261108-155800-702/`，已查看实体列表与空结果单张截图。样式治理和 14 对手册章节校验通过。
 
+### 第二轮追加：地图设置与图层入口整合
+
+场景树统一提供图层创建、激活、移动选区、排序、显隐、隔离、锁定、导出排除、改名和删除。右侧导航移除独立地图页；旧地图页布局恢复到场景，其他页面身份保持不变。
+
+场景工具栏的齿轮、视图菜单“地图设置…”及 `Ctrl+1` 打开同一个按需创建的窗口。软边界保留关闭、游戏默认和自定义向量范围；Mods 保留可用/已启用列表、搜索、启用停用和优先级排序。修改立即通过原生地图命令生效，关闭窗口不回滚，可使用地图 Undo/Redo。打开设置不改变当前检查器页面、显隐或地图选区。
+
+设置窗口显示目标地图路径，固定绑定所属文档，并以窗口模态方式防止同时操作宿主。工程中切换地图或关闭所属地图会关闭并释放窗口；重新打开读取当前地图状态。Mods 编辑器初始化直接读取已加载文档，软边界控件随命令与撤销同步刷新。
+
+试用：创建并组织多个图层；从场景齿轮打开设置并调整边界、Mods，关闭后 Undo/Redo；在工程两张地图间切换并分别打开设置；检查 `Ctrl+1/2/3` 及旧布局恢复。
+
+本次验收（2026-11-08）：
+
+- Release 应用与 UI 测试目标构建通过；最终本地预检通过，包含 14 个改动编译单元的严格编译、10 项 CTest 回归和 UI 样式治理检查。
+- 地图设置、场景树、窄属性面板、工作台和工程地图切换通过 Light / Dark / Blender 共 15 张快照验收；逐张检查设置窗口及窄面板，未使用长拼图代替检查。输出目录：`build-release-codex/codex-logs/ui-theme-acceptance/20261108-162539-293/`。
+- 原生窗口定向测试通过：设置编辑、场景齿轮/地图快捷命令共用窗口、工程地图切换/关闭，共 80 条断言。Terrain 绘制回归另以共享 OpenGL 子进程通过，覆盖打开并关闭设置后继续绘制。
+- 中文翻译与编译资源同步更新，1782 条译文完成；中英离线手册 14 对章节校验通过。
+
 ### 第一轮：先把场景树做好
 
 目标：用户能用场景树完成一张真实地图的对象与图层组织。
@@ -204,6 +221,5 @@ Terrain 的推荐路径是从材质控制打开底部浏览器并筛选 Terrain 
 
 - 底部材质视图默认采用哪种密度、是否自动随选面定位，以及选中同一材质切换无材质的交互是否需要显式提示；实施前通过原型讨论，不能静默改变现有语义。
 - 场景树与属性面板的默认比例、窄屏最低可用高度、是否记住各地图或整个工作空间的展开状态。
-- 地图设置入口与图层跳转的具体呈现；保留快捷键不等于强制保留完全相同的页面布局。
 - 单独 MAP 与工程在所有资源类别、游戏配置和拖放路径的实测差异；Terrain 从库创建到捕获绑定的现有详细步骤。
 - 合并后对原有插件、用户布局及依赖控件名称的测试/自动化的影响，需在实际迁移时核对。

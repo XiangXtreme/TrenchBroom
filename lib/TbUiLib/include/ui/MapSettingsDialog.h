@@ -19,8 +19,9 @@
 
 #pragma once
 
+#include <QDialog>
+
 #include "base/NotifierConnection.h"
-#include "ui/TabBook.h"
 
 #include "vm/bbox.h"
 
@@ -34,25 +35,13 @@ class QRadioButton;
 
 namespace tb::ui
 {
-class CollapsibleTitledPanel;
 class MapDocument;
 
-class MapInspector : public TabBookPage
+class MapSettingsDialog : public QDialog
 {
   Q_OBJECT
-private:
-  CollapsibleTitledPanel* m_mapPropertiesEditor = nullptr;
-  CollapsibleTitledPanel* m_modEditor = nullptr;
-
 public:
-  explicit MapInspector(MapDocument& document, QWidget* parent = nullptr);
-  ~MapInspector() override;
-
-private:
-  void createGui(MapDocument& document);
-  QWidget* createLayerEditor(MapDocument& document);
-  CollapsibleTitledPanel* createMapPropertiesEditor(MapDocument& document);
-  CollapsibleTitledPanel* createModEditor(MapDocument& document);
+  explicit MapSettingsDialog(MapDocument& document, QWidget* parent = nullptr);
 };
 
 /**

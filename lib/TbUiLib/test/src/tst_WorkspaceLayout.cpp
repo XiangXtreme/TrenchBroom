@@ -76,24 +76,29 @@ TEST_CASE("WorkspaceLayout")
     CHECK(settings.value("Windows/Inspector/State").toByteArray() == bytes);
   }
 
-  SECTION("saved entity pages migrate to scene without changing other page IDs")
+  SECTION("saved map and entity pages migrate to scene without changing other page IDs")
   {
-    auto bytes = QByteArray{};
-    auto stream = QDataStream{&bytes, QIODevice::WriteOnly};
-    stream << static_cast<int>(InspectorPage::Entity);
-    settings.setValue("Windows/Inspector_TabBook/State", bytes);
-    CHECK(
-      loadEditorLayout(settings, WorkspaceKind::Map).inspectorPage
-      == InspectorPage::Outliner);
-    settings.setValue(
-      "WorkspaceLayouts/Map/Editor",
-      QVariantMap{{"version", 1}, {"inspectorPage", "entity"}});
-    CHECK(
-      loadEditorLayout(settings, WorkspaceKind::Map).inspectorPage
-      == InspectorPage::Outliner);
+    for (const auto page : {InspectorPage::Map, InspectorPage::Entity})
+    {
+      auto bytes = QByteArray{};
+      auto stream = QDataStream{&bytes, QIODevice::WriteOnly};
+      stream << static_cast<int>(page);
+      settings.remove("WorkspaceLayouts/Map/Editor");
+      settings.setValue("Windows/Inspector_TabBook/State", bytes);
+      CHECK(
+        loadEditorLayout(settings, WorkspaceKind::Map).inspectorPage
+        == InspectorPage::Outliner);
+      settings.setValue(
+        "WorkspaceLayouts/Map/Editor",
+        QVariantMap{
+          {"version", 1},
+          {"inspectorPage", page == InspectorPage::Map ? "map" : "entity"}});
+      CHECK(
+        loadEditorLayout(settings, WorkspaceKind::Map).inspectorPage
+        == InspectorPage::Outliner);
+    }
     for (const auto page :
-         {InspectorPage::Map,
-          InspectorPage::Face,
+         {InspectorPage::Face,
           InspectorPage::Outliner,
           InspectorPage::Plugin,
           InspectorPage::Terrain})
@@ -117,7 +122,7 @@ TEST_CASE("WorkspaceLayout")
     const auto editor = loadEditorLayout(settings, WorkspaceKind::Project);
     CHECK(editor.inspectorRatio == EditorLayout{}.inspectorRatio);
     CHECK(editor.infoRatio == EditorLayout{}.infoRatio);
-    CHECK(editor.inspectorPage == InspectorPage::Map);
+    CHECK(editor.inspectorPage == InspectorPage::Outliner);
     settings.setValue(
       "WorkspaceLayouts/Project/Tools",
       QVariantMap{{"version", 1}, {"tool", "uninstalled-plugin"}, {"heightRatio", 50.0}});

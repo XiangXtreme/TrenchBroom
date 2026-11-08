@@ -92,15 +92,17 @@ ModEditor::ModEditor(MapDocument& document, QWidget* parent)
 {
   createGui();
   connectObservers();
+  documentWasLoaded();
 }
 
 void ModEditor::createGui()
 {
-  auto* availableModContainer = new TitledPanel{"Available", false, true};
+  auto* availableModContainer = new TitledPanel{tr("Available"), false, true};
   availableModContainer->setBackgroundRole(QPalette::Base);
   availableModContainer->setAutoFillBackground(true);
 
   m_availableModList = new QListWidget{};
+  m_availableModList->setObjectName("ModEditor_Available");
   m_availableModList->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
   auto* availableModContainerSizer = new QVBoxLayout{};
@@ -117,11 +119,12 @@ void ModEditor::createGui()
   filterBoxSizer->setSpacing(0);
   filterBoxSizer->addWidget(m_filterBox, 1);
 
-  auto* enabledModContainer = new TitledPanel{"Enabled", false, true};
+  auto* enabledModContainer = new TitledPanel{tr("Enabled"), false, true};
   enabledModContainer->setBackgroundRole(QPalette::Base);
   enabledModContainer->setAutoFillBackground(true);
 
   m_enabledModList = new QListWidget{};
+  m_enabledModList->setObjectName("ModEditor_Enabled");
   m_enabledModList->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
   auto* enabledModContainerSizer = new QVBoxLayout{};
@@ -134,6 +137,11 @@ void ModEditor::createGui()
   m_removeModsButton = createBitmapButton("Remove.svg", tr("Disable the selected mods"));
   m_moveModUpButton = createBitmapButton("Up.svg", tr("Move the selected mod up"));
   m_moveModDownButton = createBitmapButton("Down.svg", tr("Move the selected mod down"));
+
+  m_addModsButton->setObjectName("ModEditor_Add");
+  m_removeModsButton->setObjectName("ModEditor_Remove");
+  m_moveModUpButton->setObjectName("ModEditor_MoveUp");
+  m_moveModDownButton->setObjectName("ModEditor_MoveDown");
 
   auto* toolBar = createMiniToolBarLayout(
     m_addModsButton,

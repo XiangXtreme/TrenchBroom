@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <QPointer>
 #include <QWidget>
 
 #include <vector>
@@ -32,7 +33,7 @@ class AppController;
 class FaceInspector;
 class MapDocument;
 class MapViewToolBox;
-class MapInspector;
+class MapSettingsDialog;
 class MapViewBar;
 class OutlinerInspector;
 class PluginInspector;
@@ -42,7 +43,7 @@ class TerrainInspector;
 
 enum class InspectorPage
 {
-  Map = 0,
+  Map = 0,    // Legacy layouts redirect to Outliner; commands open map settings.
   Entity = 1, // Legacy settings/commands redirect to Outliner.
   Face = 2,
   Outliner = 3,
@@ -57,7 +58,7 @@ private:
   AppController* m_appController = nullptr;
   MapDocument* m_document = nullptr;
   TabBook* m_tabBook = nullptr;
-  MapInspector* m_mapInspector = nullptr;
+  QPointer<MapSettingsDialog> m_mapSettingsDialog;
   FaceInspector* m_faceInspector = nullptr;
   OutlinerInspector* m_outlinerInspector = nullptr;
   PluginInspector* m_pluginInspector = nullptr;
@@ -81,6 +82,8 @@ public:
   void connectTopWidgets(MapViewBar* mapViewBar);
   void switchToPage(InspectorPage page);
   InspectorPage currentPage() const;
+  void showMapSettings();
+  void closeMapSettings();
   bool cancelMouseDrag();
 
   FaceInspector* faceInspector();

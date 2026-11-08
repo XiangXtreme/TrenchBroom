@@ -1001,8 +1001,8 @@
             </message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/ActionManager.cpp" line="1832" />
-            <source>Show Map Inspector</source>
-            <translation>显示地图检查器</translation>
+            <source>Map Settings…</source>
+            <translation>地图设置…</translation>
             </message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/ActionManager.cpp" line="1840" />
@@ -1159,7 +1159,7 @@
             <translation>%1 隐藏</translation>
             </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="80" />
+            <location filename="../../../../lib/TbUiLib/src/MapSettingsDialog.cpp" line="80" />
             <source>None</source>
             <translation>无</translation>
             </message>
@@ -3280,47 +3280,52 @@ Please choose a different file name to export to.</source>
             </message>
         </context>
     <context>
-        <name>tb::ui::MapInspector</name>
+        <name>tb::ui::MapSettingsDialog</name>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="118" />
-            <source>Layers</source>
-            <translation>图层</translation>
-            </message>
+            <source>Map Settings</source>
+            <translation>地图设置</translation>
+        </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="131" />
-            <source>Map Properties</source>
-            <translation>地图属性</translation>
-            </message>
+            <source>Untitled map</source>
+            <translation>未命名地图</translation>
+        </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="148" />
+            <source>Map Bounds</source>
+            <translation>地图边界</translation>
+        </message>
+        <message>
             <source>Mods</source>
             <translation>模组（Mods）</translation>
-            </message>
-        </context>
+        </message>
+        <message>
+            <source>Changes apply immediately and can be undone in the map.</source>
+            <translation>修改立即生效，可通过地图撤销操作恢复。</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::MapPropertiesEditor</name>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="184" />
+            <location filename="../../../../lib/TbUiLib/src/MapSettingsDialog.cpp" line="184" />
             <source>Soft bounds disabled</source>
             <translation>软边界已禁用</translation>
             </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="189" />
+            <location filename="../../../../lib/TbUiLib/src/MapSettingsDialog.cpp" line="189" />
             <source>Use game default</source>
             <translation>使用游戏默认</translation>
             </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="191" />
+            <location filename="../../../../lib/TbUiLib/src/MapSettingsDialog.cpp" line="191" />
             <source>Min:</source>
             <translation>最小：</translation>
             </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="192" />
+            <location filename="../../../../lib/TbUiLib/src/MapSettingsDialog.cpp" line="192" />
             <source>Max:</source>
             <translation>最大值：</translation>
             </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/MapInspector.cpp" line="215" />
+            <location filename="../../../../lib/TbUiLib/src/MapSettingsDialog.cpp" line="215" />
             <source>Use custom bounds</source>
             <translation>使用自定义边界</translation>
             </message>
@@ -3750,7 +3755,15 @@ Please choose a different file name to export to.</source>
             <source>Move the selected mod down</source>
             <translation>将所选模型向下移动</translation>
             </message>
-        </context>
+        <message>
+            <source>Available</source>
+            <translation>可用模组</translation>
+        </message>
+        <message>
+            <source>Enabled</source>
+            <translation>已启用模组</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::ModelBrowser</name>
         <message>
@@ -4494,7 +4507,15 @@ Map: %2</source>
             <source>Reveal selection</source>
             <translation>定位所选对象</translation>
         </message>
-        </context>
+        <message>
+            <source>Map Settings…</source>
+            <translation>地图设置…</translation>
+        </message>
+        <message>
+            <source>Map Settings… (Ctrl+1)</source>
+            <translation>地图设置…（Ctrl+1）</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::OutlinerTreeWidget</name>
         <message>

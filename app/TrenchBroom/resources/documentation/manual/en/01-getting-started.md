@@ -127,7 +127,7 @@ At most one of the viewports can have focus, that is, only one of them can recei
 
 Game engines often impose a limit on the usable/playable volume of space. TrenchBroom can display this limit as a guide to use when creating your map. Such bounds will appear as an orange square or rectangle in the 2D viewports. For example, the image above shows the Quake map McKinley Base (ctf1 from Threewave CTF) within the normal bounds for a Quake map.
 
-![Map Properties (Ubuntu Linux)](images/SoftBounds.png) If bounds are configured for a game, they will usually represent the limits observed by the last official release or patch of a particular game engine. Those bounds may not be correct for your situation, so you can disable or modify the displayed bounds using the Map Properties portion of the Map Inspector, as shown here. (More about the Map Inspector in the next section below.)
+![Map Properties (Ubuntu Linux)](images/SoftBounds.png) If bounds are configured for a game, they will usually represent the limits observed by the last official release or patch of a particular game engine. Those bounds may not be correct for your situation, so you can disable or modify the displayed bounds using **Map Settings…** (#key(Ctrl)#key(1)), available from the Scene toolbar or View menu.
 
 In Quake-engine games, these bounds represent a limit on the volume that can contain players, items, or other entities. Static geometry (plain brushes) can extend further, which is why these limits are often called "soft bounds". As far as TrenchBroom is concerned however, it is just drawing orange lines at whatever coordinates are indicated in the [game configuration file](#game_configuration_files)... if this is a non-Quake-engine game then the bounds could represent something else.
 
@@ -135,11 +135,11 @@ In any case, keep in mind that the displayed bounds are just a guide that you sh
 
 ### The Inspector {#the-inspector}
 
-The inspector is located at the right of the main window and contains various controls, distributed to several pages, to change certain properties of the currently selected objects. You can show or hide the inspector by choosing #menu(Menu/View/Toggle Inspector). To switch directly to a particular inspector page, choose #menu(Menu/View/Switch to Map Inspector) for the map inspector, #menu(Menu/View/Switch to Entity Inspector) for the entity inspector, and #menu(Menu/View/Switch to Face Inspector) for the face inspector.
+The inspector is located at the right of the main window and contains various controls, distributed to several pages, to change certain properties of the currently selected objects. You can show or hide the inspector by choosing #menu(Menu/View/Toggle Inspector). Open **Map Settings…** with #key(Ctrl)#key(1), Scene and properties with #key(Ctrl)#key(2), or the face inspector with #key(Ctrl)#key(3).
 
 ![Outliner, Entity, and Face inspectors](images/Inspector.png)
 
-The **Map Inspector** allows you to edit [layers](#layers), configure displayed [map bounds](#map_bounds), and set up which game modifications ([mods](#mods)) you are working with. The **Entity Inspector** is the tool of choice to change the [properties](#entity_properties) of entities. It also contains an entity browser that allows you to [create new entities](#creating_entities) by dragging them from the browser to a viewport and it allows you to [set up entity definitions](#entity_definitions). Additionally, you can manage entity definition files in the entity inspector. The face inspector is used to edit the attributes of the currently selected faces. At the top, it has a graphical [UV editor](#uv_editor). Below that, you can edit the face attributes directly by editing their values. To select a material for the currently selected faces, you can use the [material browser](#material_browser).
+The **Scene** page combines [layers](#layers), the object hierarchy and entity [properties](#entity_properties). The bottom Content Browser's Entities folder lets you [create point entities](#creating_entities) and [configure entity definitions](#entity_definitions). **Map Settings…** contains [map bounds](#map_bounds) and [mods](#mods). The face inspector retains its graphical [UV editor](#uv_editor), face attributes and [material browser](#material_browser).
 
 ### The Info Bar {#the-info-bar}
 

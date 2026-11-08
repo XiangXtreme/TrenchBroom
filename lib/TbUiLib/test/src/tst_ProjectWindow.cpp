@@ -85,6 +85,7 @@
 #include "ui/InfoPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
+#include "ui/MapSettingsDialog.h"
 #include "ui/MapStatus.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
@@ -565,6 +566,31 @@ TEST_CASE("ProjectWindow")
     QApplication::processEvents();
     CHECK(window.activeMapWindow() != nullptr);
     CHECK(window.findChild<ModelBrowser*>() == browser);
+  }
+
+  SECTION("map settings close when their project map changes or closes")
+  {
+    alphaWindow->editorView().showMapSettings();
+    auto alphaSettings =
+      QPointer<MapSettingsDialog>{alphaWindow->findChild<MapSettingsDialog*>()};
+    REQUIRE(alphaSettings);
+    CHECK(alphaSettings->isVisible());
+    tabs->setCurrentIndex(1);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    CHECK(alphaSettings.isNull());
+    auto* betaWindow = window.activeMapWindow();
+    REQUIRE(betaWindow);
+    CHECK(betaWindow != alphaWindow);
+    betaWindow->editorView().showMapSettings();
+    auto betaSettings =
+      QPointer<MapSettingsDialog>{betaWindow->findChild<MapSettingsDialog*>()};
+    REQUIRE(betaSettings);
+    CHECK(betaSettings->isVisible());
+    closeTab(*tabs, 1);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    CHECK(betaSettings.isNull());
+    CHECK(window.activeMapWindow() == alphaWindow);
+    CHECK(alphaWindow->findChild<MapSettingsDialog*>() == nullptr);
   }
 
   SECTION("save status follows the active map and ignores inactive edits")

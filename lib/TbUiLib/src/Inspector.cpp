@@ -30,7 +30,7 @@
 
 #include "ui/FaceInspector.h"
 #include "ui/ImageUtils.h"
-#include "ui/MapInspector.h"
+#include "ui/MapSettingsDialog.h"
 #include "ui/MapViewBar.h"
 #include "ui/PluginInspector.h"
 #include "ui/SyncHeightEventFilter.h"
@@ -57,10 +57,8 @@ Inspector::Inspector(
 
   // Keep the terrain parameter/operation provider alive for the tool session.
   // Other pages are prepared lazily.
-  m_mapInspector = new MapInspector{document};
   m_terrainInspector = new TerrainInspector{appController, document, toolBox};
 
-  m_tabBook->addPage(m_mapInspector, "Map");
   m_tabBook->addPlaceholderPage("Face");
   m_tabBook->addPlaceholderPage("Outliner");
   m_tabBook->addPlaceholderPage("Plugin");
@@ -109,12 +107,6 @@ Inspector::Inspector(
     navigationLayout->addWidget(button);
   };
 
-  addNavigationButton(
-    InspectorPage::Map,
-    tr("Map Inspector"),
-    tr("Map Inspector (Ctrl+1)"),
-    "Inspector_NavigationMap",
-    "InspectorMap.svg");
   addNavigationButton(
     InspectorPage::Face,
     tr("Face Inspector"),
@@ -182,7 +174,7 @@ void Inspector::connectTopWidgets(MapViewBar* mapViewBar)
 
 void Inspector::ensurePage(const InspectorPage page)
 {
-  const auto index = page == InspectorPage::Map ? 0 : static_cast<int>(page) - 1;
+  const auto index = static_cast<int>(page) - 2;
   switch (page)
   {
   case InspectorPage::Face:
@@ -198,6 +190,11 @@ void Inspector::ensurePage(const InspectorPage page)
     {
       m_outlinerInspector = new OutlinerInspector{*m_document};
       m_tabBook->replacePage(index, m_outlinerInspector);
+      connect(
+        m_outlinerInspector,
+        &OutlinerInspector::mapSettingsRequested,
+        this,
+        &Inspector::showMapSettings);
       emit pagePrepared(static_cast<int>(page));
     }
     break;
@@ -218,18 +215,18 @@ void Inspector::ensurePage(const InspectorPage page)
 
 void Inspector::switchToPage(const InspectorPage page)
 {
-  const auto destination = page == InspectorPage::Entity ? InspectorPage::Outliner : page;
+  const auto destination = page == InspectorPage::Entity || page == InspectorPage::Map
+                             ? InspectorPage::Outliner
+                             : page;
   ensurePage(destination);
   if (page == InspectorPage::Entity)
     m_outlinerInspector->showProperties();
-  m_tabBook->switchToPage(
-    destination == InspectorPage::Map ? 0 : static_cast<int>(destination) - 1);
+  m_tabBook->switchToPage(static_cast<int>(destination) - 2);
 }
 
 InspectorPage Inspector::currentPage() const
 {
-  const auto index = m_tabBook->currentPageIndex();
-  return index == 0 ? InspectorPage::Map : static_cast<InspectorPage>(index + 1);
+  return static_cast<InspectorPage>(m_tabBook->currentPageIndex() + 2);
 }
 
 void Inspector::updateNavigation(const int page)
@@ -239,10 +236,29 @@ void Inspector::updateNavigation(const int page)
     return;
   }
 
-  const auto titles =
-    std::array{tr("Map"), tr("Face"), tr("Scene"), tr("Plugins"), tr("Terrain")};
+  const auto titles = std::array{tr("Face"), tr("Scene"), tr("Plugins"), tr("Terrain")};
   m_pageTitle->setText(titles.at(static_cast<size_t>(page)).toUpper());
   m_navigationButtons.at(static_cast<size_t>(page))->setChecked(true);
+}
+
+void Inspector::showMapSettings()
+{
+  if (m_mapSettingsDialog && !m_mapSettingsDialog->isVisible())
+    delete m_mapSettingsDialog.data();
+  if (!m_mapSettingsDialog)
+  {
+    m_mapSettingsDialog = new MapSettingsDialog{*m_document, this};
+    m_mapSettingsDialog->setAttribute(Qt::WA_DeleteOnClose);
+  }
+  m_mapSettingsDialog->show();
+  m_mapSettingsDialog->raise();
+  m_mapSettingsDialog->activateWindow();
+}
+
+void Inspector::closeMapSettings()
+{
+  if (m_mapSettingsDialog)
+    m_mapSettingsDialog->close();
 }
 
 bool Inspector::cancelMouseDrag()

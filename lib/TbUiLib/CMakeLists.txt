@@ -144,15 +144,13 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LaunchGameEngine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LaunchGameEngineDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LayerActions.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/LayerEditor.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/LayerListBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapBaker.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapBakeReader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapPreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LimitedKeySequenceEdit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapCommandSurface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapDocumentActionCache.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/MapInspector.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MapSettingsDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapView2D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapView3D.cpp
@@ -422,8 +420,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/KeyboardShortcutModel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LaunchGameEngine.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LaunchGameEngineDialog.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LayerEditor.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LayerListBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LightmapBaker.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LightmapBakeReader.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LightmapPreview.h
@@ -434,7 +430,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapEditorView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapCommandSurface.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapDocumentActionCache.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapInspector.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapSettingsDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView2D.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapView3D.h

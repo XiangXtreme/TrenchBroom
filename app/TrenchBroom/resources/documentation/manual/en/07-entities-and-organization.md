@@ -444,21 +444,21 @@ In the map file, these groups would be stored as follows. Refer to the comments 
 
 Layers divide your map into several parts. For example, you might create a layer for separate rooms or areas. Layers can contain groups, entities, or brushes, and each of these objects can belong to one layer only. Each layer has a name and can be set to hidden or locked, or omitted from exported maps. Every map contains a "Default Layer" that cannot be removed.
 
-![Layer Editor](images/LayerEditor.png)
+![Scene tree](images/OutlinerHierarchy.png)
 
-The layer editor in the map inspector and the [Outliner](#outliner) both display all layers in your map. The Outliner plus button is the quickest way to create and reveal a new layer without leaving the hierarchy.
+The [Scene tree](#outliner) displays all layers alongside their objects. Its toolbar plus button creates and reveals a new layer.
 
-- Omit a layer from export by clicking the hollow circle icon (the "X" indicates the layer is omitted from export)
+- Omit a layer from export using **Omit From Export** in its context menu
 - Hide or show a layer by clicking on the eye icon
 - Lock or unlock a layer by clicking on the lock icon
-- Create a new layer by clicking the plus button at the bottom of the layer list
-- Remove one or more layers by selecting them and clicking the minus button
+- Create a new layer by clicking the plus button in the Scene toolbar
+- Remove a layer using **Remove Layer** in its context menu; its objects move to the default layer
 
 New objects created from scratch or pasted from the clipboard are inserted into the current layer (unless you are working in a group). Objects created from other objects (e.g. by duplicating or extrusion) are inserted into the layer of the source object.
 
-The current layer is indicated in the layer list by a radio button and by having its name in bold, and you can set the current layer by double-clicking a layer in the layer list.
+The Scene tree highlights the current layer. Use **Make active layer** in a layer's context menu to change it.
 
-Right-click a layer in the layer editor to open its context menu:
+Right-click a layer in the Scene tree to open its context menu:
 
 - Make active layer
 - Move selection to layer
@@ -471,6 +471,7 @@ Right-click a layer in the layer editor to open its context menu:
 - Hide all Layers
 - Unlock All Layers
 - Lock All Layers
+- Move layer up / down
 - Rename Layer
 - Remove Layer
 

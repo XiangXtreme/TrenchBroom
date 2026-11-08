@@ -64,6 +64,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapEditorController.h"
 #include "ui/MapEditorView.h"
+#include "ui/MapSettingsDialog.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewToolBox.h"
@@ -1145,6 +1146,12 @@ TEST_CASE("Project terrain panel paints a picked brush")
   CHECK_FALSE(window->toolBox().selectModeActive());
   CHECK_FALSE(window->toolBox().brushCreationModeActive());
   window->switchToInspectorPage(InspectorPage::Map);
+  CHECK(panel->painting());
+  auto* mapSettings = window->findChild<MapSettingsDialog*>();
+  REQUIRE(mapSettings);
+  REQUIRE(mapSettings->isVisible());
+  mapSettings->close();
+  QApplication::processEvents();
   CHECK(panel->painting());
   window->toolBox().setSelectMode(true);
   CHECK_FALSE(panel->painting());

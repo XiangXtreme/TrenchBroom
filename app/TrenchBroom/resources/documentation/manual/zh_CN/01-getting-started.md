@@ -127,7 +127,7 @@ YZ          +Y            +Z         +X             侧视图
 
 游戏引擎通常会限制可使用或可游玩的空间范围。TrenchBroom 可以显示这一限制，作为创建地图时的参考。这些边界会在 2D 视图中显示为橙色正方形或矩形。例如，上图显示了 Quake 地图 McKinley Base（Threewave CTF 中的 ctf1）处于 Quake 地图的标准边界内。
 
-![地图属性（Ubuntu Linux）](images/SoftBounds.png) 如果为游戏配置了边界，它们通常表示特定游戏引擎的最后一个官方版本或补丁所遵循的限制。这些边界可能不符合你的具体情况，因此你可以使用地图检查器的“地图属性”部分禁用或修改显示的边界，如图所示（关于地图检查器的更多信息请参阅下文）。
+![地图属性（Ubuntu Linux）](images/SoftBounds.png) 如果为游戏配置了边界，它们通常表示特定游戏引擎的最后一个官方版本或补丁所遵循的限制。这些边界可能不符合你的具体情况，因此你可以通过场景工具栏或视图菜单中的**地图设置…**（#key(Ctrl)#key(1)）禁用或修改显示的边界。
 
 在 Quake 引擎游戏中，这些边界限制了可容纳玩家、物品或其他实体的空间范围。静态几何体（普通 Brush）可以延伸到更远的位置，因此这些限制通常称为“软边界”。不过对 TrenchBroom 来说，它只是按照[游戏配置文件](#game_configuration_files)中指定的坐标绘制橙色线条……如果目标不是 Quake 引擎游戏，边界也可能代表其他含义。
 
@@ -135,11 +135,11 @@ YZ          +Y            +Z         +X             侧视图
 
 ### 检查器 {#the-inspector}
 
-检查器位于主窗口右侧，分布在多个页面中的各种控件用于修改当前选中对象的属性。选择 #menu(Menu/View/Toggle Inspector)可以显示或隐藏检查器。要直接切换到某个检查器页面，可分别选择 #menu(Menu/View/Switch to Map Inspector)打开地图检查器，选择 #menu(Menu/View/Switch to Entity Inspector)打开实体检查器，或选择 #menu(Menu/View/Switch to Face Inspector)打开面检查器。
+检查器位于主窗口右侧，分布在多个页面中的各种控件用于修改当前选中对象的属性。选择 #menu(Menu/View/Toggle Inspector)可以显示或隐藏检查器。按 #key(Ctrl)#key(1) 打开**地图设置…**，按 #key(Ctrl)#key(2) 打开场景与属性，按 #key(Ctrl)#key(3) 打开面检查器。
 
 ![Outliner、实体与面检查器](images/Inspector.png)
 
-**地图检查器**用于编辑[图层](#layers)、配置显示的[地图边界](#map_bounds)，以及设置当前使用的游戏 Mod（[Mod](#mods)）。**实体检查器**用于修改实体的[属性](#entity_properties)。它还包含实体浏览器，你可以将实体从浏览器拖到视图中以[创建新实体](#creating_entities)，也可以[设置实体定义](#entity_definitions)。此外，还可以在实体检查器中管理实体定义文件。面检查器用于编辑当前选中面的属性，顶部提供图形化的 [UV 编辑器](#uv_editor)，下方可以直接修改面属性值。要为当前选中的面选择材质，可以使用[材质浏览器](#material_browser)。
+**场景**页统一管理[图层](#layers)、对象层级和实体[属性](#entity_properties)。底部内容浏览器的“实体”文件夹用于[创建点实体](#creating_entities)和[设置实体定义](#entity_definitions)。**地图设置…**包含[地图边界](#map_bounds)与 [Mod](#mods)。面检查器保留图形化 [UV 编辑器](#uv_editor)、面属性和[材质浏览器](#material_browser)。
 
 ### 信息栏 {#the-info-bar}
 

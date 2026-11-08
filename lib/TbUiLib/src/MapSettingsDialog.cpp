@@ -17,8 +17,9 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ui/MapInspector.h"
+#include "ui/MapSettingsDialog.h"
 
+#include <QDialogButtonBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -30,17 +31,15 @@
 #include "mdl/Map.h"
 #include "mdl/Map_World.h"
 #include "mdl/WorldNode.h" // IWYU pragma: keep
-#include "ui/BorderLine.h"
 #include "ui/ClickableLabel.h"
 #include "ui/CollapsibleTitledPanel.h"
-#include "ui/LayerEditor.h"
 #include "ui/MapDocument.h"
 #include "ui/ModEditor.h"
+#include "ui/PanelLayout.h"
+#include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
 #include "ui/QVecUtils.h"
-#include "ui/TitledPanel.h"
 #include "ui/ViewConstants.h"
-#include "ui/WidgetState.h"
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -82,78 +81,42 @@ QString formatVec(const std::optional<vm::bbox3d>& bbox, const bool max)
 
 } // namespace
 
-// MapInspector
-
-MapInspector::MapInspector(MapDocument& document, QWidget* parent)
-  : TabBookPage{parent}
+MapSettingsDialog::MapSettingsDialog(MapDocument& document, QWidget* parent)
+  : QDialog{parent}
 {
-  createGui(document);
-}
+  setObjectName("MapSettingsDialog");
+  setWindowTitle(tr("Map Settings"));
+  setWindowModality(Qt::WindowModal);
+  resize(640, 600);
 
-MapInspector::~MapInspector()
-{
-  saveWidgetState(m_mapPropertiesEditor);
-  saveWidgetState(m_modEditor);
-}
+  auto* column = createPanelColumn(this);
+  auto* mapName = new QLabel{
+    document.map().path().empty() ? tr("Untitled map")
+                                  : pathAsQString(document.map().path())};
+  mapName->setObjectName("MapSettingsDialog_Target");
+  mapName->setTextFormat(Qt::PlainText);
+  mapName->setWordWrap(true);
+  mapName->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  column->addWidget(mapName);
+  auto* hint = new QLabel{tr("Changes apply immediately and can be undone in the map.")};
+  hint->setWordWrap(true);
+  setInfoStyle(hint);
+  column->addWidget(hint);
 
-void MapInspector::createGui(MapDocument& document)
-{
-  m_mapPropertiesEditor = createMapPropertiesEditor(document);
-  m_modEditor = createModEditor(document);
+  auto* bounds = new CollapsibleTitledPanel{tr("Map Bounds")};
+  bounds->setObjectName("MapSettingsDialog_Bounds");
+  bounds->createContentLayout()->addWidget(new MapPropertiesEditor{document});
+  column->addWidget(bounds);
 
-  auto* sizer = new QVBoxLayout{};
-  sizer->setContentsMargins(0, 0, 0, 0);
-  sizer->setSpacing(0);
+  auto* mods = new CollapsibleTitledPanel{tr("Mods")};
+  mods->setObjectName("MapSettingsDialog_Mods");
+  mods->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
+  mods->createContentLayout()->addWidget(new ModEditor{document});
+  column->addWidget(mods, 1);
 
-  sizer->addWidget(createLayerEditor(document), 1);
-  sizer->addWidget(new BorderLine{}, 0);
-  sizer->addWidget(m_mapPropertiesEditor, 0);
-  sizer->addWidget(new BorderLine{}, 0);
-  sizer->addWidget(m_modEditor, 0);
-  setLayout(sizer);
-}
-
-QWidget* MapInspector::createLayerEditor(MapDocument& document)
-{
-  auto* titledPanel = new TitledPanel{tr("Layers")};
-  auto* layerEditor = new LayerEditor{document};
-
-  auto* sizer = new QVBoxLayout{};
-  sizer->setContentsMargins(0, 0, 0, 0);
-  sizer->addWidget(layerEditor, 1);
-  titledPanel->getPanel()->setLayout(sizer);
-
-  return titledPanel;
-}
-
-CollapsibleTitledPanel* MapInspector::createMapPropertiesEditor(MapDocument& document)
-{
-  auto* titledPanel = new CollapsibleTitledPanel{tr("Map Properties")};
-  titledPanel->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
-  titledPanel->setObjectName("MapInspector_MapPropertiesPanel");
-
-  auto* editor = new MapPropertiesEditor{document};
-
-  titledPanel->createContentLayout()->addWidget(editor, 1);
-
-  restoreWidgetState(titledPanel);
-
-  return titledPanel;
-}
-
-CollapsibleTitledPanel* MapInspector::createModEditor(MapDocument& document)
-{
-  auto* titledPanel = new CollapsibleTitledPanel{tr("Mods")};
-  titledPanel->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
-  titledPanel->setObjectName("MapInspector_ModsPanel");
-
-  auto* modEditor = new ModEditor{document};
-
-  titledPanel->createContentLayout()->addWidget(modEditor, 1);
-
-  restoreWidgetState(titledPanel);
-
-  return titledPanel;
+  auto* buttons = new QDialogButtonBox{QDialogButtonBox::Close};
+  connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+  column->addWidget(buttons);
 }
 
 // MapPropertiesEditor
@@ -162,6 +125,7 @@ MapPropertiesEditor::MapPropertiesEditor(MapDocument& document, QWidget* parent)
   : QWidget{parent}
   , m_document{document}
 {
+  setObjectName("MapPropertiesEditor");
   createGui();
   connectObservers();
 }
@@ -177,9 +141,11 @@ std::optional<vm::bbox3d> MapPropertiesEditor::parseLineEdits()
 void MapPropertiesEditor::createGui()
 {
   m_softBoundsDisabled = new QRadioButton{};
+  m_softBoundsDisabled->setObjectName("MapBounds_Disabled");
   auto* softBoundsDisabledLabel = new ClickableLabel{tr("Soft bounds disabled")};
 
   m_softBoundsFromGame = new QRadioButton{};
+  m_softBoundsFromGame->setObjectName("MapBounds_Game");
   m_softBoundsFromGameMinLabel = new QLabel{};
   m_softBoundsFromGameMaxLabel = new QLabel{};
   auto* softBoundsFromGameLabel = new ClickableLabel{tr("Use game default")};
@@ -208,10 +174,13 @@ void MapPropertiesEditor::createGui()
   softBoundsFromGameLayout->addLayout(softBoundsFromGameValueLayout);
 
   m_softBoundsFromMap = new QRadioButton{};
+  m_softBoundsFromMap->setObjectName("MapBounds_Custom");
   auto* softBoundsFromMapLabel = new ClickableLabel{tr("Use custom bounds")};
   m_softBoundsFromMapMinEdit = new QLineEdit{};
   m_softBoundsFromMapMinEdit->setPlaceholderText("min");
   m_softBoundsFromMapMaxEdit = new QLineEdit{};
+  m_softBoundsFromMapMinEdit->setObjectName("MapBounds_Min");
+  m_softBoundsFromMapMaxEdit->setObjectName("MapBounds_Max");
   m_softBoundsFromMapMaxEdit->setPlaceholderText("max");
 
   auto* softBoundsFromMapValueLayout = new QHBoxLayout{};
@@ -315,6 +284,10 @@ void MapPropertiesEditor::connectObservers()
     m_document.documentWasLoadedNotifier.connect([&] { updateGui(); });
   m_notifierConnection +=
     m_document.documentDidChangeNotifier.connect([&] { updateGui(); });
+  m_notifierConnection +=
+    m_document.commandDoneNotifier.connect([this](const auto&) { updateGui(); });
+  m_notifierConnection +=
+    m_document.commandUndoneNotifier.connect([this](const auto&) { updateGui(); });
 }
 
 /**

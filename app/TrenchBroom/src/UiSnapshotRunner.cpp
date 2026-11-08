@@ -86,6 +86,7 @@
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
+#include "ui/MapSettingsDialog.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
@@ -115,6 +116,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
 {
   static const auto pages = QStringList{
     QStringLiteral("map"),
+    QStringLiteral("map-settings"),
     QStringLiteral("map-areas"),
     QStringLiteral("map-area-split-preview"),
     QStringLiteral("map-area-join-preview"),
@@ -1401,6 +1403,7 @@ int runUiSnapshot(
   auto targetName = QString{};
   auto componentSnapshot = std::unique_ptr<QWidget>{};
   auto preferencesDialog = std::unique_ptr<PreferenceDialog>{};
+  auto mapSettingsDialog = std::unique_ptr<MapSettingsDialog>{};
   auto commandPaletteDialog = std::unique_ptr<CommandPaletteDialog>{};
   auto workspaceSnapshot = std::unique_ptr<UiWorkspaceSnapshot>{};
   auto assetLibrarySnapshot = std::unique_ptr<QWidget>{};
@@ -1475,6 +1478,12 @@ int runUiSnapshot(
             return 3;
           }
           targetWidget = workspaceSnapshot->widget();
+        }
+        else if (options.page == QStringLiteral("map-settings"))
+        {
+          mapSettingsDialog =
+            std::make_unique<MapSettingsDialog>(mapWindow->document(), mapWindow);
+          targetWidget = mapSettingsDialog.get();
         }
         else if (options.page == QStringLiteral("command-palette"))
         {

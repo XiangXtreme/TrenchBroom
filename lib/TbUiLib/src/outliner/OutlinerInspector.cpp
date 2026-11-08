@@ -94,6 +94,15 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
   addLayerButton->setIconSize(QSize{16, 16});
   topRow->addWidget(addLayerButton);
 
+  auto* mapSettings = createBitmapButton(
+    "GeneralPreferences.svg", tr("Map Settings… (Ctrl+1)"), topRowWidget);
+  mapSettings->setObjectName("OutlinerInspector_MapSettings");
+  mapSettings->setProperty("tbControlRole", "compact");
+  mapSettings->setAccessibleName(tr("Map Settings…"));
+  topRow->addWidget(mapSettings);
+  connect(
+    mapSettings, &QToolButton::clicked, this, &OutlinerInspector::mapSettingsRequested);
+
   auto* treeOptions =
     createBitmapButton("InspectorOutliner.svg", tr("Scene tree options"), topRowWidget);
   treeOptions->setObjectName("OutlinerInspector_TreeOptions");

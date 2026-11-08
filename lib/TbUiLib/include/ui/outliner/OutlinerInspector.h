@@ -33,6 +33,9 @@ public:
   explicit OutlinerInspector(MapDocument& document, QWidget* parent = nullptr);
   ~OutlinerInspector() override;
   void showProperties();
+
+signals:
+  void mapSettingsRequested();
 };
 
 } // namespace tb::ui

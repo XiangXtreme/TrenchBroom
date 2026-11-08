@@ -430,9 +430,25 @@ void MapEditorView::createEntity(const QString& classname)
 
 void MapEditorView::showInspectorPage(const InspectorPage page)
 {
+  if (page == InspectorPage::Map)
+  {
+    showMapSettings();
+    return;
+  }
   m_inspectorSurface->show();
   m_inspector->show();
   m_inspector->switchToPage(page);
+}
+
+void MapEditorView::showMapSettings()
+{
+  m_inspector->showMapSettings();
+}
+
+void MapEditorView::hideEvent(QHideEvent* event)
+{
+  m_inspector->closeMapSettings();
+  QWidget::hideEvent(event);
 }
 
 bool MapEditorView::toggleInspector()

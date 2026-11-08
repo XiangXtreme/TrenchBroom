@@ -100,6 +100,7 @@ public:
   void showInfoPanelPage(InfoPanelPage page);
   void showInspectorPage(InspectorPage page);
   void showEntityBrowser();
+  void showMapSettings();
   void createEntity(const QString& classname);
   bool toggleInspector();
   bool isInspectorVisible() const;
@@ -139,6 +140,7 @@ private:
 
 protected:
   void showEvent(QShowEvent* event) override;
+  void hideEvent(QHideEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
 
 signals:

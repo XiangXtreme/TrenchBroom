@@ -31,6 +31,7 @@
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
 #include "mdl/Map_Entities.h"
+#include "mdl/Map_Layers.h"
 #include "mdl/Map_NodeLocking.h"
 #include "mdl/Map_NodeVisibility.h"
 #include "mdl/Map_Nodes.h"
@@ -320,6 +321,29 @@ TEST_CASE("OutlinerTreeWidget")
     CHECK(fixture.defaultLayer->visible());
     clickColumn(3);
     CHECK_FALSE(fixture.defaultLayer->visible());
+  }
+
+  SECTION("isolating a layer refreshes visibility icons and undo restores them")
+  {
+    auto* layer = mdl::createLayer(map, "Details");
+    REQUIRE(layer);
+    processOutlinerTreeUpdates();
+    auto* defaultItem = itemForNode(tree, fixture.defaultLayer);
+    auto* customItem = itemForNode(tree, layer);
+    REQUIRE(defaultItem);
+    REQUIRE(customItem);
+    const auto visibleIcon = defaultItem->icon(3).cacheKey();
+    CHECK(customItem->icon(3).cacheKey() == visibleIcon);
+    mdl::isolateLayers(map, {layer});
+    processOutlinerTreeUpdates();
+    CHECK(fixture.defaultLayer->hidden());
+    CHECK_FALSE(layer->hidden());
+    CHECK(defaultItem->icon(3).cacheKey() != visibleIcon);
+    CHECK(customItem->icon(3).cacheKey() == visibleIcon);
+    map.undoCommand();
+    processOutlinerTreeUpdates();
+    CHECK(defaultItem->icon(3).cacheKey() == visibleIcon);
+    CHECK(customItem->icon(3).cacheKey() == visibleIcon);
   }
 
   SECTION("escape clears tree and document selection")

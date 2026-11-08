@@ -2032,10 +2032,10 @@ void ActionManager::createViewMenu()
   viewMenu.addSeparator();
   viewMenu.addItem(addAction(Action{
     "Menu/View/Switch to Map Inspector",
-    "Show Map Inspector",
+    "Map Settings…",
     ActionContext::Any,
     KeySequence{"Ctrl+1"},
-    [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Map); },
+    [](auto& context) { context.editorView().showMapSettings(); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   viewMenu.addItem(addAction(Action{
