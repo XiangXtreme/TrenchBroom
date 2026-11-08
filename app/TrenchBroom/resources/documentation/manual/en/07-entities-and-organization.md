@@ -2,13 +2,15 @@
 
 ## Entity Browser {#entity_browser}
 
-The entity browser is part of the Entity Inspector. Use its search field to filter entity definitions by name or description, and use the grouping and sorting controls to organize the result. Drag a point entity from the browser into a 2D or 3D viewport to create it. Select a brush first and choose a brush entity definition to turn that selection into the corresponding brush entity.
+The entity browser is in the bottom Content Browser. Choose **Entities** in the content type selector, or use #menu(Menu/View/Show Entity Browser). Search definitions by name or description; filter point or brush types, group them, sort by name or usage, or show only used types. Selecting a type shows its description and a preview for point types without changing the map selection.
+
+Drag a point type into a 2D or 3D viewport to place it, or click **Create in current view** to create it at the view's default position. To create a brush entity, select brushes, choose a brush type, then click **Turn selection into entity**. Creation uses normal map undo and redo. Without an open map you can browse definitions, but creation and definition settings are disabled.
 
 The browser uses the entity definition files configured for the current map. If an expected class is missing, verify the active FGD, ENT, or DEF configuration before creating an unconfigured entity manually.
 
 ## Entity Properties {#entity_properties}
 
-An entity is, essentially, a collection of properties, and a property is a key value pair where both the key and the value is a string. Some values have a special format, such as colors, points, or angles. But in general, if you are editing an entity, you will be working with strings. In TrenchBroom, you can add, remove, and edit entity properties using the entity property editor, which is located at the top of the entity inspector.
+An entity is, essentially, a collection of properties, and a property is a key value pair where both the key and the value is a string. Some values have a special format, such as colors, points, or angles. But in general, if you are editing an entity, you will be working with strings. In TrenchBroom, you can add, remove, and edit entity properties using the entity property editor, which is located below the scene tree in the right-hand Scene page. Press #key(Ctrl)#key(2) to show the scene and expand its properties. Use the properties table for the complete editor, including default values, smart editors, flags, help, and linked-group protection.
 
 ![Entity Property Editor](images/EntityPropertyEditor.png)
 
@@ -102,7 +104,7 @@ The toolbar provides these controls:
 - The plus button creates a named layer and reveals it in the tree.
 - The properties button opens a resizable entity property panel below the tree. Toggle it off to devote the full inspector height to the hierarchy.
 
-Layer visibility, locking, current-layer state, and group nesting remain visible in the Outliner, so it can be used alongside the dedicated map and entity inspectors rather than as a separate data model.
+Layer visibility, locking, current-layer state, and group nesting remain visible in the scene tree while the properties below follow the same map selection. Browse entity types in the bottom Content Browser; edit existing objects in the Scene page.
 
 ### Filtering and Sorting {#outliner_filtering}
 
@@ -285,7 +287,7 @@ Group B (translated by 128 0 0)
 
 Note that `Entity A`'s `angle` property still has a value of 90. If you now change `Entity A`'s `angle` property, this change will not be reflected in `Entity B` either.
 
-You can use the entity property editor in the entity inspector to protect entity properties. When editing an entity inside of a linked group, a new column with checkboxes appears like in the following screenshot.
+You can use the properties table in the Scene page to protect entity properties. When editing an entity inside of a linked group, a new column with checkboxes appears like in the following screenshot.
 
 ![Protected Entity Properties (macOS)](images/ProtectedProperties.png)
 

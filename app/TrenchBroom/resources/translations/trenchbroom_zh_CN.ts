@@ -1462,6 +1462,14 @@
             <source>Project</source>
             <translation>工程</translation>
         </message>
+        <message>
+            <source>Show Scene and Properties</source>
+            <translation>显示场景与属性</translation>
+        </message>
+        <message>
+            <source>Show Entity Browser</source>
+            <translation>显示实体浏览器</translation>
+        </message>
     </context>
     <context>
         <name>tb::AppPreferenceManager</name>
@@ -2324,6 +2332,78 @@ Please create an issue report and upload these files.</source>
             <source>Only show entity definitions currently in use</source>
             <translation>仅显示当前正在使用的实体定义</translation>
             </message>
+        <message>
+            <source>Search entity types</source>
+            <translation>搜索实体类型</translation>
+        </message>
+        <message>
+            <source>All entities</source>
+            <translation>全部实体</translation>
+        </message>
+        <message>
+            <source>Point entities</source>
+            <translation>点实体</translation>
+        </message>
+        <message>
+            <source>Brush entities</source>
+            <translation>刷子实体</translation>
+        </message>
+        <message>
+            <source>Definitions…</source>
+            <translation>定义文件…</translation>
+        </message>
+        <message>
+            <source>Configure entity definition files for the current map</source>
+            <translation>配置当前地图使用的实体定义文件</translation>
+        </message>
+        <message>
+            <source>Classname</source>
+            <translation>类名</translation>
+        </message>
+        <message>
+            <source>Type</source>
+            <translation>类型</translation>
+        </message>
+        <message>
+            <source>Point</source>
+            <translation>点实体</translation>
+        </message>
+        <message>
+            <source>Brush</source>
+            <translation>刷子实体</translation>
+        </message>
+        <message>
+            <source>Select an entity type</source>
+            <translation>选择实体类型</translation>
+        </message>
+        <message>
+            <source>Select a type to read its definition. Drag a point entity into a map view to place it.</source>
+            <translation>选择类型查看定义。将点实体拖入地图视图即可定位放置。</translation>
+        </message>
+        <message>
+            <source>Create in current view</source>
+            <translation>在当前视图创建</translation>
+        </message>
+        <message>
+            <source>Turn selection into entity</source>
+            <translation>将选区转为实体</translation>
+        </message>
+        <message>
+            <source>Open a map to create entities</source>
+            <translation>打开地图后才能创建实体</translation>
+        </message>
+        <message>
+            <source>Create at the current view position, or drag the type into a view to place it</source>
+            <translation>在当前视图位置创建，也可将类型拖入视图定位放置</translation>
+        </message>
+        <message>
+            <source>Select brushes, then convert them to this entity type</source>
+            <translation>先选择刷子，再将其转换为此实体类型</translation>
+        </message>
+        <message>
+            <source>Entity Definitions</source>
+            <translation>实体定义</translation>
+        </message>
         </context>
     <context>
         <name>tb::ui::EntityDefinitionCheckBoxList</name>
@@ -4044,6 +4124,14 @@ Map: %2</source>
             <source>%1 items</source>
             <translation>%1 项</translation>
         </message>
+        <message>
+            <source>Entities</source>
+            <translation>实体</translation>
+        </message>
+        <message>
+            <source>Content type</source>
+            <translation>内容类型</translation>
+        </message>
 </context>
     <context>
         <name>tb::ui::ModelBrowserView</name>
@@ -5736,6 +5824,10 @@ By %2</source>
         <message>
             <source>Scene tree and properties</source>
             <translation>场景树与属性</translation>
+        </message>
+        <message>
+            <source>Scene tree and properties (Ctrl+2)</source>
+            <translation>场景树与属性（Ctrl+2）</translation>
         </message>
         </context>
     <context>

@@ -108,7 +108,7 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
   treeVisible->setChecked(
     QSettings{}.value(widgetSettingsPath(this, "TreeVisible"), true).toBool());
 
-  auto* propertiesToggle =
+  auto* propertiesToggle = m_propertiesToggle =
     createBitmapToggleButton("Map_entity.svg", tr("Toggle properties panel"), this);
   propertiesToggle->setObjectName("OutlinerInspector_PropertiesToggle");
   propertiesToggle->setProperty("tbControlRole", "compact");
@@ -250,6 +250,12 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
 
   m_treeWidget->setSortMode(
     static_cast<OutlinerTreeWidget::SortMode>(m_sortBox->currentData().toInt()));
+}
+
+void OutlinerInspector::showProperties()
+{
+  if (!m_propertiesToggle->isChecked())
+    m_propertiesToggle->click();
 }
 
 OutlinerInspector::~OutlinerInspector()

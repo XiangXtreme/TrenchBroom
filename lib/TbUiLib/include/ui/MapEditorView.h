@@ -99,6 +99,8 @@ public:
   /** Panel visibility belongs to the view so a host does not have to reimplement it. */
   void showInfoPanelPage(InfoPanelPage page);
   void showInspectorPage(InspectorPage page);
+  void showEntityBrowser();
+  void createEntity(const QString& classname);
   bool toggleInspector();
   bool isInspectorVisible() const;
   bool toggleInfoPanel();
@@ -141,6 +143,7 @@ protected:
 
 signals:
   void infoPanelPageRequested(InfoPanelPage page);
+  void entityBrowserRequested();
   void infoPanelToggleRequested();
   void infoPanelVisibilityChanged();
 };

@@ -103,6 +103,7 @@
 #include "ui/MapViewLayout.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ModelBrowser.h"
 #include "ui/ObjExportDialog.h"
 #include "ui/PluginInspector.h"
 #include "ui/ProjectSession.h"
@@ -565,6 +566,11 @@ void MapWindow::createGui()
       &MapEditorView::infoPanelToggleRequested,
       m_tools,
       &WorkspaceToolPanel::toggle);
+    connect(m_editor, &MapEditorView::entityBrowserRequested, this, [this] {
+      m_tools->showContent();
+      if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
+        browser->showEntityBrowser();
+    });
     connect(m_tools, &WorkspaceToolPanel::extensionsRequested, this, [this]() {
       m_editor->showInspectorPage(InspectorPage::Plugin);
     });

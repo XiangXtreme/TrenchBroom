@@ -82,6 +82,7 @@
 #include "ui/AssetLibraryWindow.h"
 #include "ui/BitmapButton.h"
 #include "ui/CatalogAssetDrop.h"
+#include "ui/EntityBrowser.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView3D.h"
@@ -117,6 +118,7 @@ const auto AssetRootPath = std::filesystem::path{};
 const auto DocumentLoadAssetRefreshDelay = 1500;
 constexpr auto PrefabThumbnailMaxSize = 512;
 constexpr auto SkyboxTypeFilter = -2;
+constexpr auto EntityTypeFilter = -3;
 
 BrowserCellType catalogCellType(
   const project::AssetType type, const std::filesystem::path& path)
@@ -272,6 +274,7 @@ ModelBrowser::ModelBrowser(
   std::shared_ptr<ProjectSession> project)
   : QWidget{parent}
   , m_document{&document}
+  , m_appController{appController}
   , m_project{project ? std::move(project) : appController.projectFor(document)}
 {
   if (m_project)
@@ -332,6 +335,8 @@ void ModelBrowser::setDocument(MapDocument& document)
   m_mapNotifierConnection.disconnect();
   m_notifierConnection.disconnect();
   m_document = &document;
+  if (m_entityBrowser)
+    m_entityBrowser->setDocument(document);
   m_usageRefreshTimer->stop();
   m_view->setDocument(document);
   connectObservers();
@@ -414,6 +419,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_typeCombo = new QComboBox{};
   m_typeCombo->setObjectName("ModelBrowser_Type");
   m_typeCombo->setMinimumWidth(88);
+  m_typeCombo->setMaximumWidth(190);
   m_typeCombo->setToolTip(tr("Asset type filter"));
   m_typeCombo->addItem(tr("All Types"), -1);
   m_typeCombo->addItem(tr("Maps"), int(BrowserCellType::Map));
@@ -424,6 +430,8 @@ void ModelBrowser::createGui(AppController& appController)
   m_typeCombo->addItem(tr("Sounds"), int(BrowserCellType::Sound));
   m_typeCombo->addItem(tr("Skyboxes"), SkyboxTypeFilter);
   m_typeCombo->addItem(tr("Prefabs"), int(BrowserCellType::Prefab));
+  m_typeCombo->addItem(tr("Entities"), EntityTypeFilter);
+  m_typeCombo->setAccessibleName(tr("Content type"));
 
   m_backButton = new QToolButton{};
   m_backButton->setObjectName("ModelBrowser_Back");
@@ -678,11 +686,10 @@ void ModelBrowser::createGui(AppController& appController)
   filterForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
   filterForm->setSizeConstraint(QLayout::SetFixedSize);
   // A popover reads best when every field lines up, so the filter fields share a width.
-  for (auto* combo : {m_typeCombo, m_soundCombo, m_tagCombo})
+  for (auto* combo : {m_soundCombo, m_tagCombo})
   {
     combo->setMinimumWidth(190);
   }
-  filterForm->addRow(tr("Type"), m_typeCombo);
   filterForm->addRow(tr("Sound"), m_soundCombo);
   filterForm->addRow(tr("Tag"), m_tagCombo);
   auto* metadataRow = new QWidget{};
@@ -757,7 +764,6 @@ void ModelBrowser::createGui(AppController& appController)
   auto* assetsLayout = new QVBoxLayout{assets};
   assetsLayout->setContentsMargins(0, 0, 0, 0);
   assetsLayout->setSpacing(0);
-  assetsLayout->addWidget(controls);
   assetsLayout->addWidget(resultBar);
   assetsLayout->addWidget(browser, 1);
 
@@ -773,12 +779,58 @@ void ModelBrowser::createGui(AppController& appController)
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
+  m_assetSurface = splitter;
+  m_fileControls = controls;
+  auto* categories = new QHBoxLayout{};
+  categories->setContentsMargins(8, 3, 0, 3);
+  categories->setSpacing(6);
+  categories->addWidget(m_typeCombo);
+  categories->addWidget(controls, 1);
+  categories->addStretch();
+  layout->addLayout(categories);
   layout->addWidget(splitter, 1);
   setLayout(layout);
 
   m_fileSystemWatcher = new QFileSystemWatcher{this};
   m_rescanTimer = new QTimer{this};
   m_rescanTimer->setSingleShot(true);
+}
+
+void ModelBrowser::showEntityBrowser()
+{
+  if (m_selectionOnly)
+    return;
+  m_typeCombo->setCurrentIndex(m_typeCombo->findData(EntityTypeFilter));
+  if (m_entityBrowser)
+    m_entityBrowser->focusSearch();
+}
+
+bool ModelBrowser::isShowingEntities() const
+{
+  return m_entityBrowser && !m_entityBrowser->isHidden();
+}
+
+void ModelBrowser::setEntityMode(const bool entities)
+{
+  if (entities && !m_entityBrowser)
+  {
+    m_entityBrowser = new EntityBrowser{m_appController, *m_document, this};
+    m_entityBrowser->setMapActionsEnabled(m_mapActionsEnabled);
+    layout()->addWidget(m_entityBrowser);
+    connect(
+      m_entityBrowser,
+      &EntityBrowser::createEntityRequested,
+      this,
+      &ModelBrowser::createEntityRequested);
+  }
+  m_filterButton->setChecked(false);
+  m_viewButton->setChecked(false);
+  m_assetSurface->setVisible(!entities);
+  m_fileControls->setVisible(!entities);
+  if (m_entityBrowser)
+    m_entityBrowser->setVisible(entities);
+  // A hidden file view must not reserve the entity page's minimum size.
+  emit entityModeChanged(entities);
 }
 
 void ModelBrowser::addViewOption(QWidget* control)
@@ -819,6 +871,8 @@ void ModelBrowser::previewAsset(AppController&, const QString& path)
 void ModelBrowser::setMapActionsEnabled(const bool enabled)
 {
   m_mapActionsEnabled = enabled;
+  if (m_entityBrowser)
+    m_entityBrowser->setMapActionsEnabled(enabled);
   updateSourceControls();
   refreshUsage();
   applyTypeFilter();
@@ -1186,6 +1240,9 @@ void ModelBrowser::bindEvents(AppController& appController)
     this,
     [&](const int index) {
       const auto value = m_typeCombo->itemData(index).toInt();
+      setEntityMode(value == EntityTypeFilter);
+      if (value == EntityTypeFilter)
+        return;
       if (value == SkyboxTypeFilter)
         setTypeFilter(BrowserCellType::Texture, true);
       else
@@ -1557,10 +1614,6 @@ void ModelBrowser::updateFilterSummary()
   }
 
   auto active = 0;
-  if (m_typeFilter)
-  {
-    ++active;
-  }
   if (m_waveKind != inspection::WaveKind::All)
   {
     ++active;

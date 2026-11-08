@@ -25,6 +25,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_CollapsibleTitledPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PanelLayout.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ViewEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityBrowser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityDefinitionFileChooser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityPropertyGrid.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityPropertyModel.cpp

@@ -13,6 +13,8 @@
 #include <QSettings>
 #include <QVBoxLayout>
 
+#include "mdl/EntityDefinition.h"
+#include "mdl/EntityDefinitionManager.h"
 #include "mdl/Map.h"
 #include "ui/Action.h"
 #include "ui/ActionBuilder.h"
@@ -28,6 +30,7 @@
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewToolBox.h"
+#include "ui/ModelBrowser.h"
 #include "ui/PythonConsole.h"
 #include "ui/SelectionPropertyEditor.h"
 #include "ui/Splitter.h"
@@ -112,6 +115,9 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   layout->setContentsMargins(6, 6, 6, 6);
   layout->addWidget(m_hSplitter);
   m_controller = std::make_unique<MapEditorController>(appController, document, *this);
+  if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
+    connect(
+      browser, &ModelBrowser::createEntityRequested, this, &MapEditorView::createEntity);
   // Outliner widgets live on a lazily created inspector page, so wire them up
   // when that page is installed rather than assuming they exist at construction.
   connect(m_inspector, &Inspector::pagePrepared, this, [this](const int) {
@@ -394,6 +400,32 @@ void MapEditorView::showInfoPanelPage(const InfoPanelPage page)
   m_infoPanelSurface->show();
   m_infoPanel->show();
   m_infoPanel->switchToPage(page);
+}
+
+void MapEditorView::showEntityBrowser()
+{
+  if (m_externalInfoPanel)
+    emit entityBrowserRequested();
+  else
+  {
+    showInfoPanelPage(InfoPanelPage::Assets);
+    if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
+      browser->showEntityBrowser();
+  }
+}
+
+void MapEditorView::createEntity(const QString& classname)
+{
+  const auto* definition =
+    m_document.map().entityDefinitionManager().definition(classname.toStdString());
+  auto* view = currentMapViewBase();
+  if (
+    !definition || !view
+    || (!definition->pointEntityDefinition && !view->canCreateBrushEntity()))
+    return;
+  view->createEntity(*definition);
+  showInspectorPage(InspectorPage::Entity);
+  view->setFocus(Qt::OtherFocusReason);
 }
 
 void MapEditorView::showInspectorPage(const InspectorPage page)

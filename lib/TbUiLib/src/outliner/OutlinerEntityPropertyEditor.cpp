@@ -31,6 +31,7 @@
 #include "base/PreferenceManager.h"
 #include "mdl/EntityColorPropertyValue.h"
 #include "mdl/EntityDefinition.h"
+#include "mdl/EntityDefinitionManager.h"
 #include "mdl/EntityNodeBase.h"
 #include "mdl/EntityProperties.h"
 #include "mdl/GameInfo.h"
@@ -1146,6 +1147,18 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
       valueEdit->setObjectName("outlinerPropertyValue");
       valueEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
       valueEdit->setProperty("propertyKey", QString::fromStdString(key));
+      if (key == mdl::EntityPropertyKeys::Classname)
+      {
+        auto names = QStringList{};
+        for (const auto& definition :
+             m_document.map().entityDefinitionManager().definitions())
+          names.push_back(QString::fromStdString(definition.name));
+        names.sort(Qt::CaseInsensitive);
+        auto* completer = new QCompleter{names, valueEdit};
+        completer->setCaseSensitivity(Qt::CaseInsensitive);
+        completer->setFilterMode(Qt::MatchContains);
+        valueEdit->setCompleter(completer);
+      }
 
       if (propertyDef && propertyDef->readOnly)
       {

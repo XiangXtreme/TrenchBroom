@@ -60,6 +60,7 @@ namespace tb::ui
 {
 class AppController;
 class AssetInspector;
+class EntityBrowser;
 class AssetLibraryWindow;
 class MapDocument;
 class PopupWindow;
@@ -70,6 +71,10 @@ class ModelBrowser : public QWidget
   Q_OBJECT
 private:
   MapDocument* m_document;
+  AppController& m_appController;
+  EntityBrowser* m_entityBrowser = nullptr;
+  QWidget* m_assetSurface = nullptr;
+  QWidget* m_fileControls = nullptr;
   std::shared_ptr<ProjectSession> m_project;
 
   QStackedWidget* m_pathStack = nullptr;
@@ -172,6 +177,8 @@ public:
     QWidget* parent = nullptr,
     std::shared_ptr<ProjectSession> project = nullptr);
   void setDocument(MapDocument& document);
+  void showEntityBrowser();
+  bool isShowingEntities() const;
   void addViewOption(QWidget* control);
   void bindInspector(AssetInspector& inspector, bool mapActions);
   void setMapActionsEnabled(bool enabled);
@@ -180,12 +187,15 @@ public:
 
 signals:
   void actionContextChanged();
+  void entityModeChanged(bool entities);
+  void createEntityRequested(const QString& classname);
 
 protected:
   bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
   void showEvent(QShowEvent* event) override;
+  void setEntityMode(bool entities);
 
   void previewAsset(AppController& appController, const QString& path);
   void applyAssetToMap(BrowserAsset asset);

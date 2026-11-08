@@ -84,6 +84,7 @@
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorView.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
@@ -499,7 +500,7 @@ void configureGoldSrcEntitySnapshot(QWidget& targetWidget)
   }
   setPref(Preferences::EntityLinkMode, Preferences::EntityLinkModeAll);
   setPref(Preferences::ShowAxes, false);
-  mapWindow->switchToInspectorPage(InspectorPage::Entity);
+  mapWindow->switchToInspectorPage(InspectorPage::Outliner);
   if (mapWindow->infoPanelVisible())
   {
     mapWindow->toggleInfoPanel();
@@ -1040,8 +1041,21 @@ void configureInspectorSnapshot(QWidget& targetWidget, const QString& targetName
   const auto showEntityBrowser = targetName.startsWith(QStringLiteral("entity-browser"));
   if (!showPluginInspector)
   {
-    mapWindow->switchToInspectorPage(
-      showEntityBrowser ? InspectorPage::Entity : InspectorPage::Face);
+    if (showEntityBrowser)
+    {
+      mapWindow->editorView().showEntityBrowser();
+      if (auto* mode = mapWindow->findChild<QComboBox*>("ProjectToolsMode"))
+        mode->setCurrentIndex(1);
+      if (!targetName.endsWith(QStringLiteral("-empty")))
+        if (auto* tree = mapWindow->findChild<QTreeWidget*>("EntityBrowser_Definitions"))
+        {
+          const auto lights = tree->findItems(QStringLiteral("light"), Qt::MatchExactly);
+          if (!lights.isEmpty())
+            tree->setCurrentItem(lights.front());
+        }
+    }
+    else
+      mapWindow->switchToInspectorPage(InspectorPage::Face);
   }
   if (
     auto* splitter =

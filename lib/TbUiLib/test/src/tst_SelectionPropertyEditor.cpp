@@ -24,7 +24,6 @@
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "ui/AppControllerFixture.h"
-#include "ui/EntityInspector.h"
 #include "ui/EntityPropertyModel.h"
 #include "ui/EntityPropertyTable.h"
 #include "ui/MapDocument.h"
@@ -146,15 +145,17 @@ TEST_CASE("SelectionPropertyEditor")
     CHECK_FALSE(modelEditor->isHidden());
   }
 
-  SECTION("scene and entity entries share presentation and property capabilities")
+  SECTION("scene and standalone surfaces share presentation and property capabilities")
   {
     auto scene = OutlinerInspector{document};
-    auto entities = EntityInspector{app.appController(), document};
+    auto entities = SelectionPropertyEditor{document};
     mode->setCurrentIndex(1);
     refreshSelectionProperties();
     for (auto* host : std::array<QWidget*, 2>{&scene, &entities})
     {
-      auto* surface = host->findChild<SelectionPropertyEditor*>();
+      auto* surface = qobject_cast<SelectionPropertyEditor*>(host);
+      if (!surface)
+        surface = host->findChild<SelectionPropertyEditor*>();
       REQUIRE(surface);
       REQUIRE(surface->findChild<EntityPropertyTable*>());
       CHECK(

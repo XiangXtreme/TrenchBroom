@@ -76,6 +76,35 @@ TEST_CASE("WorkspaceLayout")
     CHECK(settings.value("Windows/Inspector/State").toByteArray() == bytes);
   }
 
+  SECTION("saved entity pages migrate to scene without changing other page IDs")
+  {
+    auto bytes = QByteArray{};
+    auto stream = QDataStream{&bytes, QIODevice::WriteOnly};
+    stream << static_cast<int>(InspectorPage::Entity);
+    settings.setValue("Windows/Inspector_TabBook/State", bytes);
+    CHECK(
+      loadEditorLayout(settings, WorkspaceKind::Map).inspectorPage
+      == InspectorPage::Outliner);
+    settings.setValue(
+      "WorkspaceLayouts/Map/Editor",
+      QVariantMap{{"version", 1}, {"inspectorPage", "entity"}});
+    CHECK(
+      loadEditorLayout(settings, WorkspaceKind::Map).inspectorPage
+      == InspectorPage::Outliner);
+    for (const auto page :
+         {InspectorPage::Map,
+          InspectorPage::Face,
+          InspectorPage::Outliner,
+          InspectorPage::Plugin,
+          InspectorPage::Terrain})
+    {
+      auto layout = EditorLayout{};
+      layout.inspectorPage = page;
+      saveEditorLayout(settings, WorkspaceKind::Map, layout);
+      CHECK(loadEditorLayout(settings, WorkspaceKind::Map).inspectorPage == page);
+    }
+  }
+
   SECTION("invalid ratios missing tools and unknown versions use defaults")
   {
     settings.setValue(

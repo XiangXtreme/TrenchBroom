@@ -12,6 +12,7 @@ class SelectionPropertyEditor;
 class QLineEdit;
 class QComboBox;
 class QSplitter;
+class QToolButton;
 
 namespace tb::ui
 {
@@ -26,10 +27,12 @@ private:
   SelectionPropertyEditor* m_propertyEditor = nullptr;
   QLineEdit* m_searchField = nullptr;
   QComboBox* m_sortBox = nullptr;
+  QToolButton* m_propertiesToggle = nullptr;
 
 public:
   explicit OutlinerInspector(MapDocument& document, QWidget* parent = nullptr);
   ~OutlinerInspector() override;
+  void showProperties();
 };
 
 } // namespace tb::ui

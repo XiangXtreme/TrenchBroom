@@ -51,6 +51,7 @@
 #include "ui/MapView3D.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/ModelBrowser.h"
 #include "ui/ProjectAssetPanel.h"
 #include "ui/ProjectCaptureConflictDialog.h"
 #include "ui/ProjectRecovery.h"
@@ -242,6 +243,15 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   contentTabs->tabBar()->hide();
   m_browser = new ProjectAssetPanel{m_appController, m_session, contentTabs};
   contentTabs->addTab(m_browser, tr("Browse"));
+  if (auto* browser = m_browser->findChild<ModelBrowser*>())
+    connect(
+      browser,
+      &ModelBrowser::createEntityRequested,
+      this,
+      [this](const QString& classname) {
+        if (auto* window = activeMapWindow())
+          window->editorView().createEntity(classname);
+      });
   auto* content = new QWidget{this};
   auto* contentLayout = new QVBoxLayout{content};
   m_search = new QLineEdit{content};
@@ -709,6 +719,12 @@ void ProjectWindow::refreshMapTabs()
           m_appController.mapWindowManager().activateMapWindow(*window);
           m_tools->showInfoPage(page);
         });
+      connect(editor, &MapEditorView::entityBrowserRequested, this, [this, window] {
+        m_appController.mapWindowManager().activateMapWindow(*window);
+        emit m_session->browserFocusRequested();
+        if (auto* browser = m_browser->findChild<ModelBrowser*>())
+          browser->showEntityBrowser();
+      });
       connect(
         editor,
         &MapEditorView::infoPanelToggleRequested,

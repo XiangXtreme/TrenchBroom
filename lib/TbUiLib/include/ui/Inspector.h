@@ -30,7 +30,6 @@ namespace tb::ui
 {
 class AppController;
 class FaceInspector;
-class EntityInspector;
 class MapDocument;
 class MapViewToolBox;
 class MapInspector;
@@ -44,7 +43,7 @@ class TerrainInspector;
 enum class InspectorPage
 {
   Map = 0,
-  Entity = 1,
+  Entity = 1, // Legacy settings/commands redirect to Outliner.
   Face = 2,
   Outliner = 3,
   Plugin = 4,
@@ -59,7 +58,6 @@ private:
   MapDocument* m_document = nullptr;
   TabBook* m_tabBook = nullptr;
   MapInspector* m_mapInspector = nullptr;
-  EntityInspector* m_entityInspector = nullptr;
   FaceInspector* m_faceInspector = nullptr;
   OutlinerInspector* m_outlinerInspector = nullptr;
   PluginInspector* m_pluginInspector = nullptr;

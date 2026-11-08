@@ -42,6 +42,7 @@
 #include <QStyleOptionViewItem>
 #include <QTextEdit>
 #include <QToolButton>
+#include <QTreeWidget>
 #include <QWidget>
 #include <QtTest/QTest>
 
@@ -59,6 +60,8 @@
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
+#include "mdl/EntityDefinition.h"
+#include "mdl/EntityDefinitionManager.h"
 #include "mdl/EntityNode.h"
 #include "mdl/EntityProperties.h"
 #include "mdl/GameConfigFixture.h"
@@ -75,12 +78,12 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/CatchConfig.h"
 #include "ui/CommandPaletteDialog.h"
-#include "ui/EntityInspector.h"
 #include "ui/InfoPanel.h"
 #include "ui/InputEvent.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/MapEditorView.h"
 #include "ui/MapStatus.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
@@ -88,6 +91,7 @@
 #include "ui/MapViewLayout.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
+#include "ui/ModelBrowser.h"
 #include "ui/MoveObjectsTool.h"
 #include "ui/PieMenu.h"
 #include "ui/PlayModeFullScreen.h"
@@ -731,6 +735,71 @@ TEST_CASE("MapWindow")
     CHECK(window.findChild<QWidget*>("ModelBrowser_FolderTree") != nullptr);
   }
 
+  SECTION("entity content creates points and converts brushes with native undo")
+  {
+    auto& map = window.document().map();
+    map.entityDefinitionManager().setDefinitions({
+      {"light", {}, "A light", {}, mdl::PointEntityDefinition{vm::bbox3d{8.0}, {}, {}}},
+      {"func_door", {}, "Door", {}},
+    });
+    window.resize(1400, 900);
+    window.show();
+    window.editorView().showEntityBrowser();
+    QApplication::processEvents();
+    auto* browser = window.findChild<ModelBrowser*>();
+    auto* tree = window.findChild<QTreeWidget*>("EntityBrowser_Definitions");
+    auto* create = window.findChild<QPushButton*>("EntityBrowser_Create");
+    REQUIRE(browser);
+    REQUIRE(tree);
+    REQUIRE(create);
+    CHECK(browser->isShowingEntities());
+    CHECK(window.findChild<WorkspaceToolPanel*>()->isToolVisible(
+      WorkspaceToolId::ContentBrowser));
+    CHECK(window.findChild<QWidget*>("Inspector_NavigationEntity") == nullptr);
+    const auto choose = [&](const QString& name) {
+      const auto found = tree->findItems(name, Qt::MatchExactly);
+      REQUIRE(found.size() == 1);
+      tree->setCurrentItem(found.front());
+    };
+    choose("light");
+    REQUIRE(create->isEnabled());
+    create->click();
+    REQUIRE(map.selection().nodes.size() == 1);
+    auto* light = dynamic_cast<mdl::EntityNode*>(map.selection().nodes.front());
+    REQUIRE(light);
+    CHECK(light->entity().classname() == "light");
+    CHECK(window.findChild<Inspector*>()->currentPage() == InspectorPage::Outliner);
+    map.undoCommand();
+    map.redoCommand();
+    REQUIRE(map.selection().nodes.size() == 1);
+    CHECK(
+      dynamic_cast<mdl::EntityNode*>(map.selection().nodes.front())->entity().classname()
+      == "light");
+    auto* brush = new mdl::BrushNode{
+      mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()}.createCube(
+        32.0, "test")
+      | kdl::value()};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {brush}}});
+    mdl::deselectAll(map);
+    window.editorView().showEntityBrowser();
+    choose("func_door");
+    CHECK_FALSE(create->isEnabled());
+    mdl::selectNodes(map, {brush});
+    REQUIRE(create->isEnabled());
+    auto* previousParent = brush->parent();
+    create->click();
+    auto* door = dynamic_cast<mdl::EntityNode*>(brush->parent());
+    REQUIRE(door);
+    CHECK(door->entity().classname() == "func_door");
+    map.undoCommand();
+    CHECK(brush->parent() == previousParent);
+    map.redoCommand();
+    REQUIRE(dynamic_cast<mdl::EntityNode*>(brush->parent()));
+    CHECK(
+      dynamic_cast<mdl::EntityNode*>(brush->parent())->entity().classname()
+      == "func_door");
+  }
+
   SECTION("standalone tools share pinning layout and keep project settings separate")
   {
     auto* tools = window.findChild<WorkspaceToolPanel*>();
@@ -792,7 +861,6 @@ TEST_CASE("MapWindow")
     REQUIRE(inspector != nullptr);
     for (const auto page :
          {InspectorPage::Map,
-          InspectorPage::Entity,
           InspectorPage::Face,
           InspectorPage::Outliner,
           InspectorPage::Plugin,
@@ -808,7 +876,7 @@ TEST_CASE("MapWindow")
     CHECK(window.findChild<QWidget*>("FaceAttribsEditor_MaterialName") != nullptr);
     CHECK(window.findChild<QWidget*>("UvEditor") != nullptr);
     CHECK(window.findChild<QWidget*>("UvEditor_Toolbar") != nullptr);
-    for (const auto& browserName : {QString{"EntityBrowser"}, QString{"MaterialBrowser"}})
+    for (const auto& browserName : {QString{"MaterialBrowser"}})
     {
       auto* browser = window.findChild<QWidget*>(browserName);
       auto* controls =
@@ -895,7 +963,7 @@ TEST_CASE("MapWindow")
     REQUIRE(pageTitle != nullptr);
     REQUIRE(legacyTabBar != nullptr);
     REQUIRE(mapButton != nullptr);
-    REQUIRE(entityButton != nullptr);
+    CHECK(entityButton == nullptr);
     REQUIRE(faceButton != nullptr);
     REQUIRE(outlinerButton != nullptr);
     REQUIRE(pluginButton != nullptr);
@@ -926,18 +994,12 @@ TEST_CASE("MapWindow")
     CHECK(navigationRail->width() == 40);
     CHECK(legacyTabBar->isHidden());
     CHECK_FALSE(mapButton->icon().isNull());
-    CHECK_FALSE(entityButton->icon().isNull());
     CHECK_FALSE(faceButton->icon().isNull());
     CHECK_FALSE(outlinerButton->icon().isNull());
     CHECK_FALSE(pluginButton->icon().isNull());
     CHECK_FALSE(terrainButton->icon().isNull());
     for (const auto* button :
-         {mapButton,
-          entityButton,
-          faceButton,
-          outlinerButton,
-          pluginButton,
-          terrainButton})
+         {mapButton, faceButton, outlinerButton, pluginButton, terrainButton})
     {
       const auto iconImage = button->icon().pixmap(QSize{20, 20}).toImage();
       CHECK(iconImage.deviceIndependentSize() == QSizeF{20, 20});
@@ -945,7 +1007,7 @@ TEST_CASE("MapWindow")
     }
     CHECK(mapButton->accessibleName() == "Map Inspector");
     CHECK(mapButton->toolTip().contains("Ctrl+1"));
-    CHECK(entityButton->toolTip().contains("Ctrl+2"));
+    CHECK(outlinerButton->toolTip().contains("Ctrl+2"));
     CHECK(faceButton->toolTip().contains("Ctrl+3"));
 
     auto* inspector = window.findChild<Inspector*>();
@@ -959,29 +1021,28 @@ TEST_CASE("MapWindow")
     CHECK(prepared.count() == 0);
     checkSingleNavigation();
 
-    QTest::keyClick(entityButton, Qt::Key_Space);
-    CHECK(entityButton->isChecked());
-    CHECK_FALSE(outlinerButton->isChecked());
-    CHECK(pageTitle->text() == "ENTITY");
-    REQUIRE(window.findChild<QWidget*>("EntityInspector_Splitter"));
-    REQUIRE(prepared.count() == 1);
-    CHECK(
-      prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Entity));
-    checkSingleNavigation();
-
-    auto* properties =
-      window.findChild<EntityInspector*>()->findChild<SelectionPropertyEditor*>();
+    auto* propertiesToggle =
+      window.findChild<QToolButton*>("OutlinerInspector_PropertiesToggle");
+    REQUIRE(propertiesToggle);
+    propertiesToggle->click();
+    REQUIRE_FALSE(propertiesToggle->isChecked());
+    window.switchToInspectorPage(InspectorPage::Entity);
+    CHECK(propertiesToggle->isChecked());
+    CHECK(outlinerButton->isChecked());
+    CHECK(pageTitle->text() == "SCENE");
+    CHECK(prepared.count() == 0);
+    auto* properties = window.findChild<SelectionPropertyEditor*>();
     REQUIRE(properties);
     auto* view = window.currentMapViewBase();
     REQUIRE(view);
     Q_EMIT qApp->focusChanged(nullptr, view);
-    entityButton->setFocus();
+    outlinerButton->setFocus();
     Q_EMIT properties->focusMapViewRequested();
     CHECK(window.focusWidget() == view);
 
     QTest::mouseClick(faceButton, Qt::LeftButton);
     CHECK(faceButton->isChecked());
-    CHECK_FALSE(entityButton->isChecked());
+    CHECK_FALSE(outlinerButton->isChecked());
     CHECK(pageTitle->text() == "FACE");
     REQUIRE(window.findChild<QWidget*>("FaceInspector_Splitter"));
     REQUIRE(prepared.count() == 1);

@@ -87,7 +87,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityBrowser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityDefinitionFileChooser.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SelectionPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyGrid.cpp
@@ -380,7 +379,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityBrowser.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityBrowserView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityDefinitionFileChooser.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/SelectionPropertyEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyGrid.h

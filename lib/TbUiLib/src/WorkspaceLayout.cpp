@@ -70,6 +70,8 @@ EditorLayout loadEditorLayout(QSettings& settings, const WorkspaceKind kind)
     const auto info = legacyValue(settings, "Windows/InfoPanel_TabBook/State", 0);
     if (info >= 0 && info < InfoPages.size())
       result.infoPage = static_cast<InfoPanelPage>(info);
+    if (result.inspectorPage == InspectorPage::Entity)
+      result.inspectorPage = InspectorPage::Outliner;
     return result;
   }
   const auto values = settings.value(path).toMap();
@@ -81,6 +83,8 @@ EditorLayout loadEditorLayout(QSettings& settings, const WorkspaceKind kind)
   result.infoVisible = values.value("infoVisible", true).toBool();
   result.inspectorPage =
     static_cast<InspectorPage>(pageIndex(InspectorPages, values.value("inspectorPage")));
+  if (result.inspectorPage == InspectorPage::Entity)
+    result.inspectorPage = InspectorPage::Outliner;
   result.infoPage =
     static_cast<InfoPanelPage>(pageIndex(InfoPages, values.value("infoPage")));
   return result;

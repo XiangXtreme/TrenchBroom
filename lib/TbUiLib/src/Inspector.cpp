@@ -28,7 +28,6 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-#include "ui/EntityInspector.h"
 #include "ui/FaceInspector.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapInspector.h"
@@ -62,7 +61,6 @@ Inspector::Inspector(
   m_terrainInspector = new TerrainInspector{appController, document, toolBox};
 
   m_tabBook->addPage(m_mapInspector, "Map");
-  m_tabBook->addPlaceholderPage("Entity");
   m_tabBook->addPlaceholderPage("Face");
   m_tabBook->addPlaceholderPage("Outliner");
   m_tabBook->addPlaceholderPage("Plugin");
@@ -118,12 +116,6 @@ Inspector::Inspector(
     "Inspector_NavigationMap",
     "InspectorMap.svg");
   addNavigationButton(
-    InspectorPage::Entity,
-    tr("Entity Inspector"),
-    tr("Entity Inspector (Ctrl+2)"),
-    "Inspector_NavigationEntity",
-    "InspectorEntity.svg");
-  addNavigationButton(
     InspectorPage::Face,
     tr("Face Inspector"),
     tr("Face Inspector (Ctrl+3)"),
@@ -132,7 +124,7 @@ Inspector::Inspector(
   addNavigationButton(
     InspectorPage::Outliner,
     tr("Scene"),
-    tr("Scene tree and properties"),
+    tr("Scene tree and properties (Ctrl+2)"),
     "Inspector_NavigationOutliner",
     "InspectorOutliner.svg");
   addNavigationButton(
@@ -190,23 +182,15 @@ void Inspector::connectTopWidgets(MapViewBar* mapViewBar)
 
 void Inspector::ensurePage(const InspectorPage page)
 {
-  const auto index = static_cast<int>(page);
+  const auto index = page == InspectorPage::Map ? 0 : static_cast<int>(page) - 1;
   switch (page)
   {
-  case InspectorPage::Entity:
-    if (!m_entityInspector)
-    {
-      m_entityInspector = new EntityInspector{*m_appController, *m_document};
-      m_tabBook->replacePage(index, m_entityInspector);
-      emit pagePrepared(index);
-    }
-    break;
   case InspectorPage::Face:
     if (!m_faceInspector)
     {
       m_faceInspector = new FaceInspector{*m_appController, *m_document};
       m_tabBook->replacePage(index, m_faceInspector);
-      emit pagePrepared(index);
+      emit pagePrepared(static_cast<int>(page));
     }
     break;
   case InspectorPage::Outliner:
@@ -214,7 +198,7 @@ void Inspector::ensurePage(const InspectorPage page)
     {
       m_outlinerInspector = new OutlinerInspector{*m_document};
       m_tabBook->replacePage(index, m_outlinerInspector);
-      emit pagePrepared(index);
+      emit pagePrepared(static_cast<int>(page));
     }
     break;
   case InspectorPage::Plugin:
@@ -222,9 +206,10 @@ void Inspector::ensurePage(const InspectorPage page)
     {
       m_pluginInspector = new PluginInspector{};
       m_tabBook->replacePage(index, m_pluginInspector);
-      emit pagePrepared(index);
+      emit pagePrepared(static_cast<int>(page));
     }
     break;
+  case InspectorPage::Entity:
   case InspectorPage::Map:
   case InspectorPage::Terrain:
     break;
@@ -233,13 +218,18 @@ void Inspector::ensurePage(const InspectorPage page)
 
 void Inspector::switchToPage(const InspectorPage page)
 {
-  ensurePage(page);
-  m_tabBook->switchToPage(static_cast<int>(page));
+  const auto destination = page == InspectorPage::Entity ? InspectorPage::Outliner : page;
+  ensurePage(destination);
+  if (page == InspectorPage::Entity)
+    m_outlinerInspector->showProperties();
+  m_tabBook->switchToPage(
+    destination == InspectorPage::Map ? 0 : static_cast<int>(destination) - 1);
 }
 
 InspectorPage Inspector::currentPage() const
 {
-  return static_cast<InspectorPage>(m_tabBook->currentPageIndex());
+  const auto index = m_tabBook->currentPageIndex();
+  return index == 0 ? InspectorPage::Map : static_cast<InspectorPage>(index + 1);
 }
 
 void Inspector::updateNavigation(const int page)
@@ -249,8 +239,8 @@ void Inspector::updateNavigation(const int page)
     return;
   }
 
-  const auto titles = std::array{
-    tr("Map"), tr("Entity"), tr("Face"), tr("Scene"), tr("Plugins"), tr("Terrain")};
+  const auto titles =
+    std::array{tr("Map"), tr("Face"), tr("Scene"), tr("Plugins"), tr("Terrain")};
   m_pageTitle->setText(titles.at(static_cast<size_t>(page)).toUpper());
   m_navigationButtons.at(static_cast<size_t>(page))->setChecked(true);
 }

@@ -154,6 +154,15 @@ void EntityBrowserView::setFilterText(const std::string& filterText)
   }
 }
 
+void EntityBrowserView::setDefinitionName(const std::string& name)
+{
+  if (m_definitionName == name)
+    return;
+  m_definitionName = name;
+  invalidate();
+  update();
+}
+
 void EntityBrowserView::resizeEvent(QResizeEvent* event)
 {
   invalidate();
@@ -180,6 +189,14 @@ void EntityBrowserView::doReloadLayout(Layout& layout)
 
   const auto& entityDefinitionManager = m_document.map().entityDefinitionManager();
   const auto font = gl::FontDescriptor{fontPath, static_cast<size_t>(fontSize)};
+
+  if (!m_definitionName.empty())
+  {
+    const auto* definition = entityDefinitionManager.definition(m_definitionName);
+    if (definition && definition->pointEntityDefinition)
+      addEntityToLayout(layout, *definition, font);
+    return;
+  }
 
   if (m_group)
   {

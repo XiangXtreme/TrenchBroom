@@ -472,6 +472,71 @@ TEST_CASE("ProjectWindow")
     CHECK_FALSE(hasPreviewPixels(Qt::red));
   }
 
+  SECTION("entity content follows the active map and cannot edit a closed target")
+  {
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    alphaDocument->map().entityDefinitionManager().setDefinitions({
+      {"alpha_point",
+       {},
+       "Alpha",
+       {},
+       mdl::PointEntityDefinition{vm::bbox3d{8.0}, {}, {}}},
+    });
+    const auto betaId = tabs->tabData(1).toString().toStdString();
+    auto* beta = session->documentFor(betaId);
+    REQUIRE(beta);
+    beta->map().entityDefinitionManager().setDefinitions({
+      {"beta_point", {}, "Beta", {}, mdl::PointEntityDefinition{vm::bbox3d{8.0}, {}, {}}},
+    });
+    auto* assetSearch = browser->findChild<QLineEdit*>("ModelBrowser_Search");
+    REQUIRE(assetSearch);
+    assetSearch->setText("original asset search");
+    auto* detailsToggle = window.findChild<QToolButton*>("ProjectAssetDetailsToggle");
+    REQUIRE(detailsToggle);
+    detailsToggle->setChecked(true);
+    alphaWindow->editorView().showEntityBrowser();
+    QApplication::processEvents();
+    CHECK(browser->isShowingEntities());
+    CHECK(window.findChild<QWidget*>("ProjectAssetDetailsSurface")->isHidden());
+    auto* contentType = browser->findChild<QComboBox*>("ModelBrowser_Type");
+    REQUIRE(contentType);
+    contentType->setCurrentIndex(contentType->findData(-1));
+    CHECK_FALSE(browser->isShowingEntities());
+    CHECK(assetSearch->text() == "original asset search");
+    CHECK_FALSE(window.findChild<QWidget*>("ProjectAssetDetailsSurface")->isHidden());
+    browser->showEntityBrowser();
+    auto* tree = browser->findChild<QTreeWidget*>("EntityBrowser_Definitions");
+    REQUIRE(tree);
+    REQUIRE(tree->topLevelItemCount() == 1);
+    CHECK(tree->topLevelItem(0)->text(0) == "alpha_point");
+    const auto alphaSelection = alphaDocument->map().selection().nodes;
+    tabs->setCurrentIndex(1);
+    QApplication::processEvents();
+    tree = browser->findChild<QTreeWidget*>("EntityBrowser_Definitions");
+    REQUIRE(tree);
+    REQUIRE(tree->topLevelItemCount() == 1);
+    CHECK(tree->topLevelItem(0)->text(0) == "beta_point");
+    tree->setCurrentItem(tree->topLevelItem(0));
+    auto* create = browser->findChild<QPushButton*>("EntityBrowser_Create");
+    REQUIRE(create);
+    REQUIRE(create->isEnabled());
+    create->click();
+    CHECK(alphaDocument->map().selection().nodes == alphaSelection);
+    REQUIRE(beta->map().selection().nodes.size() == 1);
+    CHECK(
+      dynamic_cast<mdl::EntityNode*>(beta->map().selection().nodes.front())
+        ->entity()
+        .classname()
+      == "beta_point");
+    closeTab(*tabs, 1);
+    closeTab(*tabs, 0);
+    CHECK(window.activeMapWindow() == nullptr);
+    create = browser->findChild<QPushButton*>("EntityBrowser_Create");
+    REQUIRE(create);
+    CHECK_FALSE(create->isEnabled());
+  }
+
   SECTION("one project browser survives map switches and closing all map tabs")
   {
     emit session->browserFocusRequested();

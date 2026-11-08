@@ -2040,10 +2040,18 @@ void ActionManager::createViewMenu()
   }));
   viewMenu.addItem(addAction(Action{
     "Menu/View/Switch to Entity Inspector",
-    "Show Entity Inspector",
+    "Show Scene and Properties",
     ActionContext::Any,
     KeySequence{"Ctrl+2"},
     [](auto& context) { context.editorView().showInspectorPage(InspectorPage::Entity); },
+    [](const auto& context) { return context.hasDocument(); },
+  }));
+  viewMenu.addItem(addAction(Action{
+    "Menu/View/Show Entity Browser",
+    "Show Entity Browser",
+    ActionContext::Any,
+    KeySequence{},
+    [](auto& context) { context.editorView().showEntityBrowser(); },
     [](const auto& context) { return context.hasDocument(); },
   }));
   viewMenu.addItem(addAction(Action{

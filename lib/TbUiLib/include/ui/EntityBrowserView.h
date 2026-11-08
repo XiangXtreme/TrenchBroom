@@ -98,6 +98,7 @@ private:
   bool m_hideUnused = false;
   mdl::EntityDefinitionSortOrder m_sortOrder;
   std::string m_filterText;
+  std::string m_definitionName;
 
   NotifierConnection m_notifierConnection;
 
@@ -114,6 +115,7 @@ public:
   void setGroup(bool group);
   void setHideUnused(bool hideUnused);
   void setFilterText(const std::string& filterText);
+  void setDefinitionName(const std::string& name);
 
 private:
   void resizeEvent(QResizeEvent* event) override;
