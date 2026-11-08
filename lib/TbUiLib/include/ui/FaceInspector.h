@@ -19,8 +19,10 @@
 
 #pragma once
 
+#include "base/NotifierConnection.h"
 #include "ui/TabBook.h"
 
+class QSplitter;
 class QWidget;
 
 namespace tb
@@ -33,14 +35,22 @@ class Material;
 namespace ui
 {
 class AppController;
+class CollapsibleTitledPanel;
 class FaceAttribsEditor;
 class MapDocument;
+class MaterialBrowser;
 
 class FaceInspector : public TabBookPage
 {
   Q_OBJECT
 private:
+  MapDocument& m_document;
+  QSplitter* m_splitter = nullptr;
   FaceAttribsEditor* m_faceAttribsEditor = nullptr;
+  MaterialBrowser* m_materialBrowser = nullptr;
+  QWidget* m_materialBrowserInfo = nullptr;
+
+  NotifierConnection m_notifierConnection;
 
 public:
   FaceInspector(
@@ -48,8 +58,18 @@ public:
   ~FaceInspector() override;
 
   bool cancelMouseDrag();
-signals:
-  void materialBrowserRequested(const gl::Material* material);
+  void revealMaterial(const gl::Material* material);
+
+private:
+  void createGui(AppController& appController);
+  QWidget* createFaceAttribsEditor(AppController& appController);
+  QWidget* createMaterialBrowser(AppController& appController);
+  QWidget* createMaterialBrowserInfo();
+
+  void materialSelected(const gl::Material* material);
+
+  void connectObservers();
+  void documentWasLoaded();
 };
 
 } // namespace ui

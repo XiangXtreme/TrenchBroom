@@ -53,9 +53,6 @@
 #include "fs/PathInfo.h"
 #include "fs/PathMatcher.h"
 #include "fs/TraversalMode.h"
-#include "gl/Material.h"
-#include "mdl/BrushFace.h"
-#include "mdl/BrushFaceHandle.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EntityDefinitionUtils.h"
 #include "mdl/EntityModelManager.h"
@@ -93,10 +90,6 @@
 #include "ui/MapView3D.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
-#include "ui/MaterialBrowser.h"
-#include "ui/MaterialBrowserIconSize.h"
-#include "ui/MaterialBrowserView.h"
-#include "ui/MaterialCollectionEditor.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/PanelLayout.h"
 #include "ui/PopupWindow.h"
@@ -106,7 +99,6 @@
 #include "ui/QPathUtils.h"
 #include "ui/QWidgetUtils.h"
 #include "ui/SearchBox.h"
-#include "ui/SmartWadEditor.h"
 
 #include "kd/overload.h"
 #include "kd/path_utils.h"
@@ -129,7 +121,6 @@ const auto DocumentLoadAssetRefreshDelay = 1500;
 constexpr auto PrefabThumbnailMaxSize = 512;
 constexpr auto SkyboxTypeFilter = -2;
 constexpr auto EntityFolderRole = Qt::UserRole + 1;
-constexpr auto MapMaterialFolderRole = Qt::UserRole + 2;
 
 BrowserCellType catalogCellType(
   const project::AssetType type, const std::filesystem::path& path)
@@ -345,10 +336,7 @@ void ModelBrowser::setDocument(MapDocument& document)
     return;
   m_mapNotifierConnection.disconnect();
   m_notifierConnection.disconnect();
-  delete m_collectionSettings.data();
   m_document = &document;
-  if (m_materialBrowser)
-    m_materialBrowser->setDocument(document);
   if (m_entityBrowser)
     m_entityBrowser->setDocument(document);
   m_usageRefreshTimer->stop();
@@ -527,15 +515,6 @@ void ModelBrowser::createGui(AppController& appController)
     if (m_entityBrowser)
       m_entityBrowser->showSettings();
   });
-  m_materialSettings =
-    createBitmapButton("GeneralPreferences.svg", tr("Material collections…"));
-  m_materialSettings->setObjectName("ModelBrowser_MaterialSettings");
-  m_materialSettings->setAccessibleName(tr("Material collections…"));
-  m_materialSettings->setProperty("tbControlRole", "compact");
-  m_materialSettings->hide();
-  pathRowLayout->addWidget(m_materialSettings);
-  connect(
-    m_materialSettings, &QToolButton::clicked, this, &ModelBrowser::showMaterialSettings);
   m_toolbarLayout = pathRowLayout;
 
   auto* controls = new QWidget{};
@@ -776,33 +755,6 @@ void ModelBrowser::createGui(AppController& appController)
     if (m_entityBrowser)
       m_entityBrowser->view().setGroup(group);
   });
-  m_materialSort = new QComboBox{};
-  m_materialSort->setObjectName("ModelBrowser_MaterialSort");
-  m_materialSort->addItems({tr("Name"), tr("Usage")});
-  m_materialGroup = new QCheckBox{tr("Group by collection")};
-  m_materialGroup->setObjectName("ModelBrowser_MaterialGroup");
-  m_materialUsed = new QCheckBox{tr("Only used materials")};
-  m_materialUsed->setObjectName("ModelBrowser_MaterialUsed");
-  viewForm->addRow(tr("Sort"), m_materialSort);
-  viewForm->addRow(m_materialGroup);
-  m_filterLayout->addRow(m_materialUsed);
-  viewForm->setRowVisible(m_materialSort, false);
-  viewForm->setRowVisible(m_materialGroup, false);
-  m_filterLayout->setRowVisible(m_materialUsed, false);
-  connect(m_materialSort, &QComboBox::currentIndexChanged, this, [this](const int i) {
-    if (m_materialBrowser)
-      m_materialBrowser->setSortOrder(
-        i == 0 ? MaterialSortOrder::Name : MaterialSortOrder::Usage);
-  });
-  connect(m_materialGroup, &QCheckBox::toggled, this, [this](const bool group) {
-    if (m_materialBrowser)
-      m_materialBrowser->setGroup(group);
-  });
-  connect(m_materialUsed, &QCheckBox::toggled, this, [this](const bool used) {
-    if (m_materialBrowser)
-      m_materialBrowser->setHideUnused(used);
-    updateFilterSummary();
-  });
   m_viewPopup->setLayout(viewForm);
 
   connect(m_filterButton, &QToolButton::toggled, this, [this](const bool shown) {
@@ -890,50 +842,16 @@ void ModelBrowser::showEntityBrowser()
 
 bool ModelBrowser::isShowingEntities() const
 {
-  return m_contentKind == ContentKind::Entities;
-}
-bool ModelBrowser::isShowingAssets() const
-{
-  return m_contentKind == ContentKind::Assets;
-}
-bool ModelBrowser::isShowingMapMaterials() const
-{
-  return m_contentKind == ContentKind::MapMaterials;
-}
-
-void ModelBrowser::showMapMaterials()
-{
-  if (m_selectionOnly)
-    return;
-  setContentKind(ContentKind::MapMaterials);
-  m_searchBox->setFocus(Qt::ShortcutFocusReason);
-}
-
-void ModelBrowser::revealMaterial(const gl::Material* material)
-{
-  showMapMaterials();
-  if (!m_materialBrowser || !material)
-    return;
-  m_searchBox->clear();
-  m_materialUsed->setChecked(false);
-  m_materialBrowser->revealMaterial(material);
-  m_materialBrowser->setSelectedMaterial(material);
+  return m_showingEntities;
 }
 
 void ModelBrowser::setEntityMode(const bool entities)
 {
-  setContentKind(entities ? ContentKind::Entities : ContentKind::Assets);
-}
-
-void ModelBrowser::setContentKind(const ContentKind kind)
-{
-  if (m_selectionOnly || m_contentKind == kind)
+  if (m_selectionOnly || m_showingEntities == entities)
     return;
+  const auto wasEntities = isShowingEntities();
   saveBrowsingState();
-  m_contentKind = kind;
-  const auto entities = isShowingEntities();
-  const auto materials = isShowingMapMaterials();
-  const auto assets = isShowingAssets();
+  m_showingEntities = entities;
   if (entities && !m_entityBrowser)
   {
     m_entityBrowser = new EntityBrowser{m_appController, *m_document, this};
@@ -950,42 +868,6 @@ void ModelBrowser::setContentKind(const ContentKind kind)
       this,
       &ModelBrowser::refreshResultCount);
   }
-  if (materials && !m_materialBrowser)
-  {
-    m_materialBrowser = new MaterialBrowser{m_appController, *m_document, this};
-    m_materialBrowser->setControlsVisible(false);
-    m_materialBrowser->setMapActionsEnabled(m_mapActionsEnabled);
-    m_materialBrowser->setSortOrder(
-      m_materialSort->currentIndex() == 0 ? MaterialSortOrder::Name
-                                          : MaterialSortOrder::Usage);
-    m_materialBrowser->setGroup(m_materialGroup->isChecked());
-    m_materialBrowser->setHideUnused(m_materialUsed->isChecked());
-    m_contentLayout->addWidget(m_materialBrowser, 1);
-    connect(
-      m_materialBrowser,
-      &MaterialBrowser::materialSelected,
-      this,
-      [this](const gl::Material* material) {
-        if (!m_mapActionsEnabled || !material)
-          return;
-        auto& map = m_document->map();
-        const auto faces = map.selection().allBrushFaces();
-        const auto clear = faces.empty()
-                             ? map.currentMaterialName() == material->name()
-                             : std::ranges::all_of(faces, [material](const auto& face) {
-                                 return face.face().material() == material;
-                               });
-        const auto name = clear ? mdl::BrushFace::NoMaterialName : material->name();
-        map.setCurrentMaterialName(name);
-        if (!faces.empty())
-          setBrushFaceAttributes(map, {.materialName = name});
-      });
-  }
-  m_assetSurface->setVisible(assets);
-  if (m_entityBrowser)
-    m_entityBrowser->setVisible(entities);
-  if (m_materialBrowser)
-    m_materialBrowser->setVisible(materials);
   if (entities)
   {
     auto& view = m_entityBrowser->view();
@@ -994,38 +876,28 @@ void ModelBrowser::setContentKind(const ContentKind kind)
                                         : mdl::EntityDefinitionSortOrder::Usage);
     view.setGroup(m_entityGroup->isChecked());
     view.setHideUnused(m_entityUsed->isChecked());
-    m_searchBox->setText(m_entitySearch);
+    if (!wasEntities)
+      m_searchBox->setText(m_entitySearch);
     view.setFilterText(m_searchBox->text().toStdString());
   }
-  else if (materials)
-  {
-    m_searchBox->setText(m_materialSearch);
-    m_materialBrowser->setFilterText(m_materialSearch.toStdString());
-  }
-  else
+  else if (wasEntities)
     restoreBrowsingState();
   m_filterButton->setChecked(false);
   m_viewButton->setChecked(false);
+  m_assetSurface->setVisible(!entities);
+  if (m_entityBrowser)
+    m_entityBrowser->setVisible(entities);
   m_entitySettings->setVisible(entities);
   m_entitySettings->setEnabled(m_mapActionsEnabled);
-  m_materialSettings->setVisible(materials);
-  m_materialSettings->setEnabled(m_mapActionsEnabled);
   updateSourceControls();
-  m_searchScopeCombo->setVisible(assets);
-  m_filterLayout->setRowVisible(m_typeCombo, assets);
+  m_searchScopeCombo->setVisible(!entities);
+  m_filterLayout->setRowVisible(m_typeCombo, !entities);
   m_filterLayout->setRowVisible(m_entityUsed, entities);
-  m_filterLayout->setRowVisible(m_materialUsed, materials);
   m_viewLayout->setRowVisible(m_entitySort, entities);
   m_viewLayout->setRowVisible(m_entityGroup, entities);
-  m_viewLayout->setRowVisible(m_materialSort, materials);
-  m_viewLayout->setRowVisible(m_materialGroup, materials);
-  m_viewLayout->setRowVisible(m_groupWadTextures, assets);
-  updateIconSizeCombo();
-  if (assets)
-  {
+  m_viewLayout->setRowVisible(m_groupWadTextures, !entities);
+  if (!entities)
     applyTypeFilter();
-    scheduleAssetRefresh();
-  }
   else
     rebuildFolderTree();
   updateFolderEdit();
@@ -1034,52 +906,9 @@ void ModelBrowser::setContentKind(const ContentKind kind)
   updateFilterVisibility();
   updateFilterSummary();
   recordFolderHistory();
-  if (entities && m_entityBrowser->isVisible())
+  if (entities && !wasEntities && m_entityBrowser->isVisible())
     m_entityBrowser->view().setScrollPosition(m_entityScroll);
-  if (materials && m_materialBrowser->isVisible())
-    m_materialBrowser->findChild<MaterialBrowserView*>()->setScrollPosition(
-      m_materialScroll);
-  emit contentModeChanged();
-}
-
-void ModelBrowser::updateWadEditor()
-{
-  if (m_wadEditor)
-    m_wadEditor->update({&m_document->map().worldNode()});
-}
-
-void ModelBrowser::showMaterialSettings()
-{
-  if (!m_mapActionsEnabled)
-    return;
-  if (m_collectionSettings && !m_collectionSettings->isVisible())
-    delete m_collectionSettings.data();
-  if (!m_collectionSettings)
-  {
-    auto* dialog = new QDialog{this};
-    m_collectionSettings = dialog;
-    dialog->setObjectName("MaterialCollectionDialog");
-    dialog->setWindowTitle(tr("Material collections"));
-    dialog->setWindowModality(Qt::WindowModal);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->resize(640, 440);
-    auto* layout = createPanelColumn(dialog);
-    if (const auto& key = m_document->map().gameInfo().gameConfig.materialConfig.property)
-    {
-      m_wadEditor = new SmartWadEditor{*m_document, dialog};
-      m_wadEditor->activate(*key);
-      updateWadEditor();
-      layout->addWidget(m_wadEditor, 1);
-    }
-    else
-      layout->addWidget(new MaterialCollectionEditor{*m_document}, 1);
-    auto* buttons = new QDialogButtonBox{QDialogButtonBox::Close};
-    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-  }
-  m_collectionSettings->show();
-  m_collectionSettings->raise();
-  m_collectionSettings->activateWindow();
+  emit entityModeChanged(entities);
 }
 
 void ModelBrowser::addViewOption(QWidget* control)
@@ -1121,11 +950,6 @@ void ModelBrowser::setMapActionsEnabled(const bool enabled)
 {
   m_mapActionsEnabled = enabled;
   m_entitySettings->setEnabled(enabled);
-  m_materialSettings->setEnabled(enabled);
-  if (!enabled)
-    delete m_collectionSettings.data();
-  if (m_materialBrowser)
-    m_materialBrowser->setMapActionsEnabled(enabled);
   if (m_entityBrowser)
     m_entityBrowser->setMapActionsEnabled(enabled);
   updateSourceControls();
@@ -1368,8 +1192,6 @@ void ModelBrowser::bindEvents(AppController& appController)
   connect(m_searchBox, &QLineEdit::textChanged, this, [this](const QString& text) {
     if (isShowingEntities())
       m_entityBrowser->view().setFilterText(text.toStdString());
-    else if (isShowingMapMaterials())
-      m_materialBrowser->setFilterText(text.toStdString());
     else if (m_view)
       m_view->setSearchText(text);
     refreshResultCount();
@@ -1443,11 +1265,6 @@ void ModelBrowser::bindEvents(AppController& appController)
       {
         return;
       }
-      if (current->data(0, MapMaterialFolderRole).isValid())
-      {
-        setContentKind(ContentKind::MapMaterials);
-        return;
-      }
       const auto entity = current->data(0, EntityFolderRole);
       if (entity.isValid())
       {
@@ -1494,11 +1311,6 @@ void ModelBrowser::bindEvents(AppController& appController)
     if (isShowingEntities())
     {
       m_entityBrowser->reload();
-      return;
-    }
-    if (isShowingMapMaterials())
-    {
-      mdl::reloadMaterialCollections(m_document->map());
       return;
     }
     m_lastWriteTimes.clear();
@@ -1557,10 +1369,7 @@ void ModelBrowser::bindEvents(AppController& appController)
     [&](const int index) {
       if (const auto value = assetIconSizeForComboIndex(m_iconSizeCombo, index))
       {
-        if (isShowingMapMaterials())
-          setPref(Preferences::MaterialBrowserIconSize, *value);
-        else
-          setPref(Preferences::AssetBrowserIconSize, *value);
+        setPref(Preferences::AssetBrowserIconSize, *value);
       }
     });
 }
@@ -1572,9 +1381,7 @@ void ModelBrowser::connectObservers()
   m_notifierConnection +=
     PreferenceManager::instance().preferenceDidChangeNotifier.connect(
       [this](const auto& path) {
-        if (
-          path == Preferences::AssetBrowserIconSize.path
-          || path == Preferences::MaterialBrowserIconSize.path)
+        if (path == Preferences::AssetBrowserIconSize.path)
         {
           updateIconSizeCombo();
           m_view->invalidate();
@@ -1604,10 +1411,6 @@ void ModelBrowser::connectMapObservers()
       updateSavePrefabButton();
       emit actionContextChanged();
     });
-  m_mapNotifierConnection +=
-    m_document->commandDoneNotifier.connect([this](const auto&) { updateWadEditor(); });
-  m_mapNotifierConnection +=
-    m_document->commandUndoneNotifier.connect([this](const auto&) { updateWadEditor(); });
   updateSavePrefabButton();
 }
 
@@ -1652,17 +1455,8 @@ void ModelBrowser::updateIconSizeCombo()
     return;
   }
 
-  const auto blocker = QSignalBlocker{m_iconSizeCombo};
-  m_iconSizeCombo->clear();
-  if (isShowingMapMaterials())
-    for (const auto size : MaterialBrowserIconSizes)
-      m_iconSizeCombo->addItem(QStringLiteral("%1%").arg(qRound(size * 100.0f)), size);
-  else
-    for (const auto size : {0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f})
-      m_iconSizeCombo->addItem(QStringLiteral("%1%").arg(qRound(size * 100.0f)), size);
-  const auto value = isShowingMapMaterials() ? pref(Preferences::MaterialBrowserIconSize)
-                                             : pref(Preferences::AssetBrowserIconSize);
-  auto index = 0;
+  const auto value = pref(Preferences::AssetBrowserIconSize);
+  auto index = 2;
   for (auto i = 0; i < m_iconSizeCombo->count(); ++i)
   {
     if (assetIconSizeForComboIndex(m_iconSizeCombo, i) == value)
@@ -1672,6 +1466,7 @@ void ModelBrowser::updateIconSizeCombo()
     }
   }
 
+  const auto blocker = QSignalBlocker{m_iconSizeCombo};
   m_iconSizeCombo->setCurrentIndex(index);
 }
 
@@ -1739,13 +1534,13 @@ void ModelBrowser::rebuildBreadcrumbBar()
     m_breadcrumbLayout->addWidget(button, 0);
   };
 
-  if (!isShowingAssets())
+  if (isShowingEntities())
   {
     auto* root = new QToolButton{};
-    root->setText(isShowingEntities() ? tr("Entities") : tr("Map materials"));
+    root->setText(tr("Entities"));
     root->setAutoRaise(true);
     root->setProperty("tbControlRole", "compact");
-    connect(root, &QToolButton::clicked, this, [this] { setContentKind(m_contentKind); });
+    connect(root, &QToolButton::clicked, this, [this] { setEntityMode(true); });
     m_breadcrumbLayout->addWidget(root);
     m_breadcrumbLayout->addStretch(1);
     return;
@@ -1774,7 +1569,7 @@ void ModelBrowser::rebuildBreadcrumbBar()
 
 void ModelBrowser::showPathEditor()
 {
-  if (!isShowingAssets() || !m_pathStack || !m_folderEdit)
+  if (isShowingEntities() || !m_pathStack || !m_folderEdit)
   {
     return;
   }
@@ -1834,11 +1629,6 @@ void ModelBrowser::updateSearchPlaceholder()
     m_searchBox->setPlaceholderText(tr("Search entity types…"));
     return;
   }
-  if (isShowingMapMaterials())
-  {
-    m_searchBox->setPlaceholderText(tr("Search map materials…"));
-    return;
-  }
   // The placeholder states the active scope, so the box never implies a wider or
   // narrower search than it performs.
   m_searchBox->setPlaceholderText(
@@ -1866,12 +1656,6 @@ void ModelBrowser::refreshResultCount()
     m_resultCount->setText(
       tr("%1 entity types")
         .arg(qulonglong(m_entityBrowser->view().filteredDefinitions().size())));
-    return;
-  }
-  if (isShowingMapMaterials())
-  {
-    m_resultCount->setText(tr("Materials loaded by the current map"));
-    m_resultCount->setToolTip(pathAsQString(m_document->map().path()));
     return;
   }
   if (m_unusedButton->isChecked() && !m_projectReferenceError.isEmpty())
@@ -1902,7 +1686,7 @@ void ModelBrowser::updateFilterVisibility()
     return;
   }
 
-  if (!isShowingAssets())
+  if (isShowingEntities())
   {
     m_filterLayout->setRowVisible(m_soundCombo, false);
     m_filterLayout->setRowVisible(m_tagCombo, false);
@@ -1959,12 +1743,6 @@ void ModelBrowser::updateFilterSummary()
       m_entityUsed->isChecked() ? tr("Filters · %1").arg(1) : tr("Filters"));
     return;
   }
-  if (isShowingMapMaterials())
-  {
-    m_filterButton->setText(
-      m_materialUsed->isChecked() ? tr("Filters · %1").arg(1) : tr("Filters"));
-    return;
-  }
   auto active = 0;
   if (m_waveKind != inspection::WaveKind::All)
   {
@@ -1996,7 +1774,7 @@ void ModelBrowser::recordFolderHistory()
 
   // Navigating somewhere new drops the forward branch, like a browser history.
   m_folderHistory.resize(size_t(m_folderHistoryIndex + 1));
-  const auto location = BrowserLocation{m_currentFolderPath, m_contentKind};
+  const auto location = BrowserLocation{m_currentFolderPath, m_showingEntities};
   if (m_folderHistory.empty() || m_folderHistory.back() != location)
   {
     m_folderHistory.push_back(location);
@@ -2028,8 +1806,8 @@ void ModelBrowser::navigateHistory(const int offset)
   m_folderHistoryIndex = target;
   m_navigatingHistory = true;
   const auto location = m_folderHistory[size_t(target)];
-  if (location.content != ContentKind::Assets)
-    setContentKind(location.content);
+  if (location.entities)
+    setEntityMode(true);
   else
     setCurrentFolderPath(location.folder);
   m_navigatingHistory = false;
@@ -2290,7 +2068,7 @@ void ModelBrowser::setFolderPath(std::filesystem::path folderPath)
 
 void ModelBrowser::setCurrentFolderPath(std::filesystem::path currentFolderPath)
 {
-  const auto leavingEntities = !isShowingAssets();
+  const auto leavingEntities = isShowingEntities();
   if (leavingEntities)
   {
     const auto navigating = m_navigatingHistory;
@@ -2346,8 +2124,6 @@ void ModelBrowser::markAssetsDirty()
 void ModelBrowser::ensureAssetsLoaded()
 {
   m_assetRefreshQueued = false;
-  if (!isShowingAssets())
-    return;
   if (!m_assetRefreshPending)
   {
     return;
@@ -2360,8 +2136,6 @@ void ModelBrowser::ensureAssetsLoaded()
 
 void ModelBrowser::scheduleAssetRefresh()
 {
-  if (!isShowingAssets())
-    return;
   if (!isVisible() || m_assetRefreshQueued || m_deferAssetRefreshAfterDocumentLoad)
   {
     return;
@@ -2695,12 +2469,6 @@ void ModelBrowser::saveBrowsingState()
     m_entityScroll = m_entityBrowser->findChild<QScrollBar*>()->value();
     return;
   }
-  if (isShowingMapMaterials())
-  {
-    m_materialSearch = m_searchBox->text();
-    m_materialScroll = m_materialBrowser->findChild<QScrollBar*>()->value();
-    return;
-  }
   m_browsingStates[browsingStateKey()] = {
     m_currentFolderPath,
     m_searchBox->text(),
@@ -2959,7 +2727,7 @@ void ModelBrowser::refreshUsage()
 void ModelBrowser::updateSourceControls()
 {
   const auto projectMode = m_sourceFilter == BrowserSourceFilter::Project;
-  m_sourceTabs->setVisible(bool(m_project) && isShowingAssets());
+  m_sourceTabs->setVisible(bool(m_project) && !isShowingEntities());
   m_unusedButton->setVisible(projectMode);
   m_unusedButton->setEnabled(projectMode);
   m_usedButton->setVisible(projectMode);
@@ -2980,7 +2748,7 @@ void ModelBrowser::updateSourceControls()
   if (m_savePrefabButton)
   {
     m_savePrefabButton->setVisible(
-      isShowingAssets() && !m_selectionOnly
+      !isShowingEntities() && !m_selectionOnly
       && (!m_project || m_sourceFilter != BrowserSourceFilter::AssetLibrary));
   }
 }
@@ -3207,12 +2975,9 @@ void ModelBrowser::rebuildFolderTree()
     auto* entityRoot = new QTreeWidgetItem{m_folderTree, {tr("Entities")}};
     entityRoot->setIcon(0, folderIcon);
     entityRoot->setData(0, EntityFolderRole, true);
-    auto* materialRoot = new QTreeWidgetItem{m_folderTree, {tr("Map materials")}};
-    materialRoot->setIcon(0, folderIcon);
-    materialRoot->setData(0, MapMaterialFolderRole, true);
-    if (!isShowingAssets())
+    if (isShowingEntities())
     {
-      m_folderTree->setCurrentItem(isShowingEntities() ? entityRoot : materialRoot);
+      m_folderTree->setCurrentItem(entityRoot);
       return;
     }
   }

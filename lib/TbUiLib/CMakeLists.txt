@@ -165,7 +165,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapStatus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapWindowManager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/MaterialPreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MaterialBrowser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MaterialBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MaterialCollectionEditor.cpp
@@ -448,7 +447,6 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapEditingContext.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapWindowManager.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MaterialPreview.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MaterialBrowser.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MaterialBrowserIconSize.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MaterialBrowserView.h

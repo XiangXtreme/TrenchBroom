@@ -55,8 +55,7 @@ class MaterialBrowserView : public CellView
 {
   Q_OBJECT
 private:
-  MapDocument* m_document;
-  bool m_mapActionsEnabled = true;
+  MapDocument& m_document;
   bool m_group = false;
   bool m_hideUnused = false;
   MaterialSortOrder m_sortOrder = MaterialSortOrder::Name;
@@ -73,9 +72,6 @@ public:
     AppController& appController, QScrollBar* scrollBar, MapDocument& document);
   ~MaterialBrowserView() override;
 
-  void setDocument(MapDocument& document);
-  void setMapActionsEnabled(bool enabled);
-
   void setSortOrder(MaterialSortOrder sortOrder);
   void setGroup(bool group);
   void setHideUnused(bool hideUnused);
@@ -87,7 +83,6 @@ public:
   void revealMaterial(const gl::Material* material);
 
 private:
-  void connectObservers();
   void resourcesWereProcessed(const std::vector<gl::ResourceId>& resources);
 
   void reloadMaterials();

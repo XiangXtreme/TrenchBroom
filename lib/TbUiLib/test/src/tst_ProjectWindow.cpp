@@ -48,10 +48,8 @@
 
 #include "el/Expression.h"
 #include "gl/GlManager.h"
-#include "gl/Material.h"
 #include "gl/PerspectiveCamera.h"
 #include "gl/Resource.h"
-#include "gl/Texture.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
@@ -84,7 +82,6 @@
 #include "ui/CatalogAssetDrop.h"
 #include "ui/CreateEntityTool.h"
 #include "ui/EntityBrowserView.h"
-#include "ui/FaceAttribsEditor.h"
 #include "ui/InfoPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
@@ -96,8 +93,6 @@
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
-#include "ui/MaterialBrowser.h"
-#include "ui/MaterialPreview.h"
 #include "ui/ModelBrowser.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/ProjectAssetPanel.h"
@@ -542,48 +537,6 @@ TEST_CASE("ProjectWindow")
     create = browser->findChild<QPushButton*>("EntityBrowser_Create");
     REQUIRE(create);
     CHECK_FALSE(create->isEnabled());
-  }
-
-  SECTION("map materials follow the active map and close stale collection settings")
-  {
-    auto* browser = window.findChild<ModelBrowser*>();
-    REQUIRE(browser);
-    alphaWindow->editorView().showMaterialBrowser();
-    auto* materials = browser->findChild<MaterialBrowser*>();
-    REQUIRE(materials);
-    auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
-    REQUIRE(search);
-    search->setText("wall");
-    auto material = gl::Material{"WALL01", nullptr};
-    emit materials->materialSelected(&material);
-    CHECK(alphaDocument->map().currentMaterialName() == "WALL01");
-    browser->showMaterialSettings();
-    auto settings =
-      QPointer<QDialog>{browser->findChild<QDialog*>("MaterialCollectionDialog")};
-    REQUIRE(settings);
-    tabs->setCurrentIndex(1);
-    QApplication::processEvents();
-    CHECK(settings.isNull());
-    auto& beta = window.activeMapWindow()->document().map();
-    emit materials->materialSelected(&material);
-    CHECK(beta.currentMaterialName() == "WALL01");
-    CHECK(alphaDocument->map().currentMaterialName() == "WALL01");
-    emit materials->materialSelected(&material);
-    CHECK(beta.currentMaterialName() == mdl::BrushFace::NoMaterialName);
-    CHECK(alphaDocument->map().currentMaterialName() == "WALL01");
-    CHECK(search->text() == "wall");
-    browser->showMaterialSettings();
-    settings = browser->findChild<QDialog*>("MaterialCollectionDialog");
-    REQUIRE(settings);
-    closeTab(*tabs, 1);
-    CHECK(settings.isNull());
-    closeTab(*tabs, 0);
-    CHECK(window.activeMapWindow() == nullptr);
-    const auto previous = alphaDocument->map().currentMaterialName();
-    emit materials->materialSelected(&material);
-    CHECK(alphaDocument->map().currentMaterialName() == previous);
-    browser->showMaterialSettings();
-    CHECK(browser->findChild<QDialog*>("MaterialCollectionDialog") == nullptr);
   }
 
   SECTION("one project browser survives map switches and closing all map tabs")
@@ -3037,7 +2990,6 @@ TEST_CASE("ProjectWindow")
     mdl::selectBrushFaces(map, {face});
     REQUIRE(map.selection().brushFaces.size() == 1);
     const auto previous = face.face().materialName();
-    alphaWindow->switchToInspectorPage(InspectorPage::Face);
 
     const auto folder = directory.filePath("texture-library");
     REQUIRE(QDir{}.mkdir(folder));
@@ -3127,15 +3079,6 @@ TEST_CASE("ProjectWindow")
     }
     CHECK(map.modified());
     CHECK(face.face().materialName() == "WALL01");
-    auto* faceEditor = alphaWindow->findChild<FaceAttribsEditor*>();
-    REQUIRE(faceEditor);
-    QTRY_VERIFY(face.face().material() != nullptr);
-    QTRY_VERIFY(getTexture(face.face().material()) != nullptr);
-    QTRY_COMPARE(
-      faceEditor->findChild<QLabel*>("FaceAttribsEditor_MaterialName")->text(),
-      QStringLiteral("WALL01"));
-    CHECK(
-      faceEditor->findChild<MaterialPreview*>()->material() == face.face().material());
     const auto assets = require(session->store().assets());
     const auto textureAsset = std::ranges::find_if(assets, [](const auto& asset) {
       return asset.type == project::AssetType::Texture;

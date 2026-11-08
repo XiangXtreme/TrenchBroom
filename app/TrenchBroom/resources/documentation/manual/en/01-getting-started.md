@@ -139,7 +139,7 @@ The inspector is located at the right of the main window and contains various co
 
 ![Outliner, Entity, and Face inspectors](images/Inspector.png)
 
-The **Scene** page combines [layers](#layers), the object hierarchy and entity [properties](#entity_properties). The bottom Content Browser's Entities folder lets you [create point entities](#creating_entities) and [configure entity definitions](#entity_definitions). **Map Settings…** contains [map bounds](#map_bounds) and [mods](#mods). The face inspector contains the current material, graphical [UV editor](#uv_editor) and face attributes. Choose materials in the bottom Content Browser’s **Map materials** folder; the material header provides buttons to open the browser or locate the current material.
+The **Scene** page combines [layers](#layers), the object hierarchy and entity [properties](#entity_properties). The bottom Content Browser's Entities folder lets you [create point entities](#creating_entities) and [configure entity definitions](#entity_definitions). **Map Settings…** contains [map bounds](#map_bounds) and [mods](#mods). The face inspector retains its graphical [UV editor](#uv_editor), face attributes and [material browser](#material_browser).
 
 ### The Info Bar {#the-info-bar}
 

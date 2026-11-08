@@ -23,19 +23,12 @@
 
 #include "base/NotifierConnection.h"
 
-#include <string>
 #include <tuple>
 
 class QAbstractButton;
 class QLabel;
 class QLineEdit;
 class QGridLayout;
-class QVBoxLayout;
-
-namespace tb::gl
-{
-class Material;
-}
 
 namespace tb
 {
@@ -50,7 +43,6 @@ namespace ui
 class AppController;
 class FlagsPopupEditor;
 class MapDocument;
-class MaterialPreview;
 class SignalDelayer;
 class SpinControl;
 class UvEditor;
@@ -74,8 +66,6 @@ private:
   QAbstractButton* m_autoFitButton = nullptr;
 
   QLabel* m_materialName = nullptr;
-  MaterialPreview* m_materialPreview = nullptr;
-  QAbstractButton* m_revealMaterialButton = nullptr;
   QLabel* m_textureSize = nullptr;
   SpinControl* m_xOffsetEditor = nullptr;
   SpinControl* m_yOffsetEditor = nullptr;
@@ -113,11 +103,7 @@ public:
 
   bool cancelMouseDrag();
 
-signals:
-  void materialBrowserRequested(const gl::Material* material);
-
 private:
-  void updateMaterialInfo(const std::string& name, const gl::Material* material);
   void alignClicked();
   void justifyClicked(mdl::UvJustifyDirection uvJustifyDirection);
   void fitClicked(mdl::UvFitDirection uvFitDirection);
@@ -140,9 +126,8 @@ private:
 
 private:
   void createGui(AppController& appController);
-  QWidget* createMaterialWidget(AppController& appController);
   QWidget* createButtonsWidget();
-  void createAttribsWidgets(QVBoxLayout& column);
+  QWidget* createAttribsWidget();
 
   void bindEvents();
 

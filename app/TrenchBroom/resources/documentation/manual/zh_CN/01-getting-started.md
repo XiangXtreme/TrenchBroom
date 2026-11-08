@@ -139,7 +139,7 @@ YZ          +Y            +Z         +X             侧视图
 
 ![Outliner、实体与面检查器](images/Inspector.png)
 
-**场景**页统一管理[图层](#layers)、对象层级和实体[属性](#entity_properties)。底部内容浏览器的“实体”文件夹用于[创建点实体](#creating_entities)和[设置实体定义](#entity_definitions)。**地图设置…**包含[地图边界](#map_bounds)与 [Mod](#mods)。面检查器显示当前材质、图形化 [UV 编辑器](#uv_editor)和面属性。选材质统一在底部内容浏览器的**地图材质**文件夹进行；顶部材质栏提供打开浏览器和定位当前材质的按钮。
+**场景**页统一管理[图层](#layers)、对象层级和实体[属性](#entity_properties)。底部内容浏览器的“实体”文件夹用于[创建点实体](#creating_entities)和[设置实体定义](#entity_definitions)。**地图设置…**包含[地图边界](#map_bounds)与 [Mod](#mods)。面检查器保留图形化 [UV 编辑器](#uv_editor)、面属性和[材质浏览器](#material_browser)。
 
 ### 信息栏 {#the-info-bar}
 

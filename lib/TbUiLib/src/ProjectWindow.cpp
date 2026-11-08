@@ -727,21 +727,6 @@ void ProjectWindow::refreshMapTabs()
       });
       connect(
         editor,
-        &MapEditorView::materialBrowserRequested,
-        this,
-        [this, window](const gl::Material* material) {
-          m_appController.mapWindowManager().activateMapWindow(*window);
-          emit m_session->browserFocusRequested();
-          if (auto* browser = m_browser->findChild<ModelBrowser*>())
-          {
-            if (material)
-              browser->revealMaterial(material);
-            else
-              browser->showMapMaterials();
-          }
-        });
-      connect(
-        editor,
         &MapEditorView::infoPanelToggleRequested,
         m_tools,
         &WorkspaceToolPanel::toggle);

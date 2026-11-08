@@ -2699,51 +2699,7 @@ Hold %2 to keep trim sheet subdivisions.</source>
             <source>Angular deviation from orthogonal UV axes.</source>
             <translation>UV 轴相对正交轴的角度偏差。</translation>
             </message>
-                <message>
-            <source>UV preview</source>
-            <translation>UV 预览</translation>
-        </message>
-        <message>
-            <source>Choose material</source>
-            <translation>选择材质</translation>
-        </message>
-        <message>
-            <source>Locate material in Content Browser</source>
-            <translation>在内容浏览器中定位材质</translation>
-        </message>
-        <message>
-            <source>Texture transform</source>
-            <translation>贴图变换</translation>
-        </message>
-        <message>
-            <source>Offset</source>
-            <translation>偏移</translation>
-        </message>
-        <message>
-            <source>Scale</source>
-            <translation>缩放</translation>
-        </message>
-        <message>
-            <source>Surface attributes</source>
-            <translation>表面属性</translation>
-        </message>
-        <message>
-            <source>Multiple materials</source>
-            <translation>多种材质</translation>
-        </message>
-        <message>
-            <source>Multiple sizes</source>
-            <translation>多种尺寸</translation>
-        </message>
-        <message>
-            <source>No material</source>
-            <translation>无材质</translation>
-        </message>
-        <message>
-            <source>%1 (not found)</source>
-            <translation>%1（未找到）</translation>
-        </message>
-</context>
+        </context>
     <context>
         <name>tb::ui::FaceInspector</name>
         <message>
@@ -4232,30 +4188,6 @@ Map: %2</source>
         <message>
             <source>%1 entity types</source>
             <translation>%1 种实体类型</translation>
-        </message>
-        <message>
-            <source>Material collections…</source>
-            <translation>材质集合…</translation>
-        </message>
-        <message>
-            <source>Material collections</source>
-            <translation>材质集合</translation>
-        </message>
-        <message>
-            <source>Only used materials</source>
-            <translation>仅显示已使用材质</translation>
-        </message>
-        <message>
-            <source>Map materials</source>
-            <translation>地图材质</translation>
-        </message>
-        <message>
-            <source>Search map materials…</source>
-            <translation>搜索地图材质…</translation>
-        </message>
-        <message>
-            <source>Materials loaded by the current map</source>
-            <translation>当前地图已加载的材质</translation>
         </message>
 </context>
     <context>
@@ -6220,10 +6152,6 @@ By %2</source>
         </context>
     <context>
         <name>tb::ui::UvEditor</name>
-        <message>
-            <source>Select a single face to preview and edit its UVs.</source>
-            <translation>选择单个面以预览和编辑 UV。</translation>
-        </message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/UvEditor.cpp" line="72" />
             <source>Reset UV alignment</source>

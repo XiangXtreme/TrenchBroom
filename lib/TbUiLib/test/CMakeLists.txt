@@ -46,7 +46,6 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapViewBar.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MaterialBrowserView.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapMaterialWorkflow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MiscPreferencePane.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ModelBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpToolRegistry.cpp
@@ -93,6 +92,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcEntityPreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartFaceSelectionPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartModelEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartWadEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SmartSkyboxEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_KreedzBroomPreferencePane.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SearchPanel.cpp
@@ -104,6 +104,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_Theme.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_TransformCard.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_UiSnapshot.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_UvView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_UpdateVersion.cpp
 
   PUBLIC FILE_SET cmd_tool TYPE HEADERS

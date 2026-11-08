@@ -123,11 +123,6 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   connect(m_inspector, &Inspector::pagePrepared, this, [this](const int) {
     connectOutlinerWidgets();
   });
-  connect(
-    m_inspector,
-    &Inspector::materialBrowserRequested,
-    this,
-    &MapEditorView::showMaterialBrowser);
   connectOutlinerWidgets();
   restoreLayoutState();
   connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
@@ -416,23 +411,6 @@ void MapEditorView::showEntityBrowser()
     showInfoPanelPage(InfoPanelPage::Assets);
     if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
       browser->showEntityBrowser();
-  }
-}
-
-void MapEditorView::showMaterialBrowser(const gl::Material* material)
-{
-  if (m_externalInfoPanel)
-    emit materialBrowserRequested(material);
-  else
-  {
-    showInfoPanelPage(InfoPanelPage::Assets);
-    if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
-    {
-      if (material)
-        browser->revealMaterial(material);
-      else
-        browser->showMapMaterials();
-    }
   }
 }
 

@@ -232,7 +232,7 @@ Select All CLASSNAME
 :   选择地图中与鼠标悬停实体具有相同 classname 的所有实体。
 
 Reveal MATERIALNAME in Material Browser
-:   打开底部内容浏览器的**地图材质**文件夹，并定位被点击的材质。
+:   切换到面检查器并滚动到[材质浏览器](#material_browser)中被点击的材质。
 
 Create Point Entity
 :   创建所选类型的[点实体](#point_entities)。

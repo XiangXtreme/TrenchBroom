@@ -572,20 +572,6 @@ void MapWindow::createGui()
       if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
         browser->showEntityBrowser();
     });
-    connect(
-      m_editor,
-      &MapEditorView::materialBrowserRequested,
-      this,
-      [this](const gl::Material* material) {
-        m_tools->showContent();
-        if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
-        {
-          if (material)
-            browser->revealMaterial(material);
-          else
-            browser->showMapMaterials();
-        }
-      });
     connect(m_tools, &WorkspaceToolPanel::extensionsRequested, this, [this]() {
       m_editor->showInspectorPage(InspectorPage::Plugin);
     });
@@ -1989,7 +1975,8 @@ void MapWindow::revealMaterial()
 
 void MapWindow::revealMaterial(const gl::Material* material)
 {
-  m_editor->showMaterialBrowser(material);
+  m_inspector->switchToPage(InspectorPage::Face);
+  m_inspector->faceInspector()->revealMaterial(material);
 }
 
 AppController& MapWindow::appController()

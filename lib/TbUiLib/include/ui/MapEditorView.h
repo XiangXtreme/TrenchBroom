@@ -19,11 +19,6 @@
 #include <string>
 #include <unordered_set>
 
-namespace tb::gl
-{
-class Material;
-}
-
 namespace tb::ui
 {
 
@@ -105,7 +100,6 @@ public:
   void showInfoPanelPage(InfoPanelPage page);
   void showInspectorPage(InspectorPage page);
   void showEntityBrowser();
-  void showMaterialBrowser(const gl::Material* material = nullptr);
   void showMapSettings();
   void createEntity(const QString& classname);
   bool toggleInspector();
@@ -152,7 +146,6 @@ protected:
 signals:
   void infoPanelPageRequested(InfoPanelPage page);
   void entityBrowserRequested();
-  void materialBrowserRequested(const gl::Material* material);
   void infoPanelToggleRequested();
   void infoPanelVisibilityChanged();
 };

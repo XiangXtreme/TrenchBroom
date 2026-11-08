@@ -67,33 +67,12 @@ std::optional<float> iconSizeForComboIndex(QComboBox* combo, const int index)
 MaterialBrowser::MaterialBrowser(
   AppController& appController, MapDocument& document, QWidget* parent)
   : QWidget{parent}
-  , m_document{&document}
+  , m_document{document}
 {
   createGui(appController);
   bindEvents();
   connectObservers();
   reload();
-}
-
-void MaterialBrowser::setDocument(MapDocument& document)
-{
-  if (m_document == &document)
-    return;
-  m_notifierConnection.disconnect();
-  m_document = &document;
-  m_view->setDocument(document);
-  connectObservers();
-  reload();
-}
-
-void MaterialBrowser::setMapActionsEnabled(const bool enabled)
-{
-  m_view->setMapActionsEnabled(enabled);
-}
-
-void MaterialBrowser::setControlsVisible(const bool visible)
-{
-  findChild<QWidget*>("MaterialBrowser_Controls")->setVisible(visible);
 }
 
 const gl::Material* MaterialBrowser::selectedMaterial() const
@@ -154,7 +133,7 @@ void MaterialBrowser::createGui(AppController& appController)
   auto* browserPanel = new QWidget{};
   m_scrollBar = new QScrollBar{Qt::Vertical};
 
-  m_view = new MaterialBrowserView{appController, m_scrollBar, *m_document};
+  m_view = new MaterialBrowserView{appController, m_scrollBar, m_document};
 
   auto* browserPanelSizer = new QHBoxLayout{};
   browserPanelSizer->setContentsMargins(0, 0, 0, 0);
@@ -273,20 +252,18 @@ void MaterialBrowser::bindEvents()
 
 void MaterialBrowser::connectObservers()
 {
+  m_notifierConnection += m_document.documentWasLoadedNotifier.connect([&] { reload(); });
+  m_notifierConnection += m_document.documentDidChangeNotifier.connect([&] { reload(); });
   m_notifierConnection +=
-    m_document->documentWasLoadedNotifier.connect([&] { reload(); });
-  m_notifierConnection +=
-    m_document->documentDidChangeNotifier.connect([&] { reload(); });
-  m_notifierConnection +=
-    m_document->materialCollectionsDidChangeNotifier.connect([&] { reload(); });
-  m_notifierConnection += m_document->currentMaterialNameDidChangeNotifier.connect(
+    m_document.materialCollectionsDidChangeNotifier.connect([&] { reload(); });
+  m_notifierConnection += m_document.currentMaterialNameDidChangeNotifier.connect(
     [&] { updateSelectedMaterial(); });
 
   auto& prefs = PreferenceManager::instance();
   m_notifierConnection +=
     prefs.preferenceDidChangeNotifier.connect([&](const auto& path) {
       if (
-        path == pref(m_document->map().gameInfo().gamePathPreference)
+        path == pref(m_document.map().gameInfo().gamePathPreference)
         || path == Preferences::MaterialBrowserIconSize.path)
       {
         if (path == Preferences::MaterialBrowserIconSize.path)
@@ -336,7 +313,7 @@ void MaterialBrowser::updateIconSizeChoice()
 
 void MaterialBrowser::updateSelectedMaterial()
 {
-  auto& map = m_document->map();
+  auto& map = m_document.map();
 
   const auto& materialName = map.currentMaterialName();
   const auto* material = map.materialManager().material(materialName);

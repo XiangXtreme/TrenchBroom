@@ -49,7 +49,7 @@ class MaterialBrowser : public QWidget
 {
   Q_OBJECT
 private:
-  MapDocument* m_document;
+  MapDocument& m_document;
   QComboBox* m_sortOrderChoice = nullptr;
   QComboBox* m_iconSizeChoice = nullptr;
   QToolButton* m_groupButton = nullptr;
@@ -67,10 +67,6 @@ public:
   const gl::Material* selectedMaterial() const;
   void setSelectedMaterial(const gl::Material* selectedMaterial);
   void revealMaterial(const gl::Material* material);
-
-  void setDocument(MapDocument& document);
-  void setMapActionsEnabled(bool enabled);
-  void setControlsVisible(bool visible);
 
   void setSortOrder(MaterialSortOrder sortOrder);
   void setGroup(bool group);

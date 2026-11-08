@@ -232,7 +232,7 @@ Select All CLASSNAME
 :   Select every entity in the map which has the same classname as the entity being hovered.
 
 Reveal MATERIALNAME in Material Browser
-:   Opens the bottom Content Browser’s **Map materials** folder and locates the clicked material.
+:   Switches to the face inspector and scroll to the clicked material in the [Material Browser](#material_browser).
 
 Create Point Entity
 :   Create a [Point Entity](#point_entities) of the chosen type.

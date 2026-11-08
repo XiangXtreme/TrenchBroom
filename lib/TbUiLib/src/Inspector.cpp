@@ -182,11 +182,6 @@ void Inspector::ensurePage(const InspectorPage page)
     {
       m_faceInspector = new FaceInspector{*m_appController, *m_document};
       m_tabBook->replacePage(index, m_faceInspector);
-      connect(
-        m_faceInspector,
-        &FaceInspector::materialBrowserRequested,
-        this,
-        &Inspector::materialBrowserRequested);
       emit pagePrepared(static_cast<int>(page));
     }
     break;

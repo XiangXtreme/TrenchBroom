@@ -183,6 +183,8 @@ UvView::UvView(AppController& appController, MapDocument& document)
   setToolBox(m_toolBox);
   createTools();
   m_toolBox.disable();
+  // Fit the initial selection once resizeGL supplies the actual canvas size.
+  m_camera.setViewport({});
   connectObservers();
   reload();
 }
