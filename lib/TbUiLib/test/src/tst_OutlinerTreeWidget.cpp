@@ -18,6 +18,7 @@
  */
 
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QHeaderView>
 #include <QScrollBar>
 #include <QSignalSpy>
@@ -29,6 +30,9 @@
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
+#include "mdl/Map_Entities.h"
+#include "mdl/Map_NodeLocking.h"
+#include "mdl/Map_NodeVisibility.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
 #include "mdl/WorldNode.h"
@@ -381,6 +385,116 @@ TEST_CASE("OutlinerTreeWidget")
     auto* movedItem = itemForNode(tree, fixture.infoEntity);
     REQUIRE(movedItem != nullptr);
     CHECK(movedItem->parent() == itemForNode(tree, targetLayer));
+    map.undoCommand();
+    processOutlinerTreeUpdates();
+    CHECK(fixture.infoEntity->parent() == fixture.defaultLayer);
+    CHECK(
+      itemForNode(tree, fixture.infoEntity)->parent()
+      == itemForNode(tree, fixture.defaultLayer));
+    map.redoCommand();
+    processOutlinerTreeUpdates();
+    CHECK(fixture.infoEntity->parent() == targetLayer);
+  }
+
+  SECTION("preserves manual group expansion when selection changes")
+  {
+    itemForNode(tree, fixture.group)->setExpanded(true);
+    mdl::selectNodes(map, {fixture.group});
+    processOutlinerTreeUpdates();
+    CHECK(itemForNode(tree, fixture.group)->isExpanded());
+    mdl::deselectAll(map);
+    mdl::selectNodes(map, {fixture.infoEntity});
+    processOutlinerTreeUpdates();
+    CHECK(itemForNode(tree, fixture.group)->isExpanded());
+  }
+
+  SECTION("updates visibility and locking filters on commands and undo")
+  {
+    tree.setFilterText("lock:locked");
+    CHECK(itemForNode(tree, fixture.infoEntity)->isHidden());
+    mdl::lockNodes(map, {fixture.infoEntity});
+    processOutlinerTreeUpdates();
+    CHECK_FALSE(itemForNode(tree, fixture.infoEntity)->isHidden());
+    map.undoCommand();
+    processOutlinerTreeUpdates();
+    CHECK(itemForNode(tree, fixture.infoEntity)->isHidden());
+    tree.setFilterText("vis:hidden");
+    CHECK(itemForNode(tree, fixture.infoEntity)->isHidden());
+    mdl::hideNodes(map, {fixture.infoEntity});
+    processOutlinerTreeUpdates();
+    CHECK_FALSE(itemForNode(tree, fixture.infoEntity)->isHidden());
+    map.undoCommand();
+    processOutlinerTreeUpdates();
+    CHECK(itemForNode(tree, fixture.infoEntity)->isHidden());
+  }
+
+  SECTION("updates name sorting and search after property edits")
+  {
+    tree.setFilterText("new_entity");
+    mdl::selectNodes(map, {fixture.lightEntity});
+    mdl::setEntityProperty(map, "classname", "new_entity", false);
+    processOutlinerTreeUpdates();
+    CHECK_FALSE(itemForNode(tree, fixture.lightEntity)->isHidden());
+    tree.setFilterText("");
+    const auto names = childNames(*itemForNode(tree, fixture.defaultLayer));
+    REQUIRE(names.size() == 3);
+    CHECK(names.back() == "new_entity");
+    map.undoCommand();
+    processOutlinerTreeUpdates();
+    CHECK(itemForNode(tree, fixture.lightEntity)->text(0) == "z_light");
+  }
+
+  SECTION("preserves scroll position across rebuilds and searches")
+  {
+    auto entities = std::vector<mdl::Node*>{};
+    for (auto i = 0; i < 80; ++i)
+      entities.push_back(new mdl::EntityNode{
+        mdl::Entity{{{"classname", "test_entity_" + std::to_string(i)}}}});
+    mdl::addNodes(map, {{fixture.defaultLayer, entities}});
+    tree.resize(340, 240);
+    tree.show();
+    tree.expandAll();
+    processOutlinerTreeUpdates();
+    auto* scroll = tree.verticalScrollBar();
+    REQUIRE(scroll->maximum() > 0);
+    scroll->setValue(scroll->maximum() / 2);
+    const auto position = scroll->value();
+    tree.updateTree();
+    processOutlinerTreeUpdates();
+    CHECK(scroll->value() == position);
+    tree.setFilterText("test_entity_7");
+    processOutlinerTreeUpdates();
+    tree.setFilterText("");
+    processOutlinerTreeUpdates();
+    CHECK(scroll->value() == position);
+  }
+
+  SECTION("filters dense scenes without rebuilding rows or changing map selection")
+  {
+    auto entities = std::vector<mdl::Node*>{};
+    entities.reserve(4000);
+    for (auto i = 0; i < 4000; ++i)
+      entities.push_back(new mdl::EntityNode{
+        mdl::Entity{{{"classname", "dense_entity_" + std::to_string(i)}}}});
+    mdl::addNodes(map, {{fixture.defaultLayer, entities}});
+    mdl::selectNodes(map, {entities.back()});
+    processOutlinerTreeUpdates();
+    auto* layerItem = itemForNode(tree, fixture.defaultLayer);
+    auto* entityItem = itemForNode(tree, entities.back());
+    REQUIRE(layerItem);
+    REQUIRE(entityItem);
+    auto timer = QElapsedTimer{};
+    timer.start();
+    for (auto i = 0; i < 20; ++i)
+    {
+      tree.setFilterText(QString{"dense_entity_%1"}.arg(i));
+      processOutlinerTreeUpdates();
+      tree.setFilterText("");
+    }
+    INFO("4000 nodes, 20 search/clear cycles: " << timer.elapsed() << " ms");
+    CHECK(itemForNode(tree, fixture.defaultLayer) == layerItem);
+    CHECK(itemForNode(tree, entities.back()) == entityItem);
+    CHECK(map.selection().nodes == std::vector<mdl::Node*>{entities.back()});
   }
 
   SECTION("locally refreshes a layer when map nodes are added")

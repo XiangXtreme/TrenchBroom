@@ -131,8 +131,8 @@ Inspector::Inspector(
     "InspectorFace.svg");
   addNavigationButton(
     InspectorPage::Outliner,
-    tr("Outliner"),
-    tr("Outliner"),
+    tr("Scene"),
+    tr("Scene tree and properties"),
     "Inspector_NavigationOutliner",
     "InspectorOutliner.svg");
   addNavigationButton(
@@ -250,7 +250,7 @@ void Inspector::updateNavigation(const int page)
   }
 
   const auto titles = std::array{
-    tr("Map"), tr("Entity"), tr("Face"), tr("Outliner"), tr("Plugins"), tr("Terrain")};
+    tr("Map"), tr("Entity"), tr("Face"), tr("Scene"), tr("Plugins"), tr("Terrain")};
   m_pageTitle->setText(titles.at(static_cast<size_t>(page)).toUpper());
   m_navigationButtons.at(static_cast<size_t>(page))->setChecked(true);
 }

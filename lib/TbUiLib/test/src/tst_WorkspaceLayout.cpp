@@ -46,7 +46,8 @@ TEST_CASE("WorkspaceLayout")
     CHECK(project.inspectorRatio == 0.25);
     CHECK(loadEditorLayout(reopened, WorkspaceKind::Map).inspectorVisible);
     CHECK(
-      loadEditorLayout(reopened, WorkspaceKind::Map).inspectorPage == InspectorPage::Map);
+      loadEditorLayout(reopened, WorkspaceKind::Map).inspectorPage
+      == InspectorPage::Outliner);
     const auto restored = loadToolLayout(reopened, WorkspaceKind::Project);
     CHECK(restored.pinned);
     CHECK(restored.keepOpen);

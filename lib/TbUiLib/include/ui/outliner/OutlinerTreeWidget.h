@@ -60,6 +60,7 @@ public:
 
   void updateTree();
   void revealNode(mdl::Node* node);
+  void revealSelection();
   void setFilterText(const QString& text);
   void setSortMode(SortMode mode);
 
@@ -108,6 +109,7 @@ private:
 private:
   QString m_filterText;
   bool m_filterActive = false;
+  int m_scrollBeforeFilter = 0;
   std::unordered_map<const mdl::Node*, bool> m_expandedBeforeFilter;
   std::unordered_map<const mdl::LayerNode*, bool> m_worldspawnExpandedBeforeFilter;
   std::unordered_map<std::string, size_t> m_linkedGroupSetSizes;

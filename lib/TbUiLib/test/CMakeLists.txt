@@ -28,6 +28,8 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityDefinitionFileChooser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityPropertyGrid.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityPropertyModel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SelectionPropertyEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LayerActions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcSpritePreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GlFunctions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_FlyModeHelper.cpp

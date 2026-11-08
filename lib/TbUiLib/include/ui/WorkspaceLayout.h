@@ -26,7 +26,7 @@ struct EditorLayout
   double infoRatio = 0.25;
   bool inspectorVisible = true;
   bool infoVisible = true;
-  InspectorPage inspectorPage = InspectorPage::Map;
+  InspectorPage inspectorPage = InspectorPage::Outliner;
   InfoPanelPage infoPage = InfoPanelPage::Console;
   // Consumed once by the view, then saved as validated proportions.
   QByteArray legacyHorizontal;

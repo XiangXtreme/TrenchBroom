@@ -191,7 +191,8 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     REQUIRE(summary != nullptr);
     CHECK(summary->text() == "Mixed selection (2 entities)");
     CHECK(!summary->isHidden());
-    CHECK(hasInfoLabel(editor, "Different entity types selected"));
+    CHECK(propertyValueEdit(editor, "classname") != nullptr);
+    CHECK(propertyValueEdit(editor, "classname")->placeholderText() == "<multiple>");
   }
 
   SECTION("shows the add controls after the rows inside the property card")
@@ -307,6 +308,12 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     map.notifyNodesDidChange(changedNodes);
     processOutlinerUpdates();
 
+    valueEdit = propertyValueEdit(editor, "optional");
+    choiceRow = propertyRow(editor, "optional_choice");
+    REQUIRE(valueEdit);
+    REQUIRE(choiceRow);
+    valueCombo = choiceRow->findChild<QComboBox*>("outlinerPropertyValue");
+    REQUIRE(valueCombo);
     CHECK(valueEdit->placeholderText() == "<inactive>");
     CHECK(valueCombo->currentIndex() == -1);
     CHECK(valueCombo->currentText().isEmpty());
@@ -534,6 +541,11 @@ TEST_CASE("OutlinerEntityPropertyEditor")
       CHECK(propertyRow(editor, "targetname") == row);
       CHECK(editor.findChildren<QWidget*>().size() == widgetCount);
     }
+    mdl::setEntityProperty(map, "targetname", "updated", false);
+    processOutlinerUpdates();
+    REQUIRE_FALSE(row.isNull());
+    CHECK(propertyRow(editor, "targetname") == row);
+    CHECK(propertyValueEdit(editor, "targetname")->text() == "updated");
     mdl::setEntityProperty(map, "new_key", "value", false);
     mdl::deselectAll(map);
     mdl::selectNodes(map, {second});
@@ -555,7 +567,7 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     CHECK(positionX->value() == 128.0);
     mdl::selectNodes(map, {first});
     processOutlinerUpdates();
-    CHECK_FALSE(card->isVisibleTo(&editor));
+    CHECK(card->isVisibleTo(&editor));
     mdl::deselectAll(map);
     processOutlinerUpdates();
     CHECK_FALSE(card->isVisibleTo(&editor));

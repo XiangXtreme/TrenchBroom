@@ -26,6 +26,7 @@
 #include "mdl/GameConfig.h"
 #include "mdl/GameInfo.h"
 #include "mdl/Map.h"
+#include "mdl/Map_Groups.h"
 #include "mdl/PropertyDefinition.h"
 #include "ui/MapDocument.h"
 #include "ui/SmartAssetPropertyEditor.h"
@@ -40,6 +41,7 @@
 #include "kd/contracts.h"
 #include "kd/functional.h"
 #include "kd/string_compare.h"
+#include "kd/vector_utils.h"
 
 namespace tb::ui
 {
@@ -235,7 +237,17 @@ void SmartPropertyEditorManager::updateEditor()
 {
   if (activeEditor())
   {
-    activeEditor()->update(m_document.map().selection().allEntities());
+    const auto nodes = m_document.map().selection().allEntities();
+    // WAD management deliberately uses a smart editor even though its raw key is
+    // immutable. FGD read-only and linked-group constraints still apply to it.
+    setEnabled(
+      !nodes.empty()
+      && mdl::canUpdateLinkedGroups(kdl::vec_static_cast<mdl::Node*>(nodes))
+      && std::ranges::all_of(nodes, [&](const auto* node) {
+           const auto* definition = mdl::propertyDefinition(node, m_propertyKey);
+           return !definition || !definition->readOnly;
+         }));
+    activeEditor()->update(nodes);
   }
 }
 

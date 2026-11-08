@@ -6,7 +6,7 @@ namespace tb::ui
 {
 class OutlinerTreeWidget;
 class MapDocument;
-class OutlinerEntityPropertyEditor;
+class SelectionPropertyEditor;
 } // namespace tb::ui
 
 class QLineEdit;
@@ -23,7 +23,7 @@ private:
 
   QSplitter* m_splitter = nullptr;
   OutlinerTreeWidget* m_treeWidget = nullptr;
-  OutlinerEntityPropertyEditor* m_propertyEditor = nullptr;
+  SelectionPropertyEditor* m_propertyEditor = nullptr;
   QLineEdit* m_searchField = nullptr;
   QComboBox* m_sortBox = nullptr;
 

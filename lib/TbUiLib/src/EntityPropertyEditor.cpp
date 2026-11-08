@@ -36,6 +36,7 @@
 #include "ui/WidgetState.h"
 
 #include <algorithm>
+#include <array>
 
 namespace tb::ui
 {
@@ -45,6 +46,9 @@ EntityPropertyEditor::EntityPropertyEditor(MapDocument& document, QWidget* paren
 {
   createGui();
   connectObservers();
+  m_currentDefinition =
+    mdl::selectEntityDefinition(m_document.map().selection().allEntities());
+  updateDocumentationAndSmartEditor();
 }
 
 EntityPropertyEditor::~EntityPropertyEditor()
@@ -65,6 +69,12 @@ void EntityPropertyEditor::connectObservers()
     [&] { updateIfSelectedEntityDefinitionChanged(); });
   m_notifierConnection += m_document.selectionDidChangeNotifier.connect(
     [&](const auto&) { updateIfSelectedEntityDefinitionChanged(); });
+  m_notifierConnection += m_document.entityDefinitionsDidChangeNotifier.connect([&] {
+    // The new definition may reuse the old address after a definition reload.
+    m_currentDefinition =
+      mdl::selectEntityDefinition(m_document.map().selection().allEntities());
+    updateDocumentationAndSmartEditor();
+  });
 }
 
 void EntityPropertyEditor::updateIfSelectedEntityDefinitionChanged()
@@ -283,11 +293,16 @@ void EntityPropertyEditor::updateMinimumSize()
   size.setWidth(m_propertyGrid->minimumWidth());
   size.setHeight(m_propertyGrid->minimumHeight());
 
-  size.setWidth(std::max(size.width(), m_smartEditorManager->minimumSizeHint().width()));
-  size.setHeight(size.height() + m_smartEditorManager->minimumSizeHint().height());
-
-  size.setWidth(std::max(size.width(), m_documentationText->minimumSizeHint().width()));
-  size.setHeight(size.height() + m_documentationText->minimumSizeHint().height());
+  for (const auto* widget :
+       std::array<QWidget*, 2>{m_smartEditorManager, m_documentationText})
+  {
+    if (!widget->isHidden())
+    {
+      size.setWidth(std::max(size.width(), widget->minimumSizeHint().width()));
+      size.setHeight(
+        size.height() + widget->minimumSizeHint().height() + m_splitter->handleWidth());
+    }
+  }
 
   setMinimumSize(size);
   updateGeometry();

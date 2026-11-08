@@ -89,6 +89,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityDefinitionFileChooser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SelectionPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyGrid.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyItemDelegate.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyModel.cpp
@@ -143,6 +144,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/KeyboardShortcutModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LaunchGameEngine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LaunchGameEngineDialog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/LayerActions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LayerEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LayerListBox.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapBaker.cpp
@@ -380,6 +382,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityDefinitionFileChooser.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyEditor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/SelectionPropertyEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyGrid.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyItemDelegate.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyModel.h

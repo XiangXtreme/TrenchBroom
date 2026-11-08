@@ -241,6 +241,8 @@ inline auto AlignmentLock = Preference<bool>{"Editor/Texture lock", true};
 inline auto UvLock = Preference<bool>{"Editor/UV lock", false};
 inline auto EntityPropertiesSmartEdit =
   Preference<bool>{"Editor/Entity properties SmartEdit", true};
+inline auto EntityPropertiesTable =
+  Preference<bool>{"Editor/Entity properties table", false};
 inline auto GroupBrushesCreatedByShapeTool =
   Preference<bool>{"Editor/Group brushes created by shape tool", true};
 

@@ -75,6 +75,7 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/CatchConfig.h"
 #include "ui/CommandPaletteDialog.h"
+#include "ui/EntityInspector.h"
 #include "ui/InfoPanel.h"
 #include "ui/InputEvent.h"
 #include "ui/Inspector.h"
@@ -92,6 +93,7 @@
 #include "ui/PlayModeFullScreen.h"
 #include "ui/PythonConsole.h"
 #include "ui/QPathUtils.h"
+#include "ui/SelectionPropertyEditor.h"
 #include "ui/SpinControl.h"
 #include "ui/SwitchableMapViewContainer.h"
 #include "ui/TransformCard.h"
@@ -288,6 +290,14 @@ TEST_CASE("MapWindow")
     Q_EMIT qApp->focusChanged(nullptr, view);
     auto* card = window.findChild<TransformCard*>();
     REQUIRE(card);
+    card->setExpanded(true);
+    QApplication::processEvents();
+    if (qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1)
+    {
+      window.raise();
+      window.activateWindow();
+      REQUIRE(QTest::qWaitForWindowActive(&window));
+    }
     auto* x = card->findChild<SpinControl*>("TransformCard_PosX");
     REQUIRE(x);
     auto expectedX = 42.0;
@@ -296,8 +306,9 @@ TEST_CASE("MapWindow")
       x->setFocus(Qt::TabFocusReason);
       auto inputFocus = QFocusEvent{QEvent::FocusIn, Qt::TabFocusReason};
       QApplication::sendEvent(x, &inputFocus);
-      x->findChild<QLineEdit*>()->setText("42");
-      QTest::keyClick(x, Qt::Key_Return);
+      auto* edit = x->findChild<QLineEdit*>();
+      QTest::keyClicks(edit, "42");
+      QTest::keyClick(edit, Qt::Key_Return);
     }
     SECTION("horizontal drag release")
     {
@@ -942,11 +953,10 @@ TEST_CASE("MapWindow")
     auto prepared = QSignalSpy{inspector, &Inspector::pagePrepared};
     QTest::mouseClick(outlinerButton, Qt::LeftButton);
     CHECK(outlinerButton->isChecked());
-    CHECK(pageTitle->text() == "OUTLINER");
+    CHECK(pageTitle->text() == "SCENE");
     REQUIRE(window.findChild<QWidget*>("OutlinerInspector"));
-    REQUIRE(prepared.count() == 1);
-    CHECK(
-      prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Outliner));
+    // The default scene page already exists and must keep its widget tree.
+    CHECK(prepared.count() == 0);
     checkSingleNavigation();
 
     QTest::keyClick(entityButton, Qt::Key_Space);
@@ -958,6 +968,16 @@ TEST_CASE("MapWindow")
     CHECK(
       prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Entity));
     checkSingleNavigation();
+
+    auto* properties =
+      window.findChild<EntityInspector*>()->findChild<SelectionPropertyEditor*>();
+    REQUIRE(properties);
+    auto* view = window.currentMapViewBase();
+    REQUIRE(view);
+    Q_EMIT qApp->focusChanged(nullptr, view);
+    entityButton->setFocus();
+    Q_EMIT properties->focusMapViewRequested();
+    CHECK(window.focusWidget() == view);
 
     QTest::mouseClick(faceButton, Qt::LeftButton);
     CHECK(faceButton->isChecked());

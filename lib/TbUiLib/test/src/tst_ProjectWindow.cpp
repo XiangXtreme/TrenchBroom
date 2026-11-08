@@ -945,7 +945,7 @@ TEST_CASE("ProjectWindow")
     const auto undoName = alphaDocument->map().undoCommandName();
     editor.resetLayout();
     CHECK_FALSE(editor.inspector()->isHidden());
-    CHECK(editor.inspector()->currentPage() == InspectorPage::Map);
+    CHECK(editor.inspector()->currentPage() == InspectorPage::Outliner);
     CHECK(alphaDocument->map().modificationCount() == modified);
     CHECK(alphaDocument->map().undoCommandName() == undoName);
     CHECK(

@@ -38,6 +38,7 @@
 #include "mdl/Transaction.h"
 #include "mdl/WorldNode.h"
 #include "ui/ImageUtils.h"
+#include "ui/LayerActions.h"
 #include "ui/MapDocument.h"
 #include "ui/QWidgetUtils.h"
 #include "ui/ViewUtils.h"
@@ -623,6 +624,7 @@ OutlinerTreeWidget::OutlinerTreeWidget(MapDocument& document, QWidget* parent)
   m_notifierConnection += m_document.nodesDidChangeNotifier.connect(
     [this](const std::vector<mdl::Node*>& nodes) {
       auto needsRebuild = false;
+      auto renamedParents = std::vector<mdl::Node*>{};
       for (auto* node : nodes)
       {
         if (!node)
@@ -650,7 +652,10 @@ OutlinerTreeWidget::OutlinerTreeWidget(MapDocument& document, QWidget* parent)
           }
           else
           {
+            const auto oldName = item->text(0);
             setupTreeItem(item, node);
+            if (oldName != item->text(0) && m_sortMode != SortMode::FileOrder)
+              renamedParents.push_back(expectedParentNode);
           }
         }
       }
@@ -659,6 +664,12 @@ OutlinerTreeWidget::OutlinerTreeWidget(MapDocument& document, QWidget* parent)
       {
         scheduleUpdateTree();
       }
+      else if (!renamedParents.empty())
+      {
+        refreshTreeParents(std::move(renamedParents));
+      }
+      if (m_filterActive)
+        applyFilter();
     });
 
   m_notifierConnection += m_document.nodeVisibilityDidChangeNotifier.connect(
@@ -670,6 +681,8 @@ OutlinerTreeWidget::OutlinerTreeWidget(MapDocument& document, QWidget* parent)
           refreshTreeItemRecursively(item);
         }
       }
+      if (m_filterActive)
+        applyFilter();
     });
 
   m_notifierConnection += m_document.nodeLockingDidChangeNotifier.connect(
@@ -688,6 +701,8 @@ OutlinerTreeWidget::OutlinerTreeWidget(MapDocument& document, QWidget* parent)
           }
         }
       }
+      if (m_filterActive)
+        applyFilter();
     });
 
   m_notifierConnection +=
@@ -1088,6 +1103,7 @@ void OutlinerTreeWidget::refreshTreeItemRecursively(QTreeWidgetItem* item)
 
 void OutlinerTreeWidget::updateTree()
 {
+  const auto scroll = verticalScrollBar()->value();
   const auto updatesWereEnabled = updatesEnabled();
   setUpdatesEnabled(false);
 
@@ -1170,6 +1186,8 @@ void OutlinerTreeWidget::updateTree()
 
   applyFilter();
 
+  verticalScrollBar()->setValue(scroll);
+
   m_syncingSelection = wasSyncing;
   blockSignals(false);
   setUpdatesEnabled(updatesWereEnabled);
@@ -1242,6 +1260,13 @@ void OutlinerTreeWidget::updateCurrentGroupHighlight()
   viewport()->update();
 }
 
+void OutlinerTreeWidget::revealSelection()
+{
+  syncSelectionFromDocument();
+  if (auto* item = currentItem(); item && item->isSelected())
+    scrollToItem(item);
+}
+
 void OutlinerTreeWidget::setFilterText(const QString& text)
 {
   const auto next = text.trimmed();
@@ -1249,6 +1274,7 @@ void OutlinerTreeWidget::setFilterText(const QString& text)
 
   if (!m_filterActive && nextHasQuery)
   {
+    m_scrollBeforeFilter = verticalScrollBar()->value();
     m_expandedBeforeFilter.clear();
     m_worldspawnExpandedBeforeFilter.clear();
 
@@ -1290,6 +1316,8 @@ void OutlinerTreeWidget::setFilterText(const QString& text)
     m_expandedBeforeFilter.clear();
     m_worldspawnExpandedBeforeFilter.clear();
     m_filterActive = false;
+    doItemsLayout();
+    verticalScrollBar()->setValue(m_scrollBeforeFilter);
     return;
   }
 
@@ -1842,18 +1870,6 @@ void OutlinerTreeWidget::syncSelectionFromDocument()
       {
         p->setExpanded(true);
       }
-
-      if (dynamic_cast<const mdl::GroupNode*>(node))
-      {
-        item->setExpanded(false);
-      }
-      else if (const auto* entityNode = dynamic_cast<const mdl::EntityNode*>(node))
-      {
-        if (isBrushEntityNode(entityNode))
-        {
-          item->setExpanded(false);
-        }
-      }
     }
   }
 
@@ -1881,38 +1897,6 @@ void OutlinerTreeWidget::syncSelectionFromDocument()
   }
 
   --m_suppressScrollToSelectionCount;
-
-  if (!m_filterActive)
-  {
-    for (int i = 0; i < topLevelItemCount(); ++i)
-    {
-      if (auto* layerItem = topLevelItem(i))
-      {
-        for (int j = 0; j < layerItem->childCount(); ++j)
-        {
-          if (auto* childItem = layerItem->child(j))
-          {
-            if (isWorldspawnItem(childItem))
-            {
-              auto hasSelectedChild = false;
-              for (int k = 0; k < childItem->childCount(); ++k)
-              {
-                if (childItem->child(k)->isSelected())
-                {
-                  hasSelectedChild = true;
-                  break;
-                }
-              }
-              if (!hasSelectedChild)
-              {
-                childItem->setExpanded(false);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
 
   m_syncingSelection = wasSyncing;
 }
@@ -2146,181 +2130,8 @@ void OutlinerTreeWidget::contextMenuEvent(QContextMenuEvent* event)
 
   if (auto* layerNode = dynamic_cast<mdl::LayerNode*>(node))
   {
-    auto& map = m_document.map();
     auto popupMenu = QMenu{this};
-
-    auto* makeActiveAction =
-      popupMenu.addAction(tr("Make active layer"), this, [&, layerNode]() {
-        mdl::setCurrentLayer(map, layerNode);
-      });
-    auto* moveSelectionToLayerAction =
-      popupMenu.addAction(tr("Move selection to layer"), this, [&, layerNode]() {
-        mdl::moveSelectedNodesToLayer(map, layerNode);
-      });
-    auto* selectAllInLayerAction =
-      popupMenu.addAction(tr("Select all in layer"), this, [&, layerNode]() {
-        mdl::selectAllInLayers(map, {layerNode});
-      });
-
-    popupMenu.addSeparator();
-
-    auto* toggleLayerVisibleAction = popupMenu.addAction(
-      layerNode->hidden() ? tr("Show layer") : tr("Hide layer"), this, [&, layerNode]() {
-        if (!layerNode->hidden())
-        {
-          mdl::hideNodes(map, std::vector<mdl::Node*>{layerNode});
-        }
-        else
-        {
-          mdl::resetNodeVisibility(map, std::vector<mdl::Node*>{layerNode});
-        }
-      });
-    auto* isolateLayerAction =
-      popupMenu.addAction(tr("Isolate layer"), this, [&, layerNode]() {
-        mdl::isolateLayers(map, std::vector<mdl::LayerNode*>{layerNode});
-      });
-    auto* toggleLayerLockedAction = popupMenu.addAction(
-      layerNode->locked() ? tr("Unlock layer") : tr("Lock layer"),
-      this,
-      [&, layerNode]() {
-        if (!layerNode->locked())
-        {
-          mdl::lockNodes(map, std::vector<mdl::Node*>{layerNode});
-        }
-        else
-        {
-          mdl::resetNodeLockingState(map, std::vector<mdl::Node*>{layerNode});
-        }
-      });
-    auto* toggleLayerOmitFromExportAction =
-      popupMenu.addAction(tr("Omit From Export"), this, [&, layerNode]() {
-        mdl::setOmitLayerFromExport(map, layerNode, !layerNode->layer().omitFromExport());
-      });
-
-    popupMenu.addSeparator();
-
-    auto* showAllLayersAction = popupMenu.addAction(tr("Show All Layers"), this, [&]() {
-      const auto layers = map.worldNode().allLayers();
-      mdl::resetNodeVisibility(map, kdl::vec_static_cast<mdl::Node*>(layers));
-    });
-    auto* hideAllLayersAction = popupMenu.addAction(tr("Hide All Layers"), this, [&]() {
-      const auto layers = map.worldNode().allLayers();
-      mdl::hideNodes(map, kdl::vec_static_cast<mdl::Node*>(layers));
-    });
-
-    popupMenu.addSeparator();
-
-    auto* unlockAllLayersAction =
-      popupMenu.addAction(tr("Unlock All Layers"), this, [&]() {
-        const auto layers = map.worldNode().allLayers();
-        mdl::resetNodeLockingState(map, kdl::vec_static_cast<mdl::Node*>(layers));
-      });
-    auto* lockAllLayersAction = popupMenu.addAction(tr("Lock All Layers"), this, [&]() {
-      const auto layers = map.worldNode().allLayers();
-      mdl::lockNodes(map, kdl::vec_static_cast<mdl::Node*>(layers));
-    });
-
-    popupMenu.addSeparator();
-
-    auto* renameLayerAction =
-      popupMenu.addAction(tr("Rename Layer"), this, [&, layerNode]() {
-        const auto name = queryLayerName(this, layerNode->name());
-        if (!name.empty())
-        {
-          mdl::renameLayer(map, layerNode, name);
-        }
-      });
-    auto* removeLayerAction =
-      popupMenu.addAction(tr("Remove Layer"), this, [&, layerNode]() {
-        auto* defaultLayerNode = map.worldNode().defaultLayer();
-
-        auto transaction = mdl::Transaction{map, "Remove Layer " + layerNode->name()};
-        mdl::deselectAll(map);
-        if (layerNode->hasChildren())
-        {
-          if (!mdl::reparentNodes(map, {{defaultLayerNode, layerNode->children()}}))
-          {
-            transaction.cancel();
-            return;
-          }
-        }
-
-        if (map.editorContext().currentLayer() == layerNode)
-        {
-          mdl::setCurrentLayer(map, defaultLayerNode);
-        }
-
-        mdl::removeNodes(map, {layerNode});
-        transaction.commit();
-      });
-
-    const auto canSetCurrentLayer = mdl::canSetCurrentLayer(map, layerNode);
-    const auto canMoveSelectedNodes = mdl::canMoveSelectedNodesToLayer(map, layerNode);
-    const auto canSelectAll = mdl::canSelectAllInLayers(map, {layerNode});
-    const auto canIsolate = mdl::canIsolateLayers(map, {layerNode});
-
-    auto canShowAll = false;
-    auto canHideAll = false;
-    auto canUnlockAll = false;
-    auto canLockAll = false;
-    for (const auto* layer : map.worldNode().allLayers())
-    {
-      if (!layer->visible())
-      {
-        canShowAll = true;
-      }
-      if (layer->visible())
-      {
-        canHideAll = true;
-      }
-      if (layer->locked())
-      {
-        canUnlockAll = true;
-      }
-      if (!layer->locked())
-      {
-        canLockAll = true;
-      }
-    }
-
-    const auto isDefaultLayer = (layerNode == map.worldNode().defaultLayer());
-    const auto canRename = !isDefaultLayer;
-    const auto canRemove = [&]() {
-      if (isDefaultLayer)
-      {
-        return false;
-      }
-      auto* defaultLayer = map.worldNode().defaultLayer();
-      if (!defaultLayer->locked() && !defaultLayer->hidden())
-      {
-        return true;
-      }
-      for (auto* customLayer : map.worldNode().customLayers())
-      {
-        if (customLayer != layerNode && !customLayer->locked() && !customLayer->hidden())
-        {
-          return true;
-        }
-      }
-      return false;
-    }();
-
-    makeActiveAction->setEnabled(canSetCurrentLayer);
-    moveSelectionToLayerAction->setEnabled(canMoveSelectedNodes);
-    selectAllInLayerAction->setEnabled(canSelectAll);
-    toggleLayerVisibleAction->setEnabled(true);
-    isolateLayerAction->setEnabled(canIsolate);
-
-    toggleLayerOmitFromExportAction->setCheckable(true);
-    toggleLayerOmitFromExportAction->setChecked(layerNode->layer().omitFromExport());
-
-    toggleLayerLockedAction->setEnabled(true);
-    showAllLayersAction->setEnabled(canShowAll);
-    hideAllLayersAction->setEnabled(canHideAll);
-    unlockAllLayersAction->setEnabled(canUnlockAll);
-    lockAllLayersAction->setEnabled(canLockAll);
-    renameLayerAction->setEnabled(canRename);
-    removeLayerAction->setEnabled(canRemove);
+    populateLayerActions(popupMenu, m_document.map(), layerNode);
 
     popupMenu.exec(event->globalPos());
     event->accept();
@@ -2523,11 +2334,20 @@ void OutlinerTreeWidget::keyPressEvent(QKeyEvent* event)
 
 void OutlinerTreeWidget::dragEnterEvent(QDragEnterEvent* event)
 {
-  event->acceptProposedAction();
+  if (event->source() == this)
+    QTreeWidget::dragEnterEvent(event);
+  else
+    event->ignore();
 }
 
 void OutlinerTreeWidget::dragMoveEvent(QDragMoveEvent* event)
 {
+  if (event->source() != this)
+  {
+    event->ignore();
+    return;
+  }
+  QTreeWidget::dragMoveEvent(event);
   const auto indicator = dropIndicatorPosition();
   if (indicator == QAbstractItemView::OnViewport)
   {
@@ -2623,6 +2443,11 @@ void OutlinerTreeWidget::dragMoveEvent(QDragMoveEvent* event)
 
 void OutlinerTreeWidget::dropEvent(QDropEvent* event)
 {
+  if (event->source() != this)
+  {
+    event->ignore();
+    return;
+  }
   const auto indicator = dropIndicatorPosition();
   if (indicator == QAbstractItemView::OnViewport)
   {

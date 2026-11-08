@@ -122,6 +122,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("outliner-hierarchy"),
     QStringLiteral("outliner-filter"),
     QStringLiteral("outliner-properties-entity"),
+    QStringLiteral("outliner-properties-table"),
+    QStringLiteral("outliner-properties-narrow"),
     QStringLiteral("outliner-reparent-layer-before"),
     QStringLiteral("outliner-reparent-layer-after"),
     QStringLiteral("outliner-brush-entity-before"),
@@ -325,7 +327,7 @@ mdl::Node* configureOutlinerSnapshotModel(MapWindow& mapWindow, const QString& t
   auto* selectedNode = static_cast<mdl::Node*>(nullptr);
 
   if (
-    targetName == QStringLiteral("outliner-properties-entity")
+    targetName.startsWith(QStringLiteral("outliner-properties-"))
     || targetName == QStringLiteral("outliner"))
   {
     selectedNode = findSnapshotEntity(worldNode, "light");
@@ -393,7 +395,10 @@ void configureOutlinerSnapshot(QWidget& targetWidget, const QString& targetName)
   auto* selectedNode = configureOutlinerSnapshotModel(*mapWindow, targetName);
   const auto showProperties =
     targetName == QStringLiteral("outliner")
-    || targetName == QStringLiteral("outliner-properties-entity");
+    || targetName.startsWith(QStringLiteral("outliner-properties-"));
+  setPref(
+    Preferences::EntityPropertiesTable,
+    targetName == QStringLiteral("outliner-properties-table"));
 
   if (
     auto* propertiesToggle = targetWidget.findChild<QAbstractButton*>(
@@ -409,7 +414,9 @@ void configureOutlinerSnapshot(QWidget& targetWidget, const QString& targetName)
     auto* horizontalSplitter =
       mapWindow->findChild<QSplitter*>(QStringLiteral("MapWindow_HorizontalSplitter")))
   {
-    horizontalSplitter->setSizes(QList<int>{860, 580});
+    horizontalSplitter->setSizes(
+      targetName == QStringLiteral("outliner-properties-narrow") ? QList<int>{1100, 340}
+                                                                 : QList<int>{860, 580});
   }
 
   if (auto* outlinerSplitter =
@@ -713,7 +720,7 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
     expectedNode = findSnapshotGroup(worldNode, "Entry Hall");
     expectedDescription = QStringLiteral("Entry Hall group");
   }
-  else if (targetName == QStringLiteral("outliner-properties-entity"))
+  else if (targetName.startsWith(QStringLiteral("outliner-properties-")))
   {
     expectedNode = findSnapshotEntity(worldNode, "light");
     expectedDescription = QStringLiteral("light entity");

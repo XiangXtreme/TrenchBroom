@@ -27,7 +27,7 @@ namespace tb::ui
 {
 class AppController;
 class EntityBrowser;
-class EntityPropertyEditor;
+class SelectionPropertyEditor;
 class MapDocument;
 
 class EntityInspector : public TabBookPage
@@ -35,7 +35,7 @@ class EntityInspector : public TabBookPage
   Q_OBJECT
 private:
   QSplitter* m_splitter = nullptr;
-  EntityPropertyEditor* m_attributeEditor = nullptr;
+  SelectionPropertyEditor* m_attributeEditor = nullptr;
   EntityBrowser* m_entityBrowser = nullptr;
 
 public:

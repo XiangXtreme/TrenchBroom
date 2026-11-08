@@ -4,6 +4,7 @@
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLineEdit>
+#include <QMenu>
 #include <QSettings>
 #include <QSize>
 #include <QSizePolicy>
@@ -18,10 +19,10 @@
 #include "ui/MapDocument.h"
 #include "ui/QWidgetUtils.h"
 #include "ui/SearchBox.h"
+#include "ui/SelectionPropertyEditor.h"
 #include "ui/Splitter.h"
 #include "ui/ViewUtils.h"
 #include "ui/WidgetState.h"
-#include "ui/outliner/OutlinerEntityPropertyEditor.h"
 #include "ui/outliner/OutlinerTreeWidget.h"
 
 namespace tb::ui
@@ -45,19 +46,28 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
   topRowWidget->setAttribute(Qt::WA_StyledBackground, true);
   topRowWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
-  auto* topRow = new QHBoxLayout(topRowWidget);
-  topRow->setContentsMargins(8, 5, 8, 5);
+  auto* toolbarLayout = new QVBoxLayout{topRowWidget};
+  toolbarLayout->setContentsMargins(8, 5, 8, 5);
+  toolbarLayout->setSpacing(6);
+  auto* topRow = new QHBoxLayout{};
+  topRow->setContentsMargins(0, 0, 0, 0);
   topRow->setSpacing(6);
 
   m_searchField = createSearchBox(topRowWidget);
   m_searchField->setObjectName("OutlinerInspector_Search");
-  topRow->addWidget(m_searchField, 10);
+  m_searchField->setPlaceholderText(tr("Search scene"));
+  m_searchField->setToolTip(
+    tr("Search names, type:entity, type:group, vis:hidden, lock:locked or selected"));
+  toolbarLayout->addWidget(m_searchField);
+  toolbarLayout->addLayout(topRow);
 
   m_sortBox = new QComboBox(topRowWidget);
   m_sortBox->setObjectName("OutlinerInspector_Sort");
-  m_sortBox->setToolTip(tr("Sort outliner"));
   m_sortBox->setMinimumWidth(74);
   m_sortBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+  m_sortBox->setProperty("tbControlRole", "compact");
+  m_sortBox->setToolTip(
+    tr("Sort objects in the view; layer order is changed separately"));
   m_sortBox->addItem(
     tr("Default"), static_cast<int>(OutlinerTreeWidget::SortMode::Default));
   m_sortBox->addItem(tr("Type"), static_cast<int>(OutlinerTreeWidget::SortMode::Type));
@@ -74,6 +84,7 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
     m_sortBox->setCurrentIndex(index >= 0 ? index : 0);
   }
   topRow->addWidget(m_sortBox);
+  topRow->addStretch();
 
   auto* addLayerButton =
     createBitmapButton("Add.svg", tr("Add a new layer"), topRowWidget);
@@ -81,18 +92,28 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
   addLayerButton->setProperty("tbControlRole", "compact");
   addLayerButton->setAccessibleName(tr("Add a new layer"));
   addLayerButton->setIconSize(QSize{16, 16});
-  addLayerButton->setFixedSize(QSize{28, 28});
   topRow->addWidget(addLayerButton);
+
+  auto* treeOptions =
+    createBitmapButton("InspectorOutliner.svg", tr("Scene tree options"), topRowWidget);
+  treeOptions->setObjectName("OutlinerInspector_TreeOptions");
+  treeOptions->setProperty("tbControlRole", "compact");
+  treeOptions->setPopupMode(QToolButton::InstantPopup);
+  auto* treeMenu = new QMenu{treeOptions};
+  treeOptions->setMenu(treeMenu);
+  topRow->addWidget(treeOptions);
+  auto* treeVisible = treeMenu->addAction(tr("Show scene tree"));
+  treeVisible->setObjectName("OutlinerInspector_TreeVisible");
+  treeVisible->setCheckable(true);
+  treeVisible->setChecked(
+    QSettings{}.value(widgetSettingsPath(this, "TreeVisible"), true).toBool());
 
   auto* propertiesToggle =
     createBitmapToggleButton("Map_entity.svg", tr("Toggle properties panel"), this);
   propertiesToggle->setObjectName("OutlinerInspector_PropertiesToggle");
   propertiesToggle->setProperty("tbControlRole", "compact");
   propertiesToggle->setIconSize(QSize{16, 16});
-  propertiesToggle->setFixedSize(QSize{28, 28});
   topRow->addWidget(propertiesToggle);
-
-  topRowWidget->setFixedHeight(38);
 
   layout->addWidget(topRowWidget, 0);
 
@@ -101,8 +122,15 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
 
   m_treeWidget = new OutlinerTreeWidget(m_document, m_splitter);
   m_splitter->addWidget(m_treeWidget);
+  treeMenu->addSeparator();
+  treeMenu->addAction(tr("Expand all"), m_treeWidget, &QTreeWidget::expandAll);
+  treeMenu->addAction(tr("Collapse all"), m_treeWidget, &QTreeWidget::collapseAll);
+  treeMenu->addAction(tr("Reveal selection"), this, [this]() {
+    m_searchField->clear();
+    m_treeWidget->revealSelection();
+  });
 
-  m_propertyEditor = new OutlinerEntityPropertyEditor{m_document, m_splitter};
+  m_propertyEditor = new SelectionPropertyEditor{m_document, m_splitter};
   m_splitter->addWidget(m_propertyEditor);
 
   connect(addLayerButton, &QAbstractButton::clicked, this, [this]() {
@@ -119,8 +147,9 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
     }
   });
 
-  m_splitter->setStretchFactor(0, 3);
-  m_splitter->setStretchFactor(1, 2);
+  m_splitter->setStretchFactor(0, 2);
+  m_splitter->setStretchFactor(1, 3);
+  m_splitter->setSizes({300, 500});
 
   layout->addWidget(m_splitter, 1);
 
@@ -129,38 +158,67 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
   {
     auto settings = QSettings{};
     const auto visiblePath = widgetSettingsPath(this, "PropertiesVisible");
-    const auto propertiesVisible = settings.value(visiblePath, false).toBool();
+    const auto propertiesVisible =
+      !treeVisible->isChecked() || settings.value(visiblePath, true).toBool();
 
     propertiesToggle->setChecked(propertiesVisible);
     m_propertyEditor->setVisible(propertiesVisible);
+    m_treeWidget->setVisible(treeVisible->isChecked());
     if (!propertiesVisible)
     {
       m_splitter->setSizes({1, 0});
     }
   }
 
-  connect(propertiesToggle, &QAbstractButton::clicked, this, [this](const bool checked) {
-    auto settings = QSettings{};
-    const auto visiblePath = widgetSettingsPath(this, "PropertiesVisible");
-    settings.setValue(visiblePath, checked);
+  connect(
+    propertiesToggle,
+    &QAbstractButton::clicked,
+    this,
+    [this, treeVisible](const bool checked) {
+      auto settings = QSettings{};
+      const auto visiblePath = widgetSettingsPath(this, "PropertiesVisible");
+      settings.setValue(visiblePath, checked);
 
-    if (checked)
-    {
-      m_propertyEditor->setVisible(true);
-      restoreWidgetState(m_splitter);
-      const auto sizes = m_splitter->sizes();
-      if (sizes.size() >= 2 && sizes.at(1) == 0)
+      if (checked)
       {
-        m_splitter->setSizes({3, 2});
+        m_propertyEditor->setVisible(true);
+        restoreWidgetState(m_splitter);
+        const auto sizes = m_splitter->sizes();
+        if (sizes.size() >= 2 && sizes.at(1) == 0)
+        {
+          m_splitter->setSizes({300, 500});
+        }
       }
-    }
-    else
-    {
-      saveWidgetState(m_splitter);
-      m_propertyEditor->setVisible(false);
-      m_splitter->setSizes({1, 0});
-    }
-  });
+      else
+      {
+        if (!m_treeWidget->isHidden())
+          saveWidgetState(m_splitter);
+        treeVisible->setChecked(true);
+        m_propertyEditor->setVisible(false);
+        m_splitter->setSizes({1, 0});
+      }
+    });
+
+  connect(
+    treeVisible, &QAction::toggled, this, [this, propertiesToggle](const bool visible) {
+      if (!visible)
+      {
+        if (!m_propertyEditor->isHidden())
+          saveWidgetState(m_splitter);
+        else
+          propertiesToggle->click();
+      }
+      m_treeWidget->setVisible(visible);
+      if (visible && !m_propertyEditor->isHidden())
+      {
+        restoreWidgetState(m_splitter);
+        const auto sizes = m_splitter->sizes();
+        if (sizes.size() == 2 && (sizes[0] == 0 || sizes[1] == 0))
+          m_splitter->setSizes({300, 500});
+      }
+      auto settings = QSettings{};
+      settings.setValue(widgetSettingsPath(this, "TreeVisible"), visible);
+    });
 
   auto* searchTimer = new QTimer{this};
   searchTimer->setInterval(120);
@@ -196,7 +254,7 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
 
 OutlinerInspector::~OutlinerInspector()
 {
-  if (m_propertyEditor && m_propertyEditor->isVisible())
+  if (!m_propertyEditor->isHidden() && !m_treeWidget->isHidden())
   {
     saveWidgetState(m_splitter);
   }

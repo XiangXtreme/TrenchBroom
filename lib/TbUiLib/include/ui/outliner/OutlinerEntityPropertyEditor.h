@@ -6,6 +6,7 @@
 
 #include "base/NotifierConnection.h"
 
+#include <string>
 #include <vector>
 
 class QLabel;
@@ -68,6 +69,8 @@ private:
   CollapsibleTitledPanel* m_propertiesCard = nullptr;
   QVBoxLayout* m_propertiesCardLayout = nullptr;
   std::vector<mdl::EntityNodeBase*> m_rowEntities;
+  std::vector<mdl::EntityNodeBase*> m_displayedEntities;
+  std::vector<std::vector<std::string>> m_rowStructure;
   bool m_rowBrushSelection = false;
   bool m_transformCardExpanded = true;
   bool m_propertiesCardExpanded = true;
@@ -81,6 +84,7 @@ public:
   explicit OutlinerEntityPropertyEditor(MapDocument& document, QWidget* parent = nullptr);
   ~OutlinerEntityPropertyEditor() override;
   void onChoiceComboPopupHidden();
+  void embedInSelectionEditor();
 
 signals:
   void focusMapViewRequested();

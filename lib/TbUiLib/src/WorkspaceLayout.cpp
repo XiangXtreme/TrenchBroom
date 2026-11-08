@@ -61,7 +61,10 @@ EditorLayout loadEditorLayout(QSettings& settings, const WorkspaceKind kind)
       settings.value("Windows/MapWindow_VerticalSplitterSplitter/State").toByteArray();
     result.inspectorVisible = legacyValue(settings, "Windows/Inspector/State", true);
     result.infoVisible = legacyValue(settings, "Windows/MapWindow_InfoPanel/State", true);
-    const auto inspector = legacyValue(settings, "Windows/Inspector_TabBook/State", 0);
+    const auto inspector = legacyValue(
+      settings,
+      "Windows/Inspector_TabBook/State",
+      static_cast<int>(result.inspectorPage));
     if (inspector >= 0 && inspector < InspectorPages.size())
       result.inspectorPage = static_cast<InspectorPage>(inspector);
     const auto info = legacyValue(settings, "Windows/InfoPanel_TabBook/State", 0);

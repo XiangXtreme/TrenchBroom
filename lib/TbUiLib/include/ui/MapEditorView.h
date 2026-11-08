@@ -17,6 +17,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 namespace tb::ui
 {
@@ -66,7 +67,7 @@ private:
   bool m_layoutPending = true;
   bool m_externalInfoPanel = false;
   bool m_externalInfoPanelExpanded = false;
-  bool m_outlinerConnectionsDone = false;
+  std::unordered_set<QObject*> m_connectedInspectorWidgets;
 
   void connectOutlinerWidgets();
 

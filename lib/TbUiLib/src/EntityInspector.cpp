@@ -23,7 +23,7 @@
 
 #include "ui/EntityBrowser.h"
 #include "ui/EntityDefinitionFileChooser.h"
-#include "ui/EntityPropertyEditor.h"
+#include "ui/SelectionPropertyEditor.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableTitledPanel.h"
 #include "ui/WidgetState.h"
@@ -67,7 +67,7 @@ void EntityInspector::createGui(AppController& appController, MapDocument& docum
 QWidget* EntityInspector::createEntityPropertyEditor(
   MapDocument& document, QWidget* parent)
 {
-  m_attributeEditor = new EntityPropertyEditor{document, parent};
+  m_attributeEditor = new SelectionPropertyEditor{document, parent};
   return m_attributeEditor;
 }
 

@@ -34,12 +34,17 @@ namespace tb
 {
 namespace mdl
 {
+class Entity;
 class EntityNodeBase;
 } // namespace mdl
 
 namespace ui
 {
 class MapDocument;
+
+// Shared by the form and table presentations, including FGD and worldspawn rules.
+bool isPropertyKeyMutable(const mdl::Entity& entity, const std::string& key);
+bool isPropertyValueMutable(const mdl::Entity& entity, const std::string& key);
 
 enum class ValueState
 {

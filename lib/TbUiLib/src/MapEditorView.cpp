@@ -29,10 +29,10 @@
 #include "ui/MapView3D.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/PythonConsole.h"
+#include "ui/SelectionPropertyEditor.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableMapViewContainer.h"
 #include "ui/WorkbenchSurface.h"
-#include "ui/outliner/OutlinerEntityPropertyEditor.h"
 #include "ui/outliner/OutlinerTreeWidget.h"
 
 #include <algorithm>
@@ -114,11 +114,8 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_controller = std::make_unique<MapEditorController>(appController, document, *this);
   // Outliner widgets live on a lazily created inspector page, so wire them up
   // when that page is installed rather than assuming they exist at construction.
-  connect(m_inspector, &Inspector::pagePrepared, this, [this](const int page) {
-    if (page == static_cast<int>(InspectorPage::Outliner))
-    {
-      connectOutlinerWidgets();
-    }
+  connect(m_inspector, &Inspector::pagePrepared, this, [this](const int) {
+    connectOutlinerWidgets();
   });
   connectOutlinerWidgets();
   restoreLayoutState();
@@ -130,21 +127,13 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
 
 void MapEditorView::connectOutlinerWidgets()
 {
-  if (m_outlinerConnectionsDone)
-  {
-    return;
-  }
-
   const auto trees = m_inspector->findChildren<OutlinerTreeWidget*>();
-  const auto propertyEditors = m_inspector->findChildren<OutlinerEntityPropertyEditor*>();
-  if (trees.isEmpty() && propertyEditors.isEmpty())
-  {
-    return;
-  }
-  m_outlinerConnectionsDone = true;
+  const auto propertyEditors = m_inspector->findChildren<SelectionPropertyEditor*>();
 
   for (auto* tree : trees)
   {
+    if (!m_connectedInspectorWidgets.insert(tree).second)
+      continue;
     connect(
       tree,
       &OutlinerTreeWidget::contextMenuActionsRequested,
@@ -175,11 +164,12 @@ void MapEditorView::connectOutlinerWidgets()
   }
   for (auto* properties : propertyEditors)
   {
-    connect(
-      properties, &OutlinerEntityPropertyEditor::focusMapViewRequested, this, [this] {
-        if (auto* view = currentMapViewBase())
-          view->setFocus(Qt::OtherFocusReason);
-      });
+    if (!m_connectedInspectorWidgets.insert(properties).second)
+      continue;
+    connect(properties, &SelectionPropertyEditor::focusMapViewRequested, this, [this] {
+      if (auto* view = currentMapViewBase())
+        view->setFocus(Qt::OtherFocusReason);
+    });
   }
 }
 

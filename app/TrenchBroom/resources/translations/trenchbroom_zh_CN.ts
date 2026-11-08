@@ -3109,6 +3109,18 @@ Hold %2 to keep trim sheet subdivisions.</source>
             <source>Remove the selected layer and move its objects to the default layer</source>
             <translation>移除所选图层并将其对象移至默认层</translation>
             </message>
+        <message>
+            <source>Move layer up</source>
+            <translation>上移图层</translation>
+        </message>
+        <message>
+            <source>Move layer down</source>
+            <translation>下移图层</translation>
+        </message>
+        <message>
+            <source>Add a new layer</source>
+            <translation>添加新图层</translation>
+        </message>
         </context>
     <context>
         <name>tb::ui::LayerListBoxWidget</name>
@@ -4318,6 +4330,38 @@ Map: %2</source>
             <source>Sort outliner</source>
             <translation>Outliner 排序</translation>
             </message>
+        <message>
+            <source>Search scene</source>
+            <translation>搜索场景</translation>
+        </message>
+        <message>
+            <source>Search names, type:entity, type:group, vis:hidden, lock:locked or selected</source>
+            <translation>搜索名称，或使用 type:entity、type:group、vis:hidden、lock:locked、selected 筛选</translation>
+        </message>
+        <message>
+            <source>Sort objects in the view; layer order is changed separately</source>
+            <translation>对视图中的对象排序；图层顺序需单独调整</translation>
+        </message>
+        <message>
+            <source>Scene tree options</source>
+            <translation>场景树选项</translation>
+        </message>
+        <message>
+            <source>Show scene tree</source>
+            <translation>显示场景树</translation>
+        </message>
+        <message>
+            <source>Expand all</source>
+            <translation>全部展开</translation>
+        </message>
+        <message>
+            <source>Collapse all</source>
+            <translation>全部折叠</translation>
+        </message>
+        <message>
+            <source>Reveal selection</source>
+            <translation>定位所选对象</translation>
+        </message>
         </context>
     <context>
         <name>tb::ui::OutlinerTreeWidget</name>
@@ -5685,6 +5729,14 @@ By %2</source>
             <source>Face</source>
             <translation>面</translation>
             </message>
+        <message>
+            <source>Scene</source>
+            <translation>场景</translation>
+        </message>
+        <message>
+            <source>Scene tree and properties</source>
+            <translation>场景树与属性</translation>
+        </message>
         </context>
     <context>
         <name>tb::ui::MapView3D</name>
@@ -8797,5 +8849,28 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Rock</source><translation>岩石</translation></message>
         <message><source>Use opaque square textures of 64, 128, or 256 pixels. 64-pixel textures are tiled and 256-pixel textures are resampled to a 128-pixel period.</source><translation>请选择 64、128 或 256 像素的不透明正方形贴图。64 像素贴图会平铺，256 像素贴图会重采样，统一为 128 像素的纹理周期。</translation></message>
         <message><source>Create</source><translation>创建</translation></message>
+    </context>
+    <context>
+        <name>tb::ui::SelectionPropertyEditor</name>
+        <message>
+            <source>Properties</source>
+            <translation>属性</translation>
+        </message>
+        <message>
+            <source>Property presentation</source>
+            <translation>属性显示方式</translation>
+        </message>
+        <message>
+            <source>Form</source>
+            <translation>表单</translation>
+        </message>
+        <message>
+            <source>Table</source>
+            <translation>表格</translation>
+        </message>
+        <message>
+            <source>Table includes property keys, protection and default values</source>
+            <translation>表格支持属性键、属性保护和默认值操作</translation>
+        </message>
     </context>
 </TS>

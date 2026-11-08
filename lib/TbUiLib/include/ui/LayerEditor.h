@@ -52,51 +52,24 @@ public:
 
 private:
   void onSetCurrentLayer(mdl::LayerNode* layer);
-  bool canSetCurrentLayer(mdl::LayerNode* layer) const;
 
   void onLayerRightClick(mdl::LayerNode* layer);
 
-  void onMoveSelectedNodesToLayer();
-  bool canMoveSelectedNodesToLayer() const;
-
-  bool canToggleLayerVisible() const;
   void toggleLayerVisible(mdl::LayerNode* layer);
 
-  bool canToggleLayerLocked() const;
   void toggleLayerLocked(mdl::LayerNode* layer);
 
   void toggleOmitLayerFromExport(mdl::LayerNode* layer);
-
-  void isolateLayer(mdl::LayerNode* layer);
-
-  void onSelectAllInLayer();
-  bool canSelectAllInLayer() const;
 
   void onAddLayer();
 
   void onRemoveLayer();
   bool canRemoveLayer() const;
 
-  void onRenameLayer();
-  bool canRenameLayer() const;
-
-  void onShowAllLayers();
-  bool canShowAllLayers() const;
-
-  void onHideAllLayers();
-  bool canHideAllLayers() const;
-
-  void onLockAllLayers();
-  bool canLockAllLayers() const;
-
-  void onUnlockAllLayers();
-  bool canUnlockAllLayers() const;
-
   bool canMoveLayer(int direction) const;
   void moveLayer(mdl::LayerNode* layer, int direction);
 
 private:
-  mdl::LayerNode* findVisibleAndUnlockedLayer(const mdl::LayerNode* except) const;
   void createGui();
 private slots:
   void updateButtons();

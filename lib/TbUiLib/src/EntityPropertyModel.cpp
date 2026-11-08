@@ -87,6 +87,8 @@ bool isPropertyReadOnly(const mdl::Entity& entity, const std::string& key)
   return false;
 }
 
+} // namespace
+
 bool isPropertyKeyMutable(const mdl::Entity& entity, const std::string& key)
 {
   contract_pre(!mdl::isGroup(entity.classname(), entity.properties()));
@@ -140,6 +142,8 @@ bool isPropertyValueMutable(const mdl::Entity& entity, const std::string& key)
   return true;
 }
 
+namespace
+{
 bool isPropertyProtectable(const mdl::EntityNodeBase& entityNode, const std::string& key)
 {
   return mdl::findContainingGroup(entityNode) && key != mdl::EntityPropertyKeys::Origin;
