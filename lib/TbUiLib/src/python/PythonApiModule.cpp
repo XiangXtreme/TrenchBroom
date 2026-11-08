@@ -69,6 +69,7 @@
 #include "ui/MapViewport.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/PanelLayout.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/automation/AutomationActions.h"
@@ -501,9 +502,7 @@ QLayout& ensurePanelLayout(QWidget& widget)
   auto* layout = widget.layout();
   if (layout == nullptr)
   {
-    auto* vbox = new QVBoxLayout{};
-    widget.setLayout(vbox);
-    layout = vbox;
+    layout = createPanelColumn(&widget);
   }
   return *layout;
 }
@@ -545,10 +544,8 @@ void addFormRow(QWidget& panel, const std::string& label, QWidget* field)
 {
   auto& layout = ensurePanelLayout(panel);
   auto* row = new QWidget{};
-  auto* rowLayout = new QFormLayout{};
-  rowLayout->setContentsMargins(0, 0, 0, 0);
+  auto* rowLayout = createPanelForm(row);
   rowLayout->addRow(QString::fromStdString(label), field);
-  row->setLayout(rowLayout);
   layout.addWidget(row);
 }
 
@@ -3024,26 +3021,6 @@ EntityHandle placeAsset(
     PythonHandleRegistry::instance().nodeLifetimeGeneration(entityNodeRaw)};
 }
 
-std::string assetTypeName(const BrowserCellType type)
-{
-  switch (type)
-  {
-  case BrowserCellType::Model:
-    return "model";
-  case BrowserCellType::Sprite:
-    return "sprite";
-  case BrowserCellType::Sound:
-    return "sound";
-  case BrowserCellType::Folder:
-  case BrowserCellType::Prefab:
-  case BrowserCellType::Map:
-  case BrowserCellType::Texture:
-  case BrowserCellType::Material:
-    return "unknown";
-  }
-  return "unknown";
-}
-
 std::optional<BrowserCellType> assetTypeFromName(const std::string& type)
 {
   if (type == "model")
@@ -5400,10 +5377,7 @@ void defineModule(py::module_& module)
       [](PluginPanelHandle& self, const std::string& key, const std::string& title) {
         auto* groupBox = new QGroupBox{QString::fromStdString(title)};
         groupBox->setObjectName(panelObjectName("group", key));
-        auto* layout = new QVBoxLayout{};
-        layout->setContentsMargins(6, 6, 6, 6);
-        layout->setSpacing(4);
-        groupBox->setLayout(layout);
+        createPanelColumn(groupBox);
         ensurePanelLayout(self.get()).addWidget(groupBox);
         return PluginPanelHandle{QPointer<QWidget>{groupBox}};
       })
@@ -5412,10 +5386,7 @@ void defineModule(py::module_& module)
       [](PluginPanelHandle& self, const std::string& key) {
         auto* row = new QWidget{};
         row->setObjectName(panelObjectName("row", key));
-        auto* layout = new QHBoxLayout{};
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(6);
-        row->setLayout(layout);
+        createPanelActions(row);
         ensurePanelLayout(self.get()).addWidget(row);
         return PluginPanelHandle{QPointer<QWidget>{row}};
       })
@@ -5424,10 +5395,7 @@ void defineModule(py::module_& module)
       [](PluginPanelHandle& self, const std::string& key) {
         auto* column = new QWidget{};
         column->setObjectName(panelObjectName("column", key));
-        auto* layout = new QVBoxLayout{};
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(4);
-        column->setLayout(layout);
+        createPanelColumn(column, PanelInsets::None);
         ensurePanelLayout(self.get()).addWidget(column);
         return PluginPanelHandle{QPointer<QWidget>{column}};
       })

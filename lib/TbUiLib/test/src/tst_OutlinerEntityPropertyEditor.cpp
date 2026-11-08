@@ -29,6 +29,7 @@
 #include <QPointer>
 #include <QScrollArea>
 #include <QToolButton>
+#include <QVBoxLayout>
 #include <QtTest/QTest>
 
 #include "base/PreferenceManager.h"
@@ -211,6 +212,31 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     REQUIRE(rowIndex >= 0);
     REQUIRE(addBarIndex >= 0);
     CHECK(rowIndex < addBarIndex);
+  }
+
+  SECTION("rebuilds nested card content while retaining permanent controls")
+  {
+    auto* card = editor.findChild<CollapsibleTitledPanel*>("EntityPropertyCard");
+    REQUIRE(card);
+    auto* layout = qobject_cast<QVBoxLayout*>(card->getPanel()->layout());
+    REQUIRE(layout);
+    auto* nested = new QVBoxLayout{};
+    auto child = QPointer<QLabel>{new QLabel{"Nested content"}};
+    nested->addWidget(child);
+    layout->addLayout(nested);
+    const auto retainedCard = QPointer<CollapsibleTitledPanel>{card};
+    const auto retainedAddBar =
+      QPointer<QWidget>{editor.findChild<QWidget*>("outlinerPropertyAddBar")};
+    REQUIRE(retainedAddBar);
+
+    auto* light = new mdl::EntityNode{mdl::Entity{{{"classname", "light"}}}};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {light}}});
+    mdl::selectNodes(map, {light});
+    processOutlinerUpdates();
+    CHECK(child.isNull());
+    CHECK(retainedCard);
+    CHECK(retainedAddBar);
+    CHECK(propertyValueEdit(editor, "classname")->text() == "light");
   }
 
   SECTION("wraps the property rows in a styled card")

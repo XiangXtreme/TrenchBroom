@@ -196,6 +196,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/outliner/OutlinerEntityPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/outliner/OutlinerInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/outliner/OutlinerTreeWidget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PanelLayout.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PathTool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PathToolController.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PieMenu.cpp

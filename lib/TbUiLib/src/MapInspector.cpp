@@ -129,14 +129,12 @@ QWidget* MapInspector::createLayerEditor(MapDocument& document)
 CollapsibleTitledPanel* MapInspector::createMapPropertiesEditor(MapDocument& document)
 {
   auto* titledPanel = new CollapsibleTitledPanel{tr("Map Properties")};
+  titledPanel->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
   titledPanel->setObjectName("MapInspector_MapPropertiesPanel");
 
   auto* editor = new MapPropertiesEditor{document};
 
-  auto* sizer = new QVBoxLayout{};
-  sizer->setContentsMargins(0, 0, 0, 0);
-  sizer->addWidget(editor, 1);
-  titledPanel->getPanel()->setLayout(sizer);
+  titledPanel->createContentLayout()->addWidget(editor, 1);
 
   restoreWidgetState(titledPanel);
 
@@ -146,14 +144,12 @@ CollapsibleTitledPanel* MapInspector::createMapPropertiesEditor(MapDocument& doc
 CollapsibleTitledPanel* MapInspector::createModEditor(MapDocument& document)
 {
   auto* titledPanel = new CollapsibleTitledPanel{tr("Mods")};
+  titledPanel->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
   titledPanel->setObjectName("MapInspector_ModsPanel");
 
   auto* modEditor = new ModEditor{document};
 
-  auto* sizer = new QVBoxLayout{};
-  sizer->setContentsMargins(0, 0, 0, 0);
-  sizer->addWidget(modEditor, 1);
-  titledPanel->getPanel()->setLayout(sizer);
+  titledPanel->createContentLayout()->addWidget(modEditor, 1);
 
   restoreWidgetState(titledPanel);
 

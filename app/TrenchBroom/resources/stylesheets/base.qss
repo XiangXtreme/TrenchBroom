@@ -1443,43 +1443,41 @@ QWidget#ClickableTitleBar QToolButton[tbControlRole="compact"]:hover {
   background: @tb-pressed-background;
 }
 
-/* Terrain uses the shared collapsible behavior as a card stack. The compound
-   surface owns the outer chrome while its child controls keep canonical styles. */
-QWidget#TerrainInspector_Creation,
-QWidget#TerrainInspector_Editing,
-QWidget#TerrainInspector_Compilation {
+/* Shared cards: object names remain available for discovery and persistence. */
+QWidget[tbPanelStyle="card"] {
   background: @tb-panel-background;
   border: 1px solid @tb-border;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
-QWidget#TerrainInspector_Creation > QWidget#ClickableTitleBar,
-QWidget#TerrainInspector_Editing > QWidget#ClickableTitleBar,
-QWidget#TerrainInspector_Compilation > QWidget#ClickableTitleBar {
+QWidget[tbPanelStyle="card"] > QWidget#ClickableTitleBar {
   background: @tb-alternate-background;
-  border: none;
-  border-top-left-radius: 7px;
-  border-top-right-radius: 7px;
+  border: 1px solid transparent;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
   min-height: 30px;
 }
 
-QWidget#TerrainInspector_Creation > QWidget#ClickableTitleBar:hover,
-QWidget#TerrainInspector_Editing > QWidget#ClickableTitleBar:hover,
-QWidget#TerrainInspector_Compilation > QWidget#ClickableTitleBar:hover {
+QWidget[tbPanelStyle="card"] > QWidget#ClickableTitleBar[expanded="false"] {
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+
+QWidget[tbPanelStyle="card"] > QWidget#ClickableTitleBar:hover {
   background: @tb-hover-background;
 }
 
-QWidget#TerrainInspector_Creation > QWidget#ClickableTitleBar QLabel#ClickableTitleBar_Title,
-QWidget#TerrainInspector_Editing > QWidget#ClickableTitleBar QLabel#ClickableTitleBar_Title,
-QWidget#TerrainInspector_Compilation > QWidget#ClickableTitleBar QLabel#ClickableTitleBar_Title {
-  font-weight: bold;
+QWidget[tbPanelStyle="card"] > QWidget#ClickableTitleBar:focus {
+  border-color: @tb-focus-border;
 }
 
-QWidget#TerrainInspector_Creation > QFrame#CollapsibleTitledPanel_Divider,
-QWidget#TerrainInspector_Editing > QFrame#CollapsibleTitledPanel_Divider,
-QWidget#TerrainInspector_Compilation > QFrame#CollapsibleTitledPanel_Divider {
+QWidget[tbPanelStyle="card"] > QWidget#ClickableTitleBar:disabled {
+  background: @tb-panel-background;
+}
+
+QWidget[tbPanelStyle="card"] > QFrame#CollapsibleTitledPanel_Divider {
   background: @tb-border;
   border: none;
   min-height: 1px;
@@ -1487,71 +1485,11 @@ QWidget#TerrainInspector_Compilation > QFrame#CollapsibleTitledPanel_Divider {
   margin: 0 12px;
 }
 
-QWidget#TerrainInspector_Creation > QWidget#CollapsibleTitledPanel_Panel,
-QWidget#TerrainInspector_Editing > QWidget#CollapsibleTitledPanel_Panel,
-QWidget#TerrainInspector_Compilation > QWidget#CollapsibleTitledPanel_Panel {
-  background: @tb-panel-background;
-  border: none;
-  border-bottom-left-radius: 7px;
-  border-bottom-right-radius: 7px;
-}
-
-QWidget#PluginInspector_PluginPanel {
-  background: @tb-elevated-background;
-  border: 1px solid @tb-strong-border;
-  border-radius: 6px;
-}
-
-QWidget#PluginInspector_PluginPanel:hover {
-  border-color: @tb-focus-border;
-}
-
-QWidget#PluginInspector_PluginPanel > QWidget#ClickableTitleBar {
-  background: @tb-button-background;
-  border: none;
-  border-top-left-radius: 5px;
-  border-top-right-radius: 5px;
-}
-
-QWidget#PluginInspector_PluginPanel > QFrame {
-  background: @tb-border;
-  border: none;
-  min-height: 1px;
-  max-height: 1px;
-}
-
-QWidget#PluginInspector_PluginPanel > QWidget {
+QWidget[tbPanelStyle="card"] > QWidget#CollapsibleTitledPanel_Panel {
   background: @tb-panel-background;
   border: none;
   border-bottom-left-radius: 5px;
   border-bottom-right-radius: 5px;
-}
-
-QWidget#TransformCard,
-QWidget#EntityPropertyCard {
-  background: @tb-alternate-background;
-  border: 1px solid @tb-border;
-  border-radius: 6px;
-}
-
-QWidget#TransformCard > QWidget#ClickableTitleBar,
-QWidget#EntityPropertyCard > QWidget#ClickableTitleBar {
-  background: transparent;
-  border: none;
-}
-
-QWidget#TransformCard > QFrame,
-QWidget#EntityPropertyCard > QFrame {
-  background: transparent;
-  border: none;
-  min-height: 0;
-  max-height: 0;
-}
-
-QWidget#TransformCard > QWidget,
-QWidget#EntityPropertyCard > QWidget {
-  background: transparent;
-  border: none;
 }
 
 QLabel[tbTextRole="secondary"] {

@@ -51,6 +51,7 @@
 #include <QWidget>
 
 #include "ui/CollapsibleTitledPanel.h"
+#include "ui/PanelLayout.h"
 #include "ui/WorkbenchSurface.h"
 
 #include <initializer_list>
@@ -63,9 +64,7 @@ namespace
 QWidget* makeControlRow(const std::initializer_list<QWidget*> controls)
 {
   auto* row = new QWidget{};
-  auto* layout = new QHBoxLayout{row};
-  layout->setContentsMargins(0, 0, 0, 0);
-  layout->setSpacing(8);
+  auto* layout = createPanelActions(row);
   for (auto* control : controls)
   {
     layout->addWidget(control);
@@ -77,10 +76,7 @@ QWidget* makeControlRow(const std::initializer_list<QWidget*> controls)
 QGroupBox* makeSection(const QString& title)
 {
   auto* section = new QGroupBox{title};
-  auto* layout = new QFormLayout{section};
-  layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-  layout->setHorizontalSpacing(12);
-  layout->setVerticalSpacing(8);
+  createPanelForm(section, PanelInsets::Content);
   return section;
 }
 
@@ -420,16 +416,26 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
   leftColumn->addWidget(selectionSection);
   auto* disclosureSection = makeSection(QStringLiteral("Collapsible sections"));
   auto* expandedPanel = new CollapsibleTitledPanel{QStringLiteral("Terrain properties")};
-  auto* expandedLayout = new QFormLayout{expandedPanel->getPanel()};
+  expandedPanel->setPresentation(CollapsibleTitledPanel::Presentation::Card);
+  auto* expandedLayout = createPanelForm();
+  expandedPanel->createContentLayout()->addLayout(expandedLayout);
+  auto* titleAction = new QToolButton{};
+  titleAction->setText(QStringLiteral("⋯"));
+  titleAction->setProperty("tbControlRole", "compact");
+  expandedPanel->addTitleWidget(titleAction);
   expandedLayout->addRow(QStringLiteral("Radius"), new QSpinBox{});
   auto* collapsedPanel =
     new CollapsibleTitledPanel{QStringLiteral("Compile settings"), false};
+  collapsedPanel->setPresentation(CollapsibleTitledPanel::Presentation::Card);
   auto* disabledPanel =
     new CollapsibleTitledPanel{QStringLiteral("Unavailable section"), false};
+  disabledPanel->setPresentation(CollapsibleTitledPanel::Presentation::Card);
   disabledPanel->setEnabled(false);
   sectionLayout(*disclosureSection)->addRow(expandedPanel);
   sectionLayout(*disclosureSection)->addRow(collapsedPanel);
   sectionLayout(*disclosureSection)->addRow(disabledPanel);
+  sectionLayout(*disclosureSection)
+    ->addRow(new CollapsibleTitledPanel{QStringLiteral("Embedded section"), false});
   leftColumn->addWidget(disclosureSection);
   leftColumn->addStretch(1);
 

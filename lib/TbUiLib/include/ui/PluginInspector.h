@@ -26,8 +26,6 @@
 #include <vector>
 
 class QLabel;
-class QScrollArea;
-class QVBoxLayout;
 class QWidget;
 class QString;
 
@@ -35,6 +33,7 @@ namespace tb::ui
 {
 
 class PluginInspector;
+class PanelList;
 
 // A non-owning registration. The host owns the widgets; callers explicitly close
 // registrations when their plugin session ends. Closing is safe after either the
@@ -60,9 +59,7 @@ class PluginInspector : public TabBookPage
   friend class PluginPanelRegistration;
 
 private:
-  QScrollArea* m_scrollArea = nullptr;
-  QWidget* m_container = nullptr;
-  QVBoxLayout* m_containerLayout = nullptr;
+  PanelList* m_panelList = nullptr;
   QLabel* m_emptyLabel = nullptr;
   std::vector<QWidget*> m_panels;
 

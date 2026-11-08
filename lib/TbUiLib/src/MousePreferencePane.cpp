@@ -68,9 +68,6 @@ void MousePreferencePane::createGui()
     LayoutConstants::DialogOuterMargin,
     LayoutConstants::DialogOuterMargin,
     LayoutConstants::DialogOuterMargin);
-  layout->setVerticalSpacing(LayoutConstants::NarrowVMargin);
-  // override the default to make the sliders take up maximum width
-  layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
   layout->addSection("Mouse Look");
   layout->addRow("Sensitivity", m_lookSpeedSlider);

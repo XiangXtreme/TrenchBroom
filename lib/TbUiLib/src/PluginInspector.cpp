@@ -20,12 +20,11 @@
 #include "ui/PluginInspector.h"
 
 #include <QLabel>
-#include <QScrollArea>
 #include <QToolButton>
 #include <QVBoxLayout>
 
-#include "ui/ClickableTitleBar.h"
 #include "ui/CollapsibleTitledPanel.h"
+#include "ui/PanelLayout.h"
 
 #include <algorithm>
 
@@ -67,23 +66,11 @@ void makePluginInfo(QLabel* label)
 PluginInspector::PluginInspector(QWidget* parent)
   : TabBookPage{parent}
 {
-  m_scrollArea = new QScrollArea{};
-  m_scrollArea->setWidgetResizable(true);
-
-  m_container = new QWidget{};
-  m_container->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::MinimumExpanding);
-  m_containerLayout = new QVBoxLayout{};
-  m_containerLayout->setContentsMargins(6, 6, 6, 6);
-  m_containerLayout->setSpacing(6);
-
-  m_containerLayout->addStretch(1);
-
-  m_container->setLayout(m_containerLayout);
-  m_scrollArea->setWidget(m_container);
+  m_panelList = new PanelList{};
 
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(0, 0, 0, 0);
-  layout->addWidget(m_scrollArea, 1);
+  layout->addWidget(m_panelList, 1);
   setLayout(layout);
   updateEmptyState();
 }
@@ -92,45 +79,34 @@ PluginPanelRegistration PluginInspector::addPluginPanel(const QString& title)
 {
   if (m_emptyLabel)
   {
-    m_containerLayout->removeWidget(m_emptyLabel);
+    m_panelList->removeWidget(m_emptyLabel);
     delete m_emptyLabel;
     m_emptyLabel = nullptr;
   }
 
-  auto insertIndex = m_containerLayout->count() - 1;
-  if (insertIndex < 0)
-  {
-    insertIndex = 0;
-  }
-
   auto* panel = new CollapsibleTitledPanel{title, true};
   panel->setObjectName("PluginInspector_PluginPanel");
-  panel->setAttribute(Qt::WA_StyledBackground, true);
-  if (auto* titleBar = panel->findChild<ClickableTitleBar*>())
-  {
-    titleBar->setAttribute(Qt::WA_StyledBackground, true);
+  panel->setPresentation(CollapsibleTitledPanel::Presentation::Card);
+  // Plugin-provided tables and browsers can use the available content height.
+  panel->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
+  auto* closeButton = new QToolButton{};
+  closeButton->setObjectName("PluginInspector_CloseButton");
+  closeButton->setProperty("tbControlRole", "compact");
+  closeButton->setAutoRaise(true);
+  closeButton->setText(QStringLiteral("×"));
+  closeButton->setToolTip(tr("Close"));
 
-    auto* closeButton = new QToolButton{titleBar};
-    closeButton->setObjectName("PluginInspector_CloseButton");
-    closeButton->setProperty("tbControlRole", "compact");
-    closeButton->setAutoRaise(true);
-    closeButton->setFixedSize(QSize{18, 18});
-    closeButton->setText(QStringLiteral("×"));
-    closeButton->setToolTip(tr("Close"));
+  panel->addTitleWidget(closeButton);
 
-    titleBar->layout()->addWidget(closeButton);
-
-    QObject::connect(closeButton, &QToolButton::clicked, this, [this, panel]() {
-      // Defer deletion until the button has finished dispatching its event.
-      panel->hide();
-      m_containerLayout->removeWidget(panel);
-      std::erase(m_panels, panel);
-      panel->deleteLater();
-      updateEmptyState();
-    });
-  }
-  panel->getPanel()->setAttribute(Qt::WA_StyledBackground, true);
-  m_containerLayout->insertWidget(insertIndex, panel, 0);
+  QObject::connect(closeButton, &QToolButton::clicked, this, [this, panel]() {
+    // Defer deletion until the button has finished dispatching its event.
+    panel->hide();
+    m_panelList->removeWidget(panel);
+    std::erase(m_panels, panel);
+    panel->deleteLater();
+    updateEmptyState();
+  });
+  m_panelList->addWidget(panel);
   m_panels.push_back(panel);
   return PluginPanelRegistration{*this, *panel, *panel->getPanel()};
 }
@@ -140,7 +116,7 @@ void PluginInspector::removePluginPanel(QWidget* panel)
   // A user-closed panel may still await DeferredDelete. Session teardown must
   // destroy it now, before releasing its document and Python services.
   std::erase(m_panels, panel);
-  m_containerLayout->removeWidget(panel);
+  m_panelList->removeWidget(panel);
   delete panel;
   updateEmptyState();
 }
@@ -152,7 +128,7 @@ void PluginInspector::updateEmptyState()
     m_emptyLabel = new QLabel{
       tr("No plugin panels loaded.\nThis panel is reserved for plugin-provided UI.")};
     makePluginInfo(m_emptyLabel);
-    m_containerLayout->insertWidget(0, m_emptyLabel);
+    m_panelList->addWidget(m_emptyLabel);
   }
 }
 

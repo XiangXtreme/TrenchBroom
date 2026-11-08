@@ -798,7 +798,8 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
       if (
         section->expanded() != expanded
         || bar->height() != bar->sizeHint().expandedTo(bar->minimumSize()).height()
-        || (!expanded && section->height() != bar->height()))
+        || (!expanded && section->height() != bar->height()
+              + section->contentsMargins().top() + section->contentsMargins().bottom()))
         return {UiSnapshotReadinessState::Pending, "Terrain section layout is settling"};
     }
     return {UiSnapshotReadinessState::Ready, "Terrain section state and geometry ready"};

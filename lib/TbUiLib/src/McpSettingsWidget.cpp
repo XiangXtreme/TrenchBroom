@@ -12,6 +12,7 @@
 
 #include "mcp/McpMode.h"
 #include "ui/AppController.h"
+#include "ui/PanelLayout.h"
 #include "ui/QStyleUtils.h"
 #include "ui/ViewConstants.h"
 
@@ -123,15 +124,7 @@ void McpSettingsWidget::createGui()
   m_errorLabel->setObjectName("McpSettings_Error");
   m_errorLabel->setWordWrap(true);
 
-  auto* layout = new QFormLayout{};
-  layout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  layout->setHorizontalSpacing(LayoutConstants::WideHMargin);
-  layout->setVerticalSpacing(LayoutConstants::WideVMargin);
-  layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* layout = createPanelForm(nullptr, PanelInsets::Content);
   layout->addRow(infoLabel);
   layout->addRow(tr("Access"), m_modeCombo);
   layout->addRow(tr("Status"), m_statusLabel);

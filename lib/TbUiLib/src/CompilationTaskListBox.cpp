@@ -41,6 +41,7 @@
 #include "ui/FixedWidthFont.h"
 #include "ui/MapDocument.h"
 #include "ui/MultiCompletionLineEdit.h"
+#include "ui/PanelLayout.h"
 #include "ui/TitledPanel.h"
 #include "ui/VariableStoreModel.h"
 #include "ui/ViewConstants.h"
@@ -136,14 +137,7 @@ CompilationExportMapTaskEditor::CompilationExportMapTaskEditor(
 {
   contract_pre(std::holds_alternative<mdl::CompilationExportMap>(task));
 
-  auto* formLayout = new QFormLayout{};
-  formLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  formLayout->setVerticalSpacing(LayoutConstants::MediumVMargin);
-  formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* formLayout = createPanelForm(nullptr, PanelInsets::Content);
   addMainLayout(formLayout);
 
   m_targetEditor = new MultiCompletionLineEdit{};
@@ -280,14 +274,7 @@ CompilationCopyFilesTaskEditor::CompilationCopyFilesTaskEditor(
 {
   contract_pre(std::holds_alternative<mdl::CompilationCopyFiles>(task));
 
-  auto* formLayout = new QFormLayout{};
-  formLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  formLayout->setVerticalSpacing(LayoutConstants::MediumVMargin);
-  formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* formLayout = createPanelForm(nullptr, PanelInsets::Content);
   addMainLayout(formLayout);
 
   m_sourceEditor = new MultiCompletionLineEdit{};
@@ -365,14 +352,7 @@ CompilationRenameFileTaskEditor::CompilationRenameFileTaskEditor(
 {
   contract_pre(std::holds_alternative<mdl::CompilationRenameFile>(task));
 
-  auto* formLayout = new QFormLayout{};
-  formLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  formLayout->setVerticalSpacing(LayoutConstants::MediumVMargin);
-  formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* formLayout = createPanelForm(nullptr, PanelInsets::Content);
   addMainLayout(formLayout);
 
   m_sourceEditor = new MultiCompletionLineEdit{};
@@ -450,14 +430,7 @@ CompilationDeleteFilesTaskEditor::CompilationDeleteFilesTaskEditor(
 {
   contract_pre(std::holds_alternative<mdl::CompilationDeleteFiles>(task));
 
-  auto* formLayout = new QFormLayout{};
-  formLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  formLayout->setVerticalSpacing(LayoutConstants::MediumVMargin);
-  formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* formLayout = createPanelForm(nullptr, PanelInsets::Content);
   addMainLayout(formLayout);
 
   m_targetEditor = new MultiCompletionLineEdit{};
@@ -511,14 +484,7 @@ CompilationRunToolTaskEditor::CompilationRunToolTaskEditor(
 {
   contract_pre(std::holds_alternative<mdl::CompilationRunTool>(task));
 
-  auto* formLayout = new QFormLayout{};
-  formLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  formLayout->setVerticalSpacing(LayoutConstants::MediumVMargin);
-  formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* formLayout = createPanelForm(nullptr, PanelInsets::Content);
   addMainLayout(formLayout);
 
   m_toolEditor = new MultiCompletionLineEdit{};
@@ -649,14 +615,7 @@ CompilationLaunchEngineTaskEditor::CompilationLaunchEngineTaskEditor(
 {
   contract_pre(std::holds_alternative<mdl::CompilationLaunchEngine>(task));
 
-  auto* formLayout = new QFormLayout{};
-  formLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  formLayout->setVerticalSpacing(LayoutConstants::MediumVMargin);
-  formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* formLayout = createPanelForm(nullptr, PanelInsets::Content);
   addMainLayout(formLayout);
 
   m_engineProfileEditor = new QComboBox{};

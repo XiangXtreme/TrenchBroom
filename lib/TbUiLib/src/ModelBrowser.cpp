@@ -88,6 +88,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ModelBrowserView.h"
+#include "ui/PanelLayout.h"
 #include "ui/PopupWindow.h"
 #include "ui/PrefabAsset.h"
 #include "ui/ProjectCaptureConflictDialog.h"
@@ -673,10 +674,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_filterPopup = new PopupWindow{this};
   m_filterPopup->setObjectName("ModelBrowser_FilterPopup");
   m_filterPopup->setAttribute(Qt::WA_StyledBackground);
-  auto* filterForm = new QFormLayout{};
-  filterForm->setContentsMargins(12, 10, 12, 12);
-  filterForm->setHorizontalSpacing(10);
-  filterForm->setVerticalSpacing(7);
+  auto* filterForm = createPanelForm(nullptr, PanelInsets::Content);
   filterForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
   filterForm->setSizeConstraint(QLayout::SetFixedSize);
   // A popover reads best when every field lines up, so the filter fields share a width.
@@ -703,10 +701,7 @@ void ModelBrowser::createGui(AppController& appController)
   m_viewPopup = new PopupWindow{this};
   m_viewPopup->setObjectName("ModelBrowser_ViewPopup");
   m_viewPopup->setAttribute(Qt::WA_StyledBackground);
-  auto* viewForm = new QFormLayout{};
-  viewForm->setContentsMargins(12, 10, 12, 12);
-  viewForm->setHorizontalSpacing(10);
-  viewForm->setVerticalSpacing(7);
+  auto* viewForm = createPanelForm(nullptr, PanelInsets::Content);
   viewForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
   viewForm->setSizeConstraint(QLayout::SetFixedSize);
   viewForm->addRow(tr("Thumbnail size"), m_iconSizeCombo);

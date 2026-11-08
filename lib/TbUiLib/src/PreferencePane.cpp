@@ -22,6 +22,8 @@
 #include <QBoxLayout>
 #include <QScrollArea>
 
+#include "ui/PanelLayout.h"
+
 namespace tb::ui
 {
 
@@ -52,13 +54,9 @@ void PreferencePane::createScrollableContent(QLayout* contentLayout)
   m_content->setAttribute(Qt::WA_StyledBackground);
   m_content->setLayout(contentLayout);
 
-  auto* scrollArea = new QScrollArea{this};
+  auto* scrollArea = createPanelScrollArea(m_content, this);
   scrollArea->setObjectName("PreferencePane_ScrollArea");
-  scrollArea->setWidget(m_content);
-  scrollArea->setWidgetResizable(true);
-  scrollArea->setFrameShape(QFrame::NoFrame);
   scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(QMargins{});

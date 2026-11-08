@@ -23,10 +23,12 @@
 #include <QDataStream>
 #include <QIODevice>
 #include <QLayout>
+#include <QStyle>
+#include <QVBoxLayout>
 
 #include "ui/BorderLine.h"
 #include "ui/ClickableTitleBar.h"
-#include "ui/ViewConstants.h"
+#include "ui/PanelLayout.h"
 
 namespace tb::ui
 {
@@ -39,10 +41,12 @@ CollapsibleTitledPanel::CollapsibleTitledPanel(
   , m_panel{new QWidget{}}
   , m_expanded{initiallyExpanded}
 {
+  setAttribute(Qt::WA_StyledBackground);
   setProperty("expanded", m_expanded);
   m_titleBar->setProperty("collapsible", true);
   m_divider->setObjectName(QStringLiteral("CollapsibleTitledPanel_Divider"));
   m_panel->setObjectName(QStringLiteral("CollapsibleTitledPanel_Panel"));
+  m_panel->setAttribute(Qt::WA_StyledBackground);
 
   auto* sizer = new QVBoxLayout{};
   sizer->setContentsMargins(0, 0, 0, 0);
@@ -54,6 +58,8 @@ CollapsibleTitledPanel::CollapsibleTitledPanel(
   sizer->addWidget(m_divider, 0);
   sizer->addWidget(m_panel, 1);
   setLayout(sizer);
+  setContentSizing(ContentSizing::FitContents);
+  setPresentation(Presentation::Section);
 
   connect(m_titleBar, &ClickableTitleBar::titleBarClicked, this, [&]() {
     setExpanded(!m_expanded);
@@ -65,6 +71,51 @@ CollapsibleTitledPanel::CollapsibleTitledPanel(
 QWidget* CollapsibleTitledPanel::getPanel() const
 {
   return m_panel;
+}
+
+QVBoxLayout* CollapsibleTitledPanel::createContentLayout()
+{
+  if (!m_contentLayout)
+  {
+    m_contentLayout = createPanelColumn(
+      m_panel,
+      m_presentation == Presentation::Card ? PanelInsets::Content : PanelInsets::None);
+  }
+  return m_contentLayout;
+}
+
+void CollapsibleTitledPanel::addTitleWidget(QWidget* widget)
+{
+  m_titleBar->layout()->addWidget(widget);
+}
+
+void CollapsibleTitledPanel::setPresentation(const Presentation presentation)
+{
+  m_presentation = presentation;
+  setProperty("tbPanelStyle", presentation == Presentation::Card ? "card" : "section");
+  if (m_contentLayout)
+    setPanelInsets(
+      *m_contentLayout,
+      presentation == Presentation::Card ? PanelInsets::Content : PanelInsets::None);
+  for (auto* widget :
+       {static_cast<QWidget*>(this),
+        static_cast<QWidget*>(m_titleBar),
+        static_cast<QWidget*>(m_divider),
+        m_panel})
+  {
+    widget->style()->unpolish(widget);
+    widget->style()->polish(widget);
+    widget->updateGeometry();
+    widget->update();
+  }
+}
+
+void CollapsibleTitledPanel::setContentSizing(const ContentSizing sizing)
+{
+  m_panel->setSizePolicy(
+    QSizePolicy::Preferred,
+    sizing == ContentSizing::FitContents ? QSizePolicy::Maximum : QSizePolicy::Expanding);
+  updateGeometry();
 }
 
 void CollapsibleTitledPanel::expand()
@@ -119,6 +170,9 @@ void CollapsibleTitledPanel::updateExpanded()
 {
   setProperty("expanded", m_expanded);
   m_titleBar->setProperty("expanded", m_expanded);
+  // QSS does not automatically recompute selectors after a dynamic property changes.
+  m_titleBar->style()->unpolish(m_titleBar);
+  m_titleBar->style()->polish(m_titleBar);
 
   if (m_expanded)
   {

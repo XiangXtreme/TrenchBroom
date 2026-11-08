@@ -19,6 +19,7 @@ Updated 2026-11-04. This index is the entry point for deciding what to trust.
 
 | Document | Decides | Status |
 | --- | --- | --- |
+| [UI foundation improvement](ui-foundation-improvement.md) | Shared panel layouts, cards, extensibility, migration scope and acceptance. | Implemented; current guidance. |
 | [Asset library master plan](asset-library-master-plan.md) | Global library, project capture, compile input, hltools handoff. | Draft; capture and compile parts are implemented. |
 | [Asset browser experience todo](asset-browser-experience-todo.md) | Browser/inspector/sound/sky behaviour and acceptance. | In progress; only acceptance items remain open. |
 | [Native project format design](native-project-format-design.md) | `.tbproj` container, revisions, snapshots, publishing. | Implemented core; future targets still valid. |

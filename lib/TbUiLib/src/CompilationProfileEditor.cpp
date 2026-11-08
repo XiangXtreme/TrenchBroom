@@ -39,6 +39,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MiniToolBarLayout.h"
 #include "ui/MultiCompletionLineEdit.h"
+#include "ui/PanelLayout.h"
 #include "ui/QStyleUtils.h"
 #include "ui/VariableStoreModel.h"
 #include "ui/ViewConstants.h"
@@ -88,15 +89,7 @@ QWidget* CompilationProfileEditor::createEditorPage(QWidget* parent)
   m_workDirTxt->setToolTip(R"(A working directory for the compilation profile.
 Variables are allowed.)");
 
-  auto* upperLayout = new QFormLayout{};
-  upperLayout->setContentsMargins(
-    LayoutConstants::MediumHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::MediumHMargin,
-    LayoutConstants::WideVMargin);
-  upperLayout->setHorizontalSpacing(LayoutConstants::MediumHMargin);
-  upperLayout->setVerticalSpacing(0);
-  upperLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* upperLayout = createPanelForm(nullptr, PanelInsets::Content);
   upperLayout->addRow("Name", m_nameTxt);
   upperLayout->addRow("Working Directory", m_workDirTxt);
   upperPanel->setLayout(upperLayout);

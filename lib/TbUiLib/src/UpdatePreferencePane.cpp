@@ -102,7 +102,6 @@ They may contain new features or bug fixes that are not yet part of a stable rel
     LayoutConstants::DialogOuterMargin,
     LayoutConstants::DialogOuterMargin,
     LayoutConstants::DialogOuterMargin);
-  m_layout->setVerticalSpacing(LayoutConstants::WideVMargin);
 
   m_layout->addSection("Automatic Updates");
   m_layout->addRow(updateInfo);

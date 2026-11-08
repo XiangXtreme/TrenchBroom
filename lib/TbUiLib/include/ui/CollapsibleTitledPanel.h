@@ -22,6 +22,7 @@
 #include <QWidget>
 
 class QLabel;
+class QVBoxLayout;
 
 namespace tb::ui
 {
@@ -31,17 +32,35 @@ class ClickableTitleBar;
 class CollapsibleTitledPanel : public QWidget
 {
   Q_OBJECT
+public:
+  enum class Presentation
+  {
+    Section,
+    Card
+  };
+  enum class ContentSizing
+  {
+    FitContents,
+    Expanding
+  };
+
 private:
   ClickableTitleBar* m_titleBar = nullptr;
   BorderLine* m_divider = nullptr;
   QWidget* m_panel = nullptr;
+  QVBoxLayout* m_contentLayout = nullptr;
   bool m_expanded = true;
+  Presentation m_presentation = Presentation::Section;
 
 public:
   explicit CollapsibleTitledPanel(
     const QString& title, bool initiallyExpanded = true, QWidget* parent = nullptr);
 
   QWidget* getPanel() const;
+  QVBoxLayout* createContentLayout();
+  void addTitleWidget(QWidget* widget);
+  void setPresentation(Presentation presentation);
+  void setContentSizing(ContentSizing sizing);
 
   void expand();
   void collapse();

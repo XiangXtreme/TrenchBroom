@@ -128,6 +128,29 @@ the disclosure button's `tbDisclosure` arrow using the same chevron and theme co
 tree branches. The `components`, `terrain` and `terrain-collapsed` snapshots cover these
 states; feature panels do not supply their own title geometry or arrow rendering.
 
+## Shared composition
+
+`PanelLayout` owns content padding, form column/row gaps, action spacing and ordinary
+scroll-area defaults. Use `createPanelForm`, `createPanelColumn`, `createPanelActions`
+and `createPanelScrollArea` instead of copying their setup into a feature. These return
+standard Qt layouts and widgets, so content, connections and specialized width/size
+constraints stay with the caller. `FormWithSectionsLayout` shares the form defaults;
+its section indent and dialog outer margins remain part of preferences composition.
+
+Use `PanelList` for a vertical collection of panels. It owns the bottom stretch; callers
+add, insert and remove widgets without manipulating a spacer. Removing a widget leaves
+ownership and visibility unchanged: explicitly hide/reuse or delete it at the call site.
+
+`CollapsibleTitledPanel::Presentation::Card` selects the shared `tbPanelStyle="card"`
+surface in `base.qss`; `Section` is the flush embedded presentation. Use
+`createContentLayout()` for its standard body and `addTitleWidget()` for title actions.
+Call `setContentSizing(Expanding)` for a growing tree, table or canvas. Ordinary form
+bodies default to `FitContents`; surplus height stays below the panels. Theme/presentation
+changes and collapse keep the shared title, divider and body states in sync. Existing
+object names and persisted expansion states continue to identify instances.
+
+The implementation and extension guide is [UI foundation improvement](ui-foundation-improvement.md).
+
 ## Exceptions
 
 Exceptions are limited to domain renderers whose content is itself visual data, including

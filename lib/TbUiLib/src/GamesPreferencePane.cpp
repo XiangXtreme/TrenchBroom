@@ -242,8 +242,6 @@ void GamePreferencePane::createGui()
 
   auto* layout = new FormWithSectionsLayout{};
   layout->setContentsMargins(0, LayoutConstants::MediumVMargin, 0, 0);
-  layout->setVerticalSpacing(2);
-  layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
   layout->addSection(QString::fromStdString(m_gameInfo.gameConfig.name));
   layout->addRow(tr("Game Path"), gamePathLayout);

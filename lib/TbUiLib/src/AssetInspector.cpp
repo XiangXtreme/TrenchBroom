@@ -33,6 +33,7 @@
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
+#include "ui/PanelLayout.h"
 #include "ui/QPathUtils.h"
 
 #include <algorithm>
@@ -147,14 +148,11 @@ AssetInspector::AssetInspector(QWidget* parent, const ScrollMode scrollMode)
   if (scrollMode == ScrollMode::Independent)
   {
     // Standalone inspectors can be squeezed into a short dock or dialog.
-    auto* scroll = new QScrollArea{this};
+    auto* scroll = createPanelScrollArea(content, this);
     scroll->setObjectName("AssetInspector_Scroll");
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->viewport()->setAutoFillBackground(false);
     outerLayout->addWidget(scroll);
-    scroll->setWidget(content);
   }
   else
   {
@@ -429,7 +427,7 @@ AssetInspector::AssetInspector(QWidget* parent, const ScrollMode scrollMode)
     showModel();
     m_image->fit();
   });
-  auto* actions = new QVBoxLayout{};
+  auto* actions = createPanelColumn(nullptr, PanelInsets::None);
   const auto button = [&](const QString& text) {
     auto* result = new QPushButton{text};
     actions->addWidget(result);
@@ -457,13 +455,14 @@ AssetInspector::AssetInspector(QWidget* parent, const ScrollMode scrollMode)
     m_showSnapshot, &QPushButton::clicked, this, &AssetInspector::showSnapshotRequested);
 
   auto* details = new CollapsibleTitledPanel{tr("Technical details"), false};
+  details->setPresentation(CollapsibleTitledPanel::Presentation::Card);
+  details->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
   m_details = new QTreeWidget{};
   m_details->setObjectName("AssetInspector_Details");
   m_details->setHeaderLabels({tr("Property"), tr("Value")});
   m_details->setRootIsDecorated(false);
   m_details->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
-  auto* detailsLayout = new QVBoxLayout{details->getPanel()};
-  detailsLayout->setContentsMargins(0, 0, 0, 0);
+  auto* detailsLayout = details->createContentLayout();
   detailsLayout->addWidget(m_details);
   layout->addWidget(m_name);
   layout->addWidget(m_status);

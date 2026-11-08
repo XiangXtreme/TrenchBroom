@@ -18,7 +18,6 @@
 #include <QPushButton>
 #include <QRubberBand>
 #include <QScopeGuard>
-#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
@@ -55,6 +54,7 @@
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapViewToolBox.h"
+#include "ui/PanelLayout.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 #include "ui/TerrainExport.h"
@@ -300,8 +300,7 @@ TerrainInspector::TerrainInspector(
   m_generate = new QPushButton{tr("Export Compile Snapshot…")};
   m_generate->setObjectName(QStringLiteral("TerrainInspector_ExportSnapshot"));
 
-  auto* form = new QFormLayout{};
-  form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+  auto* form = createPanelForm();
   m_form = form;
   form->addRow(tr("Edit mode"), m_editMode);
   form->addRow(tr("Sculpt tool"), m_sculptMode);
@@ -316,24 +315,21 @@ TerrainInspector::TerrainInspector(
   form->addRow(tr("Brush strength"), m_strength);
   form->addRow(tr("Brush hardness"), m_hardness);
 
-  auto* createForm = new QFormLayout{};
-  createForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+  auto* createForm = createPanelForm();
   createForm->addRow(tr("Grid spacing"), m_gridSpacing);
   createForm->addRow(tr("New terrain height"), m_newHeight);
   createForm->addRow(tr("New terrain thickness"), m_newThickness);
   auto* creation = new CollapsibleTitledPanel{tr("Create Terrain"), false, this};
   m_creation = creation;
   creation->setObjectName(QStringLiteral("TerrainInspector_Creation"));
-  auto* creationLayout = new QVBoxLayout{creation->getPanel()};
-  creationLayout->setContentsMargins(12, 8, 12, 12);
-  creationLayout->setSpacing(8);
+  creation->setPresentation(CollapsibleTitledPanel::Presentation::Card);
+  auto* creationLayout = creation->createContentLayout();
   creationLayout->addLayout(createForm);
   creationLayout->addWidget(m_drawNew);
   creationLayout->addWidget(m_convert);
   creationLayout->addWidget(m_create);
 
-  m_compileForm = new QFormLayout{};
-  m_compileForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+  m_compileForm = createPanelForm();
   m_compileForm->addRow(m_brushEntity);
   m_compileForm->addRow(tr("Entity class"), m_brushEntityClass);
   m_compileForm->addRow(tr("Extra top face limit"), m_faceBudget);
@@ -342,9 +338,8 @@ TerrainInspector::TerrainInspector(
   m_compileForm->addRow(tr("Local patch density"), m_patchDensity);
   auto* compilation = new CollapsibleTitledPanel{tr("Compile Settings"), false, this};
   compilation->setObjectName(QStringLiteral("TerrainInspector_Compilation"));
-  auto* compilationLayout = new QVBoxLayout{compilation->getPanel()};
-  compilationLayout->setContentsMargins(12, 8, 12, 12);
-  compilationLayout->setSpacing(8);
+  compilation->setPresentation(CollapsibleTitledPanel::Presentation::Card);
+  auto* compilationLayout = compilation->createContentLayout();
   compilationLayout->addLayout(m_compileForm);
   compilationLayout->addWidget(m_analyze);
   compilationLayout->addWidget(m_showCuts);
@@ -353,29 +348,18 @@ TerrainInspector::TerrainInspector(
 
   auto* editing = new CollapsibleTitledPanel{tr("Edit Terrain"), true, this};
   editing->setObjectName(QStringLiteral("TerrainInspector_Editing"));
-  auto* editingLayout = new QVBoxLayout{editing->getPanel()};
-  editingLayout->setContentsMargins(12, 8, 12, 12);
-  editingLayout->setSpacing(8);
+  editing->setPresentation(CollapsibleTitledPanel::Presentation::Card);
+  auto* editingLayout = editing->createContentLayout();
   editingLayout->addLayout(form);
   editingLayout->addWidget(m_paint);
   editingLayout->addWidget(m_help);
   editingLayout->addWidget(m_openLibrary);
 
-  auto* content = new QWidget{};
-  auto* sections = new QVBoxLayout{content};
-  sections->setContentsMargins(8, 8, 8, 12);
-  sections->setSpacing(8);
-  sections->addWidget(creation);
-  sections->addWidget(editing);
-  sections->addWidget(compilation);
-  // Expanded sections can grow. Reserve surplus height for the bottom spacer
-  // instead of distributing it into their forms and between their actions.
-  sections->addStretch(1);
-  auto* scroll = new QScrollArea{this};
+  auto* scroll = new PanelList{this};
   scroll->setObjectName(QStringLiteral("TerrainInspector_Scroll"));
-  scroll->setWidgetResizable(true);
-  scroll->setFrameShape(QFrame::NoFrame);
-  scroll->setWidget(content);
+  scroll->addWidget(creation);
+  scroll->addWidget(editing);
+  scroll->addWidget(compilation);
   auto* layout = new QVBoxLayout{};
   layout->addWidget(m_status);
   layout->addWidget(scroll, 1);

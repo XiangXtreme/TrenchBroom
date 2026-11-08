@@ -265,9 +265,6 @@ QWidget* ViewPreferencePane::createViewPreferences()
     LayoutConstants::DialogOuterMargin,
     LayoutConstants::DialogOuterMargin,
     LayoutConstants::DialogOuterMargin);
-  layout->setVerticalSpacing(LayoutConstants::WideVMargin);
-  // override the default to make the sliders take up maximum width
-  layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
   layout->addSection("User Interface");
   layout->addRow("Theme", themeLayout);

@@ -32,6 +32,7 @@
 #include "mdl/GameEngineProfile.h"
 #include "ui/EmptyWidget.h"
 #include "ui/FileDialogDefaultDir.h"
+#include "ui/PanelLayout.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
 #include "ui/ViewConstants.h"
@@ -79,14 +80,7 @@ QWidget* GameEngineProfileEditor::createEditorPage()
   pathLayout->addWidget(m_pathEdit, 1);
   pathLayout->addWidget(button);
 
-  auto* formLayout = new QFormLayout{};
-  formLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  formLayout->setVerticalSpacing(LayoutConstants::NarrowVMargin);
-  formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+  auto* formLayout = createPanelForm(nullptr, PanelInsets::Content);
   container->setLayout(formLayout);
 
   formLayout->addRow("Name", m_nameEdit);

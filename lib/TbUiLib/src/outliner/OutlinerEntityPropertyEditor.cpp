@@ -18,7 +18,6 @@
 #include <QPixmap>
 #include <QResizeEvent>
 #include <QScopeGuard>
-#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QStringList>
 #include <QStringListModel>
@@ -44,6 +43,7 @@
 #include "ui/FileDialogDefaultDir.h"
 #include "ui/FlagsEditor.h"
 #include "ui/MapDocument.h"
+#include "ui/PanelLayout.h"
 #include "ui/QColorUtils.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStringUtils.h"
@@ -639,19 +639,11 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   m_selectionSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
   m_selectionSummary->hide();
 
-  m_scrollArea = new QScrollArea{m_propertiesPanel->getPanel()};
+  m_scrollArea = new PanelList{m_propertiesPanel->getPanel()};
   m_scrollArea->setObjectName("outlinerPropertyScrollArea");
-  m_scrollArea->setFrameShape(QFrame::NoFrame);
-  m_scrollArea->setWidgetResizable(true);
-
-  m_scrollContents = new QWidget{m_scrollArea};
+  m_scrollContents = m_scrollArea->contentWidget();
   m_scrollContents->setObjectName("outlinerPropertyList");
   m_scrollContents->setAttribute(Qt::WA_StyledBackground, true);
-  m_scrollLayout = new QVBoxLayout{m_scrollContents};
-  m_scrollLayout->setContentsMargins(6, 4, 6, 4);
-  m_scrollLayout->setSpacing(6);
-  m_scrollLayout->addStretch(1);
-  m_scrollArea->setWidget(m_scrollContents);
 
   auto* propertiesLayout = new QVBoxLayout{m_propertiesPanel->getPanel()};
   propertiesLayout->setContentsMargins(0, 0, 0, 0);
@@ -692,13 +684,9 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   m_propertiesCard = new CollapsibleTitledPanel{
     tr("Entity Properties"), m_propertiesCardExpanded, m_propertiesContainer};
   m_propertiesCard->setObjectName("EntityPropertyCard");
-  // CollapsibleTitledPanel is a plain QWidget, so Qt only paints its style sheet
-  // card background when the styled background attribute is set (see TransformCard).
-  m_propertiesCard->setAttribute(Qt::WA_StyledBackground, true);
+  m_propertiesCard->setPresentation(CollapsibleTitledPanel::Presentation::Card);
   propertiesContainerLayout->addWidget(m_propertiesCard);
-  m_propertiesCardLayout = new QVBoxLayout{m_propertiesCard->getPanel()};
-  m_propertiesCardLayout->setContentsMargins(6, 6, 6, 8);
-  m_propertiesCardLayout->setSpacing(2);
+  m_propertiesCardLayout = m_propertiesCard->createContentLayout();
   m_propertiesContainer->hide();
   connect(
     m_propertiesCard,
@@ -966,35 +954,36 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
 
   // The card containers survive a rebuild; every other widget in the layouts is
   // recreated from the current selection.
-  const auto clearLayout =
-    [&](auto&& self, QLayout* l, const bool keepCardContainers) -> void {
+  const auto clearLayout = [&](auto&& self, QLayout* l) -> void {
     while (auto* item = l->takeAt(0))
     {
       if (auto* w = item->widget())
       {
-        const auto keep =
-          w == m_addPropertyBar
-          || (keepCardContainers && (w == m_transformContainer || w == m_propertiesContainer));
-        if (!keep)
+        if (w != m_addPropertyBar)
         {
           delete w;
         }
       }
       if (auto* childLayout = item->layout())
       {
-        self(self, childLayout, keepCardContainers);
-        delete childLayout;
+        self(self, childLayout);
+        // A child QLayout is the layout item itself; delete it once below.
       }
       delete item;
     }
   };
 
-  clearLayout(clearLayout, m_scrollLayout, true);
+  for (auto* entry : m_scrollArea->entries())
+  {
+    m_scrollArea->removeWidget(entry);
+    if (entry != m_transformContainer && entry != m_propertiesContainer)
+      delete entry;
+  }
   m_transformContainer->hide();
   m_propertiesContainer->hide();
-  m_scrollLayout->addWidget(m_transformContainer, 0);
-  m_scrollLayout->addWidget(m_propertiesContainer, 0);
-  clearLayout(clearLayout, m_propertiesCardLayout, false);
+  m_scrollArea->addWidget(m_transformContainer);
+  m_scrollArea->addWidget(m_propertiesContainer);
+  clearLayout(clearLayout, m_propertiesCardLayout);
 
   if (entityNodes.empty())
   {
@@ -1003,8 +992,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     auto* emptyLabel = new QLabel{tr("No entity selected"), m_scrollContents};
     emptyLabel->setObjectName("infoLabel");
     emptyLabel->setContentsMargins(4, 4, 4, 4);
-    m_scrollLayout->addWidget(emptyLabel, 0);
-    m_scrollLayout->addStretch(1);
+    m_scrollArea->addWidget(emptyLabel);
     return;
   }
 
@@ -1022,8 +1010,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
       new QLabel{tr("Different entity types selected"), m_scrollContents};
     mixedLabel->setObjectName("infoLabel");
     mixedLabel->setContentsMargins(8, 8, 8, 8);
-    m_scrollLayout->addWidget(mixedLabel, 0);
-    m_scrollLayout->addStretch(1);
+    m_scrollArea->addWidget(mixedLabel);
     return;
   }
 
@@ -1766,7 +1753,6 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
   }
 
   m_propertiesCardLayout->addWidget(m_addPropertyBar, 0);
-  m_scrollLayout->addStretch(1);
   m_propertiesCardLayout->activate();
 }
 

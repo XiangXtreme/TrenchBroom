@@ -62,6 +62,7 @@
 #include "ui/CreateTerrainMaterialDialog.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
+#include "ui/PanelLayout.h"
 #include "ui/ProjectCaptureConflictDialog.h"
 #include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
@@ -619,18 +620,14 @@ void AssetLibraryWindow::buildUi()
   auto* inspector = new QWidget{};
   inspector->setObjectName(QStringLiteral("AssetLibraryInspector"));
   inspector->setAttribute(Qt::WA_StyledBackground, true);
-  auto* inspectorLayout = new QVBoxLayout{inspector};
-  inspectorLayout->setContentsMargins(12, 10, 12, 10);
-  inspectorLayout->setSpacing(7);
+  auto* inspectorLayout = createPanelColumn(inspector);
 
   auto* previewTitle = new QLabel{tr("Preview"), inspector};
   previewTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
   m_inspector =
     new AssetInspector{inspector, AssetInspector::ScrollMode::SharedWithParent};
   auto* actionRow = new QWidget{inspector};
-  auto* actionLayout = new QHBoxLayout{actionRow};
-  actionLayout->setContentsMargins(0, 0, 0, 0);
-  actionLayout->setSpacing(6);
+  auto* actionLayout = createPanelActions(actionRow);
   m_favoriteButton = new QPushButton{QStringLiteral("☆ Favourite"), actionRow};
   m_favoriteButton->setCheckable(true);
   m_favoriteButton->setObjectName(QStringLiteral("AssetLibraryFavoriteButton"));
@@ -654,9 +651,7 @@ void AssetLibraryWindow::buildUi()
   connect(m_deleteAction, &QAction::triggered, this, &AssetLibraryWindow::deleteSelected);
 
   auto* tagsRow = new QWidget{inspector};
-  auto* tagsLayout = new QHBoxLayout{tagsRow};
-  tagsLayout->setContentsMargins(0, 0, 0, 0);
-  tagsLayout->setSpacing(6);
+  auto* tagsLayout = createPanelActions(tagsRow);
   auto* tagsLabel = new QLabel{tr("Tags"), tagsRow};
   tagsLabel->setObjectName(QStringLiteral("AssetLibraryPropertyKey"));
   m_tagsEdit = new QLineEdit{tagsRow};
@@ -675,12 +670,8 @@ void AssetLibraryWindow::buildUi()
   auto* propertiesTitle = new QLabel{tr("Details"), inspector};
   propertiesTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
   auto* propertiesHost = new QWidget{inspector};
-  m_properties = new QFormLayout{propertiesHost};
-  m_properties->setContentsMargins(0, 0, 0, 0);
+  m_properties = createPanelForm(propertiesHost);
   m_properties->setLabelAlignment(Qt::AlignLeft | Qt::AlignTop);
-  m_properties->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
-  m_properties->setHorizontalSpacing(10);
-  m_properties->setVerticalSpacing(5);
 
   auto* dependenciesTitle = new QLabel{tr("Dependencies"), inspector};
   dependenciesTitle->setObjectName(QStringLiteral("AssetLibrarySectionTitle"));
@@ -722,11 +713,8 @@ void AssetLibraryWindow::buildUi()
   connect(refreshUsage, &QPushButton::clicked, this, &AssetLibraryWindow::refreshUsage);
   inspectorLayout->addWidget(refreshUsage);
   inspectorLayout->addWidget(m_usage);
-  auto* inspectorScroll = new QScrollArea{splitter};
+  auto* inspectorScroll = createPanelScrollArea(inspector, splitter);
   inspectorScroll->setObjectName("AssetLibrary_InspectorScroll");
-  inspectorScroll->setWidgetResizable(true);
-  inspectorScroll->setFrameShape(QFrame::NoFrame);
-  inspectorScroll->setWidget(inspector);
   splitter->addWidget(inspectorScroll);
 
   splitter->setStretchFactor(0, 0);

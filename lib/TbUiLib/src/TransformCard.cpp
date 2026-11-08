@@ -895,7 +895,7 @@ TransformCard::TransformCard(MapDocument& document, QWidget* parent)
   , m_document{document}
 {
   setObjectName("TransformCard");
-  setAttribute(Qt::WA_StyledBackground, true);
+  setPresentation(Presentation::Card);
 
   createGui();
   connectObservers();
@@ -967,12 +967,7 @@ const vm::vec3d& TransformCard::currentScale() const
 
 void TransformCard::createGui()
 {
-  auto* panel = getPanel();
-  panel->setAttribute(Qt::WA_StyledBackground, true);
-
-  auto* panelLayout = new QVBoxLayout{panel};
-  panelLayout->setContentsMargins(12, 8, 10, 10);
-  panelLayout->setSpacing(4);
+  auto* panelLayout = createContentLayout();
 
   auto* grid = new QGridLayout{};
   grid->setContentsMargins(0, 0, 0, 0);

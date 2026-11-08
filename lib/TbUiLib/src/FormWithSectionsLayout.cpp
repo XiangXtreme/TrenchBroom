@@ -22,6 +22,7 @@
 #include <QBoxLayout>
 #include <QLabel>
 
+#include "ui/PanelLayout.h"
 #include "ui/QStyleUtils.h"
 #include "ui/ViewConstants.h"
 
@@ -31,6 +32,12 @@ namespace tb::ui
 namespace
 {
 constexpr auto FieldLeftMargin = 3 * LayoutConstants::WideHMargin;
+}
+
+FormWithSectionsLayout::FormWithSectionsLayout(QWidget* parent)
+  : QFormLayout{parent}
+{
+  configurePanelForm(*this);
 }
 
 void FormWithSectionsLayout::addSection(const QString& title, const QString& info)

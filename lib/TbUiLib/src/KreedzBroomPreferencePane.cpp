@@ -161,13 +161,8 @@ KreedzBroomPreferencePane::KreedzBroomPreferencePane(QWidget* parent)
 void KreedzBroomPreferencePane::createGui()
 {
   // Two columns of sections use the width of the dialog instead of one long column.
-  const auto createColumn = []() {
-    auto* column = new FormWithSectionsLayout{};
-    column->setVerticalSpacing(LayoutConstants::NarrowVMargin);
-    return column;
-  };
-  auto* left = createColumn();
-  auto* right = createColumn();
+  auto* left = new FormWithSectionsLayout{};
+  auto* right = new FormWithSectionsLayout{};
 
   left->addSection("Mouse");
   left->addRow(

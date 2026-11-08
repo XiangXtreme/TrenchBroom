@@ -27,7 +27,7 @@ namespace tb::ui
 class FormWithSectionsLayout : public QFormLayout
 {
 public:
-  using QFormLayout::QFormLayout;
+  explicit FormWithSectionsLayout(QWidget* parent = nullptr);
 
   void addSection(const QString& title, const QString& info = "");
 

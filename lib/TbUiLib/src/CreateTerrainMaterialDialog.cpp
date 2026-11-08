@@ -14,6 +14,8 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
+#include "ui/PanelLayout.h"
+
 #include <algorithm>
 
 namespace tb::ui
@@ -30,8 +32,7 @@ CreateTerrainMaterialDialog::CreateTerrainMaterialDialog(
   rootLayout->setContentsMargins(16, 16, 16, 16);
   rootLayout->setSpacing(12);
 
-  auto* generalForm = new QFormLayout{};
-  generalForm->setContentsMargins(0, 0, 0, 0);
+  auto* generalForm = createPanelForm();
   m_nameEdit = new QLineEdit{this};
   m_nameEdit->setObjectName(QStringLiteral("MaterialNameEdit"));
   m_nameEdit->setPlaceholderText(tr("e.g. alpine_blend"));
@@ -40,9 +41,7 @@ CreateTerrainMaterialDialog::CreateTerrainMaterialDialog(
 
   auto* slotsGroup = new QGroupBox{tr("Texture Slots"), this};
   slotsGroup->setObjectName(QStringLiteral("MaterialSlotsGroup"));
-  auto* slotsLayout = new QVBoxLayout{slotsGroup};
-  slotsLayout->setContentsMargins(10, 12, 10, 10);
-  slotsLayout->setSpacing(8);
+  auto* slotsLayout = createPanelColumn(slotsGroup);
 
   const auto populateTextures = [&](QComboBox* combo) {
     for (const auto& asset : textureAssets)
@@ -64,9 +63,7 @@ CreateTerrainMaterialDialog::CreateTerrainMaterialDialog(
                                const QString& nameObj,
                                const QString& texObj,
                                const int defaultIndex) {
-    auto* rowLayout = new QHBoxLayout{};
-    rowLayout->setContentsMargins(0, 0, 0, 0);
-    rowLayout->setSpacing(6);
+    auto* rowLayout = createPanelActions();
 
     nameEdit = new QLineEdit{defaultName, slotsGroup};
     nameEdit->setObjectName(nameObj);

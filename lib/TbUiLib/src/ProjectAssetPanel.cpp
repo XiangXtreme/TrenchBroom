@@ -88,7 +88,9 @@ ProjectAssetPanel::ProjectAssetPanel(
   detailsLayout->addWidget(m_inspector, 1);
   auto* metadata =
     new CollapsibleTitledPanel{tr("Project and dependency details"), false};
-  auto* metadataLayout = new QVBoxLayout{metadata->getPanel()};
+  metadata->setPresentation(CollapsibleTitledPanel::Presentation::Card);
+  metadata->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
+  auto* metadataLayout = metadata->createContentLayout();
   metadataLayout->addWidget(m_details);
   detailsLayout->addWidget(metadata);
   splitter->addWidget(detailsSurface);

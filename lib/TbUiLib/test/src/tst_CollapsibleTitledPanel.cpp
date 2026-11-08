@@ -31,6 +31,7 @@
 
 #include "ui/ClickableTitleBar.h"
 #include "ui/CollapsibleTitledPanel.h"
+#include "ui/PanelLayout.h"
 #include "ui/QPathUtils.h"
 #include "ui/SystemPaths.h"
 #include "ui/Theme.h"
@@ -95,6 +96,36 @@ TEST_CASE("CollapsibleTitledPanel")
     CHECK(panel.expanded());
   }
 
+  SECTION("title actions do not toggle the section")
+  {
+    auto* action = new QToolButton{};
+    action->setText("Action");
+    panel.addTitleWidget(action);
+    auto clicks = 0;
+    QObject::connect(action, &QToolButton::clicked, [&] { ++clicks; });
+    QApplication::processEvents();
+    QTest::mouseClick(action, Qt::LeftButton);
+    CHECK(clicks == 1);
+    CHECK(panel.expanded());
+    action->setEnabled(false);
+    QTest::mouseClick(action, Qt::LeftButton);
+    CHECK(clicks == 1);
+    CHECK(panel.expanded());
+  }
+
+  SECTION("presentation updates existing standard content")
+  {
+    auto* content = panel.createContentLayout();
+    content->addWidget(new QLineEdit{});
+    CHECK(panel.createContentLayout() == content);
+    CHECK(content->contentsMargins().isNull());
+    panel.setPresentation(CollapsibleTitledPanel::Presentation::Card);
+    CHECK(content->contentsMargins().left() > 0);
+    CHECK(panel.property("tbPanelStyle").toString() == "card");
+    panel.setPresentation(CollapsibleTitledPanel::Presentation::Section);
+    CHECK(content->contentsMargins().isNull());
+  }
+
   SECTION("restores the collapsed state")
   {
     panel.collapse();
@@ -108,6 +139,8 @@ TEST_CASE("CollapsibleTitledPanel")
 
   SECTION("expanded content can still grow with its container")
   {
+    panel.setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
+    QApplication::processEvents();
     const auto initialHeight = panel.getPanel()->height();
     panel.resize(360, 480);
     REQUIRE(
@@ -139,23 +172,19 @@ TEST_CASE("CollapsibleTitledPanel")
       REQUIRE(expandThemeStyleSheet(styleSheet, tokens));
       qApp->setStyleSheet(styleSheet);
 
-      auto scroll = QScrollArea{};
-      scroll.setWidgetResizable(true);
-      auto* content = new QWidget{};
-      auto* sectionsLayout = new QVBoxLayout{content};
+      auto scroll = PanelList{};
       auto sections = std::vector<CollapsibleTitledPanel*>{};
       for (auto i = 0; i < 3; ++i)
       {
         auto* section = new CollapsibleTitledPanel{"Terrain properties"};
-        auto* form = new QFormLayout{section->getPanel()};
-        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        section->setPresentation(CollapsibleTitledPanel::Presentation::Card);
+        auto* form = createPanelForm();
+        section->createContentLayout()->addLayout(form);
         for (auto row = 0; row < 5; ++row)
           form->addRow("Minimum terrain face width", new QLineEdit{"16"});
-        sectionsLayout->addWidget(section);
+        scroll.addWidget(section);
         sections.push_back(section);
       }
-      sectionsLayout->addStretch();
-      scroll.setWidget(content);
       scroll.show();
       auto* enabledTitle =
         sections.front()->findChild<QLabel*>("ClickableTitleBar_Title");
@@ -186,7 +215,9 @@ TEST_CASE("CollapsibleTitledPanel")
           [&] {
             return std::ranges::all_of(sections, [](auto* section) {
               const auto* bar = section->template findChild<ClickableTitleBar*>();
-              return section->height() == bar->height()
+              return section->height()
+                       == bar->height() + section->contentsMargins().top()
+                            + section->contentsMargins().bottom()
                      && bar->height()
                           == bar->sizeHint().expandedTo(bar->minimumSize()).height();
             });
@@ -195,7 +226,10 @@ TEST_CASE("CollapsibleTitledPanel")
         for (auto* section : sections)
         {
           const auto* bar = section->findChild<ClickableTitleBar*>();
-          CHECK(section->height() == bar->height());
+          CHECK(
+            section->height()
+            == bar->height() + section->contentsMargins().top()
+                 + section->contentsMargins().bottom());
           CHECK(bar->height() == bar->sizeHint().expandedTo(bar->minimumSize()).height());
         }
         REQUIRE(compact);

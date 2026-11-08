@@ -10,7 +10,6 @@
 
 class QLabel;
 class QLineEdit;
-class QScrollArea;
 class QVBoxLayout;
 class QToolButton;
 class QCompleter;
@@ -30,6 +29,7 @@ class SmartSkyboxEditor;
 class SmartWadEditor;
 class CollapsibleTitledPanel;
 class TransformCard;
+class PanelList;
 
 class OutlinerEntityPropertyEditor : public QWidget
 {
@@ -40,9 +40,8 @@ private:
 
   TitledPanel* m_propertiesPanel = nullptr;
   QLabel* m_selectionSummary = nullptr;
-  QScrollArea* m_scrollArea = nullptr;
+  PanelList* m_scrollArea = nullptr;
   QWidget* m_scrollContents = nullptr;
-  QVBoxLayout* m_scrollLayout = nullptr;
 
   QToolButton* m_smartEditButton = nullptr;
   QCompleter* m_addKeyCompleter = nullptr;
