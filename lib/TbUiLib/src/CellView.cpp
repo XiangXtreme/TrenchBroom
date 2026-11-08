@@ -582,6 +582,8 @@ void CellView::startDrag(const QMouseEvent* event)
       doLeftClick(m_layout, x, y);
 
       const auto dropData = dndData(*cell);
+      if (dropData.isEmpty())
+        return;
 
       auto* mimeData = new QMimeData{};
       mimeData->setText(dropData);

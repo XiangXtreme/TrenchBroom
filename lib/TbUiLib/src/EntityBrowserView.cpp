@@ -40,9 +40,11 @@
 #include "mdl/EntityDefinitionUtils.h"
 #include "mdl/EntityModel.h"
 #include "mdl/EntityModelManager.h"
+#include "mdl/EntityProperties.h"
 #include "mdl/Map.h"
 #include "prefs/Preferences.h"
 #include "render/Transformation.h"
+#include "ui/InputEvent.h"
 #include "ui/MapDocument.h"
 #include "ui/Theme.h"
 
@@ -57,38 +59,12 @@
 
 #include <algorithm>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace tb::ui
 {
-namespace
-{
-constexpr auto EntityBrowserOuterMargin = 5.0f;
-constexpr auto EntityBrowserCellMargin = 5.0f;
-constexpr auto PreferredEntityCellWidth = 93.0f;
-constexpr auto MinimumEntityCellWidth = 82.0f;
-
-float responsiveEntityCellWidth(const float layoutWidth)
-{
-  const auto availableWidth =
-    std::max(1.0f, layoutWidth - 2.0f * EntityBrowserOuterMargin);
-  const auto preferredColumnCount = std::max(
-    1,
-    int(std::round(
-      (availableWidth + EntityBrowserCellMargin)
-      / (PreferredEntityCellWidth + EntityBrowserCellMargin))));
-  const auto maximumColumnCount = std::max(
-    1,
-    int(std::floor(
-      (availableWidth + EntityBrowserCellMargin)
-      / (MinimumEntityCellWidth + EntityBrowserCellMargin))));
-  const auto columnCount = std::min(preferredColumnCount, maximumColumnCount);
-
-  return (availableWidth - float(columnCount - 1) * EntityBrowserCellMargin)
-         / float(columnCount);
-}
-} // namespace
-
 EntityBrowserView::EntityBrowserView(
   AppController& appController, QScrollBar* scrollBar, MapDocument& document)
   : CellView{appController, scrollBar}
@@ -119,8 +95,7 @@ void EntityBrowserView::setSortOrder(const mdl::EntityDefinitionSortOrder sortOr
   if (sortOrder != m_sortOrder)
   {
     m_sortOrder = sortOrder;
-    invalidate();
-    update();
+    refreshDefinitions();
   }
 }
 
@@ -129,8 +104,7 @@ void EntityBrowserView::setGroup(const bool group)
   if (group != m_group)
   {
     m_group = group;
-    invalidate();
-    update();
+    refreshDefinitions();
   }
 }
 
@@ -139,8 +113,7 @@ void EntityBrowserView::setHideUnused(const bool hideUnused)
   if (hideUnused != m_hideUnused)
   {
     m_hideUnused = hideUnused;
-    invalidate();
-    update();
+    refreshDefinitions();
   }
 }
 
@@ -149,35 +122,169 @@ void EntityBrowserView::setFilterText(const std::string& filterText)
   if (filterText != m_filterText)
   {
     m_filterText = filterText;
-    invalidate();
-    update();
+    refreshDefinitions();
   }
 }
 
-void EntityBrowserView::setDefinitionName(const std::string& name)
+void EntityBrowserView::setFolder(const EntityBrowserFolder folder)
 {
-  if (m_definitionName == name)
+  if (m_folder == folder)
     return;
-  m_definitionName = name;
-  invalidate();
-  update();
+  m_folder = folder;
+  refreshDefinitions();
+}
+EntityBrowserFolder EntityBrowserView::folder() const
+{
+  return m_folder;
+}
+const std::string& EntityBrowserView::filterText() const
+{
+  return m_filterText;
+}
+mdl::EntityDefinitionSortOrder EntityBrowserView::sortOrder() const
+{
+  return m_sortOrder;
+}
+bool EntityBrowserView::group() const
+{
+  return m_group;
+}
+bool EntityBrowserView::hideUnused() const
+{
+  return m_hideUnused;
+}
+void EntityBrowserView::setMapActionsEnabled(const bool enabled)
+{
+  m_mapActionsEnabled = enabled;
+}
+const std::string& EntityBrowserView::selectedDefinitionName() const
+{
+  return m_selectedDefinitionName;
 }
 
-void EntityBrowserView::resizeEvent(QResizeEvent* event)
+std::vector<const mdl::EntityDefinition*> EntityBrowserView::filteredDefinitions() const
 {
+  auto result = std::vector<const mdl::EntityDefinition*>{};
+  const auto words = kdl::str_split(m_filterText, " ");
+  for (const auto& definition : m_document.map().entityDefinitionManager().definitions())
+  {
+    const auto point = definition.pointEntityDefinition.has_value();
+    if (
+      definition.name == mdl::EntityPropertyValues::WorldspawnClassname
+      || (m_folder == EntityBrowserFolder::Point && !point)
+      || (m_folder == EntityBrowserFolder::Brush && point)
+      || (m_hideUnused && definition.usageCount() == 0))
+      continue;
+    const auto text = definition.name + " " + definition.description;
+    if (std::ranges::all_of(
+          words, [&](const auto& word) { return kdl::ci::str_contains(text, word); }))
+      result.push_back(&definition);
+  }
+  std::ranges::sort(result, [this](const auto* lhs, const auto* rhs) {
+    if (
+      m_sortOrder == mdl::EntityDefinitionSortOrder::Usage
+      && lhs->usageCount() != rhs->usageCount())
+      return lhs->usageCount() > rhs->usageCount();
+    return kdl::ci::string_less_natural{}(lhs->name, rhs->name);
+  });
+  return result;
+}
+
+void EntityBrowserView::refreshDefinitions()
+{
+  const auto definitions = filteredDefinitions();
+  if (
+    !m_selectedDefinitionName.empty()
+    && !std::ranges::any_of(definitions, [this](const auto* definition) {
+         return definition->name == m_selectedDefinitionName;
+       }))
+    m_selectedDefinitionName.clear();
   invalidate();
-  CellView::resizeEvent(event);
+  update();
+  emit definitionsChanged();
+}
+
+bool EntityBrowserView::selectDefinition(const std::string& name)
+{
+  const auto definitions = filteredDefinitions();
+  if (!std::ranges::any_of(
+        definitions, [&](const auto* definition) { return definition->name == name; }))
+    return false;
+  m_selectedDefinitionName = name;
+  update();
+  emit definitionSelected();
+  return true;
+}
+
+QString EntityBrowserView::dragPayload(const std::string& name) const
+{
+  const auto* definition = m_document.map().entityDefinitionManager().definition(name);
+  return m_mapActionsEnabled && definition && definition->pointEntityDefinition
+           ? "entity:" + QString::fromStdString(name)
+           : QString{};
+}
+
+void EntityBrowserView::doLeftClick(Layout& layout, const float x, const float y)
+{
+  if (const auto* cell = layout.cellAt(x, y))
+    selectDefinition(cellData(*cell).entityDefinition.name);
+}
+void EntityBrowserView::doDoubleClick(Layout& layout, const float x, const float y)
+{
+  if (const auto* cell = layout.cellAt(x, y))
+    if (cellData(*cell).entityDefinition.pointEntityDefinition)
+    {
+      selectDefinition(cellData(*cell).entityDefinition.name);
+      emit definitionActivated();
+    }
+}
+bool EntityBrowserView::isCellSelected(const Cell& cell) const
+{
+  return cellData(cell).entityDefinition.name == m_selectedDefinitionName;
+}
+void EntityBrowserView::processEvent(const KeyEvent& event)
+{
+  if (event.type == KeyEvent::Type::Down && event.modifiers == Qt::NoModifier)
+  {
+    const auto definitions = filteredDefinitions();
+    if (event.key == Qt::Key_Return || event.key == Qt::Key_Enter)
+    {
+      if (!m_selectedDefinitionName.empty())
+        emit definitionActivated();
+      return;
+    }
+    if (event.key == Qt::Key_Left || event.key == Qt::Key_Right)
+    {
+      const auto selected =
+        std::ranges::find_if(definitions, [this](const auto* definition) {
+          return definition->name == m_selectedDefinitionName;
+        });
+      const auto next = selected == definitions.end()
+                          ? std::ptrdiff_t{0}
+                          : std::distance(definitions.begin(), selected)
+                              + (event.key == Qt::Key_Right ? 1 : -1);
+      if (next >= 0 && next < std::ptrdiff_t(definitions.size()))
+      {
+        selectDefinition(definitions[size_t(next)]->name);
+        scrollToCell([this](const auto& cell) { return isCellSelected(cell); });
+      }
+      return;
+    }
+  }
+  CellView::processEvent(event);
 }
 
 void EntityBrowserView::doInitLayout(Layout& layout)
 {
-  layout.setOuterMargin(EntityBrowserOuterMargin);
-  layout.setGroupMargin(5.0f);
-  layout.setRowMargin(5.0f);
-  layout.setCellMargin(EntityBrowserCellMargin);
-  const auto cellWidth = responsiveEntityCellWidth(layout.width());
-  layout.setCellWidth(cellWidth, cellWidth);
-  layout.setCellHeight(64.0f, 128.0f);
+  const auto cellSize =
+    93.0f * std::clamp(pref(Preferences::AssetBrowserIconSize), 0.5f, 3.0f);
+  layout.setOuterMargin(10.0f);
+  layout.setGroupMargin(0.0f);
+  layout.setRowMargin(10.0f);
+  layout.setCellMargin(10.0f);
+  layout.setTitleMargin(4.0f);
+  layout.setCellWidth(cellSize, cellSize);
+  layout.setCellHeight(cellSize, cellSize);
   layout.setMaxUpScale(1.5f);
 }
 
@@ -190,46 +297,32 @@ void EntityBrowserView::doReloadLayout(Layout& layout)
   const auto& entityDefinitionManager = m_document.map().entityDefinitionManager();
   const auto font = gl::FontDescriptor{fontPath, static_cast<size_t>(fontSize)};
 
-  if (!m_definitionName.empty())
-  {
-    const auto* definition = entityDefinitionManager.definition(m_definitionName);
-    if (definition && definition->pointEntityDefinition)
-      addEntityToLayout(layout, *definition, font);
-    return;
-  }
-
+  const auto definitions = filteredDefinitions();
   if (m_group)
   {
+    auto grouped =
+      std::unordered_map<std::string_view, std::vector<const mdl::EntityDefinition*>>{};
+    for (const auto* definition : definitions)
+      grouped[mdl::getGroupName(*definition)].push_back(definition);
     for (const auto& group : entityDefinitionManager.groups())
-    {
-      if (const auto definitions = filterAndSort(
-            group.definitions, mdl::EntityDefinitionType::Point, m_sortOrder);
-          !definitions.empty())
+      if (const auto it = grouped.find(group.name); it != grouped.end())
       {
         layout.addGroup(displayName(group), static_cast<float>(fontSize) + 2.0f);
-
-        addEntitiesToLayout(layout, definitions, font);
+        addEntitiesToLayout(layout, it->second, font);
       }
-    }
   }
   else
-  {
-    const auto& definitions =
-      entityDefinitionManager.definitions(mdl::EntityDefinitionType::Point, m_sortOrder);
     addEntitiesToLayout(layout, definitions, font);
-  }
 }
 
 bool EntityBrowserView::dndEnabled()
 {
-  return true;
+  return m_mapActionsEnabled;
 }
 
 QString EntityBrowserView::dndData(const Cell& cell)
 {
-  static const auto prefix = QString{"entity:"};
-  const auto name = QString::fromStdString(cellData(cell).entityDefinition.name);
-  return prefix + name;
+  return dragPayload(cellData(cell).entityDefinition.name);
 }
 
 void EntityBrowserView::resourcesWereProcessed(const std::vector<gl::ResourceId>&)
@@ -248,19 +341,6 @@ void EntityBrowserView::addEntitiesToLayout(
   }
 }
 
-namespace
-{
-bool matchesFilterText(
-  const mdl::EntityDefinition& definition, const std::string& filterText)
-{
-  return filterText.empty()
-         || std::ranges::all_of(
-           kdl::str_split(filterText, " "), [&](const auto& pattern) {
-             return kdl::ci::str_contains(definition.name, pattern);
-           });
-}
-} // namespace
-
 void EntityBrowserView::addEntityToLayout(
   Layout& layout, const mdl::EntityDefinition& definition, const gl::FontDescriptor& font)
 {
@@ -268,75 +348,79 @@ void EntityBrowserView::addEntityToLayout(
   const auto name =
     m_group ? std::string{mdl::getShortName(definition)} : definition.name;
 
-  if (
-    (!m_hideUnused || definition.usageCount() > 0)
-    && matchesFilterText(definition, m_filterText))
+  const auto* pointEntityDefinition =
+    definition.pointEntityDefinition ? &*definition.pointEntityDefinition : nullptr;
+
+  const auto maxCellWidth = layout.maxCellWidth();
+  const auto actualFont = fontManager().selectFontSize(font, name, maxCellWidth, 5);
+  const auto actualSize = fontManager().font(actualFont).measure(name);
+  const auto spec =
+    pointEntityDefinition
+      ? mdl::safeGetModelSpecification(
+          map.logger(),
+          definition.name,
+          [&]() {
+            return pointEntityDefinition->modelDefinition.defaultModelSpecification();
+          })
+      : mdl::ModelSpecification{};
+
+  const auto modelScale = pointEntityDefinition
+                            ? vm::vec3f{mdl::safeGetModelScale(
+                                pointEntityDefinition->modelDefinition,
+                                el::NullVariableStore{},
+                                m_defaultScaleModelExpression)}
+                            : vm::vec3f::fill(1.0f);
+
+  auto* modelRenderer = static_cast<gl::MaterialRenderer*>(nullptr);
+  auto bounds = vm::bbox3f{};
+  auto transform = vm::mat4x4f{};
+  auto modelOrientation = mdl::Orientation::Oriented;
+
+  const auto& entityModelManager = map.entityModelManager();
+  const auto* model =
+    pointEntityDefinition ? entityModelManager.model(spec.path) : nullptr;
+  const auto* modelData = model ? model->data() : nullptr;
+  const auto* modelFrame = modelData ? modelData->frame(spec.frameIndex) : nullptr;
+  if (modelFrame)
   {
-    contract_assert(definition.pointEntityDefinition != std::nullopt);
-    const auto& pointEntityDefinition = *definition.pointEntityDefinition;
+    modelRenderer = entityModelManager.renderer(spec);
+    modelOrientation = modelData->orientation();
 
-    const auto maxCellWidth = layout.maxCellWidth();
-    const auto actualFont = fontManager().selectFontSize(font, name, maxCellWidth, 5);
-    const auto actualSize = fontManager().font(actualFont).measure(name);
-    const auto spec =
-      mdl::safeGetModelSpecification(map.logger(), definition.name, [&]() {
-        return pointEntityDefinition.modelDefinition.defaultModelSpecification();
-      });
+    bounds = modelFrame->bounds();
 
-    const auto modelScale = vm::vec3f{mdl::safeGetModelScale(
-      pointEntityDefinition.modelDefinition,
-      el::NullVariableStore{},
-      m_defaultScaleModelExpression)};
-
-    auto* modelRenderer = static_cast<gl::MaterialRenderer*>(nullptr);
-    auto bounds = vm::bbox3f{};
-    auto transform = vm::mat4x4f{};
-    auto modelOrientation = mdl::Orientation::Oriented;
-
-    const auto& entityModelManager = map.entityModelManager();
-    const auto* model = entityModelManager.model(spec.path);
-    const auto* modelData = model ? model->data() : nullptr;
-    const auto* modelFrame = modelData ? modelData->frame(spec.frameIndex) : nullptr;
-    if (modelFrame)
-    {
-      modelRenderer = entityModelManager.renderer(spec);
-      modelOrientation = modelData->orientation();
-
-      bounds = modelFrame->bounds();
-
-      const auto scalingMatrix = vm::scaling_matrix(modelScale);
-      const auto center = bounds.center();
-      const auto scaledCenter = scalingMatrix * center;
-      transform = vm::translation_matrix(scaledCenter) * vm::rotation_matrix(m_rotation)
-                  * scalingMatrix * vm::translation_matrix(-center);
-    }
-    else
-    {
-      bounds = vm::bbox3f{pointEntityDefinition.bounds};
-
-      const auto center = bounds.center();
-      transform = vm::translation_matrix(-center) * vm::rotation_matrix(m_rotation)
-                  * vm::translation_matrix(center);
-    }
-
-    const auto rotatedBounds = bounds.transform(transform);
-    const auto rotatedBoundsSize = rotatedBounds.size();
-
-    layout.addItem(
-      EntityCellData{
-        definition,
-        modelRenderer,
-        modelOrientation,
-        actualFont,
-        bounds,
-        transform,
-        modelScale},
-      name,
-      rotatedBoundsSize.y(),
-      rotatedBoundsSize.z(),
-      actualSize.x(),
-      static_cast<float>(font.size()) + 2.0f);
+    const auto scalingMatrix = vm::scaling_matrix(modelScale);
+    const auto center = bounds.center();
+    const auto scaledCenter = scalingMatrix * center;
+    transform = vm::translation_matrix(scaledCenter) * vm::rotation_matrix(m_rotation)
+                * scalingMatrix * vm::translation_matrix(-center);
   }
+  else
+  {
+    bounds = pointEntityDefinition ? vm::bbox3f{pointEntityDefinition->bounds}
+                                   : vm::bbox3f{16.0f};
+
+    const auto center = bounds.center();
+    transform = vm::translation_matrix(-center) * vm::rotation_matrix(m_rotation)
+                * vm::translation_matrix(center);
+  }
+
+  const auto rotatedBounds = bounds.transform(transform);
+  const auto rotatedBoundsSize = rotatedBounds.size();
+
+  layout.addItem(
+    EntityCellData{
+      definition,
+      modelRenderer,
+      modelOrientation,
+      actualFont,
+      bounds,
+      transform,
+      modelScale},
+    name,
+    rotatedBoundsSize.y(),
+    rotatedBoundsSize.z(),
+    actualSize.x(),
+    static_cast<float>(font.size()) + 2.0f);
 }
 
 void EntityBrowserView::doClear() {}
@@ -392,14 +476,13 @@ void EntityBrowserView::renderBounds(
           for (const auto& cell : row.cells())
           {
             const auto& definition = cellData(cell).entityDefinition;
-            const auto& pointEntityDefinition = *definition.pointEntityDefinition;
             auto* modelRenderer = cellData(cell).modelRenderer;
 
             if (modelRenderer == nullptr)
             {
               const auto itemTrans = itemTransformation(cell, y, height);
               const auto& color = definition.color;
-              vm::bbox3f{pointEntityDefinition.bounds}.for_each_edge(
+              cellData(cell).bounds.for_each_edge(
                 [&](const vm::vec3f& v1, const vm::vec3f& v2) {
                   vertices.emplace_back(itemTrans * v1, color.to<RgbaF>().toVec());
                   vertices.emplace_back(itemTrans * v2, color.to<RgbaF>().toVec());
@@ -497,7 +580,8 @@ vm::mat4x4f EntityBrowserView::itemTransformation(
 
 QString EntityBrowserView::tooltip(const Cell& cell)
 {
-  return QString::fromStdString(cellData(cell).entityDefinition.name);
+  const auto& definition = cellData(cell).entityDefinition;
+  return QString::fromStdString(definition.name + "\n" + definition.description);
 }
 
 const EntityCellData& EntityBrowserView::cellData(const Cell& cell) const

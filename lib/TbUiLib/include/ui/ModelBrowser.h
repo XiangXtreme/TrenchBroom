@@ -26,6 +26,7 @@
 #include "project/LibrarySync.h"
 #include "ui/AssetBrowserModel.h"
 #include "ui/AssetInspection.h"
+#include "ui/EntityBrowser.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/ProjectResourceAudit.h"
 
@@ -55,6 +56,7 @@ class QTabBar;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QTimer;
+class QVBoxLayout;
 
 namespace tb::ui
 {
@@ -74,7 +76,15 @@ private:
   AppController& m_appController;
   EntityBrowser* m_entityBrowser = nullptr;
   QWidget* m_assetSurface = nullptr;
-  QWidget* m_fileControls = nullptr;
+  QVBoxLayout* m_contentLayout = nullptr;
+  QFormLayout* m_viewLayout = nullptr;
+  QComboBox* m_entitySort = nullptr;
+  QCheckBox* m_entityGroup = nullptr;
+  QCheckBox* m_entityUsed = nullptr;
+  QToolButton* m_entitySettings = nullptr;
+  std::optional<EntityBrowserFolder> m_entityFolder;
+  QString m_entitySearch;
+  int m_entityScroll = 0;
   std::shared_ptr<ProjectSession> m_project;
 
   QStackedWidget* m_pathStack = nullptr;
@@ -145,7 +155,13 @@ private:
   // Folder navigation history behind the back and forward buttons. The breadcrumb and
   // the folder tree replace the old ".." card, so returning to a folder needs its own
   // affordance.
-  std::vector<std::filesystem::path> m_folderHistory;
+  struct BrowserLocation
+  {
+    std::filesystem::path folder;
+    std::optional<EntityBrowserFolder> entities;
+    bool operator==(const BrowserLocation&) const = default;
+  };
+  std::vector<BrowserLocation> m_folderHistory;
   std::ptrdiff_t m_folderHistoryIndex = -1;
   bool m_navigatingHistory = false;
   std::vector<BrowserAsset> m_assets;
@@ -195,7 +211,7 @@ protected:
 
 private:
   void showEvent(QShowEvent* event) override;
-  void setEntityMode(bool entities);
+  void setEntityFolder(std::optional<EntityBrowserFolder> folder);
 
   void previewAsset(AppController& appController, const QString& path);
   void applyAssetToMap(BrowserAsset asset);

@@ -61,7 +61,7 @@ Mod 信息存储在名为 "_tb_mod" 的 worldspawn 属性中。
 
 ### 加载实体定义 {#entity_definition_setup}
 
-![实体定义编辑器](images/EntityDefinitionEditor.png) 实体定义是包含[实体及其属性含义](#entity_definitions)信息的文本文件。根据你制作地图所针对的游戏和 Mod，你可能希望在编辑器中加载不同的实体定义。要在 TrenchBroom 中加载实体定义文件，请打开底部内容浏览器，在内容类型中选择**实体**，然后点击**定义文件…**。实体定义浏览器在水平方向上分为两个区域。上方区域包含 _内置_ 实体定义文件列表。这些是 TrenchBroom 针对你当前正在处理的游戏所自带的实体定义文件。你可以通过点击来选择其中一个内置文件。TrenchBroom 将加载该文件并相应地更新其资源。或者，你可能希望加载自己的外部实体定义文件。为此，请点击实体定义浏览器下方区域中标记为“Browse”的按钮，并选择要加载的文件。目前，TrenchBroom 支持 Radiant DEF 文件和 ENT 文件，以及 [Valve FGD][FGD File Format] 文件。要从当前加载的外部文件重新加载实体定义（以及引用的模型），可以点击底部的“Reload”按钮或使用 #menu(Menu/File/Reload Entity Definitions)。如果你正在为你正在开发的 Mod 编辑实体定义文件，这会非常有用。
+![实体定义编辑器](images/EntityDefinitionEditor.png) 实体定义是包含[实体及其属性含义](#entity_definitions)信息的文本文件。根据你制作地图所针对的游戏和 Mod，你可能希望在编辑器中加载不同的实体定义。要在 TrenchBroom 中加载实体定义文件，请打开底部内容浏览器，在来源树中选择**实体**文件夹，然后点击**定义文件…**。实体定义浏览器在水平方向上分为两个区域。上方区域包含 _内置_ 实体定义文件列表。这些是 TrenchBroom 针对你当前正在处理的游戏所自带的实体定义文件。你可以通过点击来选择其中一个内置文件。TrenchBroom 将加载该文件并相应地更新其资源。或者，你可能希望加载自己的外部实体定义文件。为此，请点击实体定义浏览器下方区域中标记为“Browse”的按钮，并选择要加载的文件。目前，TrenchBroom 支持 Radiant DEF 文件和 ENT 文件，以及 [Valve FGD][FGD File Format] 文件。要从当前加载的外部文件重新加载实体定义（以及引用的模型），可以点击底部的“Reload”按钮或使用 #menu(Menu/File/Reload Entity Definitions)。如果你正在为你正在开发的 Mod 编辑实体定义文件，这会非常有用。
 
 关闭实体定义窗口即可继续浏览。在工程中，这些设置作用于当前活动地图。
 

@@ -81,6 +81,7 @@
 #include "ui/AssetLibraryWindow.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/CreateEntityTool.h"
+#include "ui/EntityBrowserView.h"
 #include "ui/InfoPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
@@ -499,25 +500,25 @@ TEST_CASE("ProjectWindow")
     QApplication::processEvents();
     CHECK(browser->isShowingEntities());
     CHECK(window.findChild<QWidget*>("ProjectAssetDetailsSurface")->isHidden());
-    auto* contentType = browser->findChild<QComboBox*>("ModelBrowser_Type");
-    REQUIRE(contentType);
-    contentType->setCurrentIndex(contentType->findData(-1));
+    auto* folders = browser->findChild<QTreeWidget*>("ModelBrowser_FolderTree");
+    REQUIRE(folders);
+    folders->setCurrentItem(folders->topLevelItem(0));
     CHECK_FALSE(browser->isShowingEntities());
     CHECK(assetSearch->text() == "original asset search");
     CHECK_FALSE(window.findChild<QWidget*>("ProjectAssetDetailsSurface")->isHidden());
     browser->showEntityBrowser();
-    auto* tree = browser->findChild<QTreeWidget*>("EntityBrowser_Definitions");
-    REQUIRE(tree);
-    REQUIRE(tree->topLevelItemCount() == 1);
-    CHECK(tree->topLevelItem(0)->text(0) == "alpha_point");
+    auto* grid = browser->findChild<EntityBrowserView*>("EntityBrowser_Grid");
+    REQUIRE(grid);
+    REQUIRE(grid->filteredDefinitions().size() == 1);
+    CHECK(grid->filteredDefinitions().front()->name == "alpha_point");
     const auto alphaSelection = alphaDocument->map().selection().nodes;
     tabs->setCurrentIndex(1);
     QApplication::processEvents();
-    tree = browser->findChild<QTreeWidget*>("EntityBrowser_Definitions");
-    REQUIRE(tree);
-    REQUIRE(tree->topLevelItemCount() == 1);
-    CHECK(tree->topLevelItem(0)->text(0) == "beta_point");
-    tree->setCurrentItem(tree->topLevelItem(0));
+    grid = browser->findChild<EntityBrowserView*>("EntityBrowser_Grid");
+    REQUIRE(grid);
+    REQUIRE(grid->filteredDefinitions().size() == 1);
+    CHECK(grid->filteredDefinitions().front()->name == "beta_point");
+    REQUIRE(grid->selectDefinition("beta_point"));
     auto* create = browser->findChild<QPushButton*>("EntityBrowser_Create");
     REQUIRE(create);
     REQUIRE(create->isEnabled());

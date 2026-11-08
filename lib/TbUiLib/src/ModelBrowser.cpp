@@ -54,6 +54,7 @@
 #include "fs/PathMatcher.h"
 #include "fs/TraversalMode.h"
 #include "mdl/BrushNode.h"
+#include "mdl/EntityDefinitionUtils.h"
 #include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
 #include "mdl/GameConfig.h"
@@ -83,6 +84,7 @@
 #include "ui/BitmapButton.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/EntityBrowser.h"
+#include "ui/EntityBrowserView.h"
 #include "ui/ImageUtils.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView3D.h"
@@ -118,7 +120,7 @@ const auto AssetRootPath = std::filesystem::path{};
 const auto DocumentLoadAssetRefreshDelay = 1500;
 constexpr auto PrefabThumbnailMaxSize = 512;
 constexpr auto SkyboxTypeFilter = -2;
-constexpr auto EntityTypeFilter = -3;
+constexpr auto EntityFolderRole = Qt::UserRole + 1;
 
 BrowserCellType catalogCellType(
   const project::AssetType type, const std::filesystem::path& path)
@@ -430,7 +432,6 @@ void ModelBrowser::createGui(AppController& appController)
   m_typeCombo->addItem(tr("Sounds"), int(BrowserCellType::Sound));
   m_typeCombo->addItem(tr("Skyboxes"), SkyboxTypeFilter);
   m_typeCombo->addItem(tr("Prefabs"), int(BrowserCellType::Prefab));
-  m_typeCombo->addItem(tr("Entities"), EntityTypeFilter);
   m_typeCombo->setAccessibleName(tr("Content type"));
 
   m_backButton = new QToolButton{};
@@ -503,6 +504,17 @@ void ModelBrowser::createGui(AppController& appController)
   pathRowLayout->addWidget(m_searchScopeCombo);
   pathRowLayout->addWidget(m_filterButton);
   pathRowLayout->addWidget(m_viewButton);
+  m_entitySettings = new QToolButton{};
+  m_entitySettings->setObjectName("EntityBrowser_Settings");
+  m_entitySettings->setText(tr("Definitions…"));
+  m_entitySettings->setToolTip(
+    tr("Configure entity definition files for the current map"));
+  m_entitySettings->hide();
+  pathRowLayout->addWidget(m_entitySettings);
+  connect(m_entitySettings, &QToolButton::clicked, this, [this] {
+    if (m_entityBrowser)
+      m_entityBrowser->showSettings();
+  });
   m_toolbarLayout = pathRowLayout;
 
   auto* controls = new QWidget{};
@@ -690,6 +702,16 @@ void ModelBrowser::createGui(AppController& appController)
   {
     combo->setMinimumWidth(190);
   }
+  filterForm->addRow(tr("Type"), m_typeCombo);
+  m_entityUsed = new QCheckBox{tr("Used in map")};
+  m_entityUsed->setObjectName("ModelBrowser_EntityUsed");
+  filterForm->addRow(m_entityUsed);
+  m_entityUsed->hide();
+  connect(m_entityUsed, &QCheckBox::toggled, this, [this](const bool used) {
+    if (m_entityBrowser)
+      m_entityBrowser->view().setHideUnused(used);
+    updateFilterSummary();
+  });
   filterForm->addRow(tr("Sound"), m_soundCombo);
   filterForm->addRow(tr("Tag"), m_tagCombo);
   auto* metadataRow = new QWidget{};
@@ -713,6 +735,26 @@ void ModelBrowser::createGui(AppController& appController)
   viewForm->setSizeConstraint(QLayout::SetFixedSize);
   viewForm->addRow(tr("Thumbnail size"), m_iconSizeCombo);
   viewForm->addRow(QString{}, m_groupWadTextures);
+  m_entitySort = new QComboBox{};
+  m_entitySort->setObjectName("ModelBrowser_EntitySort");
+  m_entitySort->addItems({tr("Name"), tr("Usage")});
+  viewForm->addRow(tr("Sort"), m_entitySort);
+  m_entityGroup = new QCheckBox{tr("Group entities")};
+  m_entityGroup->setObjectName("ModelBrowser_EntityGroup");
+  viewForm->addRow(m_entityGroup);
+  m_viewLayout = viewForm;
+  viewForm->setRowVisible(m_entitySort, false);
+  viewForm->setRowVisible(m_entityGroup, false);
+  connect(m_entitySort, &QComboBox::currentIndexChanged, this, [this](const int index) {
+    if (m_entityBrowser)
+      m_entityBrowser->view().setSortOrder(
+        index == 0 ? mdl::EntityDefinitionSortOrder::Name
+                   : mdl::EntityDefinitionSortOrder::Usage);
+  });
+  connect(m_entityGroup, &QCheckBox::toggled, this, [this](const bool group) {
+    if (m_entityBrowser)
+      m_entityBrowser->view().setGroup(group);
+  });
   m_viewPopup->setLayout(viewForm);
 
   connect(m_filterButton, &QToolButton::toggled, this, [this](const bool shown) {
@@ -766,6 +808,7 @@ void ModelBrowser::createGui(AppController& appController)
   assetsLayout->setSpacing(0);
   assetsLayout->addWidget(resultBar);
   assetsLayout->addWidget(browser, 1);
+  m_contentLayout = assetsLayout;
 
   auto* splitter = new QSplitter{Qt::Horizontal};
   splitter->setObjectName("ModelBrowser_Splitter");
@@ -779,15 +822,8 @@ void ModelBrowser::createGui(AppController& appController)
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
-  m_assetSurface = splitter;
-  m_fileControls = controls;
-  auto* categories = new QHBoxLayout{};
-  categories->setContentsMargins(8, 3, 0, 3);
-  categories->setSpacing(6);
-  categories->addWidget(m_typeCombo);
-  categories->addWidget(controls, 1);
-  categories->addStretch();
-  layout->addLayout(categories);
+  m_assetSurface = browser;
+  layout->addWidget(controls);
   layout->addWidget(splitter, 1);
   setLayout(layout);
 
@@ -800,36 +836,81 @@ void ModelBrowser::showEntityBrowser()
 {
   if (m_selectionOnly)
     return;
-  m_typeCombo->setCurrentIndex(m_typeCombo->findData(EntityTypeFilter));
-  if (m_entityBrowser)
-    m_entityBrowser->focusSearch();
+  setEntityFolder(EntityBrowserFolder::All);
+  m_searchBox->setFocus(Qt::ShortcutFocusReason);
 }
 
 bool ModelBrowser::isShowingEntities() const
 {
-  return m_entityBrowser && !m_entityBrowser->isHidden();
+  return m_entityFolder.has_value();
 }
 
-void ModelBrowser::setEntityMode(const bool entities)
+void ModelBrowser::setEntityFolder(const std::optional<EntityBrowserFolder> folder)
 {
+  if (m_selectionOnly || m_entityFolder == folder)
+    return;
+  const auto wasEntities = isShowingEntities();
+  if (wasEntities != folder.has_value())
+    saveBrowsingState();
+  m_entityFolder = folder;
+  const auto entities = isShowingEntities();
   if (entities && !m_entityBrowser)
   {
     m_entityBrowser = new EntityBrowser{m_appController, *m_document, this};
     m_entityBrowser->setMapActionsEnabled(m_mapActionsEnabled);
-    layout()->addWidget(m_entityBrowser);
+    m_contentLayout->addWidget(m_entityBrowser, 1);
     connect(
       m_entityBrowser,
       &EntityBrowser::createEntityRequested,
       this,
       &ModelBrowser::createEntityRequested);
+    connect(
+      m_entityBrowser,
+      &EntityBrowser::contentsChanged,
+      this,
+      &ModelBrowser::refreshResultCount);
   }
+  if (entities)
+  {
+    auto& view = m_entityBrowser->view();
+    view.setFolder(*folder);
+    view.setSortOrder(
+      m_entitySort->currentIndex() == 0 ? mdl::EntityDefinitionSortOrder::Name
+                                        : mdl::EntityDefinitionSortOrder::Usage);
+    view.setGroup(m_entityGroup->isChecked());
+    view.setHideUnused(m_entityUsed->isChecked());
+    if (!wasEntities)
+      m_searchBox->setText(m_entitySearch);
+    view.setFilterText(m_searchBox->text().toStdString());
+  }
+  else if (wasEntities)
+    restoreBrowsingState();
   m_filterButton->setChecked(false);
   m_viewButton->setChecked(false);
   m_assetSurface->setVisible(!entities);
-  m_fileControls->setVisible(!entities);
   if (m_entityBrowser)
     m_entityBrowser->setVisible(entities);
-  // A hidden file view must not reserve the entity page's minimum size.
+  m_entitySettings->setVisible(entities);
+  m_entitySettings->setEnabled(m_mapActionsEnabled);
+  updateSourceControls();
+  m_searchScopeCombo->setVisible(!entities);
+  m_filterLayout->setRowVisible(m_typeCombo, !entities);
+  m_filterLayout->setRowVisible(m_entityUsed, entities);
+  m_viewLayout->setRowVisible(m_entitySort, entities);
+  m_viewLayout->setRowVisible(m_entityGroup, entities);
+  m_viewLayout->setRowVisible(m_groupWadTextures, !entities);
+  if (!entities)
+    applyTypeFilter();
+  else
+    rebuildFolderTree();
+  updateFolderEdit();
+  updateSearchPlaceholder();
+  refreshResultCount();
+  updateFilterVisibility();
+  updateFilterSummary();
+  recordFolderHistory();
+  if (entities && !wasEntities && m_entityBrowser->isVisible())
+    m_entityBrowser->view().setScrollPosition(m_entityScroll);
   emit entityModeChanged(entities);
 }
 
@@ -871,6 +952,7 @@ void ModelBrowser::previewAsset(AppController&, const QString& path)
 void ModelBrowser::setMapActionsEnabled(const bool enabled)
 {
   m_mapActionsEnabled = enabled;
+  m_entitySettings->setEnabled(enabled);
   if (m_entityBrowser)
     m_entityBrowser->setMapActionsEnabled(enabled);
   updateSourceControls();
@@ -1111,10 +1193,10 @@ void ModelBrowser::bindEvents(AppController& appController)
   connect(
     m_view, &ModelBrowserView::assetApplyRequested, this, &ModelBrowser::applyAssetToMap);
   connect(m_searchBox, &QLineEdit::textChanged, this, [this](const QString& text) {
-    if (m_view)
-    {
+    if (isShowingEntities())
+      m_entityBrowser->view().setFilterText(text.toStdString());
+    else if (m_view)
       m_view->setSearchText(text);
-    }
     refreshResultCount();
   });
 
@@ -1186,6 +1268,12 @@ void ModelBrowser::bindEvents(AppController& appController)
       {
         return;
       }
+      const auto entity = current->data(0, EntityFolderRole);
+      if (entity.isValid())
+      {
+        setEntityFolder(EntityBrowserFolder(entity.toInt()));
+        return;
+      }
       const auto rel = current->data(0, Qt::UserRole).toString();
       setCurrentFolderPath(pathFromQString(rel));
     });
@@ -1223,6 +1311,11 @@ void ModelBrowser::bindEvents(AppController& appController)
     });
 
   connect(m_reloadButton, &QToolButton::clicked, this, [&]() {
+    if (isShowingEntities())
+    {
+      m_entityBrowser->reload();
+      return;
+    }
     m_lastWriteTimes.clear();
     m_assetRefreshPending = false;
     if (m_sourceFilter != BrowserSourceFilter::GameFiles)
@@ -1240,9 +1333,6 @@ void ModelBrowser::bindEvents(AppController& appController)
     this,
     [&](const int index) {
       const auto value = m_typeCombo->itemData(index).toInt();
-      setEntityMode(value == EntityTypeFilter);
-      if (value == EntityTypeFilter)
-        return;
       if (value == SkyboxTypeFilter)
         setTypeFilter(BrowserCellType::Texture, true);
       else
@@ -1299,6 +1389,11 @@ void ModelBrowser::connectObservers()
           updateIconSizeCombo();
           m_view->invalidate();
           m_view->update();
+          if (m_entityBrowser)
+          {
+            m_entityBrowser->view().invalidate();
+            m_entityBrowser->view().update();
+          }
         }
       });
   connectMapObservers();
@@ -1442,6 +1537,27 @@ void ModelBrowser::rebuildBreadcrumbBar()
     m_breadcrumbLayout->addWidget(button, 0);
   };
 
+  if (isShowingEntities())
+  {
+    auto* root = new QToolButton{};
+    root->setText(tr("Entities"));
+    root->setAutoRaise(true);
+    root->setProperty("tbControlRole", "compact");
+    connect(root, &QToolButton::clicked, this, [this] {
+      setEntityFolder(EntityBrowserFolder::All);
+    });
+    m_breadcrumbLayout->addWidget(root);
+    if (*m_entityFolder != EntityBrowserFolder::All)
+    {
+      addSeparator();
+      m_breadcrumbLayout->addWidget(new QLabel{
+        *m_entityFolder == EntityBrowserFolder::Point ? tr("Point entities")
+                                                      : tr("Brush entities")});
+    }
+    m_breadcrumbLayout->addStretch(1);
+    return;
+  }
+
   // The root crumb names the listing the paths are relative to, so "sprites" reads as
   // assets/sprites instead of looking like a top-level folder.
   const auto rootTitle = m_folderPath.filename().empty()
@@ -1465,7 +1581,7 @@ void ModelBrowser::rebuildBreadcrumbBar()
 
 void ModelBrowser::showPathEditor()
 {
-  if (!m_pathStack || !m_folderEdit)
+  if (isShowingEntities() || !m_pathStack || !m_folderEdit)
   {
     return;
   }
@@ -1520,6 +1636,11 @@ void ModelBrowser::updateSearchPlaceholder()
   {
     return;
   }
+  if (isShowingEntities())
+  {
+    m_searchBox->setPlaceholderText(tr("Search entity types…"));
+    return;
+  }
   // The placeholder states the active scope, so the box never implies a wider or
   // narrower search than it performs.
   m_searchBox->setPlaceholderText(
@@ -1541,6 +1662,14 @@ void ModelBrowser::refreshResultCount()
     return;
   }
 
+  if (isShowingEntities())
+  {
+    m_resultCount->setToolTip({});
+    m_resultCount->setText(
+      tr("%1 entity types")
+        .arg(qulonglong(m_entityBrowser->view().filteredDefinitions().size())));
+    return;
+  }
   if (m_unusedButton->isChecked() && !m_projectReferenceError.isEmpty())
   {
     m_resultCount->setText(tr("Reference scan failed"));
@@ -1569,6 +1698,13 @@ void ModelBrowser::updateFilterVisibility()
     return;
   }
 
+  if (isShowingEntities())
+  {
+    m_filterLayout->setRowVisible(m_soundCombo, false);
+    m_filterLayout->setRowVisible(m_tagCombo, false);
+    m_filterLayout->setRowVisible(m_metadataFilterRow, false);
+    return;
+  }
   // A filter that cannot change the assets below the current folder only raises the
   // question of what it filters, so each one is kept for the types it can apply to.
   const auto currentFolderAbs =
@@ -1613,6 +1749,12 @@ void ModelBrowser::updateFilterSummary()
     return;
   }
 
+  if (isShowingEntities())
+  {
+    m_filterButton->setText(
+      m_entityUsed->isChecked() ? tr("Filters · %1").arg(1) : tr("Filters"));
+    return;
+  }
   auto active = 0;
   if (m_waveKind != inspection::WaveKind::All)
   {
@@ -1644,9 +1786,10 @@ void ModelBrowser::recordFolderHistory()
 
   // Navigating somewhere new drops the forward branch, like a browser history.
   m_folderHistory.resize(size_t(m_folderHistoryIndex + 1));
-  if (m_folderHistory.empty() || m_folderHistory.back() != m_currentFolderPath)
+  const auto location = BrowserLocation{m_currentFolderPath, m_entityFolder};
+  if (m_folderHistory.empty() || m_folderHistory.back() != location)
   {
-    m_folderHistory.push_back(m_currentFolderPath);
+    m_folderHistory.push_back(location);
     m_folderHistoryIndex = std::ptrdiff_t(m_folderHistory.size()) - 1;
   }
   updateHistoryButtons();
@@ -1674,7 +1817,11 @@ void ModelBrowser::navigateHistory(const int offset)
 
   m_folderHistoryIndex = target;
   m_navigatingHistory = true;
-  setCurrentFolderPath(m_folderHistory[size_t(target)]);
+  const auto location = m_folderHistory[size_t(target)];
+  if (location.entities)
+    setEntityFolder(location.entities);
+  else
+    setCurrentFolderPath(location.folder);
   m_navigatingHistory = false;
   updateHistoryButtons();
 }
@@ -1914,6 +2061,7 @@ void ModelBrowser::removePrefabFromBrowser(const std::filesystem::path& prefabPa
 
 void ModelBrowser::setFolderPath(std::filesystem::path folderPath)
 {
+  setEntityFolder(std::nullopt);
   folderPath = folderPath.lexically_normal();
   if (m_folderPath == folderPath)
   {
@@ -1932,6 +2080,14 @@ void ModelBrowser::setFolderPath(std::filesystem::path folderPath)
 
 void ModelBrowser::setCurrentFolderPath(std::filesystem::path currentFolderPath)
 {
+  const auto leavingEntities = isShowingEntities();
+  if (leavingEntities)
+  {
+    const auto navigating = m_navigatingHistory;
+    m_navigatingHistory = true;
+    setEntityFolder(std::nullopt);
+    m_navigatingHistory = navigating;
+  }
   currentFolderPath = currentFolderPath.lexically_normal();
   if (currentFolderPath == std::filesystem::path{"."})
   {
@@ -1940,6 +2096,8 @@ void ModelBrowser::setCurrentFolderPath(std::filesystem::path currentFolderPath)
 
   if (m_currentFolderPath == currentFolderPath)
   {
+    if (leavingEntities)
+      recordFolderHistory();
     return;
   }
 
@@ -2260,6 +2418,7 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanGameAssets()
 
 void ModelBrowser::setAssetSource(const BrowserSourceFilter source)
 {
+  setEntityFolder(std::nullopt);
   if (m_sourceFilter == source)
   {
     return;
@@ -2316,6 +2475,12 @@ int ModelBrowser::browsingStateKey() const
 
 void ModelBrowser::saveBrowsingState()
 {
+  if (isShowingEntities())
+  {
+    m_entitySearch = m_searchBox->text();
+    m_entityScroll = m_entityBrowser->findChild<QScrollBar*>()->value();
+    return;
+  }
   m_browsingStates[browsingStateKey()] = {
     m_currentFolderPath,
     m_searchBox->text(),
@@ -2574,6 +2739,7 @@ void ModelBrowser::refreshUsage()
 void ModelBrowser::updateSourceControls()
 {
   const auto projectMode = m_sourceFilter == BrowserSourceFilter::Project;
+  m_sourceTabs->setVisible(bool(m_project) && !isShowingEntities());
   m_unusedButton->setVisible(projectMode);
   m_unusedButton->setEnabled(projectMode);
   m_usedButton->setVisible(projectMode);
@@ -2594,7 +2760,7 @@ void ModelBrowser::updateSourceControls()
   if (m_savePrefabButton)
   {
     m_savePrefabButton->setVisible(
-      !m_selectionOnly
+      !isShowingEntities() && !m_selectionOnly
       && (!m_project || m_sourceFilter != BrowserSourceFilter::AssetLibrary));
   }
 }
@@ -2816,6 +2982,30 @@ void ModelBrowser::rebuildFolderTree()
   }
 
   m_folderTree->expandItem(rootItem);
+  if (!m_selectionOnly)
+  {
+    auto* entityRoot = new QTreeWidgetItem{m_folderTree, {tr("Entities")}};
+    entityRoot->setIcon(0, folderIcon);
+    entityRoot->setData(0, EntityFolderRole, int(EntityBrowserFolder::All));
+    QTreeWidgetItem* entitySelection = entityRoot;
+    for (const auto folder : {EntityBrowserFolder::Point, EntityBrowserFolder::Brush})
+    {
+      auto* item = new QTreeWidgetItem{
+        entityRoot,
+        {folder == EntityBrowserFolder::Point ? tr("Point entities")
+                                              : tr("Brush entities")}};
+      item->setData(0, EntityFolderRole, int(folder));
+      item->setIcon(0, folderIcon);
+      if (m_entityFolder == folder)
+        entitySelection = item;
+    }
+    entityRoot->setExpanded(true);
+    if (isShowingEntities())
+    {
+      m_folderTree->setCurrentItem(entitySelection);
+      return;
+    }
+  }
 
   if (auto it = m_folderTreeItems.find(m_currentFolderPath);
       it != m_folderTreeItems.end())

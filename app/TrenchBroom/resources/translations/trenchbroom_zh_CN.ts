@@ -2404,7 +2404,11 @@ Please create an issue report and upload these files.</source>
             <source>Entity Definitions</source>
             <translation>实体定义</translation>
         </message>
-        </context>
+        <message>
+            <source>Select an entity type. Drag a point entity into a map view to place it.</source>
+            <translation>选择实体类型；将点实体拖入地图视图即可定位放置。</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::EntityDefinitionCheckBoxList</name>
         <message>
@@ -4131,6 +4135,46 @@ Map: %2</source>
         <message>
             <source>Content type</source>
             <translation>内容类型</translation>
+        </message>
+        <message>
+            <source>Point entities</source>
+            <translation>点实体</translation>
+        </message>
+        <message>
+            <source>Brush entities</source>
+            <translation>刷子实体</translation>
+        </message>
+        <message>
+            <source>Definitions…</source>
+            <translation>定义文件…</translation>
+        </message>
+        <message>
+            <source>Configure entity definition files for the current map</source>
+            <translation>配置当前地图的实体定义文件</translation>
+        </message>
+        <message>
+            <source>Group entities</source>
+            <translation>实体分组</translation>
+        </message>
+        <message>
+            <source>Sort</source>
+            <translation>排序</translation>
+        </message>
+        <message>
+            <source>Name</source>
+            <translation>名称</translation>
+        </message>
+        <message>
+            <source>Usage</source>
+            <translation>使用量</translation>
+        </message>
+        <message>
+            <source>Search entity types…</source>
+            <translation>搜索实体类型…</translation>
+        </message>
+        <message>
+            <source>%1 entity types</source>
+            <translation>%1 种实体类型</translation>
         </message>
 </context>
     <context>

@@ -105,7 +105,13 @@ ProjectAssetPanel::ProjectAssetPanel(
   detailsToggle->setText(tr("Details"));
   detailsToggle->setToolTip(tr("Show asset details"));
   detailsToggle->setCheckable(true);
-  connect(detailsToggle, &QToolButton::toggled, detailsSurface, &QWidget::setVisible);
+  connect(
+    detailsToggle,
+    &QToolButton::toggled,
+    this,
+    [this, detailsSurface](const bool visible) {
+      detailsSurface->setVisible(visible && !m_browser->isShowingEntities());
+    });
   m_browser->addViewOption(detailsToggle);
   detailsSurface->hide();
   connect(
@@ -113,6 +119,7 @@ ProjectAssetPanel::ProjectAssetPanel(
     &ModelBrowser::entityModeChanged,
     this,
     [detailsSurface, detailsToggle](const bool entities) {
+      detailsToggle->setVisible(!entities);
       detailsSurface->setVisible(!entities && detailsToggle->isChecked());
     });
   layout->addWidget(splitter);

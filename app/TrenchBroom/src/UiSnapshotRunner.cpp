@@ -81,6 +81,7 @@
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/CommandPaletteDialog.h"
 #include "ui/CyclingMapView.h"
+#include "ui/EntityBrowserView.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
@@ -1047,12 +1048,8 @@ void configureInspectorSnapshot(QWidget& targetWidget, const QString& targetName
       if (auto* mode = mapWindow->findChild<QComboBox*>("ProjectToolsMode"))
         mode->setCurrentIndex(1);
       if (!targetName.endsWith(QStringLiteral("-empty")))
-        if (auto* tree = mapWindow->findChild<QTreeWidget*>("EntityBrowser_Definitions"))
-        {
-          const auto lights = tree->findItems(QStringLiteral("light"), Qt::MatchExactly);
-          if (!lights.isEmpty())
-            tree->setCurrentItem(lights.front());
-        }
+        if (auto* grid = mapWindow->findChild<EntityBrowserView*>("EntityBrowser_Grid"))
+          grid->selectDefinition("light");
     }
     else
       mapWindow->switchToInspectorPage(InspectorPage::Face);
@@ -1066,7 +1063,7 @@ void configureInspectorSnapshot(QWidget& targetWidget, const QString& targetName
 
   if (targetName.endsWith(QStringLiteral("-empty")))
   {
-    const auto searchName = showEntityBrowser ? QStringLiteral("EntityBrowser_Search")
+    const auto searchName = showEntityBrowser ? QStringLiteral("ModelBrowser_Search")
                                               : QStringLiteral("MaterialBrowser_Search");
     if (auto* search = mapWindow->findChild<QLineEdit*>(searchName))
     {

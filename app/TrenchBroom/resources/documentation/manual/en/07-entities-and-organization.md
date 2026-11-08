@@ -2,9 +2,9 @@
 
 ## Entity Browser {#entity_browser}
 
-The entity browser is in the bottom Content Browser. Choose **Entities** in the content type selector, or use #menu(Menu/View/Show Entity Browser). Search definitions by name or description; filter point or brush types, group them, sort by name or usage, or show only used types. Selecting a type shows its description and a preview for point types without changing the map selection.
+The entity browser is in the bottom Content Browser. Select the **Entities** folder in the source tree, or use #menu(Menu/View/Show Entity Browser). The content area displays a 3D thumbnail grid using the existing entity model and bounds renderer. The Point and Brush subfolders narrow the types. Use the shared search field to match names or descriptions, **Filters** to show only used types, and **View** to change thumbnail size, grouping or name/usage order. Selecting a thumbnail shows its description and creation action in the compact bottom bar without changing the map selection. The shared breadcrumbs and back/forward buttons navigate entity and file folders while preserving their search state.
 
-Drag a point type into a 2D or 3D viewport to place it, or click **Create in current view** to create it at the view's default position. To create a brush entity, select brushes, choose a brush type, then click **Turn selection into entity**. Creation uses normal map undo and redo. Without an open map you can browse definitions, but creation and definition settings are disabled.
+Drag a point type into a 2D or 3D viewport to place it, or double-click it, press Enter, or click **Create in current view** to create it at the view's default position. To create a brush entity, select brushes, choose a brush type, then click **Turn selection into entity**. Creation uses normal map undo and redo. Without an open map you can browse definitions, but creation and definition settings are disabled.
 
 The browser uses the entity definition files configured for the current map. If an expected class is missing, verify the active FGD, ENT, or DEF configuration before creating an unconfigured entity manually.
 

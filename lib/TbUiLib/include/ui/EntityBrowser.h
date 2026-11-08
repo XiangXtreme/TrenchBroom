@@ -23,14 +23,16 @@
 
 #include "base/NotifierConnection.h"
 
-class QComboBox;
+#include <string>
+
 class QLabel;
 class QPushButton;
-class QTextBrowser;
-class QTreeWidget;
-class QLineEdit;
 class QScrollBar;
-class QToolButton;
+
+namespace tb::mdl
+{
+enum class EntityDefinitionSortOrder;
+}
 
 namespace tb::ui
 {
@@ -38,6 +40,14 @@ class AppController;
 class EntityBrowserView;
 class MapDocument;
 
+enum class EntityBrowserFolder
+{
+  All,
+  Point,
+  Brush
+};
+
+// Entity content canvas. Navigation, search and view controls belong to ModelBrowser.
 class EntityBrowser : public QWidget
 {
   Q_OBJECT
@@ -45,43 +55,29 @@ private:
   MapDocument* m_document;
   AppController& m_appController;
   QWidget* m_content = nullptr;
-  QTreeWidget* m_definitions = nullptr;
-  QComboBox* m_typeChoice = nullptr;
-  QTextBrowser* m_description = nullptr;
-  QPushButton* m_create = nullptr;
   QLabel* m_summary = nullptr;
-  bool m_mapActionsEnabled = true;
-  QComboBox* m_sortOrderChoice = nullptr;
-  QToolButton* m_groupButton = nullptr;
-  QToolButton* m_usedButton = nullptr;
-  QLineEdit* m_filterBox = nullptr;
+  QPushButton* m_create = nullptr;
   QScrollBar* m_scrollBar = nullptr;
   EntityBrowserView* m_view = nullptr;
-
+  bool m_mapActionsEnabled = true;
   NotifierConnection m_notifierConnection;
 
 public:
   EntityBrowser(
     AppController& appController, MapDocument& document, QWidget* parent = nullptr);
-
   void reload();
   void setDocument(MapDocument& document);
   void setMapActionsEnabled(bool enabled);
-  void focusSearch();
+  EntityBrowserView& view() const;
+  void showSettings();
 
 signals:
+  void contentsChanged();
   void createEntityRequested(const QString& classname);
 
 private:
-  void refreshDefinitions();
   void refreshSelection();
-  void updateCreationAction();
-  void showSettings();
-
-private:
-  void createGui(AppController& appController);
-
+  void createGui();
   void connectObservers();
 };
-
 } // namespace tb::ui

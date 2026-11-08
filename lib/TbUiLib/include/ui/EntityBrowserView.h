@@ -24,6 +24,7 @@
 #include "gl/FontDescriptor.h"
 #include "gl/VertexType.h"
 #include "ui/CellView.h"
+#include "ui/EntityBrowser.h"
 
 #include "kd/flat_map.h"
 
@@ -98,7 +99,9 @@ private:
   bool m_hideUnused = false;
   mdl::EntityDefinitionSortOrder m_sortOrder;
   std::string m_filterText;
-  std::string m_definitionName;
+  EntityBrowserFolder m_folder = EntityBrowserFolder::All;
+  std::string m_selectedDefinitionName;
+  bool m_mapActionsEnabled = true;
 
   NotifierConnection m_notifierConnection;
 
@@ -115,10 +118,30 @@ public:
   void setGroup(bool group);
   void setHideUnused(bool hideUnused);
   void setFilterText(const std::string& filterText);
-  void setDefinitionName(const std::string& name);
+  void setFolder(EntityBrowserFolder folder);
+  EntityBrowserFolder folder() const;
+  const std::string& filterText() const;
+  mdl::EntityDefinitionSortOrder sortOrder() const;
+  bool group() const;
+  bool hideUnused() const;
+  void setMapActionsEnabled(bool enabled);
+  void refreshDefinitions();
+  std::vector<const mdl::EntityDefinition*> filteredDefinitions() const;
+  const std::string& selectedDefinitionName() const;
+  bool selectDefinition(const std::string& name);
+  QString dragPayload(const std::string& name) const;
+
+signals:
+  void definitionSelected();
+  void definitionActivated();
+  void definitionsChanged();
 
 private:
-  void resizeEvent(QResizeEvent* event) override;
+  void doLeftClick(Layout& layout, float x, float y) override;
+  void doDoubleClick(Layout& layout, float x, float y) override;
+  bool isCellSelected(const Cell& cell) const override;
+  void processEvent(const KeyEvent& event) override;
+
   void doInitLayout(Layout& layout) override;
   void doReloadLayout(Layout& layout) override;
 

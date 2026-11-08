@@ -78,6 +78,7 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/CatchConfig.h"
 #include "ui/CommandPaletteDialog.h"
+#include "ui/EntityBrowserView.h"
 #include "ui/InfoPanel.h"
 #include "ui/InputEvent.h"
 #include "ui/Inspector.h"
@@ -747,19 +748,17 @@ TEST_CASE("MapWindow")
     window.editorView().showEntityBrowser();
     QApplication::processEvents();
     auto* browser = window.findChild<ModelBrowser*>();
-    auto* tree = window.findChild<QTreeWidget*>("EntityBrowser_Definitions");
+    auto* grid = window.findChild<EntityBrowserView*>("EntityBrowser_Grid");
     auto* create = window.findChild<QPushButton*>("EntityBrowser_Create");
     REQUIRE(browser);
-    REQUIRE(tree);
+    REQUIRE(grid);
     REQUIRE(create);
     CHECK(browser->isShowingEntities());
     CHECK(window.findChild<WorkspaceToolPanel*>()->isToolVisible(
       WorkspaceToolId::ContentBrowser));
     CHECK(window.findChild<QWidget*>("Inspector_NavigationEntity") == nullptr);
     const auto choose = [&](const QString& name) {
-      const auto found = tree->findItems(name, Qt::MatchExactly);
-      REQUIRE(found.size() == 1);
-      tree->setCurrentItem(found.front());
+      REQUIRE(grid->selectDefinition(name.toStdString()));
     };
     choose("light");
     REQUIRE(create->isEnabled());
