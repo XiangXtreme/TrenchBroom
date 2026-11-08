@@ -63,6 +63,16 @@ ThemeTokens makeSystemThemeTokens(const QPalette& palette);
 
 QPalette makeThemePalette(const ThemeTokens& tokens);
 
+enum class SemanticColor
+{
+  Error,
+  Warning,
+  Success
+};
+
+/** Semantic ink for domain renderers, including command-line theme overrides. */
+QColor themeSemanticColor(const QPalette& palette, SemanticColor role);
+
 Color browserBackgroundColor(const QPalette& palette);
 Color browserGroupBackgroundColor(const QPalette& palette);
 Color browserTextColor(const QPalette& palette);

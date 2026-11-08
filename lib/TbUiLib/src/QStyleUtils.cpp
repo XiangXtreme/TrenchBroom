@@ -26,6 +26,8 @@
 #include <QLineEdit>
 #include <QPalette>
 #include <QString>
+#include <QStyle>
+#include <QVariant>
 #include <QWidget>
 #include <QtSystemDetection>
 
@@ -37,18 +39,31 @@
 
 namespace tb::ui
 {
+namespace
+{
+void setTextRole(QWidget& widget, const char* role)
+{
+  const auto value = role ? QVariant{QString::fromLatin1(role)} : QVariant{};
+  if (widget.property("tbTextRole") == value)
+    return;
+  widget.setProperty("tbTextRole", value);
+  widget.style()->unpolish(&widget);
+  widget.style()->polish(&widget);
+}
+} // namespace
 
 QWidget* setDefaultStyle(QWidget* widget)
 {
   widget->setFont(QFont{});
   widget->setPalette(QPalette{});
+  setTextRole(*widget, nullptr);
   return widget;
 }
 
 QWidget* setEmphasizedStyle(QWidget* widget)
 {
   auto font = widget->font();
-  font.setBold(true);
+  font.setWeight(QFont::DemiBold);
   widget->setFont(font);
   return widget;
 }
@@ -61,19 +76,10 @@ QWidget* setUnemphasizedSTyle(QWidget* widget)
 
 QWidget* setInfoStyle(QWidget* widget)
 {
-  setDefaultStyle(widget);
-
+  widget->setFont(QFont{});
   widget = setSmallStyle(widget);
 
-  const auto defaultPalette = QPalette{};
-  auto palette = widget->palette();
-  // Set all color groups (active, inactive, disabled) to use the disabled color, so it's
-  // dimmer
-  palette.setColor(
-    QPalette::WindowText, defaultPalette.color(QPalette::Disabled, QPalette::WindowText));
-  palette.setColor(
-    QPalette::Text, defaultPalette.color(QPalette::Disabled, QPalette::Text));
-  widget->setPalette(palette);
+  setTextRole(*widget, "secondary");
   return widget;
 }
 
@@ -96,10 +102,7 @@ QWidget* setHeaderStyle(QWidget* widget)
 
 QWidget* setErrorStyle(QWidget* widget)
 {
-  auto palette = widget->palette();
-  palette.setColor(QPalette::Normal, QPalette::WindowText, Qt::red);
-  palette.setColor(QPalette::Normal, QPalette::Text, Qt::red);
-  widget->setPalette(palette);
+  setTextRole(*widget, "error");
   return widget;
 }
 

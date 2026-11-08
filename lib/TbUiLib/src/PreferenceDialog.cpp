@@ -155,11 +155,13 @@ void PreferenceDialog::createGui()
 
   m_navigation = new QListWidget{};
   m_navigation->setObjectName("PreferenceDialog_NavigationList");
-  m_navigation->setIconSize(QSize{18, 18});
+  m_navigation->setProperty("tbControlRole", "navigation");
+  m_navigation->setIconSize(QSize{16, 16});
+  m_navigation->setSpacing(2);
   m_navigation->setSelectionMode(QAbstractItemView::SingleSelection);
   m_navigation->setUniformItemSizes(true);
   m_navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  m_navigation->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  m_navigation->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
   new QListWidgetItem{gamesImage, tr("Games"), m_navigation};
   new QListWidgetItem{viewImage, tr("View"), m_navigation};
@@ -170,13 +172,13 @@ void PreferenceDialog::createGui()
   new QListWidgetItem{kreedzBroomImage, tr("KreedzBroom"), m_navigation};
   new QListWidgetItem{updateImage, tr("Update"), m_navigation};
 
-  auto* navigationTitle = new QLabel{tr("SETTINGS")};
+  auto* navigationTitle = new QLabel{tr("Settings")};
   navigationTitle->setObjectName("PreferenceDialog_NavigationTitle");
   navigationTitle->setProperty("regionAnchor", true);
 
   auto* navigationLayout = new QVBoxLayout{};
   navigationLayout->setContentsMargins(8, 12, 8, 8);
-  navigationLayout->setSpacing(6);
+  navigationLayout->setSpacing(8);
   navigationLayout->addWidget(navigationTitle);
   navigationLayout->addWidget(m_navigation, 1);
 

@@ -63,8 +63,9 @@ remain related to the default control.
   buttons. Used for spatial vectors where horizontal dragging is the primary adjustment;
   20 px minimum height keeps the three channels compact. Normal numeric focus, hover,
   disabled and selection states still apply. `tbVectorPosition` marks first/middle/last.
-- `navigation`: an icon or tab used to change application regions rather than execute a
-  document command.
+- `navigation`: a button, tab or list used to change application regions rather than
+  execute a document command. Navigation lists use 16 px icons and a 32 px minimum row
+  height provided by `ApplicationStyle`; QSS owns their hover and selection states.
 - `outlined`: an icon command whose persistent boundary communicates a mode or selectable
   tool outside a toolbar. It is not a general-purpose way to make one button look stronger.
 - `chip`: a labelled command with an icon used inside a toolbar when the word is part of
@@ -113,7 +114,7 @@ Metrics are reviewed as a set rather than copied into feature modules:
 - command and grouped-surface radius: 6 px
 - popup surface radius: 8 px; popup item radius: 4 px
 - standard indicator size: 18 px
-- standard item-view row minimum height: 22 px
+- standard item-view row minimum height: 22 px; navigation list row minimum: 32 px
 - standard small and button icon size: 16 px; toolbar icon size: 20 px
 
 These are logical Qt pixels and scale through Qt's device-pixel handling. A feature module
@@ -134,8 +135,11 @@ states; feature panels do not supply their own title geometry or arrow rendering
 scroll-area defaults. Use `createPanelForm`, `createPanelColumn`, `createPanelActions`
 and `createPanelScrollArea` instead of copying their setup into a feature. These return
 standard Qt layouts and widgets, so content, connections and specialized width/size
-constraints stay with the caller. `FormWithSectionsLayout` shares the form defaults;
-its section indent and dialog outer margins remain part of preferences composition.
+constraints stay with the caller. `PanelInsets::Toolbar` provides 8 px horizontal and
+4 px vertical padding for compact panel headers; `Content` provides 12 px horizontal
+and bottom padding with an 8 px top inset. Form column/row gaps are 12/6 px.
+`FormWithSectionsLayout` shares the form defaults; its section indent and dialog outer
+margins remain part of preferences composition.
 
 Use `PanelList` for a vertical collection of panels. It owns the bottom stretch; callers
 add, insert and remove widgets without manipulating a spacer. Removing a widget leaves
@@ -235,3 +239,21 @@ Panel surfaces use the same frame. Area gutters use the greater of the shared sp
 and horizontal layout spacing metrics. Accept `components`, `workbench`, `outliner`
 and `map-areas`, plus the existing gesture previews across the theme/scale matrix.
 View selectors use standard overlay tool buttons and exclusive Qt menu actions.
+
+## Text and semantic feedback
+
+Use inherited UI type for region titles and sentence case for labels. Section hierarchy
+comes from spacing and a 600 weight, without uppercase conversion or extra tracking.
+Use `setInfoStyle` for smaller secondary text, `setErrorStyle` for validation feedback,
+and `setDefaultStyle` when feedback returns to normal. These helpers maintain
+`tbTextRole`; the global stylesheet owns colors, including disabled states. Secondary
+text must remain distinct from disabled controls.
+
+Domain renderers which write formatted text use `themeSemanticColor` for errors, warnings
+and success. `ApplicationStyle` publishes the installed theme tokens on the application;
+this also honors command-line snapshot theme overrides. Do not re-resolve a saved theme
+preference or hardcode a second palette inside a console or preview renderer.
+
+The components target includes secondary, error and disabled feedback. Acceptance for
+text or navigation changes includes preferences, workbench, narrow Outliner properties,
+asset library, output log and Python console.

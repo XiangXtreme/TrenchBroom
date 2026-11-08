@@ -21,8 +21,10 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QPalette>
+#include <QScopeGuard>
 #include <QString>
 #include <QTemporaryDir>
+#include <QVariant>
 
 #include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
@@ -32,6 +34,7 @@
 #include "ui/ThemeRegistry.h"
 
 #include <algorithm>
+#include <array>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -120,6 +123,32 @@ TEST_CASE("Theme")
       palette.color(QPalette::Inactive, QPalette::Highlight)
       == tokens.inactiveSelectionBackground);
     CHECK(palette.color(QPalette::Disabled, QPalette::Text) == tokens.disabledText);
+    CHECK(
+      palette.color(QPalette::Active, QPalette::HighlightedText) == tokens.inverseText);
+    CHECK(palette.color(QPalette::Inactive, QPalette::HighlightedText) == tokens.text);
+    CHECK(
+      palette.color(QPalette::Disabled, QPalette::HighlightedText)
+      == tokens.disabledText);
+  }
+
+  SECTION("semantic colors use the installed theme rather than the saved preference")
+  {
+    auto* app = QCoreApplication::instance();
+    REQUIRE(app);
+    const auto palette = QGuiApplication::palette();
+    for (const auto& [role, property] : std::array{
+           std::pair{SemanticColor::Error, "tbThemeErrorColor"},
+           std::pair{SemanticColor::Warning, "tbThemeWarningColor"},
+           std::pair{SemanticColor::Success, "tbThemeSuccessColor"}})
+    {
+      const auto previous = app->property(property);
+      const auto restore = qScopeGuard([&] { app->setProperty(property, previous); });
+      app->setProperty(property, QVariant{});
+      CHECK(themeSemanticColor(palette, role).isValid());
+      const auto custom = QColor{101, 132, 163};
+      app->setProperty(property, custom);
+      CHECK(themeSemanticColor(palette, role) == custom);
+    }
   }
 
   SECTION("browser colors follow the theme until they are customized")
@@ -219,9 +248,10 @@ TEST_CASE("Theme")
     CHECK(error.isEmpty());
     CHECK(
       darkStyleSheet
-      == QStringLiteral("QTabBar::close-button { image: url(:/controls/tab-close-dark); } "
-                        "QTabBar::close-button:hover { image: "
-                        "url(:/controls/tab-close-hover-dark); }"));
+      == QStringLiteral(
+        "QTabBar::close-button { image: url(:/controls/tab-close-dark); } "
+        "QTabBar::close-button:hover { image: "
+        "url(:/controls/tab-close-hover-dark); }"));
 
     const auto& lightTokens =
       builtInThemes.resolveTheme(QStringLiteral("builtin.light")).tokens;
@@ -232,9 +262,10 @@ TEST_CASE("Theme")
     CHECK(error.isEmpty());
     CHECK(
       lightStyleSheet
-      == QStringLiteral("QTabBar::close-button { image: url(:/controls/tab-close-light); } "
-                        "QTabBar::close-button:hover { image: "
-                        "url(:/controls/tab-close-hover-light); }"));
+      == QStringLiteral(
+        "QTabBar::close-button { image: url(:/controls/tab-close-light); } "
+        "QTabBar::close-button:hover { image: "
+        "url(:/controls/tab-close-hover-light); }"));
   }
 
   SECTION("expandThemeStyleSheet rejects unknown tokens without changing the input")

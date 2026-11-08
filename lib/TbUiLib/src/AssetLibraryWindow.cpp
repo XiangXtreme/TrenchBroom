@@ -62,6 +62,7 @@
 #include "ui/AssetLibrarySource.h"
 #include "ui/BuiltinAssetLibrary.h"
 #include "ui/CreateTerrainMaterialDialog.h"
+#include "ui/ElidedLabel.h"
 #include "ui/GoldSrcSpritePreview.h"
 #include "ui/ModelThumbnail.h"
 #include "ui/PanelLayout.h"
@@ -327,22 +328,25 @@ void AssetLibraryWindow::buildUi()
   auto* header = new QWidget{this};
   header->setObjectName(QStringLiteral("AssetLibraryHeader"));
   header->setAttribute(Qt::WA_StyledBackground, true);
-  auto* headerLayout = new QHBoxLayout{header};
-  headerLayout->setContentsMargins(14, 10, 14, 10);
-  headerLayout->setSpacing(10);
+  auto* headerColumn = new QVBoxLayout{header};
+  headerColumn->setContentsMargins(12, 8, 12, 8);
+  headerColumn->setSpacing(8);
+  auto* headerLayout = new QHBoxLayout{};
+  headerLayout->setSpacing(8);
+  headerColumn->addLayout(headerLayout);
 
   m_libraryBadge = new QLabel{header};
   m_libraryBadge->setObjectName(QStringLiteral("AssetLibraryBadge"));
-  m_libraryBadge->setFixedSize(38, 38);
+  m_libraryBadge->setFixedSize(40, 40);
   m_libraryBadge->setAlignment(Qt::AlignCenter);
 
   auto* identity = new QWidget{header};
   auto* identityLayout = new QVBoxLayout{identity};
   identityLayout->setContentsMargins(0, 0, 0, 0);
-  identityLayout->setSpacing(1);
-  m_libraryLabel = new QLabel{tr("No asset library"), identity};
+  identityLayout->setSpacing(2);
+  m_libraryLabel = new ElidedLabel{tr("No asset library"), Qt::ElideRight, identity};
   m_libraryLabel->setObjectName(QStringLiteral("AssetLibraryHeaderTitle"));
-  m_libraryPath = new QLabel{identity};
+  m_libraryPath = new ElidedLabel{Qt::ElideMiddle, identity};
   m_libraryPath->setObjectName(QStringLiteral("AssetLibraryHeaderPath"));
   identityLayout->addWidget(m_libraryLabel);
   identityLayout->addWidget(m_libraryPath);
@@ -351,10 +355,9 @@ void AssetLibraryWindow::buildUi()
   m_libraryChip->setObjectName(QStringLiteral("AssetLibraryChip"));
 
   headerLayout->addWidget(m_libraryBadge);
-  headerLayout->addWidget(identity);
+  headerLayout->addWidget(identity, 1);
   headerLayout->addSpacing(2);
   headerLayout->addWidget(m_libraryChip, 0, Qt::AlignVCenter);
-  headerLayout->addStretch(1);
 
   m_importButton =
     createActionButton(header, tr("Import Files…"), tr("Copy assets into this library"));
@@ -370,20 +373,15 @@ void AssetLibraryWindow::buildUi()
     createActionButton(header, tr("Change Library…"), tr("Open another asset library"));
 
   m_importButton->setIcon(
-    assetLibraryGlyphIcon(AssetLibraryGlyph::Import, textColor, 15));
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Import, textColor, 16));
   m_createMaterialButton->setIcon(
-    assetLibraryGlyphIcon(AssetLibraryGlyph::Texture, textColor, 15));
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Texture, textColor, 16));
   m_convertButton->setIcon(
-    assetLibraryGlyphIcon(AssetLibraryGlyph::Convert, textColor, 15));
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Convert, textColor, 16));
   m_revealButton->setIcon(
-    assetLibraryGlyphIcon(AssetLibraryGlyph::Reveal, textColor, 15));
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Reveal, textColor, 16));
   m_changeButton->setIcon(
-    assetLibraryGlyphIcon(AssetLibraryGlyph::Library, textColor, 15));
-
-  auto* separator = new QFrame{header};
-  separator->setObjectName(QStringLiteral("AssetLibrarySeparator"));
-  separator->setFrameShape(QFrame::VLine);
-  separator->setFixedWidth(1);
+    assetLibraryGlyphIcon(AssetLibraryGlyph::Library, textColor, 16));
 
   m_searchEdit = new QLineEdit{header};
   m_searchEdit->setObjectName(QStringLiteral("AssetLibrarySearch"));
@@ -394,13 +392,16 @@ void AssetLibraryWindow::buildUi()
     assetLibraryGlyphIcon(AssetLibraryGlyph::Search, dimColor, 14),
     QLineEdit::LeadingPosition);
 
-  headerLayout->addWidget(m_importButton);
-  headerLayout->addWidget(m_createMaterialButton);
-  headerLayout->addWidget(m_convertButton);
-  headerLayout->addWidget(m_revealButton);
-  headerLayout->addWidget(separator);
   headerLayout->addWidget(m_changeButton);
   headerLayout->addWidget(m_searchEdit);
+  auto* libraryActions = new QHBoxLayout{};
+  libraryActions->setSpacing(8);
+  libraryActions->addWidget(m_importButton);
+  libraryActions->addWidget(m_createMaterialButton);
+  libraryActions->addWidget(m_convertButton);
+  libraryActions->addWidget(m_revealButton);
+  libraryActions->addStretch(1);
+  headerColumn->addLayout(libraryActions);
   layout->addWidget(header);
 
   // ---- body: categories, grid and inspector ------------------------------------------
@@ -413,7 +414,7 @@ void AssetLibraryWindow::buildUi()
   sidebar->setObjectName(QStringLiteral("AssetLibrarySidebar"));
   sidebar->setAttribute(Qt::WA_StyledBackground, true);
   auto* sideLayout = new QVBoxLayout{sidebar};
-  sideLayout->setContentsMargins(8, 10, 8, 10);
+  sideLayout->setContentsMargins(8, 8, 8, 8);
   sideLayout->setSpacing(4);
   m_categories = new AssetLibraryListView{sidebar};
   m_categories->setObjectName(QStringLiteral("AssetLibraryCategories"));
@@ -511,14 +512,17 @@ void AssetLibraryWindow::buildUi()
   auto* center = new QWidget{splitter};
   center->setObjectName(QStringLiteral("AssetLibraryCenter"));
   auto* centerLayout = new QVBoxLayout{center};
-  centerLayout->setContentsMargins(10, 8, 10, 8);
+  centerLayout->setContentsMargins(8, 8, 8, 8);
   centerLayout->setSpacing(8);
 
   auto* tools = new QWidget{center};
   tools->setObjectName(QStringLiteral("AssetLibraryToolBar"));
-  auto* toolsLayout = new QHBoxLayout{tools};
-  toolsLayout->setContentsMargins(2, 0, 2, 0);
-  toolsLayout->setSpacing(6);
+  auto* toolsColumn = new QVBoxLayout{tools};
+  toolsColumn->setContentsMargins(0, 0, 0, 0);
+  toolsColumn->setSpacing(4);
+  auto* toolsLayout = new QHBoxLayout{};
+  toolsLayout->setSpacing(4);
+  toolsColumn->addLayout(toolsLayout);
 
   m_countLabel = new QLabel{tools};
   m_countLabel->setObjectName(QStringLiteral("AssetLibraryCount"));
@@ -583,12 +587,15 @@ void AssetLibraryWindow::buildUi()
   toolsLayout->addWidget(m_convertCancel);
   toolsLayout->addWidget(m_retryButton);
   toolsLayout->addStretch(1);
-  toolsLayout->addWidget(sizeLabel);
-  toolsLayout->addWidget(m_sizeSlider);
-  toolsLayout->addWidget(m_sizeValue);
-  toolsLayout->addSpacing(4);
-  toolsLayout->addWidget(m_gridButton);
-  toolsLayout->addWidget(m_listButton);
+  auto* viewActions = new QHBoxLayout{};
+  viewActions->setSpacing(4);
+  viewActions->addWidget(sizeLabel);
+  viewActions->addWidget(m_sizeSlider);
+  viewActions->addWidget(m_sizeValue);
+  viewActions->addStretch(1);
+  viewActions->addWidget(m_gridButton);
+  viewActions->addWidget(m_listButton);
+  toolsColumn->addLayout(viewActions);
 
   m_grid = new AssetLibraryListView{center};
   m_grid->setObjectName(QStringLiteral("AssetLibraryGrid"));
@@ -742,7 +749,7 @@ void AssetLibraryWindow::buildUi()
 
   m_footer = new QLabel{this};
   m_footer->setObjectName(QStringLiteral("AssetLibraryFooter"));
-  m_footer->setContentsMargins(14, 5, 14, 5);
+  m_footer->setContentsMargins(12, 4, 12, 4);
   layout->addWidget(m_footer);
 
   auto* libraryMenu = new QMenu{m_changeButton};

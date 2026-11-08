@@ -51,6 +51,7 @@
 #include "prefs/Preferences.h"
 #include "ui/FixedWidthFont.h"
 #include "ui/QThreadUtils.h"
+#include "ui/Theme.h"
 #include "ui/python/PythonApiCatalog.h"
 #include "ui/python/PythonCompletionEngine.h"
 
@@ -1079,18 +1080,14 @@ void PythonConsole::logToConsole(const LogLevel level, const std::string& messag
     return;
   }
 
-  const auto isDark = (edit->palette().color(QPalette::Base).lightness() < 128);
-  const auto promptColor =
-    isDark ? QColor{88, 166, 255} : QColor{9, 105, 218}; // Electric blue / Cyan
-  const auto subPromptColor =
-    isDark ? QColor{139, 148, 158} : QColor{101, 109, 118}; // Secondary muted slate
-  const auto resultPrefixColor =
-    isDark ? QColor{63, 185, 80} : QColor{26, 127, 55}; // Mint / Green
-  const auto resultTextColor =
-    isDark ? QColor{165, 214, 255} : QColor{5, 80, 174}; // Soft bright result text
-  const auto errorColor = isDark ? QColor{248, 81, 73} : QColor{207, 34, 46}; // Coral Red
-  const auto warnColor = isDark ? QColor{210, 153, 34} : QColor{154, 103, 0}; // Amber
-  const auto normalTextColor = edit->palette().color(QPalette::Text);
+  const auto& colors = edit->palette();
+  const auto promptColor = colors.color(QPalette::Active, QPalette::Accent);
+  const auto subPromptColor = colors.color(QPalette::Active, QPalette::PlaceholderText);
+  const auto resultPrefixColor = themeSemanticColor(colors, SemanticColor::Success);
+  const auto normalTextColor = colors.color(QPalette::Active, QPalette::Text);
+  const auto resultTextColor = normalTextColor;
+  const auto errorColor = themeSemanticColor(colors, SemanticColor::Error);
+  const auto warnColor = themeSemanticColor(colors, SemanticColor::Warning);
 
   auto cursor = QTextCursor{edit->document()};
   cursor.movePosition(QTextCursor::End);
@@ -1129,7 +1126,7 @@ void PythonConsole::logToConsole(const LogLevel level, const std::string& messag
 
       auto promptFmt = QTextCharFormat{};
       promptFmt.setForeground(promptColor);
-      promptFmt.setFontWeight(QFont::Bold);
+      promptFmt.setFontWeight(QFont::DemiBold);
       cursor.insertText(QStringLiteral(">>> "), promptFmt);
 
       auto codeFmt = QTextCharFormat{};
@@ -1152,7 +1149,7 @@ void PythonConsole::logToConsole(const LogLevel level, const std::string& messag
     {
       auto resPromptFmt = QTextCharFormat{};
       resPromptFmt.setForeground(resultPrefixColor);
-      resPromptFmt.setFontWeight(QFont::Bold);
+      resPromptFmt.setFontWeight(QFont::DemiBold);
       cursor.insertText(QStringLiteral("=> "), resPromptFmt);
 
       auto resTextFmt = QTextCharFormat{};

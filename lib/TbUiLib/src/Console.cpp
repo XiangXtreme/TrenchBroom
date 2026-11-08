@@ -32,6 +32,7 @@
 #include "ui/FileLogger.h"
 #include "ui/FixedWidthFont.h"
 #include "ui/QThreadUtils.h"
+#include "ui/Theme.h"
 #include "ui/ViewConstants.h"
 
 #include "kd/contracts.h"
@@ -51,13 +52,13 @@ auto getForegroundBrush(const LogLevel level, const QPalette& palette)
   switch (level)
   {
   case LogLevel::Debug:
-    return QBrush{palette.color(QPalette::Disabled, QPalette::Text)};
+    return QBrush{palette.color(QPalette::Active, QPalette::PlaceholderText)};
   case LogLevel::Info:
     return QBrush{palette.color(QPalette::Normal, QPalette::Text)};
   case LogLevel::Warn:
-    return QBrush{palette.color(QPalette::Active, QPalette::Text)};
+    return QBrush{themeSemanticColor(palette, SemanticColor::Warning)};
   case LogLevel::Error:
-    return QBrush{QColor{250, 30, 60}};
+    return QBrush{themeSemanticColor(palette, SemanticColor::Error)};
     switchDefault();
   }
 }

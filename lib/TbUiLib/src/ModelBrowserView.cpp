@@ -393,10 +393,10 @@ void ModelBrowserView::resourcesWereProcessed(const std::vector<mdl::ResourceId>
 void ModelBrowserView::doInitLayout(Layout& layout)
 {
   const auto cellSize = assetCellSize();
-  layout.setOuterMargin(10.0f);
+  layout.setOuterMargin(8.0f);
   layout.setGroupMargin(0.0f);
-  layout.setRowMargin(10.0f);
-  layout.setCellMargin(10.0f);
+  layout.setRowMargin(8.0f);
+  layout.setCellMargin(8.0f);
   layout.setTitleMargin(4.0f);
   layout.setCellWidth(cellSize, cellSize);
   layout.setCellHeight(cellSize, cellSize);

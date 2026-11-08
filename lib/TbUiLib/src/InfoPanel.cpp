@@ -58,11 +58,11 @@ InfoPanel::InfoPanel(AppController& appController, MapDocument& document, QWidge
     m_modelInspector->setObjectName("InfoPanel_Assets");
   }
 
-  m_tabBook->addPage(m_console, tr("Console").toUpper());
-  m_tabBook->addPage(m_pythonConsole, tr("Python Console").toUpper());
-  m_tabBook->addPage(m_issueBrowser, tr("Issues").toUpper());
+  m_tabBook->addPage(m_console, tr("Console"));
+  m_tabBook->addPage(m_pythonConsole, tr("Python Console"));
+  m_tabBook->addPage(m_issueBrowser, tr("Issues"));
   if (m_modelInspector)
-    m_tabBook->addPage(m_modelInspector, tr("Assets").toUpper());
+    m_tabBook->addPage(m_modelInspector, tr("Assets"));
 
   auto* sizer = new QVBoxLayout{};
   sizer->setContentsMargins(0, 0, 0, 0);

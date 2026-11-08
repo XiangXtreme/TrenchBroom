@@ -309,16 +309,16 @@ TerrainInspector::TerrainInspector(
   form->addRow(m_selectOccluded);
   form->addRow(tr("Selection radius"), m_softRadius);
   form->addRow(tr("Selection hardness"), m_softHardness);
-  form->addRow(tr("Terrain Material"), m_terrainMaterial);
-  form->addRow(tr("Paint Slot"), m_material);
+  form->addRow(tr("Terrain material"), m_terrainMaterial);
+  form->addRow(tr("Paint slot"), m_material);
   form->addRow(tr("Brush radius"), m_radius);
   form->addRow(tr("Brush strength"), m_strength);
   form->addRow(tr("Brush hardness"), m_hardness);
 
   auto* createForm = createPanelForm();
   createForm->addRow(tr("Grid spacing"), m_gridSpacing);
-  createForm->addRow(tr("New terrain height"), m_newHeight);
-  createForm->addRow(tr("New terrain thickness"), m_newThickness);
+  createForm->addRow(tr("Height"), m_newHeight);
+  createForm->addRow(tr("Thickness"), m_newThickness);
   auto* creation = new CollapsibleTitledPanel{tr("Create Terrain"), false, this};
   m_creation = creation;
   creation->setObjectName(QStringLiteral("TerrainInspector_Creation"));

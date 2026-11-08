@@ -45,6 +45,7 @@ class AssetLibraryItemDelegate;
 class AssetLibraryListView;
 class AssetLibrarySource;
 class ProjectSession;
+class ElidedLabel;
 
 /**
  * The application-wide asset library browser.
@@ -73,8 +74,8 @@ class AssetLibraryWindow : public QDialog
   bool m_listMode = false;
 
   QLabel* m_libraryBadge = nullptr;
-  QLabel* m_libraryLabel = nullptr;
-  QLabel* m_libraryPath = nullptr;
+  ElidedLabel* m_libraryLabel = nullptr;
+  ElidedLabel* m_libraryPath = nullptr;
   QLabel* m_libraryChip = nullptr;
   QPushButton* m_changeButton = nullptr;
   QPushButton* m_importButton = nullptr;

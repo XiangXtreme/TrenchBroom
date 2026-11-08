@@ -52,6 +52,7 @@
 
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/PanelLayout.h"
+#include "ui/QStyleUtils.h"
 #include "ui/WorkbenchSurface.h"
 
 #include <initializer_list>
@@ -95,7 +96,7 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
 
   auto* title = new QLabel{QStringLiteral("Foundational Components")};
   auto titleFont = title->font();
-  titleFont.setBold(true);
+  titleFont.setWeight(QFont::DemiBold);
   titleFont.setPointSize(titleFont.pointSize() + 3);
   title->setFont(titleFont);
 
@@ -115,6 +116,16 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
   inputLayout->addRow(
     QStringLiteral("Text"),
     makeControlRow({focusedLineEdit, readOnlyLineEdit, disabledLineEdit}));
+
+  auto* info = new QLabel{QStringLiteral("Applies immediately")};
+  setInfoStyle(info);
+  auto* error = new QLabel{QStringLiteral("Path unavailable")};
+  setErrorStyle(error);
+  auto* disabledInfo = new QLabel{QStringLiteral("Unavailable")};
+  setInfoStyle(disabledInfo);
+  disabledInfo->setEnabled(false);
+  inputLayout->addRow(
+    QStringLiteral("Feedback"), makeControlRow({info, error, disabledInfo}));
 
   auto* combo = new QComboBox{};
   combo->addItems(
@@ -338,10 +349,20 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
   list->item(5)->setFlags(list->item(5)->flags() & ~Qt::ItemIsEnabled);
   list->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
 
+  auto* navigationList = new QListWidget{};
+  navigationList->setProperty("tbControlRole", "navigation");
+  navigationList->setSpacing(2);
+  navigationList->addItems(
+    {QStringLiteral("Scene"), QStringLiteral("Face"), QStringLiteral("Plugins")});
+  navigationList->setCurrentRow(0);
+  navigationList->item(2)->setFlags(
+    navigationList->item(2)->flags() & ~Qt::ItemIsEnabled);
+
   auto* collectionSplitter = new QSplitter{Qt::Horizontal};
   collectionSplitter->setChildrenCollapsible(false);
   collectionSplitter->addWidget(tree);
   collectionSplitter->addWidget(list);
+  collectionSplitter->addWidget(navigationList);
   collectionSplitter->setMinimumWidth(420);
   collectionSplitter->setFixedHeight(126);
   collectionLayout->addRow(QStringLiteral("Views"), collectionSplitter);

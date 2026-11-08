@@ -152,3 +152,46 @@ list->addWidget(section); // list 是 PanelList，自动管理尾部空间
 
 截图是本机 Qt、字体和渲染环境下的布局证据；本机 Qt 6.11.1 与 CI 的 6.10.3
 存在小版本差异，其他平台仍由对应 CI 和平台验收覆盖。
+
+
+## 全局视觉收口（2026-11-09）
+
+方向：精确、紧凑、沉静的关卡工作台。地图、材质、模型和地形预览承担色彩与
+细节，周围控件使用现有主题的中性色。沿用字体、TB 标识、功能入口和工作区组织。
+
+本轮按公共契约调整，而不是为每个页面另做皮肤：
+
+- 间距：面板工具栏统一使用 `PanelInsets::Toolbar`，表单列距统一为 12 px；
+  Content Browser 预览间距为 8 px，资源库标题与侧栏使用同一组间距。资源库标题与
+  管理操作分两行，网格筛选与显示控制分两行，长库名和路径使用共享 ElidedLabel，
+  保持搜索、转换、预览同时可见。
+- 色彩：辅助文字使用 secondary，禁用状态使用 disabled；验证错误、输出日志和
+  Python Console 使用当前安装主题的 error/warning/success。卡片标题减少重复底色。
+  修正浅色主题失焦选中行的文字对比度，普通列表与自绘资源分类共同使用对应 palette group。
+- 图标：设置导航与资产库操作统一使用 16 px，保留具有领域含义的地图工具图标。
+- 文案与字重：区域标题取消强制全大写，分类取消额外字距；标题使用 600，资产名
+  使用 500，元数据继承字体后小一号且不低于 8 pt。地形创建分组使用简短字段名。
+- 导航与操作：公共 navigation 状态同时覆盖右栏、底栏与设置列表；设置行最小
+  高度为 32 px，短窗口可滚动。欢迎页明确新建地图为默认操作。
+- 扩展：新增面板继续使用公共 role、布局和主题接口；组件快照覆盖导航列表及
+  secondary/error/disabled 反馈，避免页面私有视觉实现再次分叉。
+
+此轮使用 Unslop 的审查方法进行现有界面打磨；方法作者为
+[Damir Sokolovsky (@heydamir)](https://heydamir.design/unslop)，CC BY 4.0。
+
+
+### 本轮验证
+
+Windows Release / Qt 6.11.1：
+
+- `TbUiLibTest`、`TrenchBroom` 构建通过；23 个改动编译单元通过 clang-cl 严格检查。
+- 串行执行 183 项 UI 回归，并对修正测试样本后的 `AssetInspection` 专项复验：
+  181 项通过，2 项受环境条件限制。`AssetInspection` 已执行的 1560 项断言全部通过，
+  真实 GoldSrc 模型段因未设置 `TB_GOLDSRC_MODEL` 跳过；原生鼠标捕获按背景测试策略跳过。
+  最终 `ci-preflight.ps1 -BaseRef HEAD -TestFilter '^AssetInspection$' -TestJobs 1` 通过。
+- 22 个真实页面及组件目标通过 Light/Dark/Blender 的 66 张 1x 截图检查；最终组件、
+  窄栏属性、窄资产库及设置页覆盖三主题和 1x/1.5x/2x，共 36 张截图通过。
+  人工核对标题、导航、辅助文字、失焦选中行、预览与滚动区域。
+- 资产库窄窗口在所有缩放下保持 900 逻辑像素宽；验收脚本新增宽度上限，防止
+  后续修改把窄窗口自动撑大而误判为通过。面检查器的 fixture 材质全部达到 GPU-ready。
+- 样式治理与 `git diff --check` 通过。验收文件保存在本机 `codex-logs`，不纳入源码。

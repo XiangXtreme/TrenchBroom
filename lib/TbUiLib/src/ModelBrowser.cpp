@@ -492,8 +492,8 @@ void ModelBrowser::createGui(AppController& appController)
   m_viewButton->setProperty("tbControlRole", "chip");
 
   auto* pathRowLayout = new QHBoxLayout{};
-  pathRowLayout->setContentsMargins(8, 3, 8, 3);
-  pathRowLayout->setSpacing(6);
+  setPanelInsets(*pathRowLayout, PanelInsets::Toolbar);
+  pathRowLayout->setSpacing(4);
   pathRowLayout->addWidget(m_sourceTabs);
   pathRowLayout->addWidget(m_backButton);
   pathRowLayout->addWidget(m_forwardButton);
@@ -795,7 +795,7 @@ void ModelBrowser::createGui(AppController& appController)
   resultBar->setObjectName("ModelBrowser_ResultBar");
   resultBar->setAttribute(Qt::WA_StyledBackground);
   auto* resultLayout = new QHBoxLayout{resultBar};
-  resultLayout->setContentsMargins(10, 4, 8, 4);
+  setPanelInsets(*resultLayout, PanelInsets::Toolbar);
   resultLayout->setSpacing(6);
   m_resultCount = new QLabel{};
   m_resultCount->setObjectName("ModelBrowser_ResultCount");

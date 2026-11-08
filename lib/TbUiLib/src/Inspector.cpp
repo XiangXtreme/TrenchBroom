@@ -90,7 +90,7 @@ Inspector::Inspector(
   m_pageTitle = new QLabel{};
   m_pageTitle->setObjectName("Inspector_PageTitle");
   m_pageTitle->setProperty("regionAnchor", true);
-  m_pageTitle->setFixedHeight(34);
+  m_pageTitle->setFixedHeight(32);
 
   auto* navigationRail = new QWidget{};
   navigationRail->setObjectName("Inspector_NavigationRail");
@@ -98,7 +98,7 @@ Inspector::Inspector(
   navigationRail->setFixedWidth(40);
 
   auto* navigationLayout = new QVBoxLayout{};
-  navigationLayout->setContentsMargins(4, 6, 4, 6);
+  navigationLayout->setContentsMargins(4, 4, 4, 4);
   navigationLayout->setSpacing(4);
 
   const auto addNavigationButton = [this, navigationRail, navigationLayout](
@@ -258,7 +258,7 @@ void Inspector::updateNavigation(const int page)
   }
 
   const auto titles = std::array{tr("Scene"), tr("Face"), tr("Plugins"), tr("Terrain")};
-  m_pageTitle->setText(titles.at(static_cast<size_t>(page)).toUpper());
+  m_pageTitle->setText(titles.at(static_cast<size_t>(page)));
   m_navigationButtons.at(static_cast<size_t>(page))->setChecked(true);
 }
 

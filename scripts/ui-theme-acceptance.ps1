@@ -95,6 +95,11 @@ function Assert-UiSnapshotMetadata {
     throw "Snapshot image does not match its manifest SHA-256: $ImagePath"
   }
 
+  if ($ExpectedTarget -in @("asset-library-narrow", "asset-library-project-narrow") -and
+      [int] $Metadata.logicalSize.width -gt 900) {
+    throw "Narrow asset library expanded beyond its 900 px viewport: $ImagePath"
+  }
+
   $scale = [double]::Parse($ExpectedScale, [Globalization.CultureInfo]::InvariantCulture)
   $expectedWidth = [math]::Round([double] $Metadata.logicalSize.width * $scale)
   $expectedHeight = [math]::Round([double] $Metadata.logicalSize.height * $scale)

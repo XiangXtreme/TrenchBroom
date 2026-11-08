@@ -20,9 +20,11 @@
 #include "ui/Theme.h"
 
 #include <QColor>
+#include <QCoreApplication>
 #include <QPalette>
 #include <QRegularExpression>
 #include <QString>
+#include <QVariant>
 
 #include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
@@ -138,7 +140,9 @@ QPalette makeThemePalette(const ThemeTokens& tokens)
   palette.setColor(
     QPalette::Inactive, QPalette::Highlight, tokens.inactiveSelectionBackground);
   palette.setColor(QPalette::Disabled, QPalette::Highlight, tokens.pressedBackground);
-  palette.setColor(QPalette::All, QPalette::HighlightedText, tokens.inverseText);
+  palette.setColor(QPalette::Active, QPalette::HighlightedText, tokens.inverseText);
+  palette.setColor(QPalette::Inactive, QPalette::HighlightedText, tokens.text);
+  palette.setColor(QPalette::Disabled, QPalette::HighlightedText, tokens.disabledText);
 
   palette.setColor(QPalette::All, QPalette::Link, tokens.accent);
   palette.setColor(QPalette::All, QPalette::LinkVisited, tokens.accent);
@@ -149,6 +153,23 @@ QPalette makeThemePalette(const ThemeTokens& tokens)
   palette.setColor(QPalette::Disabled, QPalette::ButtonText, tokens.disabledText);
 
   return palette;
+}
+
+QColor themeSemanticColor(const QPalette& palette, const SemanticColor role)
+{
+  const auto property = role == SemanticColor::Error     ? "tbThemeErrorColor"
+                        : role == SemanticColor::Warning ? "tbThemeWarningColor"
+                                                         : "tbThemeSuccessColor";
+  if (const auto* app = QCoreApplication::instance())
+  {
+    const auto color = app->property(property).value<QColor>();
+    if (color.isValid())
+      return color;
+  }
+  const auto tokens = makeSystemThemeTokens(palette);
+  return role == SemanticColor::Error     ? tokens.error
+         : role == SemanticColor::Warning ? tokens.warning
+                                          : tokens.success;
 }
 
 Color browserBackgroundColor(const QPalette& palette)

@@ -17,6 +17,7 @@
 #include "mdl/Map_Layers.h"
 #include "ui/BitmapButton.h"
 #include "ui/MapDocument.h"
+#include "ui/PanelLayout.h"
 #include "ui/QWidgetUtils.h"
 #include "ui/SearchBox.h"
 #include "ui/SelectionPropertyEditor.h"
@@ -47,11 +48,11 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
   topRowWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
   auto* toolbarLayout = new QVBoxLayout{topRowWidget};
-  toolbarLayout->setContentsMargins(8, 5, 8, 5);
-  toolbarLayout->setSpacing(6);
+  setPanelInsets(*toolbarLayout, PanelInsets::Toolbar);
+  toolbarLayout->setSpacing(4);
   auto* topRow = new QHBoxLayout{};
   topRow->setContentsMargins(0, 0, 0, 0);
-  topRow->setSpacing(6);
+  topRow->setSpacing(4);
 
   m_searchField = createSearchBox(topRowWidget);
   m_searchField->setObjectName("OutlinerInspector_Search");

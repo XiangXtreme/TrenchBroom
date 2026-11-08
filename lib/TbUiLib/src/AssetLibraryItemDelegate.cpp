@@ -5,8 +5,6 @@
 */
 #include "ui/AssetLibraryItemDelegate.h"
 
-#include "ui/AssetLibraryGlyphs.h"
-
 #include <QApplication>
 #include <QFontMetrics>
 #include <QPainter>
@@ -14,6 +12,8 @@
 #include <QPixmap>
 #include <QStyle>
 #include <QStyleOptionViewItem>
+
+#include "ui/AssetLibraryGlyphs.h"
 
 #include <algorithm>
 #include <array>
@@ -23,7 +23,7 @@ namespace tb::ui
 {
 namespace
 {
-constexpr auto CardMargin = 3;
+constexpr auto CardMargin = 4;
 constexpr auto CardRadius = 6.0;
 constexpr auto ThumbRadius = 4.0;
 constexpr auto CardInset = 8;
@@ -236,36 +236,38 @@ void AssetLibraryItemDelegate::paintGrid(
   const auto base = palette.color(QPalette::Active, QPalette::AlternateBase);
   const auto border = palette.color(QPalette::Active, QPalette::Mid);
 
-  const auto card = option.rect.adjusted(CardMargin, CardMargin, -CardMargin, -CardMargin);
+  const auto card =
+    option.rect.adjusted(CardMargin, CardMargin, -CardMargin, -CardMargin);
   if (card.width() <= CardInset * 2 || card.height() <= CardInset * 2)
     return;
 
-  const auto surface =
-    selected ? blend(base, accent, 0.22)
-    : hovered ? palette.color(QPalette::Active, QPalette::Midlight)
-              : base;
+  const auto surface = selected  ? blend(base, accent, 0.22)
+                       : hovered ? palette.color(QPalette::Active, QPalette::Midlight)
+                                 : base;
 
   painter->setPen(QPen{
-    selected ? withAlpha(accent, 210)
+    selected  ? withAlpha(accent, 210)
     : hovered ? border
               : withAlpha(border, 150),
     1.0});
   painter->setBrush(surface);
-  painter->drawRoundedRect(QRectF{card}.adjusted(0.5, 0.5, -0.5, -0.5), CardRadius, CardRadius);
+  painter->drawRoundedRect(
+    QRectF{card}.adjusted(0.5, 0.5, -0.5, -0.5), CardRadius, CardRadius);
 
   auto nameFont = option.font;
-  nameFont.setBold(true);
+  nameFont.setWeight(QFont::Medium);
   const auto nameMetrics = QFontMetrics{nameFont};
 
   auto metaFont = option.font;
-  metaFont.setPointSizeF(std::max(6.5, option.font.pointSizeF() * 0.88));
+  metaFont.setPointSizeF(std::max(8.0, option.font.pointSizeF() - 1.0));
   const auto metaMetrics = QFontMetrics{metaFont};
 
   const auto inner = card.adjusted(CardInset, CardInset, -CardInset, -CardInset);
   const auto textTop = inner.bottom() - metaMetrics.height() - 2;
   const auto nameTop = textTop - nameMetrics.height() - 2;
 
-  const auto thumbArea = QRect{inner.left(), inner.top(), inner.width(), nameTop - inner.top() - 6};
+  const auto thumbArea =
+    QRect{inner.left(), inner.top(), inner.width(), nameTop - inner.top() - 6};
   const auto side = std::max(0, std::min(thumbArea.width(), thumbArea.height()));
   const auto thumbRect = QRect{
     thumbArea.left() + (thumbArea.width() - side) / 2,
@@ -292,7 +294,8 @@ void AssetLibraryItemDelegate::paintGrid(
   painter->drawText(
     nameRect,
     Qt::AlignHCenter | Qt::AlignTop,
-    nameMetrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideMiddle, nameRect.width()));
+    nameMetrics.elidedText(
+      index.data(Qt::DisplayRole).toString(), Qt::ElideMiddle, nameRect.width()));
 
   painter->setFont(metaFont);
   painter->setPen(palette.color(QPalette::Active, QPalette::PlaceholderText));
@@ -300,7 +303,8 @@ void AssetLibraryItemDelegate::paintGrid(
   painter->drawText(
     metaRect,
     Qt::AlignHCenter | Qt::AlignTop,
-    metaMetrics.elidedText(index.data(TypeLabelRole).toString(), Qt::ElideRight, metaRect.width()));
+    metaMetrics.elidedText(
+      index.data(TypeLabelRole).toString(), Qt::ElideRight, metaRect.width()));
 }
 
 void AssetLibraryItemDelegate::paintList(
@@ -317,18 +321,18 @@ void AssetLibraryItemDelegate::paintList(
   if (card.width() <= 40 || card.height() <= 8)
     return;
 
-  const auto surface =
-    selected ? blend(base, accent, 0.22)
-    : hovered ? palette.color(QPalette::Active, QPalette::Midlight)
-              : base;
+  const auto surface = selected  ? blend(base, accent, 0.22)
+                       : hovered ? palette.color(QPalette::Active, QPalette::Midlight)
+                                 : base;
 
   painter->setPen(QPen{
-    selected ? withAlpha(accent, 210)
+    selected  ? withAlpha(accent, 210)
     : hovered ? border
               : withAlpha(border, 130),
     1.0});
   painter->setBrush(surface);
-  painter->drawRoundedRect(QRectF{card}.adjusted(0.5, 0.5, -0.5, -0.5), CardRadius, CardRadius);
+  painter->drawRoundedRect(
+    QRectF{card}.adjusted(0.5, 0.5, -0.5, -0.5), CardRadius, CardRadius);
 
   const auto side = std::max(0, card.height() - 10);
   const auto thumbRect = QRect{card.left() + 5, card.top() + 5, side, side};
@@ -344,11 +348,11 @@ void AssetLibraryItemDelegate::paintList(
     surface);
 
   auto nameFont = option.font;
-  nameFont.setBold(true);
+  nameFont.setWeight(QFont::Medium);
   const auto nameMetrics = QFontMetrics{nameFont};
 
   auto metaFont = option.font;
-  metaFont.setPointSizeF(std::max(6.5, option.font.pointSizeF() * 0.88));
+  metaFont.setPointSizeF(std::max(8.0, option.font.pointSizeF() - 1.0));
   const auto metaMetrics = QFontMetrics{metaFont};
 
   const auto textLeft = thumbRect.right() + 9;
@@ -362,18 +366,19 @@ void AssetLibraryItemDelegate::paintList(
   painter->drawText(
     nameRect,
     Qt::AlignLeft | Qt::AlignVCenter,
-    nameMetrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideMiddle, nameRect.width()));
+    nameMetrics.elidedText(
+      index.data(Qt::DisplayRole).toString(), Qt::ElideMiddle, nameRect.width()));
 
   auto meta = index.data(TypeLabelRole).toString();
   if (const auto detail = index.data(DetailRole).toString(); !detail.isEmpty())
     meta = meta.isEmpty() ? detail : QStringLiteral("%1 · %2").arg(meta, detail);
-  if (const auto statusLine = statusText(status);
-      status == Pending || status == Missing)
+  if (const auto statusLine = statusText(status); status == Pending || status == Missing)
     meta = meta.isEmpty() ? statusLine : QStringLiteral("%1 · %2").arg(meta, statusLine);
 
   painter->setFont(metaFont);
   painter->setPen(palette.color(QPalette::Active, QPalette::PlaceholderText));
-  const auto metaRect = QRect{textLeft, textTop + nameMetrics.height() + 2, textWidth, metaMetrics.height()};
+  const auto metaRect =
+    QRect{textLeft, textTop + nameMetrics.height() + 2, textWidth, metaMetrics.height()};
   painter->drawText(
     metaRect,
     Qt::AlignLeft | Qt::AlignVCenter,
@@ -453,15 +458,13 @@ void AssetLibraryCategoryDelegate::paint(
   if (index.data(SectionRole).toBool())
   {
     auto font = option.font;
-    font.setBold(true);
-    font.setPointSizeF(std::max(6.5, option.font.pointSizeF() * 0.82));
-    font.setLetterSpacing(QFont::AbsoluteSpacing, 0.8);
+    font.setWeight(QFont::DemiBold);
     painter->setFont(font);
     painter->setPen(option.palette.color(QPalette::Active, QPalette::PlaceholderText));
     painter->drawText(
       option.rect.adjusted(10, 0, -10, -2),
       Qt::AlignLeft | Qt::AlignBottom,
-      index.data(Qt::DisplayRole).toString().toUpper());
+      index.data(Qt::DisplayRole).toString());
     painter->restore();
     return;
   }
@@ -471,15 +474,19 @@ void AssetLibraryCategoryDelegate::paint(
   itemOption.text.clear();
   itemOption.icon = QIcon{};
 
-  const auto* style = itemOption.widget ? itemOption.widget->style() : QApplication::style();
-  style->drawPrimitive(QStyle::PE_PanelItemViewItem, &itemOption, painter, itemOption.widget);
+  const auto* style =
+    itemOption.widget ? itemOption.widget->style() : QApplication::style();
+  style->drawPrimitive(
+    QStyle::PE_PanelItemViewItem, &itemOption, painter, itemOption.widget);
 
   const auto selected = (itemOption.state & QStyle::State_Selected) != 0;
+  const auto group = !(itemOption.state & QStyle::State_Enabled) ? QPalette::Disabled
+                     : itemOption.state & QStyle::State_Active   ? QPalette::Active
+                                                                 : QPalette::Inactive;
   const auto textColor = itemOption.palette.color(
-    QPalette::Active, selected ? QPalette::HighlightedText : QPalette::Text);
+    group, selected ? QPalette::HighlightedText : QPalette::Text);
   const auto countColor = itemOption.palette.color(
-    QPalette::Active,
-    selected ? QPalette::HighlightedText : QPalette::PlaceholderText);
+    group, selected ? QPalette::HighlightedText : QPalette::PlaceholderText);
 
   auto rect = option.rect.adjusted(10, 0, -10, 0);
   const auto iconSide = 16;
@@ -492,22 +499,26 @@ void AssetLibraryCategoryDelegate::paint(
     *painter, iconRect, glyphForFilter(index.data(FilterRole).toString()), textColor);
 
   auto font = option.font;
-  font.setPointSizeF(std::max(7.0, option.font.pointSizeF() * 0.96));
   const auto metrics = QFontMetrics{font};
   painter->setFont(font);
 
   const auto count = index.data(CountRole).toInt();
   const auto countText = count >= 0 ? QString::number(count) : QString{};
-  const auto countWidth = countText.isEmpty() ? 0 : metrics.horizontalAdvance(countText) + 10;
+  const auto countWidth =
+    countText.isEmpty() ? 0 : metrics.horizontalAdvance(countText) + 10;
 
   const auto textLeft = rect.left() + iconSide + 9;
   const auto textRect = QRect{
-    textLeft, rect.top(), std::max(0, rect.right() - countWidth - textLeft), rect.height()};
+    textLeft,
+    rect.top(),
+    std::max(0, rect.right() - countWidth - textLeft),
+    rect.height()};
   painter->setPen(textColor);
   painter->drawText(
     textRect,
     Qt::AlignLeft | Qt::AlignVCenter,
-    metrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, textRect.width()));
+    metrics.elidedText(
+      index.data(Qt::DisplayRole).toString(), Qt::ElideRight, textRect.width()));
 
   if (!countText.isEmpty())
   {
@@ -522,11 +533,9 @@ void AssetLibraryCategoryDelegate::paint(
 }
 
 QSize AssetLibraryCategoryDelegate::sizeHint(
-  const QStyleOptionViewItem& option, const QModelIndex& index) const
+  const QStyleOptionViewItem& option, const QModelIndex&) const
 {
-  if (index.data(SectionRole).toBool())
-    return QSize{option.rect.width(), 30};
-  return QSize{option.rect.width(), 30};
+  return QSize{option.rect.width(), 32};
 }
 
 // ---------------------------------------------------------------------------------------

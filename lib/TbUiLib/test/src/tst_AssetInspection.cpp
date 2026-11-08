@@ -365,6 +365,34 @@ TEST_CASE("AssetInspection")
     REQUIRE_FALSE(thumbnail.isNull());
     CHECK(thumbnail.pixelColor(0, 0) == QColor{Qt::red});
   }
+  SECTION("library commands and previews fit a narrow window")
+  {
+    auto temporary = QTemporaryDir{};
+    REQUIRE(temporary.isValid());
+    const auto folder = pathFromQString(temporary.path());
+    write(folder / "texture.png", png(Qt::red));
+    auto library = require(
+      project::AssetLibrary::create(folder, "A library with a long descriptive name"));
+    REQUIRE(library->importDirectory(folder).is_success());
+    auto browser = AssetLibraryWindow{temporary.path(), false};
+    browser.resize(900, 640);
+    browser.show();
+    QApplication::processEvents();
+    CHECK(browser.width() == 900);
+    for (const auto* name :
+         {"AssetLibrarySearch",
+          "AssetLibraryGrid",
+          "AssetLibraryConvert",
+          "AssetLibrary_InspectorScroll"})
+    {
+      CAPTURE(name);
+      auto* control = browser.findChild<QWidget*>(name);
+      REQUIRE(control);
+      CHECK(control->isVisible());
+      const auto rect = QRect{control->mapTo(&browser, QPoint{}), control->size()};
+      CHECK(browser.rect().contains(rect));
+    }
+  }
   SECTION("library preview shares the inspector scroll area")
   {
     auto temporary = QTemporaryDir{};

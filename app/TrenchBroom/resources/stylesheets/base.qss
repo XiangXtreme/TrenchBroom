@@ -15,7 +15,7 @@ QMenuBar {
 QMenuBar::item {
   background: transparent;
   border-radius: 4px;
-  padding: 4px 7px;
+  padding: 4px 8px;
 }
 
 QMenuBar::item:selected {
@@ -106,7 +106,7 @@ QToolBar#MapWindowToolBar {
   background: @tb-window-background;
   border: none;
   padding: 4px 6px;
-  spacing: 3px;
+  spacing: 4px;
 }
 
 QToolBar#MapWindowToolBar QToolButton {
@@ -151,14 +151,13 @@ QLabel#WorkbenchPanelTitle,
 QLabel[regionAnchor="true"],
 QWidget[regionAnchorTabs="true"] QLabel#TabBarButtonLabel {
   color: @tb-secondary-text;
-  font-size: 11px;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 QLabel#WorkbenchPanelTitle,
 QLabel#Inspector_PageTitle {
   background: @tb-sidebar-background;
-  padding: 0 10px;
+  padding: 0 12px;
 }
 
 QLabel#Inspector_PageTitle {
@@ -196,7 +195,7 @@ QToolButton[tbControlRole="navigation"]:hover {
 QToolButton[tbControlRole="navigation"]:checked {
   background: @tb-pressed-background;
   border-color: @tb-strong-border;
-  color: @tb-accent;
+  color: @tb-text;
 }
 
 QToolButton[tbControlRole="navigation"]:focus {
@@ -222,30 +221,6 @@ QWidget#ProjectToolBar {
   background: @tb-elevated-background;
   border-top: 1px solid @tb-border;
   border-bottom: 1px solid @tb-border;
-}
-
-/* Horizontal drawer navigation is one compound tab strip. */
-QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"] {
-  border-radius: 4px;
-  border-bottom: 2px solid transparent;
-}
-
-QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"]:checked {
-  background: @tb-button-background;
-  border-color: @tb-strong-border;
-  border-bottom-color: @tb-accent;
-  color: @tb-text;
-}
-
-QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"]:focus {
-  border-left-color: @tb-focus-border;
-  border-right-color: @tb-focus-border;
-  border-top-color: @tb-focus-border;
-}
-
-QWidget#ProjectToolBar QToolButton[tbControlRole="navigation"]:disabled {
-  color: @tb-disabled-text;
-  border-color: transparent;
 }
 
 QWidget#WorkspaceStatusBar {
@@ -740,6 +715,7 @@ QAbstractItemView::item:selected {
 
 QAbstractItemView::item:selected:!active {
   background: @tb-inactive-selection-background;
+  color: @tb-text;
 }
 
 QAbstractItemView::item:focus {
@@ -820,7 +796,7 @@ QTabBar::tab {
   color: @tb-secondary-text;
   margin: 3px 2px;
   min-height: 26px;
-  padding: 0 10px;
+  padding: 0 12px;
 }
 
 QTabBar::tab:hover {
@@ -872,7 +848,7 @@ QWidget#TabBarButton QLabel#TabBarButtonLabel {
 
 QWidget#TabBarButton[active="true"] QLabel#TabBarButtonLabel {
   color: @tb-text;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 QWidget#InfoPanel_TabBook,
@@ -907,7 +883,7 @@ QWidget#InfoPanel_TabBar QWidget#TabBarButton[active="true"] {
 
 QWidget#InfoPanel_TabBar QWidget#TabBarButton[active="true"] QLabel#TabBarButtonLabel {
   color: @tb-text;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 QTextEdit#Console_TextView,
@@ -930,7 +906,7 @@ QWidget#PythonConsole_InputBar {
 }
 
 QLabel#PythonConsole_Prompt {
-  color: @tb-accent;
+  color: @tb-secondary-text;
   padding-top: 2px;
 }
 
@@ -1174,30 +1150,30 @@ QLabel#PreferenceDialog_NavigationTitle {
   padding: 0 7px;
 }
 
-QListWidget#PreferenceDialog_NavigationList {
+QListView[tbControlRole="navigation"] {
   background: transparent;
   border: none;
   outline: none;
   padding: 0;
 }
 
-QListWidget#PreferenceDialog_NavigationList::item {
+QListView[tbControlRole="navigation"]::item {
   background: transparent;
   border: 1px solid transparent;
   border-left: 2px solid transparent;
   border-radius: 5px;
   color: @tb-secondary-text;
-  min-height: 34px;
-  padding: 2px 7px;
+  min-height: 28px;
+  padding: 2px 8px;
 }
 
-QListWidget#PreferenceDialog_NavigationList::item:hover {
+QListView[tbControlRole="navigation"]::item:hover {
   background: @tb-hover-background;
   color: @tb-text;
 }
 
-QListWidget#PreferenceDialog_NavigationList::item:selected,
-QListWidget#PreferenceDialog_NavigationList::item:selected:!active {
+QListView[tbControlRole="navigation"]::item:selected,
+QListView[tbControlRole="navigation"]::item:selected:!active {
   background: @tb-pressed-background;
   border-left-color: @tb-accent;
   color: @tb-text;
@@ -1210,13 +1186,17 @@ QWidget#PreferencePane_Content {
   background: @tb-editor-background;
 }
 
+QListView[tbControlRole="navigation"]::item:disabled {
+  color: @tb-disabled-text;
+}
+
 QLabel#PreferenceDialog_PageTitle {
   background: @tb-panel-background;
   border-bottom: 1px solid @tb-border;
   color: @tb-text;
   font-size: 16px;
-  font-weight: bold;
-  min-height: 44px;
+  font-weight: 600;
+  min-height: 40px;
   padding: 0 16px;
 }
 
@@ -1361,7 +1341,7 @@ QHeaderView#OutlinerTreeHeader::section {
   border: none;
   border-bottom: 1px solid @tb-border;
   color: @tb-secondary-text;
-  min-height: 25px;
+  min-height: 24px;
   padding: 0 5px;
 }
 
@@ -1397,7 +1377,7 @@ QWidget#FaceAttribsEditor_Attributes QLabel[faceFieldLabel="true"] {
 
 QLabel#FaceAttribsEditor_MaterialName {
   color: @tb-text;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 QWidget#FaceAttribsEditor_Attributes QDoubleSpinBox {
@@ -1451,7 +1431,7 @@ QWidget[tbPanelStyle="card"] {
 }
 
 QWidget[tbPanelStyle="card"] > QWidget#ClickableTitleBar {
-  background: @tb-alternate-background;
+  background: @tb-panel-background;
   border: 1px solid transparent;
   border-top-left-radius: 5px;
   border-top-right-radius: 5px;
@@ -1492,8 +1472,17 @@ QWidget[tbPanelStyle="card"] > QWidget#CollapsibleTitledPanel_Panel {
   border-bottom-right-radius: 5px;
 }
 
-QLabel[tbTextRole="secondary"] {
+QWidget[tbTextRole="secondary"] {
   color: @tb-secondary-text;
+}
+
+QWidget[tbTextRole="error"] {
+  color: @tb-error;
+}
+
+QWidget[tbTextRole="secondary"]:disabled,
+QWidget[tbTextRole="error"]:disabled {
+  color: @tb-disabled-text;
 }
 
 tb--ui--BitmapButton {
@@ -1513,7 +1502,7 @@ QWidget#OutlinerPropertyPanel {
 }
 
 QWidget#OutlinerPropertySectionHeader {
-  background: @tb-panel-background;
+  background: transparent;
   min-height: 26px;
 }
 
@@ -1554,13 +1543,13 @@ QLabel#AssetLibraryBadge {
   border-radius: 8px;
 }
 
-QLabel#AssetLibraryHeaderTitle {
+QWidget#AssetLibraryHeaderTitle {
   color: @tb-text;
   font-size: 15px;
   font-weight: 600;
 }
 
-QLabel#AssetLibraryHeaderPath {
+QWidget#AssetLibraryHeaderPath {
   color: @tb-secondary-text;
   font-size: 11px;
 }
@@ -1568,11 +1557,9 @@ QLabel#AssetLibraryHeaderPath {
 QLabel#AssetLibraryChip {
   background: @tb-alternate-background;
   border: 1px solid @tb-border;
-  border-radius: 9px;
+  border-radius: 4px;
   color: @tb-secondary-text;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 9px;
+  padding: 2px 8px;
 }
 
 QLabel#AssetLibraryChip[libraryState="local"] {
@@ -1609,9 +1596,7 @@ QWidget#AssetLibraryInspector {
 
 QLabel#AssetLibrarySectionTitle {
   color: @tb-secondary-text;
-  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 1px;
   padding-top: 2px;
 }
 
@@ -1712,7 +1697,7 @@ QWidget#smartSkyboxHeader {
 
 QLabel#smartSkyboxTitle {
   color: @tb-text;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 QListWidget#smartSkyboxList {
@@ -1754,7 +1739,7 @@ QWidget#ProjectAssetDetailsSurface {
 QWidget#ModelBrowser_Sources > QLabel[regionAnchor="true"],
 QWidget#ProjectAssetDetailsSurface > QLabel[regionAnchor="true"] {
   min-height: 30px;
-  padding: 0 10px;
+  padding: 0 12px;
   background: @tb-panel-background;
   border-bottom: 1px solid @tb-border;
 }

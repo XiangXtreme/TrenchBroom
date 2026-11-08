@@ -17,7 +17,7 @@ namespace
 constexpr auto ContentPadding = 12;
 constexpr auto ContentTopPadding = 8;
 constexpr auto SectionGap = 8;
-constexpr auto FormColumnGap = 10;
+constexpr auto FormColumnGap = 12;
 constexpr auto FormRowGap = 6;
 
 void configureScrollArea(QScrollArea& scroll)
@@ -30,10 +30,12 @@ void configureScrollArea(QScrollArea& scroll)
 
 void setPanelInsets(QLayout& layout, const PanelInsets insets)
 {
-  layout.setContentsMargins(
+  const auto margins =
     insets == PanelInsets::Content
       ? QMargins{ContentPadding, ContentTopPadding, ContentPadding, ContentPadding}
-      : QMargins{});
+    : insets == PanelInsets::Toolbar ? QMargins{8, 4, 8, 4}
+                                     : QMargins{};
+  layout.setContentsMargins(margins);
 }
 
 void configurePanelForm(QFormLayout& form, const PanelInsets insets)

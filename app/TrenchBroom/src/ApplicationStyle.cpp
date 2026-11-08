@@ -317,6 +317,20 @@ public:
     }
   }
 
+  QSize sizeFromContents(
+    ContentsType type,
+    const QStyleOption* option,
+    const QSize& contentsSize,
+    const QWidget* widget = nullptr) const override
+  {
+    auto size = QProxyStyle::sizeFromContents(type, option, contentsSize, widget);
+    if (
+      type == QStyle::CT_ItemViewItem && widget
+      && widget->property("tbControlRole") == "navigation")
+      size.setHeight(std::max(size.height(), 32));
+    return size;
+  }
+
   int pixelMetric(
     PixelMetric metric,
     const QStyleOption* option = nullptr,
@@ -472,6 +486,11 @@ bool loadStyleSheet(QApplication& app, const ThemeTokens& themeTokens, QString* 
       return false;
     }
 
+    // QPalette has no error/warning/success roles. Publish the installed tokens for
+    // domain renderers instead of resolving the saved preference a second time.
+    app.setProperty("tbThemeErrorColor", themeTokens.error);
+    app.setProperty("tbThemeWarningColor", themeTokens.warning);
+    app.setProperty("tbThemeSuccessColor", themeTokens.success);
     app.setStyleSheet(styleSheet);
     if (error != nullptr)
     {

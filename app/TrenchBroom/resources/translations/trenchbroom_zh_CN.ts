@@ -3106,7 +3106,7 @@ Hold %2 to keep trim sheet subdivisions.</source>
             </message>
         <message>
             <location filename="../../../../lib/TbUiLib/src/PreferenceDialog.cpp" line="173" />
-            <source>SETTINGS</source>
+            <source>Settings</source>
             <translation>设置</translation>
             </message>
         </context>
@@ -8932,8 +8932,8 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Slot 2</source><translation>槽位 2</translation></message>
         <message><source>Slot %1</source><translation>槽位 %1</translation></message>
         <message><source>Asset Library…</source><translation>资产库…</translation></message>
-        <message><source>Terrain Material</source><translation>地形材质</translation></message>
-        <message><source>Paint Slot</source><translation>涂刷槽位</translation></message>
+        <message><source>Terrain material</source><translation>地形材质</translation></message>
+        <message><source>Paint slot</source><translation>涂刷槽位</translation></message>
         <message><source>Edit mode</source><translation>编辑模式</translation></message>
         <message><source>Sculpt</source><translation>雕刻</translation></message>
         <message><source>Vertices</source><translation>顶点</translation></message>
@@ -8951,8 +8951,8 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message><source>Move Terrain Vertices</source><translation>移动地形顶点</translation></message>
         <message><source>Create Sculptable Terrain</source><translation>创建可雕刻地形</translation></message>
         <message><source>Draw New Terrain</source><translation>框选新地形</translation></message>
-        <message><source>New terrain height</source><translation>新地形高度</translation></message>
-        <message><source>New terrain thickness</source><translation>新地形厚度</translation></message>
+        <message><source>Height</source><translation>高度</translation></message>
+        <message><source>Thickness</source><translation>厚度</translation></message>
         <message><source>Brush entity</source><translation>刷子实体</translation></message>
         <message><source>Terrain brush entity class</source><translation>地形刷子实体类型</translation></message>
         <message><source>Change Terrain Brush Entity</source><translation>更改地形刷子实体</translation></message>

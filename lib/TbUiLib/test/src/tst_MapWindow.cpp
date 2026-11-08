@@ -742,7 +742,7 @@ TEST_CASE("MapWindow")
     {
       tabNames << tabLabel->text();
     }
-    CHECK(tabNames == QStringList{"CONSOLE", "PYTHON CONSOLE", "ISSUES", "ASSETS"});
+    CHECK(tabNames == QStringList{"Console", "Python Console", "Issues", "Assets"});
 
     window.switchToInfoPanelPage(InfoPanelPage::Assets);
 
@@ -1074,7 +1074,7 @@ TEST_CASE("MapWindow")
     auto prepared = QSignalSpy{inspector, &Inspector::pagePrepared};
     QTest::mouseClick(outlinerButton, Qt::LeftButton);
     CHECK(outlinerButton->isChecked());
-    CHECK(pageTitle->text() == "SCENE");
+    CHECK(pageTitle->text() == "Scene");
     REQUIRE(window.findChild<QWidget*>("OutlinerInspector"));
     // The default scene page already exists and must keep its widget tree.
     CHECK(prepared.count() == 0);
@@ -1088,7 +1088,7 @@ TEST_CASE("MapWindow")
     window.switchToInspectorPage(InspectorPage::Entity);
     CHECK(propertiesToggle->isChecked());
     CHECK(outlinerButton->isChecked());
-    CHECK(pageTitle->text() == "SCENE");
+    CHECK(pageTitle->text() == "Scene");
     CHECK(prepared.count() == 0);
     auto* properties = window.findChild<SelectionPropertyEditor*>();
     REQUIRE(properties);
@@ -1102,7 +1102,7 @@ TEST_CASE("MapWindow")
     QTest::mouseClick(faceButton, Qt::LeftButton);
     CHECK(faceButton->isChecked());
     CHECK_FALSE(outlinerButton->isChecked());
-    CHECK(pageTitle->text() == "FACE");
+    CHECK(pageTitle->text() == "Face");
     REQUIRE(window.findChild<QWidget*>("FaceInspector_Splitter"));
     REQUIRE(prepared.count() == 1);
     CHECK(prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Face));
@@ -1111,7 +1111,7 @@ TEST_CASE("MapWindow")
     QTest::mouseClick(pluginButton, Qt::LeftButton);
     CHECK(pluginButton->isChecked());
     CHECK_FALSE(faceButton->isChecked());
-    CHECK(pageTitle->text() == "PLUGINS");
+    CHECK(pageTitle->text() == "Plugins");
     REQUIRE(prepared.count() == 1);
     CHECK(
       prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Plugin));
@@ -1119,11 +1119,11 @@ TEST_CASE("MapWindow")
     QTest::mouseClick(terrainButton, Qt::LeftButton);
     CHECK(terrainButton->isChecked());
     CHECK_FALSE(pluginButton->isChecked());
-    CHECK(pageTitle->text() == "TERRAIN");
+    CHECK(pageTitle->text() == "Terrain");
     checkSingleNavigation();
     window.switchToInspectorPage(InspectorPage::Map);
     CHECK(terrainButton->isChecked());
-    CHECK(pageTitle->text() == "TERRAIN");
+    CHECK(pageTitle->text() == "Terrain");
     auto* settings = window.findChild<MapSettingsDialog*>();
     REQUIRE(settings);
     CHECK(settings->isVisible());

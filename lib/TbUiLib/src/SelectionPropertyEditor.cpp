@@ -26,7 +26,7 @@ SelectionPropertyEditor::SelectionPropertyEditor(MapDocument& document, QWidget*
   m_layout->setSpacing(0);
   auto* toolbar = new QWidget{this};
   auto* actions = createPanelActions(toolbar);
-  setPanelInsets(*actions, PanelInsets::Content);
+  setPanelInsets(*actions, PanelInsets::Toolbar);
   actions->addWidget(new QLabel{tr("Properties"), toolbar});
   actions->addStretch();
   m_presentation = new QComboBox{toolbar};

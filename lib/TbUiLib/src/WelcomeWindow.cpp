@@ -94,6 +94,7 @@ QWidget* WelcomeWindow::createAppPanel()
 
   m_createNewDocumentButton = new QPushButton{"New map...", appPanel};
   m_createNewDocumentButton->setToolTip("Create a new map document");
+  m_createNewDocumentButton->setDefault(true);
   m_openOtherDocumentButton = new QPushButton{"Browse...", appPanel};
   m_openOtherDocumentButton->setToolTip("Open an existing map document");
 

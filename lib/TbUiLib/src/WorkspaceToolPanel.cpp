@@ -25,6 +25,7 @@
 #include "ui/ImageUtils.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapViewBase.h"
+#include "ui/PanelLayout.h"
 
 #include <algorithm>
 
@@ -96,7 +97,7 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   m_bar->setObjectName("ProjectToolBar");
   m_bar->setAttribute(Qt::WA_StyledBackground);
   auto* barLayout = new QHBoxLayout{m_bar};
-  barLayout->setContentsMargins(6, 1, 6, 1);
+  setPanelInsets(*barLayout, PanelInsets::Toolbar);
   barLayout->setSpacing(2);
   const auto tools = std::map<WorkspaceToolId, QString>{
     {WorkspaceToolId::ContentBrowser, tr("Content Browser")},

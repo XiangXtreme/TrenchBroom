@@ -591,7 +591,7 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   : QWidget{parent}
   , m_document{document}
 {
-  m_propertiesPanel = new TitledPanel{tr("Entity Properties").toUpper(), true, true};
+  m_propertiesPanel = new TitledPanel{tr("Entity Properties"), true, true};
   m_propertiesPanel->setObjectName("OutlinerPropertyPanel");
   m_propertiesPanel->getTitleBar()->setObjectName("OutlinerPropertySectionHeader");
   m_propertiesPanel->getPanel()->setObjectName("OutlinerPropertyPanelBody");
@@ -604,7 +604,7 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
     m_propertiesPanel->getTitleBar());
   m_smartEditButton->setObjectName("outlinerPropertySmartEditToggle");
   m_smartEditButton->setProperty("tbControlRole", "compact");
-  m_smartEditButton->setIconSize(QSize{14, 14});
+  m_smartEditButton->setIconSize(QSize{16, 16});
   m_smartEditButton->setFixedSize(QSize{22, 22});
   m_smartEditButton->setChecked(pref(Preferences::EntityPropertiesSmartEdit));
   if (titleBarLayout != nullptr)
@@ -1295,7 +1295,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
       colorButton->setObjectName("outlinerPropertyColorButton");
       colorButton->setProperty("tbControlRole", "compact");
       colorButton->setFixedSize(QSize{24, 24});
-      colorButton->setIconSize(QSize{14, 14});
+      colorButton->setIconSize(QSize{16, 16});
       colorButton->setProperty("propertyKey", QString::fromStdString(key));
       colorButton->setToolTip(tr("Choose color"));
       colorButton->setEnabled(valueMutable);

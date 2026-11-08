@@ -18,7 +18,8 @@ namespace tb::ui
 enum class PanelInsets
 {
   None,
-  Content
+  Content,
+  Toolbar
 };
 
 // Standard Qt layouts with shared defaults. Feature code adds content and may
