@@ -20,13 +20,16 @@
 #include "ui/FaceAttribsEditor.h"
 
 #include <QApplication>
+#include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QScrollArea>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QtGlobal>
 
 #include "gl/Material.h"
+#include "gl/MaterialManager.h"
 #include "gl/Texture.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushFaceHandle.h"
@@ -42,15 +45,20 @@
 #include "mdl/WorldNode.h"
 #include "ui/BitmapButton.h"
 #include "ui/BorderLine.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/FlagsPopupEditor.h"
 #include "ui/MapDocument.h"
+#include "ui/MaterialPreview.h"
+#include "ui/PanelLayout.h"
 #include "ui/QStyleUtils.h"
 #include "ui/SignalDelayer.h"
 #include "ui/SpinControl.h"
+#include "ui/Splitter.h"
 #include "ui/UvEditor.h"
 #include "ui/UvViewHelper.h"
 #include "ui/ViewConstants.h"
 #include "ui/ViewUtils.h"
+#include "ui/WidgetState.h"
 
 #include "vm/vec_io.h" // IWYU pragma: keep
 
@@ -107,6 +115,7 @@ FaceAttribsEditor::FaceAttribsEditor(
   AppController& appController, MapDocument& document, QWidget* parent)
   : QWidget{parent}
   , m_document{document}
+
   , m_updateControlsSignalDelayer{new SignalDelayer{this}}
 {
   setObjectName(QStringLiteral("FaceAttribsEditor"));
@@ -114,6 +123,7 @@ FaceAttribsEditor::FaceAttribsEditor(
   bindEvents();
   connectObservers();
   updateIncrements();
+  updateControls();
 }
 
 bool FaceAttribsEditor::cancelMouseDrag()
@@ -373,24 +383,70 @@ void FaceAttribsEditor::createGui(AppController& appController)
 {
   m_uvEditor = new UvEditor{appController, m_document};
 
-  auto* buttonsWidget = createButtonsWidget();
-  auto* faceAttribsWidget = createAttribsWidget();
+  auto* material = createMaterialWidget(appController);
+  auto* preview = new CollapsibleTitledPanel{tr("UV preview")};
+  preview->setObjectName("FaceAttribsEditor_UvSection");
+  preview->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
+  preview->createContentLayout()->addWidget(m_uvEditor, 1);
+  auto* attributes = createPanelScrollArea(createAttribsWidget());
+  auto* splitter = new Splitter{Qt::Vertical};
+  splitter->setObjectName("FaceAttribsEditor_Splitter");
+  splitter->addWidget(preview);
+  splitter->addWidget(attributes);
+  splitter->setSizes({280, 320});
+  splitter->setStretchFactor(0, 1);
+  splitter->setStretchFactor(1, 1);
+  restoreWidgetState(splitter);
+  connect(
+    splitter, &QSplitter::splitterMoved, this, [splitter] { saveWidgetState(splitter); });
+  auto* layout = new QVBoxLayout{this};
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->setSpacing(0);
+  layout->addWidget(material);
+  layout->addWidget(splitter, 1);
+}
 
-  auto* innerLayout = new QHBoxLayout{};
-  innerLayout->setContentsMargins(0, 0, 0, 0);
-  innerLayout->setSpacing(LayoutConstants::NarrowHMargin);
-  innerLayout->addWidget(buttonsWidget, 0);
-  innerLayout->addWidget(new BorderLine{BorderLine::Direction::Vertical});
-  innerLayout->addWidget(faceAttribsWidget, 1);
-
-  auto* outerLayout = new QVBoxLayout{};
-  outerLayout->setContentsMargins(0, 0, 0, 0);
-  outerLayout->setSpacing(0);
-  outerLayout->addWidget(m_uvEditor, 1);
-  outerLayout->addWidget(new BorderLine{});
-  outerLayout->addLayout(innerLayout);
-
-  setLayout(outerLayout);
+QWidget* FaceAttribsEditor::createMaterialWidget(AppController& appController)
+{
+  auto* header = new QWidget{};
+  header->setObjectName("FaceAttribsEditor_Material");
+  auto* layout = new QHBoxLayout{header};
+  layout->setContentsMargins(8, 8, 8, 8);
+  auto* preview = new MaterialPreview{appController, m_document};
+  layout->addWidget(preview);
+  m_materialName = new QLabel{};
+  m_materialName->setObjectName("FaceAttribsEditor_MaterialName");
+  m_materialName->setTextFormat(Qt::PlainText);
+  m_materialName->setWordWrap(true);
+  m_materialName->setMinimumWidth(0);
+  m_materialName->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+  m_materialName->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  m_textureSize = new QLabel{};
+  setInfoStyle(m_textureSize);
+  auto* info = new QVBoxLayout{};
+  info->setSpacing(2);
+  info->addWidget(m_materialName);
+  info->addWidget(m_textureSize);
+  layout->addLayout(info, 1);
+  auto* choose = createBitmapButton("BrowserFolderSmall.svg", tr("Choose material"));
+  choose->setObjectName("FaceAttribsEditor_ChooseMaterial");
+  choose->setAccessibleName(tr("Choose material"));
+  choose->setProperty("tbControlRole", "compact");
+  layout->addWidget(choose);
+  connect(choose, &QAbstractButton::clicked, this, [this] {
+    emit materialBrowserRequested(nullptr);
+  });
+  auto* reveal =
+    createBitmapButton("Search.svg", tr("Locate material in Content Browser"));
+  reveal->setObjectName("FaceAttribsEditor_RevealMaterial");
+  reveal->setAccessibleName(tr("Locate material in Content Browser"));
+  reveal->setProperty("tbControlRole", "compact");
+  layout->addWidget(reveal);
+  connect(reveal, &QAbstractButton::clicked, this, [this, preview] {
+    if (const auto* material = preview->material())
+      emit materialBrowserRequested(material);
+  });
+  return header;
 }
 
 QWidget* FaceAttribsEditor::createButtonsWidget()
@@ -453,67 +509,49 @@ Hold %2 to keep trim sheet subdivisions.)")
   m_autoFitButton =
     createBitmapButton("AutoFitTexture.svg", tr("Fit texture to face."), this);
 
-  auto* innerLayout = new QGridLayout{};
-  innerLayout->addWidget(m_justifyUpButton, 0, 1);
-  innerLayout->addWidget(m_justifyLeftButton, 1, 0);
-  innerLayout->addWidget(m_autoFitButton, 1, 1);
-  innerLayout->addWidget(m_justifyRightButton, 1, 2);
-  innerLayout->addWidget(m_justifyDownButton, 2, 1);
-
-  innerLayout->addWidget(m_alignButton, 3, 0);
-  innerLayout->addWidget(m_fitHButton, 3, 1);
-  innerLayout->addWidget(m_fitVButton, 3, 2);
-
-  innerLayout->setContentsMargins(QMargins{0, 0, 0, 0});
+  auto* innerLayout = new QHBoxLayout{};
+  innerLayout->setContentsMargins(0, 0, 0, 0);
   innerLayout->setSpacing(LayoutConstants::NarrowHMargin);
-
-  auto* outerLayout = new QVBoxLayout{};
-  outerLayout->setContentsMargins(
-    LayoutConstants::NarrowHMargin,
-    LayoutConstants::MediumVMargin,
-    LayoutConstants::NarrowHMargin,
-    LayoutConstants::MediumVMargin);
-  outerLayout->addLayout(innerLayout);
-  outerLayout->addStretch(0);
-
+  for (auto* button :
+       {m_alignButton,
+        m_justifyLeftButton,
+        m_justifyRightButton,
+        m_justifyUpButton,
+        m_justifyDownButton,
+        m_fitHButton,
+        m_fitVButton,
+        m_autoFitButton})
+  {
+    button->setProperty("tbControlRole", "compact");
+    innerLayout->addWidget(button);
+  }
+  innerLayout->addStretch(1);
   auto* container = new QWidget{};
+  container->setLayout(innerLayout);
   container->setObjectName(QStringLiteral("FaceAttribsEditor_Tools"));
   container->setAttribute(Qt::WA_StyledBackground);
-  container->setLayout(outerLayout);
-  container->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+  container->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
   return container;
 }
 
 QWidget* FaceAttribsEditor::createAttribsWidget()
 {
-  auto* materialNameLabel = createFieldLabel(QStringLiteral("Material"));
-  m_materialName = new QLabel{"none"};
-  m_materialName->setObjectName(QStringLiteral("FaceAttribsEditor_MaterialName"));
-  m_materialName->setTextInteractionFlags(Qt::TextSelectableByMouse);
-
-  auto* textureSizeLabel = createFieldLabel(QStringLiteral("Size"));
-  m_textureSize = new QLabel{""};
-
   const auto max = std::numeric_limits<double>::max();
   const auto min = -max;
 
-  auto* xOffsetLabel = createFieldLabel(QStringLiteral("X Offset"));
   m_xOffsetEditor = new SpinControl{};
   m_xOffsetEditor->setRange(min, max);
   m_xOffsetEditor->setDigits(0, 6);
 
-  auto* yOffsetLabel = createFieldLabel(QStringLiteral("Y Offset"));
   m_yOffsetEditor = new SpinControl{};
   m_yOffsetEditor->setRange(min, max);
   m_yOffsetEditor->setDigits(0, 6);
 
-  auto* xScaleLabel = createFieldLabel(QStringLiteral("X Scale"));
   m_xScaleEditor = new SpinControl{};
   m_xScaleEditor->setRange(min, max);
   m_xScaleEditor->setIncrements(0.1, 0.25, 0.01);
   m_xScaleEditor->setDigits(0, 6);
 
-  auto* yScaleLabel = createFieldLabel(QStringLiteral("Y Scale"));
   m_yScaleEditor = new SpinControl{};
   m_yScaleEditor->setRange(min, max);
   m_yScaleEditor->setIncrements(0.1, 0.25, 0.01);
@@ -567,76 +605,50 @@ QWidget* FaceAttribsEditor::createAttribsWidget()
 
   m_colorEditor->setValidator(new ColorValidator{});
 
-  const Qt::Alignment LabelFlags = Qt::AlignVCenter | Qt::AlignRight;
-  const Qt::Alignment ValueFlags = Qt::AlignVCenter;
-
-  auto* faceAttribsLayout = new QGridLayout{};
-  faceAttribsLayout->setContentsMargins(
-    LayoutConstants::NarrowHMargin,
-    LayoutConstants::MediumVMargin,
-    LayoutConstants::NarrowHMargin,
-    LayoutConstants::MediumVMargin);
-  faceAttribsLayout->setHorizontalSpacing(LayoutConstants::MediumHMargin);
-  faceAttribsLayout->setVerticalSpacing(LayoutConstants::MediumVMargin);
-
-  int r = 0;
-  int c = 0;
-
-  faceAttribsLayout->addWidget(materialNameLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_materialName, r, c++, ValueFlags);
-  faceAttribsLayout->addWidget(textureSizeLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_textureSize, r, c++, ValueFlags);
-  ++r;
-  c = 0;
-
-  faceAttribsLayout->addWidget(xOffsetLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_xOffsetEditor, r, c++);
-  faceAttribsLayout->addWidget(yOffsetLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_yOffsetEditor, r, c++);
-  ++r;
-  c = 0;
-
-  faceAttribsLayout->addWidget(xScaleLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_xScaleEditor, r, c++);
-  faceAttribsLayout->addWidget(yScaleLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_yScaleEditor, r, c++);
-  ++r;
-  c = 0;
-
-  faceAttribsLayout->addWidget(rotationLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_rotationEditor, r, c++);
-  faceAttribsLayout->addWidget(m_uvSkewLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_uvSkewEditor, r, c++);
-  ++r;
-  c = 0;
-
-  faceAttribsLayout->addWidget(m_surfaceValueLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_surfaceValueEditorLayout, r, c++);
-  ++r;
-  c = 0;
-
-  faceAttribsLayout->addWidget(m_surfaceFlagsLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_surfaceFlagsEditorLayout, r, c++, 1, 3);
-  ++r;
-  c = 0;
-
-  faceAttribsLayout->addWidget(m_contentFlagsLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_contentFlagsEditorLayout, r, c++, 1, 3);
-  ++r;
-  c = 0;
-
-  faceAttribsLayout->addWidget(m_colorLabel, r, c++, LabelFlags);
-  faceAttribsLayout->addWidget(m_colorEditorLayout, r, c++, 1, 3);
-  ++r;
-  c = 0;
-
-  faceAttribsLayout->setColumnStretch(1, 1);
-  faceAttribsLayout->setColumnStretch(3, 1);
-
+  // The two axes share a row, so narrow inspectors do not need four label/value columns.
+  m_xOffsetEditor->setPrefix("X: ");
+  m_yOffsetEditor->setPrefix("Y: ");
+  m_xScaleEditor->setPrefix("X: ");
+  m_yScaleEditor->setPrefix("Y: ");
+  m_xOffsetEditor->setObjectName("FaceAttribsEditor_OffsetX");
+  m_yOffsetEditor->setObjectName("FaceAttribsEditor_OffsetY");
+  m_xScaleEditor->setObjectName("FaceAttribsEditor_ScaleX");
+  m_yScaleEditor->setObjectName("FaceAttribsEditor_ScaleY");
+  m_rotationEditor->setObjectName("FaceAttribsEditor_Rotation");
+  const auto axes = [](QWidget* x, QWidget* y) {
+    auto* widget = new QWidget{};
+    auto* layout = new QHBoxLayout{widget};
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    layout->addWidget(x, 1);
+    layout->addWidget(y, 1);
+    return widget;
+  };
+  auto* transform = new CollapsibleTitledPanel{tr("Texture transform")};
+  transform->createContentLayout()->addWidget(createButtonsWidget());
+  auto* form = createPanelForm();
+  form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  form->addRow(tr("Offset"), axes(m_xOffsetEditor, m_yOffsetEditor));
+  form->addRow(tr("Scale"), axes(m_xScaleEditor, m_yScaleEditor));
+  form->addRow(rotationLabel, m_rotationEditor);
+  form->addRow(m_uvSkewLabel, m_uvSkewEditor);
+  transform->createContentLayout()->addLayout(form);
+  auto* surface = new CollapsibleTitledPanel{tr("Surface attributes")};
+  surface->setObjectName("FaceAttribsEditor_SurfaceSection");
+  auto* surfaceForm = createPanelForm();
+  surfaceForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  surfaceForm->addRow(m_surfaceValueLabel, m_surfaceValueEditorLayout);
+  surfaceForm->addRow(m_surfaceFlagsLabel, m_surfaceFlagsEditorLayout);
+  surfaceForm->addRow(m_contentFlagsLabel, m_contentFlagsEditorLayout);
+  surfaceForm->addRow(m_colorLabel, m_colorEditorLayout);
+  surface->createContentLayout()->addLayout(surfaceForm);
+  surface->setVisible(hasSurfaceFlags() || hasContentFlags() || hasColorAttribs());
   auto* container = new QWidget{};
-  container->setObjectName(QStringLiteral("FaceAttribsEditor_Attributes"));
-  container->setAttribute(Qt::WA_StyledBackground);
-  container->setLayout(faceAttribsLayout);
+  container->setObjectName("FaceAttribsEditor_Attributes");
+  auto* column = createPanelColumn(container);
+  column->addWidget(transform);
+  column->addWidget(surface);
+  column->addStretch(1);
   return container;
 }
 
@@ -738,6 +750,10 @@ void FaceAttribsEditor::bindEvents()
 
 void FaceAttribsEditor::connectObservers()
 {
+  m_notifierConnection +=
+    m_document.currentMaterialNameDidChangeNotifier.connect([this] { refresh(); });
+  m_notifierConnection +=
+    m_document.resourcesWereProcessedNotifier.connect([this](const auto&) { refresh(); });
   m_notifierConnection +=
     m_document.documentWasLoadedNotifier.connect([&] { refresh(); });
   m_notifierConnection +=
@@ -897,37 +913,14 @@ void FaceAttribsEditor::updateControls()
 
     if (materialMulti)
     {
-      m_materialName->setText("multi");
+      m_materialName->setText(tr("Multiple materials"));
       m_materialName->setEnabled(false);
-      m_textureSize->setText("multi");
+      m_textureSize->setText(tr("Multiple sizes"));
       m_textureSize->setEnabled(false);
     }
     else
     {
-      if (materialName == mdl::BrushFace::NoMaterialName)
-      {
-        m_materialName->setText("none");
-        m_materialName->setEnabled(false);
-        m_textureSize->setText("");
-        m_textureSize->setEnabled(false);
-      }
-      else
-      {
-        if (const auto* texture = getTexture(firstFace.material()))
-        {
-          m_materialName->setText(QString::fromStdString(materialName));
-          m_textureSize->setText(
-            QStringLiteral("%1 * %2").arg(texture->width()).arg(texture->height()));
-          m_materialName->setEnabled(true);
-          m_textureSize->setEnabled(true);
-        }
-        else
-        {
-          m_materialName->setText(QString::fromStdString(materialName) + " (not found)");
-          m_materialName->setEnabled(false);
-          m_textureSize->setEnabled(false);
-        }
-      }
+      updateMaterialInfo(materialName, firstFace.material());
     }
     setValueOrMulti(m_xOffsetEditor, xOffsetMulti, double(xOffset));
     setValueOrMulti(m_yOffsetEditor, yOffsetMulti, double(yOffset));
@@ -971,6 +964,10 @@ void FaceAttribsEditor::updateControls()
   }
   else
   {
+    const auto& map = m_document.map();
+    updateMaterialInfo(
+      map.currentMaterialName(),
+      map.materialManager().material(map.currentMaterialName()));
     m_alignButton->setEnabled(false);
     m_justifyUpButton->setEnabled(false);
     m_justifyDownButton->setEnabled(false);
@@ -998,6 +995,32 @@ void FaceAttribsEditor::updateControls()
     m_surfaceFlagsUnsetButton->setEnabled(false);
     m_contentFlagsUnsetButton->setEnabled(false);
     m_colorUnsetButton->setEnabled(false);
+  }
+}
+
+void FaceAttribsEditor::updateMaterialInfo(
+  const std::string& name, const gl::Material* material)
+{
+  m_textureSize->clear();
+  if (name.empty() || name == mdl::BrushFace::NoMaterialName)
+  {
+    m_materialName->setText(tr("No material"));
+    m_materialName->setEnabled(false);
+    m_textureSize->setEnabled(false);
+  }
+  else if (const auto* texture = getTexture(material))
+  {
+    m_materialName->setText(QString::fromStdString(name));
+    m_textureSize->setText(
+      QStringLiteral("%1 × %2").arg(texture->width()).arg(texture->height()));
+    m_materialName->setEnabled(true);
+    m_textureSize->setEnabled(true);
+  }
+  else
+  {
+    m_materialName->setText(tr("%1 (not found)").arg(QString::fromStdString(name)));
+    m_materialName->setEnabled(false);
+    m_textureSize->setEnabled(false);
   }
 }
 

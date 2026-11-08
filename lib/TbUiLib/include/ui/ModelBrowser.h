@@ -43,6 +43,7 @@ class QAbstractButton;
 class QCheckBox;
 class QComboBox;
 class QEvent;
+class QDialog;
 class QFileSystemWatcher;
 class QFormLayout;
 class QHBoxLayout;
@@ -58,6 +59,11 @@ class QTreeWidgetItem;
 class QTimer;
 class QVBoxLayout;
 
+namespace tb::gl
+{
+class Material;
+}
+
 namespace tb::ui
 {
 class AppController;
@@ -65,6 +71,8 @@ class AssetInspector;
 class EntityBrowser;
 class AssetLibraryWindow;
 class MapDocument;
+class MaterialBrowser;
+class SmartWadEditor;
 class PopupWindow;
 class ProjectSession;
 
@@ -72,6 +80,22 @@ class ModelBrowser : public QWidget
 {
   Q_OBJECT
 private:
+  enum class ContentKind
+  {
+    Assets,
+    Entities,
+    MapMaterials
+  };
+  ContentKind m_contentKind = ContentKind::Assets;
+  MaterialBrowser* m_materialBrowser = nullptr;
+  QComboBox* m_materialSort = nullptr;
+  QCheckBox* m_materialGroup = nullptr;
+  QCheckBox* m_materialUsed = nullptr;
+  QToolButton* m_materialSettings = nullptr;
+  QPointer<QDialog> m_collectionSettings;
+  QPointer<SmartWadEditor> m_wadEditor;
+  QString m_materialSearch;
+  int m_materialScroll = 0;
   MapDocument* m_document;
   AppController& m_appController;
   EntityBrowser* m_entityBrowser = nullptr;
@@ -82,7 +106,6 @@ private:
   QCheckBox* m_entityGroup = nullptr;
   QCheckBox* m_entityUsed = nullptr;
   QToolButton* m_entitySettings = nullptr;
-  bool m_showingEntities = false;
   QString m_entitySearch;
   int m_entityScroll = 0;
   std::shared_ptr<ProjectSession> m_project;
@@ -158,7 +181,7 @@ private:
   struct BrowserLocation
   {
     std::filesystem::path folder;
-    bool entities = false;
+    ContentKind content = ContentKind::Assets;
     bool operator==(const BrowserLocation&) const = default;
   };
   std::vector<BrowserLocation> m_folderHistory;
@@ -195,6 +218,11 @@ public:
   void setDocument(MapDocument& document);
   void showEntityBrowser();
   bool isShowingEntities() const;
+  bool isShowingAssets() const;
+  bool isShowingMapMaterials() const;
+  void showMapMaterials();
+  void revealMaterial(const gl::Material* material);
+  void showMaterialSettings();
   void addViewOption(QWidget* control);
   void bindInspector(AssetInspector& inspector, bool mapActions);
   void setMapActionsEnabled(bool enabled);
@@ -203,7 +231,7 @@ public:
 
 signals:
   void actionContextChanged();
-  void entityModeChanged(bool entities);
+  void contentModeChanged();
   void createEntityRequested(const QString& classname);
 
 protected:
@@ -212,6 +240,8 @@ protected:
 private:
   void showEvent(QShowEvent* event) override;
   void setEntityMode(bool entities);
+  void setContentKind(ContentKind kind);
+  void updateWadEditor();
 
   void previewAsset(AppController& appController, const QString& path);
   void applyAssetToMap(BrowserAsset asset);

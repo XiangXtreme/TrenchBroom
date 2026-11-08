@@ -49,6 +49,7 @@
 
 #include "base/PreferenceManager.h"
 #include "gl/GlManager.h"
+#include "gl/MaterialManager.h"
 #include "gl/ResourceManager.h"
 #include "mdl/Autosaver.h"
 #include "mdl/BrushFace.h"
@@ -571,6 +572,20 @@ void MapWindow::createGui()
       if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
         browser->showEntityBrowser();
     });
+    connect(
+      m_editor,
+      &MapEditorView::materialBrowserRequested,
+      this,
+      [this](const gl::Material* material) {
+        m_tools->showContent();
+        if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
+        {
+          if (material)
+            browser->revealMaterial(material);
+          else
+            browser->showMapMaterials();
+        }
+      });
     connect(m_tools, &WorkspaceToolPanel::extensionsRequested, this, [this]() {
       m_editor->showInspectorPage(InspectorPage::Plugin);
     });
@@ -1947,6 +1962,8 @@ const gl::Material* materialToReveal(const mdl::Map& map)
   const auto& selection = map.selection();
 
   const auto& allBrushFaces = selection.allBrushFaces();
+  if (allBrushFaces.empty())
+    return map.materialManager().material(map.currentMaterialName());
   const auto* firstMaterial = allBrushFaces.front().face().material();
   const auto allFacesHaveIdenticalMaterial = std::ranges::all_of(
     allBrushFaces,
@@ -1972,8 +1989,7 @@ void MapWindow::revealMaterial()
 
 void MapWindow::revealMaterial(const gl::Material* material)
 {
-  m_inspector->switchToPage(InspectorPage::Face);
-  m_inspector->faceInspector()->revealMaterial(material);
+  m_editor->showMaterialBrowser(material);
 }
 
 AppController& MapWindow::appController()

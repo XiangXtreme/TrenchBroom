@@ -27,6 +27,11 @@
 class QLabel;
 class QToolButton;
 
+namespace tb::gl
+{
+class Material;
+}
+
 namespace tb::ui
 {
 class AppController;
@@ -95,6 +100,7 @@ public:
 signals:
   /** Emitted right after a lazily created inspector page is installed. */
   void pagePrepared(int page);
+  void materialBrowserRequested(const gl::Material* material);
 };
 
 } // namespace tb::ui

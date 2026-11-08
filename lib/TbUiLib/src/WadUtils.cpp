@@ -24,7 +24,7 @@
 #include "mdl/GameConfig.h"
 #include "mdl/GameInfo.h"
 #include "mdl/Map.h"
-#include "mdl/Map_Entities.h"
+#include "mdl/Map_World.h"
 #include "mdl/WadPropertyUtils.h"
 #include "mdl/WorldNode.h"
 #include "ui/ChoosePathTypeDialog.h"
@@ -67,7 +67,8 @@ bool addWadPaths(const QStringList& pathQStrs, mdl::Map& map, QWidget* dialogPar
             .generic_string();
         });
 
-      return setEntityProperty(map, *wadPropertyKey, mdl::joinWadProperty(wadPaths));
+      setWorldProperty(map, *wadPropertyKey, mdl::joinWadProperty(wadPaths));
+      return true;
     }
   }
 

@@ -6,13 +6,13 @@ There are two aspects to working with materials in a level editor: [material man
 
 ### The Material Browser {#material_browser}
 
-![The material browser](images/TextureBrowser.png) The material browser is part of the face inspector and is used for two purposes: changing the material for the currently selected faces and selecting the _current material_. The name of every material is displayed below its image. Materials that are currently in use have a yellow border, while the current material has a red border. Hover over a thumbnail to see the material name and texture dimensions.
+![The material browser](images/TextureBrowser.png) The material browser lives in the bottom Content Browser’s **Map materials** folder and is used for two purposes: changing the material for the currently selected faces and selecting the _current material_. The name of every material is displayed below its image. Materials that are currently in use have a yellow border, while the current material has a red border. Hover over a thumbnail to see the material name and texture dimensions.
 
-The browser has two compact control rows above the thumbnails. The first is a search field. Enter one or more space-delimited words to show only names containing every term. The second row contains the following controls:
+Use the shared search field above the thumbnails. Enter one or more space-delimited words to show only names containing every term. Search and scroll positions are retained separately for map materials, entity types and file assets. The toolbar provides these controls:
 
-- **Name / Usage** sorts materials alphabetically or by their current use count.
-- **Group** groups materials by [material collection](#material_management). Click a group heading or its disclosure indicator to collapse or expand that collection.
-- **Used** limits the browser to materials currently used by the map.
+- **View > Sort > Name / Usage** sorts materials alphabetically or by their current use count.
+- **View > Group by collection** groups materials by [material collection](#material_management). Click a group heading or its disclosure indicator to collapse or expand that collection.
+- **Filters > Only used materials** limits the browser to materials currently used by the map.
 - **100%–500%** changes the thumbnail scale. You can also hold #key(Ctrl) and use the mouse wheel over the browser to step through the same scale range.
 
 The selected thumbnail scale is shared with **Preferences > View > Material Browser > Icon size**. Ordinary wheel input continues to scroll the browser.
@@ -23,9 +23,9 @@ To select all brushes having a face with a certain material, right-click that ma
 
 ### Filtering Material Collections {#filtering-material-collections}
 
-![Filtering material collections](images/TextureCollectionEditor.png) To filter out material collections, click on the "Settings" button in the material browser's title bar. This reveals a UI to enable or disable individual material collections. Select one or more material collections from the "Available" section and click on the "+" icon to enable them. To disable material collections, select them in the "Enabled" section and click on the "-" icon. Click on the circular arrow icon to reload all material collections.
+![Filtering material collections](images/TextureCollectionEditor.png) To filter out material collections, click the material collections button in the Content Browser toolbar. This opens a dialog to enable or disable individual material collections. Select one or more material collections from the "Available" section and click on the "+" icon to enable them. To disable material collections, select them in the "Enabled" section and click on the "-" icon. Click on the circular arrow icon to reload all material collections.
 
-Click on the "Browser" button in the material browser's title bar to return to the material browser.
+For WAD-based games, this dialog manages the worldspawn WAD list, even while an entity or face is selected. Close the dialog to return to browsing; changes are applied immediately and support undo.
 
 ### Material Projection Modes {#material_projection_modes}
 
@@ -41,7 +41,7 @@ In TrenchBroom, there is the notion of a current material, which we have already
 
 ### Assigning Materials Manually {#assigning-materials-manually}
 
-To change the material of the currently selected faces, left click on a material in the material browser. This also works if you have selected brushes (and nothing else) - in this case, the new material is applied to all faces of the currently selected brushes.
+To change the material of the currently selected faces, left click on a material in the material browser. This also works if you have selected brushes (and nothing else) - in this case, the new material is applied to all faces of the currently selected brushes. Clicking a material already shared by all selected faces clears their material. With no selected faces, clicking changes the current material for new brushes; clicking it again clears it. Selecting faces does not automatically open the browser, and applying a material preserves the current search and scroll position.
 
 You can also transfer material and attributes from one face to another. "Attributes" in this context refers to almost any characteristic &mdash; such as offset, scale, or surface flags &mdash; that you can modify through the [face attribute editor](#face_attribute_editor). The sole exception to this is content flags; the content flags on the target face(s) will always be preserved unchanged.
 
@@ -101,7 +101,7 @@ The button in the center of the four justification arrows auto fits the texture,
 
 #### The Face Attribute Editor {#face_attribute_editor}
 
-The face attribute editor is located in the face inspector, right between the UV editor and the material browser. It contains several controls to edit the face attributes of one or several selected brush faces.
+The face attribute editor is located in the right-side face inspector, below the resizable, collapsible UV preview. The current material header shows a live thumbnail, name and dimensions, with buttons to choose or locate a material in the bottom browser. Texture transform groups offset, scale, angle and alignment tools; format-specific surface attributes appear in a separate section. It contains several controls to edit the face attributes of one or several selected brush faces.
 
 ![Face Attribute Editor (Mac OS X)](images/FaceAttribsEditor.png)
 

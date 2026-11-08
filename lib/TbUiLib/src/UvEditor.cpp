@@ -21,6 +21,7 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QResizeEvent>
 #include <QSpinBox>
 #include <QToolButton>
 #include <QtGlobal>
@@ -32,6 +33,7 @@
 #include "mdl/UpdateBrushFaceAttributes.h"
 #include "ui/BitmapButton.h"
 #include "ui/MapDocument.h"
+#include "ui/PanelLayout.h"
 #include "ui/QStyleUtils.h"
 #include "ui/UvView.h"
 #include "ui/ViewConstants.h"
@@ -50,6 +52,17 @@ UvEditor::UvEditor(AppController& appController, MapDocument& document, QWidget*
 bool UvEditor::cancelMouseDrag()
 {
   return m_uvView->cancelDrag();
+}
+
+void UvEditor::resizeEvent(QResizeEvent* event)
+{
+  QWidget::resizeEvent(event);
+  const auto margins = m_toolbarLayout->contentsMargins();
+  const auto requiredWidth =
+    m_actions->minimumSizeHint().width() + m_grid->minimumSizeHint().width()
+    + m_toolbarLayout->spacing() + margins.left() + margins.right();
+  m_toolbarLayout->setDirection(
+    width() < requiredWidth ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
 }
 
 void UvEditor::updateButtons()
@@ -113,10 +126,9 @@ void UvEditor::createGui(AppController& appController)
     this,
     &UvEditor::subDivisionChanged);
 
-  auto* bottomLayout = new QHBoxLayout{};
-  bottomLayout->setContentsMargins(
-    LayoutConstants::NarrowHMargin, 0, LayoutConstants::NarrowHMargin, 0);
-  bottomLayout->setSpacing(LayoutConstants::NarrowHMargin);
+  m_actions = new QWidget{};
+  m_actions->setObjectName("UvEditor_Actions");
+  auto* bottomLayout = createPanelActions(m_actions);
   bottomLayout->addWidget(m_resetUvButton);
   bottomLayout->addWidget(m_resetUvToWorldButton);
   bottomLayout->addWidget(m_flipUAxisButton);
@@ -124,18 +136,25 @@ void UvEditor::createGui(AppController& appController)
   bottomLayout->addWidget(m_rotateUvCCWButton);
   bottomLayout->addWidget(m_rotateUvCWButton);
   bottomLayout->addStretch();
-  bottomLayout->addWidget(gridLabel);
-  bottomLayout->addWidget(new QLabel{"X:"});
-  bottomLayout->addWidget(m_xSubDivisionEditor);
-  bottomLayout->addSpacing(
-    LayoutConstants::MediumHMargin - LayoutConstants::NarrowHMargin);
-  bottomLayout->addWidget(new QLabel{"Y:"});
-  bottomLayout->addWidget(m_ySubDivisionEditor);
+  m_grid = new QWidget{};
+  m_grid->setObjectName("UvEditor_Grid");
+  auto* gridLayout = createPanelActions(m_grid);
+  gridLayout->addWidget(gridLabel);
+  gridLayout->addWidget(new QLabel{"X:"});
+  gridLayout->addWidget(m_xSubDivisionEditor, 1);
+  gridLayout->addWidget(new QLabel{"Y:"});
+  gridLayout->addWidget(m_ySubDivisionEditor, 1);
 
   auto* toolbar = new QWidget{};
   toolbar->setObjectName(QStringLiteral("UvEditor_Toolbar"));
   toolbar->setAttribute(Qt::WA_StyledBackground);
-  toolbar->setLayout(bottomLayout);
+  toolbar->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+  m_toolbarLayout = new QBoxLayout{QBoxLayout::TopToBottom, toolbar};
+  m_toolbarLayout->setContentsMargins(
+    LayoutConstants::NarrowHMargin, 0, LayoutConstants::NarrowHMargin, 0);
+  m_toolbarLayout->setSpacing(LayoutConstants::NarrowHMargin);
+  m_toolbarLayout->addWidget(m_actions, 1);
+  m_toolbarLayout->addWidget(m_grid);
 
   auto* outerLayout = new QVBoxLayout{};
   outerLayout->setContentsMargins(0, 0, 0, 0);

@@ -110,17 +110,18 @@ ProjectAssetPanel::ProjectAssetPanel(
     &QToolButton::toggled,
     this,
     [this, detailsSurface](const bool visible) {
-      detailsSurface->setVisible(visible && !m_browser->isShowingEntities());
+      detailsSurface->setVisible(visible && m_browser->isShowingAssets());
     });
   m_browser->addViewOption(detailsToggle);
   detailsSurface->hide();
   connect(
     m_browser,
-    &ModelBrowser::entityModeChanged,
+    &ModelBrowser::contentModeChanged,
     this,
-    [detailsSurface, detailsToggle](const bool entities) {
-      detailsToggle->setVisible(!entities);
-      detailsSurface->setVisible(!entities && detailsToggle->isChecked());
+    [this, detailsSurface, detailsToggle] {
+      detailsToggle->setVisible(m_browser->isShowingAssets());
+      detailsSurface->setVisible(
+        m_browser->isShowingAssets() && detailsToggle->isChecked());
     });
   layout->addWidget(splitter);
   auto* view = m_browser->findChild<ModelBrowserView*>();

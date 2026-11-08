@@ -880,75 +880,23 @@ TEST_CASE("MapWindow")
     CHECK(window.findChild<QWidget*>("FaceAttribsEditor_MaterialName") != nullptr);
     CHECK(window.findChild<QWidget*>("UvEditor") != nullptr);
     CHECK(window.findChild<QWidget*>("UvEditor_Toolbar") != nullptr);
-    for (const auto& browserName : {QString{"MaterialBrowser"}})
-    {
-      auto* browser = window.findChild<QWidget*>(browserName);
-      auto* controls =
-        window.findChild<QWidget*>(browserName + QStringLiteral("_Controls"));
-      auto* search =
-        window.findChild<QLineEdit*>(browserName + QStringLiteral("_Search"));
-      auto* filterRow =
-        window.findChild<QWidget*>(browserName + QStringLiteral("_FilterRow"));
-      auto* sort = window.findChild<QComboBox*>(browserName + QStringLiteral("_Sort"));
-      auto* iconSize =
-        window.findChild<QComboBox*>(browserName + QStringLiteral("_IconSize"));
-      auto* groupToggle =
-        window.findChild<QToolButton*>(browserName + QStringLiteral("_GroupToggle"));
-      auto* usedToggle =
-        window.findChild<QToolButton*>(browserName + QStringLiteral("_UsedToggle"));
-
-      REQUIRE(browser != nullptr);
-      REQUIRE(controls != nullptr);
-      REQUIRE(search != nullptr);
-      REQUIRE(filterRow != nullptr);
-      REQUIRE(sort != nullptr);
-      REQUIRE(groupToggle != nullptr);
-      REQUIRE(usedToggle != nullptr);
-
-      CHECK(controls->parentWidget() == browser);
-      CHECK(browser->layout()->indexOf(controls) == 0);
-      CHECK(controls->layout()->count() == 2);
-      CHECK(controls->layout()->indexOf(search) == 0);
-      CHECK(controls->layout()->indexOf(filterRow) == 1);
-      const auto isMaterialBrowser = browserName == QStringLiteral("MaterialBrowser");
-      CHECK(filterRow->layout()->count() == (isMaterialBrowser ? 4 : 3));
-      CHECK(filterRow->layout()->indexOf(sort) == 0);
-      CHECK(filterRow->layout()->indexOf(groupToggle) == 1);
-      CHECK(filterRow->layout()->indexOf(usedToggle) == 2);
-      if (isMaterialBrowser)
-      {
-        const auto originalIconSize = pref(Preferences::MaterialBrowserIconSize);
-        REQUIRE(iconSize != nullptr);
-        CHECK(filterRow->layout()->indexOf(iconSize) == 3);
-        CHECK(iconSize->count() == 9);
-        CHECK(iconSize->itemText(0) == QStringLiteral("100%"));
-        CHECK(iconSize->itemText(8) == QStringLiteral("500%"));
-        CHECK(
-          iconSize->currentData().toFloat()
-          == pref(Preferences::MaterialBrowserIconSize));
-
-        setPref(Preferences::MaterialBrowserIconSize, 1.5f);
-        CHECK(iconSize->currentText() == QStringLiteral("150%"));
-
-        iconSize->setCurrentIndex(2);
-        iconSize->activated(2);
-        CHECK(pref(Preferences::MaterialBrowserIconSize) == 2.0f);
-
-        setPref(Preferences::MaterialBrowserIconSize, originalIconSize);
-      }
-      else
-      {
-        CHECK(iconSize == nullptr);
-      }
-      CHECK(search->placeholderText() == "Search...");
-      CHECK(sort->count() == 2);
-      CHECK(groupToggle->isCheckable());
-      CHECK(usedToggle->isCheckable());
-      CHECK(groupToggle->property("browserFilterToggle").toBool());
-      CHECK(usedToggle->property("browserFilterToggle").toBool());
-      CHECK(groupToggle->toolButtonStyle() == Qt::ToolButtonTextOnly);
-      CHECK(usedToggle->toolButtonStyle() == Qt::ToolButtonTextOnly);
-    }
+    window.editorView().showMaterialBrowser();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    CHECK(browser->isShowingMapMaterials());
+    CHECK(window.findChild<QWidget*>("MaterialBrowser_Controls")->isHidden());
+    auto* iconSize = browser->findChild<QComboBox*>("ModelBrowser_IconSize");
+    REQUIRE(iconSize);
+    CHECK(iconSize->count() == 9);
+    CHECK(iconSize->itemText(0) == QStringLiteral("100%"));
+    CHECK(iconSize->itemText(8) == QStringLiteral("500%"));
+    const auto originalIconSize = pref(Preferences::MaterialBrowserIconSize);
+    setPref(Preferences::MaterialBrowserIconSize, 1.5f);
+    CHECK(iconSize->currentText() == QStringLiteral("150%"));
+    iconSize->setCurrentIndex(2);
+    iconSize->activated(2);
+    CHECK(pref(Preferences::MaterialBrowserIconSize) == 2.0f);
+    setPref(Preferences::MaterialBrowserIconSize, originalIconSize);
   }
 
   SECTION("uses a synchronized vertical inspector navigation rail")
@@ -1044,10 +992,24 @@ TEST_CASE("MapWindow")
     CHECK(faceButton->isChecked());
     CHECK_FALSE(outlinerButton->isChecked());
     CHECK(pageTitle->text() == "FACE");
-    REQUIRE(window.findChild<QWidget*>("FaceInspector_Splitter"));
+    REQUIRE(window.findChild<QWidget*>("FaceAttribsEditor_Splitter"));
+    CHECK(window.findChild<QWidget*>("MaterialBrowser") == nullptr);
     REQUIRE(prepared.count() == 1);
     CHECK(prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Face));
     checkSingleNavigation();
+
+    auto* choose = window.findChild<QAbstractButton*>("FaceAttribsEditor_ChooseMaterial");
+    REQUIRE(choose);
+    QTest::mouseClick(choose, Qt::LeftButton);
+    auto* materialContent = window.findChild<ModelBrowser*>();
+    REQUIRE(materialContent);
+    CHECK(materialContent->isShowingMapMaterials());
+    CHECK(faceButton->isChecked());
+    auto* materialSearch = materialContent->findChild<QLineEdit*>("ModelBrowser_Search");
+    REQUIRE(materialSearch);
+    materialSearch->setText("wall");
+    QTest::mouseClick(choose, Qt::LeftButton);
+    CHECK(materialSearch->text() == "wall");
 
     QTest::mouseClick(pluginButton, Qt::LeftButton);
     CHECK(pluginButton->isChecked());

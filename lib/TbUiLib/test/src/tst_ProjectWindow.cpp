@@ -48,6 +48,7 @@
 
 #include "el/Expression.h"
 #include "gl/GlManager.h"
+#include "gl/Material.h"
 #include "gl/PerspectiveCamera.h"
 #include "gl/Resource.h"
 #include "img/GoldSrcTexture.h"
@@ -93,6 +94,7 @@
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
+#include "ui/MaterialBrowser.h"
 #include "ui/ModelBrowser.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/ProjectAssetPanel.h"
@@ -537,6 +539,48 @@ TEST_CASE("ProjectWindow")
     create = browser->findChild<QPushButton*>("EntityBrowser_Create");
     REQUIRE(create);
     CHECK_FALSE(create->isEnabled());
+  }
+
+  SECTION("map materials follow the active map and close stale collection settings")
+  {
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    alphaWindow->editorView().showMaterialBrowser();
+    auto* materials = browser->findChild<MaterialBrowser*>();
+    REQUIRE(materials);
+    auto* search = browser->findChild<QLineEdit*>("ModelBrowser_Search");
+    REQUIRE(search);
+    search->setText("wall");
+    auto material = gl::Material{"WALL01", nullptr};
+    emit materials->materialSelected(&material);
+    CHECK(alphaDocument->map().currentMaterialName() == "WALL01");
+    browser->showMaterialSettings();
+    auto settings =
+      QPointer<QDialog>{browser->findChild<QDialog*>("MaterialCollectionDialog")};
+    REQUIRE(settings);
+    tabs->setCurrentIndex(1);
+    QApplication::processEvents();
+    CHECK(settings.isNull());
+    auto& beta = window.activeMapWindow()->document().map();
+    emit materials->materialSelected(&material);
+    CHECK(beta.currentMaterialName() == "WALL01");
+    CHECK(alphaDocument->map().currentMaterialName() == "WALL01");
+    emit materials->materialSelected(&material);
+    CHECK(beta.currentMaterialName() == mdl::BrushFace::NoMaterialName);
+    CHECK(alphaDocument->map().currentMaterialName() == "WALL01");
+    CHECK(search->text() == "wall");
+    browser->showMaterialSettings();
+    settings = browser->findChild<QDialog*>("MaterialCollectionDialog");
+    REQUIRE(settings);
+    closeTab(*tabs, 1);
+    CHECK(settings.isNull());
+    closeTab(*tabs, 0);
+    CHECK(window.activeMapWindow() == nullptr);
+    const auto previous = alphaDocument->map().currentMaterialName();
+    emit materials->materialSelected(&material);
+    CHECK(alphaDocument->map().currentMaterialName() == previous);
+    browser->showMaterialSettings();
+    CHECK(browser->findChild<QDialog*>("MaterialCollectionDialog") == nullptr);
   }
 
   SECTION("one project browser survives map switches and closing all map tabs")

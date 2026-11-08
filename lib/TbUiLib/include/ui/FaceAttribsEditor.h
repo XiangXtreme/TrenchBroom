@@ -23,12 +23,18 @@
 
 #include "base/NotifierConnection.h"
 
+#include <string>
 #include <tuple>
 
 class QAbstractButton;
 class QLabel;
 class QLineEdit;
 class QGridLayout;
+
+namespace tb::gl
+{
+class Material;
+}
 
 namespace tb
 {
@@ -103,7 +109,11 @@ public:
 
   bool cancelMouseDrag();
 
+signals:
+  void materialBrowserRequested(const gl::Material* material);
+
 private:
+  void updateMaterialInfo(const std::string& name, const gl::Material* material);
   void alignClicked();
   void justifyClicked(mdl::UvJustifyDirection uvJustifyDirection);
   void fitClicked(mdl::UvFitDirection uvFitDirection);
@@ -126,6 +136,7 @@ private:
 
 private:
   void createGui(AppController& appController);
+  QWidget* createMaterialWidget(AppController& appController);
   QWidget* createButtonsWidget();
   QWidget* createAttribsWidget();
 

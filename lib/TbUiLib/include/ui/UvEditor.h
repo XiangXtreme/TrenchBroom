@@ -25,6 +25,7 @@
 
 class QSpinBox;
 class QAbstractButton;
+class QBoxLayout;
 
 namespace tb::ui
 {
@@ -41,6 +42,9 @@ private:
   UvView* m_uvView = nullptr;
   QSpinBox* m_xSubDivisionEditor = nullptr;
   QSpinBox* m_ySubDivisionEditor = nullptr;
+  QBoxLayout* m_toolbarLayout = nullptr;
+  QWidget* m_actions = nullptr;
+  QWidget* m_grid = nullptr;
 
   QAbstractButton* m_resetUvButton = nullptr;
   QAbstractButton* m_resetUvToWorldButton = nullptr;
@@ -58,6 +62,7 @@ public:
   bool cancelMouseDrag();
 
 private:
+  void resizeEvent(QResizeEvent* event) override;
   void updateButtons();
 
 private:

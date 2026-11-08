@@ -25,7 +25,7 @@
 
 #include "mdl/EntityNodeBase.h"
 #include "mdl/Map_Assets.h"
-#include "mdl/Map_Entities.h"
+#include "mdl/Map_World.h"
 #include "mdl/WadPropertyUtils.h"
 #include "ui/BitmapButton.h"
 #include "ui/BorderLine.h"
@@ -172,7 +172,7 @@ void SmartWadEditor::removeSelectedWads()
     wadPaths = kdl::vec_erase_at(std::move(wadPaths), index);
   }
 
-  setEntityProperty(document().map(), propertyKey(), getWadPathStr(wadPaths));
+  setWorldProperty(document().map(), propertyKey(), getWadPathStr(wadPaths));
   m_wadPaths->setCurrentRow(
     std::min(int(indicesToRemove.back()), m_wadPaths->count() - 1),
     QItemSelectionModel::ClearAndSelect);
@@ -193,7 +193,7 @@ void SmartWadEditor::moveSelectedWadsUp()
     using std::swap;
     swap(wadPaths[index], wadPaths[index - 1]);
 
-    setEntityProperty(document().map(), propertyKey(), getWadPathStr(wadPaths));
+    setWorldProperty(document().map(), propertyKey(), getWadPathStr(wadPaths));
     m_wadPaths->setCurrentRow(int(index) - 1, QItemSelectionModel::ClearAndSelect);
   }
 }
@@ -212,7 +212,7 @@ void SmartWadEditor::moveSelectedWadsDown()
     using std::swap;
     swap(wadPaths[index], wadPaths[index + 1]);
 
-    setEntityProperty(document().map(), propertyKey(), getWadPathStr(wadPaths));
+    setWorldProperty(document().map(), propertyKey(), getWadPathStr(wadPaths));
     m_wadPaths->setCurrentRow(int(index) + 1, QItemSelectionModel::ClearAndSelect);
   }
 }

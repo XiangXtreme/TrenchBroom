@@ -130,12 +130,35 @@ float responsiveMaterialCellWidth(const float layoutWidth, const float preferred
 MaterialBrowserView::MaterialBrowserView(
   AppController& appController, QScrollBar* scrollBar, MapDocument& document)
   : CellView{appController, scrollBar}
-  , m_document{document}
+  , m_document{&document}
 {
-  m_notifierConnection += m_document.materialUsageCountsDidChangeNotifier.connect(
+  connectObservers();
+}
+
+void MaterialBrowserView::connectObservers()
+{
+  m_notifierConnection += m_document->materialUsageCountsDidChangeNotifier.connect(
     this, &MaterialBrowserView::reloadMaterials);
-  m_notifierConnection += m_document.resourcesWereProcessedNotifier.connect(
+  m_notifierConnection += m_document->resourcesWereProcessedNotifier.connect(
     this, &MaterialBrowserView::resourcesWereProcessed);
+}
+
+void MaterialBrowserView::setDocument(MapDocument& document)
+{
+  if (m_document == &document)
+    return;
+  m_notifierConnection.disconnect();
+  clear();
+  m_selectedMaterial = nullptr;
+  m_collapsedGroups.clear();
+  m_document = &document;
+  connectObservers();
+  reloadMaterials();
+}
+
+void MaterialBrowserView::setMapActionsEnabled(const bool enabled)
+{
+  m_mapActionsEnabled = enabled;
 }
 
 MaterialBrowserView::~MaterialBrowserView()
@@ -362,7 +385,7 @@ void MaterialBrowserView::addMaterialToLayout(
 
 std::vector<const gl::MaterialCollection*> MaterialBrowserView::getCollections() const
 {
-  const auto& map = m_document.map();
+  const auto& map = m_document->map();
   const auto enabledMaterialCollections = mdl::enabledMaterialCollections(map);
 
   auto result = std::vector<const gl::MaterialCollection*>{};
@@ -654,20 +677,26 @@ void MaterialBrowserView::doContextMenu(
 {
   if (const auto* cell = layout.cellAt(x, y))
   {
+    const auto* document = m_document;
+    const auto name = cellData(*cell).name();
     auto menu = QMenu{this};
-    menu.addAction(tr("Select Faces"), this, [&, material = &cellData(*cell)]() {
-      selectBrushFacesWithMaterial(m_document.map(), material->name());
+    menu.addAction(tr("Select Faces"), this, [this, document, name]() {
+      if (m_mapActionsEnabled && m_document == document)
+        selectBrushFacesWithMaterial(m_document->map(), name);
     });
 
-    menu.addAction(tr("Select Brushes"), this, [&, material = &cellData(*cell)]() {
-      selectBrushesWithMaterial(m_document.map(), material->name());
+    menu.addAction(tr("Select Brushes"), this, [this, document, name]() {
+      if (m_mapActionsEnabled && m_document == document)
+        selectBrushesWithMaterial(m_document->map(), name);
     });
 
+    for (auto* action : menu.actions())
+      action->setEnabled(m_mapActionsEnabled);
     menu.addSeparator();
 
-    menu.addAction(tr("Copy Name"), this, [&, material = &cellData(*cell)]() {
+    menu.addAction(tr("Copy Name"), this, [name]() {
       auto* clipboard = QApplication::clipboard();
-      clipboard->setText(QString::fromStdString(material->name()));
+      clipboard->setText(QString::fromStdString(name));
     });
 
     menu.exec(event->globalPos());

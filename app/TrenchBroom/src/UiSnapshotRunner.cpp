@@ -21,6 +21,7 @@
 
 #include <QAbstractButton>
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDeadlineTimer>
 #include <QDebug>
@@ -136,6 +137,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("entity-browser-empty"),
     QStringLiteral("goldsrc-entity-links"),
     QStringLiteral("face-inspector"),
+    QStringLiteral("face-inspector-narrow"),
     QStringLiteral("material-browser-empty"),
     QStringLiteral("plugin-inspector"),
     QStringLiteral("terrain"),
@@ -595,14 +597,14 @@ bool isInspectorSnapshotTarget(const QString& targetName)
 {
   return targetName == QStringLiteral("entity-browser")
          || targetName == QStringLiteral("entity-browser-empty")
-         || targetName == QStringLiteral("face-inspector")
+         || targetName.startsWith(QStringLiteral("face-inspector"))
          || targetName == QStringLiteral("material-browser-empty")
          || targetName == QStringLiteral("plugin-inspector");
 }
 
 bool isMaterialBrowserSnapshotTarget(const QString& targetName)
 {
-  return targetName == QStringLiteral("face-inspector")
+  return targetName.startsWith(QStringLiteral("face-inspector"))
          || targetName == QStringLiteral("material-browser-empty");
 }
 
@@ -1032,12 +1034,23 @@ void configureInspectorSnapshot(QWidget& targetWidget, const QString& targetName
       distance->selectAll();
     }
   }
-  else if (targetName == QStringLiteral("face-inspector"))
+  else if (targetName.startsWith(QStringLiteral("face-inspector")))
   {
-    setPref(Preferences::MaterialBrowserIconSize, 5.0f);
+    auto& map = mapWindow->document().map();
+    selectAllNodes(map);
+    if (!map.selection().brushes.empty())
+    {
+      auto* brush = map.selection().brushes.front();
+      deselectAll(map);
+      selectBrushFaces(map, {{*brush, 3}});
+    }
+    mapWindow->editorView().showMaterialBrowser();
+    setPref(Preferences::MaterialBrowserIconSize, 1.5f);
     if (auto* materialBrowser = mapWindow->findChild<MaterialBrowser*>())
     {
       materialBrowser->setGroup(true);
+      if (auto* group = mapWindow->findChild<QCheckBox*>("ModelBrowser_MaterialGroup"))
+        group->setChecked(true);
     }
   }
 
@@ -1054,19 +1067,25 @@ void configureInspectorSnapshot(QWidget& targetWidget, const QString& targetName
           grid->selectDefinition("light");
     }
     else
+    {
       mapWindow->switchToInspectorPage(InspectorPage::Face);
+      mapWindow->editorView().showMaterialBrowser();
+      if (auto* mode = mapWindow->findChild<QComboBox*>("ProjectToolsMode"))
+        mode->setCurrentIndex(1);
+    }
   }
   if (
     auto* splitter =
       mapWindow->findChild<QSplitter*>(QStringLiteral("MapWindow_HorizontalSplitter")))
   {
-    splitter->setSizes(QList<int>{940, 500});
+    splitter->setSizes(
+      targetName.endsWith(QStringLiteral("-narrow")) ? QList<int>{1100, 340}
+                                                     : QList<int>{1000, 440});
   }
 
   if (targetName.endsWith(QStringLiteral("-empty")))
   {
-    const auto searchName = showEntityBrowser ? QStringLiteral("ModelBrowser_Search")
-                                              : QStringLiteral("MaterialBrowser_Search");
+    const auto searchName = QStringLiteral("ModelBrowser_Search");
     if (auto* search = mapWindow->findChild<QLineEdit*>(searchName))
     {
       const auto filterText = QStringLiteral("__ui_snapshot_no_match__");

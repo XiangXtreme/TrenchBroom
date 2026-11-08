@@ -46,6 +46,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapViewBar.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MaterialBrowserView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MapMaterialWorkflow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_MiscPreferencePane.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ModelBrowserView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_McpToolRegistry.cpp
@@ -169,6 +170,7 @@ add_custom_command(TARGET TbUiLibTest POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${TB_RESOURCE_DIR}/fonts" "$<TARGET_FILE_DIR:TbUiLibTest>/fonts"
   COMMAND ${CMAKE_COMMAND} -E rm -rf "${TEST_FIXTURE_DEST_DIR}"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${TEST_FIXTURE_SOURCE_DIR}" "${TEST_FIXTURE_DEST_DIR}/test"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/lib/TbMdlLib/test/fixture/mdl/Map/reloadMaterialCollectionsQ2.map" "${TEST_FIXTURE_DEST_DIR}/test/mapMaterialsQ2.map"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/lib/TbMdlLib/test/fixture/mdl/LoadAssimpModel/additiveTexture/additive.mdl" "${TEST_FIXTURE_DEST_DIR}/test/publish-model.mdl"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/lib/TbMdlLib/test/fixture/mdl/LoadSpriteModel/RenderModeNormal.spr" "${TEST_FIXTURE_DEST_DIR}/test/publish-sprite.spr"
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${TB_RESOURCE_DIR}/games" "${TEST_FIXTURE_DEST_DIR}/games"
