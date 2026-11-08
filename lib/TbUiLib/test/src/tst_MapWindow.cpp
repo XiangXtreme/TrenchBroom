@@ -992,7 +992,7 @@ TEST_CASE("MapWindow")
     CHECK(faceButton->isChecked());
     CHECK_FALSE(outlinerButton->isChecked());
     CHECK(pageTitle->text() == "FACE");
-    REQUIRE(window.findChild<QWidget*>("FaceAttribsEditor_Splitter"));
+    REQUIRE(window.findChild<QWidget*>("FaceAttribsEditor_TransformSection"));
     CHECK(window.findChild<QWidget*>("MaterialBrowser") == nullptr);
     REQUIRE(prepared.count() == 1);
     CHECK(prepared.takeFirst().front().toInt() == static_cast<int>(InspectorPage::Face));

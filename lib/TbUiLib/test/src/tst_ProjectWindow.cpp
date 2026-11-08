@@ -51,6 +51,7 @@
 #include "gl/Material.h"
 #include "gl/PerspectiveCamera.h"
 #include "gl/Resource.h"
+#include "gl/Texture.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
@@ -83,6 +84,7 @@
 #include "ui/CatalogAssetDrop.h"
 #include "ui/CreateEntityTool.h"
 #include "ui/EntityBrowserView.h"
+#include "ui/FaceAttribsEditor.h"
 #include "ui/InfoPanel.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
@@ -95,6 +97,7 @@
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/MaterialBrowser.h"
+#include "ui/MaterialPreview.h"
 #include "ui/ModelBrowser.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/ProjectAssetPanel.h"
@@ -3034,6 +3037,7 @@ TEST_CASE("ProjectWindow")
     mdl::selectBrushFaces(map, {face});
     REQUIRE(map.selection().brushFaces.size() == 1);
     const auto previous = face.face().materialName();
+    alphaWindow->switchToInspectorPage(InspectorPage::Face);
 
     const auto folder = directory.filePath("texture-library");
     REQUIRE(QDir{}.mkdir(folder));
@@ -3123,6 +3127,15 @@ TEST_CASE("ProjectWindow")
     }
     CHECK(map.modified());
     CHECK(face.face().materialName() == "WALL01");
+    auto* faceEditor = alphaWindow->findChild<FaceAttribsEditor*>();
+    REQUIRE(faceEditor);
+    QTRY_VERIFY(face.face().material() != nullptr);
+    QTRY_VERIFY(getTexture(face.face().material()) != nullptr);
+    QTRY_COMPARE(
+      faceEditor->findChild<QLabel*>("FaceAttribsEditor_MaterialName")->text(),
+      QStringLiteral("WALL01"));
+    CHECK(
+      faceEditor->findChild<MaterialPreview*>()->material() == face.face().material());
     const auto assets = require(session->store().assets());
     const auto textureAsset = std::ranges::find_if(assets, [](const auto& asset) {
       return asset.type == project::AssetType::Texture;

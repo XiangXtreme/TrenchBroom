@@ -184,6 +184,7 @@ UvView::UvView(AppController& appController, MapDocument& document)
   createTools();
   m_toolBox.disable();
   connectObservers();
+  reload();
 }
 
 void UvView::setSubDivisions(const vm::vec2i& subDivisions)

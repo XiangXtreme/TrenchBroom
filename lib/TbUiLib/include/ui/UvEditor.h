@@ -26,6 +26,7 @@
 class QSpinBox;
 class QAbstractButton;
 class QBoxLayout;
+class QLabel;
 
 namespace tb::ui
 {
@@ -40,6 +41,7 @@ private:
   MapDocument& m_document;
 
   UvView* m_uvView = nullptr;
+  QLabel* m_emptyState = nullptr;
   QSpinBox* m_xSubDivisionEditor = nullptr;
   QSpinBox* m_ySubDivisionEditor = nullptr;
   QBoxLayout* m_toolbarLayout = nullptr;

@@ -18,6 +18,7 @@ param(
     "goldsrc-entity-links",
     "face-inspector",
     "face-inspector-narrow",
+    "face-inspector-brush",
     "material-browser-empty",
     "plugin-inspector",
     "terrain",
@@ -277,6 +278,7 @@ foreach ($target in $normalizedTargets) {
       "goldsrc-entity-links",
       "face-inspector",
       "face-inspector-narrow",
+      "face-inspector-brush",
       "material-browser-empty",
       "plugin-inspector",
       "terrain",
@@ -339,6 +341,7 @@ $resolvedQtBin = Resolve-Path -Path $QtBin
 $usesMaterialFixture =
   $normalizedTargets -contains "face-inspector" -or
   $normalizedTargets -contains "face-inspector-narrow" -or
+  $normalizedTargets -contains "face-inspector-brush" -or
   $normalizedTargets -contains "material-browser-empty"
 $resolvedMaterialMapPath =
   if ($usesMaterialFixture) { Resolve-Path -Path $MaterialMapPath } else { $null }

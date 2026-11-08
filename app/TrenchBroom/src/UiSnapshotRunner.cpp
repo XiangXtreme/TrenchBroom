@@ -138,6 +138,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("goldsrc-entity-links"),
     QStringLiteral("face-inspector"),
     QStringLiteral("face-inspector-narrow"),
+    QStringLiteral("face-inspector-brush"),
     QStringLiteral("material-browser-empty"),
     QStringLiteral("plugin-inspector"),
     QStringLiteral("terrain"),
@@ -1038,7 +1039,9 @@ void configureInspectorSnapshot(QWidget& targetWidget, const QString& targetName
   {
     auto& map = mapWindow->document().map();
     selectAllNodes(map);
-    if (!map.selection().brushes.empty())
+    if (
+      !map.selection().brushes.empty()
+      && targetName != QStringLiteral("face-inspector-brush"))
     {
       auto* brush = map.selection().brushes.front();
       deselectAll(map);

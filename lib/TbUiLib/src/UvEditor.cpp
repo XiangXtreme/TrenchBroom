@@ -67,7 +67,13 @@ void UvEditor::resizeEvent(QResizeEvent* event)
 
 void UvEditor::updateButtons()
 {
-  const bool enabled = !m_document.map().selection().allBrushFaces().empty();
+  const auto& selection = m_document.map().selection();
+  const auto singleFace = selection.brushFaces.size() == 1;
+  const auto enabled = !selection.allBrushFaces().empty();
+  m_uvView->setVisible(singleFace);
+  m_emptyState->setVisible(!singleFace);
+  m_grid->setVisible(singleFace);
+  m_actions->setVisible(enabled);
 
   m_resetUvButton->setEnabled(enabled);
   m_resetUvToWorldButton->setEnabled(enabled);
@@ -80,7 +86,13 @@ void UvEditor::updateButtons()
 void UvEditor::createGui(AppController& appController)
 {
   setObjectName(QStringLiteral("UvEditor"));
+  setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
   m_uvView = new UvView{appController, m_document};
+  m_uvView->setFixedHeight(220);
+  m_emptyState = new QLabel{tr("Select a single face to preview and edit its UVs.")};
+  m_emptyState->setObjectName("UvEditor_EmptyState");
+  m_emptyState->setWordWrap(true);
+  setInfoStyle(m_emptyState);
 
   m_resetUvButton = createBitmapButton("ResetUV.svg", tr("Reset UV alignment"), this);
   m_resetUvToWorldButton = createBitmapButton(
@@ -160,6 +172,7 @@ void UvEditor::createGui(AppController& appController)
   outerLayout->setContentsMargins(0, 0, 0, 0);
   outerLayout->setSpacing(LayoutConstants::NarrowVMargin);
   outerLayout->addWidget(m_uvView, 1);
+  outerLayout->addWidget(m_emptyState);
   outerLayout->addWidget(toolbar);
   setLayout(outerLayout);
 

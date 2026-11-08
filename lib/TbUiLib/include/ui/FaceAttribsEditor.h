@@ -30,6 +30,7 @@ class QAbstractButton;
 class QLabel;
 class QLineEdit;
 class QGridLayout;
+class QVBoxLayout;
 
 namespace tb::gl
 {
@@ -49,6 +50,7 @@ namespace ui
 class AppController;
 class FlagsPopupEditor;
 class MapDocument;
+class MaterialPreview;
 class SignalDelayer;
 class SpinControl;
 class UvEditor;
@@ -72,6 +74,8 @@ private:
   QAbstractButton* m_autoFitButton = nullptr;
 
   QLabel* m_materialName = nullptr;
+  MaterialPreview* m_materialPreview = nullptr;
+  QAbstractButton* m_revealMaterialButton = nullptr;
   QLabel* m_textureSize = nullptr;
   SpinControl* m_xOffsetEditor = nullptr;
   SpinControl* m_yOffsetEditor = nullptr;
@@ -138,7 +142,7 @@ private:
   void createGui(AppController& appController);
   QWidget* createMaterialWidget(AppController& appController);
   QWidget* createButtonsWidget();
-  QWidget* createAttribsWidget();
+  void createAttribsWidgets(QVBoxLayout& column);
 
   void bindEvents();
 

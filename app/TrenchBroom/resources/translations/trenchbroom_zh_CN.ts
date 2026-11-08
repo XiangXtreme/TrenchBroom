@@ -6221,6 +6221,10 @@ By %2</source>
     <context>
         <name>tb::ui::UvEditor</name>
         <message>
+            <source>Select a single face to preview and edit its UVs.</source>
+            <translation>选择单个面以预览和编辑 UV。</translation>
+        </message>
+        <message>
             <location filename="../../../../lib/TbUiLib/src/UvEditor.cpp" line="72" />
             <source>Reset UV alignment</source>
             <translation>重置 UV 对齐</translation>

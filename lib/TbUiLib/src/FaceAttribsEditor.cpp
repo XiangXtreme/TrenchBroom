@@ -53,12 +53,10 @@
 #include "ui/QStyleUtils.h"
 #include "ui/SignalDelayer.h"
 #include "ui/SpinControl.h"
-#include "ui/Splitter.h"
 #include "ui/UvEditor.h"
 #include "ui/UvViewHelper.h"
 #include "ui/ViewConstants.h"
 #include "ui/ViewUtils.h"
-#include "ui/WidgetState.h"
 
 #include "vm/vec_io.h" // IWYU pragma: keep
 
@@ -386,24 +384,20 @@ void FaceAttribsEditor::createGui(AppController& appController)
   auto* material = createMaterialWidget(appController);
   auto* preview = new CollapsibleTitledPanel{tr("UV preview")};
   preview->setObjectName("FaceAttribsEditor_UvSection");
-  preview->setContentSizing(CollapsibleTitledPanel::ContentSizing::Expanding);
   preview->createContentLayout()->addWidget(m_uvEditor, 1);
-  auto* attributes = createPanelScrollArea(createAttribsWidget());
-  auto* splitter = new Splitter{Qt::Vertical};
-  splitter->setObjectName("FaceAttribsEditor_Splitter");
-  splitter->addWidget(preview);
-  splitter->addWidget(attributes);
-  splitter->setSizes({280, 320});
-  splitter->setStretchFactor(0, 1);
-  splitter->setStretchFactor(1, 1);
-  restoreWidgetState(splitter);
-  connect(
-    splitter, &QSplitter::splitterMoved, this, [splitter] { saveWidgetState(splitter); });
+  auto* content = new QWidget{};
+  content->setObjectName("FaceAttribsEditor_Attributes");
+  content->setAttribute(Qt::WA_StyledBackground);
+  auto* column = createPanelColumn(content);
+  column->setSizeConstraint(QLayout::SetMinAndMaxSize);
+  createAttribsWidgets(*column);
+  column->addWidget(preview);
+  column->addStretch(1);
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
   layout->addWidget(material);
-  layout->addWidget(splitter, 1);
+  layout->addWidget(createPanelScrollArea(content), 1);
 }
 
 QWidget* FaceAttribsEditor::createMaterialWidget(AppController& appController)
@@ -412,8 +406,8 @@ QWidget* FaceAttribsEditor::createMaterialWidget(AppController& appController)
   header->setObjectName("FaceAttribsEditor_Material");
   auto* layout = new QHBoxLayout{header};
   layout->setContentsMargins(8, 8, 8, 8);
-  auto* preview = new MaterialPreview{appController, m_document};
-  layout->addWidget(preview);
+  m_materialPreview = new MaterialPreview{appController, m_document};
+  layout->addWidget(m_materialPreview);
   m_materialName = new QLabel{};
   m_materialName->setObjectName("FaceAttribsEditor_MaterialName");
   m_materialName->setTextFormat(Qt::PlainText);
@@ -439,11 +433,12 @@ QWidget* FaceAttribsEditor::createMaterialWidget(AppController& appController)
   auto* reveal =
     createBitmapButton("Search.svg", tr("Locate material in Content Browser"));
   reveal->setObjectName("FaceAttribsEditor_RevealMaterial");
+  m_revealMaterialButton = reveal;
   reveal->setAccessibleName(tr("Locate material in Content Browser"));
   reveal->setProperty("tbControlRole", "compact");
   layout->addWidget(reveal);
-  connect(reveal, &QAbstractButton::clicked, this, [this, preview] {
-    if (const auto* material = preview->material())
+  connect(reveal, &QAbstractButton::clicked, this, [this] {
+    if (const auto* material = m_materialPreview->material())
       emit materialBrowserRequested(material);
   });
   return header;
@@ -534,7 +529,7 @@ Hold %2 to keep trim sheet subdivisions.)")
   return container;
 }
 
-QWidget* FaceAttribsEditor::createAttribsWidget()
+void FaceAttribsEditor::createAttribsWidgets(QVBoxLayout& column)
 {
   const auto max = std::numeric_limits<double>::max();
   const auto min = -max;
@@ -625,6 +620,7 @@ QWidget* FaceAttribsEditor::createAttribsWidget()
     return widget;
   };
   auto* transform = new CollapsibleTitledPanel{tr("Texture transform")};
+  transform->setObjectName("FaceAttribsEditor_TransformSection");
   transform->createContentLayout()->addWidget(createButtonsWidget());
   auto* form = createPanelForm();
   form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
@@ -643,13 +639,8 @@ QWidget* FaceAttribsEditor::createAttribsWidget()
   surfaceForm->addRow(m_colorLabel, m_colorEditorLayout);
   surface->createContentLayout()->addLayout(surfaceForm);
   surface->setVisible(hasSurfaceFlags() || hasContentFlags() || hasColorAttribs());
-  auto* container = new QWidget{};
-  container->setObjectName("FaceAttribsEditor_Attributes");
-  auto* column = createPanelColumn(container);
-  column->addWidget(transform);
-  column->addWidget(surface);
-  column->addStretch(1);
-  return container;
+  column.addWidget(transform);
+  column.addWidget(surface);
 }
 
 void FaceAttribsEditor::bindEvents()
@@ -913,6 +904,8 @@ void FaceAttribsEditor::updateControls()
 
     if (materialMulti)
     {
+      m_materialPreview->hide();
+      m_revealMaterialButton->setEnabled(false);
       m_materialName->setText(tr("Multiple materials"));
       m_materialName->setEnabled(false);
       m_textureSize->setText(tr("Multiple sizes"));
@@ -1001,6 +994,8 @@ void FaceAttribsEditor::updateControls()
 void FaceAttribsEditor::updateMaterialInfo(
   const std::string& name, const gl::Material* material)
 {
+  m_materialPreview->setVisible(getTexture(material) != nullptr);
+  m_revealMaterialButton->setEnabled(material != nullptr);
   m_textureSize->clear();
   if (name.empty() || name == mdl::BrushFace::NoMaterialName)
   {

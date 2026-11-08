@@ -11,6 +11,7 @@
 #include <QSpinBox>
 #include <QToolButton>
 #include <QTreeWidget>
+#include <QtTest/QTest>
 
 #include "gl/Material.h"
 #include "gl/MaterialManager.h"
@@ -34,6 +35,7 @@
 #include "ui/SmartWadEditor.h"
 #include "ui/SpinControl.h"
 #include "ui/UvEditor.h"
+#include "ui/UvView.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -130,6 +132,11 @@ TEST_CASE("MapMaterialWorkflow")
 
   SECTION("UV controls fit narrow inspectors and collapsed preview releases its height")
   {
+    mdl::selectAllNodes(map);
+    REQUIRE_FALSE(map.selection().brushes.empty());
+    const auto face = mdl::BrushFaceHandle{*map.selection().brushes.front(), 0};
+    mdl::deselectAll(map);
+    mdl::selectBrushFaces(map, {face});
     auto editor = FaceAttribsEditor{app.appController(), document};
     editor.setFixedWidth(300);
     editor.resize(300, 640);
@@ -152,12 +159,35 @@ TEST_CASE("MapMaterialWorkflow")
       editor.findChild<CollapsibleTitledPanel*>("FaceAttribsEditor_UvSection");
     REQUIRE(preview);
     CHECK(preview->height() > 100);
+    CHECK(preview->height() < 360);
+    const auto* offset = editor.findChild<SpinControl*>("FaceAttribsEditor_OffsetX");
+    REQUIRE(offset);
+    REQUIRE(QTest::qWaitFor([&] {
+      return offset->mapTo(&editor, QPoint{}).y() < preview->mapTo(&editor, QPoint{}).y();
+    }));
     preview->collapse();
     QApplication::processEvents();
     CHECK(preview->height() < 50);
     preview->expand();
     QApplication::processEvents();
     CHECK(preview->height() > 100);
+    // Replacing a single face selection with a brush must release the blank canvas.
+    mdl::deselectAll(map);
+    mdl::selectNodes(map, {&face.node()});
+    QApplication::processEvents();
+    CHECK(uv->findChild<UvView*>()->isHidden());
+    CHECK_FALSE(uv->findChild<QLabel*>("UvEditor_EmptyState")->isHidden());
+    CHECK(grid->isHidden());
+    CHECK_FALSE(actions->isHidden());
+    CHECK(preview->height() < 150);
+    mdl::deselectAll(map);
+    QApplication::processEvents();
+    CHECK(actions->isHidden());
+    mdl::selectBrushFaces(map, {face});
+    QApplication::processEvents();
+    CHECK_FALSE(uv->findChild<UvView*>()->isHidden());
+    CHECK(uv->findChild<QLabel*>("UvEditor_EmptyState")->isHidden());
+    CHECK_FALSE(grid->isHidden());
   }
 }
 

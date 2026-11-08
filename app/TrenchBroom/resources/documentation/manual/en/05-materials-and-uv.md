@@ -101,7 +101,7 @@ The button in the center of the four justification arrows auto fits the texture,
 
 #### The Face Attribute Editor {#face_attribute_editor}
 
-The face attribute editor is located in the right-side face inspector, below the resizable, collapsible UV preview. The current material header shows a live thumbnail, name and dimensions, with buttons to choose or locate a material in the bottom browser. Texture transform groups offset, scale, angle and alignment tools; format-specific surface attributes appear in a separate section. It contains several controls to edit the face attributes of one or several selected brush faces.
+The face attribute editor is located in the right-side face inspector, above the collapsible UV preview. The current material header shows a live thumbnail, name and dimensions, with buttons to choose or locate a material in the bottom browser. Texture transform groups offset, scale, angle and alignment tools; format-specific surface attributes appear in a separate section. It contains several controls to edit the face attributes of one or several selected brush faces.
 
 ![Face Attribute Editor (Mac OS X)](images/FaceAttribsEditor.png)
 
@@ -145,7 +145,7 @@ These are interpreted relative to the 3D camera (except "Reset"). This means tha
 
 #### The UV Editor {#uv_editor}
 
-The UV editor is located at the top of the face inspector. Using the UV editor, you can adjust the offset, the scale and the angle of the material of the currently selected brush face. Note that the UV editor is only usable if one brush face is selected. If multiple brush faces are selected, the UV editor is empty.
+The UV editor is located below the face attributes in a collapsible preview section. Using the UV editor, you can adjust the offset, the scale and the angle of the material of the currently selected brush face. The canvas appears only when a single brush face is selected. Other selections show a short hint instead; the toolbar still supports applying UV commands to all selected faces.
 
 ![UV Editor](images/UVEditor.png)
 
