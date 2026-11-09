@@ -2087,6 +2087,13 @@ void ModelBrowserView::renderModels(
               }
               auto& preview = m_catalogModels[item.path];
               if (!preview)
+              {
+                // Library keys include the catalog ID for selection/cache isolation.
+                // Materialized files retain only the library's virtual model path.
+                const auto modelPath = asset->source == BrowserSource::AssetLibrary
+                                         ? asset->path.lexically_relative(pathFromQString(
+                                             QString::fromStdString(asset->libraryId)))
+                                         : asset->path;
                 preview = std::make_unique<CatalogModelPreview>(
                   previewPath,
                   m_document->map().gameInfo(),
@@ -2096,7 +2103,8 @@ void ModelBrowserView::renderModels(
                     return resource;
                   },
                   m_document->logger(),
-                  asset->path);
+                  modelPath);
+              }
               manager = &preview->models();
               spec = preview->specification();
             }

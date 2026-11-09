@@ -48,6 +48,7 @@
 #include <QTreeWidget>
 #include <QtTest/QTest>
 
+#include "TestEnvironment.h"
 #include "el/Expression.h"
 #include "gl/GlManager.h"
 #include "gl/PerspectiveCamera.h"
@@ -2377,7 +2378,8 @@ TEST_CASE("ProjectWindow")
           QFile::copy(file, modelFolder + "/" + QString::number(1000 + i) + ".obj"));
       auto asset = BrowserAsset{};
       asset.type = BrowserCellType::Model;
-      asset.path = std::to_string(1000 + i) + ".obj";
+      asset.catalogPath = std::to_string(1000 + i) + ".obj";
+      asset.path = std::filesystem::path{"library"} / asset.catalogPath;
       asset.displayName = std::to_string(1000 + i);
       asset.source = BrowserSource::AssetLibrary;
       asset.libraryId = "library";
@@ -2391,7 +2393,7 @@ TEST_CASE("ProjectWindow")
       for (const auto& entry : entries)
       {
         resolved.push_back(entry.path);
-        files.emplace(entry.path, pathFromQString(modelFolder) / entry.path);
+        files.emplace(entry.path, pathFromQString(modelFolder) / entry.catalogPath);
       }
       return Result<decltype(files)>{std::move(files)};
     });
@@ -2425,6 +2427,61 @@ TEST_CASE("ProjectWindow")
     CHECK(resolved.size() == afterScroll);
     browser->setPreviewPathResolver({});
     browser->setAssets({}, {});
+  }
+
+  SECTION("library model previews preserve virtual paths after folder reorganization")
+  {
+    const auto folder = directory.filePath("model-path-library");
+    REQUIRE(QDir{}.mkpath(folder + "/models/props"));
+    REQUIRE(QFile::copy(
+      pathAsQString(getFixtureRoot() / "test/publish-model.mdl"),
+      folder + "/models/props/crate.mdl"));
+    auto library =
+      require(project::AssetLibrary::create(pathFromQString(folder), "Models"));
+    require(library->importDirectory(library->folder()));
+    const auto resources = require(library->assets());
+    REQUIRE(resources.size() == 1);
+    const auto resource = resources.front();
+    require(library->setGroup({resource.id}, "models/curated"));
+    require(session->attachLibrary(pathFromQString(folder)));
+    emit session->browserFocusRequested();
+    auto* browser = window.findChild<ModelBrowser*>();
+    REQUIRE(browser);
+    auto* source = browser->findChild<QTabBar*>("ModelBrowser_Source");
+    auto* cards = browser->findChild<ModelBrowserView*>();
+    auto* type = browser->findChild<QComboBox*>("ModelBrowser_Type");
+    REQUIRE(source);
+    REQUIRE(cards);
+    REQUIRE(type);
+    source->setCurrentIndex(sourceTabIndex(*source, BrowserSourceFilter::AssetLibrary));
+    type->setCurrentIndex(type->findData(int(BrowserCellType::Model)));
+    REQUIRE(QTest::qWaitFor([&] { return cards->assets().size() == 1; }, 3000));
+    const auto asset = cards->assets().front();
+    CHECK(
+      asset.path == std::filesystem::path{library->info().id} / "models/props/crate.mdl");
+    CHECK(asset.catalogPath == std::filesystem::path{"models/curated/crate.mdl"});
+    CHECK(asset.absolutePath.empty());
+    cards->setFixedSize(600, 200);
+    emit cards->folderActivated("models/curated");
+    REQUIRE(QTest::qWaitFor(
+      [&] {
+        return !cards->grabFramebuffer().isNull()
+               && !appController.glManager().resourceManager().needsProcessing();
+      },
+      3000));
+    const auto rendered = cards->grabFramebuffer();
+    REQUIRE_FALSE(rendered.isNull());
+    // A nonblank framebuffer alone can be an error placeholder. Compare it with a
+    // missing model to establish that the real catalog model was decoded and drawn.
+    auto missing = asset;
+    missing.absolutePath =
+      pathFromQString(directory.filePath("missing")) / "models/props/crate.mdl";
+    cards->setAssets({}, {missing});
+    const auto placeholder = cards->grabFramebuffer();
+    REQUIRE_FALSE(placeholder.isNull());
+    CHECK(rendered != placeholder);
+    CHECK_FALSE(
+      require(session->projectAssetForLibraryAsset(library->info().id, resource.id)));
   }
 
   SECTION("library browsing keeps Unicode folders and does not eagerly resolve models")
