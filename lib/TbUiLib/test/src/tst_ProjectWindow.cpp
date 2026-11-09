@@ -23,6 +23,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLayout>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -628,6 +629,19 @@ TEST_CASE("ProjectWindow")
     tools->showContent();
     QTRY_VERIFY_WITH_TIMEOUT(!tools->isAnimating(), 1000);
     CHECK(views->isVisible());
+    auto* contentTool = tools->findChild<QToolButton*>("ProjectTool0");
+    auto* outputTool = tools->findChild<QToolButton*>("ProjectTool1");
+    REQUIRE(contentTool);
+    REQUIRE(outputTool);
+    auto* contentControls = views->parentWidget();
+    REQUIRE(contentControls);
+    CHECK(contentControls->parentWidget() == contentTool->parentWidget());
+    CHECK(
+      contentControls->parentWidget()->layout()->indexOf(contentControls)
+      == contentControls->parentWidget()->layout()->indexOf(contentTool) + 1);
+    CHECK(
+      contentControls->parentWidget()->layout()->indexOf(contentControls)
+      < contentControls->parentWidget()->layout()->indexOf(outputTool));
     CHECK_FALSE(pages->tabBar()->isVisible());
     CHECK_FALSE(details->isVisible());
     toggle->click();

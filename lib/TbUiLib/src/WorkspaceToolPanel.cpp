@@ -104,6 +104,15 @@ WorkspaceToolPanel::WorkspaceToolPanel(
     {WorkspaceToolId::OutputLog, tr("Output Log")},
     {WorkspaceToolId::PythonConsole, tr("Python Console")},
     {WorkspaceToolId::Issues, tr("Issues")}};
+
+  // Controls contributed by the content page belong beside its workspace entry. Keeping
+  // them here makes the relationship visible without mixing page navigation into the
+  // global tool sequence (output, console and issues).
+  m_contentControls = new QWidget{m_bar};
+  auto* contentLayout = new QHBoxLayout{m_contentControls};
+  contentLayout->setContentsMargins(8, 0, 0, 0);
+  contentLayout->setSpacing(4);
+
   for (const auto& [id, title] : tools)
   {
     auto* button = new QToolButton{m_bar};
@@ -121,12 +130,12 @@ WorkspaceToolPanel::WorkspaceToolPanel(
     connect(button, &QToolButton::clicked, this, [this, id]() { selectTool(id); });
     barLayout->addWidget(button);
     m_buttons.emplace(id, button);
+
+    if (id == WorkspaceToolId::ContentBrowser)
+    {
+      barLayout->addWidget(m_contentControls);
+    }
   }
-  m_contentControls = new QWidget{m_bar};
-  auto* contentLayout = new QHBoxLayout{m_contentControls};
-  contentLayout->setContentsMargins(8, 0, 0, 0);
-  contentLayout->setSpacing(4);
-  barLayout->addWidget(m_contentControls);
   barLayout->addStretch();
   m_mode = new QComboBox{m_bar};
   m_mode->setObjectName("ProjectToolsMode");
