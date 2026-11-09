@@ -50,6 +50,7 @@
 #include "gl/GlManager.h"
 #include "gl/PerspectiveCamera.h"
 #include "gl/Resource.h"
+#include "gl/ResourceManager.h"
 #include "img/GoldSrcTexture.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
@@ -2255,6 +2256,8 @@ TEST_CASE("ProjectWindow")
     auto* browser = window.findChild<ModelBrowserView*>();
     REQUIRE(browser != nullptr);
     browser->setIncludeDefaultRoots(false);
+    // Keep framebuffer comparisons independent of deferred workbench layout changes.
+    browser->setFixedSize(600, 200);
     auto asset =
       BrowserAsset{BrowserCellType::Model, "catalog.obj", pathFromQString(file)};
     asset.source = BrowserSource::Project;
@@ -2262,7 +2265,13 @@ TEST_CASE("ProjectWindow")
     asset.assetId = "preview-model";
     browser->setAssets({}, {asset});
     REQUIRE(QTest::qWaitFor([&]() { return browser->isVisible(); }, 3000));
-    QTest::qWait(100);
+    REQUIRE(QTest::qWaitFor(
+      [&] {
+        return !browser->grabFramebuffer().isNull()
+               && !appController.glManager().resourceManager().needsProcessing();
+      },
+      3000));
+    // Capture after both model decoding and its queued texture uploads have finished.
     const auto rendered = browser->grabFramebuffer();
     REQUIRE_FALSE(rendered.isNull());
     asset.absolutePath = pathFromQString(directory.filePath("missing/catalog.obj"));

@@ -37,8 +37,10 @@
 #include "ui/SwitchableMapViewContainer.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace tb::ui
 {
@@ -519,6 +521,8 @@ TEST_CASE("AreaMapView")
 
   SECTION("corner drag previews, cancels and commits")
   {
+    window.resize(GENERATE(QSize{1400, 1000}, QSize{1100, 1100}));
+    QApplication::processEvents();
     auto* grip = original->findChild<QWidget*>("MapViewAreaGrip");
     REQUIRE(grip);
     const auto drag = [&](QEvent::Type type, QPoint global) {
@@ -571,7 +575,15 @@ TEST_CASE("AreaMapView")
       layout->areas()[0] == original ? layout->areas()[1] : layout->areas()[0];
     grip = original->findChild<QWidget*>("MapViewAreaGrip");
     drag(QEvent::MouseButtonPress, grip->mapToGlobal(grip->rect().center()));
-    const auto target = other->mapToGlobal(QPoint{8, other->height() / 2});
+    // The center drag can split along either axis, depending on the workbench's
+    // aspect ratio. Join at the shared edge rather than assuming a left/right split.
+    const auto delta = original->geometry().center() - other->geometry().center();
+    auto targetPosition = other->rect().center();
+    if (std::abs(delta.x()) > std::abs(delta.y()))
+      targetPosition.setX(delta.x() < 0 ? 8 : other->width() - 8);
+    else
+      targetPosition.setY(delta.y() < 0 ? 8 : other->height() - 8);
+    const auto target = other->mapToGlobal(targetPosition);
     drag(QEvent::MouseMove, target);
     CHECK(preview->isVisible());
     CHECK(preview->property("join").toBool());

@@ -183,8 +183,9 @@ UvView::UvView(AppController& appController, MapDocument& document)
   setToolBox(m_toolBox);
   createTools();
   m_toolBox.disable();
-  // Fit the initial selection once resizeGL supplies the actual canvas size.
-  m_camera.setViewport({});
+  // Defer fitting until resizeGL supplies the canvas size, while keeping camera
+  // matrices invertible when the initial selection resets the UV origin.
+  m_camera.setViewport({0, 0, 1, 1});
   connectObservers();
   reload();
 }

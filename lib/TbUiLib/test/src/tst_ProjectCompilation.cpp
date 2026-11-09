@@ -73,6 +73,7 @@
 #include "ui/ProjectSession.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
+#include "ui/SwitchableMapViewContainer.h"
 #include "ui/TerrainChunks.h"
 #include "ui/TerrainExport.h"
 #include "ui/TerrainInspector.h"
@@ -1192,11 +1193,12 @@ TEST_CASE("Project terrain panel paints a picked brush")
   CHECK(panel->painting());
   CHECK(map.selection().nodes == selectedNodes);
 
-  const auto center = view->rect().center();
+  auto center = view->rect().center();
   const auto withoutCursor = view->grabFramebuffer();
   auto hover = QMouseEvent{
     QEvent::MouseMove,
     QPointF{center},
+    QPointF{view->mapTo(view->window(), center)},
     QPointF{view->mapToGlobal(center)},
     Qt::NoButton,
     Qt::NoButton,
@@ -1214,6 +1216,7 @@ TEST_CASE("Project terrain panel paints a picked brush")
   auto movedHover = QMouseEvent{
     QEvent::MouseMove,
     QPointF{movedPosition},
+    QPointF{view->mapTo(view->window(), movedPosition)},
     QPointF{view->mapToGlobal(movedPosition)},
     Qt::NoButton,
     Qt::NoButton,
@@ -1518,6 +1521,11 @@ TEST_CASE("Project terrain panel paints a picked brush")
   const auto convertedHeights = converted.heightField->heights;
   REQUIRE(QTest::qWaitFor([&] { return centerIs(true); }, 15000));
   testTerrainPanelInteraction(window, panel);
+  // The panel scenario resizes the workbench. Drain the restored layout and GL
+  // viewport before using screen coordinates for the subsequent sculpt strokes.
+  QApplication::processEvents();
+  view->grabFramebuffer();
+  center = view->rect().center();
   activate->click();
   REQUIRE(panel->painting());
   const auto terrainPick = [&] {
@@ -1576,6 +1584,16 @@ TEST_CASE("Project terrain panel paints a picked brush")
   activate->click();
   editMode->setCurrentIndex(1);
   activate->click();
+  // Inspector focus can deactivate the views. Activate only when needed so this
+  // click cannot add a sculpt command and change the undo sequence below.
+  auto* views = window->findChild<SwitchableMapViewContainer*>();
+  REQUIRE(views);
+  if (!views->active())
+  {
+    terrainMouseClick(view, Qt::LeftButton, Qt::NoModifier, center);
+    view->grabFramebuffer();
+  }
+  REQUIRE(views->active());
   terrainMouseEvent(
     view, QEvent::MouseButtonPress, Qt::LeftButton, Qt::NoModifier, center);
   view->grabFramebuffer();
