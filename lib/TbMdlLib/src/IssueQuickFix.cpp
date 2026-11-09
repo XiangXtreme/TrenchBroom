@@ -63,7 +63,18 @@ const std::string& IssueQuickFix::description() const
 
 void IssueQuickFix::apply(Map& map, const std::vector<const Issue*>& issues) const
 {
-  m_fix(map, issues);
+  // The first edit can destroy every cached diagnostic on that node. Preserve
+  // their payloads until the entire batch has finished.
+  auto snapshots = std::vector<std::unique_ptr<Issue>>{};
+  auto stableIssues = std::vector<const Issue*>{};
+  snapshots.reserve(issues.size());
+  stableIssues.reserve(issues.size());
+  for (const auto* issue : issues)
+  {
+    snapshots.push_back(issue->clone());
+    stableIssues.push_back(snapshots.back().get());
+  }
+  m_fix(map, stableIssues);
 }
 
 IssueQuickFix makeDeleteNodesQuickFix()
@@ -101,8 +112,8 @@ IssueQuickFix makeTransformEntityPropertiesQuickFix(
             const auto pushSelection = PushSelection{map};
 
             const auto& propIssue = static_cast<const EntityPropertyIssue&>(issue);
-            const auto& oldkey = propIssue.propertyKey();
-            const auto& oldValue = propIssue.propertyValue();
+            const auto oldkey = propIssue.propertyKey();
+            const auto oldValue = propIssue.propertyValue();
             const auto newKey = keyTransform(oldkey);
             const auto newValue = valueTransform(oldValue);
 

@@ -61,6 +61,7 @@ private:
 
 public:
   explicit EntityPropertyEditor(MapDocument& document, QWidget* parent = nullptr);
+  void focusProperty(const QString& key);
   ~EntityPropertyEditor() override;
 
 private:

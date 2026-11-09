@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QSignalBlocker>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "base/PreferenceManager.h"
@@ -48,6 +49,18 @@ SelectionPropertyEditor::SelectionPropertyEditor(MapDocument& document, QWidget*
           updatePresentation();
       });
   updatePresentation();
+}
+
+void SelectionPropertyEditor::focusProperty(const QString& key)
+{
+  // Both property presentations coalesce native selection notifications. Run after
+  // their queued refresh, without retaining a pointer to a map node.
+  QTimer::singleShot(0, this, [this, key] {
+    if (m_presentation->currentIndex() == 1 && m_table)
+      m_table->focusProperty(key);
+    else if (m_form)
+      m_form->focusProperty(key);
+  });
 }
 
 void SelectionPropertyEditor::updatePresentation()

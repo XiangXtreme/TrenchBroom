@@ -464,6 +464,19 @@ void EntityPropertyGrid::updateControlsEnabled()
   m_showDefaultPropertiesCheckBox->setChecked(m_model->showDefaultRows());
 }
 
+void EntityPropertyGrid::focusProperty(const QString& key)
+{
+  m_model->updateFromMap();
+  const auto row = m_model->rowIndexForPropertyKey(key.toStdString());
+  if (row < 0)
+    return;
+  const auto index =
+    m_proxyModel->mapFromSource(m_model->index(row, EntityPropertyModel::ColumnValue));
+  m_table->setCurrentIndex(index);
+  m_table->scrollTo(index);
+  m_table->setFocus(Qt::OtherFocusReason);
+}
+
 std::string EntityPropertyGrid::selectedRowName() const
 {
   const auto current = m_proxyModel->mapToSource(m_table->currentIndex());

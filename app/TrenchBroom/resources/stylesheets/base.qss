@@ -955,21 +955,6 @@ QWidget#PythonConsole_TabActions QToolButton:disabled {
   color: @tb-disabled-text;
 }
 
-QWidget#IssueBrowser_TabActions {
-  background: transparent;
-}
-
-QWidget#IssueBrowser_TabActions QCheckBox {
-  color: @tb-secondary-text;
-  spacing: 5px;
-}
-
-QTableView#IssueBrowser_Table {
-  background: @tb-editor-background;
-  border: none;
-  padding: 2px;
-}
-
 QWidget#ModelBrowser_Controls {
   background: @tb-panel-background;
   border-bottom: 1px solid @tb-border;

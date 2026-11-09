@@ -25,6 +25,7 @@
 #include "ui/CyclingMapView.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
+#include "ui/IssueBrowserView.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorController.h"
 #include "ui/MapView2D.h"
@@ -114,6 +115,20 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
     connect(
       browser, &ModelBrowser::createEntityRequested, this, &MapEditorView::createEntity);
+  if (auto* issues = m_infoPanel->findChild<IssueBrowserView*>())
+  {
+    connect(
+      issues, &IssueBrowserView::focusObjectsRequested, this, [this](const bool faces) {
+        focusCameraOnSelection(true);
+        m_inspector->switchToPage(faces ? InspectorPage::Face : InspectorPage::Outliner);
+      });
+    connect(
+      issues, &IssueBrowserView::editPropertyRequested, this, [this](const QString& key) {
+        m_inspector->switchToPage(InspectorPage::Entity);
+        if (auto* properties = m_inspector->findChild<SelectionPropertyEditor*>())
+          properties->focusProperty(key);
+      });
+  }
   // Outliner widgets live on a lazily created inspector page, so wire them up
   // when that page is installed rather than assuming they exist at construction.
   connect(m_inspector, &Inspector::pagePrepared, this, [this](const int) {

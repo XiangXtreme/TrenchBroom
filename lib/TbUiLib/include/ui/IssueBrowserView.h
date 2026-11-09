@@ -19,110 +19,119 @@
 
 #pragma once
 
-#include <QAbstractItemModel>
+#include <QString>
 #include <QWidget>
 
 #include "mdl/IssueType.h"
 
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class QLabel;
-class QStackedLayout;
-class QTableView;
+class QLineEdit;
+class QMenu;
+class QPushButton;
+class QStandardItemModel;
+class QToolButton;
+class QTreeView;
 
-namespace tb
-{
-namespace mdl
+namespace tb::mdl
 {
 class Issue;
 class IssueQuickFix;
-} // namespace mdl
+} // namespace tb::mdl
 
+namespace tb
+{
 namespace ui
 {
-class IssueBrowserModel;
+class FlagsPopupEditor;
 class MapDocument;
 class SignalDelayer;
+
+QString issueTypeLabel(const std::string& description);
+
+// The model and details contain values only: node edits can destroy cached Issues
+// before the delayed validation runs. Live issues are usable only while m_valid.
+struct IssueBrowserEntry
+{
+  size_t id;
+  mdl::IssueType type;
+  QString category;
+  QString path;
+  QString description;
+  QString property;
+  QString value;
+  size_t line;
+  bool hidden;
+  bool isProperty;
+};
 
 class IssueBrowserView : public QWidget
 {
   Q_OBJECT
 private:
   MapDocument& m_document;
-
   int m_hiddenIssueTypes = 0;
   bool m_showHiddenIssues = false;
-
   bool m_valid = false;
-  int m_scrollPosition = 0;
-
-  QStackedLayout* m_stackedLayout = nullptr;
-  QTableView* m_tableView = nullptr;
-  QLabel* m_validatingLabel = nullptr;
-  IssueBrowserModel* m_tableModel = nullptr;
-
+  bool m_rebuilding = false;
+  std::vector<IssueBrowserEntry> m_entries;
+  std::unordered_map<size_t, const mdl::Issue*> m_liveIssues;
+  QTreeView* m_tree = nullptr;
+  QStandardItemModel* m_model = nullptr;
+  QLineEdit* m_search = nullptr;
+  FlagsPopupEditor* m_filter = nullptr;
+  std::unordered_map<int, bool> m_expansion;
+  QLabel* m_status = nullptr;
+  QLabel* m_title = nullptr;
+  QLabel* m_details = nullptr;
+  QLabel* m_result = nullptr;
+  QPushButton* m_locate = nullptr;
+  QPushButton* m_editProperty = nullptr;
+  QPushButton* m_ignore = nullptr;
+  QPushButton* m_restore = nullptr;
+  QToolButton* m_fix = nullptr;
   SignalDelayer* m_validateSignalDelayer = nullptr;
 
 public:
   explicit IssueBrowserView(MapDocument& document, QWidget* parent = nullptr);
-
-private:
-  void createGui();
-
-public:
   int hiddenIssueTypes() const;
   void setHiddenIssueTypes(int hiddenIssueTypes);
   void setShowHiddenIssues(bool show);
   void reload();
+  void updateFilterFlags();
   void deselectAll();
 
-private:
-  void updateIssues();
+signals:
+  void focusObjectsRequested(bool faces);
+  void editPropertyRequested(const QString& key);
 
-  std::vector<const mdl::Issue*> collectIssues(const QList<QModelIndex>& indices) const;
-  std::vector<const mdl::IssueQuickFix*> collectQuickFixes(
-    const QList<QModelIndex>& indices) const;
-  mdl::IssueType issueTypeMask() const;
-
-  void setIssueVisibility(bool show);
-
-  QList<QModelIndex> getSelection() const;
-  void updateSelection();
-  void bindEvents();
-
-  void itemRightClicked(const QPoint& pos);
-  void itemSelectionChanged();
-  void showIssues();
-  void hideIssues();
-  void applyQuickFix(const mdl::IssueQuickFix& quickFix);
-
-private:
-  void invalidate();
 public slots:
   void validate();
-};
+  void locateSelection();
 
-/**
- * Trivial QAbstractTableModel subclass, when the issues list changes,
- * it just refreshes the entire list with beginResetModel()/endResetModel().
- */
-class IssueBrowserModel : public QAbstractTableModel
-{
-  Q_OBJECT
 private:
-  std::vector<const mdl::Issue*> m_issues;
-
-public:
-  explicit IssueBrowserModel(QObject* parent);
-
-  void setIssues(std::vector<const mdl::Issue*> issues);
-  const std::vector<const mdl::Issue*>& issues();
-
-public: // QAbstractTableModel overrides
-  int rowCount(const QModelIndex& parent) const override;
-  int columnCount(const QModelIndex& parent) const override;
-  QVariant data(const QModelIndex& index, int role) const override;
-  QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
+  void createGui();
+  void updateIssues();
+  struct SelectionState
+  {
+    std::unordered_set<size_t> ids;
+    std::unordered_set<int> types;
+  };
+  SelectionState selectionState() const;
+  void rebuildModel();
+  void rebuildModel(const SelectionState& selection);
+  void updateDetails();
+  std::vector<size_t> selectedEntries() const;
+  std::vector<const mdl::Issue*> collectIssues() const;
+  std::vector<const mdl::IssueQuickFix*> collectQuickFixes() const;
+  bool selectObjects(const std::vector<const mdl::Issue*>& issues);
+  void setIssueVisibility(bool show);
+  void populateFixMenu(QMenu& menu);
+  void applyQuickFix(const std::string& description);
 };
 } // namespace ui
 } // namespace tb

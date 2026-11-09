@@ -837,6 +837,26 @@ void OutlinerEntityPropertyEditor::connectObservers()
       });
 }
 
+void OutlinerEntityPropertyEditor::focusProperty(const QString& key)
+{
+  m_forceUpdate = true;
+  updateFromSelection();
+  m_propertiesCard->setExpanded(true);
+  const auto focus = [this, &key](QWidget* widget) {
+    if (widget->property("propertyKey").toString() != key)
+      return false;
+    m_scrollArea->ensureWidgetVisible(widget);
+    widget->setFocus(Qt::OtherFocusReason);
+    return true;
+  };
+  for (auto* widget : findChildren<QLineEdit*>("outlinerPropertyValue"))
+    if (focus(widget))
+      return;
+  for (auto* widget : findChildren<QComboBox*>("outlinerPropertyValue"))
+    if (focus(widget))
+      return;
+}
+
 void OutlinerEntityPropertyEditor::scheduleUpdate(const bool force)
 {
   if (force)

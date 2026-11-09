@@ -1123,6 +1123,9 @@ TEST_CASE("ProjectWindow")
     REQUIRE(tools);
     REQUIRE(mode);
     REQUIRE(splitter);
+    // An inactive issue-details page must not raise the other tools' minimum height.
+    tools->showInfoPage(InfoPanelPage::Issues);
+    QApplication::processEvents();
     tools->showInfoPage(InfoPanelPage::PythonConsole);
     mode->setCurrentIndex(1);
     QApplication::processEvents();

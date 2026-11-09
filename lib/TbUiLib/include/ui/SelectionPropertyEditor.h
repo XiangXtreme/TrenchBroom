@@ -33,6 +33,7 @@ private:
 
 public:
   explicit SelectionPropertyEditor(MapDocument& document, QWidget* parent = nullptr);
+  void focusProperty(const QString& key);
 
 signals:
   void focusMapViewRequested();

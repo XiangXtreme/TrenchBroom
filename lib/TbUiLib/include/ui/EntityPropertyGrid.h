@@ -68,6 +68,7 @@ private:
 
 public:
   explicit EntityPropertyGrid(MapDocument& document, QWidget* parent = nullptr);
+  void focusProperty(const QString& key);
 
 private:
   void backupSelection();

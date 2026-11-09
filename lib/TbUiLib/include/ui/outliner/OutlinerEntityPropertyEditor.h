@@ -85,6 +85,7 @@ public:
   ~OutlinerEntityPropertyEditor() override;
   void onChoiceComboPopupHidden();
   void embedInSelectionEditor();
+  void focusProperty(const QString& key);
 
 signals:
   void focusMapViewRequested();

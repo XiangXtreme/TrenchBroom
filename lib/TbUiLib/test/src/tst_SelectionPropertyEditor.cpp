@@ -81,6 +81,29 @@ TEST_CASE("SelectionPropertyEditor")
   mdl::selectNodes(map, {entity});
   refreshSelectionProperties();
 
+  SECTION("diagnostic property navigation uses the active presentation")
+  {
+    editor.focusProperty("message");
+    refreshSelectionProperties();
+    mode->setCurrentIndex(1);
+    refreshSelectionProperties();
+    editor.focusProperty("model");
+    refreshSelectionProperties();
+    auto* table = editor.findChild<EntityPropertyTable*>();
+    REQUIRE(table);
+    CHECK(
+      table->currentIndex()
+        .siblingAtColumn(EntityPropertyModel::ColumnKey)
+        .data()
+        .toString()
+      == "model");
+    mode->setCurrentIndex(0);
+    refreshSelectionProperties();
+    editor.focusProperty("message");
+    refreshSelectionProperties();
+    CHECK(*entity->entity().property("message") == "original");
+  }
+
   SECTION("form and table edit the same properties with native undo")
   {
     auto* form = editor.findChild<OutlinerEntityPropertyEditor*>();

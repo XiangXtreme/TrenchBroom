@@ -237,6 +237,11 @@ void EntityPropertyEditor::updateDocumentation(const std::string& propertyKey)
   m_documentationText->moveCursor(QTextCursor::MoveOperation::Start);
 }
 
+void EntityPropertyEditor::focusProperty(const QString& key)
+{
+  m_propertyGrid->focusProperty(key);
+}
+
 void EntityPropertyEditor::createGui()
 {
   m_splitter = new Splitter{Qt::Vertical};

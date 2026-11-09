@@ -45,6 +45,19 @@ Issue::Issue(const IssueType type, Node& node, std::string description)
 
 Issue::~Issue() = default;
 
+std::unique_ptr<Issue> Issue::clone() const
+{
+  return std::make_unique<Issue>(*this);
+}
+std::unique_ptr<Issue> BrushFaceIssue::clone() const
+{
+  return std::make_unique<BrushFaceIssue>(*this);
+}
+std::unique_ptr<Issue> EntityPropertyIssue::clone() const
+{
+  return std::make_unique<EntityPropertyIssue>(*this);
+}
+
 size_t Issue::seqId() const
 {
   return m_seqId;

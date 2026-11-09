@@ -19,15 +19,8 @@
 
 #include "ui/IssueBrowser.h"
 
-#include <QCheckBox>
-#include <QList>
-#include <QStringList>
 #include <QVBoxLayout>
 
-#include "mdl/Map.h"
-#include "mdl/Validator.h"
-#include "mdl/WorldNode.h"
-#include "ui/FlagsPopupEditor.h"
 #include "ui/IssueBrowserView.h"
 #include "ui/MapDocument.h"
 
@@ -47,79 +40,20 @@ IssueBrowser::IssueBrowser(MapDocument& document, QWidget* parent)
   connectObservers();
 }
 
-QWidget* IssueBrowser::createTabBarPage(QWidget* parent)
-{
-  auto* barPage = new QWidget{parent};
-  barPage->setObjectName("IssueBrowser_TabActions");
-  m_showHiddenIssuesCheckBox = new QCheckBox{"Show hidden issues"};
-  m_showHiddenIssuesCheckBox->setObjectName("IssueBrowser_ShowHidden");
-  connect(
-    m_showHiddenIssuesCheckBox,
-    &QCheckBox::checkStateChanged,
-    this,
-    &IssueBrowser::showHiddenIssuesChanged);
-
-  m_filterEditor = new FlagsPopupEditor{1, "Filter", false};
-  m_filterEditor->setObjectName("IssueBrowser_Filter");
-  connect(
-    m_filterEditor, &FlagsPopupEditor::flagChanged, this, &IssueBrowser::filterChanged);
-
-  auto* barPageSizer = new QHBoxLayout{};
-  barPageSizer->setContentsMargins(0, 0, 0, 0);
-  barPageSizer->addWidget(m_showHiddenIssuesCheckBox, 0, Qt::AlignVCenter);
-  barPageSizer->addWidget(m_filterEditor, 0, Qt::AlignVCenter);
-  barPage->setLayout(barPageSizer);
-
-  return barPage;
-}
-
 void IssueBrowser::connectObservers()
 {
   m_notifierConnection += m_document.documentWasLoadedNotifier.connect([&] {
-    updateFilterFlags();
+    m_view->updateFilterFlags();
     m_view->reload();
   });
   m_notifierConnection +=
-    m_document.documentWasSavedNotifier.connect([&] { m_view->update(); });
+    m_document.documentWasSavedNotifier.connect([&] { m_view->reload(); });
   m_notifierConnection +=
     m_document.documentDidChangeNotifier.connect([&] { m_view->reload(); });
   m_notifierConnection +=
     m_document.materialCollectionsDidChangeNotifier.connect([&] { m_view->reload(); });
   m_notifierConnection +=
     m_document.entityDefinitionsDidChangeNotifier.connect([&] { m_view->reload(); });
-}
-
-void IssueBrowser::updateFilterFlags()
-{
-  auto flags = QList<int>{};
-  auto labels = QStringList{};
-
-  const auto& map = m_document.map();
-  const auto validators = map.worldNode().registeredValidators();
-
-  for (const auto* validator : validators)
-  {
-    flags.push_back(validator->type());
-    labels.push_back(QString::fromStdString(validator->description()));
-  }
-
-  m_filterEditor->setFlags(flags, labels);
-  m_view->setHiddenIssueTypes(0);
-  m_filterEditor->setFlagValue(~0);
-}
-
-void IssueBrowser::showHiddenIssuesChanged()
-{
-  m_view->setShowHiddenIssues(m_showHiddenIssuesCheckBox->isChecked());
-}
-
-void IssueBrowser::filterChanged(
-  const size_t /* index */,
-  const int /* value */,
-  const int setFlag,
-  const int /* mixedFlag */)
-{
-  m_view->setHiddenIssueTypes(~setFlag);
 }
 
 } // namespace tb::ui

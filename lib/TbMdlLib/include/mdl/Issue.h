@@ -21,6 +21,7 @@
 
 #include "mdl/IssueType.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,9 @@ protected:
 public:
   explicit Issue(IssueType type, Node& node, std::string description);
   virtual ~Issue();
+
+  // Derived diagnostics must preserve their payload when used by a quick fix.
+  virtual std::unique_ptr<Issue> clone() const;
 
   size_t seqId() const;
   size_t lineNumber() const;
@@ -70,6 +74,7 @@ public:
   BrushFaceIssue(
     IssueType type, BrushNode& node, size_t faceIndex, std::string description);
   ~BrushFaceIssue() override;
+  std::unique_ptr<Issue> clone() const override;
 
   size_t faceIndex() const;
   const BrushFace& face() const;
@@ -90,6 +95,7 @@ public:
     std::string propertyKey,
     std::string description);
   ~EntityPropertyIssue() override;
+  std::unique_ptr<Issue> clone() const override;
 
   const std::string& propertyKey() const;
   const std::string& propertyValue() const;

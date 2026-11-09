@@ -2828,42 +2828,304 @@ Hold %2 to keep trim sheet subdivisions.</source>
             <translation>资产</translation>
             </message>
         </context>
-    <context>
-        <name>tb::ui::IssueBrowserModel</name>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/IssueBrowserView.cpp" line="433" />
-            <source>Line</source>
-            <translation>线条</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/IssueBrowserView.cpp" line="437" />
-            <source>Description</source>
-            <translation>描述</translation>
-            </message>
-        </context>
+
     <context>
         <name>tb::ui::IssueBrowserView</name>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/IssueBrowserView.cpp" line="291" />
-            <source>Show</source>
-            <translation>显示</translation>
-            </message>
+            <source>Fractional vertices can be intentional after rotation, clipping or terrain editing. Inspect the brush before snapping; snapping to a 1-unit grid changes its geometry.</source>
+            <translation>旋转、裁切或地形编辑后，小数顶点可能是有意保留的。吸附前请检查刷子；吸附到 1 单位网格会改变几何形状。</translation>
+        </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/IssueBrowserView.cpp" line="292" />
-            <source>Hide</source>
-            <translation>隐藏</translation>
-            </message>
+            <source>The classname is not present in the loaded entity definitions. Check the game configuration and FGD before deleting the object.</source>
+            <translation>已加载的实体定义中没有此 classname。删除对象前，请检查游戏配置与 FGD。</translation>
+        </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/IssueBrowserView.cpp" line="298" />
-            <source>Fix</source>
-            <translation>修正</translation>
-            </message>
+            <source>Check whether this property is intentional. Removing it may change entity behavior; consult the entity definition first.</source>
+            <translation>请先确认此属性是否有意保留。删除它可能改变实体行为，建议先查看实体定义。</translation>
+        </message>
         <message>
-            <location filename="../../../../lib/TbUiLib/src/IssueBrowserView.cpp" line="109" />
-            <source>Validating, please wait...</source>
-            <translation>正在校验，请稍候...</translation>
-            </message>
-        </context>
+            <source>Check target and targetname together. A missing link may prevent a trigger or scripted sequence from working.</source>
+            <translation>请一起检查 target 与 targetname。缺失的连接可能使触发器或脚本序列无法工作。</translation>
+        </message>
+        <message>
+            <source>A zero texture scale is invalid. Resetting it changes texture alignment on the affected faces.</source>
+            <translation>纹理缩放不能为零。重置会改变受影响面的纹理对齐。</translation>
+        </message>
+        <message>
+            <source>Assign a material to this face using the material browser or face inspector.</source>
+            <translation>请通过材质浏览器或面检查器为此面指定材质。</translation>
+        </message>
+        <message>
+            <source>Review the original diagnostic and the affected object before making changes. Check the entity definition or map settings when appropriate.</source>
+            <translation>修改前，请核对原始诊断与受影响对象，必要时检查实体定义或地图设置。</translation>
+        </message>
+        <message>
+            <source>Empty property value</source>
+            <translation>属性值为空</translation>
+        </message>
+        <message>
+            <source>Long entity property keys</source>
+            <translation>实体属性名过长</translation>
+        </message>
+        <message>
+            <source>Missing entity link source</source>
+            <translation>实体连接缺少来源</translation>
+        </message>
+        <message>
+            <source>Missing entity link target</source>
+            <translation>实体连接缺少目标</translation>
+        </message>
+        <message>
+            <source>Empty property name</source>
+            <translation>属性名为空</translation>
+        </message>
+        <message>
+            <source>Missing entity classname</source>
+            <translation>实体缺少 classname</translation>
+        </message>
+        <message>
+            <source>Invalid UV scale</source>
+            <translation>UV 缩放无效</translation>
+        </message>
+        <message>
+            <source>Placeholder texture</source>
+            <translation>占位纹理</translation>
+        </message>
+        <message>
+            <source>Missing mod directory</source>
+            <translation>模组目录缺失</translation>
+        </message>
+        <message>
+            <source>Long entity property value</source>
+            <translation>实体属性值过长</translation>
+        </message>
+        <message>
+            <source>Missing entity definition</source>
+            <translation>实体定义缺失</translation>
+        </message>
+        <message>
+            <source>Mixed brush content flags</source>
+            <translation>刷子内容标记不一致</translation>
+        </message>
+        <message>
+            <source>Empty group</source>
+            <translation>空分组</translation>
+        </message>
+        <message>
+            <source>Non-integer vertices</source>
+            <translation>非整数顶点</translation>
+        </message>
+        <message>
+            <source>Empty brush entity</source>
+            <translation>空刷子实体</translation>
+        </message>
+        <message>
+            <source>Point entity with brushes</source>
+            <translation>点实体包含刷子</translation>
+        </message>
+        <message>
+            <source>Invalid entity property keys</source>
+            <translation>实体属性名无效</translation>
+        </message>
+        <message>
+            <source>Invalid entity property values</source>
+            <translation>实体属性值无效</translation>
+        </message>
+        <message>
+            <source>Objects out of world bounds</source>
+            <translation>对象超出世界边界</translation>
+        </message>
+        <message>
+            <source>Objects out of soft map bounds</source>
+            <translation>对象超出建议地图边界</translation>
+        </message>
+        <message>
+            <source>Paths must use forward slashes</source>
+            <translation>路径需使用正斜杠</translation>
+        </message>
+        <message>
+            <source>Snap Vertices</source>
+            <translation>吸附顶点到网格</translation>
+        </message>
+        <message>
+            <source>Delete Objects</source>
+            <translation>删除对象</translation>
+        </message>
+        <message>
+            <source>Delete Property</source>
+            <translation>删除属性</translation>
+        </message>
+        <message>
+            <source>Reset UV Scale</source>
+            <translation>重置 UV 缩放</translation>
+        </message>
+        <message>
+            <source>Remove Mod</source>
+            <translation>移除模组</translation>
+        </message>
+        <message>
+            <source>Truncate Property Values</source>
+            <translation>截短属性值</translation>
+        </message>
+        <message>
+            <source>Move Brushes to World</source>
+            <translation>将刷子移至世界</translation>
+        </message>
+        <message>
+            <source>Replace " with '</source>
+            <translation>将双引号替换为单引号</translation>
+        </message>
+        <message>
+            <source>Replace \ with /</source>
+            <translation>将反斜杠替换为正斜杠</translation>
+        </message>
+        <message>
+            <source>Search issues, objects or properties</source>
+            <translation>搜索问题、对象或属性</translation>
+        </message>
+        <message>
+            <source>Search issues</source>
+            <translation>搜索问题</translation>
+        </message>
+        <message>
+            <source>Show ignored</source>
+            <translation>显示已忽略</translation>
+        </message>
+        <message>
+            <source>Issue types</source>
+            <translation>问题类型</translation>
+        </message>
+        <message>
+            <source>Select an issue to inspect</source>
+            <translation>选择问题查看详情</translation>
+        </message>
+        <message>
+            <source>Locate objects</source>
+            <translation>定位对象</translation>
+        </message>
+        <message>
+            <source>Edit property</source>
+            <translation>编辑属性</translation>
+        </message>
+        <message>
+            <source>Fix selected</source>
+            <translation>修复所选</translation>
+        </message>
+        <message>
+            <source>Ignore</source>
+            <translation>忽略</translation>
+        </message>
+        <message>
+            <source>Restore</source>
+            <translation>恢复</translation>
+        </message>
+        <message>
+            <source>Ignores this issue type on the affected objects for this session only. It does not hide objects or change the map file.</source>
+            <translation>仅在本次打开期间，忽略受影响对象上的此类问题；不会隐藏对象，也不会修改地图文件。</translation>
+        </message>
+        <message>
+            <source>Updating checks…</source>
+            <translation>正在更新检查…</translation>
+        </message>
+        <message>
+            <source>Issue / object</source>
+            <translation>问题 / 对象</translation>
+        </message>
+        <message>
+            <source>Line</source>
+            <translation>行号</translation>
+        </message>
+        <message>
+            <source>(empty key)</source>
+            <translation>（空属性名）</translation>
+        </message>
+        <message>
+            <source>%1 shown / %2 total</source>
+            <translation>显示 %1 / 共 %2 项</translation>
+        </message>
+        <message>
+            <source>No visible issues</source>
+            <translation>没有可见问题</translation>
+        </message>
+        <message>
+            <source>%1 selected issues</source>
+            <translation>已选择 %1 项问题</translation>
+        </message>
+        <message>
+            <source>Select a row to read details. Double-click or use Locate objects to select and focus it in the map. Select a category to act on its visible results.</source>
+            <translation>单击条目阅读详情；双击或使用“定位对象”在地图中选择并聚焦。选择分类可批量处理其中当前可见的结果。</translation>
+        </message>
+        <message>
+            <source>The current map checks found no issues. This does not replace a compile or in-game test.</source>
+            <translation>当前地图检查未发现问题。仍需通过编译和游戏内测试验证地图。</translation>
+        </message>
+        <message>
+            <source>No results match the current search and filters. Clear the search or adjust Issue types and Show ignored to review other results.</source>
+            <translation>没有匹配当前搜索和筛选的结果。请清空搜索，或调整“问题类型”和“显示已忽略”。</translation>
+        </message>
+        <message>
+            <source>Multiple issue types are selected. Select one type to see its explanation and available fixes.</source>
+            <translation>已选择多种问题。请选择一种类型，查看其说明和可用修复。</translation>
+        </message>
+        <message>
+            <source>Original diagnostic: %1</source>
+            <translation>原始诊断：%1</translation>
+        </message>
+        <message>
+            <source>Property: %1
+Value: %2</source>
+            <translation>属性：%1
+值：%2</translation>
+        </message>
+        <message>
+            <source>Ignored for this session on this object and issue type.</source>
+            <translation>本次打开期间，已忽略此对象上的此类问题。</translation>
+        </message>
+        <message>
+            <source>Actions apply only to the selected, currently visible results. Ignoring applies to each object's issue type for this session.</source>
+            <translation>操作仅针对当前选中且可见的结果。忽略会对相应对象上的同类问题生效，仅限本次打开。</translation>
+        </message>
+        <message>
+            <source>Some affected objects are hidden, locked or inside a closed group. Make them selectable before locating or fixing them.</source>
+            <translation>部分对象已隐藏、锁定或位于关闭的分组内。定位或修复前，请先使它们可选。</translation>
+        </message>
+        <message>
+            <source>This diagnostic concerns map properties or an object without selectable geometry. Use the scene property editor to inspect it.</source>
+            <translation>此诊断涉及地图属性，或没有可选几何的对象。可在场景属性编辑器中检查。</translation>
+        </message>
+        <message>
+            <source>Restored for this session.</source>
+            <translation>已在本次打开期间恢复显示。</translation>
+        </message>
+        <message>
+            <source>Ignored on the affected objects for this session only.</source>
+            <translation>已在本次打开期间忽略相应对象上的此类问题。</translation>
+        </message>
+        <message>
+            <source>Fix selected issues</source>
+            <translation>修复所选问题</translation>
+        </message>
+        <message>
+            <source>Apply “%1” to %2 selected issues? This can change or remove map data. You can undo this action.</source>
+            <translation>对选中的 %2 项问题执行“%1”？此操作可能修改或删除地图数据，可通过撤销恢复。</translation>
+        </message>
+        <message>
+            <source>Ran “%1” for %2 issues. Checks refreshed: %3 issues remain in the map.</source>
+            <translation>已对 %2 项问题执行“%1”。检查已刷新，地图中仍有 %3 项问题。</translation>
+        </message>
+        <message>
+            <source>The fix was rolled back. Check the output log.</source>
+            <translation>修复已回滚，请检查输出日志。</translation>
+        </message>
+        <message>
+            <source>Changes can be undone.</source>
+            <translation>可通过撤销恢复修改。</translation>
+        </message>
+        <message>
+            <source>No map data changed. Review the remaining results and the output log.</source>
+            <translation>地图数据未改变，请检查剩余问题和输出日志。</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::KeyboardPreferencePane</name>
         <message>

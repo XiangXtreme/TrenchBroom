@@ -54,6 +54,11 @@ private:
   std::string m_mod;
 
 public:
+  std::unique_ptr<Issue> clone() const override
+  {
+    return std::make_unique<MissingModIssue>(*this);
+  }
+
   MissingModIssue(EntityNodeBase& entityNode, std::string mod, std::string description)
     : Issue{Type, entityNode, std::move(description)}
     , m_mod{std::move(mod)}

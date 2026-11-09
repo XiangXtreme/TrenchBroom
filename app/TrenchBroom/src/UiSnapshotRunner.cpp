@@ -85,6 +85,7 @@
 #include "ui/EntityBrowserView.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
+#include "ui/IssueBrowserView.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapSettingsDialog.h"
@@ -142,6 +143,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("plugin-inspector"),
     QStringLiteral("terrain"),
     QStringLiteral("terrain-collapsed"),
+    QStringLiteral("issues"),
+    QStringLiteral("issues-empty"),
     QStringLiteral("supporting"),
     QStringLiteral("output-log"),
     QStringLiteral("path-tool-preview"),
@@ -496,6 +499,50 @@ void configureOutlinerSnapshot(QWidget& targetWidget, const QString& targetName)
     {
       list->setCurrentRow(1);
       scroll->ensureWidgetVisible(list->parentWidget()->parentWidget());
+    }
+  }
+}
+
+void configureIssuesSnapshot(QWidget& targetWidget, const QString& targetName)
+{
+  auto* window = qobject_cast<MapWindow*>(&targetWidget);
+  if (!window)
+    return;
+  if (!targetWidget.property("issuesSnapshotInitialized").toBool())
+  {
+    auto& map = window->document().map();
+    auto entities = std::vector<mdl::Node*>{};
+    for (int i = 0; i < 12; ++i)
+      entities.push_back(new mdl::EntityNode{mdl::Entity{
+        {{"classname", "trigger_multiple"},
+         {"target", "missing_destination"},
+         {"message", ""},
+         {"targetname", "check_trigger_" + std::to_string(i + 1)}}}});
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), entities}});
+    targetWidget.setProperty("issuesSnapshotInitialized", true);
+  }
+  window->switchToInfoPanelPage(InfoPanelPage::Issues);
+  if (auto* mode = window->findChild<QComboBox*>("ProjectToolsMode"))
+    mode->setCurrentIndex(1);
+  if (auto* splitter = window->findChild<QSplitter*>("ProjectToolsSplitter"))
+    splitter->setSizes({460, 440});
+  auto* issues = window->findChild<IssueBrowserView*>();
+  if (!issues)
+    return;
+  issues->validate();
+  if (targetName == "issues-empty")
+    issues->findChild<QLineEdit*>("IssueBrowser_Search")
+      ->setText("no_matching_diagnostic");
+  else
+  {
+    auto* tree = issues->findChild<QTreeView*>("IssueBrowser_Tree");
+    if (tree && tree->model()->rowCount() > 0)
+    {
+      const auto group = tree->model()->index(0, 0);
+      tree->setExpanded(group, true);
+      tree->selectionModel()->select(
+        tree->model()->index(0, 0, group),
+        QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     }
   }
 }
@@ -876,6 +923,17 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
       tools && tools->isAnimating())
     return {
       UiSnapshotReadinessState::Pending, "Workspace drawer animation is still running"};
+  if (targetName == "issues" || targetName == "issues-empty")
+  {
+    auto* issues = targetWidget.findChild<IssueBrowserView*>();
+    auto* tree = issues ? issues->findChild<QTreeView*>("IssueBrowser_Tree") : nullptr;
+    auto* details = issues ? issues->findChild<QLabel*>("IssueBrowser_Details") : nullptr;
+    const auto ready = tree && details && tree->isVisible() && !details->text().isEmpty()
+      && (targetName == "issues-empty" ? tree->model()->rowCount() == 0 : !tree->selectionModel()->selectedRows().isEmpty());
+    return {
+      ready ? UiSnapshotReadinessState::Ready : UiSnapshotReadinessState::Failed,
+      "Issue groups, filtering and details must reach their requested state"};
+  }
   if (targetName == QStringLiteral("output-log"))
   {
     auto* bar = targetWidget.findChild<QWidget*>("InfoPanel_TabBar");
@@ -1257,6 +1315,10 @@ void configureSnapshot(QWidget& targetWidget, const QString& targetName)
   else if (isOutlinerSnapshotTarget(targetName))
   {
     configureOutlinerSnapshot(targetWidget, targetName);
+  }
+  else if (targetName == "issues" || targetName == "issues-empty")
+  {
+    configureIssuesSnapshot(targetWidget, targetName);
   }
   else if (targetName == QStringLiteral("supporting"))
   {

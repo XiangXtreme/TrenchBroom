@@ -22,20 +22,12 @@
 #include "base/NotifierConnection.h"
 #include "ui/TabBook.h"
 
-class QCheckBox;
-class QStackedLayout;
 class QWidget;
 
 namespace tb
 {
-namespace mdl
-{
-class Issue;
-} // namespace mdl
-
 namespace ui
 {
-class FlagsPopupEditor;
 class IssueBrowserView;
 class MapDocument;
 
@@ -43,30 +35,16 @@ class IssueBrowser : public TabBookPage
 {
   Q_OBJECT
 private:
-  static const int SelectObjectsCommandId = 1;
-  static const int ShowIssuesCommandId = 2;
-  static const int HideIssuesCommandId = 3;
-  static const int FixObjectsBaseId = 4;
-
   MapDocument& m_document;
   IssueBrowserView* m_view = nullptr;
-  QCheckBox* m_showHiddenIssuesCheckBox = nullptr;
-  FlagsPopupEditor* m_filterEditor = nullptr;
 
   NotifierConnection m_notifierConnection;
 
 public:
   explicit IssueBrowser(MapDocument& document, QWidget* parent = nullptr);
 
-  QWidget* createTabBarPage(QWidget* parent) override;
-
 private:
   void connectObservers();
-
-  void updateFilterFlags();
-
-  void showHiddenIssuesChanged();
-  void filterChanged(size_t index, int value, int setFlag, int mixedFlag);
 };
 
 } // namespace ui
