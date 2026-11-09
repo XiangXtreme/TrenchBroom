@@ -285,6 +285,17 @@ Result<void> CompilationDialog::runProfile(
       return std::get<Error>(asset.error());
     if (!asset.value())
       return Error{"The project map no longer exists."};
+
+    // Runtime resources are part of the same frozen dependency set as the map. Publish
+    // them before a real run so a subsequent engine launch sees the exact revisions that
+    // are about to be compiled. Test compiles remain side-effect free.
+    if (!test && !map.gamePath().empty())
+    {
+      if (const auto published =
+            project->publishCompileResources(*assetId, map.gamePath());
+          published.is_error())
+        return std::get<Error>(published.error());
+    }
     auto mapName = asset.value()->displayName;
     if (mapName.empty())
       mapName = std::filesystem::path{asset.value()->publishPath}.stem().string();

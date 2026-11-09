@@ -841,6 +841,88 @@ Result<void> ProjectSession::exportCompileSnapshot(
   }
   return {};
 }
+Result<void> ProjectSession::publishCompileResources(
+  const std::string& mapAssetId, const std::filesystem::path& gameDirectory)
+{
+  if (gameDirectory.empty() || gameDirectory == gameDirectory.root_path())
+    return Error{"The game directory for resource publishing is invalid."};
+
+  QTemporaryDir snapshot;
+  if (!snapshot.isValid())
+    return Error{"Could not create a temporary resource snapshot."};
+  const auto snapshotPath = pathFromQString(snapshot.path());
+  if (const auto exported = exportCompileSnapshot(mapAssetId, snapshotPath, "map.map");
+      exported.is_error())
+    return std::get<Error>(exported.error());
+
+  const auto resources = snapshotPath / "resources";
+  std::error_code error;
+  if (!std::filesystem::exists(resources, error))
+  {
+    if (error)
+      return Error{"Cannot inspect the compile resources: " + error.message()};
+    return {};
+  }
+
+  auto iterator = std::filesystem::recursive_directory_iterator{resources, error};
+  const auto end = std::filesystem::recursive_directory_iterator{};
+  while (iterator != end)
+  {
+    if (error)
+      return Error{"Cannot inspect the compile resources: " + error.message()};
+    const auto& entry = *iterator;
+    const auto regular = entry.is_regular_file(error);
+    if (error)
+      return Error{"Cannot inspect a compile resource: " + error.message()};
+    if (!regular)
+    {
+      iterator.increment(error);
+      continue;
+    }
+
+    const auto relative = entry.path().lexically_relative(resources);
+    if (
+      relative.empty() || relative.is_absolute()
+      || std::ranges::any_of(relative, [](const auto& part) { return part == ".."; }))
+      return Error{"The compile snapshot contains an invalid resource path."};
+    const auto target = gameDirectory / relative;
+    const auto sourceHash = fileDigest(entry.path());
+    if (sourceHash.is_error())
+      return std::get<Error>(sourceHash.error());
+    const auto targetExists = std::filesystem::exists(target, error);
+    if (error)
+      return Error{"Cannot inspect existing game resource: " + error.message()};
+    if (targetExists)
+    {
+      const auto targetIsDirectory = std::filesystem::is_directory(target, error);
+      if (error)
+        return Error{"Cannot inspect existing game resource: " + error.message()};
+      if (targetIsDirectory)
+        return Error{
+          "A game resource path is occupied by a directory: " + target.string()};
+      const auto targetHash = fileDigest(target);
+      if (targetHash.is_error())
+        return Error{
+          "Cannot read existing game resource '" + target.string()
+          + "': " + std::get<Error>(targetHash.error()).msg};
+      if (sourceHash.value() != targetHash.value())
+        return Error{"A different game resource already exists: " + target.string()};
+    }
+    else
+    {
+      const auto bytes = readBytes(entry.path());
+      if (bytes.is_error())
+        return std::get<Error>(bytes.error());
+      if (const auto written = writeBytes(target, bytes.value()); written.is_error())
+        return std::get<Error>(written.error());
+    }
+    iterator.increment(error);
+  }
+  if (error)
+    return Error{"Cannot inspect the compile resources: " + error.message()};
+  return {};
+}
+
 Result<std::filesystem::path> ProjectSession::prepareMap(const std::string& id)
 {
   return m_store->findAsset(id)

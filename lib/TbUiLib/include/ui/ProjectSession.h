@@ -278,6 +278,13 @@ public:
     const std::string& mapAssetId,
     const std::filesystem::path& folder,
     const std::string& mapFileName = "map.map");
+  /**
+   * Publishes the selected map's runtime dependency snapshot into a game directory.
+   * Existing files are reused when their content matches; a different existing file
+   * is reported as a conflict so a compile cannot silently overwrite game assets.
+   */
+  Result<void> publishCompileResources(
+    const std::string& mapAssetId, const std::filesystem::path& gameDirectory);
 
   // Reads live edits without selecting revisions, saving the project or clearing dirty
   // state.

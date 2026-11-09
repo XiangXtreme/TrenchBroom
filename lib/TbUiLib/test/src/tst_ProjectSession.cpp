@@ -2586,6 +2586,19 @@ TEST_CASE("ProjectSessionAssetLibrary")
     const auto edges = requireProject(sandbox.session->store().dependencies(group.id));
     REQUIRE(edges.size() == 6);
 
+    SECTION("publishes skybox faces directly under the game gfx env directory")
+    {
+      const auto game = sandbox.root / "game";
+      requireProject(sandbox.session->publishCompileResources(map.id, game));
+      for (const auto* suffix : {"bk", "rt", "lf", "ft", "up", "dn"})
+      {
+        CHECK(std::filesystem::exists(
+          game / (std::string{"gfx/env/desert"} + suffix + ".tga")));
+      }
+      CHECK_FALSE(
+        std::filesystem::exists(game / "gfx/env" / sandbox.session->store().info().id));
+    }
+
     SECTION("one copy task publishes a portable mixed resource snapshot")
     {
       const auto modelBytes =
