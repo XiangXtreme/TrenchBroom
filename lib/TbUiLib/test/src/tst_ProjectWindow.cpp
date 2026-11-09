@@ -1081,9 +1081,16 @@ TEST_CASE("ProjectWindow")
 
   SECTION("reopened views apply saved proportions after host layout")
   {
+    window.resize(1600, 900);
+    QApplication::processEvents();
     auto settings = QSettings{};
     auto saved = EditorLayout{};
     saved.inspectorRatio = 0.42;
+    SECTION("wide saved sidebar retains its proportion") {}
+    SECTION("narrow saved sidebar respects the content minimum")
+    {
+      saved.inspectorRatio = 0.1;
+    }
     saved.inspectorPage = InspectorPage::Outliner;
     saveEditorLayout(settings, WorkspaceKind::Project, saved);
     closeTab(*tabs, 0);
@@ -1098,7 +1105,10 @@ TEST_CASE("ProjectWindow")
     const auto sizes = editor.hSplitter()->sizes();
     CHECK(editor.inspector()->currentPage() == InspectorPage::Outliner);
     REQUIRE(sizes[0] + sizes[1] > 0);
-    CHECK(std::abs(static_cast<double>(sizes[1]) / (sizes[0] + sizes[1]) - 0.42) < 0.02);
+    const auto total = sizes[0] + sizes[1];
+    const auto minimum = editor.hSplitter()->widget(1)->minimumSizeHint().width();
+    const auto expected = std::max(saved.inspectorRatio * total, double(minimum));
+    CHECK(std::abs(sizes[1] - expected) < 2.0);
     tabs->setCurrentIndex(0);
     tabs->setCurrentIndex(1);
     CHECK(editor.hSplitter()->sizes() == sizes);
@@ -3076,8 +3086,11 @@ TEST_CASE("ProjectWindow")
       REQUIRE(view != nullptr);
       auto mime = QMimeData{};
       mime.setText(payload);
-      // The corner is over the void, so the drop falls back to the face selection.
-      const auto position = QPoint{1, 1};
+      // Look away from the brush so the drop falls back to the face selection,
+      // independently of the viewport's aspect ratio.
+      view->camera().moveTo(vm::vec3f{512, 0, 0});
+      view->camera().setDirection(vm::vec3f{1, 0, 0}, vm::vec3f{0, 0, 1});
+      const auto position = view->rect().center();
       auto enter =
         QDragEnterEvent{position, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
       QApplication::sendEvent(view, &enter);

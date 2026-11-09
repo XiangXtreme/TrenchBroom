@@ -79,6 +79,7 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/CatchConfig.h"
 #include "ui/CommandPaletteDialog.h"
+#include "ui/ElidedLabel.h"
 #include "ui/EntityBrowserView.h"
 #include "ui/InfoPanel.h"
 #include "ui/InputEvent.h"
@@ -449,6 +450,8 @@ TEST_CASE("MapWindow")
         send(MouseEvent::Type::Motion, MouseEvent::Button::None, start);
         send(MouseEvent::Type::Down, MouseEvent::Button::Left, start);
         send(MouseEvent::Type::DragStart, MouseEvent::Button::None, start);
+        CAPTURE(view->camera().zoom(), QGuiApplication::queryKeyboardModifiers());
+        REQUIRE(toolBox.dragging());
         send(MouseEvent::Type::Drag, MouseEvent::Button::None, end);
         REQUIRE(toolBox.dragging());
         send(MouseEvent::Type::DragEnd, MouseEvent::Button::None, end);
@@ -872,6 +875,58 @@ TEST_CASE("MapWindow")
 
     QTRY_VERIFY_WITH_TIMEOUT(output->toPlainText().contains(QStringLiteral("42")), 500);
     CHECK(output->toPlainText().contains(QStringLiteral("'worldspawn'")));
+  }
+
+  SECTION("sidebar minimum keeps paired face controls separated across inspector pages")
+  {
+    auto* inspector = window.findChild<Inspector*>();
+    auto* splitter = window.findChild<QSplitter*>("MapWindow_HorizontalSplitter");
+    REQUIRE(inspector);
+    REQUIRE(splitter);
+    window.resize(1280, 900);
+    window.show();
+    for (const auto page :
+         {InspectorPage::Outliner,
+          InspectorPage::Face,
+          InspectorPage::Terrain,
+          InspectorPage::Plugin,
+          InspectorPage::Face,
+          InspectorPage::Outliner})
+    {
+      inspector->switchToPage(page);
+      splitter->setSizes({10000, 1});
+      QTest::qWait(20);
+      CAPTURE(
+        static_cast<int>(page), inspector->width(), inspector->minimumSizeHint().width());
+      CHECK(inspector->width() >= inspector->minimumSizeHint().width());
+      if (page == InspectorPage::Face)
+      {
+        auto* materialName = static_cast<ElidedLabel*>(
+          inspector->findChild<QWidget*>("FaceAttribsEditor_MaterialName"));
+        REQUIRE(materialName);
+        const auto readableMinimum = inspector->minimumSizeHint().width();
+        materialName->setText(QString{"textures/very_long_material_name/"}.repeated(20));
+        QTest::qWait(20);
+        CHECK(inspector->minimumSizeHint().width() == readableMinimum);
+        for (const auto* name : {"FaceAttribsEditor_Attributes", "UvEditor_Toolbar"})
+        {
+          auto* controls = inspector->findChild<QWidget*>(name);
+          REQUIRE(controls);
+          const auto children =
+            controls->findChildren<QWidget*>(QString{}, Qt::FindDirectChildrenOnly);
+          for (auto* child : children)
+          {
+            if (!child->isVisible())
+              continue;
+            CHECK(controls->rect().contains(child->geometry()));
+            CHECK(child->width() >= child->minimumSizeHint().width());
+            for (auto* other : children)
+              if (other != child && other->isVisible())
+                CHECK_FALSE(child->geometry().intersects(other->geometry()));
+          }
+        }
+      }
+    }
   }
 
   SECTION("exposes styled inspector and browser sections")

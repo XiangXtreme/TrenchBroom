@@ -41,6 +41,7 @@ enum class UvJustifyDirection;
 namespace ui
 {
 class AppController;
+class ElidedLabel;
 class FlagsPopupEditor;
 class MapDocument;
 class SignalDelayer;
@@ -65,7 +66,7 @@ private:
   QAbstractButton* m_fitVButton = nullptr;
   QAbstractButton* m_autoFitButton = nullptr;
 
-  QLabel* m_materialName = nullptr;
+  ElidedLabel* m_materialName = nullptr;
   QLabel* m_textureSize = nullptr;
   SpinControl* m_xOffsetEditor = nullptr;
   SpinControl* m_yOffsetEditor = nullptr;

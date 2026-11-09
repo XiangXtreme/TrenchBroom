@@ -42,6 +42,7 @@
 #include "mdl/WorldNode.h"
 #include "ui/BitmapButton.h"
 #include "ui/BorderLine.h"
+#include "ui/ElidedLabel.h"
 #include "ui/FlagsPopupEditor.h"
 #include "ui/MapDocument.h"
 #include "ui/QStyleUtils.h"
@@ -487,7 +488,7 @@ Hold %2 to keep trim sheet subdivisions.)")
 QWidget* FaceAttribsEditor::createAttribsWidget()
 {
   auto* materialNameLabel = createFieldLabel(QStringLiteral("Material"));
-  m_materialName = new QLabel{"none"};
+  m_materialName = new ElidedLabel{"none", Qt::ElideMiddle};
   m_materialName->setObjectName(QStringLiteral("FaceAttribsEditor_MaterialName"));
   m_materialName->setTextInteractionFlags(Qt::TextSelectableByMouse);
 

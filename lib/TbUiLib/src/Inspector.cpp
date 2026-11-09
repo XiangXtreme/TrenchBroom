@@ -182,6 +182,13 @@ Inspector::Inspector(
 
 Inspector::~Inspector() = default;
 
+QSize Inspector::minimumSizeHint() const
+{
+  // The rail is part of the sidebar budget. Leave room for paired property
+  // fields, and let the layout request more space for larger fonts or controls.
+  return QWidget::minimumSizeHint().expandedTo(QSize{520, 100});
+}
+
 void Inspector::connectTopWidgets(MapViewBar* mapViewBar)
 {
   if (m_syncHeaderEventFilter)

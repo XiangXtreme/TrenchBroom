@@ -79,6 +79,8 @@ public:
     QWidget* parent = nullptr);
   ~Inspector() override;
 
+  QSize minimumSizeHint() const override;
+
   void connectTopWidgets(MapViewBar* mapViewBar);
   void updateShortcuts();
   void switchToPage(InspectorPage page);

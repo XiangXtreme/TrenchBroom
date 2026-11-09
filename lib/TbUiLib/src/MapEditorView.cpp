@@ -99,7 +99,7 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_infoPanel->setMinimumSize(100, appController.projectFor(document) ? 100 : 240);
 
   m_vSplitter->setMinimumSize(100, 100);
-  m_inspector->setMinimumSize(380, 100);
+  m_inspector->setMinimumHeight(100);
 
   // resize only the map view when the window resizes
   m_vSplitter->setStretchFactor(0, 1);

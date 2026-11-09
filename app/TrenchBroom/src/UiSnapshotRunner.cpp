@@ -1107,7 +1107,9 @@ void configureInspectorSnapshot(QWidget& targetWidget, const QString& targetName
     auto* splitter =
       mapWindow->findChild<QSplitter*>(QStringLiteral("MapWindow_HorizontalSplitter")))
   {
-    splitter->setSizes(QList<int>{940, 500});
+    splitter->setSizes(
+      targetName == QStringLiteral("face-inspector") ? QList<int>{10000, 1}
+                                                     : QList<int>{940, 500});
   }
 
   if (targetName.endsWith(QStringLiteral("-empty")))

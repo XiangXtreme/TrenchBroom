@@ -174,6 +174,10 @@ Choice descriptions size the popup rather than widening or stacking the form fie
 Resizing rearranges the existing widgets and preserves the current edit and focus.
 `EditorLayout` owns the initial and persisted workspace splitter proportions; do not
 add a second set of startup proportions in the view constructor.
+`Inspector::minimumSizeHint` owns the sidebar's lower width bound: at least 520 logical
+pixels including its navigation rail, or the larger minimum requested by its Qt layout.
+Do not override it with an explicit width in `MapEditorView`; that masks the child
+layout's minimum. Saved proportions and manual splitter resizing respect this same bound.
 
 The implementation and extension guide is [UI foundation improvement](ui-foundation-improvement.md).
 

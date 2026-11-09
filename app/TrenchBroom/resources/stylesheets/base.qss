@@ -1375,7 +1375,7 @@ QWidget#FaceAttribsEditor_Attributes QLabel[faceFieldLabel="true"] {
   font-weight: normal;
 }
 
-QLabel#FaceAttribsEditor_MaterialName {
+QWidget#FaceAttribsEditor_MaterialName {
   color: @tb-text;
   font-weight: 600;
 }
