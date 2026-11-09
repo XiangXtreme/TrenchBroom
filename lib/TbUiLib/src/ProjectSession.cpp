@@ -168,6 +168,24 @@ std::string goldSrcTextureName(const std::string& stem, const bool masked)
   return name;
 }
 
+// Only runtime files whose engine roots allow subdirectories receive a namespace.
+std::string namespacedPath(
+  const project::AssetType type,
+  const std::string& path,
+  const std::string& assetNamespace,
+  const std::string& previousNamespace = {})
+{
+  if (
+    type != project::AssetType::Model && type != project::AssetType::Sprite
+    && type != project::AssetType::Sound)
+    return path;
+  const auto root = std::string{publishRoot(type)} + "/";
+  auto suffix = path.starts_with(root) ? path.substr(root.size()) : path;
+  if (!previousNamespace.empty() && suffix.starts_with(previousNamespace + "/"))
+    suffix.erase(0, previousNamespace.size() + 1);
+  return root + (assetNamespace.empty() ? std::string{} : assetNamespace + "/") + suffix;
+}
+
 // Project virtual path of a captured library asset. The library path is only a hint; the
 // GameSrc roots decide where the engine will look for the resource.
 std::string publishPathFor(
@@ -237,6 +255,29 @@ Result<void> ProjectSession::initialize(
                        : project::ProjectStore::open(m_path);
   if (source.is_error())
     return std::get<Error>(source.error());
+  if (create)
+  {
+    auto assetNamespace = std::string{};
+    for (const auto c : name)
+      assetNamespace += (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                            || (c >= '0' && c <= '9') || c == '_' || c == '-'
+                          ? c
+                          : '_';
+    if (assetNamespace.empty())
+      assetNamespace = "project";
+    if (assetNamespace.size() > 24)
+      assetNamespace.resize(24);
+    auto lower = assetNamespace;
+    std::ranges::transform(
+      lower, lower.begin(), [](const unsigned char c) { return char(std::tolower(c)); });
+    if (lower == "con" || lower == "prn" || lower == "aux"
+        || lower == "nul" || (lower.size() == 4 && (lower.starts_with("com")
+        || lower.starts_with("lpt")) && lower.back() >= '1' && lower.back() <= '9'))
+      assetNamespace = "project_" + assetNamespace;
+    if (const auto configured = source.value()->setPublishSettings({assetNamespace, {}});
+        configured.is_error())
+      return std::get<Error>(configured.error());
+  }
   auto digest = fileDigest(m_path);
   if (digest.is_error())
     return std::get<Error>(digest.error());
@@ -314,7 +355,16 @@ void ProjectSession::changed()
 }
 Result<project::Asset> ProjectSession::importAsset(const project::AssetImport& asset)
 {
-  return m_store->importAsset(asset) | kdl::transform([&](auto result) {
+  auto input = asset;
+  if (input.publishPath.empty())
+  {
+    const auto settings = m_store->publishSettings();
+    if (settings.is_error())
+      return std::get<Error>(settings.error());
+    input.publishPath =
+      namespacedPath(input.type, input.virtualPath, settings.value().assetNamespace);
+  }
+  return m_store->importAsset(input) | kdl::transform([&](auto result) {
            changed();
            if (!result.library.empty())
              emit libraryLinksChanged();
@@ -855,71 +905,105 @@ Result<void> ProjectSession::publishCompileResources(
       exported.is_error())
     return std::get<Error>(exported.error());
 
-  const auto resources = snapshotPath / "resources";
-  std::error_code error;
-  if (!std::filesystem::exists(resources, error))
-  {
-    if (error)
-      return Error{"Cannot inspect the compile resources: " + error.message()};
-    return {};
-  }
+  return publishSnapshotResources(snapshotPath, gameDirectory);
+}
 
+Result<void> ProjectSession::publishSnapshotResources(
+  const std::filesystem::path& snapshotPath, const std::filesystem::path& gameDirectory)
+{
+  if (!gameDirectory.is_absolute() || gameDirectory == gameDirectory.root_path())
+    return Error{"Select an absolute game/mod directory in Project Settings."};
+  const auto resources = snapshotPath / "resources";
+  auto error = std::error_code{};
+  if (!std::filesystem::exists(resources, error))
+    return error ? Result<void>{Error{error.message()}} : Result<void>{};
+  auto files = std::vector<std::pair<std::filesystem::path, std::filesystem::path>>{};
   auto iterator = std::filesystem::recursive_directory_iterator{resources, error};
   const auto end = std::filesystem::recursive_directory_iterator{};
-  while (iterator != end)
+  while (!error && iterator != end)
   {
-    if (error)
-      return Error{"Cannot inspect the compile resources: " + error.message()};
-    const auto& entry = *iterator;
-    const auto regular = entry.is_regular_file(error);
-    if (error)
-      return Error{"Cannot inspect a compile resource: " + error.message()};
-    if (!regular)
-    {
-      iterator.increment(error);
-      continue;
-    }
-
+    const auto entry = *iterator;
     const auto relative = entry.path().lexically_relative(resources);
     if (
       relative.empty() || relative.is_absolute()
       || std::ranges::any_of(relative, [](const auto& part) { return part == ".."; }))
       return Error{"The compile snapshot contains an invalid resource path."};
-    const auto target = gameDirectory / relative;
-    const auto sourceHash = fileDigest(entry.path());
-    if (sourceHash.is_error())
-      return std::get<Error>(sourceHash.error());
-    const auto targetExists = std::filesystem::exists(target, error);
+    if (entry.is_symlink(error))
+      return Error{"The compile snapshot contains a symbolic link."};
     if (error)
-      return Error{"Cannot inspect existing game resource: " + error.message()};
-    if (targetExists)
+      break;
+    if (entry.is_regular_file(error))
     {
-      const auto targetIsDirectory = std::filesystem::is_directory(target, error);
+      const auto target = gameDirectory / relative;
+      // Reject redirected parents before inspecting or creating any destination files.
+      for (auto current = target; !current.empty(); current = current.parent_path())
+      {
+        const auto status = std::filesystem::symlink_status(current, error);
+        if (error == std::errc::no_such_file_or_directory)
+          error.clear();
+        if (error)
+          return Error{error.message()};
+        if (std::filesystem::is_symlink(status))
+          return Error{
+            "A game resource path contains a symbolic link: " + storedPath(current)};
+        if (current == current.root_path())
+          break;
+      }
+      const auto exists = std::filesystem::exists(target, error);
       if (error)
-        return Error{"Cannot inspect existing game resource: " + error.message()};
-      if (targetIsDirectory)
-        return Error{
-          "A game resource path is occupied by a directory: " + target.string()};
-      const auto targetHash = fileDigest(target);
-      if (targetHash.is_error())
-        return Error{
-          "Cannot read existing game resource '" + target.string()
-          + "': " + std::get<Error>(targetHash.error()).msg};
-      if (sourceHash.value() != targetHash.value())
-        return Error{"A different game resource already exists: " + target.string()};
+        break;
+      if (exists)
+      {
+        const auto sourceHash = fileDigest(entry.path());
+        if (sourceHash.is_error())
+          return std::get<Error>(sourceHash.error());
+        const auto targetHash = fileDigest(target);
+        if (targetHash.is_error())
+          return std::get<Error>(targetHash.error());
+        if (sourceHash.value() != targetHash.value())
+          return Error{"A different game resource already exists: " + storedPath(target)};
+      }
+      else
+        files.emplace_back(entry.path(), target);
     }
-    else
-    {
-      const auto bytes = readBytes(entry.path());
-      if (bytes.is_error())
-        return std::get<Error>(bytes.error());
-      if (const auto written = writeBytes(target, bytes.value()); written.is_error())
-        return std::get<Error>(written.error());
-    }
-    iterator.increment(error);
+    if (!error)
+      iterator.increment(error);
   }
   if (error)
-    return Error{"Cannot inspect the compile resources: " + error.message()};
+    return Error{"Cannot inspect compile resources: " + error.message()};
+  // All conflicts are checked before the first write. NewOnly closes the overwrite
+  // race; only files created by this run are removed if a later copy fails.
+  auto created = std::vector<std::filesystem::path>{};
+  for (const auto& [source, target] : files)
+  {
+    auto failure = std::string{};
+    const auto bytes = readBytes(source);
+    auto file = QFile{pathAsQString(target)};
+    if (bytes.is_error())
+      failure = std::get<Error>(bytes.error()).msg;
+    else if (!QDir{}.mkpath(pathAsQString(target.parent_path())))
+      failure = "Cannot create the game resource directory.";
+    else if (!file.open(QIODevice::WriteOnly | QIODevice::NewOnly))
+      failure = file.errorString().toStdString();
+    else
+    {
+      created.push_back(target);
+      if (
+        file.write(
+          reinterpret_cast<const char*>(bytes.value().data()),
+          qint64(bytes.value().size()))
+          != qint64(bytes.value().size())
+        || !file.flush())
+        failure = file.errorString().toStdString();
+      file.close();
+    }
+    if (!failure.empty())
+    {
+      for (auto it = created.rbegin(); it != created.rend(); ++it)
+        QFile::remove(pathAsQString(*it));
+      return Error{failure};
+    }
+  }
   return {};
 }
 
@@ -1428,6 +1512,255 @@ Result<project::ProjectChanges> ProjectSession::compare(const std::string& id)
   return result;
 }
 
+Result<std::map<std::string, std::string>> ProjectSession::publishMigration(
+  const std::string& assetNamespace) const
+{
+  if (const auto valid =
+        project::ProjectStore::validatePublishSettings({assetNamespace, {}});
+      valid.is_error())
+    return std::get<Error>(valid.error());
+  const auto settings = m_store->publishSettings();
+  if (settings.is_error())
+    return std::get<Error>(settings.error());
+  const auto assets = m_store->assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+  auto paths = std::map<std::string, std::string>{};
+  auto targets = std::set<std::string>{};
+  for (const auto& asset : assets.value())
+  {
+    const auto target = namespacedPath(
+      asset.type, asset.publishPath, assetNamespace, settings.value().assetNamespace);
+    if (
+      (normalizedTextureName(target).ends_with(".mdl")
+       || normalizedTextureName(target).ends_with(".spr"))
+      && target.size() >= 64)
+      return Error{"The published model/sprite path must fit in 63 bytes: " + target};
+    if (target != asset.publishPath)
+      paths.emplace(asset.publishPath, target);
+    if (!targets.insert(normalizedTextureName(target)).second)
+      return Error{"Resource migration paths conflict: " + target};
+  }
+  for (const auto& target : targets)
+    for (auto slash = target.find('/'); slash != std::string::npos;
+         slash = target.find('/', slash + 1))
+      if (targets.contains(target.substr(0, slash)))
+        return Error{"Resource migration paths conflict: " + target};
+  return paths;
+}
+
+namespace
+{
+// Rewrite only entity property values in one pass. Comments, brush/patch data, keys,
+// arbitrary text and sentences must survive a resource namespace migration verbatim.
+Result<std::string> migrateResourceReferences(
+  const std::vector<std::uint8_t>& bytes, const std::map<std::string, std::string>& paths)
+{
+  auto lookup = std::map<std::string, std::string>{};
+  auto soundLookup = std::map<std::string, std::string>{};
+  for (const auto& [from, to] : paths)
+  {
+    if (const auto normalized = normalizeGamePath(from))
+      lookup.emplace(*normalized, to);
+    if (from.starts_with("sound/") && to.starts_with("sound/"))
+      if (const auto normalized = normalizeGamePath(from.substr(6)))
+        soundLookup.emplace(*normalized, to.substr(6));
+  }
+  auto text = std::string{bytes.begin(), bytes.end()};
+  struct Replacement
+  {
+    std::size_t start;
+    std::size_t size;
+    std::string value;
+  };
+  struct Property
+  {
+    std::string key;
+    Replacement token;
+  };
+  auto replacements = std::vector<Replacement>{};
+  auto properties = std::vector<Property>{};
+  auto key = std::optional<std::string>{};
+  auto depth = 0;
+  const auto finishEntity = [&] {
+    auto classname = std::string{};
+    for (const auto& property : properties)
+      if (property.key == "classname")
+        classname = property.token.value;
+    for (const auto& property : properties)
+    {
+      if (const auto normalized = normalizeGamePath(property.token.value))
+      {
+        if (const auto found = lookup.find(*normalized); found != lookup.end())
+          replacements.push_back(
+            {property.token.start, property.token.size, found->second});
+        else if (
+          (classname == "ambient_generic" && property.key == "message")
+          || (classname == "env_message" && property.key == "messagesound"))
+          if (const auto sound = soundLookup.find(*normalized);
+              sound != soundLookup.end())
+            replacements.push_back(
+              {property.token.start, property.token.size, sound->second});
+      }
+    }
+    properties.clear();
+  };
+  for (auto i = std::size_t{0}; i < text.size();)
+  {
+    if (text[i] == '/' && i + 1 < text.size() && text[i + 1] == '/')
+    {
+      i = text.find('\n', i);
+      if (i == std::string::npos)
+        break;
+    }
+    else if (text[i] == '{')
+    {
+      if (key)
+        return Error{"Cannot migrate a map with an incomplete entity property."};
+      ++depth;
+      ++i;
+    }
+    else if (text[i] == '}')
+    {
+      if (depth == 0 || key)
+        return Error{"Cannot migrate a map with invalid entity structure."};
+      if (depth == 1)
+        finishEntity();
+      --depth;
+      key.reset();
+      ++i;
+    }
+    else if (text[i] == '"')
+    {
+      const auto start = ++i;
+      auto value = std::string{};
+      while (i < text.size() && text[i] != '"')
+      {
+        if (
+          text[i] == '\\' && i + 1 < text.size()
+          && (text[i + 1] == '"' || text[i + 1] == '\\'))
+          ++i;
+        value += text[i++];
+      }
+      if (i == text.size())
+        return Error{"Cannot migrate a map with an unterminated string."};
+      if (depth == 1)
+      {
+        if (!key)
+          key = value;
+        else
+        {
+          properties.push_back({*key, {start, i - start, value}});
+          key.reset();
+        }
+      }
+      ++i;
+    }
+    else
+      ++i;
+  }
+  if (depth != 0 || key)
+    return Error{"Cannot migrate a map with incomplete entity structure."};
+  for (auto it = replacements.rbegin(); it != replacements.rend(); ++it)
+    text.replace(it->start, it->size, it->value);
+  return text;
+}
+} // namespace
+
+Result<void> ProjectSession::setPublishSettings(
+  const project::PublishSettings& settings, const bool migrate)
+{
+  if (const auto valid = project::ProjectStore::validatePublishSettings(settings);
+      valid.is_error())
+    return std::get<Error>(valid.error());
+  const auto current = m_store->publishSettings();
+  if (current.is_error())
+    return std::get<Error>(current.error());
+  if (!migrate)
+  {
+    if (current.value() == settings)
+      return {};
+    const auto result = m_store->setPublishSettings(settings);
+    if (result.is_success())
+    {
+      m_modified = true;
+      emit stateChanged();
+    }
+    return result;
+  }
+  const auto paths = publishMigration(settings.assetNamespace);
+  if (paths.is_error())
+    return std::get<Error>(paths.error());
+  if (paths.value().empty())
+    return setPublishSettings(settings, false);
+  auto generation = QTemporaryDir{m_workspace.path() + "/migration-XXXXXX"};
+  if (!generation.isValid())
+    return Error{"Cannot prepare the resource migration."};
+  const auto path = pathFromQString(generation.path()) / "project.tbproj";
+  if (const auto copied = m_store->saveCopy(path); copied.is_error())
+    return std::get<Error>(copied.error());
+  auto opened = project::ProjectStore::open(path);
+  if (opened.is_error())
+    return std::get<Error>(opened.error());
+  auto candidate = std::move(opened).value();
+  if (const auto configured = candidate->setPublishSettings(settings);
+      configured.is_error())
+    return std::get<Error>(configured.error());
+  const auto assets = candidate->assets();
+  if (assets.is_error())
+    return std::get<Error>(assets.error());
+  // Stage live maps before the safety version so no unsaved editing is discarded.
+  for (const auto& asset : assets.value())
+    if (asset.type == project::AssetType::Map)
+    {
+      const auto bytes = workingMapContents(asset.id);
+      if (bytes.is_error())
+        return std::get<Error>(bytes.error());
+      auto input = project::AssetImport{};
+      input.type = asset.type;
+      input.library = asset.library;
+      input.sourceName = asset.sourceName;
+      input.conversionRecipe = asset.conversionRecipe;
+      input.original = input.compatible = bytes.value();
+      if (const auto replaced = candidate->replaceAsset(asset.id, input);
+          replaced.is_error())
+        return std::get<Error>(replaced.error());
+    }
+  if (const auto version = candidate->checkpoint("Before resource path migration");
+      version.is_error())
+    return std::get<Error>(version.error());
+  auto renamedPaths = std::map<std::string, std::string>{};
+  for (const auto& asset : assets.value())
+    if (const auto found = paths.value().find(asset.publishPath);
+        found != paths.value().end())
+      renamedPaths.emplace(asset.id, found->second);
+  if (const auto renamed = candidate->setPublishPaths(renamedPaths); renamed.is_error())
+    return std::get<Error>(renamed.error());
+  for (const auto& asset : assets.value())
+  {
+    if (asset.type != project::AssetType::Map)
+      continue;
+    const auto bytes = candidate->readAsset(asset.id, project::ContentKind::Compatible);
+    if (bytes.is_error())
+      return std::get<Error>(bytes.error());
+    const auto text = migrateResourceReferences(bytes.value(), paths.value());
+    if (text.is_error())
+      return std::get<Error>(text.error());
+    if (text.value() == std::string{bytes.value().begin(), bytes.value().end()})
+      continue;
+    auto input = project::AssetImport{};
+    input.type = asset.type;
+    input.library = asset.library;
+    input.sourceName = asset.sourceName;
+    input.conversionRecipe = asset.conversionRecipe;
+    input.original = input.compatible = {text.value().begin(), text.value().end()};
+    if (const auto replaced = candidate->replaceAsset(asset.id, input);
+        replaced.is_error())
+      return std::get<Error>(replaced.error());
+  }
+  return installPreparedStore(std::move(candidate), generation);
+}
+
 Result<void> ProjectSession::restore(const std::string& id)
 {
   const auto changes = m_store->compare(id);
@@ -1480,6 +1813,13 @@ Result<void> ProjectSession::restore(const std::string& id)
   if (const auto restored = candidate->restore(id); restored.is_error())
     return std::get<Error>(restored.error());
 
+  return installPreparedStore(std::move(candidate), generation);
+}
+
+Result<void> ProjectSession::installPreparedStore(
+  std::unique_ptr<project::ProjectStore> candidate, QTemporaryDir& generation)
+{
+  const auto root = pathFromQString(generation.path());
   auto assets = candidate->assets();
   if (assets.is_error())
     return std::get<Error>(assets.error());
@@ -1507,6 +1847,8 @@ Result<void> ProjectSession::restore(const std::string& id)
     const auto asset = candidate->findAsset(entry.assetId);
     if (asset.is_error())
       return std::get<Error>(asset.error());
+    if (!asset.value())
+      return Error{"An open map is absent from the prepared project."};
     const auto path =
       root / "maps" / entry.assetId
       / pathFromQString(QString::fromStdString(asset.value()->virtualPath)).filename();
@@ -1813,6 +2155,13 @@ Result<project::AssetImport> ProjectSession::captureImport(
   import.virtualPath =
     existing ? existing->virtualPath : publishPathFor(asset, native.value());
   import.conversionRecipe = project::captureRecipe(asset);
+  const auto settings = m_store->publishSettings();
+  if (settings.is_error())
+    return std::get<Error>(settings.error());
+  import.publishPath =
+    existing
+      ? existing->publishPath
+      : namespacedPath(import.type, import.virtualPath, settings.value().assetNamespace);
   return import;
 }
 
@@ -2064,10 +2413,12 @@ Result<std::vector<CaptureConflict>> ProjectSession::captureConflicts(
     if (entry.assetId)
       continue;
     const auto& path = entry.import.virtualPath;
+    const auto& publishPath =
+      entry.import.publishPath.empty() ? path : entry.import.publishPath;
     for (const auto& asset : assets.value())
       if (
         projectPathsOverlap(path, asset.virtualPath)
-        || projectPathsOverlap(path, asset.publishPath))
+        || projectPathsOverlap(publishPath, asset.publishPath))
       {
         conflicts.push_back(
           CaptureConflict{index, entry.import.displayName, path, asset});
@@ -2093,6 +2444,7 @@ void ProjectSession::resolveCaptureConflict(
   // reference them. Only the snapshot revision is replaced.
   entry.import.virtualPath = conflict.existing->virtualPath;
   entry.import.displayName = conflict.existing->displayName;
+  entry.import.publishPath = conflict.existing->publishPath;
 }
 
 Result<std::optional<project::Asset>> ProjectSession::captureLibraryAssetResolving(
@@ -2225,14 +2577,18 @@ Result<ProjectSession::MapReferenceCapture> ProjectSession::captureMapReferences
       // categorized library folder to the path explicitly requested by the map.
       for (auto& entry : plan)
         if (!entry.assetId && entry.import.virtualPath.starts_with(prefix))
+        {
           entry.import.virtualPath =
             targetPrefix + entry.import.virtualPath.substr(prefix.size());
-      if (requested.assetId && lowered(requested.import.virtualPath) != key)
+          entry.import.publishPath = entry.import.virtualPath;
+        }
+      if (requested.assetId && lowered(requested.import.publishPath) != key)
       {
         result.unresolved.push_back(reference);
         continue;
       }
       requested.import.virtualPath = reference;
+      requested.import.publishPath = reference;
       auto misplacedDependency = false;
       const auto folder = [&](const std::string& path) {
         return lowered(path.substr(0, path.find_last_of('/') + 1));
@@ -2245,7 +2601,7 @@ Result<ProjectSession::MapReferenceCapture> ProjectSession::captureMapReferences
             continue;
           auto path = std::string{};
           if (dependency.assetId.empty())
-            path = plan.at(dependency.target).import.virtualPath;
+            path = plan.at(dependency.target).import.publishPath;
           else
           {
             const auto existing = m_store->findAsset(dependency.assetId);
@@ -2254,7 +2610,7 @@ Result<ProjectSession::MapReferenceCapture> ProjectSession::captureMapReferences
             if (existing.value())
               path = existing.value()->publishPath;
           }
-          if (path.empty() || folder(path) != folder(entry.import.virtualPath))
+          if (path.empty() || folder(path) != folder(entry.import.publishPath))
             misplacedDependency = true;
         }
       // Existing snapshots must not be moved implicitly to satisfy a new map path.

@@ -416,7 +416,8 @@ void ModelBrowserView::doReloadLayout(Layout& layout)
          m_currentFolderPath,
          m_searchText,
          m_includeDefaultRoots,
-         m_searchAllAssets))
+         m_searchAllAssets,
+         m_partitionNames))
   {
     if (m_previewOnly && entry.cellData.type == BrowserCellType::Folder)
       continue;

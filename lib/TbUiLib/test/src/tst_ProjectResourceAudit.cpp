@@ -122,6 +122,7 @@ TEST_CASE("ProjectResourceAudit")
   REQUIRE(temporary.isValid());
   const auto path = pathFromQString(temporary.path()) / "audit.tbproj";
   auto session = checked(ProjectSession::create(path, "Audit", "Quake"));
+  checked(session->setPublishSettings({}, false));
 
   SECTION("cleanup protects custom property paths and transitive dependencies")
   {

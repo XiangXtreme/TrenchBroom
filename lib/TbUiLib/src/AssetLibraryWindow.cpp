@@ -460,14 +460,15 @@ void AssetLibraryWindow::buildUi()
         m_folders->setCurrentItem(item);
       auto menu = QMenu{this};
       menu.addAction(tr("New folder…"), this, &AssetLibraryWindow::createFolder);
-      if (m_folderPath.contains('/'))
+      if (!m_folderPath.isEmpty())
       {
         menu.addAction(tr("Rename folder…"), this, [this] {
           if (auto* item = m_folders->currentItem())
             m_folders->editItem(item);
         });
-        menu.addAction(
-          tr("Delete empty folder…"), this, &AssetLibraryWindow::deleteFolder);
+        if (m_folderPath.contains('/'))
+          menu.addAction(
+            tr("Delete empty folder…"), this, &AssetLibraryWindow::deleteFolder);
       }
       menu.exec(m_folders->viewport()->mapToGlobal(point));
     });
@@ -991,6 +992,7 @@ void AssetLibraryWindow::openLibrary(const QString& folder, const bool remember)
 void AssetLibraryWindow::reload()
 {
   m_assets.clear();
+  m_partitionNames.clear();
   m_thumbnailKeys.clear();
   if (!m_source)
   {
@@ -1005,6 +1007,8 @@ void AssetLibraryWindow::reload()
     return;
   }
 
+  if (const auto names = m_source->partitionNames(); names.is_success())
+    m_partitionNames = names.value();
   const auto assets = m_source->assets();
   if (assets.is_error())
   {
@@ -1173,13 +1177,34 @@ void AssetLibraryWindow::refreshCategories()
       return asset.type == type;
     }));
   };
-  add(QStringLiteral("texture"), tr("Textures"), countOf(project::AssetType::Texture));
-  add(QStringLiteral("material"), tr("Materials"), countOf(project::AssetType::Material));
-  add(QStringLiteral("model"), tr("Models"), countOf(project::AssetType::Model));
-  add(QStringLiteral("sprite"), tr("Sprites"), countOf(project::AssetType::Sprite));
-  add(QStringLiteral("sound"), tr("Sounds"), countOf(project::AssetType::Sound));
-  add(QStringLiteral("skybox"), tr("Skyboxes"), countOf(project::AssetType::Skybox));
-  add(QStringLiteral("prefab"), tr("Prefabs"), countOf(project::AssetType::Prefab));
+  add(
+    QStringLiteral("texture"),
+    browserFolderDisplayName("textures", m_partitionNames),
+    countOf(project::AssetType::Texture));
+  add(
+    QStringLiteral("material"),
+    browserFolderDisplayName("materials", m_partitionNames),
+    countOf(project::AssetType::Material));
+  add(
+    QStringLiteral("model"),
+    browserFolderDisplayName("models", m_partitionNames),
+    countOf(project::AssetType::Model));
+  add(
+    QStringLiteral("sprite"),
+    browserFolderDisplayName("sprites", m_partitionNames),
+    countOf(project::AssetType::Sprite));
+  add(
+    QStringLiteral("sound"),
+    browserFolderDisplayName("sound", m_partitionNames),
+    countOf(project::AssetType::Sound));
+  add(
+    QStringLiteral("skybox"),
+    browserFolderDisplayName("skybox", m_partitionNames),
+    countOf(project::AssetType::Skybox));
+  add(
+    QStringLiteral("prefab"),
+    browserFolderDisplayName("prefabs", m_partitionNames),
+    countOf(project::AssetType::Prefab));
 
   addSection(tr("Attention"));
   add(QStringLiteral("pending"), tr("Pending"), pendingCount());
@@ -1215,7 +1240,7 @@ void AssetLibraryWindow::renameFolder(const QString& oldPath, const QString& tit
 {
   if (!m_source || !m_source->canManage())
     return;
-  if (oldPath.isEmpty() || !oldPath.contains('/'))
+  if (oldPath.isEmpty())
     return;
   const auto name = title.trimmed();
   if (
@@ -1223,6 +1248,18 @@ void AssetLibraryWindow::renameFolder(const QString& oldPath, const QString& tit
     || name == "..")
   {
     refreshFolders();
+    return;
+  }
+  if (!oldPath.contains('/'))
+  {
+    if (const auto result =
+          m_source->setPartitionName(oldPath.toStdString(), name.toStdString());
+        result.is_error())
+      QMessageBox::warning(
+        this,
+        tr("Asset Library"),
+        QString::fromStdString(std::get<Error>(result.error()).msg));
+    reload();
     return;
   }
   const auto newPath = oldPath.left(oldPath.lastIndexOf('/') + 1) + name;
@@ -1260,7 +1297,8 @@ void AssetLibraryWindow::createFolder()
       if (path.find('/') == std::string::npos)
       {
         roots.push_back(QString::fromStdString(path));
-        titles.push_back(browserFolderDisplayName(pathFromQString(roots.back())));
+        titles.push_back(
+          browserFolderDisplayName(pathFromQString(roots.back()), m_partitionNames));
       }
     auto accepted = false;
     const auto title = QInputDialog::getItem(
@@ -1402,11 +1440,12 @@ void AssetLibraryWindow::refreshFolders()
         parent = found.value();
       else
       {
-        const auto title =
-          parent == root ? browserFolderDisplayName(pathFromQString(path)) : part;
+        const auto title = parent == root ? browserFolderDisplayName(
+                                              pathFromQString(path), m_partitionNames)
+                                          : part;
         auto* item = new QTreeWidgetItem{parent, QStringList{title}};
         item->setData(0, Qt::UserRole, path);
-        if (parent != root && m_source && m_source->canManage())
+        if (m_source && m_source->canManage())
           item->setFlags(item->flags() | Qt::ItemIsEditable);
         items.insert(path, item);
         parent = item;

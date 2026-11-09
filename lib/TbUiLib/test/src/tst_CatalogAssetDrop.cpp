@@ -103,7 +103,7 @@ TEST_CASE("CatalogAssetDrop")
   SECTION("preparation and cancellation never capture resources")
   {
     auto pending = require(PreparedAssetDrop::prepare(session, text));
-    CHECK(pending->nativePayload() == "sound:sound/clip.wav");
+    CHECK(pending->nativePayload() == "sound:sound/Project/clip.wav");
     CHECK(pending->matches(text));
     CHECK_FALSE(pending->matches(text + " "));
     CHECK(require(session->store().assets()).empty());
@@ -120,6 +120,7 @@ TEST_CASE("CatalogAssetDrop")
     require(pending->commit());
     const auto captured = require(session->store().assets());
     REQUIRE(captured.size() == 1);
+    CHECK(pending->nativePayload() == "sound:" + captured.front().publishPath);
     CHECK(captured.front().library.libraryRevision == entry.revision);
     const auto bytes = require(
       session->store().readAsset(captured.front().id, project::ContentKind::Compatible));
@@ -160,6 +161,7 @@ TEST_CASE("CatalogAssetDrop")
     auto input = project::AssetImport{};
     input.type = project::AssetType::Sound;
     input.virtualPath = "sound/clip.wav";
+    input.publishPath = "sound/legacy/clip.wav";
     input.displayName = "Existing";
     input.original = {'x'};
     input.compatible = {'x'};
@@ -171,8 +173,11 @@ TEST_CASE("CatalogAssetDrop")
     CHECK(pending->conflicts().front().existing->id == existing.id);
     CHECK(pending->commit().is_error());
 
+    pending->resolveConflicts(CaptureConflictChoice::Cancel);
+    CHECK_FALSE(pending->conflicts().empty());
     pending->resolveConflicts(CaptureConflictChoice::Replace);
     CHECK(pending->conflicts().empty());
+    CHECK(pending->nativePayload() == "sound:" + existing.publishPath);
     require(pending->commit());
 
     const auto assets = require(session->store().assets());
@@ -194,7 +199,7 @@ TEST_CASE("CatalogAssetDrop")
     asset.revision = captured.revision;
     const auto payload = catalogAssetDragData(asset, session->store().info().id);
     auto pending = require(PreparedAssetDrop::prepare(session, payload));
-    CHECK(pending->nativePayload() == "sound:sound/clip.wav");
+    CHECK(pending->nativePayload() == "sound:" + captured.publishPath);
     require(session->renameAsset(captured.id, "Renamed"));
     require(session->save());
     CHECK(pending->commit().is_error());

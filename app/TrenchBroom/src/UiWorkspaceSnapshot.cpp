@@ -5,11 +5,14 @@
 #include "UiWorkspaceSnapshot.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QLineEdit>
 #include <QMenu>
 #include <QSplitter>
 #include <QTabBar>
 #include <QToolButton>
+#include <QTreeWidget>
 
 #include "mdl/Grid.h"
 #include "mdl/Map.h"
@@ -22,6 +25,7 @@
 #include "ui/MapWindowManager.h"
 #include "ui/ModelBrowserView.h"
 #include "ui/ProjectSession.h"
+#include "ui/ProjectSettingsDialog.h"
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
 #include "ui/WorkspaceToolPanel.h"
@@ -68,7 +72,25 @@ Result<void> UiWorkspaceSnapshot::initialize(
     manager.closeMapView(*window);
     delete window;
   }
-  if (target != "project-empty")
+  if (target == "project-settings")
+  {
+    for (const auto type : {project::AssetType::Model, project::AssetType::Sound})
+    {
+      auto input = project::AssetImport{};
+      input.type = type;
+      input.virtualPath = type == project::AssetType::Model ? "models/props/crate.mdl"
+                                                            : "sound/ambience/wind.wav";
+      input.displayName = input.virtualPath;
+      input.original = input.compatible = {1, 2, 3};
+      if (const auto imported = m_window->session()->importAsset(input);
+          imported.is_error())
+        return std::get<Error>(imported.error());
+    }
+    m_settings = std::make_unique<ProjectSettingsDialog>(m_window->session());
+    m_settings->findChild<QLineEdit*>("ProjectResourceNamespace")->setText("kz_climb");
+    m_settings->findChild<QCheckBox*>("ProjectMigrateResources")->setChecked(true);
+  }
+  else if (target != "project-empty")
   {
     for (const auto* name : {"alpha", "beta"})
     {
@@ -89,7 +111,7 @@ Result<void> UiWorkspaceSnapshot::initialize(
 
 QWidget* UiWorkspaceSnapshot::widget() const
 {
-  return m_window.get();
+  return m_settings ? static_cast<QWidget*>(m_settings.get()) : m_window.get();
 }
 
 void configureWorkspaceSnapshot(QWidget& widget, const QString& target)
@@ -135,6 +157,13 @@ void configureWorkspaceSnapshot(QWidget& widget, const QString& target)
 
 QString workspaceSnapshotPendingReason(QWidget& widget, const QString& target)
 {
+  if (target == "project-settings")
+  {
+    const auto* preview = widget.findChild<QTreeWidget*>("ProjectMigrationPreview");
+    return preview && preview->topLevelItemCount() == 2
+             ? QString{}
+             : QString{"Resource migration preview is not ready"};
+  }
   auto* window = qobject_cast<ProjectWindow*>(&widget);
   if (!window)
     return "Workspace snapshot is not a project window";

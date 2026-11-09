@@ -64,6 +64,17 @@ std::vector<std::string> rootStrings(
 
 TEST_CASE("AssetBrowserModel")
 {
+  SECTION(
+    "configured partition names are displayed and searchable without changing paths")
+  {
+    const auto names = BrowserPartitionNames{{"models", "Props"}};
+    CHECK(browserFolderDisplayName("models", names) == "Props");
+    CHECK(browserFolderDisplayName("models/trees", names) == "trees");
+    const auto entries = modelBrowserEntries({}, {}, {}, "Props", true, false, names);
+    REQUIRE(entries.size() == 1);
+    CHECK(entries.front().cellData.path == "models");
+    CHECK(entries.front().title == "Props");
+  }
   SECTION("shared library filters include tags without confusing content revisions")
   {
     auto metadata = BrowserAssetMetadata{true, {"Industrial", "Ambient loops"}};

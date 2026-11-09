@@ -154,17 +154,7 @@ private:
       }
       // Class/key pairs are deliberate: player-start model choices and FGD preview
       // models are editor data, not runtime dependencies. See native-project-usage.md.
-      const auto model = key == "model"
-                         && (m_classname == "cycler" || m_classname == "cycler_sprite"
-                             || m_classname == "cycler_wreckage" || m_classname == "env_sprite"
-                             || m_classname == "env_glow" || m_classname == "hostage_entity");
-      const auto sprite =
-        (m_classname == "env_beam" && key == "texture")
-        || (m_classname == "env_laser" && (key == "texture" || key == "EndSprite"));
-      const auto gib = (m_classname == "func_breakable" || m_classname == "func_pushable")
-                       && key == "gibmodel";
-      const auto shooter = m_classname == "env_shooter" && key == "shootmodel";
-      if (model || sprite || gib || shooter)
+      if (isGoldSrcResourceProperty(m_classname, key))
         m_references.push_back({location.line, where, value, ReferenceKind::File});
       else if (m_classname == "infodecal" && key == "texture")
         m_references.push_back(

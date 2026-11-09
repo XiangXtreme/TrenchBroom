@@ -196,10 +196,13 @@ std::filesystem::path browserPathUnderType(
   return result;
 }
 
-QString browserFolderDisplayName(const std::filesystem::path& path)
+QString browserFolderDisplayName(
+  const std::filesystem::path& path, const BrowserPartitionNames& names)
 {
   if (path.parent_path().empty())
   {
+    if (const auto found = names.find(path.generic_string()); found != names.end())
+      return QString::fromStdString(found->second);
     for (const auto& folder : TypeFolders)
       if (path == folder.path)
         return QCoreApplication::translate("tb::ui::AssetTypes", folder.title);
@@ -603,7 +606,8 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const std::filesystem::path& currentFolderPath,
   const QString& searchText,
   const bool includeDefaultRoots,
-  const bool searchAllAssets)
+  const bool searchAllAssets,
+  const BrowserPartitionNames& names)
 {
   const auto trimmedSearchText = searchText.trimmed();
   const auto hasSearch = !trimmedSearchText.isEmpty();
@@ -613,7 +617,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   const auto matches = [&](const std::filesystem::path& path) {
     return !hasSearch
            || pathAsGenericQString(path).contains(trimmedSearchText, Qt::CaseInsensitive)
-           || (searchingTypeRoots && browserFolderDisplayName(path).contains(trimmedSearchText, Qt::CaseInsensitive));
+           || (searchingTypeRoots && browserFolderDisplayName(path, names).contains(trimmedSearchText, Qt::CaseInsensitive));
   };
 
   auto normalizedCurrentFolderPath = currentFolderPath.lexically_normal();
@@ -733,7 +737,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   {
     entries.push_back(
       {BrowserCellData{BrowserCellType::Folder, folderRelPath},
-       (rootFolderPath.empty() ? browserFolderDisplayName(folderRelPath)
+       (rootFolderPath.empty() ? browserFolderDisplayName(folderRelPath, names)
                                : pathAsGenericQString(folderRelPath.filename()))
          .toStdString()});
   }

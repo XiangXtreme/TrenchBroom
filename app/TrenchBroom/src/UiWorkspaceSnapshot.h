@@ -18,12 +18,14 @@ namespace tb::ui
 {
 class AppController;
 class ProjectWindow;
+class ProjectSettingsDialog;
 
 /** Owns a disposable real project and destroys its views before removing its files. */
 class UiWorkspaceSnapshot
 {
   QTemporaryDir m_directory;
   std::unique_ptr<ProjectWindow> m_window;
+  std::unique_ptr<ProjectSettingsDialog> m_settings;
 
 public:
   UiWorkspaceSnapshot();

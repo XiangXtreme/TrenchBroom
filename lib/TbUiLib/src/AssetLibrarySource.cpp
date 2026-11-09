@@ -296,6 +296,11 @@ public:
     return m_library->allDependencies();
   }
 
+  Result<std::map<std::string, std::string>> partitionNames() const override
+  {
+    return m_library->partitionNames();
+  }
+
   Result<std::vector<std::string>> folders() const override
   {
     return m_library->folders();
@@ -361,6 +366,14 @@ public:
   }
 
   bool canManage() const override { return true; }
+  Result<void> setPartitionName(const std::string& root, const std::string& name) override
+  {
+    auto result = m_library->setPartitionName(root, name);
+    if (result.is_success())
+      emit AssetLibraryChanges::instance().changed(QString::fromStdString(libraryId()));
+    return result;
+  }
+
 
   Result<void> createFolder(const std::string& path) override
   {

@@ -11,6 +11,7 @@
 #include "ui/ProjectSession.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 namespace tb::ui
 {
@@ -25,6 +26,7 @@ class PreparedAssetDrop
   std::vector<project::AssetCapture> m_plan;
   std::vector<project::Asset> m_expected;
   std::vector<CaptureConflict> m_conflicts;
+  std::optional<std::size_t> m_rootIndex;
   std::string m_nativePayload;
   QString m_original;
   bool m_committed = false;

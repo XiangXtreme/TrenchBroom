@@ -88,6 +88,7 @@ private:
   std::map<std::filesystem::path, size_t> m_assetIndices;
   std::filesystem::path m_currentFolderPath;
   QString m_searchText;
+  BrowserPartitionNames m_partitionNames;
   bool m_searchAllAssets = false;
 
   NotifierConnection m_notifierConnection;
@@ -131,6 +132,10 @@ private:
   AssetPreviewPathResolver m_previewPathResolver;
 
 public:
+  void setPartitionNames(BrowserPartitionNames names)
+  {
+    m_partitionNames = std::move(names);
+  }
   void setSelectionOnly(bool selectionOnly) { m_selectionOnly = selectionOnly; }
   bool selectProjectAsset(const std::string& assetId);
   ModelBrowserView(

@@ -131,6 +131,8 @@ struct AssetImport
   std::string conversionRecipe;
   // Set when the import is a capture or update from an asset library.
   LibraryLink library;
+  // Explicit engine path for a new import; empty uses virtualPath.
+  std::string publishPath = {};
 };
 
 /** One project asset revision replacement, applied as part of a batch. */
@@ -184,6 +186,15 @@ struct Asset
   LibraryLink library;
 
   friend bool operator==(const Asset&, const Asset&) = default;
+};
+
+struct PublishSettings
+{
+  std::string assetNamespace;
+  // Explicit game/mod directory, independent of the engine installation.
+  std::string gameDirectory;
+
+  friend bool operator==(const PublishSettings&, const PublishSettings&) = default;
 };
 
 struct ProjectInfo

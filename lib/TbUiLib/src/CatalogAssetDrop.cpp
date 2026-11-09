@@ -155,9 +155,11 @@ Result<std::unique_ptr<PreparedAssetDrop>> PreparedAssetDrop::prepare(
       result->m_conflicts = std::move(conflicts).value();
     }
     const auto& root = result->m_plan.at(indices.front());
+    result->m_rootIndex = indices.front();
     if (root.import.library.libraryRevision != revision)
       return Error{"The library revision changed while preparing the drop."};
-    path = root.import.virtualPath;
+    path =
+      root.import.publishPath.empty() ? root.import.virtualPath : root.import.publishPath;
     for (const auto& capture : result->m_plan)
       if (capture.assetId)
       {
@@ -221,8 +223,23 @@ const std::vector<CaptureConflict>& PreparedAssetDrop::conflicts() const
 }
 void PreparedAssetDrop::resolveConflicts(const CaptureConflictChoice choice)
 {
+  if (choice != CaptureConflictChoice::Replace)
+    return;
   for (const auto& conflict : m_conflicts)
+  {
     m_session->resolveCaptureConflict(m_plan, conflict, choice);
+    if (conflict.existing)
+      m_expected.push_back(*conflict.existing);
+  }
+  if (m_rootIndex)
+  {
+    const auto& root = m_plan.at(*m_rootIndex).import;
+    if (
+      root.type != project::AssetType::Texture && root.type != project::AssetType::Skybox)
+      m_nativePayload =
+        kind(root.type) + ":"
+        + (root.publishPath.empty() ? root.virtualPath : root.publishPath);
+  }
   m_conflicts.clear();
 }
 Result<void> PreparedAssetDrop::commit()

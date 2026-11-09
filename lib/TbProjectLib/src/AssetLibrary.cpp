@@ -1222,6 +1222,60 @@ Result<LibraryScan> AssetLibrary::importFiles(
   });
 }
 
+Result<std::map<std::string, std::string>> AssetLibrary::partitionNames() const
+{
+  return detail::attempt([&] {
+    auto* db = m_impl->database.get();
+    auto exists = detail::Statement{
+      db, "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='partition_names'"};
+    auto result = std::map<std::string, std::string>{};
+    if (!exists.next())
+      return result;
+    auto query = detail::Statement{db, "SELECT root,label FROM partition_names"};
+    while (query.next())
+      result.emplace(query.text(0), query.text(1));
+    return result;
+  });
+}
+
+Result<void> AssetLibrary::setPartitionName(
+  const std::string& root, const std::string& name)
+{
+  return detail::attempt([&] {
+    const auto roots = std::set<std::string>{
+      "maps", "textures", "materials", "models", "sprites", "sound", "skybox", "prefabs"};
+    if (!roots.contains(root))
+      throw detail::StoreError{"Unknown asset partition."};
+    if (
+      name.empty() || name.size() > 128 || name.find_first_of("/\\") != std::string::npos
+      || std::ranges::any_of(
+        name, [](const unsigned char c) { return c < 32 || c == 127; })
+      || name.front() == ' ' || name.back() == ' ')
+      throw detail::StoreError{
+        "Enter a partition name without separators or control characters."};
+    auto* db = m_impl->database.get();
+    auto transaction = detail::Transaction{db};
+    detail::execute(
+      db,
+      "CREATE TABLE IF NOT EXISTS partition_names(root TEXT PRIMARY KEY,label TEXT NOT "
+      "NULL)");
+    auto duplicate = detail::Statement{
+      db, "SELECT 1 FROM partition_names WHERE root<>? AND label=? COLLATE NOCASE"};
+    duplicate.bind(1, root);
+    duplicate.bind(2, name);
+    if (duplicate.next())
+      throw detail::StoreError{"Another partition already uses this name."};
+    auto write = detail::Statement{
+      db,
+      "INSERT INTO partition_names VALUES(?,?) ON CONFLICT(root) DO UPDATE SET "
+      "label=excluded.label"};
+    write.bind(1, root);
+    write.bind(2, name);
+    write.run();
+    transaction.commit();
+  });
+}
+
 Result<std::vector<std::string>> AssetLibrary::folders() const
 {
   return detail::attempt([&] {

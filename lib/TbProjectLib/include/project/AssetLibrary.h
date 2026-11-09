@@ -67,6 +67,8 @@ public:
 
   // Catalog folders live below fixed asset-type roots. Moving and renaming only
   // changes organization; asset IDs, revisions, source paths and content stay intact.
+  Result<std::map<std::string, std::string>> partitionNames() const;
+  Result<void> setPartitionName(const std::string& root, const std::string& name);
   Result<std::vector<std::string>> folders() const;
   Result<void> createFolder(const std::string& path);
   Result<void> renameFolder(const std::string& path, const std::string& newPath);

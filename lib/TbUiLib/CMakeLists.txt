@@ -215,6 +215,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectCaptureConflictDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectRecovery.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectSession.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectSettingsDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectReference.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectResourceAudit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProjectResourceDialog.cpp
@@ -504,6 +505,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectResourceAudit.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectResourceDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectSession.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectSettingsDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectAssetPanel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ProjectWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/WorkspaceToolPanel.h

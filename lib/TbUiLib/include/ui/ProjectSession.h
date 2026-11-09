@@ -109,6 +109,8 @@ class ProjectSession : public QObject, public std::enable_shared_from_this<Proje
   void markDocumentBound(
     MapDocument& document, const std::filesystem::path& projectDirectory);
   void changed();
+  Result<void> installPreparedStore(
+    std::unique_ptr<project::ProjectStore> candidate, QTemporaryDir& generation);
 
   /**
    * Library records the session works with.
@@ -158,6 +160,9 @@ public:
   const project::ProjectStore& store() const;
   bool modified() const;
   bool hasOpenMaps() const;
+  Result<void> setPublishSettings(const project::PublishSettings& settings, bool migrate);
+  Result<std::map<std::string, std::string>> publishMigration(
+    const std::string& assetNamespace) const;
   std::vector<std::shared_ptr<MapDocument>> documents() const;
   MapDocument* documentFor(const std::string& assetId) const;
   std::optional<std::string> assetFor(const MapDocument& document) const;
@@ -285,6 +290,8 @@ public:
    */
   Result<void> publishCompileResources(
     const std::string& mapAssetId, const std::filesystem::path& gameDirectory);
+  static Result<void> publishSnapshotResources(
+    const std::filesystem::path& snapshot, const std::filesystem::path& gameDirectory);
 
   // Reads live edits without selecting revisions, saving the project or clearing dirty
   // state.

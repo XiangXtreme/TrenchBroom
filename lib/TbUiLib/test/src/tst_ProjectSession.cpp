@@ -3,13 +3,19 @@
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
 #include <QBuffer>
+#include <QCheckBox>
 #include <QColor>
 #include <QCryptographicHash>
+#include <QDialogButtonBox>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QTemporaryDir>
 #include <QTextEdit>
+#include <QTreeWidget>
 #include <QtTest/QSignalSpy>
 
 #include "TestEnvironment.h"
@@ -51,6 +57,7 @@
 #include "ui/MapDocumentFixture.h"
 #include "ui/ProjectResourceAudit.h"
 #include "ui/ProjectSession.h"
+#include "ui/ProjectSettingsDialog.h"
 #include "ui/QPathUtils.h"
 #include "ui/TerrainExport.h"
 #include "ui/TerrainMaterial.h"
@@ -187,6 +194,9 @@ struct LibrarySandbox
     std::filesystem::create_directories(libraryFolder);
     session =
       requireProject(ProjectSession::create(projectPath, "Snapshot", "Half-Life"));
+    // Existing capture fixtures exercise legacy projects with unchanged runtime paths.
+    requireProject(session->setPublishSettings({}, false));
+    requireProject(session->save());
   }
 
   void writeWad(
@@ -233,6 +243,8 @@ TEST_CASE("ProjectSession")
   REQUIRE(temporary.isValid());
   const auto path = pathFromQString(temporary.path()) / "test.tbproj";
   auto session = requireProject(ProjectSession::create(path, "Test", "Quake"));
+  requireProject(session->setPublishSettings({}, false));
+  requireProject(session->save());
 
   SECTION("isolates unsaved content locks the source and saves portable copies")
   {
@@ -766,6 +778,205 @@ TEST_CASE("ProjectSession")
     const auto combinedAsset = requireProject(session->importAsset(combinedInput));
     CHECK(
       session->renamePublishPath(combinedAsset.id, "textures/COMBINED2.wad").is_error());
+  }
+}
+
+TEST_CASE("Project publishing settings and migration")
+{
+  auto temporary = QTemporaryDir{};
+  REQUIRE(temporary.isValid());
+  const auto root = pathFromQString(temporary.path());
+  auto session =
+    requireProject(ProjectSession::create(root / "test.tbproj", "KZ Test", "Half-Life"));
+  CHECK(requireProject(session->store().publishSettings()).assetNamespace == "KZ_Test");
+
+  SECTION("new imports use namespaces while existing projects retain explicit paths")
+  {
+    auto input = testAsset();
+    const auto first = requireProject(session->importAsset(input));
+    CHECK(first.publishPath == "sound/KZ_Test/test.wav");
+    requireProject(session->setPublishSettings({"new", {}}, false));
+    CHECK(
+      requireProject(session->store().findAsset(first.id))->publishPath
+      == first.publishPath);
+    input.virtualPath = "sound/second.wav";
+    const auto second = requireProject(session->importAsset(input));
+    CHECK(second.publishPath == "sound/new/second.wav");
+    requireProject(session->save());
+    session.reset();
+    session = requireProject(ProjectSession::open(root / "test.tbproj"));
+    CHECK(requireProject(session->store().publishSettings()).assetNamespace == "new");
+    CHECK(
+      requireProject(session->store().findAsset(first.id))->publishPath
+      == first.publishPath);
+  }
+
+  SECTION("settings dialog validates input previews migration and applies only on save")
+  {
+    const auto first = requireProject(session->importAsset(testAsset()));
+    auto dialog = ProjectSettingsDialog{session};
+    auto* name = dialog.findChild<QLineEdit*>("ProjectResourceNamespace");
+    auto* migrate = dialog.findChild<QCheckBox*>("ProjectMigrateResources");
+    auto* preview = dialog.findChild<QTreeWidget*>("ProjectMigrationPreview");
+    auto* buttons = dialog.findChild<QDialogButtonBox*>();
+    REQUIRE(name);
+    REQUIRE(migrate);
+    REQUIRE(preview);
+    REQUIRE(buttons);
+    name->setText("../invalid");
+    CHECK_FALSE(buttons->button(QDialogButtonBox::Save)->isEnabled());
+    name->setText("level");
+    migrate->setChecked(true);
+    REQUIRE(preview->topLevelItemCount() == 1);
+    CHECK(preview->topLevelItem(0)->text(1) == "sound/level/test.wav");
+    CHECK(
+      requireProject(session->store().findAsset(first.id))->publishPath
+      == first.publishPath);
+    buttons->button(QDialogButtonBox::Save)->click();
+    CHECK(dialog.result() == QDialog::Accepted);
+    CHECK(
+      requireProject(session->store().findAsset(first.id))->publishPath
+      == "sound/level/test.wav");
+  }
+
+  SECTION("migration preview rejects colliding final paths without changing the project")
+  {
+    requireProject(session->setPublishSettings({}, false));
+    auto input = testAsset();
+    requireProject(session->importAsset(input));
+    input.virtualPath = "sound/second.wav";
+    input.publishPath = "sound/new/test.wav";
+    input.type = project::AssetType::Texture;
+    requireProject(session->importAsset(input));
+    const auto before = requireProject(session->store().assets());
+    CHECK(session->publishMigration("new").is_error());
+    CHECK(session->setPublishSettings({"new", {}}, true).is_error());
+    CHECK(requireProject(session->store().assets()) == before);
+    CHECK(requireProject(session->store().publishSettings()).assetNamespace.empty());
+  }
+
+  SECTION(
+    "migration rewrites runtime properties including classname after value and preserves "
+    "arbitrary text")
+  {
+    requireProject(session->setPublishSettings({}, false));
+    auto sound = testAsset();
+    const auto resource = requireProject(session->importAsset(sound));
+    const auto text = std::string{R"({
+"classname" "worldspawn"
+"message" "test.wav"
+"skyname" "desert"
+}
+// "message" "test.wav"
+{
+"message" "test.wav"
+"classname" "ambient_generic"
+}
+{
+"classname" "env_message"
+"messagesound" "test.wav"
+"message" "test.wav"
+}
+{
+"classname" "custom_entity"
+"custom_sound" "sound/test.wav"
+}
+)"};
+    auto map = project::AssetImport{};
+    map.type = project::AssetType::Map;
+    map.virtualPath = "maps/migrate.map";
+    map.displayName = "Migration";
+    map.original = map.compatible = {text.begin(), text.end()};
+    const auto asset = requireProject(session->importAsset(map));
+    CHECK(
+      requireProject(session->publishMigration("new")).at("sound/test.wav")
+      == "sound/new/test.wav");
+    requireProject(session->setPublishSettings({"new", {}}, true));
+    const auto bytes = requireProject(
+      session->store().readAsset(asset.id, project::ContentKind::Compatible));
+    const auto migrated = std::string{bytes.begin(), bytes.end()};
+    CHECK(migrated.find("\"message\" \"new/test.wav\"") != std::string::npos);
+    CHECK(migrated.find("\"messagesound\" \"new/test.wav\"") != std::string::npos);
+    CHECK(migrated.find("\"custom_sound\" \"sound/new/test.wav\"") != std::string::npos);
+    CHECK(migrated.find("// \"message\" \"test.wav\"") != std::string::npos);
+    CHECK(migrated.find("\"skyname\" \"desert\"") != std::string::npos);
+    CHECK(
+      migrated.find("\"classname\" \"worldspawn\"\n\"message\" \"test.wav\"")
+      != std::string::npos);
+    CHECK(
+      requireProject(session->store().findAsset(resource.id))->publishPath
+      == "sound/new/test.wav");
+    CHECK(requireProject(session->store().checkpoints()).size() == 1);
+  }
+
+  SECTION("malformed closed map leaves migration state unchanged")
+  {
+    requireProject(session->importAsset(testAsset()));
+    const auto text = GENERATE(
+      std::string{"{\n\"classname\" \"worldspawn\"\n"},
+      std::string{"{\n\"classname\" \"worldspawn\n}"});
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.virtualPath = "maps/broken.map";
+    input.displayName = "Broken";
+    input.original = input.compatible = {text.begin(), text.end()};
+    const auto map = requireProject(session->importAsset(input));
+    const auto before = requireProject(session->store().assets());
+    CHECK(session->setPublishSettings({"new", {}}, true).is_error());
+    CHECK(requireProject(session->store().assets()) == before);
+    CHECK(requireProject(session->store().publishSettings()).assetNamespace == "KZ_Test");
+    CHECK(requireProject(session->store().checkpoints()).empty());
+    CHECK(
+      requireProject(session->store().readAsset(map.id, project::ContentKind::Compatible))
+      == input.compatible);
+  }
+
+  SECTION("migration failure preserves store settings paths and live unsaved maps")
+  {
+    requireProject(session->importAsset(testAsset()));
+    auto fixture = MapDocumentFixture{};
+    auto& document = fixture.create();
+    const auto source = root / "live.map";
+    requireProject(document.map().saveTo(source));
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Map;
+    input.virtualPath = "maps/live.map";
+    input.displayName = "Live";
+    input.original = input.compatible = readProjectFile(source);
+    const auto map = requireProject(session->importAsset(input));
+    requireProject(session->registerDocument(document, map.id));
+    REQUIRE(mdl::setEntityProperty(document.map(), "message", "Unsaved edit"));
+    const auto before = requireProject(session->store().assets());
+    CHECK(session->setPublishSettings({"../bad", {}}, true).is_error());
+    CHECK(requireProject(session->store().assets()) == before);
+    CHECK(document.map().modified());
+    requireProject(session->setPublishSettings({"migrated", {}}, true));
+    requireProject(document.map().saveTo(source));
+    const auto live = readProjectFile(source);
+    CHECK(
+      std::string(live.begin(), live.end()).find("Unsaved edit") != std::string::npos);
+    CHECK_FALSE(document.map().modified());
+    CHECK(session->hasOpenMaps());
+    session->unregisterDocument(document);
+  }
+
+  SECTION("publisher checks every collision before copying and can be repeated")
+  {
+    const auto snapshot = root / "snapshot";
+    const auto game = root / "cstrike";
+    writeFile(snapshot / "resources/models/test/crate.mdl", {1, 2, 3});
+    writeFile(snapshot / "resources/sound/test/wind.wav", {4, 5, 6});
+    writeFile(game / "sound/test/wind.wav", {9});
+    CHECK(ProjectSession::publishSnapshotResources(snapshot, game).is_error());
+    CHECK_FALSE(std::filesystem::exists(game / "models/test/crate.mdl"));
+    CHECK(readProjectFile(game / "sound/test/wind.wav") == std::vector<std::uint8_t>{9});
+    writeFile(game / "sound/test/wind.wav", {4, 5, 6});
+    requireProject(ProjectSession::publishSnapshotResources(snapshot, game));
+    requireProject(ProjectSession::publishSnapshotResources(snapshot, game));
+    CHECK(
+      readProjectFile(game / "models/test/crate.mdl")
+      == std::vector<std::uint8_t>{1, 2, 3});
+    CHECK(ProjectSession::publishSnapshotResources(snapshot, "relative").is_error());
   }
 }
 
@@ -2547,6 +2758,9 @@ TEST_CASE("ProjectSessionAssetLibrary")
   }
   SECTION("skybox snapshot publishes six source images independently of the library")
   {
+    const auto useNamespace = GENERATE(false, true);
+    if (useNamespace)
+      requireProject(sandbox.session->setPublishSettings({"kz", {}}, false));
     for (const auto* face : {"bk", "rt", "lf", "ft", "up", "dn"})
       sandbox.write(
         std::string{"env/desert"} + face + ".png", pngBytes(QColor{31, 93, 177}, 16));
@@ -2568,6 +2782,7 @@ TEST_CASE("ProjectSessionAssetLibrary")
     REQUIRE(sky != libraryAssets.end());
     const auto group =
       requireProject(sandbox.session->captureLibraryAsset(libraryId, sky->id));
+    CHECK(requireProject(sandbox.session->publishMigration("renamed")).empty());
     auto stream = std::ostringstream{};
     mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Valve, "Sky");
     stream << R"({
@@ -2666,19 +2881,11 @@ TEST_CASE("ProjectSessionAssetLibrary")
           readProjectFile(requireProject(sandbox.session->assetFile(replaced))) == bytes);
       }
       auto mixedMap = input;
-      const auto entities = mapText + R"({
-"classname" "cycler"
-"model" "models/props/crate.mdl"
-}
-{
-"classname" "env_sprite"
-"model" "sprites/effects/glow.spr"
-}
-{
-"classname" "ambient_generic"
-"message" "ambience/wind.wav"
-}
-)";
+      const auto entities =
+        mapText + "{\n\"classname\" \"cycler\"\n\"model\" \"" + model.publishPath
+        + "\"\n}\n{\n\"classname\" \"env_sprite\"\n\"model\" \"" + sprite.publishPath
+        + "\"\n}\n{\n\"classname\" \"ambient_generic\"\n\"message\" \""
+        + sound.publishPath.substr(6) + "\"\n}\n";
       mixedMap.original = mixedMap.compatible = {entities.begin(), entities.end()};
       requireProject(sandbox.session->replaceAsset(map.id, mixedMap));
       const auto copy = sandbox.root / "portable-mixed.tbproj";
@@ -2716,9 +2923,9 @@ TEST_CASE("ProjectSessionAssetLibrary")
       REQUIRE(ended.count() == 1);
       INFO(output.toPlainText().toStdString());
       CHECK_FALSE(output.toPlainText().contains("failed", Qt::CaseInsensitive));
-      CHECK(readProjectFile(published / "models/props/crate.mdl") == modelBytes);
-      CHECK(readProjectFile(published / "sprites/effects/glow.spr") == spriteBytes);
-      CHECK(readProjectFile(published / "sound/ambience/wind.wav") == soundBytes);
+      CHECK(readProjectFile(published / model.publishPath) == modelBytes);
+      CHECK(readProjectFile(published / sprite.publishPath) == spriteBytes);
+      CHECK(readProjectFile(published / sound.publishPath) == soundBytes);
       for (const auto& entry :
            std::filesystem::recursive_directory_iterator{folder / "resources"})
         if (entry.is_regular_file())
@@ -3069,6 +3276,9 @@ TEST_CASE("ProjectSessionAssetLibrary")
 
   SECTION("exports the captured dependency closure with the map resources")
   {
+    const auto useNamespace = GENERATE(false, true);
+    if (useNamespace)
+      requireProject(sandbox.session->setPublishSettings({"kz", {}}, false));
     sandbox.write("models/crate.mdl", modelWithGroups(2));
     sandbox.write("models/crate01.mdl", modelWithGroups(1));
     sandbox.write("models/crateT.mdl", modelWithGroups(1));
@@ -3080,6 +3290,9 @@ TEST_CASE("ProjectSessionAssetLibrary")
     REQUIRE(model != assets.end());
     const auto captured =
       requireProject(sandbox.session->captureLibraryAsset(libraryId, model->id));
+    CHECK(
+      captured.publishPath
+      == (useNamespace ? "models/kz/crate.mdl" : "models/crate.mdl"));
 
     auto stream = std::ostringstream{};
     mdl::writeMapHeader(stream, "Half-Life", mdl::MapFormat::Valve, "Snapshot");
@@ -3098,9 +3311,22 @@ TEST_CASE("ProjectSessionAssetLibrary")
     mapImport.type = project::AssetType::Map;
     mapImport.virtualPath = "maps/model.map";
     mapImport.displayName = "Model";
-    mapImport.original = {mapText.begin(), mapText.end()};
+    auto referencedText = mapText;
+    const auto reference = referencedText.find("models/crate.mdl");
+    REQUIRE(reference != std::string::npos);
+    referencedText.replace(
+      reference, std::string{"models/crate.mdl"}.size(), captured.publishPath);
+    mapImport.original = {referencedText.begin(), referencedText.end()};
     mapImport.compatible = mapImport.original;
     const auto map = requireProject(sandbox.session->importAsset(mapImport));
+    if (useNamespace)
+      requireProject(sandbox.session->setPublishSettings({}, true));
+    const auto migratedMap = requireProject(
+      sandbox.session->store().readAsset(map.id, project::ContentKind::Compatible));
+    CHECK(
+      std::string(migratedMap.begin(), migratedMap.end())
+        .find("\"model\" \"models/crate.mdl\"")
+      != std::string::npos);
 
     const auto folder = sandbox.root / "model-snapshot";
     requireProject(sandbox.session->exportCompileSnapshot(map.id, folder));

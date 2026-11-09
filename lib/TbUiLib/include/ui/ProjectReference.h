@@ -10,6 +10,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace tb::ui
@@ -78,6 +79,9 @@ private:
  * reference can never escape the project or depend on the platform.
  */
 std::optional<std::string> normalizeGamePath(std::string path);
+
+// Runtime entity file properties, shared by auditing and path migration.
+bool isGoldSrcResourceProperty(std::string_view classname, std::string_view key);
 
 /**
  * The name a map uses for a captured asset: the miptex name for textures, the publish

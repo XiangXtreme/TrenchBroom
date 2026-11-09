@@ -84,6 +84,9 @@ public:
 
   const std::filesystem::path& path() const;
   const ProjectInfo& info() const;
+  static Result<void> validatePublishSettings(const PublishSettings& settings);
+  Result<PublishSettings> publishSettings() const;
+  Result<void> setPublishSettings(const PublishSettings& settings);
 
   Result<Asset> importAsset(const AssetImport& import);
   // Reimport replaces content and recipe, preserving ID, type, name and folder.
@@ -105,6 +108,7 @@ public:
   // Changes the engine-facing path without touching the asset's content. The new path is
   // validated with the same overlap rule as every other write.
   Result<Asset> setPublishPath(const std::string& id, const std::string& publishPath);
+  Result<void> setPublishPaths(const std::map<std::string, std::string>& paths);
   Result<void> removeAsset(const std::string& id);
   // Atomically select existing immutable revisions, used to roll back temporary
   // document staging without discarding checkpoints that reference those revisions.

@@ -204,7 +204,11 @@ std::vector<AssetDependency> queryDependencies(
 }
 
 void writeRevision(
-  sqlite3* db, Asset& asset, const std::string& original, const std::string& compatible);
+  sqlite3* db,
+  Asset& asset,
+  const std::string& original,
+  const std::string& compatible,
+  const std::map<std::string, std::string>* finalPaths = nullptr);
 
 Asset createAsset(sqlite3* db, const AssetImport& import)
 {
@@ -218,7 +222,7 @@ Asset createAsset(sqlite3* db, const AssetImport& import)
     import.sourceName,
     0,
     import.conversionRecipe,
-    {},
+    import.publishPath,
     contentHash(import.compatible),
     import.library};
   writeRevision(
@@ -227,16 +231,27 @@ Asset createAsset(sqlite3* db, const AssetImport& import)
 }
 
 void writeRevision(
-  sqlite3* db, Asset& asset, const std::string& original, const std::string& compatible)
+  sqlite3* db,
+  Asset& asset,
+  const std::string& original,
+  const std::string& compatible,
+  const std::map<std::string, std::string>* finalPaths)
 {
   validateText(asset.displayName, "display name");
   validatePath(asset.virtualPath);
   const auto publishPath =
     asset.publishPath.empty() ? asset.virtualPath : asset.publishPath;
   validatePath(publishPath);
+  auto extension = std::filesystem::path{publishPath}.extension().string();
+  std::ranges::transform(extension, extension.begin(), [](const unsigned char c) {
+    return char(std::tolower(c));
+  });
+  if ((extension == ".mdl" || extension == ".spr") && publishPath.size() >= 64)
+    throw StoreError{
+      "The published model/sprite path must fit in 63 bytes: " + publishPath};
   auto conflicts = Statement{
     db,
-    "SELECT h.virtual_path,r.publish_path FROM heads h JOIN revisions r ON "
+    "SELECT h.virtual_path,r.publish_path,h.asset_id FROM heads h JOIN revisions r ON "
     "r.asset_id=h.asset_id AND r.revision=h.revision WHERE h.asset_id<>?"};
   conflicts.bind(1, asset.id);
   const auto normalized = [](std::string path) {
@@ -250,10 +265,16 @@ void writeRevision(
     return x == y || x.starts_with(y + '/') || y.starts_with(x + '/');
   };
   while (conflicts.next())
+  {
+    auto otherPath = conflicts.text(1);
+    if (finalPaths)
+      if (const auto found = finalPaths->find(conflicts.text(2));
+          found != finalPaths->end())
+        otherPath = found->second;
     if (
-      overlaps(asset.virtualPath, conflicts.text(0))
-      || overlaps(publishPath, conflicts.text(1)))
+      overlaps(asset.virtualPath, conflicts.text(0)) || overlaps(publishPath, otherPath))
       throw StoreError{"Project paths conflict with an existing asset or folder."};
+  }
   asset.publishPath = publishPath;
   const auto& library = asset.library;
   if (!library.empty())
@@ -309,7 +330,10 @@ void writeRevision(
   head.run();
 }
 
-void writeMetadataRevision(sqlite3* db, Asset& asset)
+void writeMetadataRevision(
+  sqlite3* db,
+  Asset& asset,
+  const std::map<std::string, std::string>* finalPaths = nullptr)
 {
   auto query = Statement{
     db, "SELECT original,compatible FROM revisions WHERE asset_id=? AND revision=?"};
@@ -319,7 +343,7 @@ void writeMetadataRevision(sqlite3* db, Asset& asset)
     throw StoreError{"Project asset revision not found."};
   const auto original = query.text(0);
   const auto compatible = query.text(1);
-  writeRevision(db, asset, original, compatible);
+  writeRevision(db, asset, original, compatible, finalPaths);
 }
 
 void requireCheckpoint(sqlite3* db, const std::string& id)
@@ -415,7 +439,8 @@ constexpr auto Schema =
   "CREATE TABLE terrain_compile_dependencies("
   "asset_id TEXT NOT NULL REFERENCES terrain_compile(asset_id) ON DELETE CASCADE,"
   "dependency_id TEXT NOT NULL,PRIMARY KEY(asset_id,dependency_id));"
-  "CREATE INDEX terrain_compile_dependency_id ON terrain_compile_dependencies(dependency_id);"
+  "CREATE INDEX terrain_compile_dependency_id ON "
+  "terrain_compile_dependencies(dependency_id);"
   "CREATE TRIGGER terrain_head_insert AFTER INSERT ON heads BEGIN "
   "DELETE FROM terrain_compile WHERE asset_id IN (SELECT asset_id FROM "
   "terrain_compile_dependencies WHERE dependency_id=NEW.asset_id); END;"
@@ -724,6 +749,73 @@ const ProjectInfo& ProjectStore::info() const
 {
   return m_impl->info;
 }
+Result<void> ProjectStore::validatePublishSettings(const PublishSettings& settings)
+{
+  return attempt([&] {
+    if (!settings.assetNamespace.empty())
+      validatePath(settings.assetNamespace);
+    if (
+      settings.assetNamespace.size() > 32
+      || std::ranges::any_of(settings.assetNamespace, [](const unsigned char c) {
+           return !(
+             (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+             || c == '_' || c == '-');
+         }))
+      throw StoreError{
+        "The resource namespace must contain at most 32 ASCII letters, digits, "
+        "underscores or hyphens."};
+    if (!settings.gameDirectory.empty())
+    {
+      validateText(settings.gameDirectory, "game directory");
+      const auto& text = settings.gameDirectory;
+      const auto path = std::filesystem::path{
+        std::u8string{reinterpret_cast<const char8_t*>(text.data()), text.size()}};
+      if (!path.is_absolute() || path == path.root_path())
+        throw StoreError{"Select an absolute game/mod directory."};
+    }
+  });
+}
+
+Result<PublishSettings> ProjectStore::publishSettings() const
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto exists = Statement{
+      db, "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='publish_settings'"};
+    if (!exists.next())
+      return PublishSettings{};
+    auto query = Statement{
+      db, "SELECT asset_namespace,game_directory FROM publish_settings WHERE id=1"};
+    const auto settings =
+      query.next() ? PublishSettings{query.text(0), query.text(1)} : PublishSettings{};
+    if (const auto valid = validatePublishSettings(settings); valid.is_error())
+      throw StoreError{std::get<Error>(valid.error()).msg};
+    return settings;
+  });
+}
+
+Result<void> ProjectStore::setPublishSettings(const PublishSettings& settings)
+{
+  if (const auto valid = validatePublishSettings(settings); valid.is_error())
+    return std::get<Error>(valid.error());
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    // Optional editor metadata keeps the format-4 compiler contract unchanged.
+    execute(
+      db,
+      "CREATE TABLE IF NOT EXISTS publish_settings(id INTEGER PRIMARY KEY "
+      "CHECK(id=1),asset_namespace TEXT NOT NULL,game_directory TEXT NOT NULL)");
+    auto write = Statement{
+      db,
+      "INSERT INTO publish_settings VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET "
+      "asset_namespace=excluded.asset_namespace,game_directory=excluded.game_directory"};
+    write.bind(1, settings.assetNamespace);
+    write.bind(2, settings.gameDirectory);
+    write.run();
+    transaction.commit();
+  });
+}
 
 Result<Asset> ProjectStore::importAsset(const AssetImport& import)
 {
@@ -760,7 +852,7 @@ Asset applyImport(sqlite3* db, const std::string& id, const AssetImport& import)
     "SELECT revision FROM revisions WHERE asset_id=? AND source_name=? AND recipe=? "
     "AND original=? AND compatible=? AND display_name=? AND virtual_path=? AND "
     "content_hash=? AND library_id=? AND library_asset_id=? AND library_revision=? "
-    "AND library_hash=? AND source_container=? AND source_member=? "
+    "AND library_hash=? AND source_container=? AND source_member=? AND publish_path=? "
     "ORDER BY revision DESC LIMIT 1"};
   existing.bind(1, id);
   existing.bind(2, asset.sourceName);
@@ -776,6 +868,7 @@ Asset applyImport(sqlite3* db, const std::string& id, const AssetImport& import)
   existing.bind(12, asset.library.libraryContentHash);
   existing.bind(13, asset.library.sourceContainer);
   existing.bind(14, asset.library.sourceMember);
+  existing.bind(15, asset.publishPath);
   if (existing.next())
   {
     asset.revision = existing.integer(0);
@@ -916,6 +1009,22 @@ Result<Asset> ProjectStore::setPublishPath(
     writeMetadataRevision(db, asset);
     transaction.commit();
     return asset;
+  });
+}
+
+Result<void> ProjectStore::setPublishPaths(
+  const std::map<std::string, std::string>& paths)
+{
+  return attempt([&] {
+    auto* db = m_impl->database.get();
+    auto transaction = Transaction{db};
+    for (const auto& [id, path] : paths)
+    {
+      auto asset = requireAsset(db, id);
+      asset.publishPath = path;
+      writeMetadataRevision(db, asset, &paths);
+    }
+    transaction.commit();
   });
 }
 

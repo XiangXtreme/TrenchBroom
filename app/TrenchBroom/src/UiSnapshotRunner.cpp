@@ -158,6 +158,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("asset-library-narrow"),
     QStringLiteral("asset-library-project-narrow"),
     QStringLiteral("project-empty"),
+    QStringLiteral("project-settings"),
     QStringLiteral("project-drawer"),
     QStringLiteral("project-pinned"),
     QStringLiteral("project-map-switch"),

@@ -562,7 +562,7 @@ TEST_CASE("AssetInspection")
     };
     auto* textures = findFolder("textures");
     REQUIRE(textures);
-    CHECK_FALSE(textures->flags().testFlag(Qt::ItemIsEditable));
+    CHECK(textures->flags().testFlag(Qt::ItemIsEditable));
     tree->setCurrentItem(textures);
     auto answered = false;
     QTimer::singleShot(0, &browser, [&] {
@@ -605,10 +605,16 @@ TEST_CASE("AssetInspection")
     QApplication::processEvents();
     CHECK(require(library->findAsset(asset.id))->group == "textures/Rock");
     REQUIRE(findFolder("textures/Rock"));
+    findFolder("textures")->setText(0, "Surface materials");
+    QApplication::processEvents();
+    REQUIRE(findFolder("textures"));
+    CHECK(findFolder("textures")->text(0) == "Surface materials");
+    CHECK(require(library->findAsset(asset.id))->group == "textures/Rock");
     auto reopened = AssetLibraryWindow{temporary.path(), false};
     auto* reopenedTree = reopened.findChild<QTreeWidget*>("AssetLibraryFolders");
     REQUIRE(reopenedTree);
     CHECK(reopenedTree->findItems("Rock", Qt::MatchRecursive).size() == 1);
+    CHECK(reopenedTree->findItems("Surface materials", Qt::MatchRecursive).size() == 1);
   }
   SECTION("source snapshots and host selection are independent")
   {

@@ -98,6 +98,54 @@ TEST_CASE("ProjectStore")
 {
   auto workspace = Workspace{};
 
+  SECTION("publishing settings are optional persistent metadata with validated paths")
+  {
+    auto store = require(ProjectStore::create(workspace.path, "Test", "Half-Life"));
+    CHECK(require(store->publishSettings()) == PublishSettings{});
+    const auto directory = workspace.directory.generic_string();
+    const auto settings = PublishSettings{"test_map", directory};
+    require(store->setPublishSettings(settings));
+    CHECK(require(store->publishSettings()) == settings);
+    for (const auto* name : {"../bad", "with space", "CON", "com1", "a/b"})
+      CHECK(store->setPublishSettings({name, directory}).is_error());
+    CHECK(store->setPublishSettings({std::string(33, 'a'), directory}).is_error());
+    CHECK(store->setPublishSettings({"test", "relative/mod"}).is_error());
+    CHECK(require(store->publishSettings()) == settings);
+    const auto copy = workspace.directory / "copy.tbproj";
+    require(store->saveCopy(copy));
+    CHECK(require(require(ProjectStore::open(copy))->publishSettings()) == settings);
+    store.reset();
+    auto raw = RawDatabase{workspace.path};
+    raw.exec("UPDATE publish_settings SET asset_namespace='../bad'");
+    CHECK(require(ProjectStore::open(workspace.path))->publishSettings().is_error());
+  }
+
+  SECTION("reimport retains the published path and batch migration validates final paths")
+  {
+    auto store = require(ProjectStore::create(workspace.path, "Test", "Half-Life"));
+    auto input = texture("models/a.mdl");
+    input.type = AssetType::Model;
+    const auto first = require(store->importAsset(input));
+    const auto moved = require(store->setPublishPath(first.id, "models/test/a.mdl"));
+    CHECK(require(store->replaceAsset(first.id, input)).publishPath == moved.publishPath);
+    input.virtualPath = "models/test/a.mdl";
+    input.publishPath = "models/test/test/a.mdl";
+    const auto second = require(store->importAsset(input));
+    require(store->setPublishPaths(
+      {{first.id, "models/test/test/a.mdl"},
+       {second.id, "models/test/test/test/a.mdl"}}));
+    CHECK(require(store->findAsset(first.id))->publishPath == "models/test/test/a.mdl");
+    const auto before = require(store->assets());
+    CHECK(
+      store
+        ->setPublishPaths({{first.id, "models/same.mdl"}, {second.id, "models/same.mdl"}})
+        .is_error());
+    CHECK(require(store->assets()) == before);
+    input.virtualPath = "models/long.mdl";
+    input.publishPath = "models/" + std::string(60, 'a') + ".mdl";
+    CHECK(store->importAsset(input).is_error());
+  }
+
   SECTION("map thumbnails persist independently of content revisions")
   {
     auto store = require(ProjectStore::create(workspace.path, "Maps", "Half-Life"));
@@ -787,11 +835,13 @@ TEST_CASE("ProjectStore")
         "CREATE TABLE content(id TEXT PRIMARY KEY,hash TEXT NOT NULL,data BLOB NOT NULL);"
         "CREATE INDEX content_hash ON content(hash);"
         "CREATE TABLE revisions(asset_id TEXT NOT NULL,type TEXT NOT NULL,virtual_path "
-        "TEXT NOT NULL,publish_path TEXT NOT NULL,display_name TEXT NOT NULL,source_name TEXT NOT NULL,revision "
+        "TEXT NOT NULL,publish_path TEXT NOT NULL,display_name TEXT NOT NULL,source_name "
+        "TEXT NOT NULL,revision "
         "INTEGER NOT NULL CHECK(revision>0),recipe TEXT NOT NULL,original TEXT NOT NULL "
         "REFERENCES content(id),compatible TEXT NOT NULL REFERENCES content(id),"
         "content_hash TEXT NOT NULL DEFAULT '',library_id TEXT NOT NULL DEFAULT '',"
-        "library_asset_id TEXT NOT NULL DEFAULT '',library_revision INTEGER NOT NULL DEFAULT 0,"
+        "library_asset_id TEXT NOT NULL DEFAULT '',library_revision INTEGER NOT NULL "
+        "DEFAULT 0,"
         "library_hash TEXT NOT NULL DEFAULT '',source_container TEXT NOT NULL DEFAULT '',"
         "source_member TEXT NOT NULL DEFAULT '',PRIMARY KEY(asset_id,revision));"
         "CREATE TABLE heads(asset_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,"
@@ -800,25 +850,39 @@ TEST_CASE("ProjectStore")
         "CREATE TABLE dependencies(asset_id TEXT NOT NULL REFERENCES heads(asset_id),"
         "dependency_id TEXT NOT NULL REFERENCES heads(asset_id),kind TEXT NOT NULL,"
         "PRIMARY KEY(asset_id,dependency_id,kind),CHECK(asset_id<>dependency_id));"
-        "CREATE TABLE libraries(id TEXT PRIMARY KEY,name TEXT NOT NULL,last_path TEXT NOT NULL,attached_at TEXT NOT NULL);"
-        "CREATE TABLE library_ignores(asset_id TEXT NOT NULL,library_hash TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(asset_id,library_hash));"
-        "CREATE TABLE checkpoints(id TEXT PRIMARY KEY,name TEXT NOT NULL,description TEXT NOT NULL,created_at TEXT NOT NULL);"
-        "CREATE TABLE checkpoint_assets(checkpoint_id TEXT NOT NULL REFERENCES checkpoints(id),asset_id TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(checkpoint_id,asset_id),FOREIGN KEY(asset_id,revision) REFERENCES revisions(asset_id,revision));"
-        "CREATE TABLE checkpoint_dependencies(checkpoint_id TEXT NOT NULL REFERENCES checkpoints(id),asset_id TEXT NOT NULL,dependency_id TEXT NOT NULL,kind TEXT NOT NULL,PRIMARY KEY(checkpoint_id,asset_id,dependency_id,kind),FOREIGN KEY(checkpoint_id,asset_id) REFERENCES checkpoint_assets(checkpoint_id,asset_id),FOREIGN KEY(checkpoint_id,dependency_id) REFERENCES checkpoint_assets(checkpoint_id,asset_id));");
+        "CREATE TABLE libraries(id TEXT PRIMARY KEY,name TEXT NOT NULL,last_path TEXT "
+        "NOT NULL,attached_at TEXT NOT NULL);"
+        "CREATE TABLE library_ignores(asset_id TEXT NOT NULL,library_hash TEXT NOT "
+        "NULL,created_at TEXT NOT NULL,PRIMARY KEY(asset_id,library_hash));"
+        "CREATE TABLE checkpoints(id TEXT PRIMARY KEY,name TEXT NOT NULL,description "
+        "TEXT NOT NULL,created_at TEXT NOT NULL);"
+        "CREATE TABLE checkpoint_assets(checkpoint_id TEXT NOT NULL REFERENCES "
+        "checkpoints(id),asset_id TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY "
+        "KEY(checkpoint_id,asset_id),FOREIGN KEY(asset_id,revision) REFERENCES "
+        "revisions(asset_id,revision));"
+        "CREATE TABLE checkpoint_dependencies(checkpoint_id TEXT NOT NULL REFERENCES "
+        "checkpoints(id),asset_id TEXT NOT NULL,dependency_id TEXT NOT NULL,kind TEXT "
+        "NOT NULL,PRIMARY KEY(checkpoint_id,asset_id,dependency_id,kind),FOREIGN "
+        "KEY(checkpoint_id,asset_id) REFERENCES "
+        "checkpoint_assets(checkpoint_id,asset_id),FOREIGN "
+        "KEY(checkpoint_id,dependency_id) REFERENCES "
+        "checkpoint_assets(checkpoint_id,asset_id));");
       db.exec(
         "INSERT INTO project VALUES('p3','V3Project','Half-Life');"
         "INSERT INTO content VALUES('c1','0','v3bytes');"
-        "INSERT INTO revisions(asset_id,type,virtual_path,publish_path,display_name,source_name,revision,recipe,original,compatible) "
+        "INSERT INTO "
+        "revisions(asset_id,type,virtual_path,publish_path,display_name,source_name,"
+        "revision,recipe,original,compatible) "
         "VALUES('22222222-2222-2222-2222-222222222222','map',"
         "'maps/test.map','maps/test.map','test','test.map',1,'{}','c1','c1');"
-        "INSERT INTO heads VALUES('22222222-2222-2222-2222-222222222222',1,'maps/test.map');");
+        "INSERT INTO heads "
+        "VALUES('22222222-2222-2222-2222-222222222222',1,'maps/test.map');");
     }
     auto store = require(ProjectStore::open(workspace.path));
     CHECK(store->info().name == "V3Project");
     CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 4);
     // Able to save terrain compile into migrated project without error
-    auto data =
-      TerrainCompile{1, 1, 4, {'m', 'a', 'p'}, {'w', 'a', 'd'}, {}, {}};
+    auto data = TerrainCompile{1, 1, 4, {'m', 'a', 'p'}, {'w', 'a', 'd'}, {}, {}};
     require(store->setTerrainCompile("22222222-2222-2222-2222-222222222222", data));
     CHECK(RawDatabase{workspace.path}.count("PRAGMA user_version") == 4);
   }

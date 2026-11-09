@@ -68,6 +68,7 @@ TEST_CASE("ProjectReferenceIndex")
   REQUIRE(temporary.isValid());
   auto session = require(ProjectSession::create(
     pathFromQString(temporary.filePath("reference.tbproj")), "Reference", "Half-Life"));
+  require(session->setPublishSettings({}, false));
 
   SECTION("texture names resolve case insensitively and duplicates are ambiguous")
   {
@@ -91,8 +92,8 @@ TEST_CASE("ProjectReferenceIndex")
 
   SECTION("publish paths resolve without depending on case or platform separators")
   {
-    const auto sound = addAsset(
-      *session, "sound/clip.wav", project::AssetType::Sound, {1, 2, 3});
+    const auto sound =
+      addAsset(*session, "sound/clip.wav", project::AssetType::Sound, {1, 2, 3});
     const auto index = require(ProjectReferenceIndex::build(*session));
     for (const auto* path : {"sound/clip.wav", "SOUND/CLIP.WAV", "sound\\clip.wav"})
     {
@@ -146,13 +147,13 @@ TEST_CASE("ProjectReferenceNames")
   {
     const auto sound =
       addAsset(*session, "sound/clip.wav", project::AssetType::Sound, {1, 2, 3});
-    CHECK(require(gameName(*session, sound)) == "sound/clip.wav");
+    CHECK(require(gameName(*session, sound)) == "sound/Names/clip.wav");
   }
 
   SECTION("an archive embedding several textures has no single name")
   {
-    const auto archive = require(
-      project::buildGoldSrcWad({textureLump("first"), textureLump("second")}));
+    const auto archive =
+      require(project::buildGoldSrcWad({textureLump("first"), textureLump("second")}));
     const auto texture =
       addAsset(*session, "textures/mixed.wad", project::AssetType::Texture, archive);
     const auto name = gameName(*session, texture);

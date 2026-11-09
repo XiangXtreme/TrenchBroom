@@ -113,6 +113,26 @@ TEST_CASE("AssetLibrary")
   const auto wall = test::makeMiptex("WALL01", 32, 16, 1);
   const auto floor = test::makeMiptex("FLOOR01", 16, 16, 2);
 
+  SECTION("partition labels persist independently of folder identities")
+  {
+    auto library = require(AssetLibrary::create(workspace.folder, "Studio"));
+    const auto before = require(library->folders());
+    CHECK(require(library->partitionNames()).empty());
+    require(library->setPartitionName("models", "模型"));
+    require(library->createFolder("models/道具"));
+    CHECK(require(library->partitionNames()).at("models") == "模型");
+    CHECK(library->setPartitionName("sound", "模型").is_error());
+    CHECK(library->setPartitionName("unknown", "Other").is_error());
+    CHECK(library->setPartitionName("models", "bad/name").is_error());
+    library.reset();
+    library = require(AssetLibrary::open(workspace.folder));
+    CHECK(require(library->partitionNames()).at("models") == "模型");
+    const auto folders = require(library->folders());
+    CHECK(std::ranges::find(folders, "models/道具") != folders.end());
+    for (const auto& root : before)
+      CHECK(std::ranges::find(folders, root) != folders.end());
+  }
+
   SECTION("empty typed folders survive reopen and older catalogs acquire storage")
   {
     auto library = require(AssetLibrary::create(workspace.folder, "Folders"));

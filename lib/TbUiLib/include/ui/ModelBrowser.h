@@ -106,6 +106,7 @@ private:
   QTabBar* m_sourceTabs = nullptr;
   QComboBox* m_typeCombo = nullptr;
   QString m_libraryName;
+  mutable BrowserPartitionNames m_partitionNames;
   QComboBox* m_iconSizeCombo = nullptr;
   QComboBox* m_soundCombo = nullptr;
   QCheckBox* m_groupWadTextures = nullptr;

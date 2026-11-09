@@ -50,6 +50,20 @@ UnreadableWad unreadable(const project::Asset& asset, const std::string& message
 }
 } // namespace
 
+bool isGoldSrcResourceProperty(
+  const std::string_view classname, const std::string_view key)
+{
+  return (classname == "ambient_generic" && key == "message")
+    || (classname == "env_message" && key == "messagesound")
+    || (key == "model" && (classname == "cycler" || classname == "cycler_sprite"
+      || classname == "cycler_wreckage" || classname == "env_sprite"
+      || classname == "env_glow" || classname == "hostage_entity"))
+    || (classname == "env_beam" && key == "texture")
+    || (classname == "env_laser" && (key == "texture" || key == "EndSprite"))
+    || ((classname == "func_breakable" || classname == "func_pushable") && key == "gibmodel")
+    || (classname == "env_shooter" && key == "shootmodel");
+}
+
 std::optional<std::string> normalizeGamePath(std::string path)
 {
   std::replace(path.begin(), path.end(), '\\', '/');
@@ -203,8 +217,9 @@ Result<std::string> capturedGameName(const project::AssetImport& import)
       return Error{"The captured resource has no game name."};
     return name;
   }
-  if (import.virtualPath.empty())
+  const auto& path = import.publishPath.empty() ? import.virtualPath : import.publishPath;
+  if (path.empty())
     return Error{"The captured resource has no published path."};
-  return import.virtualPath;
+  return path;
 }
 } // namespace tb::ui

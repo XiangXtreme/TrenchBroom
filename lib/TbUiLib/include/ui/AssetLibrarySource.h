@@ -100,6 +100,15 @@ public:
   /** Whether this source supports catalog edits (favourite, rename, delete). */
   virtual bool canManage() const { return false; }
 
+  virtual Result<std::map<std::string, std::string>> partitionNames() const
+  {
+    return std::map<std::string, std::string>{};
+  }
+  virtual Result<void> setPartitionName(const std::string&, const std::string&)
+  {
+    return Error{"This asset library is read only."};
+  }
+
   virtual Result<std::vector<std::string>> folders() const
   {
     return Error{"This asset library does not support folders."};

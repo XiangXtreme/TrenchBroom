@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -171,7 +172,9 @@ QString browserCellTypeDisplayName(BrowserCellType type);
 /** Stable presentation folders; they do not change source or engine paths. */
 std::filesystem::path browserPathUnderType(
   BrowserCellType type, bool skybox, const std::filesystem::path& path);
-QString browserFolderDisplayName(const std::filesystem::path& path);
+using BrowserPartitionNames = std::map<std::string, std::string>;
+QString browserFolderDisplayName(
+  const std::filesystem::path& path, const BrowserPartitionNames& names = {});
 
 std::filesystem::path browserAssetDisplayPath(
   const BrowserAsset& asset, bool groupWadTextures);
@@ -233,6 +236,7 @@ std::vector<ModelBrowserEntry> modelBrowserEntries(
   // Game files are browsed through fixed roots; project and library listings only show
   // the folders their own entries imply.
   bool includeDefaultRoots = true,
-  bool searchAllAssets = false);
+  bool searchAllAssets = false,
+  const BrowserPartitionNames& names = {});
 
 } // namespace tb::ui

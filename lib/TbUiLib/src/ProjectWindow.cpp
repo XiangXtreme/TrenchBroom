@@ -57,6 +57,7 @@
 #include "ui/ProjectRecovery.h"
 #include "ui/ProjectResourceDialog.h"
 #include "ui/ProjectSession.h"
+#include "ui/ProjectSettingsDialog.h"
 #include "ui/ProjectTextureImport.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
@@ -167,6 +168,10 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
       this, tr("Save Project Copy"), {}, tr("TB projects (*.tbproj)"));
     if (!path.isEmpty())
       report(m_session->saveCopy(pathFromQString(path)));
+  });
+  file->addAction(tr("Project Settings…"), this, [this] {
+    auto dialog = ProjectSettingsDialog{m_session, this};
+    dialog.exec();
   });
   file->addAction(tr("Import Files…"), this, &ProjectWindow::importFiles);
   file->addAction(tr("Check Resources…"), this, [this]() { checkResources(); });

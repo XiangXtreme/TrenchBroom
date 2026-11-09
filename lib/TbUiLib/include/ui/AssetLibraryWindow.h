@@ -71,6 +71,7 @@ class AssetLibraryWindow : public QDialog
   QString m_filter = QStringLiteral("all");
   QString m_search;
   QString m_folderPath;
+  BrowserPartitionNames m_partitionNames;
   bool m_listMode = false;
 
   QLabel* m_libraryBadge = nullptr;

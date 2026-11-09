@@ -82,6 +82,7 @@
 #include "ui/AssetLibrarySource.h"
 #include "ui/AssetLibraryWindow.h"
 #include "ui/BitmapButton.h"
+#include "ui/BuiltinAssetLibrary.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/EntityBrowser.h"
 #include "ui/EntityBrowserView.h"
@@ -1565,7 +1566,7 @@ void ModelBrowser::rebuildBreadcrumbBar()
     accumulated /= part;
     addSeparator();
     addCrumb(
-      m_folderPath.empty() ? browserFolderDisplayName(accumulated)
+      m_folderPath.empty() ? browserFolderDisplayName(accumulated, m_partitionNames)
                            : pathAsGenericQString(part),
       accumulated);
   }
@@ -2339,6 +2340,30 @@ std::optional<std::vector<BrowserAsset>> ModelBrowser::scanLibraryAssets() const
 
 std::optional<std::vector<BrowserAsset>> ModelBrowser::scanAssets()
 {
+  m_partitionNames.clear();
+  if (m_project)
+    if (const auto connections = m_project->libraries(); connections.is_success())
+      for (const auto& connection : connections.value())
+        if (connection.available && connection.info.id != BuiltinAssetLibraryId)
+          if (const auto source = openLocalAssetLibrary(connection.info.path))
+            if (const auto names = source->partitionNames(); names.is_success())
+              for (const auto& [root, label] : names.value())
+                m_partitionNames.insert_or_assign(root, label);
+  const auto setTitle = [this](const int type, const char* root) {
+    const auto index = m_typeCombo->findData(type);
+    if (index >= 0)
+      m_typeCombo->setItemText(index, browserFolderDisplayName(root, m_partitionNames));
+  };
+  setTitle(int(BrowserCellType::Map), "maps");
+  setTitle(int(BrowserCellType::Texture), "textures");
+  setTitle(int(BrowserCellType::Material), "materials");
+  setTitle(int(BrowserCellType::Model), "models");
+  setTitle(int(BrowserCellType::Sprite), "sprites");
+  setTitle(int(BrowserCellType::Sound), "sound");
+  setTitle(SkyboxTypeFilter, "skybox");
+  setTitle(int(BrowserCellType::Prefab), "prefabs");
+  m_view->setPartitionNames(m_partitionNames);
+
   switch (m_sourceFilter)
   {
   case BrowserSourceFilter::Project:
@@ -2885,6 +2910,7 @@ void ModelBrowser::reloadModels()
   }
 
   m_assets = std::move(*nextAssets);
+  m_view->setPartitionNames(m_partitionNames);
   if (m_project)
     loadBrowserAssetMetadata(m_assets, *m_project);
   refreshMetadataFilters();
@@ -2938,8 +2964,8 @@ void ModelBrowser::rebuildFolderTree()
         continue;
       }
 
-      auto* item =
-        new QTreeWidgetItem{rootItem, QStringList{browserFolderDisplayName(rootPath)}};
+      auto* item = new QTreeWidgetItem{
+        rootItem, QStringList{browserFolderDisplayName(rootPath, m_partitionNames)}};
       item->setData(0, Qt::UserRole, pathAsGenericQString(rootPath));
       item->setIcon(0, folderIcon);
       m_folderTreeItems.emplace(rootPath, item);
@@ -2974,8 +3000,9 @@ void ModelBrowser::rebuildFolderTree()
         continue;
       }
 
-      const auto title = m_folderPath.empty() ? browserFolderDisplayName(accumulatedPath)
-                                              : pathAsGenericQString(part);
+      const auto title = m_folderPath.empty()
+                           ? browserFolderDisplayName(accumulatedPath, m_partitionNames)
+                           : pathAsGenericQString(part);
       auto* item = new QTreeWidgetItem{parentItem, QStringList{title}};
       item->setData(0, Qt::UserRole, pathAsGenericQString(accumulatedPath));
       item->setIcon(0, folderIcon);

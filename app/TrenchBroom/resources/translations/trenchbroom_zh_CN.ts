@@ -8468,6 +8468,10 @@ Projects keep their captured copies.</source>
     <context>
         <name>tb::ui::ProjectWindow</name>
         <message>
+            <source>Project Settings…</source>
+            <translation>工程设置…</translation>
+        </message>
+        <message>
             <source>Open this map in a 3D view to update its preview.</source>
             <translation>请在三维视图中打开此地图以更新预览。</translation>
         </message>
@@ -9382,6 +9386,59 @@ Terrain textures: %4 · WAD: %5 KiB</source><translation>源顶面：%1 · 生�
         <message>
             <source>Table includes property keys, protection and default values</source>
             <translation>表格支持属性键、属性保护和默认值操作</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::ProjectSettingsDialog</name>
+        <message>
+            <source>Project Settings</source>
+            <translation>工程设置</translation>
+        </message>
+        <message>
+            <source>Resource namespace</source>
+            <translation>资源前缀</translation>
+        </message>
+        <message>
+            <source>Browse…</source>
+            <translation>浏览…</translation>
+        </message>
+        <message>
+            <source>Game / mod directory</source>
+            <translation>游戏 / 模组目录</translation>
+        </message>
+        <message>
+            <source>New models, sprites and sounds use the resource namespace. Leave the game directory empty to disable automatic publishing. Select the mod folder (for example cstrike), where models, sprites and sound are located. Existing files with different content stop publishing before any file is copied.</source>
+            <translation>新导入的模型、Sprite 和声音使用资源前缀。游戏目录留空时不自动发布。请选择包含 models、sprites 和 sound 的模组目录（例如 cstrike）。如果目标位置存在内容不同的同名文件，将在复制前停止发布。</translation>
+        </message>
+        <message>
+            <source>Migrate existing resource paths and map references</source>
+            <translation>迁移已有资源路径及地图引用</translation>
+        </message>
+        <message>
+            <source>Migration creates a safety version including unsaved map edits. Open maps reload and their undo history is cleared. Save the project to keep these settings and changes.</source>
+            <translation>迁移前会创建安全版本，包含地图尚未保存的编辑。已打开的地图会重新加载并清空撤销历史。请保存工程以保留设置和改动。</translation>
+        </message>
+        <message>
+            <source>Current game path</source>
+            <translation>当前游戏路径</translation>
+        </message>
+        <message>
+            <source>New game path</source>
+            <translation>新游戏路径</translation>
+        </message>
+        <message>
+            <source>Examples: models/%1crate.mdl · sprites/%1glow.spr · sound/%1wind.wav
+Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</source>
+            <translation>示例：models/%1crate.mdl · sprites/%1glow.spr · sound/%1wind.wav
+天空盒：gfx/env/&lt;skyname&gt;bk.tga（六个面，直接放置）</translation>
+        </message>
+        <message>
+            <source>Existing resource paths stay unchanged. The namespace applies to new resources.</source>
+            <translation>已有资源路径保持原样，前缀应用于新导入的资源。</translation>
+        </message>
+        <message>
+            <source>%1 resource paths will change.</source>
+            <translation>将修改 %1 条资源路径。</translation>
         </message>
     </context>
 </TS>
