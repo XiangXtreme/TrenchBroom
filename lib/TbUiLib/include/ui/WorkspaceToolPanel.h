@@ -90,9 +90,6 @@ public:
   WorkspaceToolId currentTool() const;
   bool isToolVisible(WorkspaceToolId tool) const;
 
-signals:
-  void extensionsRequested();
-
 protected:
   void showEvent(QShowEvent* event) override;
   bool eventFilter(QObject* watched, QEvent* event) override;

@@ -26,7 +26,7 @@
 | 右侧面 | 面属性、UV 和面标志；打开底部材质浏览的入口 | 不再长期占据右侧空间显示另一套材质列表；`Ctrl+3` 仍直达面编辑。 |
 | 地图设置窗口 | 地图软边界、Mods 等地图级配置 | 场景工具栏、视图菜单和 `Ctrl+1` 打开同一个地图设置窗口。 |
 | 右侧 Terrain | 创建、编辑模式、笔刷、材质槽、分析、预算和导出 | 保留独立工具会话；资源入口定位到底部匹配的 Terrain Material，工具切换不重置正在使用的设置。 |
-| 右侧插件 | 已注册插件面板和关闭操作 | 保留注册、卸载和生命周期；底部 Extensions 可继续跳转。 |
+| 右侧插件 | 已注册插件面板和关闭操作 | 插件入口统一在右侧，保留注册、卸载和生命周期。 |
 | 底部 Content Browser | 来源、类型、搜索、预览、详情；实体类型已迁入，地图材质集合视图和面材质应用能力待后续整合 | 一个主要浏览区域承载地图材质、工程、库和游戏文件；根据来源与目标显示适当操作，不假装不同资源具有同样能力。 |
 | 底部其他工具 | Output、Python、Issues | 保留文档作用域、抽屉/固定、焦点和快捷键。 |
 | Asset Library | 导入、转换、创建复合材质、重命名、删除和批量管理 | 仍是库管理工作区；从 Content Browser 定位进去，也能返回原资源。 |
@@ -44,7 +44,7 @@
 | 面材质 | 原浏览器提供按名称/使用量排序、集合分组、已使用过滤、搜索、图标尺寸及定位材质；集合设置与游戏格式有关。工程另有资源选择器。 | 底部覆盖上述能力、材质集合/WAD 设置及非 GoldSrc 游戏；从选面定位当前材质。原生浏览器有重要语义：选同一材质可切换到无材质；无选面时改变当前材质。应明确保留并验证，而不只是提供“应用”按钮。 |
 | Content Browser | 工程有库、工程和游戏来源，资源类别包括地图、纹理、Terrain Material、模型、sprite、声音、天空盒及 prefab；独立 MAP 走另一宿主路径。贴图/天空盒应用、资源拖放和选择器有不同条件。 | 资源类型分别定义浏览、预览、选择、应用、拖放及禁用原因；不能承诺每种资源都有相同操作。工程、独立 MAP、无活动地图都验收，不依赖虚构地图来决定操作目标。 |
 | Terrain Material | Terrain 当前从工程资源选择复合材质 ID，并使用三个绘制槽；资源库可创建材质，Content Browser 可筛选，缺失材质有反馈。 | 从库浏览、捕获到工程、绑定所选 Terrain 的路径可发现；默认三通道、依赖纹理、缺失和非法状态保持可见。普通面纹理与 Terrain Material 保持各自语义。现有路径是否能一步完成须人工验证，不能当作已实现。 |
-| 插件 | 底部入口跳转右侧插件；插件面板有独立注册和生命周期。 | 不改变已公开的注册、卸载、定时器、文档解绑与关闭行为；未来扩展面板依照工作空间契约声明作用域。 |
+| 插件 | 右侧插件页提供入口；插件面板有独立注册和生命周期。 | 不改变已公开的注册、卸载、定时器、文档解绑与关闭行为；未来扩展面板依照工作空间契约声明作用域。 |
 
 图层证据：[LayerActions](../lib/TbUiLib/src/LayerActions.cpp)、[创建图层](../lib/TbMdlLib/src/Map_Layers.cpp)、[OutlinerTreeWidget](../lib/TbUiLib/src/outliner/OutlinerTreeWidget.cpp)。属性证据：[EntityPropertyGrid](../lib/TbUiLib/src/EntityPropertyGrid.cpp)、[智能编辑器注册](../lib/TbUiLib/src/SmartPropertyEditorManager.cpp)、[Outliner 属性](../lib/TbUiLib/src/outliner/OutlinerEntityPropertyEditor.cpp)。材质证据：[FaceInspector](../lib/TbUiLib/src/FaceInspector.cpp)、[MaterialBrowser](../lib/TbUiLib/src/MaterialBrowser.cpp)、[ModelBrowser](../lib/TbUiLib/src/ModelBrowser.cpp)、[TerrainInspector](../lib/TbUiLib/src/TerrainInspector.cpp)。
 

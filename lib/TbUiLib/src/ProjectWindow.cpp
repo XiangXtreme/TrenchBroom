@@ -314,10 +314,6 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
          m_maps->findChildren<MapWindow*>(QString{}, Qt::FindDirectChildrenOnly))
       mapWindow->editorView().resetLayout();
   });
-  connect(m_tools, &WorkspaceToolPanel::extensionsRequested, this, [this]() {
-    if (auto* window = activeMapWindow())
-      window->switchToInspectorPage(InspectorPage::Plugin);
-  });
   connect(
     m_session.get(),
     &ProjectSession::browserAssetSelected,

@@ -17,7 +17,7 @@
 | Outliner | 层级树、搜索排序、图层和节点操作、可选属性面板 | 当前地图与选区；`OutlinerTreeWidget`、`OutlinerEntityPropertyEditor` |
 | Terrain | 创建、转换、绘制、雕刻、顶点编辑；材质、编译预算、分析和导出 | 受支持的 Half-Life Valve 220 工程地图；`TerrainInspector` |
 | Plugin | 展示和关闭插件提供的面板 | 插件注册的 UI；`PluginInspector` |
-| 底部工具区 | Content Browser、输出、Python 控制台、Issues，及 Extensions 跳转；支持 Overlay/Push、保持打开和高度调整 | `WorkspaceToolPanel`；扩展入口跳到右侧插件页 |
+| 底部工具区 | Content Browser、输出、Python 控制台、Issues；支持 Overlay/Push、保持打开和高度调整 | `WorkspaceToolPanel` |
 | Content Browser | 按来源和类型浏览、搜索、预览、应用及管理工程资源 | 工程使用 `ProjectAssetPanel` + `ModelBrowser` + `AssetInspector`；独立地图通过 `InfoPanel` 的 `ModelInspector` 路径 |
 | Asset Library 窗口 | 库浏览、导入、转换、地形材质创建、重命名、删除及预览 | 独立库管理；可从欢迎页、Terrain 和浏览器等入口打开 |
 
@@ -33,7 +33,7 @@
 | 资源浏览和管理 | Content Browser 与库窗口均有搜索、分类、预览；`AssetInspector` 已在多个入口复用，但列表和管理界面独立。 | 共享资源身份、预览、筛选语义及定位；库窗口仍承担导入、转换、删除等库管理任务。评估共享浏览组件时保留批量转换和库管理能力。 | 高 |
 | Terrain 材质 | Terrain 使用工程材质下拉选择并能打开资源库；库中创建复合地形材质，Content Browser 也能筛选地形材质。 | 补齐从浏览到定位、捕获和绑定的连续路径；保留默认三通道材质、缺失提示及编辑中的材质/槽位状态。具体交互待验证。 | 中 |
 | 地图配置与场景组织 | Map 页包含 Layers、边界和 Mods；Outliner 是完整层级视图。功能存在交集，但边界和 Mods 并非层级编辑。 | 可考虑将场景组织收敛到 Outliner，把地图级设置单独组织；先比较操作密度与兼容性，不预先删除入口。 | 中 |
-| 插件导航 | 底部 Extensions 跳转右侧 Plugin 页，两个入口指向同一类任务。 | 明确一个主要位置并保留便捷跳转；不能破坏插件面板注册、关闭及生命周期。 | 低 |
+| 插件导航 | 插件入口统一在右侧 Plugin 页。 | 保留插件面板注册、关闭及生命周期。 | 低 |
 | 实体定义与资源 | Entity Browser 浏览实体定义，Content Browser 浏览文件与项目资产。名字相似，但对象和使用方式不同。 | 统一搜索和视觉交互即可；实体定义、FGD 设置及创建能力不应直接当作文件资产合并。 | 中 |
 
 图层证据：[LayerEditor](../lib/TbUiLib/src/LayerEditor.cpp)、[OutlinerTreeWidget](../lib/TbUiLib/src/outliner/OutlinerTreeWidget.cpp)。属性证据：[EntityInspector](../lib/TbUiLib/src/EntityInspector.cpp)、[OutlinerEntityPropertyEditor](../lib/TbUiLib/src/outliner/OutlinerEntityPropertyEditor.cpp)。

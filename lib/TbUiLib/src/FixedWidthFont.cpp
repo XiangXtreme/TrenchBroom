@@ -20,6 +20,7 @@
 #include "ui/FixedWidthFont.h"
 
 #include <QFontDatabase>
+#include <QStringList>
 #include <QtSystemDetection>
 
 namespace tb::ui::Fonts
@@ -31,9 +32,16 @@ QFont fixedWidthFont()
   auto font = QFont{"Monaco"};
   font.setStyleHint(QFont::TypeWriter);
   return font;
-#else
-  return QFontDatabase::systemFont(QFontDatabase::FixedFont);
+#elif defined(Q_OS_WIN)
+  // Prefer a readable screen font over Windows' legacy system fixed font.
+  if (QFontDatabase::families().contains(QStringLiteral("Consolas"), Qt::CaseInsensitive))
+  {
+    auto font = QFont{QStringLiteral("Consolas"), 10};
+    font.setStyleHint(QFont::Monospace);
+    return font;
+  }
 #endif
+  return QFontDatabase::systemFont(QFontDatabase::FixedFont);
 }
 
 } // namespace tb::ui::Fonts

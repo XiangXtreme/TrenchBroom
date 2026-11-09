@@ -124,19 +124,6 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   }
   m_buttons.at(WorkspaceToolId::ContentBrowser)
     ->setToolTip(tr("Content Browser (Ctrl+Shift+Space)"));
-  auto* extensions = new QToolButton{m_bar};
-  extensions->setObjectName("ProjectToolsExtensions");
-  extensions->setProperty("tbControlRole", "navigation");
-  extensions->setText(tr("Extensions"));
-  extensions->setIcon(loadSVGIcon(std::filesystem::path{"InspectorPlugin.svg"}));
-  extensions->setIconSize(QSize{16, 16});
-  extensions->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-  connect(extensions, &QToolButton::clicked, this, [this]() {
-    if (m_mode->currentIndex() != 1)
-      setExpanded(false);
-    emit extensionsRequested();
-  });
-  barLayout->addWidget(extensions);
   m_contentControls = new QWidget{m_bar};
   auto* contentLayout = new QHBoxLayout{m_contentControls};
   contentLayout->setContentsMargins(8, 0, 0, 0);
@@ -355,7 +342,6 @@ void WorkspaceToolPanel::setMapEditor(MapEditorView* editor)
   m_mapPanel = editor ? m_mapPanels.at(editor) : nullptr;
   for (const auto& [id, button] : m_buttons)
     button->setEnabled(id == WorkspaceToolId::ContentBrowser || editor != nullptr);
-  findChild<QToolButton*>("ProjectToolsExtensions")->setEnabled(editor != nullptr);
   if (!editor)
     m_tool = WorkspaceToolId::ContentBrowser;
   else if (!m_pendingTool.isEmpty())

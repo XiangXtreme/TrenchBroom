@@ -121,6 +121,10 @@ These are logical Qt pixels and scale through Qt's device-pixel handling. A feat
 may constrain width for its content, but it must not redefine the component's visual
 metrics.
 
+`Fonts::fixedWidthFont` owns the default technical-text font for logs, compile output,
+and command fields. Windows prefers 10 pt Consolas when installed and otherwise uses the
+system fixed font. Python Console keeps its existing font and size preferences.
+
 Shared collapsible sections use `ClickableTitleBar` with a fixed vertical size policy;
 `CollapsibleTitledPanel` constrains its layout to the visible children's minimum and
 maximum sizes. A collapsed section occupies only its title row, including in resizable

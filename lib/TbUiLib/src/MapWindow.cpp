@@ -573,9 +573,6 @@ void MapWindow::createGui()
       if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
         browser->showEntityBrowser();
     });
-    connect(m_tools, &WorkspaceToolPanel::extensionsRequested, this, [this]() {
-      m_editor->showInspectorPage(InspectorPage::Plugin);
-    });
   }
   m_console = m_infoPanel->console();
   m_pythonConsole = m_infoPanel->pythonConsole();
