@@ -9045,10 +9045,6 @@ Removing them frees about %3. Current assets and versions are kept.</source>
             <translation>问题</translation>
         </message>
         <message>
-            <source>Content Browser (Ctrl+Shift+Space)</source>
-            <translation>内容浏览器（Ctrl+Shift+Space）</translation>
-        </message>
-        <message>
             <source>Extensions</source>
             <translation>扩展</translation>
         </message>

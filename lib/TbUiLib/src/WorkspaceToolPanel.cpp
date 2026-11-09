@@ -122,8 +122,6 @@ WorkspaceToolPanel::WorkspaceToolPanel(
     barLayout->addWidget(button);
     m_buttons.emplace(id, button);
   }
-  m_buttons.at(WorkspaceToolId::ContentBrowser)
-    ->setToolTip(tr("Content Browser (Ctrl+Shift+Space)"));
   m_contentControls = new QWidget{m_bar};
   auto* contentLayout = new QHBoxLayout{m_contentControls};
   contentLayout->setContentsMargins(8, 0, 0, 0);
@@ -214,9 +212,7 @@ WorkspaceToolPanel::WorkspaceToolPanel(
   });
   auto* shortcut =
     new QShortcut{QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_Space}, this};
-  connect(shortcut, &QShortcut::activated, this, [this]() {
-    selectTool(WorkspaceToolId::ContentBrowser);
-  });
+  connect(shortcut, &QShortcut::activated, this, &WorkspaceToolPanel::toggle);
   auto* escape = new QShortcut{QKeySequence{Qt::Key_Escape}, m_panel};
   escape->setContext(Qt::WidgetWithChildrenShortcut);
   connect(escape, &QShortcut::activated, this, [this]() { setExpanded(false); });
@@ -499,8 +495,13 @@ void WorkspaceToolPanel::updatePage()
     button->setChecked(isToolVisible(id));
   m_contentControls->setVisible(m_expanded && m_tool == WorkspaceToolId::ContentBrowser);
   m_fold->setIcon(loadSVGIcon(std::filesystem::path{m_expanded ? "Down.svg" : "Up.svg"}));
-  m_fold->setToolTip(m_expanded ? tr("Collapse tool panel") : tr("Expand tool panel"));
-  m_fold->setAccessibleName(m_fold->toolTip());
+  const auto foldAction =
+    m_expanded ? tr("Collapse tool panel") : tr("Expand tool panel");
+  m_fold->setAccessibleName(foldAction);
+  m_fold->setToolTip(QStringLiteral("%1 (%2)").arg(
+    foldAction,
+    QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_Space}.toString(
+      QKeySequence::NativeText)));
   if (m_activeEditor)
     m_activeEditor->setExternalInfoPanelExpanded(m_expanded);
 }

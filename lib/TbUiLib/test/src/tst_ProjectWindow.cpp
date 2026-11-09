@@ -33,6 +33,7 @@
 #include <QScopeGuard>
 #include <QScrollBar>
 #include <QSettings>
+#include <QShortcut>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -1113,6 +1114,55 @@ TEST_CASE("ProjectWindow")
     tabs->setCurrentIndex(0);
     tabs->setCurrentIndex(1);
     CHECK(editor.hSplitter()->sizes() == sizes);
+  }
+
+  SECTION("tool shortcut toggles the last page in overlay and push modes")
+  {
+    auto* tools = window.findChild<WorkspaceToolPanel*>();
+    REQUIRE(tools);
+    auto* mode = tools->findChild<QComboBox*>("ProjectToolsMode");
+    REQUIRE(mode);
+    auto* shortcut = static_cast<QShortcut*>(nullptr);
+    for (auto* candidate : tools->findChildren<QShortcut*>())
+      if (candidate->key() == QKeySequence{Qt::CTRL | Qt::SHIFT | Qt::Key_Space})
+      {
+        REQUIRE(shortcut == nullptr);
+        shortcut = candidate;
+      }
+    REQUIRE(shortcut);
+    for (const auto pinned : {false, true})
+    {
+      mode->setCurrentIndex(pinned ? 1 : 0);
+      for (const auto page :
+           {InfoPanelPage::Issues,
+            InfoPanelPage::PythonConsole,
+            InfoPanelPage::Console,
+            InfoPanelPage::Assets})
+      {
+        tools->showInfoPage(page);
+        const auto tool = tools->currentTool();
+        REQUIRE(tools->isExpanded());
+        Q_EMIT shortcut->activated();
+        CHECK_FALSE(tools->isExpanded());
+        CHECK(tools->currentTool() == tool);
+        Q_EMIT shortcut->activated();
+        CHECK(tools->isToolVisible(tool));
+        auto settings = QSettings{};
+        const auto saved = loadToolLayout(settings, WorkspaceKind::Project);
+        CHECK(saved.expanded);
+        CHECK(saved.pinned == pinned);
+        if (page == InfoPanelPage::Issues)
+          CHECK(saved.tool == "issues");
+        if (!pinned)
+        {
+          Q_EMIT qApp->focusChanged(
+            nullptr, window.activeMapWindow()->editorView().currentMapViewBase());
+          CHECK_FALSE(tools->isExpanded());
+          Q_EMIT shortcut->activated();
+          CHECK(tools->isToolVisible(tool));
+        }
+      }
+    }
   }
 
   SECTION("tool layout retains pinned height and uses stable tool ids")
