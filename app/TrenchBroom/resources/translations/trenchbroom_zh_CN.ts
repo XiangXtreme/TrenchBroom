@@ -3032,10 +3032,6 @@ Hold %2 to keep trim sheet subdivisions.</source>
             <translation>问题 / 对象</translation>
         </message>
         <message>
-            <source>Line</source>
-            <translation>行号</translation>
-        </message>
-        <message>
             <source>(empty key)</source>
             <translation>（空属性名）</translation>
         </message>
@@ -3066,10 +3062,6 @@ Hold %2 to keep trim sheet subdivisions.</source>
         <message>
             <source>Multiple issue types are selected. Select one type to see its explanation and available fixes.</source>
             <translation>已选择多种问题。请选择一种类型，查看其说明和可用修复。</translation>
-        </message>
-        <message>
-            <source>Original diagnostic: %1</source>
-            <translation>原始诊断：%1</translation>
         </message>
         <message>
             <source>Property: %1
@@ -3124,6 +3116,14 @@ Value: %2</source>
         <message>
             <source>No map data changed. Review the remaining results and the output log.</source>
             <translation>地图数据未改变，请检查剩余问题和输出日志。</translation>
+        </message>
+        <message>
+            <source>Original diagnostic</source>
+            <translation>原始诊断</translation>
+        </message>
+        <message>
+            <source>(empty value)</source>
+            <translation>（空值）</translation>
         </message>
     </context>
     <context>

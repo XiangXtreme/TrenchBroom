@@ -45,6 +45,7 @@
 #include "mdl/Transaction.h"
 #include "mdl/Validator.h"
 #include "mdl/WorldNode.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/FlagsPopupEditor.h"
 #include "ui/MapDocument.h"
 #include "ui/PanelLayout.h"
@@ -194,6 +195,7 @@ void IssueBrowserView::createGui()
   layout->addWidget(toolbar);
 
   auto* splitter = new Splitter{Qt::Horizontal, this};
+  splitter->setObjectName("IssueBrowser_Splitter");
   splitter->setChildrenCollapsible(false);
   m_model = new QStandardItemModel{this};
   m_tree = new QTreeView{splitter};
@@ -217,6 +219,13 @@ void IssueBrowserView::createGui()
   font.setWeight(QFont::DemiBold);
   m_title->setFont(font);
   body->addWidget(m_title);
+  m_context = new QLabel{content};
+  m_context->setObjectName("IssueBrowser_Context");
+  m_context->setTextFormat(Qt::PlainText);
+  m_context->setWordWrap(true);
+  m_context->setTextInteractionFlags(
+    Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+  body->addWidget(m_context);
   m_details = new QLabel{content};
   m_details->setObjectName("IssueBrowser_Details");
   m_details->setTextFormat(Qt::PlainText);
@@ -261,9 +270,24 @@ void IssueBrowserView::createGui()
   m_result->setWordWrap(true);
   setInfoStyle(m_result);
   body->addWidget(m_result);
+  m_diagnosticPanel =
+    new CollapsibleTitledPanel{tr("Original diagnostic"), false, content};
+  m_diagnosticPanel->setObjectName("IssueBrowser_DiagnosticPanel");
+  m_diagnostic = new QLabel{m_diagnosticPanel->getPanel()};
+  m_diagnostic->setObjectName("IssueBrowser_Diagnostic");
+  m_diagnostic->setTextFormat(Qt::PlainText);
+  m_diagnostic->setWordWrap(true);
+  m_diagnostic->setTextInteractionFlags(
+    Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+  setInfoStyle(m_diagnostic);
+  m_diagnosticPanel->createContentLayout()->addWidget(m_diagnostic);
+  body->addWidget(m_diagnosticPanel);
   body->addStretch();
-  splitter->setStretchFactor(0, 3);
-  splitter->setStretchFactor(1, 2);
+  // Give explanations a readable initial measure; extra width belongs to the list.
+  // Both regions remain freely resizable, including in a narrow tool window.
+  splitter->setSizes({640, 480});
+  splitter->setStretchFactor(0, 1);
+  splitter->setStretchFactor(1, 0);
   layout->addWidget(splitter, 1);
 
   connect(m_search, &QLineEdit::textChanged, this, [this] { rebuildModel(); });
@@ -374,7 +398,9 @@ void IssueBrowserView::updateIssues()
   auto labels = std::unordered_map<mdl::IssueType, QString>{};
   for (const auto* validator : validators)
     labels.emplace(validator->type(), QString::fromStdString(validator->description()));
-  const auto collect = [&](auto&& self, mdl::Node& node, const QString& path) -> void {
+  const auto collect =
+    [&](
+      auto&& self, mdl::Node& node, const QString& path, const QString& object) -> void {
     for (const auto* issue : node.issues(validators))
     {
       const auto* property = dynamic_cast<const mdl::EntityPropertyIssue*>(issue);
@@ -383,10 +409,10 @@ void IssueBrowserView::updateIssues()
          issue->type(),
          labels[issue->type()],
          path,
+         object,
          QString::fromStdString(issue->description()),
          property ? QString::fromStdString(property->propertyKey()) : QString{},
          property ? QString::fromStdString(property->propertyValue()) : QString{},
-         issue->lineNumber(),
          issue->hidden(),
          property != nullptr});
       m_liveIssues.emplace(issue->seqId(), issue);
@@ -395,14 +421,13 @@ void IssueBrowserView::updateIssues()
     for (auto* child : node.children())
     {
       ++index;
-      self(
-        self,
-        *child,
-        path + " / " + QString::fromStdString(child->name())
-          + QStringLiteral(" #%1").arg(index));
+      const auto label =
+        QString::fromStdString(child->name()) + QStringLiteral(" #%1").arg(index);
+      self(self, *child, path + " / " + label, label);
     }
   };
-  collect(collect, world, QString::fromStdString(world.name()));
+  const auto name = QString::fromStdString(world.name());
+  collect(collect, world, name, name);
 }
 
 IssueBrowserView::SelectionState IssueBrowserView::selectionState() const
@@ -427,9 +452,8 @@ void IssueBrowserView::rebuildModel(const SelectionState& selection)
   m_rebuilding = true;
   const auto blocker = QSignalBlocker{m_tree->selectionModel()};
   m_model->clear();
-  m_model->setHorizontalHeaderLabels({tr("Issue / object"), tr("Line")});
+  m_model->setHorizontalHeaderLabels({tr("Issue / object")});
   m_tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-  m_tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
   auto groups = std::unordered_map<int, QStandardItem*>{};
   auto orderedGroups = std::vector<QStandardItem*>{};
   const auto query = m_search->text().trimmed();
@@ -457,8 +481,8 @@ void IssueBrowserView::rebuildModel(const SelectionState& selection)
     }
     auto* item = new QStandardItem{
       !entry.isProperty
-        ? entry.path
-        : entry.path + " · "
+        ? entry.object
+        : entry.object + " · "
             + (entry.property.isEmpty() ? tr("(empty key)") : entry.property)};
     item->setData(QVariant::fromValue<qulonglong>(i), EntryRole);
     item->setToolTip(entry.description + "\n" + entry.path);
@@ -468,8 +492,7 @@ void IssueBrowserView::rebuildModel(const SelectionState& selection)
       font.setItalic(true);
       item->setFont(font);
     }
-    group->appendRow(
-      {item, new QStandardItem{entry.line ? QString::number(entry.line) : QString{}}});
+    group->appendRow(item);
     ++visible;
   }
   // Build children while detached, then publish each category in one insertion.
@@ -478,7 +501,7 @@ void IssueBrowserView::rebuildModel(const SelectionState& selection)
   {
     const auto type = group->data(TypeRole).toInt();
     group->setText(group->text() + QStringLiteral(" (%1)").arg(group->rowCount()));
-    m_model->appendRow({group, new QStandardItem{}});
+    m_model->appendRow(group);
     if (selection.types.contains(type))
       restoredSelection.select(group->index(), group->index());
     for (int row = 0; row < group->rowCount(); ++row)
@@ -542,6 +565,9 @@ std::vector<const mdl::IssueQuickFix*> IssueBrowserView::collectQuickFixes() con
 void IssueBrowserView::updateDetails()
 {
   const auto entries = selectedEntries();
+  m_context->clear();
+  m_diagnostic->clear();
+  m_diagnosticPanel->setVisible(entries.size() == 1);
   m_title->setText(
     entries.empty()
       ? (m_valid && m_model->rowCount() == 0 ? tr("No visible issues")
@@ -575,10 +601,15 @@ void IssueBrowserView::updateDetails()
                                  "see its explanation and available fixes.");
     if (entries.size() == 1)
     {
-      text = entry.path + "\n\n" + text + "\n\n"
-             + tr("Original diagnostic: %1").arg(entry.description);
+      auto context = entry.path;
       if (entry.isProperty)
-        text += "\n\n" + tr("Property: %1\nValue: %2").arg(entry.property, entry.value);
+        context += "\n\n"
+                   + tr("Property: %1\nValue: %2")
+                       .arg(
+                         entry.property.isEmpty() ? tr("(empty key)") : entry.property,
+                         entry.value.isEmpty() ? tr("(empty value)") : entry.value);
+      m_context->setText(context);
+      m_diagnostic->setText(entry.description);
       if (entry.hidden)
         text += "\n\n" + tr("Ignored for this session on this object and issue type.");
     }
@@ -590,16 +621,26 @@ void IssueBrowserView::updateDetails()
     m_details->setText(text);
   }
   const auto active = m_valid && !entries.empty();
+  m_context->setVisible(!m_context->text().isEmpty());
+  m_locate->setVisible(!entries.empty());
   m_locate->setEnabled(active);
+  m_editProperty->setVisible(
+    entries.size() == 1 && m_entries[entries.front()].isProperty);
   m_editProperty->setEnabled(
     active && entries.size() == 1 && m_entries[entries.front()].isProperty);
   m_fix->setEnabled(active && !collectQuickFixes().empty());
+  if (m_valid || entries.empty())
+    m_fix->setVisible(m_fix->isEnabled());
   m_ignore->setEnabled(active && std::ranges::any_of(entries, [&](const auto i) {
                          return !m_entries[i].hidden;
                        }));
   m_restore->setEnabled(active && std::ranges::any_of(entries, [&](const auto i) {
                           return m_entries[i].hidden;
                         }));
+  m_ignore->setVisible(
+    std::ranges::any_of(entries, [&](const auto i) { return !m_entries[i].hidden; }));
+  m_restore->setVisible(
+    std::ranges::any_of(entries, [&](const auto i) { return m_entries[i].hidden; }));
 }
 
 bool IssueBrowserView::selectObjects(const std::vector<const mdl::Issue*>& issues)

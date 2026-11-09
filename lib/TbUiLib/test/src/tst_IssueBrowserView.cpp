@@ -48,6 +48,7 @@
 #include "mdl/Map_Selection.h"
 #include "mdl/WorldNode.h"
 #include "ui/CatchConfig.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/IssueBrowserView.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
@@ -111,7 +112,7 @@ TEST_CASE("IssueBrowserView")
     selectRow(*tree, model->index(0, 0, group));
     CHECK(map.selection().nodes.empty());
     CHECK(
-      view.findChild<QLabel*>("IssueBrowser_Details")->text().contains("first_empty"));
+      view.findChild<QLabel*>("IssueBrowser_Context")->text().contains("first_empty"));
     locate->click();
     CHECK(map.selection().nodes == std::vector<mdl::Node*>{entity});
     CHECK(spy.count() == 1);
@@ -143,6 +144,53 @@ TEST_CASE("IssueBrowserView")
     REQUIRE(spy.count() == 1);
     CHECK(spy.front().front().toString() == "first_empty");
     CHECK(map.selection().nodes == std::vector<mdl::Node*>{entity});
+  }
+  SECTION("compact rows retain searchable full paths and readable property context")
+  {
+    REQUIRE(model->columnCount() == 1);
+    const auto index = model->index(0, 0, group);
+    const auto title = index.data().toString();
+    CHECK(title.startsWith("some_class #"));
+    CHECK(title.endsWith(" · first_empty"));
+    CHECK_FALSE(title.contains("worldspawn /"));
+    CHECK(index.data(Qt::ToolTipRole).toString().contains("worldspawn /"));
+    selectRow(*tree, index);
+    CHECK(
+      view.findChild<QLabel*>("IssueBrowser_Context")->text().contains("(empty value)"));
+    auto* diagnostic =
+      view.findChild<CollapsibleTitledPanel*>("IssueBrowser_DiagnosticPanel");
+    REQUIRE(diagnostic);
+    CHECK_FALSE(diagnostic->expanded());
+    CHECK(
+      view.findChild<QLabel*>("IssueBrowser_Diagnostic")->text().contains("first_empty"));
+    diagnostic->expand();
+    view.reload();
+    view.validate();
+    CHECK(diagnostic->expanded());
+    search->setText("worldspawn /");
+    CHECK(findGroup(*tree, "Empty property value").isValid());
+  }
+  SECTION("only relevant actions appear for the current selection")
+  {
+    auto* ignore = view.findChild<QPushButton*>("IssueBrowser_Ignore");
+    auto* restore = view.findChild<QPushButton*>("IssueBrowser_Restore");
+    auto* edit = view.findChild<QPushButton*>("IssueBrowser_EditProperty");
+    auto* fix = view.findChild<QToolButton*>("IssueBrowser_Fix");
+    CHECK(ignore->isHidden());
+    CHECK(restore->isHidden());
+    CHECK(fix->isHidden());
+    selectRow(*tree, group);
+    CHECK_FALSE(ignore->isHidden());
+    CHECK(restore->isHidden());
+    CHECK(edit->isHidden());
+    CHECK_FALSE(fix->isHidden());
+    ignore->click();
+    view.setShowHiddenIssues(true);
+    selectRow(*tree, findGroup(*tree, "Empty property value"));
+    CHECK(ignore->isHidden());
+    CHECK_FALSE(restore->isHidden());
+    selectRow(*tree, model->index(0, 0, findGroup(*tree, "Empty property value")));
+    CHECK_FALSE(edit->isHidden());
   }
   SECTION("Chinese presentation translates group titles and actions")
   {

@@ -48,6 +48,7 @@ namespace tb
 namespace ui
 {
 class FlagsPopupEditor;
+class CollapsibleTitledPanel;
 class MapDocument;
 class SignalDelayer;
 
@@ -61,10 +62,10 @@ struct IssueBrowserEntry
   mdl::IssueType type;
   QString category;
   QString path;
+  QString object;
   QString description;
   QString property;
   QString value;
-  size_t line;
   bool hidden;
   bool isProperty;
 };
@@ -87,7 +88,10 @@ private:
   std::unordered_map<int, bool> m_expansion;
   QLabel* m_status = nullptr;
   QLabel* m_title = nullptr;
+  QLabel* m_context = nullptr;
   QLabel* m_details = nullptr;
+  QLabel* m_diagnostic = nullptr;
+  CollapsibleTitledPanel* m_diagnosticPanel = nullptr;
   QLabel* m_result = nullptr;
   QPushButton* m_locate = nullptr;
   QPushButton* m_editProperty = nullptr;
