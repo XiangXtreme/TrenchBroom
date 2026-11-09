@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <QListWidget>
 #include <QScrollArea>
 
 #include <vector>
@@ -32,6 +33,23 @@ QVBoxLayout* createPanelColumn(
   QWidget* parent = nullptr, PanelInsets insets = PanelInsets::Content);
 QHBoxLayout* createPanelActions(QWidget* parent = nullptr);
 QScrollArea* createPanelScrollArea(QWidget* content, QWidget* parent = nullptr);
+
+// A bounded list inside a form: retain complete rows instead of collapsing to
+// QAbstractScrollArea's tiny minimum. Extra items scroll within the list.
+class PanelItemList : public QListWidget
+{
+private:
+  int m_minimumRows;
+  int m_maximumRows;
+
+public:
+  explicit PanelItemList(int minimumRows, int maximumRows, QWidget* parent = nullptr);
+  QSize minimumSizeHint() const override;
+  QSize sizeHint() const override;
+
+protected:
+  bool event(QEvent* event) override;
+};
 
 // Keeps surplus space below the entries. Removing an entry does not delete or
 // reparent it; its owner may reuse it or destroy it explicitly.

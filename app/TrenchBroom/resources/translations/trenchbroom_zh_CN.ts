@@ -5171,6 +5171,30 @@ Further settings changes will not be saved this session.</source>
     <context>
         <name>tb::ui::SmartWadEditor</name>
         <message>
+            <source>WAD files</source>
+            <translation>WAD 文件</translation>
+        </message>
+        <message>
+            <source>Add WAD files</source>
+            <translation>添加 WAD 文件</translation>
+        </message>
+        <message>
+            <source>Remove selected WAD files</source>
+            <translation>移除选中的 WAD 文件</translation>
+        </message>
+        <message>
+            <source>Move selected WAD file up</source>
+            <translation>上移选中的 WAD 文件</translation>
+        </message>
+        <message>
+            <source>Move selected WAD file down</source>
+            <translation>下移选中的 WAD 文件</translation>
+        </message>
+        <message>
+            <source>Reload WAD files</source>
+            <translation>重新加载 WAD 文件</translation>
+        </message>
+        <message>
             <source>Load Wad File</source>
             <translation type="vanished">加载Wad文件</translation>
             </message>

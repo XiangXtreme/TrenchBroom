@@ -18,6 +18,7 @@
  */
 
 #include <QAbstractButton>
+#include <QApplication>
 #include <QListWidget>
 #include <QStackedLayout>
 
@@ -93,8 +94,10 @@ TEST_CASE("SmartSkyboxEditor")
 
     REQUIRE(list != nullptr);
     REQUIRE(refreshButton != nullptr);
-    CHECK(editor.minimumHeight() == 210);
-    CHECK(editor.maximumHeight() == 210);
+    editor.resize(320, 180);
+    editor.show();
+    QApplication::processEvents();
+    CHECK(list->viewport()->height() >= 2 * list->gridSize().height());
     CHECK(list->viewMode() == QListView::IconMode);
     CHECK(list->movement() == QListView::Static);
     CHECK(list->resizeMode() == QListView::Adjust);

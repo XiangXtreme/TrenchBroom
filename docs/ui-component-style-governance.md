@@ -145,6 +145,14 @@ Use `PanelList` for a vertical collection of panels. It owns the bottom stretch;
 add, insert and remove widgets without manipulating a spacer. Removing a widget leaves
 ownership and visibility unchanged: explicitly hide/reuse or delete it at the call site.
 
+Use `PanelItemList` for bounded item lists embedded in a form. Its row budget uses the
+current item/grid height, font, frame and spacing, so the enclosing form scrolls instead
+of crushing the list. WAD lists retain four to six rows, and the skybox grid retains two
+to three complete thumbnail rows. Additional items scroll within the list. The widget
+inherits the canonical item-view appearance and recalculates its geometry on model,
+font and style changes. Long asset paths belong in item data/tooltips; file lists show
+filenames with middle elision and do not add a horizontal scroll bar.
+
 `CollapsibleTitledPanel::Presentation::Card` selects the shared `tbPanelStyle="card"`
 surface in `base.qss`; `Section` is the flush embedded presentation. Use
 `createContentLayout()` for its standard body and `addTitleWidget()` for title actions.

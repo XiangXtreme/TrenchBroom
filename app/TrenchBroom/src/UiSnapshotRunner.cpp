@@ -70,6 +70,7 @@
 #include "mdl/MapHeader.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
+#include "mdl/Map_World.h"
 #include "mdl/Node.h"
 #include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
@@ -128,6 +129,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("outliner-properties-entity"),
     QStringLiteral("outliner-properties-table"),
     QStringLiteral("outliner-properties-narrow"),
+    QStringLiteral("outliner-properties-wad"),
     QStringLiteral("outliner-reparent-layer-before"),
     QStringLiteral("outliner-reparent-layer-after"),
     QStringLiteral("outliner-brush-entity-before"),
@@ -331,7 +333,20 @@ mdl::Node* configureOutlinerSnapshotModel(MapWindow& mapWindow, const QString& t
   auto& worldNode = map.worldNode();
   auto* selectedNode = static_cast<mdl::Node*>(nullptr);
 
-  if (
+  if (targetName == QStringLiteral("outliner-properties-wad"))
+  {
+    mdl::setWorldProperty(
+      map,
+      "wad",
+      "D:/CS/Mapper/Shared_Assets/Wad_Common/halflife.wad;"
+      "D:/CS/Mapper/Shared_Assets/Wad_Common/sdhlt.wad;"
+      "D:/CS/Mapper/Map_Assets/kz_relics.wad;"
+      "D:/CS/Mapper/Map_Assets/kz_terrain.wad;"
+      "D:/CS/Mapper/Shared_Assets/Wad_Common/decals.wad;"
+      "D:/CS/Mapper/Map_Assets/kz_signs.wad");
+    selectedNode = &worldNode;
+  }
+  else if (
     targetName.startsWith(QStringLiteral("outliner-properties-"))
     || targetName == QStringLiteral("outliner"))
   {
@@ -420,8 +435,10 @@ void configureOutlinerSnapshot(QWidget& targetWidget, const QString& targetName)
       mapWindow->findChild<QSplitter*>(QStringLiteral("MapWindow_HorizontalSplitter")))
   {
     horizontalSplitter->setSizes(
-      targetName == QStringLiteral("outliner-properties-narrow") ? QList<int>{1100, 340}
-                                                                 : QList<int>{860, 580});
+      targetName == QStringLiteral("outliner-properties-narrow")
+          || targetName == QStringLiteral("outliner-properties-wad")
+        ? QList<int>{1100, 340}
+        : QList<int>{860, 580});
   }
 
   if (auto* outlinerSplitter =
@@ -463,6 +480,22 @@ void configureOutlinerSnapshot(QWidget& targetWidget, const QString& targetName)
       tree->setCurrentItem(snapshotItem);
       snapshotItem->setSelected(true);
       tree->setFocus(Qt::OtherFocusReason);
+    }
+  }
+
+  if (targetName == QStringLiteral("outliner-properties-wad"))
+  {
+    QApplication::processEvents();
+    for (auto* button : targetWidget.findChildren<QToolButton*>())
+      if (button->property("propertyKey").toString() == "wad" && button->isCheckable())
+        button->setChecked(true);
+    QApplication::processEvents();
+    auto* list = targetWidget.findChild<QListWidget*>("SmartWadEditor_Paths");
+    auto* scroll = targetWidget.findChild<QScrollArea*>("outlinerPropertyScrollArea");
+    if (list && scroll)
+    {
+      list->setCurrentRow(1);
+      scroll->ensureWidgetVisible(list->parentWidget()->parentWidget());
     }
   }
 }
@@ -718,7 +751,18 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
   auto expectParent = false;
   auto expectedDescription = QString{};
 
-  if (
+  if (targetName == QStringLiteral("outliner-properties-wad"))
+  {
+    auto* list = targetWidget.findChild<QListWidget*>("SmartWadEditor_Paths");
+    if (!list || !list->isVisible() || list->count() != 6)
+      return {UiSnapshotReadinessState::Failed, "Expanded WAD list fixture is missing"};
+    if (
+      list->viewport()->height() < 6 * list->sizeHintForRow(0)
+      || list->horizontalScrollBar()->maximum() != 0)
+      return {UiSnapshotReadinessState::Pending, "WAD list must retain six full rows"};
+    return {UiSnapshotReadinessState::Ready, "Expanded WAD files retain six full rows"};
+  }
+  else if (
     targetName == QStringLiteral("outliner-hierarchy")
     || targetName == QStringLiteral("outliner-filter"))
   {

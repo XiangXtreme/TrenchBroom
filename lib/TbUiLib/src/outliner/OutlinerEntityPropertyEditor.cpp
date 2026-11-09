@@ -1401,6 +1401,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
       wadToggleButton->setProperty("tbControlRole", "compact");
       wadToggleButton->setCheckable(true);
       wadToggleButton->setFixedSize(QSize{24, 24});
+      wadToggleButton->setProperty("propertyKey", QString::fromStdString(key));
       wadToggleButton->setToolTip(tr("Show wad file editor"));
 
       const QSignalBlocker blocker{wadToggleButton};

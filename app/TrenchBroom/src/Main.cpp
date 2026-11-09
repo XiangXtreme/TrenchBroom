@@ -168,7 +168,7 @@ std::optional<CommandLineOptions> parseCommandLine(QApplication& app)
     QStringList{"ui-snapshot-page"},
     "Select the surface to capture: map, outliner, "
     "outliner-hierarchy, outliner-filter, outliner-properties-entity, "
-    "outliner-properties-table, outliner-properties-narrow, "
+    "outliner-properties-table, outliner-properties-narrow, outliner-properties-wad, "
     "outliner-reparent-layer-before, outliner-reparent-layer-after, "
     "outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, "
     "entity-browser-empty, face-inspector, material-browser-empty, plugin-inspector, "

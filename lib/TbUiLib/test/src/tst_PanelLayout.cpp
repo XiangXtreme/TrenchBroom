@@ -20,6 +20,41 @@
 namespace tb::ui
 {
 
+TEST_CASE("PanelItemList")
+{
+  auto scroll = PanelList{};
+  auto* list = new PanelItemList{4, 6};
+  list->addItem("halflife.wad");
+  scroll.addWidget(list);
+  scroll.resize(320, 90);
+  scroll.show();
+  QApplication::processEvents();
+
+  const auto rowHeight = list->sizeHintForRow(0);
+  CHECK(list->viewport()->height() >= 4 * rowHeight);
+  CHECK(scroll.verticalScrollBar()->maximum() > 0);
+  CHECK(list->horizontalScrollBar()->maximum() == 0);
+
+  for (auto i = 0; i < 10; ++i)
+    list->addItem(QString{"materials_%1.wad"}.arg(i));
+  QApplication::processEvents();
+  CHECK(list->viewport()->height() >= 6 * rowHeight);
+  CHECK(list->viewport()->height() <= 6 * rowHeight + 2);
+  CHECK(list->verticalScrollBar()->maximum() > 0);
+
+  auto largeFont = list->font();
+  largeFont.setPointSize(22);
+  list->setFont(largeFont);
+  QApplication::processEvents();
+  CHECK(list->viewport()->height() >= 6 * list->sizeHintForRow(0));
+  const auto populatedHeight = list->height();
+
+  list->clear();
+  QApplication::processEvents();
+  CHECK(list->height() < populatedHeight);
+  CHECK(list->minimumSizeHint().height() >= 4 * list->fontMetrics().height());
+}
+
 TEST_CASE("PanelList")
 {
   auto list = PanelList{};

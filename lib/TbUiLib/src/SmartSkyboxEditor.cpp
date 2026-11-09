@@ -21,6 +21,7 @@
 #include "mdl/Map.h"
 #include "ui/BitmapButton.h"
 #include "ui/MapDocument.h"
+#include "ui/PanelLayout.h"
 #include "ui/QPathUtils.h"
 
 #include "kd/string_compare.h"
@@ -50,8 +51,8 @@ public:
   {
   }
 
-  QSize sizeHint(
-    const QStyleOptionViewItem& /* option */, const QModelIndex& /* index */) const override
+  QSize sizeHint(const QStyleOptionViewItem& /* option */, const QModelIndex& /* index */)
+    const override
   {
     return SkyboxItemSize;
   }
@@ -112,11 +113,11 @@ public:
       tileRect.right() - previewRect.right() - 11,
       tileRect.height() - 4};
     const auto name = index.data(Qt::DisplayRole).toString();
-    const auto elidedName = option.fontMetrics.elidedText(
-      name, Qt::ElideRight, textRect.width());
+    const auto elidedName =
+      option.fontMetrics.elidedText(name, Qt::ElideRight, textRect.width());
     painter->setFont(option.font);
-    painter->setPen(option.palette.color(
-      selected ? QPalette::HighlightedText : QPalette::Text));
+    painter->setPen(
+      option.palette.color(selected ? QPalette::HighlightedText : QPalette::Text));
     painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, elidedName);
 
     painter->restore();
@@ -234,8 +235,6 @@ SmartSkyboxEditor::SmartSkyboxEditor(MapDocument& document, QWidget* parent)
 
 void SmartSkyboxEditor::createGui()
 {
-  setFixedHeight(210);
-
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(4);
@@ -258,7 +257,7 @@ void SmartSkyboxEditor::createGui()
   headerLayout->addStretch(1);
   headerLayout->addWidget(m_refreshButton);
 
-  m_listWidget = new QListWidget{this};
+  m_listWidget = new PanelItemList{2, 3, this};
   m_listWidget->setObjectName("smartSkyboxList");
   m_listWidget->setViewMode(QListView::IconMode);
   m_listWidget->setMovement(QListView::Static);
@@ -278,14 +277,12 @@ void SmartSkyboxEditor::createGui()
   layout->addWidget(header);
   layout->addWidget(m_listWidget, 1);
 
-  connect(m_refreshButton, &QAbstractButton::clicked, this, [this]() {
-    reloadSkyboxes(true);
-  });
+  connect(
+    m_refreshButton, &QAbstractButton::clicked, this, [this]() { reloadSkyboxes(true); });
   connect(m_listWidget, &QListWidget::itemClicked, this, &SmartSkyboxEditor::applySkybox);
 }
 
-void SmartSkyboxEditor::doUpdateVisual(
-  const std::vector<mdl::EntityNodeBase*>& nodes)
+void SmartSkyboxEditor::doUpdateVisual(const std::vector<mdl::EntityNodeBase*>& nodes)
 {
   if (m_skyboxes.empty())
   {
@@ -368,9 +365,8 @@ void SmartSkyboxEditor::applySkybox(QListWidgetItem* item)
 
 QIcon SmartSkyboxEditor::iconForSkybox(const SmartSkyboxItem& skybox)
 {
-  const auto cacheKey =
-    document().map().gamePath().generic_string() + "\n"
-    + skybox.previewPath.generic_string();
+  const auto cacheKey = document().map().gamePath().generic_string() + "\n"
+                        + skybox.previewPath.generic_string();
   auto& cache = skyboxIconCache();
   if (cache.contains(cacheKey))
   {
@@ -409,9 +405,7 @@ QIcon SmartSkyboxEditor::iconForSkybox(const SmartSkyboxItem& skybox)
   image = texture.format() == GL_BGRA ? image.rgbSwapped() : image.copy();
 
   const auto scaledImage = image.scaled(
-    SkyboxPreviewSize,
-    Qt::KeepAspectRatioByExpanding,
-    Qt::SmoothTransformation);
+    SkyboxPreviewSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
   const auto previewImage = scaledImage.copy(
     (scaledImage.width() - SkyboxPreviewSize.width()) / 2,
     (scaledImage.height() - SkyboxPreviewSize.height()) / 2,

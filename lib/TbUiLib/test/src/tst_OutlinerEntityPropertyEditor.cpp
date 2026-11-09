@@ -25,6 +25,7 @@
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPalette>
 #include <QPointer>
 #include <QScrollArea>
@@ -43,6 +44,7 @@
 #include "mdl/Map_Entities.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/Map_Selection.h"
+#include "mdl/Map_World.h"
 #include "mdl/Node.h"
 #include "mdl/TestFactory.h"
 #include "mdl/WorldNode.h"
@@ -52,6 +54,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 #include "ui/SmartSkyboxEditor.h"
+#include "ui/SmartWadEditor.h"
 #include "ui/SpinControl.h"
 #include "ui/TransformCard.h"
 #include "ui/outliner/OutlinerEntityPropertyEditor.h"
@@ -444,6 +447,48 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     skynameEdit = propertyValueEdit(editor, "skyname");
     REQUIRE(skynameEdit != nullptr);
     CHECK(skynameEdit->text() == "morning");
+  }
+
+  SECTION("expanded WAD files keep complete rows inside the property scroll area")
+  {
+    auto wadFixture = MapDocumentFixture{};
+    auto config = mdl::MapFixtureConfig{};
+    config.gameInfo.gameConfig.materialConfig.property = "wad";
+    auto& wadDocument = wadFixture.create(config);
+    auto& wadMap = wadDocument.map();
+    mdl::setWorldProperty(wadMap, "wad", "halflife.wad;sdhlt.wad");
+    auto wadEditor = OutlinerEntityPropertyEditor{wadDocument};
+    wadEditor.resize(380, 260);
+    wadEditor.show();
+    processOutlinerUpdates();
+
+    auto* toggle = static_cast<QAbstractButton*>(nullptr);
+    for (auto* button : propertyRowButtons(wadEditor, "wad"))
+      if (button->isCheckable())
+        toggle = button;
+    REQUIRE(toggle != nullptr);
+    toggle->setChecked(true);
+    processOutlinerUpdates();
+    auto* embedded = wadEditor.findChild<SmartWadEditor*>();
+    REQUIRE(embedded != nullptr);
+    auto* list = embedded->findChild<QListWidget*>();
+    REQUIRE(list != nullptr);
+    CHECK(list->viewport()->height() >= 4 * list->sizeHintForRow(0));
+    CHECK(list->horizontalScrollBar()->maximum() == 0);
+    auto* scrollArea = wadEditor.findChild<QScrollArea*>("outlinerPropertyScrollArea");
+    REQUIRE(scrollArea != nullptr);
+    CHECK(scrollArea->verticalScrollBar()->maximum() > 0);
+
+    const auto expandedHeight = scrollArea->widget()->height();
+    toggle->setChecked(false);
+    processOutlinerUpdates();
+    QTRY_VERIFY_WITH_TIMEOUT(scrollArea->widget()->height() < expandedHeight, 1000);
+    toggle->setChecked(true);
+    processOutlinerUpdates();
+    CHECK(list->viewport()->height() >= 4 * list->sizeHintForRow(0));
+    list->setCurrentRow(1);
+    CHECK(embedded->canMoveWadsUp());
+    CHECK(embedded->canRemoveWads());
   }
 
   SECTION("aligns value editors across rows with different actions")

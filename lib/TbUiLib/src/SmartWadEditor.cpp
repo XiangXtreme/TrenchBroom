@@ -21,6 +21,7 @@
 
 #include <QFileDialog>
 #include <QListWidget>
+#include <QSignalBlocker>
 #include <QToolButton>
 
 #include "mdl/EntityNodeBase.h"
@@ -33,6 +34,7 @@
 #include "ui/FileDialogDefaultDir.h"
 #include "ui/MapDocument.h"
 #include "ui/MiniToolBarLayout.h"
+#include "ui/PanelLayout.h"
 #include "ui/TitleBar.h"
 #include "ui/ViewConstants.h"
 #include "ui/WadUtils.h"
@@ -72,16 +74,28 @@ std::string getWadPathStr(const std::vector<std::string>& wadPaths)
 SmartWadEditor::SmartWadEditor(MapDocument& document, QWidget* parent)
   : SmartPropertyEditor{document, parent}
 {
-  auto* header = new TitleBar{"Wad Files"};
+  auto* header = new TitleBar{tr("WAD files")};
 
-  m_wadPaths = new QListWidget{};
+  m_wadPaths = new PanelItemList{4, 6};
+  m_wadPaths->setObjectName("SmartWadEditor_Paths");
   m_wadPaths->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  m_wadPaths->setTextElideMode(Qt::ElideMiddle);
 
-  m_addWadsButton = createBitmapButton("Add.svg", "Add wad files from the file system");
-  m_removeWadsButton = createBitmapButton("Remove.svg", "Remove the selected wad files");
-  m_moveWadUpButton = createBitmapButton("Up.svg", "Move the selected wad file up");
-  m_moveWadDownButton = createBitmapButton("Down.svg", "Move the selected wad file down");
-  m_reloadWadsButton = createBitmapButton("Refresh.svg", "Reload all wad files");
+  m_addWadsButton = createBitmapButton("Add.svg", tr("Add WAD files"));
+  m_removeWadsButton = createBitmapButton("Remove.svg", tr("Remove selected WAD files"));
+  m_moveWadUpButton = createBitmapButton("Up.svg", tr("Move selected WAD file up"));
+  m_moveWadDownButton = createBitmapButton("Down.svg", tr("Move selected WAD file down"));
+  m_reloadWadsButton = createBitmapButton("Refresh.svg", tr("Reload WAD files"));
+  for (auto* button :
+       {m_addWadsButton,
+        m_removeWadsButton,
+        m_moveWadUpButton,
+        m_moveWadDownButton,
+        m_reloadWadsButton})
+  {
+    button->setProperty("tbControlRole", "compact");
+    button->setAccessibleName(button->toolTip());
+  }
 
   auto* toolBar = createMiniToolBarLayout(
     m_addWadsButton,
@@ -125,6 +139,7 @@ SmartWadEditor::SmartWadEditor(MapDocument& document, QWidget* parent)
     m_reloadWadsButton, &QAbstractButton::clicked, this, &SmartWadEditor::reloadWads);
 
   setAcceptDrops(true);
+  updateButtons();
 }
 
 void SmartWadEditor::addWads()
@@ -234,8 +249,6 @@ bool SmartWadEditor::canRemoveWads() const
   return !selections.empty() && std::ranges::all_of(selections, [&](const auto s) {
     return size_t(s) < wadPaths.size();
   });
-
-  return true;
 }
 
 bool SmartWadEditor::canMoveWadsUp() const
@@ -257,33 +270,56 @@ bool SmartWadEditor::canReloadWads() const
 
 void SmartWadEditor::doUpdateVisual(const std::vector<mdl::EntityNodeBase*>& nodes)
 {
+  const auto paths = getWadPaths(nodes, propertyKey());
+  auto displayedPaths = std::vector<std::string>{};
+  for (auto i = 0; i < m_wadPaths->count(); ++i)
+    displayedPaths.push_back(
+      m_wadPaths->item(i)->data(Qt::UserRole).toString().toStdString());
+  if (paths == displayedPaths)
+  {
+    updateButtons();
+    return;
+  }
+
   auto cachedSelection = std::vector<std::tuple<int, QString>>{};
   std::ranges::transform(
     m_wadPaths->selectedItems(),
     std::back_inserter(cachedSelection),
     [&](const auto* selectedItem) {
-      return std::tuple{m_wadPaths->row(selectedItem), selectedItem->text()};
+      return std::tuple{
+        m_wadPaths->row(selectedItem), selectedItem->data(Qt::UserRole).toString()};
     });
 
-  m_wadPaths->clear();
-
-  for (const auto& path : getWadPaths(nodes, propertyKey()))
   {
-    m_wadPaths->addItem(QString::fromStdString(path));
-  }
+    const auto blocker = QSignalBlocker{m_wadPaths};
+    m_wadPaths->clear();
 
-  for (const auto& [index, text] : cachedSelection)
-  {
-    if (index < m_wadPaths->count() && m_wadPaths->item(index)->text() == text)
+    for (const auto& path : paths)
     {
-      m_wadPaths->setCurrentRow(index, QItemSelectionModel::Select);
+      const auto fullPath = QString::fromStdString(path);
+      auto normalizedPath = fullPath;
+      normalizedPath.replace('\\', '/');
+      auto* item = new QListWidgetItem{normalizedPath.section('/', -1), m_wadPaths};
+      item->setData(Qt::UserRole, fullPath);
+      item->setToolTip(fullPath);
     }
-    else
+
+    for (const auto& [index, path] : cachedSelection)
     {
-      m_wadPaths->clearSelection();
-      break;
+      if (
+        index < m_wadPaths->count()
+        && m_wadPaths->item(index)->data(Qt::UserRole).toString() == path)
+      {
+        m_wadPaths->setCurrentRow(index, QItemSelectionModel::Select);
+      }
+      else
+      {
+        m_wadPaths->clearSelection();
+        break;
+      }
     }
   }
+  updateButtons();
 }
 
 void SmartWadEditor::updateButtons()

@@ -4,9 +4,14 @@
  */
 #include "ui/PanelLayout.h"
 
+#include <QEvent>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QStyle>
+#include <QStyleOptionViewItem>
 #include <QVBoxLayout>
+
+#include "kd/contracts.h"
 
 #include <algorithm>
 
@@ -78,6 +83,56 @@ QScrollArea* createPanelScrollArea(QWidget* content, QWidget* parent)
   configureScrollArea(*scroll);
   scroll->setWidget(content);
   return scroll;
+}
+
+PanelItemList::PanelItemList(
+  const int minimumRows, const int maximumRows, QWidget* parent)
+  : QListWidget{parent}
+  , m_minimumRows{minimumRows}
+  , m_maximumRows{maximumRows}
+{
+  contract_pre(minimumRows > 0 && maximumRows >= minimumRows);
+  setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  for (const auto signal :
+       {&QAbstractItemModel::rowsInserted, &QAbstractItemModel::rowsRemoved})
+    connect(model(), signal, this, [this]() { updateGeometry(); });
+  connect(model(), &QAbstractItemModel::modelReset, this, [this]() { updateGeometry(); });
+  connect(
+    model(), &QAbstractItemModel::dataChanged, this, [this]() { updateGeometry(); });
+}
+
+QSize PanelItemList::minimumSizeHint() const
+{
+  return {0, sizeHint().height()};
+}
+
+QSize PanelItemList::sizeHint() const
+{
+  auto option = QStyleOptionViewItem{};
+  option.initFrom(this);
+  const auto emptyRowHeight =
+    style()
+      ->sizeFromContents(
+        QStyle::CT_ItemViewItem, &option, QSize{0, fontMetrics().height()}, this)
+      .height();
+  const auto rowHeight = std::max(
+    gridSize().height() > 0 ? gridSize().height() : sizeHintForRow(0), emptyRowHeight);
+  const auto rows = std::clamp(count(), m_minimumRows, m_maximumRows);
+  return {
+    QListWidget::sizeHint().width(),
+    rows * (rowHeight + 2 * spacing()) + 2 * frameWidth()};
+}
+
+bool PanelItemList::event(QEvent* event)
+{
+  const auto result = QListWidget::event(event);
+  if (
+    event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange
+    || event->type() == QEvent::Polish || event->type() == QEvent::LayoutRequest)
+    updateGeometry();
+  return result;
 }
 
 PanelList::PanelList(QWidget* parent)

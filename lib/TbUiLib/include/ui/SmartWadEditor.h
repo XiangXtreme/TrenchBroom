@@ -56,7 +56,6 @@ public:
   bool canReloadWads() const;
 
 private:
-  void createGui();
   void doUpdateVisual(const std::vector<mdl::EntityNodeBase*>& nodes) override;
 
 private slots:

@@ -13,6 +13,7 @@ param(
     "outliner",
     "outliner-properties-table",
     "outliner-properties-narrow",
+    "outliner-properties-wad",
     "entity-browser",
     "entity-browser-empty",
     "goldsrc-entity-links",
@@ -273,6 +274,7 @@ foreach ($target in $normalizedTargets) {
       "outliner-properties-entity",
       "outliner-properties-table",
       "outliner-properties-narrow",
+      "outliner-properties-wad",
       "outliner-reparent-layer-before",
       "outliner-reparent-layer-after",
       "outliner-brush-entity-before",
@@ -304,7 +306,7 @@ foreach ($target in $normalizedTargets) {
       "preferences-misc",
       "preferences-kreedzbroom"
     )) {
-    throw "Unsupported target '$target'. Expected welcome, workbench, map-settings, map-areas, map-area-split-preview, map-area-join-preview, map-area-partial-join-preview, map-area-dock-preview, project-empty, project-drawer, project-pinned, project-map-switch, project-all-closed, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-properties-table, outliner-properties-narrow, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, goldsrc-entity-links, face-inspector, material-browser-empty, plugin-inspector, terrain, terrain-collapsed, supporting, output-log, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
+    throw "Unsupported target '$target'. Expected welcome, workbench, map-settings, map-areas, map-area-split-preview, map-area-join-preview, map-area-partial-join-preview, map-area-dock-preview, project-empty, project-drawer, project-pinned, project-map-switch, project-all-closed, outliner, outliner-hierarchy, outliner-filter, outliner-properties-entity, outliner-properties-table, outliner-properties-narrow, outliner-properties-wad, outliner-reparent-layer-before, outliner-reparent-layer-after, outliner-brush-entity-before, outliner-brush-entity-after, entity-browser, entity-browser-empty, goldsrc-entity-links, face-inspector, material-browser-empty, plugin-inspector, terrain, terrain-collapsed, supporting, output-log, path-tool-preview, python-console, command-palette, components, preferences, preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, or preferences-kreedzbroom."
   }
 }
 foreach ($theme in $Themes) {
@@ -349,7 +351,8 @@ $resolvedMaterialMapPath =
 $resolvedMaterialGamePath =
   if ($usesMaterialFixture) { Resolve-Path -Path $MaterialGamePath } else { $null }
 $resolvedGoldSrcMapPath =
-  if ($normalizedTargets -contains "goldsrc-entity-links") {
+  if ($normalizedTargets -contains "goldsrc-entity-links" -or
+      $normalizedTargets -contains "outliner-properties-wad") {
     Resolve-Path -Path $GoldSrcMapPath
   } else { $null }
 $usesOutlinerFixture =
@@ -417,8 +420,9 @@ foreach ($target in $normalizedTargets) {
       }
       $useMaterialFixture =
         $target -eq "face-inspector" -or $target -eq "material-browser-empty"
-      $useOutlinerFixture = $target.StartsWith("outliner")
-      $useGoldSrcFixture = $target -eq "goldsrc-entity-links"
+      $useGoldSrcFixture = $target -eq "goldsrc-entity-links" -or
+        $target -eq "outliner-properties-wad"
+      $useOutlinerFixture = $target.StartsWith("outliner") -and -not $useGoldSrcFixture
       $targetMapPath =
         if ($useMaterialFixture) {
           $resolvedMaterialMapPath
