@@ -3840,6 +3840,7 @@ zhlt_invisible(choices) :"Invisible" : 1 =
 	[
 		"simple": "simple"
 		"legacy": "legacy"
+		"legacytrim": "legacytrim (continuous exterior surface hulls, hltools)"
 		"normalized": "normalized"
 	]
 ]
