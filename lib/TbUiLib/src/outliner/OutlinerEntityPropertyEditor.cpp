@@ -64,6 +64,7 @@
 #include "kd/string_utils.h"
 #include "kd/vector_utils.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <unordered_set>
 
@@ -89,8 +90,6 @@ std::vector<std::vector<std::string>> propertyRowStructure(
 class ResponsivePropertyRow : public QWidget
 {
 private:
-  static constexpr int CompactWidth = 420;
-
   QGridLayout* m_layout = nullptr;
   QWidget* m_keyWidget = nullptr;
   QWidget* m_valueWidget = nullptr;
@@ -112,17 +111,7 @@ public:
     m_keyWidget = keyWidget;
     m_valueWidget = valueWidget;
     m_actionsWidget = actionsWidget;
-    auto initialWidth = width();
-    for (auto* p = parentWidget(); initialWidth <= 0 && p != nullptr;
-         p = p->parentWidget())
-    {
-      if (p->width() > 0)
-      {
-        initialWidth = p->width();
-        break;
-      }
-    }
-    updateLayout(initialWidth);
+    updateLayout(width());
   }
 
 protected:
@@ -130,6 +119,17 @@ protected:
   {
     QWidget::resizeEvent(event);
     updateLayout(event->size().width());
+  }
+
+  bool event(QEvent* event) override
+  {
+    if (
+      event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange
+      || event->type() == QEvent::LayoutRequest)
+    {
+      updateLayout(width());
+    }
+    return QWidget::event(event);
   }
 
 private:
@@ -140,7 +140,34 @@ private:
       return;
     }
 
-    const auto compact = width < CompactWidth;
+    // Reserve readable label and value columns using the current font. A fixed
+    // panel-width breakpoint stacks ordinary fields even when they fit side by side.
+    const auto keyMinimum = fontMetrics().horizontalAdvance(QStringLiteral("0000000000"));
+    const auto valueMinimum = std::max(
+      m_valueWidget->minimumSizeHint().width(),
+      m_valueWidget->fontMetrics().horizontalAdvance(QStringLiteral("0000000000000000"))
+        + 12);
+    const auto actionsWidth =
+      std::max(m_actionsWidget->minimumWidth(), m_actionsWidget->sizeHint().width());
+    const auto margins = m_layout->contentsMargins();
+    const auto columnsWidth = width - margins.left() - margins.right() - actionsWidth
+                              - 2 * m_layout->horizontalSpacing();
+    const auto compact = columnsWidth < keyMinimum + valueMinimum;
+
+    if (compact)
+    {
+      m_keyWidget->setMinimumWidth(0);
+      m_keyWidget->setMaximumWidth(QWIDGETSIZE_MAX);
+    }
+    else
+    {
+      // All rows use the same label budget, including the add-property row.
+      // Long labels elide with their existing tooltip instead of growing the panel.
+      m_keyWidget->setFixedWidth(std::clamp(
+        columnsWidth / 3,
+        keyMinimum,
+        fontMetrics().horizontalAdvance(QStringLiteral("0000000000000000"))));
+    }
     if (m_layout->indexOf(m_keyWidget) >= 0 && compact == m_compact)
     {
       return;
@@ -703,6 +730,7 @@ OutlinerEntityPropertyEditor::OutlinerEntityPropertyEditor(
   m_addValue->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
   auto* addActions = new QWidget{m_addPropertyBar};
+  addActions->setObjectName("outlinerPropertyActions");
   auto* addActionsLayout = new QHBoxLayout{addActions};
   addActionsLayout->setContentsMargins(0, 0, 0, 0);
   addActionsLayout->setSpacing(2);
@@ -1119,6 +1147,9 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
         valueCombo = new OutlinerChoiceComboBox{m_comboPopupVisible, this, row};
         valueCombo->setObjectName("outlinerPropertyValue");
         valueCombo->setEditable(true);
+        // Option descriptions belong to the popup, not the form's minimum width.
+        valueCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        valueCombo->setMinimumContentsLength(8);
         valueCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         valueCombo->setProperty("propertyKey", QString::fromStdString(key));
 
@@ -1724,6 +1755,8 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
     });
   }
 
+  auto* addActions = m_addPropertyBar->findChild<QWidget*>("outlinerPropertyActions");
+  actionWidgets.push_back(addActions);
   const auto actionWidth = std::ranges::max(
     actionWidgets | std::views::transform([](const auto* widget) {
       return widget->sizeHint().width();

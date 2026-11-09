@@ -153,6 +153,16 @@ bodies default to `FitContents`; surplus height stays below the panels. Theme/pr
 changes and collapse keep the shared title, divider and body states in sync. Existing
 object names and persisted expansion states continue to identify instances.
 
+The scene property form keeps labels, values and actions on one row while the current
+font leaves room for a ten-digit label and a sixteen-digit value. Narrower rows stack
+the value below the label; font/style changes recalculate the same rule. Labels share
+a bounded column and retain their full text in tooltips. Existing fields and the add
+row reserve the same action column, so inline values align at ordinary sidebar widths.
+Choice descriptions size the popup rather than widening or stacking the form field.
+Resizing rearranges the existing widgets and preserves the current edit and focus.
+`EditorLayout` owns the initial and persisted workspace splitter proportions; do not
+add a second set of startup proportions in the view constructor.
+
 The implementation and extension guide is [UI foundation improvement](ui-foundation-improvement.md).
 
 ## Exceptions

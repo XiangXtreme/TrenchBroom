@@ -28,6 +28,7 @@
 #include <QPalette>
 #include <QPointer>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QtTest/QTest>
@@ -338,19 +339,74 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     CHECK(keyLabel->selectedText() == "classname");
   }
 
-  SECTION("adapts property rows to narrow and wide panels")
+  SECTION("keeps normal sidebar fields inline and preserves edits while resizing")
+  {
+    mdl::setEntityProperty(map, "message", "initial", false);
+    processOutlinerUpdates();
+    editor.show();
+    editor.resize(380, 600);
+    processOutlinerUpdates();
+
+    auto* row = propertyRow(editor, "message");
+    auto* value = propertyValueEdit(editor, "message");
+    REQUIRE(row != nullptr);
+    REQUIRE(value != nullptr);
+    REQUIRE(value->isEnabled());
+    CHECK_FALSE(row->property("compact").toBool());
+    const auto nativeWindows = qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1;
+    if (nativeWindows)
+    {
+      editor.raise();
+      editor.activateWindow();
+      REQUIRE(QTest::qWaitForWindowActive(&editor));
+    }
+    value->setFocus();
+    value->setText("draft_value");
+    value->setSelection(2, 5);
+
+    editor.resize(240, 600);
+    processOutlinerUpdates();
+    CHECK(row->property("compact").toBool());
+
+    for (const auto width : {380, 420, 800, 380})
+    {
+      CAPTURE(width);
+      editor.resize(width, 600);
+      processOutlinerUpdates();
+      CHECK_FALSE(row->property("compact").toBool());
+      CHECK(propertyValueEdit(editor, "message") == value);
+      CHECK(value->text() == "draft_value");
+      CHECK(value->selectedText() == "aft_v");
+      // Background test windows retain Qt's focus target without desktop activation.
+      CHECK(editor.focusWidget() == value);
+      if (nativeWindows)
+        CHECK(value->hasFocus());
+    }
+  }
+
+  SECTION("property wrapping follows font changes without horizontal scrolling")
   {
     editor.show();
-    editor.resize(320, 600);
+    editor.resize(380, 600);
     processOutlinerUpdates();
 
     auto* row = propertyRow(editor, "classname");
     REQUIRE(row != nullptr);
-    CHECK(row->property("compact").toBool());
+    CHECK_FALSE(row->property("compact").toBool());
 
-    editor.resize(800, 600);
+    const auto normalFont = editor.font();
+    auto largeFont = normalFont;
+    largeFont.setPointSize(24);
+    editor.setFont(largeFont);
     processOutlinerUpdates();
-    CHECK(!row->property("compact").toBool());
+    CHECK(row->property("compact").toBool());
+    auto* scrollArea = editor.findChild<QScrollArea*>("outlinerPropertyScrollArea");
+    REQUIRE(scrollArea != nullptr);
+    CHECK(scrollArea->horizontalScrollBar()->maximum() == 0);
+
+    editor.setFont(normalFont);
+    processOutlinerUpdates();
+    CHECK_FALSE(row->property("compact").toBool());
   }
 
   SECTION("shows skybox editor control for worldspawn skyname")
@@ -424,8 +480,30 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     CHECK(classnameActions->width() == skynameActions->width());
     CHECK(classnameActions->width() == colorActions->width());
     CHECK(colorActions->width() == 50);
-    CHECK(classnameEdit->geometry().right() == skynameEdit->geometry().right());
-    CHECK(classnameEdit->geometry().right() == colorEdit->geometry().right());
+    auto* addBar = editor.findChild<QWidget*>("outlinerPropertyAddBar");
+    auto* addKey = editor.findChild<QLineEdit*>("outlinerPropertyAddKey");
+    auto* addValue = editor.findChild<QLineEdit*>("outlinerPropertyAddValue");
+    REQUIRE(addBar != nullptr);
+    REQUIRE(addKey != nullptr);
+    REQUIRE(addValue != nullptr);
+    for (const auto width : {380, 420, 800})
+    {
+      CAPTURE(width);
+      editor.resize(width, 600);
+      processOutlinerUpdates();
+      for (auto* current : {classnameRow, skynameRow, colorRow, addBar})
+      {
+        CHECK_FALSE(current->property("compact").toBool());
+      }
+      CHECK(classnameEdit->geometry().left() == skynameEdit->geometry().left());
+      CHECK(classnameEdit->geometry().left() == colorEdit->geometry().left());
+      CHECK(classnameEdit->geometry().left() == addValue->geometry().left());
+      CHECK(classnameEdit->geometry().right() == skynameEdit->geometry().right());
+      CHECK(classnameEdit->geometry().right() == colorEdit->geometry().right());
+      CHECK(classnameEdit->geometry().right() == addValue->geometry().right());
+      CHECK(classnameEdit->width() >= 100);
+      CHECK(addKey->geometry().right() < addValue->geometry().left());
+    }
 
     const auto* colorButton =
       colorRow->findChild<QToolButton*>("outlinerPropertyColorButton");
@@ -580,7 +658,9 @@ TEST_CASE("OutlinerEntityPropertyEditor")
       {},
       "",
       {{"mode",
-        mdl::PropertyValueTypes::Choice{{{"0", "Invisible"}, {"1", "Textured"}}},
+        mdl::PropertyValueTypes::Choice{
+          {{"0", "Invisible"},
+           {"1", "Textured with a long description that should only size the popup"}}},
         "",
         ""}},
       mdl::PointEntityDefinition{vm::bbox3d{16.0}, {}, {}},
@@ -591,6 +671,8 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     auto* entityNode = mdl::createPointEntity(map, *definition, {0, 0, 0});
     REQUIRE(entityNode != nullptr);
     mdl::setEntityProperty(map, "mode", "1", false);
+    editor.resize(380, 600);
+    editor.show();
     processOutlinerUpdates();
 
     auto* row = propertyRow(editor, "mode");
@@ -598,6 +680,12 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     auto* valueCombo = row->findChild<QComboBox*>("outlinerPropertyValue");
     REQUIRE(valueCombo != nullptr);
     REQUIRE(valueCombo->lineEdit() != nullptr);
+    CHECK_FALSE(row->property("compact").toBool());
+    CHECK(valueCombo->width() >= 100);
+    CHECK(valueCombo->itemText(1).contains("long description"));
+    auto* scrollArea = editor.findChild<QScrollArea*>("outlinerPropertyScrollArea");
+    REQUIRE(scrollArea != nullptr);
+    CHECK(scrollArea->horizontalScrollBar()->maximum() == 0);
 
     valueCombo->lineEdit()->setText("0 : Invisible");
     emit valueCombo->lineEdit()->editingFinished();

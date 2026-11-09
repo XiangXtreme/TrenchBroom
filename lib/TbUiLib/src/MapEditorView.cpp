@@ -107,10 +107,6 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   m_hSplitter->setStretchFactor(0, 1);
   m_hSplitter->setStretchFactor(1, 0);
 
-  // default proportions give comfortable width to inspector and info panel
-  m_hSplitter->setSizes(QList<int>{670, 330});
-  m_vSplitter->setSizes(QList<int>{750, 250});
-
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(6, 6, 6, 6);
   layout->addWidget(m_hSplitter);
@@ -124,6 +120,7 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
     connectOutlinerWidgets();
   });
   connectOutlinerWidgets();
+  // EditorLayout is the single source for initial and saved splitter proportions.
   restoreLayoutState();
   connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* focus) {
     if (auto* view = qobject_cast<MapViewBase*>(focus); view && isAncestorOf(view))
