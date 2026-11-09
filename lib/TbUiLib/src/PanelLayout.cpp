@@ -4,9 +4,11 @@
  */
 #include "ui/PanelLayout.h"
 
+#include <QCoreApplication>
 #include <QEvent>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QScopeGuard>
 #include <QStyle>
 #include <QStyleOptionViewItem>
 #include <QVBoxLayout>
@@ -175,6 +177,27 @@ void PanelList::insertWidget(const int index, QWidget* entry)
 void PanelList::removeWidget(QWidget* entry)
 {
   m_entries->removeWidget(entry);
+}
+
+void PanelList::setContentVisible(QWidget* content, const bool visible)
+{
+  contract_pre(content && widget()->isAncestorOf(content));
+  const auto updatesWereEnabled = updatesEnabled();
+  setUpdatesEnabled(false);
+  const auto restoreUpdates = qScopeGuard([&] { setUpdatesEnabled(updatesWereEnabled); });
+  content->setVisible(visible);
+
+  // Nested cards cache their size constraints. Settle them from the changed
+  // content outwards before the scroll area resizes or paints the page.
+  for (auto* parent = content->parentWidget(); parent; parent = parent->parentWidget())
+  {
+    if (parent->layout())
+      parent->layout()->activate();
+    if (parent == widget())
+      break;
+  }
+  auto layoutRequest = QEvent{QEvent::LayoutRequest};
+  QCoreApplication::sendEvent(this, &layoutRequest);
 }
 
 } // namespace tb::ui

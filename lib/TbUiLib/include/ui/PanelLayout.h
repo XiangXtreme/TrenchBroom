@@ -66,6 +66,7 @@ public:
   void addWidget(QWidget* widget);
   void insertWidget(int index, QWidget* widget);
   void removeWidget(QWidget* widget);
+  void setContentVisible(QWidget* content, bool visible);
 };
 
 } // namespace tb::ui

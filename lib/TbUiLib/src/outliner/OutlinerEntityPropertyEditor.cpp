@@ -170,6 +170,8 @@ private:
     }
     if (m_layout->indexOf(m_keyWidget) >= 0 && compact == m_compact)
     {
+      // Scrollbar changes can resize the label without changing the row mode.
+      m_layout->activate();
       return;
     }
 
@@ -1498,7 +1500,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
         [this, container, spawnflagsToggleButton](const bool checked) {
           m_spawnflagsEditorExpanded = checked;
           spawnflagsToggleButton->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
-          container->setVisible(checked);
+          m_scrollArea->setContentVisible(container, checked);
         });
 
       connect(
@@ -1537,7 +1539,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
         [this, container, wadToggleButton](const bool checked) {
           m_wadEditorExpanded = checked;
           wadToggleButton->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
-          container->setVisible(checked);
+          m_scrollArea->setContentVisible(container, checked);
         });
     }
 
@@ -1570,7 +1572,7 @@ void OutlinerEntityPropertyEditor::rebuildPropertyRows(
         [this, container, skyboxToggleButton](const bool checked) {
           m_skyboxEditorExpanded = checked;
           skyboxToggleButton->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
-          container->setVisible(checked);
+          m_scrollArea->setContentVisible(container, checked);
         });
     }
 

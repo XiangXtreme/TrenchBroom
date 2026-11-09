@@ -457,6 +457,12 @@ TEST_CASE("OutlinerEntityPropertyEditor")
     auto& wadDocument = wadFixture.create(config);
     auto& wadMap = wadDocument.map();
     mdl::setWorldProperty(wadMap, "wad", "halflife.wad;sdhlt.wad");
+    SECTION("short form adds and removes the outer scrollbar") {}
+    SECTION("long form keeps content below the WAD editor")
+    {
+      for (auto i = 0; i < 12; ++i)
+        mdl::setWorldProperty(wadMap, "zz_extra_" + std::to_string(i), "value");
+    }
     auto wadEditor = OutlinerEntityPropertyEditor{wadDocument};
     wadEditor.resize(380, 260);
     wadEditor.show();
@@ -481,14 +487,51 @@ TEST_CASE("OutlinerEntityPropertyEditor")
 
     const auto expandedHeight = scrollArea->widget()->height();
     toggle->setChecked(false);
+    const auto heightAfterToggle = scrollArea->widget()->height();
+    const auto rangeAfterToggle = scrollArea->verticalScrollBar()->maximum();
     processOutlinerUpdates();
     QTRY_VERIFY_WITH_TIMEOUT(scrollArea->widget()->height() < expandedHeight, 1000);
+    CHECK(heightAfterToggle == scrollArea->widget()->height());
+    CHECK(rangeAfterToggle == scrollArea->verticalScrollBar()->maximum());
     toggle->setChecked(true);
     processOutlinerUpdates();
     CHECK(list->viewport()->height() >= 4 * list->sizeHintForRow(0));
     list->setCurrentRow(1);
     CHECK(embedded->canMoveWadsUp());
     CHECK(embedded->canRemoveWads());
+
+    const auto geometryState = [&] {
+      return std::vector{
+        scrollArea->widget()->width(),
+        scrollArea->widget()->height(),
+        scrollArea->viewport()->width(),
+        scrollArea->viewport()->height(),
+        scrollArea->verticalScrollBar()->maximum(),
+        scrollArea->verticalScrollBar()->value(),
+        toggle->mapTo(scrollArea->viewport(), QPoint{}).x(),
+        toggle->mapTo(scrollArea->viewport(), QPoint{}).y(),
+        propertyValueEdit(wadEditor, "wad")->width(),
+        propertyValueEdit(wadEditor, "wad")->height()};
+    };
+    for (const auto size : {QSize{380, 260}, QSize{480, 420}, QSize{300, 180}})
+    {
+      CAPTURE(size.width(), size.height());
+      wadEditor.resize(size);
+      QTest::qWait(20);
+      for (auto cycle = 0; cycle < 4; ++cycle)
+      {
+        CAPTURE(cycle);
+        scrollArea->ensureWidgetVisible(toggle);
+        QTest::qWait(20);
+        const auto wasChecked = toggle->isChecked();
+        QTest::mouseClick(toggle, Qt::LeftButton);
+        CHECK(toggle->isChecked() != wasChecked);
+        const auto immediateGeometry = geometryState();
+        QTest::qWait(30);
+        CHECK(geometryState() == immediateGeometry);
+        CHECK(list->currentRow() == 1);
+      }
+    }
   }
 
   SECTION("aligns value editors across rows with different actions")
