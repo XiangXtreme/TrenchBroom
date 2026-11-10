@@ -31,6 +31,7 @@
 
 #include <cmath>
 #include <memory>
+#include <numbers>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -78,13 +79,15 @@ scs_player_state groundedAt(scs_context* context, const float x, const float y =
 void checkEdgeTransition(
   scs_context* context, scs_player_state state, const PlayModeEdgeGuide& edge)
 {
+  if (std::hypot(state.velocity[0], state.velocity[1]) < 0.1f)
+  {
+    for (auto i = size_t{0}; i < 2; ++i)
+      state.velocity[i] = edge.direction[i] * 250.0f;
+  }
   for (const auto offset : {-0.1f, 0.1f})
   {
     for (auto i = size_t{0}; i < 2; ++i)
-    {
-      state.origin[i] = edge.position[i] + edge.direction[i] * (16.0f + offset);
-      state.velocity[i] = edge.direction[i] * 250.0f;
-    }
+      state.origin[i] = edge.position[i] + edge.direction[i] * offset;
     CHECK(playModeEdgeFriction(context, state) == (offset > 0));
   }
 }
@@ -241,8 +244,7 @@ TEST_CASE("PlayModeJumpGuide")
       false);
     CHECK_FALSE(guide.span);
   }
-  SECTION(
-    "turning the view keeps dimensions perpendicular and the HJ hint inside the edge")
+  SECTION("turning the view keeps dimensions perpendicular and the HJ boundary fixed")
   {
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
@@ -257,11 +259,52 @@ TEST_CASE("PlayModeJumpGuide")
       CHECK(guide.span->start.y() == Catch::Approx(12).margin(0.01));
       CHECK(guide.span->end.y() == Catch::Approx(12).margin(0.01));
       REQUIRE(guide.edge);
-      CHECK(guide.edge->position.x() == Catch::Approx(-16).margin(0.1));
+      CHECK(guide.edge->position.x() == Catch::Approx(0).margin(0.01));
       CHECK(guide.edge->position.y() == Catch::Approx(12).margin(0.01));
       CHECK(guide.edge->direction.x() == Catch::Approx(1).margin(0.01));
       CHECK(guide.edge->direction.y() == Catch::Approx(0).margin(0.01));
       checkEdgeTransition(context.get(), state, *guide.edge);
+    }
+  }
+  SECTION("diagonal HJ boundaries correspond to JumpStats Jumpoff distances")
+  {
+    const auto world = buildPlayModeWorld(map);
+    auto context = contextFor(world);
+    struct Approach
+    {
+      float degrees;
+      float jumpoff;
+    };
+    for (const auto approach :
+         {Approach{0, 16},
+          Approach{30, 13.8564f},
+          Approach{40, 12.2567f},
+          Approach{45, 11.3137f}})
+    {
+      CAPTURE(approach.degrees);
+      auto state = groundedAt(context.get(), -48, 12);
+      const auto angle = approach.degrees * std::numbers::pi_v<float> / 180.0f;
+      state.velocity[0] = 280.0f * std::cos(angle);
+      state.velocity[1] = 280.0f * std::sin(angle);
+      for (const auto x : {-48.0f, -8.0f, 6.0f})
+      {
+        state.origin[0] = x;
+        for (const auto yaw : {-0.8f, 0.0f, 0.8f})
+        {
+          const auto guide = measurePlayModeJumpGuide(
+            context.get(), world.jumpSurfaces, state, {1, yaw, -0.5f}, false, true);
+          REQUIRE(guide.edge);
+          // On this +X approach, JumpStats measures from the player's rear at x-16.
+          CHECK(
+            16.0f - guide.edge->position.x()
+            == Catch::Approx(approach.jumpoff).margin(0.01));
+          CHECK(guide.edge->position.y() == Catch::Approx(12).margin(0.01));
+          CHECK(guide.edge->direction.x() == Catch::Approx(1).margin(0.01));
+          CHECK(guide.edge->direction.y() == Catch::Approx(0).margin(0.01));
+          CHECK(guide.edge->active == (x > 16.0f - approach.jumpoff));
+          checkEdgeTransition(context.get(), state, *guide.edge);
+        }
+      }
     }
   }
   SECTION("rotated platforms follow their real edge rather than the world axes")
@@ -416,10 +459,7 @@ TEST_CASE("PlayModeJumpGuide")
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     auto state = groundedAt(context.get(), -8);
-    state.origin[0] = 2;
-    state.velocity[0] = 250;
-    REQUIRE(playModeEdgeFriction(context.get(), state));
-    auto speed = [&](const float multiplier) {
+    auto speed = [&](const float multiplier, const bool jump) {
       auto config = scs_config{};
       scs_config_defaults(&config);
       config.movevars.edgefriction = multiplier;
@@ -428,12 +468,43 @@ TEST_CASE("PlayModeJumpGuide")
       scs_set_state(player.get(), &state);
       auto command = scs_usercmd{};
       command.msec = 10;
+      command.buttons = jump ? SCS_IN_JUMP : 0;
       scs_step(player.get(), &command);
       auto after = scs_player_state{};
       scs_get_state(player.get(), &after);
-      return after.velocity[0];
+      if (jump)
+        CHECK(after.ground_entity == -1);
+      return std::hypot(after.velocity[0], after.velocity[1]);
     };
-    CHECK(speed(2) < speed(1));
+    struct Takeoff
+    {
+      float degrees;
+      float jumpoff;
+      bool extraFriction;
+    };
+    for (const auto takeoff :
+         {Takeoff{30, 10, true},
+          Takeoff{30, 12, true},
+          Takeoff{30, 14, false},
+          Takeoff{45, 10, true},
+          Takeoff{45, 12, false},
+          Takeoff{45, 14, false}})
+    {
+      CAPTURE(takeoff.degrees, takeoff.jumpoff);
+      const auto angle = takeoff.degrees * std::numbers::pi_v<float> / 180.0f;
+      state.origin[0] = 16.0f - takeoff.jumpoff;
+      state.velocity[0] = 280.0f * std::cos(angle);
+      state.velocity[1] = 280.0f * std::sin(angle);
+      CHECK(playModeEdgeFriction(context.get(), state) == takeoff.extraFriction);
+      CHECK(speed(1, false) == Catch::Approx(268.8f).margin(0.01));
+      CHECK(
+        speed(2, false)
+        == Catch::Approx(takeoff.extraFriction ? 257.6f : 268.8f).margin(0.01));
+      // A successful jump skips ground friction on that command. Any edge slowdown
+      // in the takeoff speed must have occurred on preceding grounded commands.
+      CHECK(speed(1, true) == Catch::Approx(280).margin(0.01));
+      CHECK(speed(2, true) == Catch::Approx(280).margin(0.01));
+    }
   }
   SECTION("measuring does not advance physics and airborne states have no guides")
   {

@@ -28,7 +28,6 @@ constexpr auto MinGap = 160.0f;
 constexpr auto MaxGap = 300.0f;
 constexpr auto MaxHeightDifference = 256.0f;
 constexpr auto SurfaceTolerance = 0.125f;
-constexpr auto TakeoffHintInset = 16.0f;
 
 float halfHeight(const scs_player_state& state)
 {
@@ -289,11 +288,11 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
           const auto middle = (low + high) / 2.0f;
           (probe(middle) ? high : low) = middle;
         }
-        // Keep the takeoff hint inside the platform; active still reports the
-        // actual friction probe rather than the hint position.
+        // The line marks the player's center at the last supported probe position.
+        // JumpStats Jumpoff measures from the rear of the hull, so its 11-14 unit
+        // readings during diagonal approaches are not an inset from this position.
         result.edge = PlayModeEdgeGuide{
-          feet + normal * (low - TakeoffHintInset), normal,
-          moving && playModeEdgeFriction(context, state)};
+          feet + normal * low, normal, moving && playModeEdgeFriction(context, state)};
       }
     }
   }
