@@ -336,8 +336,7 @@ void renderPlayModeJumpGuide(
   if (guide.edge)
   {
     const auto& edge = *guide.edge;
-    service.setForegroundColor(
-      pref(edge.active ? Preferences::XAxisColor : Preferences::ZAxisColor));
+    service.setForegroundColor(Color{RgbaF{1.0f, 0.2f, 0.2f, 1.0f}});
     service.setLineWidth(edge.active ? 3.0f : 2.0f);
     const auto cap = vm::vec3f{-edge.direction.y(), edge.direction.x(), 0} * 24.0f;
     const auto position = edge.position + lift;
