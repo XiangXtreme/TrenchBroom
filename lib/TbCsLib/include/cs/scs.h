@@ -223,6 +223,9 @@ typedef struct scs_config {
   /* Optional footstep / jump sound sink (runs on the stepping thread). */
   scs_sound_fn sound_fn;
   void* sound_user;
+  /* Optional +speed multiplier in noclip; 1 preserves native GoldSrc behavior.
+   * The client should disable its walk slowdown when enabling this travel aid. */
+  float noclip_speed_boost;
 } scs_config;
 
 /* The exact CS 1.6 server defaults (ReGameDLL forces accel/friction/stopspeed). */

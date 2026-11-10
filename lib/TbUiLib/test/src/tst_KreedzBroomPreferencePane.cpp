@@ -27,6 +27,7 @@
 #include "ui/CatchConfig.h"
 #include "ui/KreedzBroomPreferencePane.h"
 
+#include <algorithm>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -38,9 +39,20 @@ TEST_CASE("KreedzBroomPreferencePane")
 {
   auto fixture = AppControllerFixture{};
   setPref(Preferences::PlayModeShowJumpSpan, false);
+  setPref(Preferences::PlayModeKeyHook, Qt::Key_C);
+  setPref(Preferences::PlayModeKeyNoclip, Qt::Key_Z);
   auto pane = KreedzBroomPreferencePane{};
   auto& base = static_cast<PreferencePane&>(pane);
   base.updateControls();
+  const auto buttons = pane.findChildren<QPushButton*>();
+  const auto keyCount = [&](const int code) {
+    return std::ranges::count_if(buttons, [code](const auto* button) {
+      const auto* key = dynamic_cast<const PlayModeKeyButton*>(button);
+      return key && key->key() == code;
+    });
+  };
+  CHECK(keyCount(Qt::Key_C) == 1);
+  CHECK(keyCount(Qt::Key_Z) == 1);
   auto* span = static_cast<QCheckBox*>(nullptr);
   for (auto* box : pane.findChildren<QCheckBox*>())
   {

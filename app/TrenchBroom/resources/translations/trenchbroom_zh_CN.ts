@@ -5902,7 +5902,37 @@ By %2</source>
             <source>The key %1 is assigned to more than one play mode action.</source>
             <translation>按键 %1 已分配给多个 Play 模式操作。</translation>
             </message>
-        </context>
+
+        <message>
+            <source>Travel aids</source>
+            <translation>移动辅助</translation>
+        </message>
+
+        <message>
+            <source>Hook (hold)</source>
+            <translation>Hook（按住）</translation>
+        </message>
+
+        <message>
+            <source>Noclip (toggle)</source>
+            <translation>穿墙（开关）</translation>
+        </message>
+
+        <message>
+            <source>Hook speed</source>
+            <translation>Hook 拉速</translation>
+        </message>
+
+        <message>
+            <source>Hold to pull toward the surface under the crosshair. Release to let go.</source>
+            <translation>按住时拉向准星命中的表面，松开后取消牵引。</translation>
+        </message>
+
+        <message>
+            <source>Fly through geometry. Hold the walk key to move three times faster. Move out of solid geometry before turning noclip off.</source>
+            <translation>穿过几何飞行，按住慢走键可加速至 3 倍。移出实体后才能关闭穿墙。</translation>
+        </message>
+    </context>
     <context>
         <name>OutlinerEntityPropertyEditor</name>
         <message>

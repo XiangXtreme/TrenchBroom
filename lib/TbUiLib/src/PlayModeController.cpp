@@ -66,6 +66,8 @@ static_assert(Preferences::PlayModeQtKeyLeft == Qt::Key_Left);
 static_assert(Preferences::PlayModeQtKeyRight == Qt::Key_Right);
 static_assert(Preferences::PlayModeQtKeyP == Qt::Key_P);
 static_assert(Preferences::PlayModeQtKeyL == Qt::Key_L);
+static_assert(Preferences::PlayModeQtKeyC == Qt::Key_C);
+static_assert(Preferences::PlayModeQtKeyZ == Qt::Key_Z);
 
 constexpr auto PlayerViewHeight = 17.0f; // CS VEC_VIEW
 constexpr auto MouseYawDegrees = 0.022f; // m_yaw / m_pitch
@@ -296,6 +298,7 @@ void PlayModeController::start(
   config.movevars.edgefriction = pref(Preferences::PlayModeEdgeFriction);
   config.movevars.stepsize = pref(Preferences::PlayModeStepSize);
   config.clientmaxspeed = pref(Preferences::PlayModeWeaponSpeed);
+  config.noclip_speed_boost = 3.0f;
 
   // The game's sounds come from the map's game file system, which changes with the game
   // path, so the player is recreated with the context.
@@ -429,6 +432,7 @@ void PlayModeController::finishStarting()
   const auto frameRate = std::clamp(pref(Preferences::PlayModeFrameRate), 4, 1000);
   m_timeline.reset(now, m_viewAngles, static_cast<uint8_t>(1000 / frameRate));
   m_timeline.setYawSpeed(pref(Preferences::PlayModeYawSpeed));
+  m_timeline.setHookSpeed(pref(Preferences::PlayModeHookSpeed));
   m_lastEventMs = now;
   m_previousEye = m_currentEye = eyePosition();
   m_active = true;
@@ -463,6 +467,7 @@ void PlayModeController::stop()
     return;
   }
 
+  m_timeline.clearTravelInput();
   auto state = scs_player_state{};
   scs_get_state(m_context.get(), &state);
   m_savedState = state;
@@ -499,6 +504,19 @@ bool PlayModeController::handleKey(const QKeyEvent& event, const bool down)
   // Keys are matched by key code alone, so a key still works while another modifier is
   // held (e.g. jumping while ducking with Ctrl).
   const auto key = event.key();
+  if (key == pref(Preferences::PlayModeKeyHook))
+  {
+    m_timeline.hook(
+      eventTime(static_cast<double>(event.timestamp()), EventSource::Qt), down);
+    return true;
+  }
+  if (key == pref(Preferences::PlayModeKeyNoclip))
+  {
+    if (down)
+      m_timeline.toggleNoclip(
+        eventTime(static_cast<double>(event.timestamp()), EventSource::Qt));
+    return true;
+  }
   if (key == pref(Preferences::PlayModeKeySavePoint))
   {
     if (down)
@@ -548,6 +566,12 @@ void PlayModeController::saveCheckpoint()
 {
   auto state = scs_player_state{};
   scs_get_state(m_context.get(), &state);
+  if (state.movetype == SCS_MOVETYPE_NOCLIP || m_timeline.travel().hookAnchor())
+  {
+    m_document.logger().info()
+      << "Play mode: release travel aids before saving a checkpoint";
+    return;
+  }
   if (std::abs(state.velocity[2]) > 0.01f)
   {
     m_document.logger().info() << "Play mode: checkpoint requires zero vertical speed";
@@ -585,6 +609,7 @@ void PlayModeController::loadCheckpoint()
   state.last_fall_damage = 0.0f;
   state.last_fall_speed = 0.0f;
   state.teleport_time = 0.0f;
+  state.movetype = SCS_MOVETYPE_WALK;
 
   if (!scs_position_is_free(m_context.get(), state.origin, usehullFor(state)))
   {
@@ -599,6 +624,7 @@ void PlayModeController::loadCheckpoint()
       state.v_angle[i] = m_checkpoint->viewAngles[i];
     }
   }
+  m_timeline.clearTravelInput();
   scs_set_state(m_context.get(), &state);
   if (pref(Preferences::PlayModeRestoreCheckpointView))
   {
@@ -679,7 +705,10 @@ void PlayModeController::update()
       m_showPre.reset(state);
       m_jumpGuide = {};
     }
-    m_showPre.tick(m_timeline.lastCommand(), state, now);
+    if (m_timeline.travel().hookAnchor() || state.movetype == SCS_MOVETYPE_NOCLIP)
+      m_showPre.reset(state);
+    else
+      m_showPre.tick(m_timeline.lastCommand(), state, now);
 
     if (state.fall_count != m_fallShownCount)
     {
@@ -773,6 +802,35 @@ void PlayModeController::render(
   const auto height = static_cast<float>(viewport.height);
 
   renderPlayModeJumpGuide(m_jumpGuide, renderContext, renderBatch);
+
+  if (const auto& anchor = m_timeline.travel().hookAnchor())
+  {
+    auto service = render::RenderService{renderContext, renderBatch};
+    service.setHideOccludedObjects();
+    service.setLineWidth(2.0f);
+    service.setForegroundColor(RgbF{0.2f, 0.8f, 1.0f});
+    service.renderLine(
+      m_camera.position() + m_camera.direction() * 8.0f + m_camera.right() * 6.0f
+        - m_camera.up() * 6.0f,
+      *anchor);
+  }
+  auto travelState = scs_player_state{};
+  scs_get_state(m_context.get(), &travelState);
+  if (travelState.movetype == SCS_MOVETYPE_NOCLIP)
+  {
+    const auto text = m_timeline.travel().noclipExitBlocked()
+                        ? "NOCLIP: move out of solid geometry to turn off"
+                        : "NOCLIP";
+    renderHudText(
+      renderContext,
+      renderBatch,
+      text,
+      1.3f,
+      {width / 2.0f, height - 32.0f},
+      0.2f,
+      0.8f,
+      1.0f);
+  }
 
   if (pref(Preferences::PlayModeShowHud))
   {
@@ -892,8 +950,10 @@ bool PlayModeController::placePlayer(const bool fromCamera)
   if (!fromCamera && m_savedState)
   {
     scs_set_state(m_context.get(), &*m_savedState);
-    if (scs_position_is_free(
-          m_context.get(), m_savedState->origin, usehullFor(*m_savedState)))
+    if (
+      m_savedState->movetype == SCS_MOVETYPE_NOCLIP
+      || scs_position_is_free(
+        m_context.get(), m_savedState->origin, usehullFor(*m_savedState)))
     {
       m_viewAngles = vm::vec3f{
         m_savedState->v_angle[0], m_savedState->v_angle[1], m_savedState->v_angle[2]};

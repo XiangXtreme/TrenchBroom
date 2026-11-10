@@ -240,6 +240,7 @@ void scs_config_defaults(scs_config* config)
   config->clientmaxspeed = 250.0f; // knife
   config->multiplayer = 1;
   config->quantize_usercmd = 1;
+  config->noclip_speed_boost = 1.0f;
 }
 
 scs_context* scs_init(const scs_config* config)

@@ -322,6 +322,28 @@ TEST_CASE("buildPlayModeWorld")
       CHECK(state.ground_entity == -1);
     }
 
+    SECTION("teleport cancels the hook instead of pulling back to the old anchor")
+    {
+      const auto world = buildPlayModeWorld(map);
+      REQUIRE(world.world);
+      auto context = createContext(world);
+      const float spawn[] = {90, 0, 40};
+      scs_spawn(context.get(), spawn, nullptr);
+      auto timeline = PlayModeTimeline{};
+      timeline.reset(0, {45, 0, 0});
+      timeline.hook(1, true);
+      timeline.advance(context.get(), 10);
+      auto state = scs_player_state{};
+      scs_get_state(context.get(), &state);
+      REQUIRE(state.teleport_count == 1u);
+      CHECK_FALSE(timeline.travel().hookAnchor());
+      CHECK(timeline.latestViewAngles() == vm::vec3f{10, 90, 0});
+      timeline.advance(context.get(), 20);
+      scs_get_state(context.get(), &state);
+      CHECK(state.origin[0] == 300.0f);
+      CHECK(state.origin[1] == 100.0f);
+    }
+
     SECTION("ducking uses the ducked destination height")
     {
       const auto world = buildPlayModeWorld(map);

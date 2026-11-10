@@ -55,6 +55,7 @@ void PlayModeTimeline::reset(
   scs_client_input_defaults(&m_input);
   m_viewAngles = viewAngles;
   m_events.clear();
+  m_travel = PlayModeTravel{};
   m_nextTickMs = startMs + static_cast<double>(m_msec);
 }
 
@@ -77,6 +78,7 @@ void PlayModeTimeline::setYawSpeed(const float degreesPerSecond)
 
 void PlayModeTimeline::releaseAllButtons(const double timeMs)
 {
+  hook(timeMs, false);
   for (const auto button :
        {PlayModeButton::Forward,
         PlayModeButton::Back,
@@ -131,7 +133,7 @@ uint32_t PlayModeTimeline::advance(
     // are delivered in order, so the queue is sorted by time.
     while (!m_events.empty() && m_events.front().timeMs <= m_nextTickMs)
     {
-      apply(m_events.front());
+      apply(m_events.front(), context);
       m_events.pop_front();
     }
 
@@ -143,13 +145,20 @@ uint32_t PlayModeTimeline::advance(
     m_input.viewangles[2] = 0.0f;
 
     auto cmd = scs_usercmd{};
+    // In noclip the walk key is a travel boost, not CS's 0.52 walk multiplier.
+    const auto walkScale = m_input.movespeedkey;
+    if (state.movetype == SCS_MOVETYPE_NOCLIP)
+      m_input.movespeedkey = 1.0f;
     scs_build_usercmd(&m_input, state.maxspeed, m_msec, &cmd);
+    m_input.movespeedkey = walkScale;
     m_viewAngles[1] = m_input.viewangles[1]; // +left / +right turned the view
+    m_travel.beforeStep(context, m_msec);
     scs_step(context, &cmd);
     auto after = scs_player_state{};
     scs_get_state(context, &after);
     if (after.teleport_count != state.teleport_count)
     {
+      m_travel.cancelHook();
       // A server fixangle replaces the command view; future input stays queued.
       m_viewAngles = vm::vec3f{after.v_angle[0], after.v_angle[1], after.v_angle[2]};
     }
@@ -186,7 +195,8 @@ void PlayModeTimeline::setViewAngles(const vm::vec3f& viewAngles)
   m_viewAngles = viewAngles;
   m_events.erase(
     std::remove_if(
-      m_events.begin(), m_events.end(),
+      m_events.begin(),
+      m_events.end(),
       [](const auto& event) { return event.type == Event::Type::Look; }),
     m_events.end());
 }
@@ -196,7 +206,42 @@ const scs_usercmd& PlayModeTimeline::lastCommand() const
   return m_lastCommand;
 }
 
-void PlayModeTimeline::apply(const Event& event)
+void PlayModeTimeline::hook(const double timeMs, const bool down)
+{
+  auto event = Event{};
+  event.timeMs = timeMs;
+  event.type = Event::Type::Hook;
+  event.down = down;
+  m_events.push_back(event);
+}
+
+void PlayModeTimeline::toggleNoclip(const double timeMs)
+{
+  auto event = Event{};
+  event.timeMs = timeMs;
+  event.type = Event::Type::Noclip;
+  m_events.push_back(event);
+}
+
+void PlayModeTimeline::clearTravelInput()
+{
+  std::erase_if(m_events, [](const auto& event) {
+    return event.type == Event::Type::Hook || event.type == Event::Type::Noclip;
+  });
+  m_travel.clearInput();
+}
+
+void PlayModeTimeline::setHookSpeed(const float speed)
+{
+  m_travel.setHookSpeed(speed);
+}
+
+const PlayModeTravel& PlayModeTimeline::travel() const
+{
+  return m_travel;
+}
+
+void PlayModeTimeline::apply(const Event& event, scs_context* context)
 {
   switch (event.type)
   {
@@ -216,6 +261,12 @@ void PlayModeTimeline::apply(const Event& event)
   case Event::Type::Tap:
     scs_key_down(&kbutton(event.button), TapKeycode);
     scs_key_up(&kbutton(event.button), TapKeycode);
+    break;
+  case Event::Type::Hook:
+    m_travel.hook(context, m_viewAngles, event.down);
+    break;
+  case Event::Type::Noclip:
+    m_travel.toggleNoclip(context);
     break;
   }
 }

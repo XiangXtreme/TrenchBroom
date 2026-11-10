@@ -48,6 +48,7 @@ Updated 2026-11-09. This index is the entry point for deciding what to trust.
 | [Python plugin development guide](python-plugin-development-guide.md) | Manifest plugins, panels, events, timers. |
 | [Issue browser workflow](issues-workflow.md) | Grouping, filtering, navigation, session ignores, batch fixes and acceptance. |
 | [Play mode jump guides](play-mode-jump-guides.md) | Platform spans and height differences while grounded in Play mode. |
+| [Play mode travel aids](play-mode-travel-aids.md) | Hook and noclip controls for navigating and testing maps in Play mode. |
 | [Themes](themes.md) | Theme file format. |
 | [Performance testing](performance-testing.md) | `TbPerf` benchmarks and how to run them. |
 

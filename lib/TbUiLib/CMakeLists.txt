@@ -212,6 +212,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeShowPre.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeSound.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeTimeline.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeTravel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeWorld.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupButton.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupWindow.cpp
@@ -503,6 +504,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeShowPre.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeSound.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeTimeline.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeTravel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeWorld.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupButton.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PopupWindow.h

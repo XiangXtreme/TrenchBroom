@@ -20,6 +20,7 @@
 #pragma once
 
 #include "cs/scs.h"
+#include "ui/PlayModeTravel.h"
 
 #include "vm/vec.h"
 
@@ -63,6 +64,8 @@ private:
       Button,
       Look,
       Tap,
+      Hook,
+      Noclip,
     };
 
     double timeMs = 0.0;
@@ -80,6 +83,7 @@ private:
   double m_nextTickMs = 0.0;
   uint8_t m_msec = 10;
   scs_usercmd m_lastCommand{};
+  PlayModeTravel m_travel;
 
 public:
   PlayModeTimeline();
@@ -103,6 +107,12 @@ public:
    */
   void tap(double timeMs, PlayModeButton button);
 
+  void hook(double timeMs, bool down);
+  void toggleNoclip(double timeMs);
+  void clearTravelInput();
+  void setHookSpeed(float speed);
+  const PlayModeTravel& travel() const;
+
   /**
    * Runs the ticks that end at or before nowMs, at most maxTicks of them; returns the
    * number of ticks run.
@@ -122,7 +132,7 @@ public:
   const scs_usercmd& lastCommand() const;
 
 private:
-  void apply(const Event& event);
+  void apply(const Event& event, scs_context* context);
   scs_kbutton& kbutton(PlayModeButton button);
 };
 

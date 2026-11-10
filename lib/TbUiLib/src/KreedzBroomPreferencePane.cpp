@@ -260,6 +260,22 @@ void KreedzBroomPreferencePane::createGui()
   right->addRow(
     "cl_yawspeed", floatField(Preferences::PlayModeYawSpeed, 0.0, 1000.0, 0, 5.0));
 
+  right->addSection(tr("Travel aids"));
+  right->addRow(
+    tr("Hook (hold)"),
+    withToolTip(
+      keyField(Preferences::PlayModeKeyHook),
+      tr("Hold to pull toward the surface under the crosshair. Release to let go.")));
+  right->addRow(
+    tr("Noclip (toggle)"),
+    withToolTip(
+      keyField(Preferences::PlayModeKeyNoclip),
+      tr("Fly through geometry. Hold the walk key to move three times faster. "
+         "Move out of solid geometry before turning noclip off.")));
+  right->addRow(
+    tr("Hook speed"),
+    floatField(Preferences::PlayModeHookSpeed, 100.0, 2000.0, 0, 50.0, " u/s"));
+
   right->addSection("Player");
   right->addRow(
     "Weapon speed",

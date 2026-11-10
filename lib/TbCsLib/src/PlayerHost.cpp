@@ -500,9 +500,16 @@ void PlayerHost::runCommandOnce(const usercmd_t& cmd)
     ent_.server_fall_velocity = -ent_.velocity[2];
   }
 
+  const auto clientMaxSpeed = ent_.maxspeed;
+  const auto noclip = ent_.movetype == MOVETYPE_NOCLIP;
   setupPMove(cmd);
   PM_Move(pm_.get(), 1);
   finishPMove();
+  // Noclip boost expands this command's limits, not the player's weapon speed.
+  if (noclip)
+  {
+    ent_.maxspeed = clientMaxSpeed;
+  }
 
   touchTeleports();
   pm_->numtouch = 0;
@@ -624,6 +631,17 @@ void PlayerHost::setupPMove(const usercmd_t& cmd)
   pm.spectator = 0;
   pm.waterjumptime = ent_.teleport_time;
   pm.cmd = cmd;
+  if (ent_.movetype == MOVETYPE_NOCLIP && (cmd.buttons & SCS_IN_RUN))
+  {
+    const auto boost = std::isfinite(config_.noclip_speed_boost)
+                         ? std::clamp(config_.noclip_speed_boost, 1.0f, 10.0f)
+                         : 1.0f;
+    pm.cmd.forwardmove *= boost;
+    pm.cmd.sidemove *= boost;
+    pm.cmd.upmove *= boost;
+    pm.maxspeed *= boost;
+    pm.clientmaxspeed *= boost;
+  }
   pm.dead = ent_.health <= 0.0f ? 1 : 0;
   pm.movetype = ent_.movetype;
   pm.flags = ent_.flags;
