@@ -420,6 +420,12 @@ inline auto PlayModeFullScreen =
 inline auto PlayModeRestoreCheckpointView =
   Preference<bool>{"Controls/Play mode/Restore checkpoint view", true};
 inline auto PlayModeShowHud = Preference<bool>{"Controls/Play mode/Show HUD", true};
+inline auto PlayModeShowJumpStats =
+  Preference<bool>{"Controls/Play mode/Show jump stats", true};
+inline auto PlayModeShowFailedJumps =
+  Preference<bool>{"Controls/Play mode/Show failed jumps", true};
+inline auto PlayModeJumpStatsDuration =
+  Preference<float>{"Controls/Play mode/Jump stats duration", 4.0f};
 inline auto PlayModeShowJumpSpan =
   Preference<bool>{"Controls/Play mode/Show jump span", false};
 inline auto PlayModeShowFallDamage =

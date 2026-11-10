@@ -26,9 +26,8 @@ namespace tb::ui
 namespace
 {
 
-// A duck tap lifts the player off the ground on the tick after duck is released, so a
-// takeoff shortly after a duck press counts as one.
-constexpr auto DuckTapTicks = 3;
+// The grace period is measured in simulation time, also at non-100 Hz tick rates.
+constexpr auto DuckTapMs = 30.0;
 
 bool onGround(const scs_player_state& state)
 {
@@ -46,28 +45,33 @@ float horizontalSpeed(const scs_player_state& state)
 void PlayModeShowPre::reset(const scs_player_state& state)
 {
   m_wasOnGround = onGround(state);
-  m_ticksSinceDuckPress = 1000;
+  m_lastDuckPressMs = -1.0e9;
   m_duckHeld = false;
   m_pre.reset();
 }
 
-void PlayModeShowPre::tick(
-  const scs_usercmd& cmd, const scs_player_state& state, const double timeMs)
+void PlayModeShowPre::tick(const scs_move_sample& sample)
 {
+  const auto& cmd = sample.command;
+  const auto& state = sample.after;
+  const auto timeMs = sample.time_seconds * 1000.0;
   const auto duck = (cmd.buttons & SCS_IN_DUCK) != 0;
-  m_ticksSinceDuckPress = duck && !m_duckHeld ? 0 : m_ticksSinceDuckPress + 1;
+  if (duck && !m_duckHeld)
+    m_lastDuckPressMs = timeMs;
   m_duckHeld = duck;
 
   const auto grounded = onGround(state);
   if (m_wasOnGround && !grounded && state.movetype == SCS_MOVETYPE_WALK)
   {
-    if (cmd.buttons & SCS_IN_JUMP)
+    if (
+      (cmd.buttons & SCS_IN_JUMP) && !(sample.before.oldbuttons & SCS_IN_JUMP)
+      && state.velocity[2] > 0.0f)
     {
-      m_pre = Pre{PlayModeTakeoff::Jump, horizontalSpeed(state), timeMs};
+      m_pre = Pre{PlayModeTakeoff::Jump, horizontalSpeed(sample.before), timeMs};
     }
-    else if (!duck && m_ticksSinceDuckPress <= DuckTapTicks)
+    else if (!duck && timeMs - m_lastDuckPressMs <= DuckTapMs + 0.001)
     {
-      m_pre = Pre{PlayModeTakeoff::Duck, horizontalSpeed(state), timeMs};
+      m_pre = Pre{PlayModeTakeoff::Duck, horizontalSpeed(sample.before), timeMs};
     }
   }
   m_wasOnGround = grounded;

@@ -438,7 +438,7 @@ void PlayerHost::resetPersistentMoveState()
   pm_->watertype = ent_.watertype;
 }
 
-void PlayerHost::runCommand(const scs_usercmd& in)
+void PlayerHost::runCommand(const scs_usercmd& in, scs_move_observer observer, void* user)
 {
   usercmd_t cmd{};
   cmd.msec = in.msec;
@@ -452,10 +452,10 @@ void PlayerHost::runCommand(const scs_usercmd& in)
   cmd.upmove = config_.quantize_usercmd ? quantizeMove(in.upmove) : in.upmove;
 
   ActiveHostScope scope(this);
-  runCommandChopped(cmd);
+  runCommandChopped(cmd, observer, user);
 }
 
-void PlayerHost::runCommandChopped(usercmd_t cmd)
+void PlayerHost::runCommandChopped(usercmd_t cmd, scs_move_observer observer, void* user)
 {
   // SV_RunCmd: chop up very long commands (note: odd milliseconds are lost,
   // the engine does the same).
@@ -464,24 +464,37 @@ void PlayerHost::runCommandChopped(usercmd_t cmd)
     const int oldmsec = cmd.msec;
     cmd.msec = static_cast<byte>(oldmsec / 2);
     const auto teleportCount = ent_.teleport_count;
-    runCommandOnce(cmd);
+    runCommandOnce(cmd, observer, user);
     cmd.msec = static_cast<byte>(oldmsec / 2);
     cmd.impulse = 0;
     if (ent_.teleport_count != teleportCount)
     {
       copyVec(ent_.v_angle, cmd.viewangles);
     }
-    runCommandOnce(cmd);
+    runCommandOnce(cmd, observer, user);
     return;
   }
-  runCommandOnce(cmd);
+  runCommandOnce(cmd, observer, user);
 }
 
-void PlayerHost::runCommandOnce(const usercmd_t& cmd)
+void PlayerHost::runCommandOnce(
+  const usercmd_t& cmd, scs_move_observer observer, void* user)
 {
   if (!world_ || world_->models.empty())
   {
     return;
+  }
+
+  auto sample = scs_move_sample{};
+  if (observer)
+  {
+    sample.before = ent_;
+    sample.command.msec = cmd.msec;
+    sample.command.buttons = cmd.buttons;
+    copyVec(cmd.viewangles, sample.command.viewangles);
+    sample.command.forwardmove = cmd.forwardmove;
+    sample.command.sidemove = cmd.sidemove;
+    sample.command.upmove = cmd.upmove;
   }
 
   // SV_RunCmd
@@ -512,9 +525,29 @@ void PlayerHost::runCommandOnce(const usercmd_t& cmd)
   }
 
   touchTeleports();
+  if (observer)
+  {
+    for (int i = 0; i < pm_->numtouch; ++i)
+    {
+      const auto& contact = pm_->touchindex[i];
+      if (contact.plane.normal[2] < 0.999f)
+        sample.obstructed = 1;
+      else if (!sample.has_floor_impact)
+      {
+        sample.has_floor_impact = 1;
+        copyVec(contact.endpos, sample.floor_impact);
+      }
+    }
+  }
   pm_->numtouch = 0;
 
   postThinkFallDamage();
+  if (observer)
+  {
+    sample.after = ent_;
+    sample.time_seconds = timebase_;
+    observer(user, &sample);
+  }
 }
 
 void PlayerHost::touchTeleports()

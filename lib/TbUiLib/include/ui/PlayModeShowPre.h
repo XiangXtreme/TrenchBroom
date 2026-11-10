@@ -49,15 +49,16 @@ public:
 
 private:
   bool m_wasOnGround = true;
-  int m_ticksSinceDuckPress = 1000;
+  double m_lastDuckPressMs = -1.0e9;
   bool m_duckHeld = false;
   std::optional<Pre> m_pre;
 
 public:
   void reset(const scs_player_state& state);
 
-  /** Feed every simulated tick: its usercmd and the player state after it. */
-  void tick(const scs_usercmd& cmd, const scs_player_state& state, double timeMs);
+  /** Feed native commands with the state before and after movement. Pre is the
+   * horizontal speed before the takeoff command, matching the stats record. */
+  void tick(const scs_move_sample& sample);
 
   /** The most recent takeoff, if any. */
   const std::optional<Pre>& pre() const;

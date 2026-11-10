@@ -22,7 +22,6 @@
 #include <QElapsedTimer>
 
 #include "cs/scs.h"
-#include "ui/PlayModeShowPre.h"
 #include "ui/PlayModeSound.h"
 #include "ui/PlayModeTimeline.h"
 #include "ui/PlayModeWorld.h"
@@ -103,7 +102,6 @@ private:
   };
   // event time minus m_clock time, per source
   std::optional<double> m_eventClockOffset[2];
-  PlayModeShowPre m_showPre;
   PlayModeJumpGuide m_jumpGuide;
   // when the last hard landing was reported on the HUD
   double m_fallShownMs = -1.0e9;

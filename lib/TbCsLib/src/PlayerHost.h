@@ -59,7 +59,8 @@ public:
   void setWorld(std::shared_ptr<const World> world);
 
   void spawn(const float origin[3], const float angles[3]);
-  void runCommand(const scs_usercmd& cmd);
+  void runCommand(
+    const scs_usercmd& cmd, scs_move_observer observer = nullptr, void* user = nullptr);
 
   scs_player_state& state() { return ent_; }
   const scs_player_state& state() const { return ent_; }
@@ -78,8 +79,8 @@ public:
 
 private:
   void bindEngineFunctions();
-  void runCommandChopped(usercmd_t cmd);
-  void runCommandOnce(const usercmd_t& cmd);
+  void runCommandChopped(usercmd_t cmd, scs_move_observer observer, void* user);
+  void runCommandOnce(const usercmd_t& cmd, scs_move_observer observer, void* user);
   void postThinkFallDamage();
   void touchTeleports();
   void checkMovingGround(float frametime);

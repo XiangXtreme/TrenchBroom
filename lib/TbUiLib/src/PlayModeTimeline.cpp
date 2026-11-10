@@ -56,6 +56,8 @@ void PlayModeTimeline::reset(
   m_viewAngles = viewAngles;
   m_events.clear();
   m_travel = PlayModeTravel{};
+  m_jumpStats.reset();
+  m_travelChanged = false;
   m_nextTickMs = startMs + static_cast<double>(m_msec);
 }
 
@@ -78,6 +80,7 @@ void PlayModeTimeline::setYawSpeed(const float degreesPerSecond)
 
 void PlayModeTimeline::releaseAllButtons(const double timeMs)
 {
+  m_jumpStats.interrupt();
   hook(timeMs, false);
   for (const auto button :
        {PlayModeButton::Forward,
@@ -121,6 +124,7 @@ uint32_t PlayModeTimeline::advance(
   const auto tickMs = static_cast<double>(m_msec);
   if (nowMs - m_nextTickMs > MaxCatchUpTicks * tickMs)
   {
+    m_jumpStats.interrupt();
     // The view was blocked for a long time (e.g. a modal dialog): skip ahead instead of
     // fast-forwarding through seconds of simulation.
     m_nextTickMs = nowMs - MaxCatchUpTicks * tickMs;
@@ -129,6 +133,7 @@ uint32_t PlayModeTimeline::advance(
   auto ticks = uint32_t{0};
   while (m_nextTickMs <= nowMs && ticks < maxTicks)
   {
+    m_travelChanged = false;
     // Input that happened before the end of this tick belongs to its usercmd. Events
     // are delivered in order, so the queue is sorted by time.
     while (!m_events.empty() && m_events.front().timeMs <= m_nextTickMs)
@@ -152,8 +157,30 @@ uint32_t PlayModeTimeline::advance(
     scs_build_usercmd(&m_input, state.maxspeed, m_msec, &cmd);
     m_input.movespeedkey = walkScale;
     m_viewAngles[1] = m_input.viewangles[1]; // +left / +right turned the view
+    const auto hookWasActive = m_travel.hookAnchor().has_value();
     m_travel.beforeStep(context, m_msec);
-    scs_step(context, &cmd);
+    struct Observation
+    {
+      PlayModeTimeline& timeline;
+      scs_context* context;
+      bool assisted;
+    } observation{
+      *this,
+      context,
+      m_travelChanged || hookWasActive || state.movetype == SCS_MOVETYPE_NOCLIP};
+    scs_step_observed(
+      context,
+      &cmd,
+      [](void* user, const scs_move_sample* sample) {
+        auto& data = *static_cast<Observation*>(user);
+        const auto empty = std::vector<PlayModeJumpSurface>{};
+        data.timeline.m_jumpStats.tick(
+          data.context,
+          data.timeline.m_jumpSurfaces ? *data.timeline.m_jumpSurfaces : empty,
+          *sample,
+          data.assisted);
+      },
+      &observation);
     auto after = scs_player_state{};
     scs_get_state(context, &after);
     if (after.teleport_count != state.teleport_count)
@@ -241,6 +268,26 @@ const PlayModeTravel& PlayModeTimeline::travel() const
   return m_travel;
 }
 
+void PlayModeTimeline::setJumpSurfaces(const std::vector<PlayModeJumpSurface>* surfaces)
+{
+  m_jumpSurfaces = surfaces;
+}
+
+void PlayModeTimeline::setGravity(const float gravity)
+{
+  m_jumpStats.setGravity(gravity);
+}
+
+const PlayModeJumpStats& PlayModeTimeline::jumpStats() const
+{
+  return m_jumpStats;
+}
+
+void PlayModeTimeline::interruptJumpStats()
+{
+  m_jumpStats.interrupt();
+}
+
 void PlayModeTimeline::apply(const Event& event, scs_context* context)
 {
   switch (event.type)
@@ -264,9 +311,11 @@ void PlayModeTimeline::apply(const Event& event, scs_context* context)
     break;
   case Event::Type::Hook:
     m_travel.hook(context, m_viewAngles, event.down);
+    m_travelChanged = m_travelChanged || m_travel.hookAnchor().has_value();
     break;
   case Event::Type::Noclip:
     m_travel.toggleNoclip(context);
+    m_travelChanged = true;
     break;
   }
 }

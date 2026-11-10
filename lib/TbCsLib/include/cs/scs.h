@@ -293,6 +293,23 @@ typedef struct scs_trace {
   int32_t ent; /* physent index, -1 = nothing hit */
 } scs_trace;
 
+/* Read-only observation of one native movement command, after angle/move
+ * quantization and command splitting. Times use the simulation clock. The first
+ * floor impact is retained before the remaining horizontal slide is applied. */
+typedef struct scs_move_sample
+{
+  scs_usercmd command;
+  scs_player_state before, after;
+  double time_seconds;
+  int32_t obstructed; /* wall, ceiling, or slope contact */
+  int32_t has_floor_impact;
+  float floor_impact[3];
+} scs_move_sample;
+
+/* Called synchronously; the sample is valid only during the call. Observers may
+ * query collision, but must not step, spawn, or change the player/world. */
+typedef void (*scs_move_observer)(void* user, const scs_move_sample* sample);
+
 /* Create / destroy a headless physics context. `config` may be NULL. */
 SCS_API scs_context* scs_init(const scs_config* config);
 SCS_API void scs_shutdown(scs_context* ctx);
@@ -306,6 +323,8 @@ SCS_API void scs_spawn(scs_context* ctx, const float origin[3], const float angl
 
 /* Run one usercmd exactly like SV_RunCmd -> PM_Move(pmove, server=1). */
 SCS_API void scs_step(scs_context* ctx, const scs_usercmd* cmd);
+SCS_API void scs_step_observed(
+  scs_context* ctx, const scs_usercmd* cmd, scs_move_observer observer, void* user);
 
 SCS_API void scs_set_position(scs_context* ctx, const float origin[3]);
 SCS_API void scs_get_position(const scs_context* ctx, float origin_out[3]);

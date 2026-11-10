@@ -290,6 +290,13 @@ void scs_step(scs_context* ctx, const scs_usercmd* cmd)
   }
 }
 
+void scs_step_observed(
+  scs_context* ctx, const scs_usercmd* cmd, scs_move_observer observer, void* user)
+{
+  if (ctx && cmd)
+    ctx->host.runCommand(*cmd, observer, user);
+}
+
 void scs_set_position(scs_context* ctx, const float origin[3])
 {
   if (ctx && origin)

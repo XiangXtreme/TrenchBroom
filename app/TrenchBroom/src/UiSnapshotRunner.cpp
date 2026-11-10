@@ -1330,7 +1330,9 @@ void configurePreferencesSnapshot(
     }
   }
 
-  if (targetName == QStringLiteral("preferences-misc"))
+  if (
+    targetName == QStringLiteral("preferences-misc")
+    || targetName == QStringLiteral("preferences-kreedzbroom"))
   {
     if (auto* pages = targetWidget.findChild<QStackedWidget*>(
           QStringLiteral("PreferenceDialog_Pages"));

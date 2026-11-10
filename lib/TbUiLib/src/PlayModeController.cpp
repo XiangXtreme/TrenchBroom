@@ -19,6 +19,7 @@
 
 #include "ui/PlayModeController.h"
 
+#include <QCoreApplication>
 #include <QFutureWatcher>
 #include <QKeyEvent>
 #include <QtConcurrent/QtConcurrent>
@@ -433,13 +434,14 @@ void PlayModeController::finishStarting()
   m_timeline.reset(now, m_viewAngles, static_cast<uint8_t>(1000 / frameRate));
   m_timeline.setYawSpeed(pref(Preferences::PlayModeYawSpeed));
   m_timeline.setHookSpeed(pref(Preferences::PlayModeHookSpeed));
+  m_timeline.setJumpSurfaces(&m_world.jumpSurfaces);
+  m_timeline.setGravity(pref(Preferences::PlayModeGravity));
   m_lastEventMs = now;
   m_previousEye = m_currentEye = eyePosition();
   m_active = true;
 
   auto state = scs_player_state{};
   scs_get_state(m_context.get(), &state);
-  m_showPre.reset(state);
   m_jumpGuide = {};
   m_fallShownMs = -1.0e9;
   m_fallShownCount = state.fall_count;
@@ -626,6 +628,7 @@ void PlayModeController::loadCheckpoint()
   }
   m_timeline.clearTravelInput();
   scs_set_state(m_context.get(), &state);
+  m_timeline.interruptJumpStats();
   if (pref(Preferences::PlayModeRestoreCheckpointView))
   {
     m_viewAngles = m_checkpoint->viewAngles;
@@ -702,13 +705,8 @@ void PlayModeController::update()
     {
       m_teleportCount = state.teleport_count;
       m_previousEye = m_currentEye;
-      m_showPre.reset(state);
       m_jumpGuide = {};
     }
-    if (m_timeline.travel().hookAnchor() || state.movetype == SCS_MOVETYPE_NOCLIP)
-      m_showPre.reset(state);
-    else
-      m_showPre.tick(m_timeline.lastCommand(), state, now);
 
     if (state.fall_count != m_fallShownCount)
     {
@@ -851,9 +849,9 @@ void PlayModeController::render(
       1.0f,
       1.0f);
 
-    if (const auto& pre = m_showPre.pre())
+    if (const auto& pre = m_timeline.jumpStats().pre())
     {
-      const auto age = nowMs() - pre->timeMs;
+      const auto age = m_timeline.jumpStats().timeMs() - pre->timeMs;
       const auto alpha =
         static_cast<float>(std::clamp(1.0 - (age - PreHoldMs) / PreFadeMs, 0.0, 1.0));
       if (alpha > 0.0f)
@@ -897,6 +895,54 @@ void PlayModeController::render(
           1.0f,
           1.0f,
           1.0f);
+      }
+    }
+  }
+
+  if (pref(Preferences::PlayModeShowHud) && pref(Preferences::PlayModeShowJumpStats))
+  {
+    const auto& stats = m_timeline.jumpStats();
+    if (const auto& result = stats.result();
+        result
+        && PlayModeJumpStats::visible(
+          *result, pref(Preferences::PlayModeShowFailedJumps)))
+    {
+      const auto age = stats.timeMs() - result->timeMs;
+      const auto hold =
+        static_cast<double>(pref(Preferences::PlayModeJumpStatsDuration)) * 1000.0;
+      const auto alpha = fadeAlpha(age, hold, 500.0);
+      if (alpha > 0.0f)
+      {
+        const auto label = result->technique == PlayModeJumpStats::Technique::HighJump
+                             ? std::string{"HJ"}
+                             : std::string{"LJ"};
+        const auto title = label + "  " + formatFloat(result->distance)
+          + (result->failed ? "  " + QCoreApplication::translate(
+               "PlayModeController", "Failed (estimate)").toStdString() : "");
+        const auto detail = "Pre " + formatFloat(result->preSpeed, 1) + "    Max "
+                            + formatFloat(result->maxSpeed, 1);
+        const auto fontSize = static_cast<float>(pref(Preferences::RendererFontSize));
+        const auto y = std::max(fontSize * 4.0f, height * 0.14f);
+        renderHudText(
+          renderContext,
+          renderBatch,
+          title,
+          1.5f,
+          {width / 2.0f, y},
+          result->failed ? 1.0f : 0.2f,
+          result->failed ? 0.4f : 1.0f,
+          result->failed ? 0.4f : 0.6f,
+          alpha);
+        renderHudText(
+          renderContext,
+          renderBatch,
+          detail,
+          1.1f,
+          {width / 2.0f, y - fontSize * 2.0f},
+          1.0f,
+          1.0f,
+          1.0f,
+          alpha);
       }
     }
   }

@@ -5868,6 +5868,26 @@ By %2</source>
     <context>
         <name>tb::ui::KreedzBroomPreferencePane</name>
         <message>
+            <source>Jump analysis</source>
+            <translation>跳跃分析</translation>
+        </message>
+        <message>
+            <source>Show jump results</source>
+            <translation>显示跳跃成绩</translation>
+        </message>
+        <message>
+            <source>Show failed jumps</source>
+            <translation>显示失败跳跃</translation>
+        </message>
+        <message>
+            <source>Result duration</source>
+            <translation>成绩停留时间</translation>
+        </message>
+        <message>
+            <source>LJ and HJ results: distance, takeoff speed and maximum speed. Assisted movement and unsupported jump techniques are excluded.</source>
+            <translation>显示 LJ 和 HJ 的距离、起跳速度及最高速度。排除辅助移动及尚未支持的跳跃技巧。</translation>
+        </message>
+        <message>
             <source>Jump guides</source>
             <translation>跳台辅助</translation>
         </message>
@@ -9572,6 +9592,13 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
         <message>
             <source>Show or hide the motion preview without changing the map</source>
             <translation>显示或隐藏运动预览，不修改地图</translation>
+        </message>
+    </context>
+    <context>
+        <name>PlayModeController</name>
+        <message>
+            <source>Failed (estimate)</source>
+            <translation>失败（估算）</translation>
         </message>
     </context>
 </TS>

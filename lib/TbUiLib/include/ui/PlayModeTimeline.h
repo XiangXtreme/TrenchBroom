@@ -20,6 +20,7 @@
 #pragma once
 
 #include "cs/scs.h"
+#include "ui/PlayModeJumpStats.h"
 #include "ui/PlayModeTravel.h"
 
 #include "vm/vec.h"
@@ -84,6 +85,9 @@ private:
   uint8_t m_msec = 10;
   scs_usercmd m_lastCommand{};
   PlayModeTravel m_travel;
+  PlayModeJumpStats m_jumpStats;
+  const std::vector<PlayModeJumpSurface>* m_jumpSurfaces = nullptr;
+  bool m_travelChanged = false;
 
 public:
   PlayModeTimeline();
@@ -112,6 +116,11 @@ public:
   void clearTravelInput();
   void setHookSpeed(float speed);
   const PlayModeTravel& travel() const;
+  /** Surfaces belong to the active world's snapshot and must outlive advance. */
+  void setJumpSurfaces(const std::vector<PlayModeJumpSurface>* surfaces);
+  void setGravity(float gravity);
+  const PlayModeJumpStats& jumpStats() const;
+  void interruptJumpStats();
 
   /**
    * Runs the ticks that end at or before nowMs, at most maxTicks of them; returns the

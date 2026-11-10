@@ -66,6 +66,28 @@ TEST_CASE("KreedzBroomPreferencePane")
   base.resetToDefaults();
   CHECK_FALSE(pref(Preferences::PlayModeShowJumpSpan));
   CHECK_FALSE(span->isChecked());
+
+  auto* results = static_cast<QCheckBox*>(nullptr);
+  auto* failures = static_cast<QCheckBox*>(nullptr);
+  for (auto* box : pane.findChildren<QCheckBox*>())
+  {
+    if (box->text() == "Show jump results")
+      results = box;
+    if (box->text() == "Show failed jumps")
+      failures = box;
+  }
+  REQUIRE(results);
+  REQUIRE(failures);
+  CHECK(results->isChecked());
+  CHECK(failures->isChecked());
+  results->click();
+  CHECK_FALSE(pref(Preferences::PlayModeShowJumpStats));
+  CHECK(pref(Preferences::PlayModeShowFailedJumps));
+  failures->click();
+  CHECK_FALSE(pref(Preferences::PlayModeShowFailedJumps));
+  base.resetToDefaults();
+  CHECK(results->isChecked());
+  CHECK(failures->isChecked());
 }
 
 TEST_CASE("playModeKeyName")

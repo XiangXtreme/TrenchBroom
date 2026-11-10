@@ -209,6 +209,18 @@ void KreedzBroomPreferencePane::createGui()
   left->addRow("", boolField("Show HUD", Preferences::PlayModeShowHud));
   left->addRow("", boolField("Show crosshair", Preferences::PlayModeShowCrosshair));
   left->addRow("", boolField("Show fall damage", Preferences::PlayModeShowFallDamage));
+  left->addSection(tr("Jump analysis"));
+  left->addRow(
+    "",
+    withToolTip(
+      boolField(tr("Show jump results"), Preferences::PlayModeShowJumpStats),
+      tr("LJ and HJ results: distance, takeoff speed and maximum speed. "
+         "Assisted movement and unsupported jump techniques are excluded.")));
+  left->addRow(
+    "", boolField(tr("Show failed jumps"), Preferences::PlayModeShowFailedJumps));
+  left->addRow(
+    tr("Result duration"),
+    floatField(Preferences::PlayModeJumpStatsDuration, 1.0, 15.0, 1, 0.5, " s"));
   left->addSection(tr("Jump guides"));
   left->addRow(
     "",

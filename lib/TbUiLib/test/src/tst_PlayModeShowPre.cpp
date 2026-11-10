@@ -21,6 +21,8 @@
 #include "ui/CatchConfig.h"
 #include "ui/PlayModeShowPre.h"
 
+#include "vm/approx.h"
+
 #include <memory>
 
 #include <catch2/catch_test_macros.hpp>
@@ -95,9 +97,15 @@ public:
       {
         cmd.forwardmove = 400.0f; // facing +x
       }
+      const auto before = state();
       scs_step(m_context.get(), &cmd);
       m_timeMs += 10.0;
-      m_showPre.tick(cmd, state(), m_timeMs);
+      auto sample = scs_move_sample{};
+      sample.command = cmd;
+      sample.after = state();
+      sample.before = before;
+      sample.time_seconds = m_timeMs / 1000.0;
+      m_showPre.tick(sample);
     }
   }
 
@@ -121,7 +129,7 @@ TEST_CASE("PlayModeShowPre")
     CHECK(player.pre()->takeoff == PlayModeTakeoff::Jump);
     CHECK(player.pre()->speed > 249.0f);
     CHECK(player.pre()->speed < 251.0f);
-    CHECK(player.pre()->timeMs == 2010.0);
+    CHECK(player.pre()->timeMs == vm::approx{2010.0, 0.00001});
   }
 
   SECTION("a duck tap shows the takeoff speed")

@@ -210,6 +210,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeFullScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeRawMouse.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeShowPre.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeJumpStats.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeSound.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeTimeline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeTravel.cpp
@@ -502,6 +503,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeJumpGuide.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeRawMouse.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeShowPre.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeJumpStats.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeSound.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeTimeline.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeTravel.h
