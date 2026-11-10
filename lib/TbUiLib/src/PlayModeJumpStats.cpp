@@ -185,7 +185,8 @@ void PlayModeJumpStats::tick(
   {
     m_landed = true;
     m_landedDucked = (after.flags & SCS_FL_DUCKING) != 0;
-    m_landingSpeed = speed(after);
+    // preCalc stores the speed entering the first grounded frame as prestrafe.
+    m_preSpeed = speed(before);
     m_groundFrames = 1;
   }
   else if (grounded(before) && grounded(after))
@@ -317,10 +318,21 @@ PlayModeJumpStats::Takeoff PlayModeJumpStats::classifyTakeoff(
     type = Technique::Unsupported;
 
   const auto post = speed(sample.before);
-  // preBhop stores the first ground frame, not the speed after FOG frames of
-  // friction. For LJ/HJ preFirstJump stores flPrevHorSpeed, i.e. cmd.before.
-  auto takeoff = Takeoff{type, linked ? m_groundFrames : 0, m_duckTaps,
-    linked ? m_landingSpeed : post, linked ? m_landingSpeed : post, post, m_timeMs};
+  // preBhop stores the first grounded frame as prestrafe and caps the displayed
+  // post speed when it exceeds the plugin's weapon-speed allowance.
+  const auto maxBhopSpeed = std::sqrt(std::max(
+    0.0f, std::pow(1.2f * std::max(1.0f, sample.before.maxspeed), 2.0f) - 16.0f));
+  const auto displayedPost = post <= maxBhopSpeed ? post : 0.8f * maxBhopSpeed;
+  // preFirstJump displays only flPrevHorSpeed and does not apply the bhop cap.
+  const auto linkedPreSpeed = linked ? m_preSpeed : post;
+  const auto linkedPostSpeed = linked ? displayedPost : post;
+  auto takeoff = Takeoff{
+    type,
+    linked ? m_groundFrames : 0,
+    m_duckTaps,
+    linkedPreSpeed,
+    linkedPostSpeed,
+    m_timeMs};
   return takeoff;
 }
 
@@ -455,14 +467,22 @@ double PlayModeJumpStats::timeMs() const
 
 bool PlayModeJumpStats::visible(const Result& result, const bool showFailed)
 {
-  const auto minDistance = result.technique == Technique::Bhop
-                             || result.technique == Technique::StandupBhop
-                             ? 150.0f
-                             : 120.0f;
-  const auto speedAdjustment = 0.7f * (result.weaponSpeed - 250.0f);
+  auto minDistance = 120.0f;
+  switch (result.technique)
+  {
+  case Technique::Bhop:
+  case Technique::StandupBhop:
+    minDistance = 150.0f;
+    break;
+  case Technique::DuckBhop:
+    minDistance = 120.0f;
+    break;
+  default:
+    break;
+  }
+  const auto speedAdjustment = 0.72f * (result.weaponSpeed - 250.0f);
   return result.technique != Technique::Unsupported && (!result.failed || showFailed)
-         && result.airFrames > 1
-         && result.distance >= minDistance + speedAdjustment
+         && result.airFrames > 1 && result.distance >= minDistance + speedAdjustment
          && (result.failed || result.distance <= 280.0f + speedAdjustment)
          && std::abs(result.heightDifference) < SameHeight;
 }

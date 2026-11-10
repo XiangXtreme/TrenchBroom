@@ -19,7 +19,6 @@
 
 #include "ui/PlayModeController.h"
 
-#include <QCoreApplication>
 #include <QFutureWatcher>
 #include <QKeyEvent>
 #include <QtConcurrent/QtConcurrent>
@@ -839,17 +838,29 @@ void PlayModeController::render(
     {
       const auto& stats = m_timeline.jumpStats();
       if (const auto& takeoff = stats.takeoff();
-          takeoff && stats.timeMs() - takeoff->timeMs < 2500.0
+          takeoff && stats.timeMs() - takeoff->timeMs < 1000.0
           && takeoff->technique != PlayModeJumpStats::Technique::Unsupported)
       {
-        const auto lines = std::array{
-          std::string{PlayModeJumpStats::name(takeoff->technique)} + " "
-            + std::to_string(takeoff->fog) + " FOG:",
-          formatFloat(takeoff->landingSpeed, 3),
-          formatFloat(takeoff->postSpeed, 3)};
+        const auto isLongJump =
+          takeoff->technique == PlayModeJumpStats::Technique::LongJump
+          || takeoff->technique == PlayModeJumpStats::Technique::HighJump;
+        const auto lines = isLongJump
+                             ? std::array{
+                                 std::string{takeoff->technique
+                                                 == PlayModeJumpStats::Technique::HighJump
+                                               ? "hj pre:"
+                                               : "lj pre:"},
+                                 formatFloat(takeoff->postSpeed, 3),
+                                 std::string{}}
+                             : std::array{
+                                 std::string{PlayModeJumpStats::name(takeoff->technique)}
+                                   + " " + std::to_string(takeoff->fog) + " FOG:",
+                                 formatFloat(takeoff->preSpeed, 3),
+                                 formatFloat(takeoff->postSpeed, 3)};
+        const auto lineCount = isLongJump ? 2u : 3u;
         const auto lineHeight =
           static_cast<float>(pref(Preferences::RendererFontSize)) * 1.5f;
-        for (size_t i = 0; i < lines.size(); ++i)
+        for (size_t i = 0; i < lineCount; ++i)
           renderHudText(
             renderContext,
             renderBatch,
@@ -892,29 +903,26 @@ void PlayModeController::render(
   if (pref(Preferences::PlayModeShowHud) && pref(Preferences::PlayModeShowJumpStats))
   {
     const auto& stats = m_timeline.jumpStats();
-    const auto* current = stats.current();
-    if (current && current->technique == PlayModeJumpStats::Technique::Unsupported)
-      current = nullptr;
     const auto* result = stats.result() ? &*stats.result() : nullptr;
     const auto hold =
       static_cast<double>(pref(Preferences::PlayModeJumpStatsDuration)) * 1000.0;
     const auto alpha =
       result ? fadeAlpha(stats.timeMs() - result->timeMs, hold, 500.0) : 0.0f;
     if (
-      result && !current && alpha > 0.0f
+      result && !stats.current() && alpha > 0.0f
       && PlayModeJumpStats::visible(*result, pref(Preferences::PlayModeShowFailedJumps)))
     {
       const auto fontSize = static_cast<float>(pref(Preferences::RendererFontSize));
       const auto y = std::max(fontSize * 6.5f, height * 0.13f);
       const auto line = fontSize * 1.55f;
-      const auto title = std::string{PlayModeJumpStats::name(result->technique)}
-        + (result->failed ? "  " + QCoreApplication::translate(
-             "PlayModeController", "Failed (estimate)").toStdString() : "");
+      const auto title = std::string{PlayModeJumpStats::name(result->technique)};
+      const auto hasFog = result->technique != PlayModeJumpStats::Technique::LongJump
+                          && result->technique != PlayModeJumpStats::Technique::HighJump;
       const auto lines = std::array{
         title,
         "Distance: " + formatFloat(result->distance, 3),
-        "Prestrafe: " + formatFloat(result->preSpeed, 3) + "("
-          + std::to_string(result->takeoff.fog) + ")",
+        "Prestrafe: " + formatFloat(result->preSpeed, 3)
+          + (hasFog ? "(" + std::to_string(result->takeoff.fog) + ")" : ""),
         "Strafes: " + std::to_string(result->strafes.size())};
       for (size_t i = 0; i < lines.size(); ++i)
         renderHudText(
@@ -924,13 +932,12 @@ void PlayModeController::render(
           i == 1 ? 1.3f : 1.2f,
           {width * 0.5f, y + static_cast<float>(3 - i) * line},
           result->failed ? 1.0f : 0.35f,
-          result->failed ? 0.4f : 0.95f,
-          result->failed ? 0.4f : 1.0f,
+          result->failed ? 70.0f / 255.0f : 0.95f,
+          result->failed ? 120.0f / 255.0f : 1.0f,
           alpha);
     }
 
-    const auto* analysis = current ? current
-                           : result && alpha > 0.0f
+    const auto* analysis = result && !stats.current() && alpha > 0.0f
                                && PlayModeJumpStats::visible(
                                  *result, pref(Preferences::PlayModeShowFailedJumps))
                              ? result
@@ -943,7 +950,7 @@ void PlayModeController::render(
       const auto rowHeight = font * scale * 1.7f;
       const auto tableX = width * 0.77f;
       const auto tableY = height * 0.78f;
-      const auto tableAlpha = current ? 1.0f : alpha;
+      const auto tableAlpha = alpha;
       const auto maxRows =
         static_cast<size_t>(std::clamp(height * 0.4f / rowHeight - 2.0f, 1.0f, 10.0f));
       const auto first =
@@ -966,7 +973,8 @@ void PlayModeController::render(
             ScreenTextAnchor{position + vm::vec2f{1, -1}, true});
           tableRenderer->renderStringOnTop(
             renderContext,
-            RgbaF{0.35f, 0.95f, 1.0f, tableAlpha},
+            result->failed ? RgbaF{1.0f, 70.0f / 255.0f, 120.0f / 255.0f, tableAlpha}
+                           : RgbaF{0.35f, 0.95f, 1.0f, tableAlpha},
             RgbaF{0, 0, 0, 0},
             string,
             ScreenTextAnchor{position, true});

@@ -47,8 +47,9 @@ public:
     Technique technique = Technique::LongJump;
     unsigned fog = 0;
     unsigned duckTaps = 0;
-    float landingSpeed = 0.0f;
+    // The plugin's preBhop uses the first grounded frame as prestrafe.
     float preSpeed = 0.0f;
+    // Speed shown as post by the plugin, including its bhop speed cap.
     float postSpeed = 0.0f;
     double timeMs = 0.0;
   };
@@ -103,7 +104,7 @@ private:
   bool m_landedDucked = false;
   unsigned m_groundFrames = 0;
   unsigned m_duckTaps = 0;
-  float m_landingSpeed = 0.0f;
+  float m_preSpeed = 0.0f;
   double m_timeMs = 0.0;
   float m_gravity = 800.0f;
 
@@ -113,10 +114,7 @@ public:
   /** An explicit discontinuity: CP restore, focus loss, or skipped simulation time.
    * The next normal grounded state starts fresh. Hook momentum is handled by tick. */
   void interrupt();
-  void tick(
-    scs_context* context,
-    const scs_move_sample& sample,
-    bool assisted);
+  void tick(scs_context* context, const scs_move_sample& sample, bool assisted);
   const std::optional<PlayModeShowPre::Pre>& pre() const;
   const std::optional<Result>& result() const;
   const Result* current() const;

@@ -155,23 +155,29 @@ TEST_CASE("PlayModeJumpStats")
     result.airFrames = 10;
     result.heightDifference = 0;
     result.weaponSpeed = 300;
-    result.distance = 154.9f;
+    result.distance = 155.9f;
     CHECK_FALSE(PlayModeJumpStats::visible(result, false));
-    result.distance = 155.0f;
+    result.distance = 156.0f;
     CHECK(PlayModeJumpStats::visible(result, false));
-    result.distance = 315.1f;
+    result.distance = 316.0f;
+    CHECK(PlayModeJumpStats::visible(result, false));
+    result.distance = 316.1f;
     CHECK_FALSE(PlayModeJumpStats::visible(result, false));
-    result.distance = 315.0f;
-    CHECK(PlayModeJumpStats::visible(result, false));
 
     result.technique = PlayModeJumpStats::Technique::Bhop;
-    result.distance = 184.9f;
+    result.distance = 185.9f;
     CHECK_FALSE(PlayModeJumpStats::visible(result, false));
-    result.distance = 185.0f;
+    result.distance = 186.0f;
     CHECK(PlayModeJumpStats::visible(result, false));
 
     result.technique = PlayModeJumpStats::Technique::DuckBhop;
-    result.distance = 155.0f;
+    result.distance = 156.0f;
+    CHECK(PlayModeJumpStats::visible(result, false));
+
+    result.technique = PlayModeJumpStats::Technique::MultiCountJump;
+    result.distance = 155.9f;
+    CHECK_FALSE(PlayModeJumpStats::visible(result, false));
+    result.distance = 156.0f;
     CHECK(PlayModeJumpStats::visible(result, false));
   }
 
@@ -360,7 +366,8 @@ TEST_CASE("PlayModeJumpStats")
       ? PlayModeJumpStats::Technique::DuckBhop : duckLanding
       ? PlayModeJumpStats::Technique::StandupBhop : PlayModeJumpStats::Technique::Bhop));
     CHECK(recorder.stats.takeoff()->fog == 1);
-    CHECK(recorder.stats.takeoff()->landingSpeed > 0);
+    CHECK(recorder.stats.takeoff()->preSpeed > 0);
+    CHECK(recorder.stats.takeoff()->postSpeed > 0);
   }
 
   SECTION("native duck taps classify CJ SCJ DCJ and MCJ")
