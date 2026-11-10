@@ -5,11 +5,15 @@
 #include "ui/PlayModeJumpGuide.h"
 
 #include "base/PreferenceManager.h"
+#include "gl/AttrString.h"
 #include "gl/Camera.h"
+#include "gl/FontDescriptor.h"
 #include "prefs/Preferences.h"
+#include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/RenderService.h"
 #include "render/TextAnchor.h"
+#include "render/TextRenderer.h"
 
 #include "vm/vec.h"
 
@@ -330,8 +334,9 @@ void renderPlayModeJumpGuide(
   service.setHideOccludedObjects();
   service.setLineWidth(2.0f);
   const auto highJump = guide.edge && guide.edge->highJump;
-  service.setForegroundColor(
-    highJump ? Color{RgbF{1.0f, 0.2f, 0.2f}} : Color{RgbF{0.2f, 1.0f, 0.2f}});
+  const auto color =
+    highJump ? Color{RgbF{1.0f, 0.2f, 0.2f}} : Color{RgbF{0.2f, 1.0f, 0.2f}};
+  service.setForegroundColor(color);
   service.setBackgroundColor(pref(Preferences::InfoOverlayBackgroundColor));
   if (guide.edge)
   {
@@ -359,9 +364,17 @@ void renderPlayModeJumpGuide(
   const auto height = span.end.z() - span.start.z();
   if (std::abs(height) > SurfaceTolerance)
     label += "  Z " + std::string{height > 0 ? "+" : ""} + number(height);
-  service.renderString(
-    label,
+  const auto fontSize = static_cast<size_t>(
+    std::round(static_cast<float>(pref(Preferences::RendererFontSize)) * 1.5f));
+  auto* textRenderer = new render::TextRenderer{
+    gl::FontDescriptor{pref(Preferences::RendererFontPath), fontSize}};
+  textRenderer->renderString(
+    renderContext,
+    color,
+    pref(Preferences::InfoOverlayBackgroundColor),
+    gl::AttrString{label},
     render::SimpleTextAnchor{
-      (start + end) / 2.0f, render::TextAlignment::Center, {0, 12}});
+      (start + end) / 2.0f, render::TextAlignment::Center, {0, 16}});
+  renderBatch.addOneShot(textRenderer);
 }
 } // namespace tb::ui
