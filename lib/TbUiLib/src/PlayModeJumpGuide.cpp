@@ -109,8 +109,39 @@ std::vector<Interval> intervals(
     if (const auto interval = intersect(surface, feet, direction))
       result.push_back(*interval);
   }
-  std::ranges::sort(result, {}, &Interval::start);
-  return result;
+  // Merge every height's continuous footprint, not just the takeoff surface.
+  // Otherwise a lower floor split into brushes can invent a landing edge at
+  // an internal seam, even when that floor continues all the way under us.
+  std::ranges::sort(result, {}, &Interval::height);
+  auto merged = std::vector<Interval>{};
+  merged.reserve(result.size());
+  for (auto first = result.begin(); first != result.end();)
+  {
+    const auto height = first->height;
+    const auto last = std::find_if(first, result.end(), [&](const auto& span) {
+      return span.height > height + SurfaceTolerance;
+    });
+    std::ranges::sort(first, last, {}, &Interval::start);
+    const auto groupStart = merged.size();
+    for (auto current = first; current != last; ++current)
+    {
+      if (
+        merged.size() > groupStart
+        && current->start <= merged.back().end + SurfaceTolerance)
+      {
+        if (current->end > merged.back().end)
+        {
+          merged.back().end = current->end;
+          merged.back().endNormal = current->endNormal;
+        }
+      }
+      else
+        merged.push_back(*current);
+    }
+    first = last;
+  }
+  std::ranges::sort(merged, {}, &Interval::start);
+  return merged;
 }
 
 std::optional<Interval> takeoffEdge(

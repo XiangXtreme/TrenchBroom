@@ -242,6 +242,35 @@ TEST_CASE("PlayModeJumpGuide")
       std::ranges::reverse(world.jumpSurfaces);
     }
   }
+  SECTION("continuous lower ground does not create a landing at brush seams")
+  {
+    // The staircase and adjoining floor brushes at the reported 288 / Z -88
+    // position in Lws_gxl_speedrun. The seam at x = -320 is not a platform edge.
+    const auto overlap = GENERATE(0.0, 16.0);
+    const auto floorHeight = GENERATE(448.0, 448.05);
+    CAPTURE(overlap, floorHeight);
+    auto continuousFixture = mdl::MapFixture{};
+    auto& continuousMap = continuousFixture.create();
+    addBox(continuousMap, {{-32, -480, 448}, {176, -384, 536}});
+    addBox(continuousMap, {{-64, -480, 480}, {-32, -384, 508}});
+    addBox(continuousMap, {{-120, -480, 448}, {-32, -384, 480}});
+    addBox(continuousMap, {{-128, -480, 384}, {192, 272, 448}});
+    addBox(continuousMap, {{-320, -480, 384}, {-128, -384, 448}});
+    addBox(continuousMap, {{-576, -480, 384}, {-320 + overlap, 272, floorHeight}});
+    auto world = buildPlayModeWorld(continuousMap);
+    auto context = contextFor(world);
+    const auto state = groundedAt(context.get(), 15, -436, 536);
+    for (auto order = 0; order < 2; ++order)
+    {
+      for (const auto yaw : {-0.3f, 0.0f, 0.3f})
+      {
+        CHECK_FALSE(measurePlayModeJumpGuide(
+                      context.get(), world.jumpSurfaces, state, {-1, yaw, -0.5f})
+                      .span);
+      }
+      std::ranges::reverse(world.jumpSurfaces);
+    }
+  }
   SECTION("thin landing faces and angled measurements are not skipped")
   {
     addBox(map, {{168, -128, -16}, {168.5, 128, 0}});
