@@ -9480,10 +9480,6 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
             <translation>触发后</translation>
         </message>
         <message>
-            <source>Reset</source>
-            <translation>重置</translation>
-        </message>
-        <message>
             <source>Preview the position at game start</source>
             <translation>预览游戏开始时的位置</translation>
         </message>
@@ -9492,16 +9488,12 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
             <translation>预览触发后的位置</translation>
         </message>
         <message>
-            <source>Clear the preview; the map is unchanged</source>
-            <translation>清除预览，地图保持原样</translation>
-        </message>
-        <message>
             <source>Motion preview progress</source>
             <translation>运动预览进度</translation>
         </message>
         <message>
-            <source>Motion preview · %1% · %2%3</source>
-            <translation>运动预览 · %1% · %2%3</translation>
+            <source>%1% · %2%3</source>
+            <translation>%1% · %2%3</translation>
         </message>
         <message>
             <source>°</source>
@@ -9512,24 +9504,24 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
             <translation> 单位</translation>
         </message>
         <message>
-            <source>Motion preview · This entity does not move</source>
-            <translation>运动预览 · 此实体不移动</translation>
+            <source>This entity does not move</source>
+            <translation>此实体不移动</translation>
         </message>
         <message>
-            <source>Motion preview · Invalid motion properties</source>
-            <translation>运动预览 · 运动属性无效</translation>
+            <source>Invalid motion properties</source>
+            <translation>运动属性无效</translation>
         </message>
         <message>
-            <source>Motion preview · No model brushes</source>
-            <translation>运动预览 · 缺少模型刷子</translation>
+            <source>No model brushes</source>
+            <translation>缺少模型刷子</translation>
         </message>
         <message>
-            <source>Motion preview · Compiler geometry overrides are not supported</source>
-            <translation>运动预览 · 暂不支持编译器几何覆盖</translation>
+            <source>Compiler geometry overrides are not supported</source>
+            <translation>暂不支持编译器几何覆盖</translation>
         </message>
         <message>
-            <source>Motion preview · Conflicting ORIGIN brush and origin properties</source>
-            <translation>运动预览 · ORIGIN 刷子与 origin 属性冲突</translation>
+            <source>Conflicting ORIGIN brush and origin properties</source>
+            <translation>ORIGIN 刷子与 origin 属性冲突</translation>
         </message>
         <message>
             <source>Start Open: the initial position is the open endpoint.</source>
@@ -9538,6 +9530,18 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
         <message>
             <source>Display-only preview. Geometry, properties and undo history are unchanged.</source>
             <translation>仅作显示预览，不修改几何体、属性或撤销历史。</translation>
+        </message>
+        <message>
+            <source>Preview</source>
+            <translation>预览</translation>
+        </message>
+        <message>
+            <source>Show motion preview</source>
+            <translation>显示运动预览</translation>
+        </message>
+        <message>
+            <source>Show or hide the motion preview without changing the map</source>
+            <translation>显示或隐藏运动预览，不修改地图</translation>
         </message>
     </context>
 </TS>

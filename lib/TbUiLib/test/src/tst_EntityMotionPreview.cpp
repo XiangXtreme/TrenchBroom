@@ -3,18 +3,24 @@
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QCursor>
 #include <QDir>
+#include <QFocusEvent>
 #include <QImage>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QSettings>
 #include <QSlider>
 #include <QtTest/QTest>
 
 #include "base/PreferenceManager.h"
 #include "gl/GlInterface.h"
+#include "gl/GlManager.h"
 #include "gl/OrthographicCamera.h"
 #include "gl/PerspectiveCamera.h"
+#include "gl/ResourceManager.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EntityNode.h"
@@ -32,8 +38,13 @@
 #include "ui/EntityMotionPreviewWidget.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/MapView2D.h"
+#include "ui/MapView3D.h"
+#include "ui/MapViewToolBox.h"
+#include "ui/MapWindow.h"
 #include "ui/RenderView.h"
 #include "ui/SelectionPropertyEditor.h"
+#include "ui/SwitchableMapViewContainer.h"
 
 #include "kd/result.h"
 
@@ -382,6 +393,18 @@ TEST_CASE("EntityMotionPreview")
     CHECK(otherPreview.progress() == 0);
     CHECK_FALSE(otherPreview.active());
   }
+  SECTION("repeating the current Play suspension state preserves the preview")
+  {
+    preview.setProgress(0.5);
+    preview.setSuspended(false);
+    CHECK(preview.active());
+    CHECK(preview.progress() == 0.5);
+    preview.setSuspended(true);
+    CHECK_FALSE(preview.active());
+    CHECK(preview.progress() == 0);
+    preview.setSuspended(false);
+    CHECK_FALSE(preview.active());
+  }
   SECTION("shared controls survive presentation changes and hide without a spacer")
   {
     const auto wasTable = pref(Preferences::EntityPropertiesTable);
@@ -409,6 +432,37 @@ TEST_CASE("EntityMotionPreview")
     CHECK(widget->isHidden());
     CHECK_FALSE(preview.active());
   }
+  SECTION("preview switch controls visibility independently of the initial endpoint")
+  {
+    REQUIRE(mdl::setEntityProperty(map, "spawnflags", "1"));
+    auto widget = EntityMotionPreviewWidget{preview};
+    auto* enabled = widget.findChild<QCheckBox*>("EntityMotionPreview_Enabled");
+    auto* slider = widget.findChild<QSlider*>();
+    REQUIRE(enabled);
+    REQUIRE(slider);
+    const auto buttons = widget.findChildren<QPushButton*>();
+    REQUIRE(buttons.size() == 2);
+    CHECK_FALSE(enabled->isChecked());
+    enabled->click();
+    CHECK(preview.active());
+    CHECK(preview.progress() == 0);
+    REQUIRE(preview.motion()->startOpen);
+    checkPoint(preview.motion()->transform(0) * vm::vec3d{0, 0, 0}, {128, 0, 0});
+    buttons.back()->click();
+    CHECK(enabled->isChecked());
+    CHECK(preview.progress() == 1);
+    buttons.front()->click();
+    CHECK(enabled->isChecked());
+    CHECK(preview.progress() == 0);
+    enabled->click();
+    CHECK_FALSE(preview.active());
+    CHECK_FALSE(enabled->isChecked());
+    slider->setValue(500);
+    CHECK(enabled->isChecked());
+    CHECK(preview.progress() == 0.5);
+    preview.setSuspended(true);
+    CHECK_FALSE(enabled->isChecked());
+  }
   SECTION("ghost renders at the preview position in 2D and 3D")
   {
     const auto ortho = GENERATE(false, true);
@@ -434,6 +488,87 @@ TEST_CASE("EntityMotionPreview")
       REQUIRE(QDir{}.mkpath(directory));
       REQUIRE(after.save(directory + (ortho ? "/motion-2d.png" : "/motion-3d.png")));
     }
+  }
+}
+
+TEST_CASE("EntityMotionPreview view navigation")
+{
+  const auto applicationName = QApplication::applicationName();
+  QApplication::setApplicationName(
+    QString{"TrenchBroom-MotionPreviewTest-%1"}.arg(QCoreApplication::applicationPid()));
+  QSettings{}.clear();
+  const auto restoreSettings = qScopeGuard([&] {
+    QSettings{}.clear();
+    QApplication::setApplicationName(applicationName);
+  });
+  auto fixture = AppControllerFixture{};
+  auto& app = fixture.appController();
+  const auto config = goldSrcConfig();
+  auto document = std::shared_ptr<MapDocument>{
+    MapDocument::createDocument(
+      app.environmentConfig(),
+      config.gameInfo,
+      mdl::MapFormat::Valve,
+      vm::bbox3d{8192.0},
+      app.taskManager(),
+      app.glManager().resourceManager())
+    | kdl::value()};
+  auto window = MapWindow{app, document};
+  window.resize(1400, 900);
+  auto* container = window.findChild<SwitchableMapViewContainer*>();
+  REQUIRE(container);
+  container->switchToMapView(MapViewLayout::TwoPanes);
+  window.show();
+  QApplication::processEvents();
+  auto* view3D = static_cast<MapView3D*>(nullptr);
+  for (auto* candidate : window.findChildren<MapView3D*>())
+    if (candidate->isVisible())
+      view3D = candidate;
+  auto* view2D = static_cast<MapView2D*>(nullptr);
+  for (auto* candidate : window.findChildren<MapView2D*>())
+    if (candidate->isVisible())
+      view2D = candidate;
+  REQUIRE(view3D);
+  REQUIRE(view2D);
+  addDoor(document->map(), "func_door_rotating");
+  REQUIRE(mdl::setEntityProperty(document->map(), "distance", "90"));
+  auto& preview = window.toolBox().entityMotionPreview();
+  preview.setProgress(0.65);
+  preview.setOpposite(true);
+  REQUIRE(preview.active());
+  auto focusIn = QFocusEvent{QEvent::FocusIn, Qt::MouseFocusReason};
+  auto focusOut = QFocusEvent{QEvent::FocusOut, Qt::MouseFocusReason};
+  // Exercise the native 3D focus handler, including its inactive Play cleanup.
+  QApplication::sendEvent(view3D, &focusIn);
+  view3D->stopPlayMode();
+  QApplication::sendEvent(view3D, &focusOut);
+  QApplication::sendEvent(view2D, &focusIn);
+  QApplication::processEvents();
+  CHECK(preview.active());
+  CHECK(preview.progress() == 0.65);
+  CHECK(preview.opposite());
+
+  if (qEnvironmentVariableIntValue("TB_TEST_SHOW_WINDOWS") == 1)
+  {
+    // Opt-in desktop validation exercises actual mouse activation and native focus.
+    window.raise();
+    window.activateWindow();
+    REQUIRE(QTest::qWaitForWindowActive(&window));
+    const auto cursor = QCursor::pos();
+    const auto restoreCursor = qScopeGuard([&] { QCursor::setPos(cursor); });
+    QCursor::setPos(view3D->mapToGlobal(view3D->rect().center()));
+    view3D->setFocus(Qt::MouseFocusReason);
+    REQUIRE(QTest::qWaitFor([&] { return view3D->hasFocus(); }, 5000));
+    QTest::mousePress(view3D, Qt::RightButton, Qt::NoModifier, view3D->rect().center());
+    QTest::mouseMove(view3D, view3D->rect().center() + QPoint{24, 12}, 20);
+    QTest::mouseRelease(
+      view3D, Qt::RightButton, Qt::NoModifier, view3D->rect().center() + QPoint{24, 12});
+    QCursor::setPos(view2D->mapToGlobal(view2D->rect().center()));
+    view2D->setFocus(Qt::MouseFocusReason);
+    REQUIRE(QTest::qWaitFor([&] { return view2D->hasFocus(); }, 5000));
+    CHECK(preview.active());
+    CHECK(preview.progress() == 0.65);
+    CHECK(preview.opposite());
   }
 }
 } // namespace tb::ui

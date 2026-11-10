@@ -79,6 +79,8 @@ void EntityMotionPreview::reset()
 
 void EntityMotionPreview::setSuspended(const bool suspended)
 {
+  if (m_suspended == suspended)
+    return;
   m_suspended = suspended;
   reset();
 }

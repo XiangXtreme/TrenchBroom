@@ -282,7 +282,6 @@ void MapView3D::stopPlayMode()
 
 void MapView3D::stopPlayMode(const bool deferPresentationRestore)
 {
-  m_toolBox.entityMotionPreview().setSuspended(false);
   if (!m_playMode->active())
   {
     const auto changingPresentation = kdl::set_temp{m_changingPlayPresentation, true};
@@ -291,6 +290,7 @@ void MapView3D::stopPlayMode(const bool deferPresentationRestore)
   }
 
   m_playMode->stop();
+  m_toolBox.entityMotionPreview().setSuspended(false);
   m_rawMouse->stop();
   if (m_grabbedMouse)
   {

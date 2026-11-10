@@ -7,6 +7,7 @@
 #include <QWidget>
 
 class QLabel;
+class QCheckBox;
 class QSlider;
 class QComboBox;
 class QPushButton;
@@ -29,6 +30,6 @@ private:
   QSlider* m_slider;
   QPushButton* m_start;
   QPushButton* m_end;
-  QPushButton* m_reset;
+  QCheckBox* m_enabled;
 };
 } // namespace tb::ui

@@ -4,6 +4,7 @@
  */
 #include "ui/EntityMotionPreviewWidget.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -26,6 +27,11 @@ EntityMotionPreviewWidget::EntityMotionPreviewWidget(
   setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
   auto* column = createPanelColumn(this, PanelInsets::Toolbar);
   auto* heading = createPanelActions();
+  m_enabled = new QCheckBox{tr("Preview"), this};
+  m_enabled->setObjectName("EntityMotionPreview_Enabled");
+  m_enabled->setAccessibleName(tr("Show motion preview"));
+  m_enabled->setToolTip(tr("Show or hide the motion preview without changing the map"));
+  heading->addWidget(m_enabled);
   m_summary = new QLabel{this};
   m_summary->setWordWrap(true);
   heading->addWidget(m_summary, 1);
@@ -40,12 +46,10 @@ EntityMotionPreviewWidget::EntityMotionPreviewWidget(
   auto* controls = createPanelActions();
   m_start = new QPushButton{tr("Initial"), this};
   m_end = new QPushButton{tr("Activated"), this};
-  m_reset = new QPushButton{tr("Reset"), this};
-  for (auto* button : {m_start, m_end, m_reset})
+  for (auto* button : {m_start, m_end})
     button->setProperty("tbControlRole", "compact");
   m_start->setToolTip(tr("Preview the position at game start"));
   m_end->setToolTip(tr("Preview the position after activation"));
-  m_reset->setToolTip(tr("Clear the preview; the map is unchanged"));
   m_slider = new QSlider{Qt::Horizontal, this};
   m_slider->setObjectName("EntityMotionPreview_Progress");
   m_slider->setRange(0, 1000);
@@ -54,14 +58,18 @@ EntityMotionPreviewWidget::EntityMotionPreviewWidget(
   controls->addWidget(m_start);
   controls->addWidget(m_slider, 1);
   controls->addWidget(m_end);
-  controls->addWidget(m_reset);
   column->addLayout(controls);
   connect(m_slider, &QSlider::valueChanged, this, [this](int value) {
     m_preview.setProgress(double(value) / 1000.0);
   });
   connect(m_start, &QPushButton::clicked, this, [this] { m_preview.setProgress(0); });
   connect(m_end, &QPushButton::clicked, this, [this] { m_preview.setProgress(1); });
-  connect(m_reset, &QPushButton::clicked, &preview, &EntityMotionPreview::reset);
+  connect(m_enabled, &QCheckBox::toggled, this, [this](const bool enabled) {
+    if (enabled)
+      m_preview.setProgress(m_preview.progress());
+    else
+      m_preview.reset();
+  });
   connect(m_direction, &QComboBox::currentIndexChanged, this, [this](int index) {
     m_preview.setOpposite(index == 1);
   });
@@ -80,35 +88,37 @@ void EntityMotionPreviewWidget::refresh()
   m_slider->setEnabled(movable);
   m_start->setEnabled(movable);
   m_end->setEnabled(movable);
-  m_reset->setEnabled(m_preview.active());
+  m_enabled->setEnabled(movable);
   m_direction->setVisible(movable && motion->bidirectional);
   const auto sliderBlocker = QSignalBlocker{m_slider};
   const auto directionBlocker = QSignalBlocker{m_direction};
+  const auto enabledBlocker = QSignalBlocker{m_enabled};
+  m_enabled->setChecked(m_preview.active());
   m_slider->setValue(qRound(m_preview.progress() * 1000));
   m_direction->setCurrentIndex(m_preview.opposite() ? 1 : 0);
   auto summary = QString{};
   switch (motion->problem)
   {
   case MotionProblem::None:
-    summary = tr("Motion preview · %1% · %2%3")
+    summary = tr("%1% · %2%3")
                 .arg(qRound(m_preview.progress() * 100))
                 .arg(motion->distance, 0, 'f', 1)
                 .arg(motion->rotating ? tr("°") : tr(" units"));
     break;
   case MotionProblem::Stationary:
-    summary = tr("Motion preview · This entity does not move");
+    summary = tr("This entity does not move");
     break;
   case MotionProblem::InvalidProperty:
-    summary = tr("Motion preview · Invalid motion properties");
+    summary = tr("Invalid motion properties");
     break;
   case MotionProblem::NoGeometry:
-    summary = tr("Motion preview · No model brushes");
+    summary = tr("No model brushes");
     break;
   case MotionProblem::CompilerOverride:
-    summary = tr("Motion preview · Compiler geometry overrides are not supported");
+    summary = tr("Compiler geometry overrides are not supported");
     break;
   case MotionProblem::OriginConflict:
-    summary = tr("Motion preview · Conflicting ORIGIN brush and origin properties");
+    summary = tr("Conflicting ORIGIN brush and origin properties");
     break;
   }
   m_summary->setText(summary);
