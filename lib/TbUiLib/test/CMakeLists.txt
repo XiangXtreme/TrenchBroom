@@ -78,6 +78,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PythonApi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PythonRuntime.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PlayModeRawMouse.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PlayModeJumpGuide.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PlayModeShowPre.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PlayModeTimeline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_PlayModeWorld.cpp

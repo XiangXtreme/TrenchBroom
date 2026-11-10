@@ -46,6 +46,7 @@ Updated 2026-11-09. This index is the entry point for deciding what to trust.
 | [Python API migration](python-api-migration.md) | Breaking renames plugin authors must apply. |
 | [Python plugin development guide](python-plugin-development-guide.md) | Manifest plugins, panels, events, timers. |
 | [Issue browser workflow](issues-workflow.md) | Grouping, filtering, navigation, session ignores, batch fixes and acceptance. |
+| [Play mode jump guides](play-mode-jump-guides.md) | Platform spans and HJ edge-friction hints while grounded in Play mode. |
 | [Themes](themes.md) | Theme file format. |
 | [Performance testing](performance-testing.md) | `TbPerf` benchmarks and how to run them. |
 

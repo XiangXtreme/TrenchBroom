@@ -5868,6 +5868,26 @@ By %2</source>
     <context>
         <name>tb::ui::KreedzBroomPreferencePane</name>
         <message>
+            <source>Jump guides</source>
+            <translation>跳台辅助</translation>
+        </message>
+        <message>
+            <source>Show platform span</source>
+            <translation>显示平台跨度</translation>
+        </message>
+        <message>
+            <source>Show edge friction boundary</source>
+            <translation>显示边缘摩擦边界</translation>
+        </message>
+        <message>
+            <source>Measure between flat platform edges along your view direction. Shows horizontal distance and height difference; does not predict whether a jump is possible.</source>
+            <translation>沿观察方向测量平坦平台边缘之间的水平跨度与高差，不预测能否跳过。</translation>
+        </message>
+        <message>
+            <source>Preview the HJ friction boundary along movement direction, or view direction when stationary. Highlights when the player's support probe misses. Uses the current standing or ducked collision hull.</source>
+            <translation>沿移动方向预览 HJ 边缘摩擦边界，静止时沿观察方向预览。玩家的支撑探测未命中时高亮，检测使用当前站立或蹲下的碰撞体。</translation>
+        </message>
+        <message>
             <source>Full screen during play</source>
             <translation>Play 时全屏显示</translation>
             </message>

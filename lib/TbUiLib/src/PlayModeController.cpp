@@ -436,6 +436,8 @@ void PlayModeController::finishStarting()
   auto state = scs_player_state{};
   scs_get_state(m_context.get(), &state);
   m_showPre.reset(state);
+  m_jumpGuide = {};
+  m_jumpGuideUpdatedMs = -1.0e9;
   m_fallShownMs = -1.0e9;
   m_fallShownCount = state.fall_count;
   m_teleportCount = state.teleport_count;
@@ -470,6 +472,7 @@ void PlayModeController::stop()
   m_camera.setZoom(m_editorZoom);
   m_sound->stopAll();
   m_active = false;
+  m_jumpGuide = {};
 }
 
 void PlayModeController::keyDown(const QKeyEvent& event)
@@ -548,8 +551,7 @@ void PlayModeController::saveCheckpoint()
   scs_get_state(m_context.get(), &state);
   if (std::abs(state.velocity[2]) > 0.01f)
   {
-    m_document.logger().info()
-      << "Play mode: checkpoint requires zero vertical speed";
+    m_document.logger().info() << "Play mode: checkpoint requires zero vertical speed";
     return;
   }
 
@@ -676,6 +678,8 @@ void PlayModeController::update()
       m_teleportCount = state.teleport_count;
       m_previousEye = m_currentEye;
       m_showPre.reset(state);
+      m_jumpGuide = {};
+      m_jumpGuideUpdatedMs = -1.0e9;
     }
     m_showPre.tick(m_timeline.lastCommand(), state, now);
 
@@ -697,6 +701,43 @@ void PlayModeController::update()
 
   // Render between the last two ticks so 100 Hz physics looks smooth at any frame rate.
   syncCamera(m_timeline.tickFraction(now));
+
+  const auto showSpan = pref(Preferences::PlayModeShowJumpSpan);
+  const auto showEdge = pref(Preferences::PlayModeShowEdgeFriction)
+                        && pref(Preferences::PlayModeEdgeFriction) > 1.0f
+                        && pref(Preferences::PlayModeFriction) > 0.0f;
+  auto state = scs_player_state{};
+  scs_get_state(m_context.get(), &state);
+  if (
+    (!showSpan && !showEdge) || state.ground_entity == -1
+    || !(state.flags & SCS_FL_ONGROUND) || state.movetype != SCS_MOVETYPE_WALK
+    || state.waterlevel >= 2 || state.teleport_time != 0.0f)
+  {
+    m_jumpGuide = {};
+    m_jumpGuideUpdatedMs = -1.0e9;
+  }
+  else
+  {
+    // Geometry selection runs at 10 Hz; physics and camera remain at their normal
+    // cadence. The live friction highlight is queried every frame, independently.
+    if (now - m_jumpGuideUpdatedMs >= 100.0)
+    {
+      m_jumpGuide = measurePlayModeJumpGuide(
+        m_context.get(),
+        m_world.jumpSurfaces,
+        state,
+        forwardFromAngles({0, m_timeline.latestViewAngles().y(), 0}),
+        showSpan,
+        showEdge);
+      m_jumpGuideUpdatedMs = now;
+    }
+    if (!showSpan)
+      m_jumpGuide.span.reset();
+    if (!showEdge || state.friction <= 0.0f)
+      m_jumpGuide.edge.reset();
+    else if (m_jumpGuide.edge)
+      m_jumpGuide.edge->active = playModeEdgeFriction(m_context.get(), state);
+  }
 }
 
 double PlayModeController::nowMs() const
@@ -750,6 +791,8 @@ void PlayModeController::render(
   const auto& viewport = m_camera.viewport();
   const auto width = static_cast<float>(viewport.width);
   const auto height = static_cast<float>(viewport.height);
+
+  renderPlayModeJumpGuide(m_jumpGuide, renderContext, renderBatch);
 
   if (pref(Preferences::PlayModeShowHud))
   {
@@ -825,9 +868,8 @@ void PlayModeController::render(
   if (pref(Preferences::PlayModeShowHud) && pref(Preferences::PlayModeShowFallDamage))
   {
     // Below showkeys: the damage of the last hard landing (the player never dies).
-    if (
-      const auto alpha = fadeAlpha(nowMs() - m_fallShownMs, FallHoldMs, FallFadeMs);
-      alpha > 0.0f)
+    if (const auto alpha = fadeAlpha(nowMs() - m_fallShownMs, FallHoldMs, FallFadeMs);
+        alpha > 0.0f)
     {
       const auto fontSize = static_cast<float>(pref(Preferences::RendererFontSize));
       auto state = scs_player_state{};
@@ -870,9 +912,8 @@ bool PlayModeController::placePlayer(const bool fromCamera)
   if (!fromCamera && m_savedState)
   {
     scs_set_state(m_context.get(), &*m_savedState);
-    if (
-      scs_position_is_free(
-        m_context.get(), m_savedState->origin, usehullFor(*m_savedState)))
+    if (scs_position_is_free(
+          m_context.get(), m_savedState->origin, usehullFor(*m_savedState)))
     {
       m_viewAngles = vm::vec3f{
         m_savedState->v_angle[0], m_savedState->v_angle[1], m_savedState->v_angle[2]};

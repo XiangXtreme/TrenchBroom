@@ -203,6 +203,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PieMenuSettingsDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginInspector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeController.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeJumpGuide.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeFullScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeRawMouse.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeShowPre.cpp
@@ -491,6 +492,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PieMenuSettingsDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PluginInspector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeController.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeJumpGuide.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeRawMouse.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeShowPre.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/PlayModeSound.h

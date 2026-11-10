@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "ui/PlayModeJumpGuide.h"
+
 #include "vm/vec.h"
 
 #include <cstdint>
@@ -56,14 +58,15 @@ struct PlayModeWorld
 {
   ScsWorldPtr world;
   std::vector<PlayModeSpawnPoint> spawnPoints;
+  std::vector<PlayModeJumpSurface> jumpSurfaces;
   size_t worldBrushCount = 0;
   size_t entityCount = 0;
   size_t teleportCount = 0;
   std::vector<std::string> warnings;
   size_t skippedBrushCount = 0;
   double buildMilliseconds = 0.0;
-  int clipType = 0;             // SCS_CLIPTYPE_* the hulls were built with
-  std::string error;            // non-empty if the world could not be built
+  int clipType = 0;  // SCS_CLIPTYPE_* the hulls were built with
+  std::string error; // non-empty if the world could not be built
 };
 
 struct PlayModeWorldOptions
