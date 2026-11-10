@@ -48,6 +48,7 @@ class AssembleBrushTool;
 class CreateEntityTool;
 class DrawShapeTool;
 class LightmapPreview;
+class EntityMotionPreview;
 class MapDocument;
 class MoveObjectsTool;
 class ExtrudeTool;
@@ -70,6 +71,7 @@ class MapViewToolBox : public ToolBox
 private:
   MapDocument& m_document;
   std::unique_ptr<LightmapPreview> m_lightmapPreview;
+  std::unique_ptr<EntityMotionPreview> m_entityMotionPreview;
   std::unique_ptr<TerrainPreviewRenderer> m_terrainPreview;
   std::function<ActionExecutionContext(MapViewBase*)> m_actionContextFactory;
   bool m_selectMode;
@@ -115,6 +117,7 @@ public:
   ActionExecutionContext actionContext(AppController& app, MapViewBase* view) const;
 
   LightmapPreview& lightmapPreview();
+  EntityMotionPreview& entityMotionPreview();
   TerrainPreviewRenderer& terrainPreview(AppController& app);
 
 public: // tools

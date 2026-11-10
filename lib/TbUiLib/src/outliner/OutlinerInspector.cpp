@@ -29,7 +29,8 @@
 namespace tb::ui
 {
 
-OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
+OutlinerInspector::OutlinerInspector(
+  MapDocument& document, QWidget* parent, EntityMotionPreview* motionPreview)
   : TabBookPage(parent)
   , m_document(document)
 {
@@ -140,7 +141,7 @@ OutlinerInspector::OutlinerInspector(MapDocument& document, QWidget* parent)
     m_treeWidget->revealSelection();
   });
 
-  m_propertyEditor = new SelectionPropertyEditor{m_document, m_splitter};
+  m_propertyEditor = new SelectionPropertyEditor{m_document, m_splitter, motionPreview};
   m_splitter->addWidget(m_propertyEditor);
 
   connect(addLayerButton, &QAbstractButton::clicked, this, [this]() {

@@ -12,13 +12,15 @@
 
 #include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
+#include "ui/EntityMotionPreviewWidget.h"
 #include "ui/EntityPropertyEditor.h"
 #include "ui/PanelLayout.h"
 #include "ui/outliner/OutlinerEntityPropertyEditor.h"
 
 namespace tb::ui
 {
-SelectionPropertyEditor::SelectionPropertyEditor(MapDocument& document, QWidget* parent)
+SelectionPropertyEditor::SelectionPropertyEditor(
+  MapDocument& document, QWidget* parent, EntityMotionPreview* motionPreview)
   : QWidget{parent}
   , m_document{document}
 {
@@ -39,6 +41,8 @@ SelectionPropertyEditor::SelectionPropertyEditor(MapDocument& document, QWidget*
     tr("Table includes property keys, protection and default values"));
   actions->addWidget(m_presentation);
   m_layout->addWidget(toolbar);
+  if (motionPreview)
+    m_layout->addWidget(new EntityMotionPreviewWidget{*motionPreview, this});
   connect(m_presentation, &QComboBox::currentIndexChanged, this, [](const int index) {
     setPref(Preferences::EntityPropertiesTable, index == 1);
   });

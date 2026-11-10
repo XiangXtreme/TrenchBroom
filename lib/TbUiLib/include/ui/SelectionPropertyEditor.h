@@ -14,6 +14,7 @@ class QVBoxLayout;
 namespace tb::ui
 {
 class EntityPropertyEditor;
+class EntityMotionPreview;
 class MapDocument;
 class OutlinerEntityPropertyEditor;
 
@@ -32,7 +33,10 @@ private:
   NotifierConnection m_notifierConnection;
 
 public:
-  explicit SelectionPropertyEditor(MapDocument& document, QWidget* parent = nullptr);
+  explicit SelectionPropertyEditor(
+    MapDocument& document,
+    QWidget* parent = nullptr,
+    EntityMotionPreview* motionPreview = nullptr);
   void focusProperty(const QString& key);
 
 signals:

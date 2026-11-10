@@ -57,6 +57,7 @@
 #include "gl/MaterialManager.h"
 #include "gl/Resource.h"
 #include "gl/Texture.h"
+#include "mdl/BrushBuilder.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
 #include "mdl/EntityLinkManager.h"
@@ -83,6 +84,8 @@
 #include "ui/CommandPaletteDialog.h"
 #include "ui/CyclingMapView.h"
 #include "ui/EntityBrowserView.h"
+#include "ui/EntityMotionPreview.h"
+#include "ui/EntityMotionPreviewWidget.h"
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/IssueBrowserView.h"
@@ -131,6 +134,9 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("outliner-properties-table"),
     QStringLiteral("outliner-properties-narrow"),
     QStringLiteral("outliner-properties-wad"),
+    QStringLiteral("outliner-motion"),
+    QStringLiteral("outliner-motion-table"),
+    QStringLiteral("outliner-motion-narrow"),
     QStringLiteral("outliner-reparent-layer-before"),
     QStringLiteral("outliner-reparent-layer-after"),
     QStringLiteral("outliner-brush-entity-before"),
@@ -337,7 +343,30 @@ mdl::Node* configureOutlinerSnapshotModel(MapWindow& mapWindow, const QString& t
   auto& worldNode = map.worldNode();
   auto* selectedNode = static_cast<mdl::Node*>(nullptr);
 
-  if (targetName == QStringLiteral("outliner-properties-wad"))
+  if (targetName.startsWith(QStringLiteral("outliner-motion")))
+  {
+    selectedNode = findSnapshotEntity(worldNode, "func_door_rotating");
+    if (!selectedNode)
+    {
+      auto* entity = new mdl::EntityNode{mdl::Entity{
+        {{"classname", "func_door_rotating"},
+         {"distance", "90"},
+         {"origin", "80 96 0"},
+         {"targetname", "entry_door"}}}};
+      const auto builder = mdl::BrushBuilder{worldNode.mapFormat(), map.worldBounds()};
+      auto brush =
+        builder.createCuboid(vm::bbox3d{{80, 96, 0}, {200, 112, 96}}, "__TB_empty");
+      if (!brush.is_success())
+      {
+        delete entity;
+        return nullptr;
+      }
+      entity->addChild(new mdl::BrushNode{std::move(brush) | kdl::value()});
+      mdl::addNodes(map, {{&mdl::parentForNodes(map), {entity}}});
+      selectedNode = entity;
+    }
+  }
+  else if (targetName == QStringLiteral("outliner-properties-wad"))
   {
     mdl::setWorldProperty(
       map,
@@ -419,10 +448,12 @@ void configureOutlinerSnapshot(QWidget& targetWidget, const QString& targetName)
   auto* selectedNode = configureOutlinerSnapshotModel(*mapWindow, targetName);
   const auto showProperties =
     targetName == QStringLiteral("outliner")
+    || targetName.startsWith(QStringLiteral("outliner-motion"))
     || targetName.startsWith(QStringLiteral("outliner-properties-"));
   setPref(
     Preferences::EntityPropertiesTable,
-    targetName == QStringLiteral("outliner-properties-table"));
+    targetName == QStringLiteral("outliner-properties-table")
+      || targetName == QStringLiteral("outliner-motion-table"));
 
   if (
     auto* propertiesToggle = targetWidget.findChild<QAbstractButton*>(
@@ -440,6 +471,7 @@ void configureOutlinerSnapshot(QWidget& targetWidget, const QString& targetName)
   {
     horizontalSplitter->setSizes(
       targetName == QStringLiteral("outliner-properties-narrow")
+          || targetName == QStringLiteral("outliner-motion-narrow")
           || targetName == QStringLiteral("outliner-properties-wad")
         ? QList<int>{1100, 340}
         : QList<int>{860, 580});
@@ -486,6 +518,9 @@ void configureOutlinerSnapshot(QWidget& targetWidget, const QString& targetName)
       tree->setFocus(Qt::OtherFocusReason);
     }
   }
+
+  if (targetName.startsWith(QStringLiteral("outliner-motion")))
+    mapWindow->toolBox().entityMotionPreview().setProgress(0.5);
 
   if (targetName == QStringLiteral("outliner-properties-wad"))
   {
@@ -798,6 +833,19 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
   auto checkParent = false;
   auto expectParent = false;
   auto expectedDescription = QString{};
+
+  if (targetName.startsWith(QStringLiteral("outliner-motion")))
+  {
+    auto* widget = targetWidget.findChild<EntityMotionPreviewWidget*>();
+    const auto& preview = mapWindow->toolBox().entityMotionPreview();
+    if (!widget || !widget->isVisible() || !preview.active() || preview.progress() != 0.5)
+      return {
+        UiSnapshotReadinessState::Failed, "Entity motion preview fixture is missing"};
+    if (widget->minimumSizeHint().width() > widget->width())
+      return {
+        UiSnapshotReadinessState::Failed, "Entity motion preview controls are clipped"};
+    return {UiSnapshotReadinessState::Ready, "Selected rotating door at 50% motion"};
+  }
 
   if (targetName == QStringLiteral("outliner-properties-wad"))
   {

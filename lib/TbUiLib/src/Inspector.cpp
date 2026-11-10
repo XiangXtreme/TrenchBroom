@@ -35,6 +35,7 @@
 #include "ui/ImageUtils.h"
 #include "ui/MapSettingsDialog.h"
 #include "ui/MapViewBar.h"
+#include "ui/MapViewToolBox.h"
 #include "ui/PluginInspector.h"
 #include "ui/SyncHeightEventFilter.h"
 #include "ui/TabBar.h"
@@ -70,6 +71,7 @@ Inspector::Inspector(
   : QWidget{parent}
   , m_appController{&appController}
   , m_document{&document}
+  , m_toolBox{&toolBox}
 {
   m_tabBook = new TabBook{};
   m_tabBook->setObjectName("Inspector_TabBook");
@@ -215,7 +217,8 @@ void Inspector::ensurePage(const InspectorPage page)
   case InspectorPage::Outliner:
     if (!m_outlinerInspector)
     {
-      m_outlinerInspector = new OutlinerInspector{*m_document};
+      m_outlinerInspector =
+        new OutlinerInspector{*m_document, nullptr, &m_toolBox->entityMotionPreview()};
       m_tabBook->replacePage(index, m_outlinerInspector);
       connect(
         m_outlinerInspector,

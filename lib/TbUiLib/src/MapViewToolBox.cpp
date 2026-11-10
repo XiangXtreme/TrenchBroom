@@ -38,6 +38,7 @@
 #include "ui/DrawShapeTool.h"
 #include "ui/DrawShapeToolPage.h"
 #include "ui/EdgeTool.h"
+#include "ui/EntityMotionPreview.h"
 #include "ui/ExtrudeTool.h"
 #include "ui/FaceTool.h"
 #include "ui/InputState.h"
@@ -67,6 +68,7 @@ namespace tb::ui
 MapViewToolBox::MapViewToolBox(MapDocument& document, QStackedLayout* toolPages)
   : m_document{document}
   , m_lightmapPreview{std::make_unique<LightmapPreview>(document)}
+  , m_entityMotionPreview{std::make_unique<EntityMotionPreview>(document)}
   , m_selectMode{pref(Preferences::Default2DSelectMode)}
 {
   createTools(toolPages);
@@ -99,6 +101,11 @@ ActionExecutionContext MapViewToolBox::actionContext(
 LightmapPreview& MapViewToolBox::lightmapPreview()
 {
   return *m_lightmapPreview;
+}
+
+EntityMotionPreview& MapViewToolBox::entityMotionPreview()
+{
+  return *m_entityMotionPreview;
 }
 
 TerrainPreviewRenderer& MapViewToolBox::terrainPreview(AppController& app)

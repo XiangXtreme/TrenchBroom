@@ -15,6 +15,9 @@ param(
     "outliner-properties-table",
     "outliner-properties-narrow",
     "outliner-properties-wad",
+    "outliner-motion",
+    "outliner-motion-table",
+    "outliner-motion-narrow",
     "entity-browser",
     "entity-browser-empty",
     "goldsrc-entity-links",
@@ -279,6 +282,9 @@ foreach ($target in $normalizedTargets) {
       "outliner-properties-table",
       "outliner-properties-narrow",
       "outliner-properties-wad",
+      "outliner-motion",
+      "outliner-motion-table",
+      "outliner-motion-narrow",
       "outliner-reparent-layer-before",
       "outliner-reparent-layer-after",
       "outliner-brush-entity-before",
@@ -358,6 +364,7 @@ $resolvedMaterialGamePath =
   if ($usesMaterialFixture) { Resolve-Path -Path $MaterialGamePath } else { $null }
 $resolvedGoldSrcMapPath =
   if ($normalizedTargets -contains "goldsrc-entity-links" -or
+      @($normalizedTargets | Where-Object { $_.StartsWith("outliner-motion") }).Count -gt 0 -or
       $normalizedTargets -contains "outliner-properties-wad") {
     Resolve-Path -Path $GoldSrcMapPath
   } else { $null }
@@ -429,6 +436,7 @@ foreach ($target in $normalizedTargets) {
       $useMaterialFixture =
         $target -eq "face-inspector" -or $target -eq "material-browser-empty"
       $useGoldSrcFixture = $target -eq "goldsrc-entity-links" -or
+        $target.StartsWith("outliner-motion") -or
         $target -eq "outliner-properties-wad"
       $useOutlinerFixture = $target.StartsWith("outliner") -and -not $useGoldSrcFixture
       $targetMapPath =

@@ -9453,4 +9453,91 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
             <translation>将修改 %1 条资源路径。</translation>
         </message>
     </context>
+    <context>
+        <name>tb::ui::EntityMotionPreviewWidget</name>
+        <message>
+            <source>Default direction</source>
+            <translation>默认方向</translation>
+        </message>
+        <message>
+            <source>Opposite direction</source>
+            <translation>反向</translation>
+        </message>
+        <message>
+            <source>Opening direction</source>
+            <translation>开启方向</translation>
+        </message>
+        <message>
+            <source>Two-way doors open away from the activator. Preview either direction.</source>
+            <translation>双向门会向远离触发者的一侧开启，可切换预览方向。</translation>
+        </message>
+        <message>
+            <source>Initial</source>
+            <translation>初始位置</translation>
+        </message>
+        <message>
+            <source>Activated</source>
+            <translation>触发后</translation>
+        </message>
+        <message>
+            <source>Reset</source>
+            <translation>重置</translation>
+        </message>
+        <message>
+            <source>Preview the position at game start</source>
+            <translation>预览游戏开始时的位置</translation>
+        </message>
+        <message>
+            <source>Preview the position after activation</source>
+            <translation>预览触发后的位置</translation>
+        </message>
+        <message>
+            <source>Clear the preview; the map is unchanged</source>
+            <translation>清除预览，地图保持原样</translation>
+        </message>
+        <message>
+            <source>Motion preview progress</source>
+            <translation>运动预览进度</translation>
+        </message>
+        <message>
+            <source>Motion preview · %1% · %2%3</source>
+            <translation>运动预览 · %1% · %2%3</translation>
+        </message>
+        <message>
+            <source>°</source>
+            <translation>°</translation>
+        </message>
+        <message>
+            <source> units</source>
+            <translation> 单位</translation>
+        </message>
+        <message>
+            <source>Motion preview · This entity does not move</source>
+            <translation>运动预览 · 此实体不移动</translation>
+        </message>
+        <message>
+            <source>Motion preview · Invalid motion properties</source>
+            <translation>运动预览 · 运动属性无效</translation>
+        </message>
+        <message>
+            <source>Motion preview · No model brushes</source>
+            <translation>运动预览 · 缺少模型刷子</translation>
+        </message>
+        <message>
+            <source>Motion preview · Compiler geometry overrides are not supported</source>
+            <translation>运动预览 · 暂不支持编译器几何覆盖</translation>
+        </message>
+        <message>
+            <source>Motion preview · Conflicting ORIGIN brush and origin properties</source>
+            <translation>运动预览 · ORIGIN 刷子与 origin 属性冲突</translation>
+        </message>
+        <message>
+            <source>Start Open: the initial position is the open endpoint.</source>
+            <translation>初始打开：游戏初始位置为打开端点。</translation>
+        </message>
+        <message>
+            <source>Display-only preview. Geometry, properties and undo history are unchanged.</source>
+            <translation>仅作显示预览，不修改几何体、属性或撤销历史。</translation>
+        </message>
+    </context>
 </TS>

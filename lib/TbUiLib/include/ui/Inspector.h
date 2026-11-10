@@ -57,6 +57,7 @@ class Inspector : public QWidget
 private:
   AppController* m_appController = nullptr;
   MapDocument* m_document = nullptr;
+  MapViewToolBox* m_toolBox = nullptr;
   TabBook* m_tabBook = nullptr;
   QPointer<MapSettingsDialog> m_mapSettingsDialog;
   FaceInspector* m_faceInspector = nullptr;

@@ -87,6 +87,7 @@
 #include "ui/CameraAnimation.h"
 #include "ui/CatalogAssetDrop.h"
 #include "ui/EnableDisableTagCallback.h"
+#include "ui/EntityMotionPreview.h"
 #include "ui/FlashSelectionAnimation.h"
 #include "ui/LightmapPreview.h"
 #include "ui/MapDocument.h"
@@ -155,6 +156,9 @@ MapViewBase::MapViewBase(
   });
   connect(
     &toolBox.lightmapPreview(), &LightmapPreview::changed, this, [this] { update(); });
+  connect(&toolBox.entityMotionPreview(), &EntityMotionPreview::changed, this, [this] {
+    update();
+  });
   setToolBox(toolBox);
   bindEvents();
   connectObservers();
@@ -1202,6 +1206,7 @@ void MapViewBase::renderContents(gl::Gl& gl)
   {
     const auto scope = render::RenderTimingScope{"cpu.overlays.build"};
     renderTools(m_toolBox, renderContext, renderBatch);
+    m_toolBox.entityMotionPreview().render(renderContext, renderBatch);
 
     renderCoordinateSystem(renderContext, renderBatch);
     renderSoftWorldBounds(renderContext, renderBatch);

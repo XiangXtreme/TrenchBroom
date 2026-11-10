@@ -66,6 +66,7 @@
 #include "ui/DrawShapeToolController3D.h"
 #include "ui/EdgeTool.h"
 #include "ui/EdgeToolController.h"
+#include "ui/EntityMotionPreview.h"
 #include "ui/ExtrudeToolController.h"
 #include "ui/FaceTool.h" // IWYU pragma: keep
 #include "ui/FaceToolController.h"
@@ -184,6 +185,7 @@ void MapView3D::startPlayMode(const bool fromCamera)
 
   m_flyModeHelper->resetKeys();
   cancelMouseDrag();
+  m_toolBox.entityMotionPreview().setSuspended(true);
 
   m_playModeBuildProgress = new QProgressDialog{this};
   m_playModeBuildProgress->setWindowTitle(tr("Play Mode"));
@@ -205,6 +207,7 @@ void MapView3D::startPlayMode(const bool fromCamera)
     }
     if (!started)
     {
+      m_toolBox.entityMotionPreview().setSuspended(false);
       return;
     }
 
@@ -279,6 +282,7 @@ void MapView3D::stopPlayMode()
 
 void MapView3D::stopPlayMode(const bool deferPresentationRestore)
 {
+  m_toolBox.entityMotionPreview().setSuspended(false);
   if (!m_playMode->active())
   {
     const auto changingPresentation = kdl::set_temp{m_changingPlayPresentation, true};

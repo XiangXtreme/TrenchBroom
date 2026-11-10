@@ -7,6 +7,7 @@ namespace tb::ui
 class OutlinerTreeWidget;
 class MapDocument;
 class SelectionPropertyEditor;
+class EntityMotionPreview;
 } // namespace tb::ui
 
 class QLineEdit;
@@ -30,7 +31,10 @@ private:
   QToolButton* m_propertiesToggle = nullptr;
 
 public:
-  explicit OutlinerInspector(MapDocument& document, QWidget* parent = nullptr);
+  explicit OutlinerInspector(
+    MapDocument& document,
+    QWidget* parent = nullptr,
+    EntityMotionPreview* motionPreview = nullptr);
   ~OutlinerInspector() override;
   void showProperties();
 

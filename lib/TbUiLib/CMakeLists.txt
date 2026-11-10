@@ -90,6 +90,9 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityDefinitionFileChooser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SelectionPropertyEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/GoldSrcEntityMotion.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityMotionPreview.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityMotionPreviewWidget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyGrid.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyItemDelegate.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertyModel.cpp
@@ -383,6 +386,9 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityDefinitionFileChooser.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/SelectionPropertyEditor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/GoldSrcEntityMotion.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityMotionPreview.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityMotionPreviewWidget.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyGrid.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyItemDelegate.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/EntityPropertyModel.h
