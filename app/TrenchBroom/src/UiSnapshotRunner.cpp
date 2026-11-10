@@ -92,6 +92,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapSettingsDialog.h"
+#include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
@@ -144,6 +145,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("entity-browser"),
     QStringLiteral("entity-browser-empty"),
     QStringLiteral("goldsrc-entity-links"),
+    QStringLiteral("entity-directions"),
     QStringLiteral("face-inspector"),
     QStringLiteral("material-browser-empty"),
     QStringLiteral("plugin-inspector"),
@@ -634,6 +636,53 @@ void configureGoldSrcEntitySnapshot(QWidget& targetWidget)
   }
 }
 
+void configureEntityDirectionSnapshot(QWidget& targetWidget)
+{
+  auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget);
+  if (!mapWindow)
+  {
+    return;
+  }
+  if (!targetWidget.property("entityDirectionsInitialized").toBool())
+  {
+    mapWindow->switchMapViewLayout(MapViewLayout::FourPanes);
+    auto& map = mapWindow->document().map();
+    auto entities = std::vector<mdl::Node*>{};
+    for (auto* node : map.worldNode().defaultLayer()->children())
+    {
+      if (auto* entity = dynamic_cast<mdl::EntityNode*>(node);
+          entity && entity->entity().classname() == "info_player_start")
+      {
+        entities.push_back(entity);
+      }
+    }
+    mdl::deselectAll(map);
+    mdl::selectNodes(map, entities);
+    setPref(Preferences::ShowAxes, false);
+    setPref(Preferences::ShowEntityClassnames, false);
+    mapWindow->switchToInspectorPage(InspectorPage::Outliner);
+    if (mapWindow->infoPanelVisible())
+    {
+      mapWindow->toggleInfoPanel();
+    }
+    targetWidget.setProperty("entityDirectionsInitialized", true);
+  }
+  for (auto* view : mapWindow->findChildren<MapView2D*>())
+  {
+    view->stopCameraAnimation();
+    auto& camera = static_cast<MapViewBase&>(*view).camera();
+    camera.moveTo(vm::vec3f{0, 0, 40} - camera.direction() * 4096.0f);
+    camera.setZoom(0.9f);
+  }
+  for (auto* view : mapWindow->findChildren<MapView3D*>())
+  {
+    view->stopCameraAnimation();
+    auto& camera = static_cast<MapViewBase&>(*view).camera();
+    camera.moveTo(vm::vec3f{260, -380, 300});
+    camera.lookAt(vm::vec3f{0, 0, 40}, vm::vec3f{0, 0, 1});
+  }
+}
+
 void configurePathToolSnapshot(QWidget& targetWidget)
 {
   auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget);
@@ -1044,6 +1093,18 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
   {
     return goldSrcEntitySnapshotReadiness(targetWidget);
   }
+  if (targetName == QStringLiteral("entity-directions"))
+  {
+    auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget);
+    const auto visible = [&](auto* view) { return view->isVisibleTo(&targetWidget); };
+    const auto ready =
+      mapWindow && mapWindow->document().map().selection().nodes.size() == 6u
+      && std::ranges::count_if(mapWindow->findChildren<MapView2D*>(), visible) == 3
+      && std::ranges::count_if(mapWindow->findChildren<MapView3D*>(), visible) == 1;
+    return {
+      ready ? UiSnapshotReadinessState::Ready : UiSnapshotReadinessState::Failed,
+      QStringLiteral("Direction fixture needs six selected entities and four map views")};
+  }
   if (isOutlinerSnapshotTarget(targetName))
   {
     return outlinerSnapshotReadiness(targetWidget, targetName);
@@ -1360,6 +1421,10 @@ void configureSnapshot(QWidget& targetWidget, const QString& targetName)
   else if (targetName == QStringLiteral("goldsrc-entity-links"))
   {
     configureGoldSrcEntitySnapshot(targetWidget);
+  }
+  else if (targetName == QStringLiteral("entity-directions"))
+  {
+    configureEntityDirectionSnapshot(targetWidget);
   }
   else if (isOutlinerSnapshotTarget(targetName))
   {

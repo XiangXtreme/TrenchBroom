@@ -5,7 +5,7 @@
   "chapters": {
     "00-introduction.md": "b0d6a3b57940c999d5ade16cd832e583364997399d8335c5a40a621f54aa86dc",
     "01-getting-started.md": "4f0c6758eddc52c846c3f2f099e6ad0bd1cf4ed215ebfe071ec68d86d00f50ae",
-    "02-interface-and-tools.md": "3c529f9305b8406ee10f01f55bd1e9e5b02d6fc97df4df4d889a7531c596554e",
+    "02-interface-and-tools.md": "aeb8d0c5c11b4ec90e76bc71ff5011f7547eba80d7e535275efbfc2f0758afae",
     "03-brush-editing.md": "0053fdfc1aceb1af705f3d546950eefb54b27d8d07a36ad99080a50c4b3ead31",
     "04-vertex-and-csg.md": "27752b4fa128305435b30acfc68da89b936cb87fc6416a6c1c1da077200d617f",
     "05-materials-and-uv.md": "24a31327dbeda77fdf9a442003ed74d19aa697eae71f087202fcbba5de83d960",

@@ -13,6 +13,7 @@ target_sources(TbRenderLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Compass3D.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EdgeRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityDecalRenderer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityDirectionIndicator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityLinkRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityModelRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityRenderer.cpp

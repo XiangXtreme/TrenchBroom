@@ -27,6 +27,8 @@
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
+#include "render/EntityDirectionIndicator.h"
+#include "render/PrimitiveRenderer.h"
 #include "render/RenderBatch.h"
 #include "render/RenderContext.h"
 #include "render/RenderService.h"
@@ -34,13 +36,11 @@
 #include "render/TextAnchor.h"
 
 #include "kd/flat_set.h"
-#include "kd/ranges/to.h"
 
 #include "vm/mat.h"
-#include "vm/mat_ext.h"
 #include "vm/vec.h"
 
-#include <ranges>
+#include <memory>
 #include <vector>
 
 namespace tb::render
@@ -345,15 +345,14 @@ void EntityRenderer::renderClassnames(
 
 void EntityRenderer::renderAngles(RenderContext& renderContext, RenderBatch& renderBatch)
 {
-  static constexpr auto maxDistance2 = 500.0f * 500.0f;
-
   if (m_showAngles)
   {
-    const auto arrow = arrowHead(9.0f, 6.0f);
-
-    auto renderService = RenderService{renderContext, renderBatch};
-    renderService.setShowOccludedObjectsTransparent();
-    renderService.setForegroundColor(m_angleColor);
+    auto renderer = std::make_unique<PrimitiveRenderer>();
+    const auto color = m_angleColor.to<RgbaF>();
+    const auto rgb = color.toVec();
+    const auto luminance = 0.2126f * rgb.x() + 0.7152f * rgb.y() + 0.0722f * rgb.z();
+    const auto contrast = luminance > 0.45f ? 0.0f : 1.0f;
+    const auto outlineColor = Color{RgbaF{contrast, contrast, contrast, rgb.w()}};
 
     for (const auto* entityNode : m_entities)
     {
@@ -366,48 +365,24 @@ void EntityRenderer::renderAngles(RenderContext& renderContext, RenderBatch& ren
       const auto direction = rotation * vm::vec3f{1, 0, 0};
       const auto center = vm::vec3f{entityNode->logicalBounds().center()};
 
-      const auto toCam = renderContext.camera().position() - center;
-      // only distance cull for perspective camera, since the 2D one is always very far
-      // from the level
-      if (
-        renderContext.camera().perspectiveProjection()
-        && vm::squared_length(toCam) > maxDistance2)
+      const auto indicator =
+        makeEntityDirectionIndicator(renderContext.camera(), center, direction);
+      if (!indicator)
       {
         continue;
       }
-
-      auto onPlane = toCam - vm::dot(toCam, direction) * direction;
-      if (vm::is_zero(onPlane, vm::Cf::almost_zero()))
-      {
-        continue;
-      }
-
-      onPlane = vm::normalize(onPlane);
-
-      const auto rotZ = rotation * vm::vec3f{0, 0, 1};
-      const auto angle = -vm::measure_angle(rotZ, onPlane, direction);
-      const auto matrix = vm::translation_matrix(center)
-                          * vm::rotation_matrix(direction, angle) * rotation
-                          * vm::translation_matrix(16.0f * vm::vec3f{0, 0, 1});
-
-
-      const auto vertices =
-        arrow | std::views::transform([&](const auto& x) { return matrix * x; })
-        | kdl::ranges::to<std::vector>();
-      renderService.renderPolygonOutline(vertices);
+      const auto renderTriangles = [&](const auto& vertices, const Color& triangleColor) {
+        renderer->renderTriangles(
+          triangleColor,
+          PrimitiveRendererOcclusionPolicy::Transparent,
+          PrimitiveRendererCullingPolicy::ShowBackfaces,
+          vertices);
+      };
+      renderTriangles(indicator->outline, outlineColor);
+      renderTriangles(indicator->fill, m_angleColor);
     }
+    renderBatch.addOneShot(renderer.release());
   }
-}
-
-std::vector<vm::vec3f> EntityRenderer::arrowHead(
-  const float length, const float width) const
-{
-  // clockwise winding
-  return std::vector{
-    vm::vec3f{0.0f, width / 2.0f, 0.0f},
-    vm::vec3f{length, 0.0f, 0.0f},
-    vm::vec3f{0.0f, -width / 2.0f, 0.0f},
-  };
 }
 
 void EntityRenderer::invalidateBounds()

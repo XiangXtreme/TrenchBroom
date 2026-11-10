@@ -1,0 +1,50 @@
+// Game: Half-Life
+// Format: Valve
+{
+"classname" "worldspawn"
+"mapversion" "220"
+{
+( -192 -128 -16 ) ( -192 -127 -16 ) ( -192 -128 -15 ) __TB_empty [ 0 -1 0 0 ] [ 0 0 -1 0 ] 0 1 1
+( -192 -128 -16 ) ( -192 -128 -15 ) ( -191 -128 -16 ) __TB_empty [ 1 0 0 0 ] [ 0 0 -1 0 ] 0 1 1
+( -192 -128 -16 ) ( -191 -128 -16 ) ( -192 -127 -16 ) __TB_empty [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 192 128 0 ) ( 192 129 0 ) ( 193 128 0 ) __TB_empty [ 1 0 0 0 ] [ 0 -1 0 0 ] 0 1 1
+( 192 128 0 ) ( 193 128 0 ) ( 192 128 1 ) __TB_empty [ 1 0 0 0 ] [ 0 0 -1 0 ] 0 1 1
+( 192 128 0 ) ( 192 128 1 ) ( 192 129 0 ) __TB_empty [ 0 1 0 0 ] [ 0 0 -1 0 ] 0 1 1
+}
+}
+{
+"classname" "info_player_start"
+"origin" "-112 -120 40"
+"angle" "0"
+"targetname" "east"
+}
+{
+"classname" "info_player_start"
+"origin" "0 -72 40"
+"angle" "90"
+"targetname" "north"
+}
+{
+"classname" "info_player_start"
+"origin" "112 -24 40"
+"angle" "180"
+"targetname" "west"
+}
+{
+"classname" "info_player_start"
+"origin" "-112 24 136"
+"angle" "270"
+"targetname" "south"
+}
+{
+"classname" "info_player_start"
+"origin" "0 72 136"
+"angle" "-1"
+"targetname" "up"
+}
+{
+"classname" "info_player_start"
+"origin" "112 120 136"
+"angle" "-2"
+"targetname" "down"
+}

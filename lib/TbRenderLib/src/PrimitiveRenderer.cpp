@@ -299,6 +299,16 @@ void PrimitiveRenderer::renderFilledPolygon(
     .addTriangleFan(Vertex::toList(positions.size(), positions.begin()));
 }
 
+void PrimitiveRenderer::renderTriangles(
+  const Color& color,
+  const PrimitiveRendererOcclusionPolicy occlusionPolicy,
+  const PrimitiveRendererCullingPolicy cullingPolicy,
+  const std::vector<vm::vec3f>& positions)
+{
+  m_triangleMeshes[TriangleRenderAttributes{color, occlusionPolicy, cullingPolicy}]
+    .addTriangles(Vertex::toList(positions.size(), positions.begin()));
+}
+
 void PrimitiveRenderer::renderCylinder(
   const Color& color,
   const float radius,

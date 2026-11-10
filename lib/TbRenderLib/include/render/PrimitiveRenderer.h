@@ -168,6 +168,12 @@ public:
     PrimitiveRendererCullingPolicy cullingPolicy,
     const std::vector<vm::vec3f>& positions);
 
+  void renderTriangles(
+    const Color& color,
+    PrimitiveRendererOcclusionPolicy occlusionPolicy,
+    PrimitiveRendererCullingPolicy cullingPolicy,
+    const std::vector<vm::vec3f>& positions);
+
   void renderCylinder(
     const Color& color,
     float radius,

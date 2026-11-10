@@ -21,6 +21,7 @@ param(
     "entity-browser",
     "entity-browser-empty",
     "goldsrc-entity-links",
+    "entity-directions",
     "face-inspector",
     "material-browser-empty",
     "plugin-inspector",
@@ -55,6 +56,7 @@ param(
     "lib\TbMdlLib\test\fixture\mdl\Map\reloadMaterialCollectionsQ2.map",
   [string] $MaterialGamePath = "lib\TbUiLib\test\fixture\mdl\Game\Quake2",
   [string] $GoldSrcMapPath = "lib\TbUiLib\test\fixture\ui\UiSnapshot\goldsrcEntityLinks.map",
+  [string] $EntityDirectionMapPath = "lib\TbUiLib\test\fixture\ui\UiSnapshot\entityDirections.map",
   [string] $OutputDir = "",
   [string] $BaselineDir = "",
   [int] $PixelDifferenceThreshold = 24,
@@ -292,6 +294,7 @@ foreach ($target in $normalizedTargets) {
       "entity-browser",
       "entity-browser-empty",
       "goldsrc-entity-links",
+      "entity-directions",
       "face-inspector",
       "material-browser-empty",
       "plugin-inspector",
@@ -370,6 +373,8 @@ $resolvedGoldSrcMapPath =
   } else { $null }
 $usesOutlinerFixture =
   @($normalizedTargets | Where-Object { $_.StartsWith("outliner") }).Count -gt 0
+$resolvedEntityDirectionMapPath =
+  if ($normalizedTargets -contains "entity-directions") { Resolve-Path -Path $EntityDirectionMapPath } else { $null }
 $resolvedOutlinerMapPath =
   if ($usesOutlinerFixture) { Resolve-Path -Path $OutlinerMapPath } else { $null }
 $resolvedMapPath = if (
@@ -440,7 +445,9 @@ foreach ($target in $normalizedTargets) {
         $target -eq "outliner-properties-wad"
       $useOutlinerFixture = $target.StartsWith("outliner") -and -not $useGoldSrcFixture
       $targetMapPath =
-        if ($useMaterialFixture) {
+        if ($target -eq "entity-directions") {
+          $resolvedEntityDirectionMapPath
+        } elseif ($useMaterialFixture) {
           $resolvedMaterialMapPath
         } elseif ($useOutlinerFixture) {
           $resolvedOutlinerMapPath
@@ -453,9 +460,9 @@ foreach ($target in $normalizedTargets) {
         $processInfo.Arguments +=
           " --ui-snapshot-game-path `"$($resolvedMaterialGamePath.Path)`""
       }
-      if ($useGoldSrcFixture) {
+      if ($useGoldSrcFixture -or $target -eq "entity-directions") {
         $processInfo.Arguments +=
-          " --ui-snapshot-game-path `"$(Split-Path -Parent $resolvedGoldSrcMapPath.Path)`""
+          " --ui-snapshot-game-path `"$(Split-Path -Parent $targetMapPath.Path)`""
       }
       if (
         $target -eq "workbench" -or
@@ -463,6 +470,7 @@ foreach ($target in $normalizedTargets) {
         $target.StartsWith("map-area") -or
         $target.StartsWith("project-") -or
         $target -eq "goldsrc-entity-links" -or
+        $target -eq "entity-directions" -or
         $target.StartsWith("outliner") -or
         $target -eq "entity-browser" -or
         $target -eq "entity-browser-empty" -or
