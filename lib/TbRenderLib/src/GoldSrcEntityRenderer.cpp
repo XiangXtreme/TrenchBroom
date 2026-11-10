@@ -23,6 +23,7 @@
 #include "gl/GlInterface.h"
 #include "mdl/Entity.h"
 #include "mdl/GameConfig.h"
+#include "mdl/GoldSrcLight.h"
 
 #include "kd/string_compare.h"
 #include "kd/string_utils.h"
@@ -51,10 +52,7 @@ bool GoldSrcEntityRenderSettings::transparent() const
 
 bool usesGoldSrcRendering(const mdl::GameConfig& config)
 {
-  // WAD lump type 0x43 (".C") identifies GoldSrc's mip textures, including custom mods.
-  return std::ranges::any_of(config.materialConfig.extensions, [](const auto& extension) {
-    return kdl::ci::str_is_equal(extension.string(), ".C");
-  });
+  return mdl::usesGoldSrcLightDirections(config);
 }
 
 GoldSrcEntityRenderSettings goldSrcEntityRenderSettings(const mdl::Entity* entity)

@@ -88,12 +88,14 @@ struct EntityPropertyConfig
   std::optional<el::ExpressionNode> defaultModelScaleExpression;
   bool setDefaultProperties = false;
   bool updateAnglePropertyAfterTransform = true;
+  bool goldSrcLightDirections = false;
 
   kdl_reflect_decl(
     EntityPropertyConfig,
     defaultModelScaleExpression,
     setDefaultProperties,
-    updateAnglePropertyAfterTransform);
+    updateAnglePropertyAfterTransform,
+    goldSrcLightDirections);
 };
 
 bool isNumberedProperty(std::string_view prefix, std::string_view key);

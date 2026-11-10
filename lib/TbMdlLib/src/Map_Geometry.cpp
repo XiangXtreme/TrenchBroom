@@ -190,8 +190,7 @@ bool transformNodes(
   using TransformResult = Result<std::pair<Node*, NodeContents>>;
 
   const auto alignmentLock = map.editorContext().alignmentLock();
-  const auto updateAngleProperty =
-    map.worldNode().entityPropertyConfig().updateAnglePropertyAfterTransform;
+  const auto& entityConfig = map.worldNode().entityPropertyConfig();
 
   const auto transformNode = [&](Node* node) -> TransformResult {
     return node->accept(kdl::overload(
@@ -204,7 +203,10 @@ bool transformNodes(
       },
       [&](EntityNode& entityNode) -> TransformResult {
         auto entity = entityNode.entity();
-        entity.transform(transformation, updateAngleProperty);
+        entity.transform(
+          transformation,
+          entityConfig.updateAnglePropertyAfterTransform,
+          entityConfig.goldSrcLightDirections);
         return std::make_pair(&entityNode, NodeContents{std::move(entity)});
       },
       [&](BrushNode& brushNode) -> TransformResult {

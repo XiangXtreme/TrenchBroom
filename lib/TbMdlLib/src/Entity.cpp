@@ -24,6 +24,7 @@
 #include "mdl/EntityProperties.h"
 #include "mdl/EntityPropertiesVariableStore.h"
 #include "mdl/EntityRotation.h"
+#include "mdl/GoldSrcLight.h"
 #include "mdl/ModelDefinition.h"
 #include "mdl/PropertyDefinition.h"
 
@@ -469,7 +470,10 @@ std::vector<EntityProperty> Entity::numberedProperties(const std::string& prefix
          | kdl::ranges::to<std::vector>();
 }
 
-void Entity::transform(const vm::mat4x4d& transformation, const bool updateAngleProperty)
+void Entity::transform(
+  const vm::mat4x4d& transformation,
+  const bool updateAngleProperty,
+  const bool goldSrcLightDirections)
 {
   if (m_pointEntity)
   {
@@ -491,7 +495,10 @@ void Entity::transform(const vm::mat4x4d& transformation, const bool updateAngle
     // applyRotation does not read the origin, so it's ok that it's already updated now
     if (updateAngleProperty)
     {
-      applyEntityRotation(*this, rotation);
+      if (goldSrcLightDirections && isGoldSrcLight(*this))
+        applyGoldSrcLightRotation(*this, rotation);
+      else
+        applyEntityRotation(*this, rotation);
     }
   }
 }

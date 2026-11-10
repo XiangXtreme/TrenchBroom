@@ -54,6 +54,22 @@ TEST_CASE("EntityDirectionResolver")
     CHECK(vm::vec3d{*direction} == vm::approx{vm::normalize(expected), 0.00001});
   }
 
+  SECTION("rotating a light updates the same direction used by the overlay")
+  {
+    auto node = mdl::EntityNode{mdl::Entity{
+      {{"classname", "light_spot"}, {"pitch", "-90"}, {"angles", "30 90 0"}}}};
+    const auto before = resolver.direction(node);
+    REQUIRE(before);
+    auto entity = node.entity();
+    const auto rotation = vm::mat4x4d::rot_90_y_ccw();
+    entity.transform(rotation, true, true);
+    node.setEntity(std::move(entity));
+    const auto after = resolver.direction(node);
+    REQUIRE(after);
+    CHECK(*after == vm::approx{vm::vec3f{rotation * vm::vec3d{*before}}});
+    CHECK(*after == vm::approx{vm::vec3f{-1, 0, 0}});
+  }
+
   SECTION("point and texture lights have no single illumination direction")
   {
     const auto classname =

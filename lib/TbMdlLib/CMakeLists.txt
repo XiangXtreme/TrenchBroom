@@ -50,6 +50,7 @@ target_sources(TbMdlLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityProperties.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityPropertiesVariableStore.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntityRotation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/GoldSrcLight.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EntParser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/EnvironmentConfig.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ExportOptions.cpp

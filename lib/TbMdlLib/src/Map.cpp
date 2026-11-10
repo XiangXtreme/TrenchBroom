@@ -45,6 +45,7 @@
 #include "mdl/EnvironmentConfig.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/GameInfo.h"
+#include "mdl/GoldSrcLight.h"
 #include "mdl/Grid.h"
 #include "mdl/GroupNode.h"
 #include "mdl/InvalidUvScaleValidator.h"
@@ -176,7 +177,10 @@ Result<std::unique_ptr<WorldNode>> loadWorldNode(
   Logger& logger)
 {
   const auto entityPropertyConfig = EntityPropertyConfig{
-    config.entityConfig.scaleExpression, config.entityConfig.setDefaultProperties};
+    config.entityConfig.scaleExpression,
+    config.entityConfig.setDefaultProperties,
+    true,
+    usesGoldSrcLightDirections(config)};
 
   auto parserStatus = SimpleParserStatus{logger};
   return fs::Disk::openFile(path) | kdl::and_then([&](auto file) {
@@ -242,7 +246,10 @@ Result<std::unique_ptr<WorldNode>> createWorldNode(
 
   auto worldNode = std::make_unique<WorldNode>(
     EntityPropertyConfig{
-      config.entityConfig.scaleExpression, config.entityConfig.setDefaultProperties},
+      config.entityConfig.scaleExpression,
+      config.entityConfig.setDefaultProperties,
+      true,
+      usesGoldSrcLightDirections(config)},
     std::move(worldEntity),
     format);
 

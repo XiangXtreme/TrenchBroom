@@ -24,6 +24,7 @@
 #include "mdl/CatchConfig.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
+#include "mdl/GoldSrcLight.h"
 #include "mdl/Group.h"
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
@@ -36,6 +37,7 @@
 #include "kd/ranges/adjacent_view.h"
 #include "kd/task_manager.h"
 
+#include "vm/approx.h"
 #include "vm/bbox.h"
 #include "vm/mat.h"
 #include "vm/mat_ext.h"
@@ -212,6 +214,33 @@ TEST_CASE("LinkedGroupUtils")
   SECTION("updateLinkedGroups")
   {
     auto taskManager = kdl::task_manager{};
+
+    SECTION("GoldSrc lights keep compiled beam direction in rotated linked groups")
+    {
+      const auto worldBounds = vm::bbox3d{8192.0};
+      auto entityConfig = EntityPropertyConfig{};
+      entityConfig.goldSrcLightDirections = true;
+      auto world = WorldNode{entityConfig, {}, MapFormat::Valve};
+      auto* source = new GroupNode{Group{"source"}};
+      auto targetGroup = Group{"target"};
+      targetGroup.transform(vm::mat4x4d::rot_90_y_ccw());
+      auto* target = new GroupNode{std::move(targetGroup)};
+      world.defaultLayer()->addChildren({source, target});
+      source->addChild(new EntityNode{
+        Entity{{{"classname", "light_spot"}, {"pitch", "-90"}, {"angles", "30 90 0"}}}});
+      updateLinkedGroups(*source, {target}, worldBounds, taskManager)
+        | kdl::transform([&](const UpdateLinkedGroupsResult& result) {
+            REQUIRE(result.size() == 1u);
+            REQUIRE(result.front().second.size() == 1u);
+            const auto* light =
+              dynamic_cast<const EntityNode*>(result.front().second.front().get());
+            REQUIRE(light);
+            REQUIRE(goldSrcLightDirection(light->entity()));
+            CHECK(
+              *goldSrcLightDirection(light->entity()) == vm::approx{vm::vec3d{-1, 0, 0}});
+          })
+        | kdl::transform_error([](const auto&) { FAIL(); });
+    }
 
     SECTION("Source group has a non-invertible transformation")
     {

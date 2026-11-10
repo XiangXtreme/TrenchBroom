@@ -19,6 +19,7 @@
 
 
 #include "Matchers.h"
+#include "fs/TestEnvironment.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushFace.h"
 #include "mdl/BrushNode.h"
@@ -26,6 +27,7 @@
 #include "mdl/EditorContext.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
+#include "mdl/GoldSrcLight.h"
 #include "mdl/Grid.h"
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
@@ -114,6 +116,80 @@ size_t faceCount(const BrushNode& brushNode)
 TEST_CASE("Map_Geometry")
 {
   auto fixture = MapFixture{};
+
+  SECTION("GoldSrc light rotation uses game rules and supports undo and redo")
+  {
+    auto config = MapFixtureConfig{};
+    config.mapFormat = MapFormat::Valve;
+    config.gameInfo.gameConfig.materialConfig.extensions = {".C"};
+    auto& map = fixture.create(config);
+    REQUIRE(map.worldNode().entityPropertyConfig().goldSrcLightDirections);
+    auto* light = new EntityNode{
+      Entity{{{"classname", "light_spot"}, {"pitch", "-90"}, {"angles", "30 90 0"}}}};
+    addNodes(map, {{&parentForNodes(map), {light}}});
+    selectNodes(map, {light});
+    const auto before = light->entity().properties();
+    REQUIRE(rotateSelection(map, {}, {0, 1, 0}, vm::to_radians(90.0)));
+    const auto rotated = light->entity().properties();
+    REQUIRE(goldSrcLightDirection(light->entity()));
+    CHECK(*goldSrcLightDirection(light->entity()) == vm::approx{vm::vec3d{-1, 0, 0}});
+    map.undoCommand();
+    CHECK(light->entity().properties() == before);
+    map.redoCommand();
+    CHECK(light->entity().properties() == rotated);
+
+    SECTION("loading keeps game direction rules and rotated key values")
+    {
+      auto env = fs::TestEnvironment{};
+      REQUIRE(map.saveAs(env.dir() / "rotated.map"));
+      auto loadedFixture = MapFixture{};
+      auto& loaded = loadedFixture.load(env.dir() / "rotated.map", config);
+      REQUIRE(loaded.worldNode().entityPropertyConfig().goldSrcLightDirections);
+      auto* loadedLight =
+        dynamic_cast<EntityNode*>(loaded.worldNode().defaultLayer()->children().front());
+      REQUIRE(loadedLight);
+      CHECK(
+        *goldSrcLightDirection(loadedLight->entity()) == vm::approx{vm::vec3d{-1, 0, 0}});
+      selectNodes(loaded, {loadedLight});
+      REQUIRE(rotateSelection(loaded, {}, {0, 0, 1}, vm::to_radians(90.0)));
+      CHECK(
+        *goldSrcLightDirection(loadedLight->entity()) == vm::approx{vm::vec3d{0, -1, 0}});
+    }
+  }
+
+  SECTION("GoldSrc target lights rotate their positions while preserving the aim link")
+  {
+    auto config = MapFixtureConfig{};
+    config.gameInfo.gameConfig.materialConfig.extensions = {".C"};
+    auto& map = fixture.create(config);
+    auto* light = new EntityNode{Entity{
+      {{"classname", "light_spot"},
+       {"target", "aim"},
+       {"origin", "16 0 0"},
+       {"angles", "30 90 0"},
+       {"pitch", "-90"}}}};
+    auto* target = new EntityNode{Entity{
+      {{"classname", "info_target"}, {"targetname", "aim"}, {"origin", "16 64 -64"}}}};
+    addNodes(map, {{&parentForNodes(map), {light, target}}});
+    const auto before = light->entity().properties();
+    const auto oldLightOrigin = light->entity().origin();
+    const auto oldTargetOrigin = target->entity().origin();
+    const auto rotateTarget = GENERATE(false, true);
+    selectNodes(
+      map, rotateTarget ? std::vector<Node*>{light, target} : std::vector<Node*>{light});
+    REQUIRE(rotateSelection(map, {}, {0, 0, 1}, vm::to_radians(90.0)));
+    const auto rotation = vm::mat4x4d::rot_90_z_ccw();
+    CHECK(light->entity().origin() == vm::approx{rotation * oldLightOrigin});
+    CHECK(
+      target->entity().origin()
+      == vm::approx{rotateTarget ? rotation * oldTargetOrigin : oldTargetOrigin});
+    CHECK(*light->entity().property("target") == "aim");
+    CHECK(*light->entity().property("pitch") == "-90");
+    CHECK(*light->entity().property("angles") == "30 90 0");
+    map.undoCommand();
+    CHECK(light->entity().properties() == before);
+    CHECK(target->entity().origin() == oldTargetOrigin);
+  }
 
   SECTION("transformSelection")
   {

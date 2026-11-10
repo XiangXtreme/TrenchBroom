@@ -187,7 +187,10 @@ public: // property management
   std::vector<EntityProperty> propertiesWithPrefix(const std::string& property) const;
   std::vector<EntityProperty> numberedProperties(const std::string& property) const;
 
-  void transform(const vm::mat4x4d& transformation, bool updateAngleProperty);
+  void transform(
+    const vm::mat4x4d& transformation,
+    bool updateAngleProperty,
+    bool goldSrcLightDirections = false);
 };
 
 } // namespace tb::mdl

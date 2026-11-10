@@ -278,7 +278,7 @@ Result<std::vector<std::unique_ptr<Node>>> cloneAndTransformChildren(
   // `nodesToClone`
   auto tasks =
     nodesToClone | std::views::transform([&](const auto& nodeToTransform) {
-      return std::function{[&]() {
+      return std::function{[&, nodeToTransform]() {
         return nodeToTransform->accept(kdl::overload(
           [](const WorldNode&) -> TransformResult { contract_assert(false); },
           [](const LayerNode&) -> TransformResult { contract_assert(false); },
@@ -288,10 +288,12 @@ Result<std::vector<std::unique_ptr<Node>>> cloneAndTransformChildren(
             return std::make_pair(nodeToTransform, NodeContents{std::move(group)});
           },
           [&](const EntityNode& entityNode) -> TransformResult {
-            const auto updateAngleProperty =
-              entityNode.entityPropertyConfig().updateAnglePropertyAfterTransform;
+            const auto& entityConfig = entityNode.entityPropertyConfig();
             auto entity = entityNode.entity();
-            entity.transform(transformation, updateAngleProperty);
+            entity.transform(
+              transformation,
+              entityConfig.updateAnglePropertyAfterTransform,
+              entityConfig.goldSrcLightDirections);
             return std::make_pair(nodeToTransform, NodeContents{std::move(entity)});
           },
           [&](const BrushNode& brushNode) -> TransformResult {
