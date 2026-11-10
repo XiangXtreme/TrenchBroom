@@ -35,7 +35,7 @@ struct PlayModeJumpSpan
 
 struct PlayModeEdgeGuide
 {
-  vm::vec3f position;  // Player center at the support-probe transition
+  vm::vec3f position;  // Takeoff hint, inset from the support-probe transition
   vm::vec3f direction; // Outward platform-edge normal
   bool active;
 };

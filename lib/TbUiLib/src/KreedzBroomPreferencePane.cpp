@@ -222,11 +222,10 @@ void KreedzBroomPreferencePane::createGui()
   left->addRow(
     "",
     withToolTip(
-      boolField(tr("Show edge friction boundary"), Preferences::PlayModeShowEdgeFriction),
-      tr("Mark the player's center at the HJ friction transition, parallel to the "
-         "platform "
-         "edge. Highlights when the player's support probe misses. Only shown while "
-         "grounded.")));
+      boolField(tr("Show HJ takeoff hint"), Preferences::PlayModeShowEdgeFriction),
+      tr("Show a takeoff hint 16 units inside the HJ friction transition, parallel to "
+         "the platform edge. Highlights when the player's support probe misses. "
+         "Only shown while grounded.")));
 
   right->addSection("Keys");
   right->addRow(

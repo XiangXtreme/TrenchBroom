@@ -82,7 +82,7 @@ void checkEdgeTransition(
   {
     for (auto i = size_t{0}; i < 2; ++i)
     {
-      state.origin[i] = edge.position[i] + edge.direction[i] * offset;
+      state.origin[i] = edge.position[i] + edge.direction[i] * (16.0f + offset);
       state.velocity[i] = edge.direction[i] * 250.0f;
     }
     CHECK(playModeEdgeFriction(context, state) == (offset > 0));
@@ -242,7 +242,7 @@ TEST_CASE("PlayModeJumpGuide")
     CHECK_FALSE(guide.span);
   }
   SECTION(
-    "turning the view keeps dimensions perpendicular and HJ at the actual transition")
+    "turning the view keeps dimensions perpendicular and the HJ hint inside the edge")
   {
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
@@ -257,7 +257,7 @@ TEST_CASE("PlayModeJumpGuide")
       CHECK(guide.span->start.y() == Catch::Approx(12).margin(0.01));
       CHECK(guide.span->end.y() == Catch::Approx(12).margin(0.01));
       REQUIRE(guide.edge);
-      CHECK(guide.edge->position.x() == Catch::Approx(0).margin(0.1));
+      CHECK(guide.edge->position.x() == Catch::Approx(-16).margin(0.1));
       CHECK(guide.edge->position.y() == Catch::Approx(12).margin(0.01));
       CHECK(guide.edge->direction.x() == Catch::Approx(1).margin(0.01));
       CHECK(guide.edge->direction.y() == Catch::Approx(0).margin(0.01));
