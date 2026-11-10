@@ -424,6 +424,8 @@ inline auto PlayModeShowJumpStats =
   Preference<bool>{"Controls/Play mode/Show jump stats", true};
 inline auto PlayModeShowFailedJumps =
   Preference<bool>{"Controls/Play mode/Show failed jumps", true};
+inline auto PlayModeShowStrafes =
+  Preference<bool>{"Controls/Play mode/Show strafes", true};
 inline auto PlayModeJumpStatsDuration =
   Preference<float>{"Controls/Play mode/Jump stats duration", 4.0f};
 inline auto PlayModeShowJumpSpan =

@@ -49,7 +49,12 @@ void PlayModeJumpStats::interrupt()
   m_initialized = false;
   m_flight.reset();
   m_result.reset();
-  m_lastDuckMs = -1.0e9;
+  m_takeoff.reset();
+  m_airAction = AirAction::None;
+  m_landed = false;
+  m_groundFrames = 0;
+  m_duckTaps = 0;
+  m_lastDuckReleaseMs = -1.0e9;
   m_showPre = {};
 }
 
@@ -90,21 +95,19 @@ void PlayModeJumpStats::tick(
     m_initialized = true;
   }
   m_showPre.tick(sample);
-  if (grounded(before) && (sample.command.buttons & SCS_IN_DUCK))
-    m_lastDuckMs = m_timeMs;
+  const auto duckReleased =
+    !(sample.command.buttons & SCS_IN_DUCK) && (before.oldbuttons & SCS_IN_DUCK);
+  if (duckReleased)
+    m_lastDuckReleaseMs = m_timeMs;
+  const auto leftGround = grounded(before) && !grounded(after);
+  const auto jumped = leftGround && after.velocity[2] > 0.0f
+                      && (sample.command.buttons & SCS_IN_JUMP)
+                      && !(before.oldbuttons & SCS_IN_JUMP);
 
-  if (
-    grounded(before) && !grounded(after) && after.velocity[2] > 0.0f
-    && (sample.command.buttons & SCS_IN_JUMP) && !(before.oldbuttons & SCS_IN_JUMP))
+  if (jumped)
   {
-    auto technique = Technique::LongJump;
-    // Until action-chain classification ships, CJ/Bhop and duck starts must not
-    // silently become LJ records. fuser2 is CS's previous-jump stamina timer.
-    if (
-      before.fuser[1] > 0.0f || m_timeMs - m_lastDuckMs < 500.0
-      || (before.flags & SCS_FL_DUCKING))
-      technique = Technique::Unsupported;
-    else if (context && speed(before) > 0.1f)
+    auto takeoff = classifyTakeoff(sample);
+    if (takeoff.technique == Technique::LongJump && context && speed(before) > 0.1f)
     {
       const auto direction =
         vm::normalize(vm::vec3f{before.velocity[0], before.velocity[1], 0});
@@ -113,22 +116,82 @@ void PlayModeJumpStats::tick(
       {
         const auto lip = guide.edge->center + guide.edge->normal * 13.0f;
         if (vm::dot(lip - feet(before), guide.edge->normal) <= 56.0f)
-          technique = Technique::HighJump;
+          takeoff.technique = Technique::HighJump;
       }
     }
+    m_takeoff = takeoff;
     m_flight = Flight{
-      technique, feet(before), speed(before), std::max(speed(before), speed(after))};
+      takeoff.technique,
+      feet(before),
+      speed(before),
+      std::max(speed(before), speed(after)),
+      {},
+      {}};
+    m_flight->analysis.takeoff = takeoff;
+    m_flight->analysis.technique = takeoff.technique;
+    m_flight->analysis.preSpeed = takeoff.preSpeed;
+    m_flight->analysis.maxSpeed = std::max(speed(before), speed(after));
+    m_actionStartZ = feet(before).z();
+    m_airAction = AirAction::Jump;
+    m_duckTaps = 0;
   }
-  if (!m_flight)
-    return;
+  else if (leftGround)
+  {
+    if (m_timeMs - m_lastDuckReleaseMs <= 30.001)
+    {
+      if (!m_landed || m_airAction != AirAction::DuckTap || m_groundFrames > 10)
+        m_duckTaps = 0;
+      ++m_duckTaps;
+      m_actionStartZ = feet(before).z();
+      m_airAction = AirAction::DuckTap;
+    }
+    else
+    {
+      m_airAction = AirAction::None;
+      m_duckTaps = 0;
+    }
+  }
 
+  if (!grounded(before) && grounded(after))
+  {
+    if (std::abs(feet(after).z() - m_actionStartZ) > 0.125f)
+    {
+      m_airAction = AirAction::None;
+      m_duckTaps = 0;
+    }
+    m_landed = true;
+    m_landedDucked = (after.flags & SCS_FL_DUCKING) != 0;
+    m_landingSpeed = speed(after);
+    m_groundFrames = 1;
+  }
+  else if (grounded(before) && grounded(after))
+  {
+    m_groundFrames = std::min(m_groundFrames + 1, 11u);
+    if (m_groundFrames > 10)
+    {
+      m_landed = false;
+      m_airAction = AirAction::None;
+      m_duckTaps = 0;
+    }
+  }
+  else if (leftGround)
+  {
+    m_groundFrames = 0;
+    m_landed = false;
+  }
   if (sample.obstructed)
   {
     // Walls, ceilings and slopes change the trajectory; don't label their
     // clipped movement as a clean jump or a same-height failure estimate.
     m_flight.reset();
+    m_airAction = AirAction::None;
+    m_duckTaps = 0;
     return;
   }
+  if (!m_flight)
+    return;
+  recordStrafes(sample);
+  m_flight->analysis.maxSpeed = std::max(m_flight->maxSpeed, speed(after));
   m_flight->maxSpeed = std::max(m_flight->maxSpeed, speed(after));
   const auto from = feet(before);
   auto to = feet(after);
@@ -190,15 +253,154 @@ void PlayModeJumpStats::finish(const vm::vec3f& endFeet, const bool failed)
   const auto delta = endFeet - flight.startFeet;
   // KZ convention: horizontal center displacement plus the 32u player width.
   // This is not the geometrical platform gap, nor distance travelled along a path.
-  m_result = Result{
-    flight.technique,
-    failed,
-    std::hypot(delta.x(), delta.y()) + 32.0f,
-    flight.preSpeed,
-    flight.maxSpeed,
-    delta.z(),
-    m_timeMs};
+  auto result = std::move(m_flight->analysis);
+  result.technique = flight.technique;
+  result.failed = failed;
+  result.distance = std::hypot(delta.x(), delta.y()) + 32.0f;
+  result.preSpeed = flight.preSpeed;
+  result.maxSpeed = flight.maxSpeed;
+  result.heightDifference = delta.z();
+  result.timeMs = m_timeMs;
+  m_result = std::move(result);
   m_flight.reset();
+}
+
+float PlayModeJumpStats::Strafe::efficiency() const
+{
+  return frames ? 100.0f * static_cast<float>(goodFrames) / static_cast<float>(frames)
+                : 0.0f;
+}
+
+PlayModeJumpStats::Takeoff PlayModeJumpStats::classifyTakeoff(
+  const scs_move_sample& sample)
+{
+  auto type = Technique::LongJump;
+  const auto linked = m_landed && m_groundFrames <= 10;
+  if (linked && m_airAction == AirAction::DuckTap && m_duckTaps)
+  {
+    type = (sample.after.flags & SCS_FL_DUCKING) ? Technique::Unsupported
+           : m_duckTaps >= 3                     ? Technique::MultiCountJump
+           : m_duckTaps == 2                     ? Technique::DoubleCountJump
+           : m_landedDucked                      ? Technique::StandupCountJump
+                                                 : Technique::CountJump;
+  }
+  else if (linked && m_airAction == AirAction::Jump)
+  {
+    type =
+      ((sample.before.flags & SCS_FL_DUCKING) && (sample.after.flags & SCS_FL_DUCKING))
+        ? Technique::DuckBhop
+      : m_landedDucked ? Technique::StandupBhop
+                       : Technique::Bhop;
+  }
+  else if (
+    (m_landed && m_airAction == AirAction::None) || sample.before.fuser[1] > 0.0f
+    || (sample.before.flags & SCS_FL_DUCKING))
+    type = Technique::Unsupported;
+  return {
+    type,
+    linked ? m_groundFrames : 0,
+    m_duckTaps,
+    linked ? m_landingSpeed : speed(sample.before),
+    speed(sample.before),
+    speed(sample.after),
+    m_timeMs};
+}
+
+void PlayModeJumpStats::recordStrafes(const scs_move_sample& sample)
+{
+  if (grounded(sample.before))
+    return; // Ground friction / jump stamina is part of the takeoff, not air gain.
+  auto& flight = *m_flight;
+  auto& result = flight.analysis;
+  // Limit pathological flights and key chatter, without unbounded per-frame storage.
+  if (result.airFrames >= 5000)
+  {
+    result.truncated = true;
+    return;
+  }
+  ++result.airFrames;
+  if (sample.after.flags & SCS_FL_DUCKING)
+    ++result.duckFrames;
+  const auto gain = speed(sample.after) - speed(sample.before);
+
+  constexpr auto keys =
+    std::array{SCS_IN_FORWARD, SCS_IN_BACK, SCS_IN_MOVELEFT, SCS_IN_MOVERIGHT};
+  constexpr auto names = std::array{'W', 'S', 'A', 'D'};
+  auto owner = std::optional<size_t>{};
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    if (!(sample.command.buttons & keys[i]))
+    {
+      flight.activeKeys[i].reset();
+      continue;
+    }
+    if (!flight.activeKeys[i])
+    {
+      if (result.strafes.size() >= 64)
+      {
+        result.truncated = true;
+        continue;
+      }
+      flight.activeKeys[i] = result.strafes.size();
+      result.strafes.push_back(Strafe{names[i]});
+    }
+    if (!owner || *flight.activeKeys[i] < *owner)
+      owner = flight.activeKeys[i];
+  }
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    if (!flight.activeKeys[i])
+      continue;
+    auto& strafe = result.strafes[*flight.activeKeys[i]];
+    ++strafe.frames;
+    if (owner != flight.activeKeys[i])
+      continue; // Credit gain once, to the earliest held key, as KZ-Rush does.
+    if (gain > 0.0f)
+    {
+      strafe.gain += gain;
+      ++strafe.goodFrames;
+    }
+    else
+      strafe.loss -= gain;
+  }
+}
+
+const PlayModeJumpStats::Result* PlayModeJumpStats::current() const
+{
+  return m_flight ? &m_flight->analysis : nullptr;
+}
+
+const std::optional<PlayModeJumpStats::Takeoff>& PlayModeJumpStats::takeoff() const
+{
+  return m_takeoff;
+}
+
+std::string_view PlayModeJumpStats::name(const Technique technique)
+{
+  switch (technique)
+  {
+  case Technique::LongJump:
+    return "LongJump";
+  case Technique::HighJump:
+    return "HighJump";
+  case Technique::CountJump:
+    return "CountJump";
+  case Technique::StandupCountJump:
+    return "Stand-Up CountJump";
+  case Technique::DoubleCountJump:
+    return "Double CountJump";
+  case Technique::MultiCountJump:
+    return "Multi CountJump";
+  case Technique::Bhop:
+    return "BhopJump";
+  case Technique::StandupBhop:
+    return "Stand-Up Bhop";
+  case Technique::DuckBhop:
+    return "DuckBhop";
+  case Technique::Unsupported:
+    return "Unsupported";
+  }
+  return "Unsupported";
 }
 
 const std::optional<PlayModeShowPre::Pre>& PlayModeJumpStats::pre() const
@@ -219,7 +421,10 @@ double PlayModeJumpStats::timeMs() const
 bool PlayModeJumpStats::visible(const Result& result, const bool showFailed)
 {
   return result.technique != Technique::Unsupported && (!result.failed || showFailed)
-         && result.distance >= 120.0f && result.distance <= 280.0f
+         && result.distance >= (result.technique == Technique::Bhop
+                               || result.technique == Technique::StandupBhop
+                               || result.technique == Technique::DuckBhop ? 150.0f : 120.0f)
+         && result.distance <= 280.0f
          && std::abs(result.heightDifference) <= 0.125f;
 }
 } // namespace tb::ui

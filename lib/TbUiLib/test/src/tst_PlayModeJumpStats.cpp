@@ -294,6 +294,168 @@ TEST_CASE("PlayModeJumpStats")
     CHECK((!stats.result() || !PlayModeJumpStats::visible(*stats.result(), true)));
   }
 
+  SECTION("native ground transitions classify bhop stand-up and duck bhop")
+  {
+    const auto world = makeWorld(false);
+    const auto player = makePlayer(world.get());
+    auto recorder = Recorder{player.get()};
+    auto cmd = scs_usercmd{};
+    cmd.msec = 10;
+    cmd.buttons = SCS_IN_JUMP;
+    recorder.step(cmd);
+    auto duckLanding = false;
+    auto keepDuck = false;
+    SECTION("standing landing") {}
+    SECTION("duck landing")
+    {
+      duckLanding = true;
+    }
+    SECTION("duck bhop")
+    {
+      duckLanding = true;
+      keepDuck = true;
+    }
+    cmd.buttons = duckLanding ? SCS_IN_DUCK : 0;
+    for (int i = 0; i < 120 && !recorder.stats.result(); ++i)
+      recorder.step(cmd);
+    REQUIRE(recorder.stats.result());
+    cmd.buttons = static_cast<uint16_t>(SCS_IN_JUMP | (keepDuck ? SCS_IN_DUCK : 0));
+    recorder.step(cmd);
+    REQUIRE(recorder.stats.takeoff());
+    CHECK(recorder.stats.takeoff()->technique == (keepDuck
+      ? PlayModeJumpStats::Technique::DuckBhop : duckLanding
+      ? PlayModeJumpStats::Technique::StandupBhop : PlayModeJumpStats::Technique::Bhop));
+    CHECK(recorder.stats.takeoff()->fog == 1);
+    CHECK(recorder.stats.takeoff()->landingSpeed > 0);
+  }
+
+  SECTION("native duck taps classify CJ SCJ DCJ and MCJ")
+  {
+    const auto world = makeWorld(false);
+    const auto player = makePlayer(world.get());
+    auto recorder = Recorder{player.get()};
+    auto cmd = scs_usercmd{};
+    cmd.msec = 10;
+    auto taps = 1;
+    auto crouchTicks = 1;
+    auto standup = false;
+    auto keepDuck = false;
+    auto expected = PlayModeJumpStats::Technique::CountJump;
+    SECTION("CJ") {}
+    SECTION("SCJ")
+    {
+      standup = true;
+      expected = PlayModeJumpStats::Technique::StandupCountJump;
+    }
+    SECTION("remaining crouched does not count as stand-up")
+    {
+      standup = true;
+      keepDuck = true;
+      expected = PlayModeJumpStats::Technique::Unsupported;
+    }
+    SECTION("DCJ")
+    {
+      taps = 2;
+      expected = PlayModeJumpStats::Technique::DoubleCountJump;
+    }
+    SECTION("MCJ")
+    {
+      taps = 3;
+      expected = PlayModeJumpStats::Technique::MultiCountJump;
+    }
+    for (auto tap = 0; tap < taps; ++tap)
+    {
+      cmd.buttons = SCS_IN_DUCK;
+      for (auto i = 0; i < crouchTicks; ++i)
+        recorder.step(cmd);
+      cmd.buttons = 0;
+      recorder.step(cmd);
+      REQUIRE((recorder.samples.back().after.flags & SCS_FL_ONGROUND) == 0);
+      if (standup)
+        cmd.buttons = SCS_IN_DUCK;
+      for (auto i = 0; i < 60 && !(recorder.samples.back().after.flags & SCS_FL_ONGROUND);
+           ++i)
+        recorder.step(cmd);
+      REQUIRE((recorder.samples.back().after.flags & SCS_FL_ONGROUND) != 0);
+    }
+    cmd.buttons = static_cast<uint16_t>(SCS_IN_JUMP | (keepDuck ? SCS_IN_DUCK : 0));
+    recorder.step(cmd);
+    REQUIRE(recorder.stats.takeoff());
+    CHECK(recorder.stats.takeoff()->technique == expected);
+    CHECK(recorder.stats.takeoff()->duckTaps == static_cast<unsigned>(taps));
+    CHECK(recorder.stats.takeoff()->fog == 1);
+  }
+
+  SECTION("ground delay and discontinuities expire the action chain")
+  {
+    const auto world = makeWorld(false);
+    const auto player = makePlayer(world.get());
+    auto recorder = Recorder{player.get()};
+    auto cmd = scs_usercmd{};
+    cmd.msec = 10;
+    cmd.buttons = SCS_IN_JUMP;
+    recorder.step(cmd);
+    cmd.buttons = 0;
+    for (int i = 0; i < 100 && !recorder.stats.result(); ++i)
+      recorder.step(cmd);
+    REQUIRE(recorder.stats.result());
+    SECTION("more than ten ground commands")
+    {
+      for (int i = 0; i < 11; ++i)
+        recorder.step(cmd);
+    }
+    SECTION("checkpoint")
+    {
+      recorder.stats.interrupt();
+    }
+    cmd.buttons = SCS_IN_JUMP;
+    recorder.step(cmd);
+    REQUIRE(recorder.stats.takeoff());
+    CHECK(
+      recorder.stats.takeoff()->technique == PlayModeJumpStats::Technique::Unsupported);
+    CHECK(recorder.stats.takeoff()->fog == 0);
+  }
+
+  SECTION("strafe transitions credit overlapping keys only once")
+  {
+    auto stats = PlayModeJumpStats{};
+    auto sample = scs_move_sample{};
+    sample.command.msec = 10;
+    sample.command.buttons = SCS_IN_JUMP;
+    sample.before.movetype = sample.after.movetype = SCS_MOVETYPE_WALK;
+    sample.before.flags = SCS_FL_ONGROUND;
+    sample.before.origin[2] = 36;
+    sample.before.velocity[0] = sample.after.velocity[0] = 250;
+    sample.after.ground_entity = -1;
+    sample.after.origin[2] = 40;
+    sample.after.velocity[2] = 250;
+    sample.time_seconds = 0.01;
+    stats.tick(nullptr, {}, sample, false);
+    const auto air = [&](const uint16_t buttons, const float gain) {
+      sample.before = sample.after;
+      sample.command.buttons = buttons;
+      sample.after.velocity[0] += gain;
+      sample.time_seconds += 0.01;
+      stats.tick(nullptr, {}, sample, false);
+    };
+    air(SCS_IN_MOVELEFT, 5);
+    air(SCS_IN_MOVELEFT | SCS_IN_MOVERIGHT, 3);
+    air(SCS_IN_MOVERIGHT, -2);
+    REQUIRE(stats.current());
+    const auto& result = *stats.current();
+    REQUIRE(result.strafes.size() == 2);
+    CHECK(result.strafes[0].key == 'A');
+    CHECK(result.strafes[0].frames == 2);
+    CHECK(result.strafes[0].gain == 8);
+    CHECK(result.strafes[1].gain == 0);
+    CHECK(result.strafes[1].loss == 2);
+    CHECK(result.strafes[0].efficiency() == 100);
+    CHECK(result.strafes[1].efficiency() == 0);
+    stats.interrupt();
+    CHECK_FALSE(stats.current());
+    CHECK_FALSE(stats.takeoff());
+  }
+
   SECTION("render cadence does not change results or sample timing")
   {
     const auto world = makeWorld(false);

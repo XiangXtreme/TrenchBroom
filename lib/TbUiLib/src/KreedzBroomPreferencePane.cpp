@@ -214,10 +214,12 @@ void KreedzBroomPreferencePane::createGui()
     "",
     withToolTip(
       boolField(tr("Show jump results"), Preferences::PlayModeShowJumpStats),
-      tr("LJ and HJ results: distance, takeoff speed and maximum speed. "
-         "Assisted movement and unsupported jump techniques are excluded.")));
+      tr("Jump results with takeoff timing, speed and strafe analysis. Assisted movement "
+         "is excluded.")));
   left->addRow(
     "", boolField(tr("Show failed jumps"), Preferences::PlayModeShowFailedJumps));
+  left->addRow(
+    "", boolField(tr("Show strafe details"), Preferences::PlayModeShowStrafes));
   left->addRow(
     tr("Result duration"),
     floatField(Preferences::PlayModeJumpStatsDuration, 1.0, 15.0, 1, 0.5, " s"));

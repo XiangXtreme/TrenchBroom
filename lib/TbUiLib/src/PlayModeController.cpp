@@ -177,17 +177,19 @@ class ScreenTextAnchor : public render::TextAnchor
 {
 private:
   vm::vec2f m_position;
+  bool m_leftAligned;
 
 public:
-  explicit ScreenTextAnchor(const vm::vec2f& position)
+  explicit ScreenTextAnchor(const vm::vec2f& position, const bool leftAligned = false)
     : m_position{position}
+    , m_leftAligned{leftAligned}
   {
   }
 
   vm::vec3f offset(const gl::Camera&, const vm::vec2f& size) const override
   {
     return vm::vec3f{
-      std::round(m_position.x() - size.x() / 2.0f),
+      std::round(m_position.x() - (m_leftAligned ? 0.0f : size.x() / 2.0f)),
       std::round(m_position.y() - size.y() / 2.0f),
       0.0f};
   }
@@ -208,7 +210,8 @@ void renderHudText(
   const float red,
   const float green,
   const float blue,
-  const float alpha = 1.0f)
+  const float alpha = 1.0f,
+  const bool leftAligned = false)
 {
   const auto fontSize = static_cast<size_t>(
     std::round(static_cast<float>(pref(Preferences::RendererFontSize)) * fontScale));
@@ -229,9 +232,9 @@ void renderHudText(
     shadow,
     transparent,
     string,
-    ScreenTextAnchor{pixel + vm::vec2f{shadowOffset, -shadowOffset}});
+    ScreenTextAnchor{pixel + vm::vec2f{shadowOffset, -shadowOffset}, leftAligned});
   textRenderer->renderStringOnTop(
-    renderContext, color, transparent, string, ScreenTextAnchor{pixel});
+    renderContext, color, transparent, string, ScreenTextAnchor{pixel, leftAligned});
   renderBatch.addOneShot(textRenderer);
 }
 
@@ -872,6 +875,33 @@ void PlayModeController::render(
       }
     }
 
+    if (pref(Preferences::PlayModeShowJumpStats))
+    {
+      const auto& stats = m_timeline.jumpStats();
+      if (const auto& takeoff = stats.takeoff();
+          takeoff && stats.timeMs() - takeoff->timeMs < 2500.0
+          && takeoff->technique != PlayModeJumpStats::Technique::Unsupported)
+      {
+        const auto lines = std::array{
+          std::string{PlayModeJumpStats::name(takeoff->technique)} + " "
+            + std::to_string(takeoff->fog) + " FOG:",
+          formatFloat(takeoff->landingSpeed, 3),
+          formatFloat(takeoff->postSpeed, 3)};
+        const auto lineHeight =
+          static_cast<float>(pref(Preferences::RendererFontSize)) * 1.5f;
+        for (size_t i = 0; i < lines.size(); ++i)
+          renderHudText(
+            renderContext,
+            renderBatch,
+            lines[i],
+            1.0f,
+            {width * 0.5f, height * 0.65f - static_cast<float>(i) * lineHeight},
+            0.35f,
+            0.95f,
+            1.0f);
+      }
+    }
+
     // showkeys below the speed: only pressed keys are drawn, in fixed places
     const auto now = nowMs();
     const auto keyLineHeight =
@@ -902,48 +932,117 @@ void PlayModeController::render(
   if (pref(Preferences::PlayModeShowHud) && pref(Preferences::PlayModeShowJumpStats))
   {
     const auto& stats = m_timeline.jumpStats();
-    if (const auto& result = stats.result();
-        result
-        && PlayModeJumpStats::visible(
-          *result, pref(Preferences::PlayModeShowFailedJumps)))
+    const auto* current = stats.current();
+    if (current && current->technique == PlayModeJumpStats::Technique::Unsupported)
+      current = nullptr;
+    const auto* result = stats.result() ? &*stats.result() : nullptr;
+    const auto hold =
+      static_cast<double>(pref(Preferences::PlayModeJumpStatsDuration)) * 1000.0;
+    const auto alpha =
+      result ? fadeAlpha(stats.timeMs() - result->timeMs, hold, 500.0) : 0.0f;
+    if (
+      result && !current && alpha > 0.0f
+      && PlayModeJumpStats::visible(*result, pref(Preferences::PlayModeShowFailedJumps)))
     {
-      const auto age = stats.timeMs() - result->timeMs;
-      const auto hold =
-        static_cast<double>(pref(Preferences::PlayModeJumpStatsDuration)) * 1000.0;
-      const auto alpha = fadeAlpha(age, hold, 500.0);
-      if (alpha > 0.0f)
-      {
-        const auto label = result->technique == PlayModeJumpStats::Technique::HighJump
-                             ? std::string{"HJ"}
-                             : std::string{"LJ"};
-        const auto title = label + "  " + formatFloat(result->distance)
-          + (result->failed ? "  " + QCoreApplication::translate(
-               "PlayModeController", "Failed (estimate)").toStdString() : "");
-        const auto detail = "Pre " + formatFloat(result->preSpeed, 1) + "    Max "
-                            + formatFloat(result->maxSpeed, 1);
-        const auto fontSize = static_cast<float>(pref(Preferences::RendererFontSize));
-        const auto y = std::max(fontSize * 4.0f, height * 0.14f);
+      const auto fontSize = static_cast<float>(pref(Preferences::RendererFontSize));
+      const auto y = std::max(fontSize * 7.5f, height * 0.18f);
+      const auto line = fontSize * 1.65f;
+      const auto title = std::string{PlayModeJumpStats::name(result->technique)}
+        + (result->failed ? "  " + QCoreApplication::translate(
+             "PlayModeController", "Failed (estimate)").toStdString() : "");
+      const auto lines = std::array{
+        title,
+        "Distance: " + formatFloat(result->distance, 3),
+        "Prestrafe: " + formatFloat(result->preSpeed, 3) + "("
+          + std::to_string(result->takeoff.fog) + ")",
+        "Strafes: " + std::to_string(result->strafes.size())};
+      for (size_t i = 0; i < lines.size(); ++i)
         renderHudText(
           renderContext,
           renderBatch,
-          title,
-          1.5f,
-          {width / 2.0f, y},
-          result->failed ? 1.0f : 0.2f,
+          lines[i],
+          i == 1 ? 1.3f : 1.05f,
+          {width * 0.5f, y - static_cast<float>(i) * line},
+          result->failed ? 1.0f : 0.35f,
+          result->failed ? 0.4f : 0.95f,
           result->failed ? 0.4f : 1.0f,
-          result->failed ? 0.4f : 0.6f,
           alpha);
-        renderHudText(
-          renderContext,
-          renderBatch,
-          detail,
-          1.1f,
-          {width / 2.0f, y - fontSize * 2.0f},
-          1.0f,
-          1.0f,
-          1.0f,
-          alpha);
+    }
+
+    const auto* analysis = current ? current
+                           : result && alpha > 0.0f
+                               && PlayModeJumpStats::visible(
+                                 *result, pref(Preferences::PlayModeShowFailedJumps))
+                             ? result
+                             : nullptr;
+    if (analysis && pref(Preferences::PlayModeShowStrafes))
+    {
+      // Independent columns keep proportional fonts aligned.
+      const auto font = static_cast<float>(pref(Preferences::RendererFontSize));
+      const auto scale = std::min(1.0f, width * 0.22f / (font * 18.0f));
+      const auto rowHeight = font * scale * 1.6f;
+      const auto tableX = width * 0.77f;
+      const auto tableY = height * 0.78f;
+      const auto tableAlpha = current ? 1.0f : alpha;
+      const auto maxRows =
+        static_cast<size_t>(std::clamp(height * 0.4f / rowHeight - 2.0f, 1.0f, 10.0f));
+      const auto first =
+        analysis->strafes.size() > maxRows ? analysis->strafes.size() - maxRows : 0;
+      const auto columns = std::array{0.0f, 0.15f, 0.38f, 0.60f, 0.78f};
+      const auto fontSize = static_cast<size_t>(std::max(1.0f, std::round(font * scale)));
+      auto* tableRenderer = new render::TextRenderer{
+        gl::FontDescriptor{pref(Preferences::RendererFontPath), fontSize}};
+      const auto drawRow = [&](const std::array<std::string, 5>& cells, const float y) {
+        for (size_t i = 0; i < cells.size(); ++i)
+        {
+          const auto position =
+            vm::round(vm::vec2f{tableX + columns[i] * width * 0.22f, y});
+          const auto string = gl::AttrString{cells[i]};
+          tableRenderer->renderStringOnTop(
+            renderContext,
+            RgbaF{0, 0, 0, tableAlpha * 0.8f},
+            RgbaF{0, 0, 0, 0},
+            string,
+            ScreenTextAnchor{position + vm::vec2f{1, -1}, true});
+          tableRenderer->renderStringOnTop(
+            renderContext,
+            RgbaF{0.35f, 0.95f, 1.0f, tableAlpha},
+            RgbaF{0, 0, 0, 0},
+            string,
+            ScreenTextAnchor{position, true});
+        }
+      };
+      renderBatch.addOneShot(tableRenderer);
+      for (size_t i = first; i < analysis->strafes.size(); ++i)
+      {
+        const auto& strafe = analysis->strafes[i];
+        drawRow(
+          {std::string(1, strafe.key),
+           formatFloat(strafe.gain, 1),
+           formatFloat(strafe.loss, 1),
+           std::to_string(strafe.frames),
+           formatFloat(strafe.efficiency(), 0) + "%"},
+          tableY - static_cast<float>(i - first) * rowHeight);
       }
+      const auto footer = analysis->truncated ? "..."
+                          : first             ? "+" + std::to_string(first) + " earlier"
+                          : analysis->duckFrames
+                            ? std::to_string(analysis->duckFrames) + " duck frames"
+                            : "noduck";
+      renderHudText(
+        renderContext,
+        renderBatch,
+        footer,
+        scale,
+        {tableX,
+         tableY
+           - static_cast<float>(std::min(maxRows, analysis->strafes.size()) + 1)
+               * rowHeight},
+        0.35f,
+        0.95f,
+        1.0f,
+        tableAlpha,
+        true);
     }
   }
 

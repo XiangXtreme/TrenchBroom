@@ -76,6 +76,14 @@ TEST_CASE("KreedzBroomPreferencePane")
     if (box->text() == "Show failed jumps")
       failures = box;
   }
+  auto* strafes = static_cast<QCheckBox*>(nullptr);
+  for (auto* box : pane.findChildren<QCheckBox*>())
+    if (box->text() == "Show strafe details")
+      strafes = box;
+  REQUIRE(strafes);
+  CHECK(strafes->isChecked());
+  strafes->click();
+  CHECK_FALSE(pref(Preferences::PlayModeShowStrafes));
   REQUIRE(results);
   REQUIRE(failures);
   CHECK(results->isChecked());

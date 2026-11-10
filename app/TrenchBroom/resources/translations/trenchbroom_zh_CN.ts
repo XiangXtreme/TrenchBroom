@@ -5952,6 +5952,14 @@ By %2</source>
             <source>Fly through geometry. Hold the walk key to move three times faster. Move out of solid geometry before turning noclip off.</source>
             <translation>穿过几何飞行，按住慢走键可加速至 3 倍。移出实体后才能关闭穿墙。</translation>
         </message>
+        <message>
+            <source>Show strafe details</source>
+            <translation>显示 Strafe 明细</translation>
+        </message>
+        <message>
+            <source>Jump results with takeoff timing, speed and strafe analysis. Assisted movement is excluded.</source>
+            <translation>显示起跳时机、速度和 Strafe 分析，辅助移动不计入成绩。</translation>
+        </message>
     </context>
     <context>
         <name>OutlinerEntityPropertyEditor</name>
