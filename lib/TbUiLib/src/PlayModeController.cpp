@@ -855,7 +855,7 @@ void PlayModeController::render(
             renderBatch,
             lines[i],
             1.15f,
-            {width * 0.23f, height * 0.40f - static_cast<float>(i) * lineHeight},
+            {width * 0.5f, height * 0.40f - static_cast<float>(i) * lineHeight},
             0.35f,
             0.95f,
             1.0f);
@@ -922,7 +922,7 @@ void PlayModeController::render(
           renderBatch,
           lines[i],
           i == 1 ? 1.3f : 1.2f,
-          {width * 0.23f, y + static_cast<float>(3 - i) * line},
+          {width * 0.5f, y + static_cast<float>(3 - i) * line},
           result->failed ? 1.0f : 0.35f,
           result->failed ? 0.4f : 0.95f,
           result->failed ? 0.4f : 1.0f,
