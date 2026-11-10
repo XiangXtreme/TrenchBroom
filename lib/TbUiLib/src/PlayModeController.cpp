@@ -832,19 +832,8 @@ void PlayModeController::render(
     // from the bottom left.
     auto state = scs_player_state{};
     scs_get_state(m_context.get(), &state);
-    const auto speed = std::sqrt(
-      state.velocity[0] * state.velocity[0] + state.velocity[1] * state.velocity[1]);
 
     const auto speedPosition = vm::vec2f{width / 2.0f, height * 0.38f};
-    renderHudText(
-      renderContext,
-      renderBatch,
-      formatSpeed(speed),
-      SpeedFontScale,
-      speedPosition,
-      1.0f,
-      1.0f,
-      1.0f);
 
     if (pref(Preferences::PlayModeShowJumpStats))
     {
@@ -853,17 +842,23 @@ void PlayModeController::render(
           takeoff && stats.timeMs() - takeoff->timeMs < 2500.0
           && takeoff->technique != PlayModeJumpStats::Technique::Unsupported)
       {
-        const auto fog = std::string{PlayModeJumpStats::name(takeoff->technique)} + "  "
-          + std::to_string(takeoff->fog) + " FOG";
-        renderHudText(
-          renderContext,
-          renderBatch,
-          fog,
-          1.6f,
-          {width * 0.5f, height * 0.65f},
-          0.35f,
-          0.95f,
-          1.0f);
+        const auto lines = std::array{
+          std::string{PlayModeJumpStats::name(takeoff->technique)} + " "
+            + std::to_string(takeoff->fog) + " FOG:",
+          formatFloat(takeoff->landingSpeed, 3),
+          formatFloat(takeoff->postSpeed, 3)};
+        const auto lineHeight =
+          static_cast<float>(pref(Preferences::RendererFontSize)) * 1.5f;
+        for (size_t i = 0; i < lines.size(); ++i)
+          renderHudText(
+            renderContext,
+            renderBatch,
+            lines[i],
+            1.15f,
+            {width * 0.23f, height * 0.40f - static_cast<float>(i) * lineHeight},
+            0.35f,
+            0.95f,
+            1.0f);
       }
     }
 
@@ -910,22 +905,24 @@ void PlayModeController::render(
       && PlayModeJumpStats::visible(*result, pref(Preferences::PlayModeShowFailedJumps)))
     {
       const auto fontSize = static_cast<float>(pref(Preferences::RendererFontSize));
-      const auto y = std::max(fontSize * 7.5f, height * 0.18f);
-      const auto line = fontSize * 1.65f;
+      const auto y = std::max(fontSize * 6.5f, height * 0.13f);
+      const auto line = fontSize * 1.55f;
       const auto title = std::string{PlayModeJumpStats::name(result->technique)}
         + (result->failed ? "  " + QCoreApplication::translate(
              "PlayModeController", "Failed (estimate)").toStdString() : "");
       const auto lines = std::array{
         title,
         "Distance: " + formatFloat(result->distance, 3),
+        "Prestrafe: " + formatFloat(result->preSpeed, 3) + "("
+          + std::to_string(result->takeoff.fog) + ")",
         "Strafes: " + std::to_string(result->strafes.size())};
       for (size_t i = 0; i < lines.size(); ++i)
         renderHudText(
           renderContext,
           renderBatch,
           lines[i],
-          i == 1 ? 1.5f : 1.2f,
-          {width * 0.5f, y - static_cast<float>(i) * line},
+          i == 1 ? 1.3f : 1.2f,
+          {width * 0.23f, y + static_cast<float>(3 - i) * line},
           result->failed ? 1.0f : 0.35f,
           result->failed ? 0.4f : 0.95f,
           result->failed ? 0.4f : 1.0f,
