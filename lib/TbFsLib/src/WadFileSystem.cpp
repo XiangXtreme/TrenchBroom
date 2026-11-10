@@ -81,7 +81,7 @@ Result<void> WadFileSystem::doReadDirectory()
     reader.seekFromBegin(WadLayout::NumEntriesAddress);
     const auto entryCount = reader.readSize<int32_t>();
 
-    if (reader.size() < WadLayout::MinFileSize + entryCount * WadLayout::DirEntrySize)
+    if (entryCount > (reader.size() - WadLayout::MinFileSize) / WadLayout::DirEntrySize)
     {
       return Error{"File does not contain a directory"};
     }
@@ -89,7 +89,9 @@ Result<void> WadFileSystem::doReadDirectory()
     reader.seekFromBegin(WadLayout::DirOffsetAddress);
     const auto directoryOffset = reader.readSize<int32_t>();
 
-    if (m_file->size() < directoryOffset + entryCount * WadLayout::DirEntrySize)
+    if (
+      directoryOffset > reader.size()
+      || entryCount > (reader.size() - directoryOffset) / WadLayout::DirEntrySize)
     {
       return Error{"File directory is out of bounds."};
     }
@@ -100,7 +102,7 @@ Result<void> WadFileSystem::doReadDirectory()
       const auto entryAddress = reader.readSize<int32_t>();
       const auto entrySize = reader.readSize<int32_t>();
 
-      if (m_file->size() < entryAddress + entrySize)
+      if (entryAddress > reader.size() || entrySize > reader.size() - entryAddress)
       {
         return Error{kdl::str_to_string(
           "File entry at address ", entryAddress, " is out of bounds")};

@@ -20,6 +20,8 @@
 #include "Matchers.h"
 #include "TestEnvironment.h"
 #include "fs/DiskIO.h"
+#include "fs/File.h"
+#include "fs/TestEnvironment.h"
 #include "fs/TestUtils.h"
 #include "fs/TraversalMode.h"
 #include "fs/WadFileSystem.h"
@@ -27,6 +29,8 @@
 #include "kd/result.h"
 
 #include <filesystem>
+#include <fstream>
+#include <string>
 #include <system_error>
 
 #include <catch2/catch_test_macros.hpp>
@@ -49,6 +53,26 @@ TEST_CASE("WadFileSystem")
   SECTION("doReadDirectory")
   {
     const auto fsTestPath = getFixtureRoot() / "test/fs/Wad/";
+
+    SECTION("rejects a negative entry offset")
+    {
+      auto env = TestEnvironment{};
+      auto wad = std::string(44, '\0');
+      wad.replace(0, 4, "WAD3");
+      wad[4] = 1;
+      wad[8] = 12;
+      wad[12] = static_cast<char>(0xff);
+      wad[13] = static_cast<char>(0xff);
+      wad[14] = static_cast<char>(0xff);
+      wad[15] = static_cast<char>(0xff);
+      wad[16] = 1;
+      const auto path = env.dir() / "invalid.wad";
+      {
+        auto stream = std::ofstream{path, std::ios::binary};
+        stream.write(wad.data(), static_cast<std::streamsize>(wad.size()));
+      }
+      CHECK(openWadFails(path));
+    }
 
     SECTION("returns an error if the file is smaller than the header size")
     {

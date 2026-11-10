@@ -25,7 +25,6 @@
 
 #include <cstring>
 #include <memory>
-#include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -95,13 +94,7 @@ TEST_CASE("CFile")
     env.createFile("foo.txt", "hello world");
     const auto file = createCFile(env.dir() / "foo.txt") | kdl::value();
 
-    // Reader::subReaderFromBegin only validates the start position, not that
-    // position + length stays within bounds, so a reader can be constructed that
-    // requests more than the file actually contains. CFile::read() must catch this
-    // itself, before ever calling fread.
-    auto reader = file->reader().subReaderFromBegin(0, 1000);
-    auto buffer = std::vector<char>(1000);
-    CHECK_THROWS_AS(reader.read(buffer.data(), 1000), ReaderException);
+    CHECK_THROWS_AS(file->reader().subReaderFromBegin(0, 1000), ReaderException);
   }
 }
 

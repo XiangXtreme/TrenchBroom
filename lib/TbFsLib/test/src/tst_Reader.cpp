@@ -24,6 +24,7 @@
 #include "fs/ReaderException.h"
 
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <string>
 
@@ -147,10 +148,40 @@ void subReader(Reader&& r)
   CHECK(s.position() == 3U);
 }
 
+void rejectInvalidRanges(Reader&& r)
+{
+  const auto max = std::numeric_limits<size_t>::max();
+  r.seekFromBegin(2);
+  CHECK_FALSE(r.canRead(max));
+  CHECK_THROWS_AS(r.seekForward(max), ReaderException);
+  CHECK_THROWS_AS(r.seekFromEnd(max), ReaderException);
+  CHECK_THROWS_AS(r.subReaderFromBegin(9, 2), ReaderException);
+  CHECK_THROWS_AS(r.subReaderFromBegin(1, max), ReaderException);
+  CHECK_THROWS_AS(r.subReaderFromCurrent(max, 1), ReaderException);
+  CHECK_THROWS_AS(r.subReaderFromCurrent(0, 9), ReaderException);
+  CHECK_THROWS_AS(r.subReaderFromBegin(max), ReaderException);
+  char byte{};
+  CHECK_THROWS_AS(r.read(&byte, max), ReaderException);
+  CHECK_THROWS_AS(r.readString(max), ReaderException);
+  CHECK(r.position() == 2);
+}
+
 } // namespace
 
 TEST_CASE("Reader")
 {
+  SECTION("rejectInvalidRanges")
+  {
+    SECTION("buffer-backed")
+    {
+      rejectInvalidRanges(Reader::from(buff(), buff() + 10));
+    }
+    SECTION("file-backed")
+    {
+      rejectInvalidRanges(file()->reader());
+    }
+  }
+
   SECTION("createEmpty")
   {
     SECTION("buffer-backed")

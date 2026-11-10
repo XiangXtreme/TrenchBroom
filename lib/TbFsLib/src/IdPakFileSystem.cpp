@@ -51,6 +51,12 @@ Result<void> IdPakFileSystem::doReadDirectory()
 
     const auto directoryAddress = reader.readSize<int32_t>();
     const auto directorySize = reader.readSize<int32_t>();
+    if (
+      directorySize % PakLayout::EntryLength != 0 || directoryAddress > reader.size()
+      || directorySize > reader.size() - directoryAddress)
+    {
+      return Error{"Pak directory is out of bounds or has an invalid size"};
+    }
     const auto entryCount = directorySize / PakLayout::EntryLength;
 
     reader.seekFromBegin(directoryAddress);
@@ -60,6 +66,10 @@ Result<void> IdPakFileSystem::doReadDirectory()
       const auto entryName = reader.readString(PakLayout::EntryNameLength);
       const auto entryAddress = reader.readSize<int32_t>();
       const auto entrySize = reader.readSize<int32_t>();
+      if (entryAddress > reader.size() || entrySize > reader.size() - entryAddress)
+      {
+        return Error{"Pak entry is out of bounds"};
+      }
 
       const auto entryPath = kdl::parse_utf8_or_latin1_path(
         kdl::str_to_lower(entryName), !K(convert_separators));

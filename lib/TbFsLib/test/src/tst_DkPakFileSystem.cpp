@@ -22,12 +22,15 @@
 #include "fs/DiskIO.h"
 #include "fs/DkPakFileSystem.h"
 #include "fs/File.h" // IWYU pragma: keep
+#include "fs/TestEnvironment.h"
 #include "fs/TestUtils.h"
 #include "fs/TraversalMode.h"
 
 #include "kd/result.h"
 
 #include <filesystem>
+#include <fstream>
+#include <initializer_list>
 #include <string>
 
 #include <catch2/catch_test_macros.hpp>
@@ -41,6 +44,73 @@ TEST_CASE("DkPakFileSystem")
 
   SECTION("doReadDirectory")
   {
+    SECTION("rejects malformed compressed entries")
+    {
+      auto env = TestEnvironment{};
+      const auto checkInvalid = [&](
+                                  const std::initializer_list<unsigned char> bytes,
+                                  const unsigned int declaredSize) {
+        auto archive = std::string{"PACK"};
+        const auto appendInt = [&](const unsigned int value) {
+          for (auto shift = 0u; shift < 32; shift += 8)
+          {
+            archive.push_back(static_cast<char>((value >> shift) & 0xff));
+          }
+        };
+        appendInt(12u + static_cast<unsigned int>(bytes.size()));
+        appendInt(72);
+        for (const auto byte : bytes)
+        {
+          archive.push_back(static_cast<char>(byte));
+        }
+        archive.append("entry.bin");
+        archive.resize(12 + bytes.size() + 56, '\0');
+        appendInt(12);
+        appendInt(declaredSize);
+        appendInt(static_cast<unsigned int>(bytes.size()));
+        appendInt(1);
+
+        const auto path = env.dir() / "invalid.pak";
+        {
+          auto stream = std::ofstream{path, std::ios::binary};
+          stream.write(archive.data(), static_cast<std::streamsize>(archive.size()));
+        }
+        const auto file = Disk::openFile(path) | kdl::value();
+        const auto fs = createImageFileSystem<DkPakFileSystem>(file) | kdl::value();
+        CHECK(fs->openFile("entry.bin").is_error());
+      };
+
+      checkInvalid({0x01, 'A', 'B', 0xff, 0}, 1);
+      checkInvalid({0x41, 0xff, 0}, 1);
+      checkInvalid({0x82, 'A', 0xff, 0}, 1);
+      checkInvalid({0xc0, 0, 0xff, 0}, 2);
+      checkInvalid({0x01, 'A', 'B', 0xc1, 0, 0xff, 0}, 5);
+      checkInvalid({0xff, 0}, 1);
+      checkInvalid({}, 1);
+    }
+
+    SECTION("rejects directory entries outside the archive")
+    {
+      auto env = TestEnvironment{};
+      auto archive = std::string(84, '\0');
+      archive.replace(0, 4, "PACK");
+      archive[4] = 12;
+      archive[8] = 72;
+      archive.replace(12, 9, "entry.bin");
+      archive[68] = static_cast<char>(0xff);
+      archive[69] = static_cast<char>(0xff);
+      archive[70] = static_cast<char>(0xff);
+      archive[71] = static_cast<char>(0xff);
+      archive[72] = 1;
+      const auto path = env.dir() / "invalid.pak";
+      {
+        auto stream = std::ofstream{path, std::ios::binary};
+        stream.write(archive.data(), static_cast<std::streamsize>(archive.size()));
+      }
+      const auto file = Disk::openFile(path) | kdl::value();
+      CHECK(createImageFileSystem<DkPakFileSystem>(file).is_error());
+    }
+
     SECTION("decompresses entries covering every RLE opcode and both loop exits")
     {
       // dkpak_rle.pak was generated to exercise DkPakFileSystem::decompress() beyond

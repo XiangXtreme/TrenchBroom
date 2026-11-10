@@ -397,6 +397,7 @@ public:
 
 protected:
   void ensurePosition(size_t position) const;
+  void ensureRange(size_t position, size_t length) const;
 };
 
 /**

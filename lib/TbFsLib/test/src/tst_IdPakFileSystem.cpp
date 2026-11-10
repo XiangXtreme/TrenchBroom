@@ -19,11 +19,16 @@
 
 #include "Matchers.h"
 #include "TestEnvironment.h"
+#include "fs/DiskIO.h"
+#include "fs/File.h"
 #include "fs/IdPakFileSystem.h"
+#include "fs/TestEnvironment.h"
 #include "fs/TestUtils.h"
 #include "fs/TraversalMode.h"
 
 #include <filesystem>
+#include <fstream>
+#include <string>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -36,6 +41,28 @@ TEST_CASE("IdPakFileSystem")
 
   SECTION("doReadDirectory")
   {
+    SECTION("rejects an entry outside the archive")
+    {
+      auto env = TestEnvironment{};
+      auto archive = std::string(76, '\0');
+      archive.replace(0, 4, "PACK");
+      archive[4] = 12;
+      archive[8] = 64;
+      archive.replace(12, 9, "entry.bin");
+      archive[68] = static_cast<char>(0xff);
+      archive[69] = static_cast<char>(0xff);
+      archive[70] = static_cast<char>(0xff);
+      archive[71] = static_cast<char>(0xff);
+      archive[72] = 1;
+      const auto path = env.dir() / "invalid.pak";
+      {
+        auto stream = std::ofstream{path, std::ios::binary};
+        stream.write(archive.data(), static_cast<std::streamsize>(archive.size()));
+      }
+      const auto file = Disk::openFile(path) | kdl::value();
+      CHECK(createImageFileSystem<IdPakFileSystem>(file).is_error());
+    }
+
     SECTION("reads an entry whose name is not valid UTF-8")
     {
       // https://github.com/TrenchBroom/TrenchBroom/issues/5494

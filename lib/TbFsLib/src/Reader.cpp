@@ -275,11 +275,13 @@ void Reader::seekFromBegin(const size_t position)
 
 void Reader::seekFromEnd(const size_t offset)
 {
+  ensurePosition(offset);
   seekFromBegin(size() - offset);
 }
 
 void Reader::seekForward(const size_t offset)
 {
+  ensureRange(position(), offset);
   seekFromBegin(position() + offset);
 }
 
@@ -296,17 +298,19 @@ void Reader::seekBackward(const size_t offset)
 
 Reader Reader::subReaderFromBegin(const size_t position, const size_t length) const
 {
-  ensurePosition(position);
+  ensureRange(position, length);
   return Reader{m_source->subSource(position, length)};
 }
 
 Reader Reader::subReaderFromBegin(const size_t position) const
 {
+  ensurePosition(position);
   return subReaderFromBegin(position, size() - position);
 }
 
 Reader Reader::subReaderFromCurrent(const size_t offset, const size_t length) const
 {
+  ensureRange(position(), offset);
   return subReaderFromBegin(position() + offset, length);
 }
 
@@ -322,7 +326,7 @@ BufferedReader Reader::buffer() const
 
 bool Reader::canRead(const size_t readSize) const
 {
-  return position() + readSize <= size();
+  return readSize <= size() - position();
 }
 
 void Reader::read(unsigned char* val, const size_t size)
@@ -332,13 +336,18 @@ void Reader::read(unsigned char* val, const size_t size)
 
 void Reader::read(char* val, const size_t size)
 {
-  ensurePosition(position() + size);
+  ensureRange(position(), size);
   m_source->read(val, position(), size);
   m_position += size;
 }
 
 std::string Reader::readString(const size_t size)
 {
+  ensureRange(position(), size);
+  if (size == std::string::npos)
+  {
+    throw ReaderException{"String length is too large"};
+  }
   auto buffer = std::vector<char>(size + 1, 0);
   read(buffer.data(), size);
   return {buffer.data()};
@@ -350,6 +359,18 @@ void Reader::ensurePosition(const size_t position) const
   {
     throw ReaderException{
       "Position " + std::to_string(position) + " is out of bounds for reader of size "
+      + std::to_string(size())};
+  }
+}
+
+void Reader::ensureRange(const size_t position, const size_t length) const
+{
+  ensurePosition(position);
+  if (length > size() - position)
+  {
+    throw ReaderException{
+      "Range at position " + std::to_string(position) + " with length "
+      + std::to_string(length) + " is out of bounds for reader of size "
       + std::to_string(size())};
   }
 }

@@ -22,13 +22,11 @@
 #include "fs/File.h"
 #include "fs/ReaderException.h"
 
-#include "kd/contracts.h"
 #include "kd/k.h"
 #include "kd/path_utils.h"
 #include "kd/result.h"
 #include "kd/string_format.h"
 
-#include <cassert>
 #include <cstring>
 #include <memory>
 
@@ -54,6 +52,13 @@ Result<std::unique_ptr<char[]>> decompress(
     auto result = std::make_unique<char[]>(uncompressedSize);
     auto* begin = result.get();
     auto* curTarget = begin;
+    auto written = size_t{0};
+    const auto ensureOutput = [&](const size_t length) {
+      if (length > uncompressedSize - written)
+      {
+        throw ReaderException{"Compressed entry exceeds its declared size"};
+      }
+    };
 
     auto x = reader.readUnsignedChar<unsigned char>();
     while (!reader.eof() && x < 0xFF)
@@ -62,23 +67,29 @@ Result<std::unique_ptr<char[]>> decompress(
       {
         // x+1 bytes of uncompressed data follow (just read+write them as they are)
         const auto len = static_cast<size_t>(x) + 1;
+        ensureOutput(len);
         reader.read(curTarget, len);
         curTarget += len;
+        written += len;
       }
       else if (x < 0x80)
       {
         // run-length encoded zeros, write (x - 62) zero-bytes to output
         const auto len = static_cast<size_t>(x) - 62;
+        ensureOutput(len);
         std::memset(curTarget, 0, len);
         curTarget += len;
+        written += len;
       }
       else if (x < 0xC0)
       {
         // run-length encoded data, read one byte, write it (x-126) times to output
         const auto len = static_cast<size_t>(x) - 126;
+        ensureOutput(len);
         const auto data = reader.readInt<unsigned char>();
         std::memset(curTarget, data, len);
         curTarget += len;
+        written += len;
       }
       else if (x < 0xFE)
       {
@@ -89,18 +100,26 @@ Result<std::unique_ptr<char[]>> decompress(
         // to output, of course)
         const auto len = static_cast<size_t>(x) - 190;
         const auto offset = reader.readSize<unsigned char>();
-        auto* from = curTarget - (offset + 2);
-
-        contract_assert(from >= begin);
-        contract_assert(from <= curTarget - len);
+        const auto distance = offset + 2;
+        ensureOutput(len);
+        if (distance > written || len > distance)
+        {
+          throw ReaderException{"Invalid compressed entry back-reference"};
+        }
+        const auto* from = curTarget - distance;
 
         std::memcpy(curTarget, from, len);
         curTarget += len;
+        written += len;
       }
 
       x = reader.readUnsignedChar<unsigned char>();
     }
 
+    if (written != uncompressedSize)
+    {
+      return Error{"Compressed entry is shorter than its declared size"};
+    }
     return result;
   }
   catch (const ReaderException& e)
@@ -119,6 +138,12 @@ Result<void> DkPakFileSystem::doReadDirectory()
 
     const auto directoryAddress = reader.readSize<int32_t>();
     const auto directorySize = reader.readSize<int32_t>();
+    if (
+      directorySize % DkPakLayout::EntryLength != 0 || directoryAddress > reader.size()
+      || directorySize > reader.size() - directoryAddress)
+    {
+      return Error{"Pak directory is out of bounds or has an invalid size"};
+    }
     const auto entryCount = directorySize / DkPakLayout::EntryLength;
 
     reader.seekFromBegin(directoryAddress);
@@ -131,6 +156,10 @@ Result<void> DkPakFileSystem::doReadDirectory()
       const auto compressedSize = reader.readSize<int32_t>();
       const auto compressed = reader.readBool<int32_t>();
       const auto entrySize = compressed ? compressedSize : uncompressedSize;
+      if (entryAddress > reader.size() || entrySize > reader.size() - entryAddress)
+      {
+        return Error{"Pak entry is out of bounds"};
+      }
 
       const auto entryPath = kdl::parse_utf8_or_latin1_path(
         kdl::str_to_lower(entryName), !K(convert_separators));
