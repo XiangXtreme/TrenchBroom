@@ -64,9 +64,10 @@ ContextPtr contextFor(const PlayModeWorld& world)
   return context;
 }
 
-scs_player_state groundedAt(scs_context* context, const float x, const float y = 0)
+scs_player_state groundedAt(
+  scs_context* context, const float x, const float y = 0, const float height = 0)
 {
-  const float origin[] = {x, y, 36.0f};
+  const float origin[] = {x, y, height + 36.0f};
   scs_spawn(context, origin, nullptr);
   auto cmd = scs_usercmd{};
   cmd.msec = 10;
@@ -203,6 +204,44 @@ TEST_CASE("PlayModeJumpGuide")
       std::ranges::reverse(world.jumpSurfaces);
     }
   }
+  SECTION("an inset platform excludes the floor lip where the player cannot fit")
+  {
+    // Bounds read from the affected pair in Lws_gxl_speedrun. The lower floor
+    // starts 8 units before the landing block, producing a false 200 / Z -88.
+    const auto floorLip = GENERATE(8.0, 32.0);
+    const auto ducked = GENERATE(false, true);
+    CAPTURE(floorLip, ducked);
+    auto insetFixture = mdl::MapFixture{};
+    auto& insetMap = insetFixture.create();
+    addBox(insetMap, {{-424, -192, 448}, {-328, -96, 536}});
+    addBox(insetMap, {{-128, -480, 384}, {192, 272, 448}});
+    addBox(insetMap, {{-128 + floorLip, -192, 448}, {184, -96, 536}});
+    auto world = buildPlayModeWorld(insetMap);
+    auto context = contextFor(world);
+    auto state = groundedAt(context.get(), -376, -144, 536);
+    if (ducked)
+    {
+      state.flags |= SCS_FL_DUCKING;
+      state.origin[2] -= 18;
+      scs_set_state(context.get(), &state);
+    }
+    // A wider floor lip remains a real lower landing.
+    const auto expectedEnd =
+      floorLip < 16 ? vm::vec3f{-120, -144, 536} : vm::vec3f{-128, -144, 448};
+    for (auto order = 0; order < 2; ++order)
+    {
+      for (const auto yaw : {-0.3f, 0.0f, 0.3f})
+      {
+        const auto guide = measurePlayModeJumpGuide(
+          context.get(), world.jumpSurfaces, state, {1, yaw, -0.5f});
+        REQUIRE(guide.span);
+        CHECK(guide.span->distance == Catch::Approx(expectedEnd.x() + 328).margin(0.01));
+        CHECK(guide.span->start == vm::vec3f{-328, -144, 536});
+        CHECK(guide.span->end == expectedEnd);
+      }
+      std::ranges::reverse(world.jumpSurfaces);
+    }
+  }
   SECTION("thin landing faces and angled measurements are not skipped")
   {
     addBox(map, {{168, -128, -16}, {168.5, 128, 0}});
@@ -300,8 +339,11 @@ TEST_CASE("PlayModeJumpGuide")
   }
   SECTION("a lower landing reports its own signed height")
   {
-    addBox(map, {{168, -128, -48}, {172, 128, -32}});
-    const auto world = buildPlayModeWorld(map);
+    auto lowerFixture = mdl::MapFixture{};
+    auto& lowerMap = lowerFixture.create();
+    addBox(lowerMap, {{-512, -128, -16}, {0, 128, 0}});
+    addBox(lowerMap, {{168, -128, -48}, {172, 128, -32}});
+    const auto world = buildPlayModeWorld(lowerMap);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
       context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});

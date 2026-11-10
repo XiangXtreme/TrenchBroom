@@ -198,9 +198,21 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
   {
     const auto& edge = approach->edge;
     const auto& direction = edge.endNormal;
-    const auto firstLanding = std::ranges::find_if(
-      approach->spans,
-      [&](const auto& span) { return span.start > edge.end + SurfaceTolerance; });
+    const auto canLand = [&](const Interval& span) {
+      // Raw brush faces include covered floors and narrow lips beside taller
+      // blocks. A landing needs room for the player's current collision hull.
+      const auto inset = std::min(SurfaceTolerance, (span.end - span.start) / 2.0f);
+      auto origin = feet + direction * (span.start + inset);
+      origin[2] = span.height + halfHeight(state) + SurfaceTolerance;
+      const auto hull =
+        state.flags & SCS_FL_DUCKING ? SCS_HULL_DUCKED : SCS_HULL_STANDING;
+      return scs_position_is_free(context, origin.v, hull) != 0;
+    };
+    const auto firstLanding =
+      std::ranges::find_if(approach->spans, [&](const auto& span) {
+        return span.start > edge.end + SurfaceTolerance && span.start < edge.end + MaxGap
+               && canLand(span);
+      });
     if (firstLanding != approach->spans.end())
     {
       // A floor and the platform above it can share the same leading edge. Use
@@ -211,7 +223,7 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
            && next->start <= firstLanding->start + SurfaceTolerance;
            ++next)
       {
-        if (next->height > landing->height)
+        if (next->height > landing->height && canLand(*next))
           landing = next;
       }
       const auto& candidate = *landing;
