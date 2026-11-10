@@ -63,16 +63,10 @@ std::unique_ptr<scs_context, ContextDeleter> makePlayer(scs_world* world)
   return context;
 }
 
-std::vector<PlayModeJumpSurface> ledgeSurfaces()
-{
-  return {{{{-4096, -4096, 0}, {0, -4096, 0}, {0, 4096, 0}, {-4096, 4096, 0}}, 15, true}};
-}
-
 struct Recorder
 {
   scs_context* context;
   PlayModeJumpStats stats;
-  std::vector<PlayModeJumpSurface> surfaces;
   std::vector<scs_move_sample> samples;
   bool assisted = false;
 
@@ -90,7 +84,7 @@ struct Recorder
         auto& recorder = *static_cast<Recorder*>(user);
         recorder.samples.push_back(*sample);
         recorder.stats.tick(
-          recorder.context, recorder.surfaces, *sample, recorder.assisted);
+          recorder.context, *sample, recorder.assisted);
       },
       this);
   }
@@ -147,19 +141,45 @@ TEST_CASE("PlayModeJumpStats")
     const auto& result = *recorder.stats.result();
     CHECK(result.technique == PlayModeJumpStats::Technique::LongJump);
     CHECK_FALSE(result.failed);
-    CHECK(result.distance > 120.0f);
-    CHECK(result.distance < 280.0f);
+    CHECK(result.distance > 88.0f);
+    CHECK(result.distance < 248.0f);
     CHECK(result.preSpeed == recorder.stats.pre()->speed);
     CHECK(result.heightDifference == vm::approx{0.0f, 0.125f});
     CHECK(PlayModeJumpStats::visible(result, true));
   }
 
-  SECTION("HJ failures stop at takeoff height even with no opposite platform")
+  SECTION("plugin distance thresholds use weapon-speed adjustment")
+  {
+    auto result = PlayModeJumpStats::Result{};
+    result.technique = PlayModeJumpStats::Technique::LongJump;
+    result.airFrames = 10;
+    result.heightDifference = 0;
+    result.weaponSpeed = 300;
+    result.distance = 154.9f;
+    CHECK_FALSE(PlayModeJumpStats::visible(result, false));
+    result.distance = 155.0f;
+    CHECK(PlayModeJumpStats::visible(result, false));
+    result.distance = 315.1f;
+    CHECK_FALSE(PlayModeJumpStats::visible(result, false));
+    result.distance = 315.0f;
+    CHECK(PlayModeJumpStats::visible(result, false));
+
+    result.technique = PlayModeJumpStats::Technique::Bhop;
+    result.distance = 184.9f;
+    CHECK_FALSE(PlayModeJumpStats::visible(result, false));
+    result.distance = 185.0f;
+    CHECK(PlayModeJumpStats::visible(result, false));
+
+    result.technique = PlayModeJumpStats::Technique::DuckBhop;
+    result.distance = 155.0f;
+    CHECK(PlayModeJumpStats::visible(result, false));
+  }
+
+  SECTION("single-axis ledge matches the plugin HJ probe and stays an LJ")
   {
     const auto world = makeWorld(true);
     const auto player = makePlayer(world.get());
     auto recorder = Recorder{player.get()};
-    recorder.surfaces = ledgeSurfaces();
     auto cmd = scs_usercmd{};
     cmd.msec = 10;
     cmd.buttons = SCS_IN_JUMP;
@@ -169,7 +189,7 @@ TEST_CASE("PlayModeJumpStats")
       recorder.step(cmd);
     REQUIRE(recorder.stats.result());
     const auto result = *recorder.stats.result();
-    CHECK(result.technique == PlayModeJumpStats::Technique::HighJump);
+    CHECK(result.technique == PlayModeJumpStats::Technique::LongJump);
     CHECK(result.failed);
     CHECK(result.heightDifference == vm::approx{0.0f, 0.001f});
     CHECK(PlayModeJumpStats::visible(result, true));
@@ -250,7 +270,7 @@ TEST_CASE("PlayModeJumpStats")
     sample.after.ground_entity = -1;
     sample.before.velocity[0] = sample.after.velocity[0] = 250;
     sample.time_seconds = 0.01;
-    stats.tick(nullptr, {}, sample, false);
+    stats.tick(nullptr, sample, false);
     REQUIRE(stats.pre());
 
     SECTION("explicit discontinuity")
@@ -261,24 +281,38 @@ TEST_CASE("PlayModeJumpStats")
     SECTION("teleport")
     {
       ++sample.after.teleport_count;
-      stats.tick(nullptr, {}, sample, false);
+      stats.tick(nullptr, sample, false);
       CHECK_FALSE(stats.pre());
     }
     SECTION("noclip")
     {
       sample.after.movetype = SCS_MOVETYPE_NOCLIP;
-      stats.tick(nullptr, {}, sample, false);
+      stats.tick(nullptr, sample, false);
       CHECK_FALSE(stats.pre());
     }
     SECTION("obstruction")
     {
       sample.obstructed = 1;
-      stats.tick(nullptr, {}, sample, false);
+      stats.tick(nullptr, sample, false);
+      sample.before = sample.after;
+      sample.before.flags = 0;
+      sample.before.ground_entity = -1;
+      sample.before.origin[2] = 38;
+      sample.after.flags = SCS_FL_ONGROUND;
+      sample.after.ground_entity = 0;
+      sample.after.origin[0] = 180;
+      sample.after.origin[2] = 36;
+      sample.after.velocity[2] = 0;
+      sample.time_seconds = 0.7;
+      stats.tick(nullptr, sample, false);
+      REQUIRE(stats.result());
+      CHECK(stats.result()->failed);
+      CHECK(stats.result()->touched);
     }
     SECTION("recent jump stamina")
     {
       sample.before.fuser[1] = 500;
-      stats.tick(nullptr, {}, sample, false);
+      stats.tick(nullptr, sample, false);
     }
     sample.before = sample.after;
     sample.before.flags = 0;
@@ -290,8 +324,8 @@ TEST_CASE("PlayModeJumpStats")
     sample.after.origin[2] = 36;
     sample.after.velocity[2] = 0;
     sample.time_seconds = 0.7;
-    stats.tick(nullptr, {}, sample, false);
-    CHECK((!stats.result() || !PlayModeJumpStats::visible(*stats.result(), true)));
+    stats.tick(nullptr, sample, false);
+    CHECK((!stats.result() || !PlayModeJumpStats::visible(*stats.result(), false)));
   }
 
   SECTION("native ground transitions classify bhop stand-up and duck bhop")
@@ -430,30 +464,61 @@ TEST_CASE("PlayModeJumpStats")
     sample.after.origin[2] = 40;
     sample.after.velocity[2] = 250;
     sample.time_seconds = 0.01;
-    stats.tick(nullptr, {}, sample, false);
+    stats.tick(nullptr, sample, false);
     const auto air = [&](const uint16_t buttons, const float gain) {
       sample.before = sample.after;
+      sample.before.oldbuttons = static_cast<int32_t>(sample.command.buttons);
       sample.command.buttons = buttons;
       sample.after.velocity[0] += gain;
       sample.time_seconds += 0.01;
-      stats.tick(nullptr, {}, sample, false);
+      stats.tick(nullptr, sample, false);
     };
     air(SCS_IN_MOVELEFT, 5);
     air(SCS_IN_MOVELEFT | SCS_IN_MOVERIGHT, 3);
     air(SCS_IN_MOVERIGHT, -2);
+    air(0, 0);
     REQUIRE(stats.current());
     const auto& result = *stats.current();
     REQUIRE(result.strafes.size() == 2);
     CHECK(result.strafes[0].key == 'A');
     CHECK(result.strafes[0].frames == 2);
-    CHECK(result.strafes[0].gain == 8);
-    CHECK(result.strafes[1].gain == 0);
-    CHECK(result.strafes[1].loss == 2);
-    CHECK(result.strafes[0].efficiency() == 100);
-    CHECK(result.strafes[1].efficiency() == 0);
+    CHECK(result.strafes[0].gain == 3);
+    CHECK(result.strafes[0].loss == 2);
+    CHECK(result.strafes[0].efficiency() == 50);
+    CHECK(result.strafes[1].key == 'D');
+    CHECK(result.strafes[1].frames == 2);
     stats.interrupt();
     CHECK_FALSE(stats.current());
     CHECK_FALSE(stats.takeoff());
+  }
+
+  SECTION("strafe already held on the first airborne command is counted")
+  {
+    auto stats = PlayModeJumpStats{};
+    auto sample = scs_move_sample{};
+    sample.command.msec = 10;
+    sample.command.buttons = static_cast<uint16_t>(SCS_IN_JUMP | SCS_IN_MOVELEFT);
+    sample.before.oldbuttons = SCS_IN_MOVELEFT;
+    sample.before.movetype = sample.after.movetype = SCS_MOVETYPE_WALK;
+    sample.before.flags = SCS_FL_ONGROUND;
+    sample.before.origin[2] = 36;
+    sample.before.velocity[0] = sample.after.velocity[0] = 250;
+    sample.after.ground_entity = -1;
+    sample.after.origin[2] = 40;
+    sample.after.velocity[2] = 250;
+    sample.time_seconds = 0.01;
+    stats.tick(nullptr, sample, false);
+    sample.before = sample.after;
+    sample.before.oldbuttons = SCS_IN_MOVELEFT;
+    sample.command.buttons = 0;
+    sample.after.velocity[0] += 2;
+    sample.time_seconds += 0.01;
+    stats.tick(nullptr, sample, false);
+    REQUIRE(stats.current());
+    REQUIRE(stats.current()->strafes.size() == 1);
+    CHECK(stats.current()->strafes[0].key == 'A');
+    CHECK(stats.current()->strafes[0].frames == 2);
+    CHECK(stats.current()->strafes[0].gain == 2);
   }
 
   SECTION("render cadence does not change results or sample timing")

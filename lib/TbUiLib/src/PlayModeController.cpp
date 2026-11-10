@@ -437,7 +437,6 @@ void PlayModeController::finishStarting()
   m_timeline.reset(now, m_viewAngles, static_cast<uint8_t>(1000 / frameRate));
   m_timeline.setYawSpeed(pref(Preferences::PlayModeYawSpeed));
   m_timeline.setHookSpeed(pref(Preferences::PlayModeHookSpeed));
-  m_timeline.setJumpSurfaces(&m_world.jumpSurfaces);
   m_timeline.setGravity(pref(Preferences::PlayModeGravity));
   m_lastEventMs = now;
   m_previousEye = m_currentEye = eyePosition();

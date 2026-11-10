@@ -4,8 +4,9 @@
  */
 #pragma once
 
-#include "ui/PlayModeJumpGuide.h"
 #include "ui/PlayModeShowPre.h"
+
+#include "vm/vec.h"
 
 #include <array>
 #include <optional>
@@ -64,6 +65,9 @@ public:
     std::vector<Strafe> strafes;
     unsigned airFrames = 0;
     unsigned duckFrames = 0;
+    bool inDuck = false;
+    bool touched = false;
+    float weaponSpeed = 250.0f;
     bool truncated = false;
   };
 
@@ -72,12 +76,15 @@ public:
 private:
   struct Flight
   {
-    Technique technique = Technique::Unsupported;
     vm::vec3f startFeet;
-    float preSpeed = 0.0f;
-    float maxSpeed = 0.0f;
     Result analysis{};
-    std::array<std::optional<size_t>, 4> activeKeys{};
+    struct ActiveStrafe
+    {
+      Strafe strafe;
+      unsigned start = 0;
+      unsigned overlaps = 0;
+    };
+    std::array<std::optional<ActiveStrafe>, 4> activeKeys{};
   };
   PlayModeShowPre m_showPre;
   std::optional<Flight> m_flight;
@@ -96,8 +103,6 @@ private:
   bool m_landedDucked = false;
   unsigned m_groundFrames = 0;
   unsigned m_duckTaps = 0;
-  double m_lastDuckReleaseMs = -1.0e9;
-  float m_actionStartZ = 0.0f;
   float m_landingSpeed = 0.0f;
   double m_timeMs = 0.0;
   float m_gravity = 800.0f;
@@ -110,7 +115,6 @@ public:
   void interrupt();
   void tick(
     scs_context* context,
-    const std::vector<PlayModeJumpSurface>& surfaces,
     const scs_move_sample& sample,
     bool assisted);
   const std::optional<PlayModeShowPre::Pre>& pre() const;
@@ -122,7 +126,8 @@ public:
 
 private:
   void finish(const vm::vec3f& feet, bool failed);
-  void recordStrafes(const scs_move_sample& sample);
+  void recordStrafes(const scs_move_sample& sample, bool badLastFrame);
+  void closeStrafe(size_t index);
   Takeoff classifyTakeoff(const scs_move_sample& sample);
 };
 } // namespace tb::ui

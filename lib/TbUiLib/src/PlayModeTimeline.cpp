@@ -173,10 +173,8 @@ uint32_t PlayModeTimeline::advance(
       &cmd,
       [](void* user, const scs_move_sample* sample) {
         auto& data = *static_cast<Observation*>(user);
-        const auto empty = std::vector<PlayModeJumpSurface>{};
         data.timeline.m_jumpStats.tick(
           data.context,
-          data.timeline.m_jumpSurfaces ? *data.timeline.m_jumpSurfaces : empty,
           *sample,
           data.assisted);
       },
@@ -266,11 +264,6 @@ void PlayModeTimeline::setHookSpeed(const float speed)
 const PlayModeTravel& PlayModeTimeline::travel() const
 {
   return m_travel;
-}
-
-void PlayModeTimeline::setJumpSurfaces(const std::vector<PlayModeJumpSurface>* surfaces)
-{
-  m_jumpSurfaces = surfaces;
 }
 
 void PlayModeTimeline::setGravity(const float gravity)
