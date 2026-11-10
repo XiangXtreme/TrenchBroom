@@ -59,9 +59,14 @@ bool RenderContext::render3D() const
   return m_renderMode == RenderMode::Render3D;
 }
 
+bool RenderContext::goldSrcGame() const
+{
+  return m_goldSrcRendering;
+}
+
 bool RenderContext::goldSrcRendering() const
 {
-  return m_goldSrcRendering && render3D() && showMaterials();
+  return goldSrcGame() && render3D() && showMaterials();
 }
 
 void RenderContext::setGoldSrcRendering(const bool enabled)

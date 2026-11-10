@@ -146,6 +146,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("entity-browser-empty"),
     QStringLiteral("goldsrc-entity-links"),
     QStringLiteral("entity-directions"),
+    QStringLiteral("goldsrc-light-directions"),
     QStringLiteral("face-inspector"),
     QStringLiteral("material-browser-empty"),
     QStringLiteral("plugin-inspector"),
@@ -636,7 +637,7 @@ void configureGoldSrcEntitySnapshot(QWidget& targetWidget)
   }
 }
 
-void configureEntityDirectionSnapshot(QWidget& targetWidget)
+void configureEntityDirectionSnapshot(QWidget& targetWidget, const bool lights)
 {
   auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget);
   if (!mapWindow)
@@ -651,7 +652,12 @@ void configureEntityDirectionSnapshot(QWidget& targetWidget)
     for (auto* node : map.worldNode().defaultLayer()->children())
     {
       if (auto* entity = dynamic_cast<mdl::EntityNode*>(node);
-          entity && entity->entity().classname() == "info_player_start")
+          entity
+          && (lights ? (entity->entity().classname() == "light_spot"
+                        || entity->entity().classname() == "light_environment"
+                        || entity->entity().classname() == "info_sunlight"
+                        || entity->entity().classname() == "light")
+                     : entity->entity().classname() == "info_player_start"))
       {
         entities.push_back(entity);
       }
@@ -1093,7 +1099,9 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
   {
     return goldSrcEntitySnapshotReadiness(targetWidget);
   }
-  if (targetName == QStringLiteral("entity-directions"))
+  if (
+    targetName == QStringLiteral("entity-directions")
+    || targetName == QStringLiteral("goldsrc-light-directions"))
   {
     auto* mapWindow = qobject_cast<MapWindow*>(&targetWidget);
     const auto visible = [&](auto* view) { return view->isVisibleTo(&targetWidget); };
@@ -1422,9 +1430,12 @@ void configureSnapshot(QWidget& targetWidget, const QString& targetName)
   {
     configureGoldSrcEntitySnapshot(targetWidget);
   }
-  else if (targetName == QStringLiteral("entity-directions"))
+  else if (
+    targetName == QStringLiteral("entity-directions")
+    || targetName == QStringLiteral("goldsrc-light-directions"))
   {
-    configureEntityDirectionSnapshot(targetWidget);
+    configureEntityDirectionSnapshot(
+      targetWidget, targetName == QStringLiteral("goldsrc-light-directions"));
   }
   else if (isOutlinerSnapshotTarget(targetName))
   {

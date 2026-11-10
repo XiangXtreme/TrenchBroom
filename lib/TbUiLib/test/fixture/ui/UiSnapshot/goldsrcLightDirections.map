@@ -1,0 +1,58 @@
+// Game: Half-Life
+// Format: Valve
+{
+"classname" "worldspawn"
+"mapversion" "220"
+}
+{
+"classname" "light_spot"
+"origin" "-112 -120 136"
+"angles" "0 0 0"
+"pitch" "-90"
+"_light" "255 255 255 200"
+"targetname" "pitch_down"
+}
+{
+"classname" "light_spot"
+"origin" "0 -72 136"
+"angles" "-45 0 0"
+"pitch" "0"
+"_light" "255 255 255 200"
+"targetname" "angles_down_east"
+}
+{
+"classname" "light_environment"
+"origin" "112 -24 136"
+"angles" "30 90 0"
+"pitch" "-45"
+"_light" "255 255 255 200"
+"targetname" "pitch_overrides_angles"
+}
+{
+"classname" "light_spot"
+"origin" "-112 24 136"
+"angles" "0 0 0"
+"pitch" "90"
+"target" "aim"
+"_light" "255 255 255 200"
+"targetname" "target_overrides_pitch"
+}
+{
+"classname" "info_target"
+"origin" "-112 24 -64"
+"targetname" "aim"
+}
+{
+"classname" "info_sunlight"
+"origin" "0 72 136"
+"angles" "0 270 0"
+"pitch" "-45"
+"_light" "255 255 255 200"
+"targetname" "sunlight_down_south"
+}
+{
+"classname" "light"
+"origin" "112 120 136"
+"_light" "255 255 255 200"
+"targetname" "omni_no_arrow"
+}

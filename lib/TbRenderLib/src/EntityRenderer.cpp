@@ -27,6 +27,7 @@
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityModelManager.h"
 #include "mdl/EntityNode.h"
+#include "render/EntityDirection.h"
 #include "render/EntityDirectionIndicator.h"
 #include "render/PrimitiveRenderer.h"
 #include "render/RenderBatch.h"
@@ -354,6 +355,7 @@ void EntityRenderer::renderAngles(RenderContext& renderContext, RenderBatch& ren
     const auto contrast = luminance > 0.45f ? 0.0f : 1.0f;
     const auto outlineColor = Color{RgbaF{contrast, contrast, contrast, rgb.w()}};
 
+    auto directions = EntityDirectionResolver{renderContext.goldSrcGame()};
     for (const auto* entityNode : m_entities)
     {
       if (!m_showHiddenEntities && !m_editorContext.visible(*entityNode))
@@ -361,12 +363,13 @@ void EntityRenderer::renderAngles(RenderContext& renderContext, RenderBatch& ren
         continue;
       }
 
-      const auto rotation = vm::mat4x4f{entityNode->entity().rotation()};
-      const auto direction = rotation * vm::vec3f{1, 0, 0};
+      const auto direction = directions.direction(*entityNode);
+      if (!direction)
+        continue;
       const auto center = vm::vec3f{entityNode->logicalBounds().center()};
 
       const auto indicator =
-        makeEntityDirectionIndicator(renderContext.camera(), center, direction);
+        makeEntityDirectionIndicator(renderContext.camera(), center, *direction);
       if (!indicator)
       {
         continue;

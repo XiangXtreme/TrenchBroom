@@ -119,6 +119,8 @@ public:
   bool render2D() const;
   bool render3D() const;
 
+  // Game semantics apply in all views, independently of material rendering.
+  bool goldSrcGame() const;
   bool goldSrcRendering() const;
   void setGoldSrcRendering(bool enabled);
   double animationTime() const;

@@ -43,6 +43,7 @@ Updated 2026-11-09. This index is the entry point for deciding what to trust.
 | Document | Covers |
 | --- | --- |
 | [Entity motion preview](entity-motion-preview.md) | GoldSrc doors/buttons, shared property controls, preview semantics and validation. |
+| [GoldSrc light directions](goldsrc-light-directions.md) | Compiler-aligned light arrows, target precedence and pitch conventions. |
 | [Python API reference](python-api-reference.md) | Entry points of the `trenchbroom` module. |
 | [Python API migration](python-api-migration.md) | Breaking renames plugin authors must apply. |
 | [Python plugin development guide](python-plugin-development-guide.md) | Manifest plugins, panels, events, timers. |

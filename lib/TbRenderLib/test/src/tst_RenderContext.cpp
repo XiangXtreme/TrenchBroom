@@ -71,6 +71,25 @@ TEST_CASE("RenderContext")
     CHECK(context3D.render3D());
   }
 
+  SECTION("GoldSrc game semantics do not depend on view or materials")
+  {
+    for (const auto mode : {RenderMode::Render2D, RenderMode::Render3D})
+    {
+      auto goldSrcContext =
+        RenderContext{testGl, mode, camera, fontManager, shaderManager};
+      CHECK_FALSE(goldSrcContext.goldSrcGame());
+      CHECK_FALSE(goldSrcContext.goldSrcRendering());
+      goldSrcContext.setGoldSrcRendering(true);
+      CHECK(goldSrcContext.goldSrcGame());
+      CHECK(goldSrcContext.goldSrcRendering() == (mode == RenderMode::Render3D));
+      goldSrcContext.setShowMaterials(false);
+      CHECK(goldSrcContext.goldSrcGame());
+      CHECK_FALSE(goldSrcContext.goldSrcRendering());
+      goldSrcContext.setGoldSrcRendering(false);
+      CHECK_FALSE(goldSrcContext.goldSrcGame());
+    }
+  }
+
   SECTION("showFaces and setShowFaces")
   {
     auto context2D =
