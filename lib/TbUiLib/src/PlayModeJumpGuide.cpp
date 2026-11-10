@@ -24,7 +24,8 @@ namespace tb::ui
 namespace
 {
 constexpr auto Approach = 128.0f;
-constexpr auto MaxGap = 512.0f;
+constexpr auto MinGap = 160.0f;
+constexpr auto MaxGap = 300.0f;
 constexpr auto MaxHeightDifference = 256.0f;
 constexpr auto SurfaceTolerance = 0.125f;
 
@@ -226,10 +227,13 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
     const auto& direction = edge.endNormal;
     for (const auto& candidate : approach->spans)
     {
-      if (
-        candidate.start <= edge.end + SurfaceTolerance
-        || candidate.start - edge.end > MaxGap)
+      if (candidate.start <= edge.end + SurfaceTolerance)
         continue;
+      const auto distance = candidate.start - edge.end;
+      // Only the nearest landing counts. Do not skip a short ledge or pit floor
+      // and label a farther platform as if the intervening support did not exist.
+      if (distance < MinGap || distance >= MaxGap)
+        break;
       const auto start = feet + direction * edge.end;
       auto end = feet + direction * candidate.start;
       end[2] = candidate.height;
@@ -244,7 +248,7 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
       if (trace.startsolid || (trace.fraction < 0.999f
             && vm::length(vm::vec3f{trace.endpos[0], trace.endpos[1], trace.endpos[2]} - to) > 1.0f))
         break;
-      result.span = PlayModeJumpSpan{start, end, candidate.start - edge.end};
+      result.span = PlayModeJumpSpan{start, end, distance};
       break;
     }
   }
@@ -284,13 +288,10 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
           const auto middle = (low + high) / 2.0f;
           (probe(middle) ? high : low) = middle;
         }
-        // Draw the rear edge of the player's footprint at the transition, on the
-        // platform side, rather than projecting the player's center into the gap.
-        const auto halfWidth = 16.0f * (std::abs(normal.x()) + std::abs(normal.y()));
+        // The probe already includes the player's collision hull. Draw the last
+        // supported player-center position, without another footprint offset.
         result.edge = PlayModeEdgeGuide{
-          feet + normal * (high - halfWidth),
-          normal,
-          moving && playModeEdgeFriction(context, state)};
+          feet + normal * low, normal, moving && playModeEdgeFriction(context, state)};
       }
     }
   }
@@ -339,7 +340,7 @@ void renderPlayModeJumpGuide(
       pref(edge.active ? Preferences::XAxisColor : Preferences::ZAxisColor));
     service.setLineWidth(edge.active ? 3.0f : 2.0f);
     const auto cap = vm::vec3f{-edge.direction.y(), edge.direction.x(), 0} * 24.0f;
-    const auto position = edge.position + lift * 2.0f;
+    const auto position = edge.position + lift;
     service.renderLine(position - cap, position + cap);
     service.renderString(
       "HJ",

@@ -75,6 +75,20 @@ scs_player_state groundedAt(scs_context* context, const float x, const float y =
   return state;
 }
 
+void checkEdgeTransition(
+  scs_context* context, scs_player_state state, const PlayModeEdgeGuide& edge)
+{
+  for (const auto offset : {-0.1f, 0.1f})
+  {
+    for (auto i = size_t{0}; i < 2; ++i)
+    {
+      state.origin[i] = edge.position[i] + edge.direction[i] * offset;
+      state.velocity[i] = edge.direction[i] * 250.0f;
+    }
+    CHECK(playModeEdgeFriction(context, state) == (offset > 0));
+  }
+}
+
 class JumpGuideView : public RenderView
 {
 public:
@@ -176,7 +190,7 @@ TEST_CASE("PlayModeJumpGuide")
   }
   SECTION("thin landing faces and angled measurements are not skipped")
   {
-    addBox(map, {{100, -128, -16}, {100.5, 128, 0}});
+    addBox(map, {{168, -128, -16}, {168.5, 128, 0}});
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
@@ -187,10 +201,48 @@ TEST_CASE("PlayModeJumpGuide")
       true,
       false);
     REQUIRE(guide.span);
-    CHECK(guide.span->distance == Catch::Approx(100).margin(0.01));
+    CHECK(guide.span->distance == Catch::Approx(168).margin(0.01));
     CHECK(guide.span->start.y() == Catch::Approx(guide.span->end.y()).margin(0.01));
   }
-  SECTION("turning the view keeps dimensions perpendicular and HJ inside the platform")
+  SECTION("only the nearest gap in the 160 inclusive to 300 exclusive range is shown")
+  {
+    for (const auto gap : {16.0f, 100.0f, 159.9f, 160.0f, 176.0f, 299.9f, 300.0f, 512.0f})
+    {
+      CAPTURE(gap);
+      auto rangeFixture = mdl::MapFixture{};
+      auto& rangeMap = rangeFixture.create();
+      addBox(rangeMap, {{-512, -128, -16}, {0, 128, 0}});
+      addBox(rangeMap, {{gap, -128, -16}, {gap + 64, 128, 0}});
+      const auto world = buildPlayModeWorld(rangeMap);
+      auto context = contextFor(world);
+      const auto guide = measurePlayModeJumpGuide(
+        context.get(),
+        world.jumpSurfaces,
+        groundedAt(context.get(), -48),
+        {1, 0, 0},
+        true,
+        false);
+      CHECK(guide.span.has_value() == (gap >= 160 && gap < 300));
+      if (guide.span)
+        CHECK(guide.span->distance == Catch::Approx(gap).margin(0.01));
+    }
+  }
+  SECTION("a nearby lower ledge does not fall through to a farther in-range platform")
+  {
+    addBox(map, {{16, -128, -104}, {32, 128, -88}});
+    const auto world = buildPlayModeWorld(map);
+    auto context = contextFor(world);
+    const auto guide = measurePlayModeJumpGuide(
+      context.get(),
+      world.jumpSurfaces,
+      groundedAt(context.get(), -48),
+      {1, 0, 0},
+      true,
+      false);
+    CHECK_FALSE(guide.span);
+  }
+  SECTION(
+    "turning the view keeps dimensions perpendicular and HJ at the actual transition")
   {
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
@@ -205,10 +257,11 @@ TEST_CASE("PlayModeJumpGuide")
       CHECK(guide.span->start.y() == Catch::Approx(12).margin(0.01));
       CHECK(guide.span->end.y() == Catch::Approx(12).margin(0.01));
       REQUIRE(guide.edge);
-      CHECK(guide.edge->position.x() == Catch::Approx(-16).margin(0.1));
+      CHECK(guide.edge->position.x() == Catch::Approx(0).margin(0.1));
       CHECK(guide.edge->position.y() == Catch::Approx(12).margin(0.01));
       CHECK(guide.edge->direction.x() == Catch::Approx(1).margin(0.01));
       CHECK(guide.edge->direction.y() == Catch::Approx(0).margin(0.01));
+      checkEdgeTransition(context.get(), state, *guide.edge);
     }
   }
   SECTION("rotated platforms follow their real edge rather than the world axes")
@@ -253,13 +306,12 @@ TEST_CASE("PlayModeJumpGuide")
       REQUIRE(guide.edge);
       CHECK(guide.edge->direction.x() == Catch::Approx(std::sqrt(0.5)).margin(0.01));
       CHECK(guide.edge->direction.y() == Catch::Approx(std::sqrt(0.5)).margin(0.01));
-      CHECK(
-        vm::dot(guide.edge->position - guide.span->start, guide.edge->direction) < -1);
+      checkEdgeTransition(context.get(), state, *guide.edge);
     }
   }
   SECTION("a lower landing reports its own signed height")
   {
-    addBox(map, {{100, -128, -48}, {140, 128, -32}});
+    addBox(map, {{168, -128, -48}, {172, 128, -32}});
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
@@ -270,7 +322,7 @@ TEST_CASE("PlayModeJumpGuide")
       true,
       false);
     REQUIRE(guide.span);
-    CHECK(guide.span->distance == Catch::Approx(100).margin(0.01));
+    CHECK(guide.span->distance == Catch::Approx(168).margin(0.01));
     CHECK(guide.span->end.z() - guide.span->start.z() == Catch::Approx(-32).margin(0.05));
   }
   SECTION("a hidden landing behind a wall is not measured")
@@ -289,7 +341,7 @@ TEST_CASE("PlayModeJumpGuide")
   }
   SECTION("an elevated landing still measures the horizontal gap")
   {
-    addBox(map, {{100, -128, -16}, {140, 128, 32}});
+    addBox(map, {{168, -128, -16}, {172, 128, 32}});
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
@@ -300,7 +352,7 @@ TEST_CASE("PlayModeJumpGuide")
       true,
       false);
     REQUIRE(guide.span);
-    CHECK(guide.span->distance == Catch::Approx(100).margin(0.01));
+    CHECK(guide.span->distance == Catch::Approx(168).margin(0.01));
     CHECK(guide.span->end.z() - guide.span->start.z() == Catch::Approx(32).margin(0.05));
   }
   SECTION("edge friction follows velocity rather than viewing direction")
