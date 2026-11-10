@@ -760,7 +760,7 @@ Quake3 (legacy)  具有 Standard 样式材质信息的 Quake 3 地图文件
 Quake3 (Valve)   具有 Valve 样式材质信息的 Quake 3 地图文件
 Hexen2           Hexen 2 地图文件（类似 Quake，但每个面带有一个额外但未使用的值）
 
-请注意，“Quake3”格式（将包含 Quake 3 Brush 图元支持）尚未完全实现，因此从上表中省略。“Quake3 (Valve)”格式在材质放置方面的表达能力与 Brush 图元格式相同，但“Quake3 (Valve)”不能用于读取包含 Brush 图元的现有地图文件。另请注意，目前所有 Quake 3 格式均不支持补丁网格。
+请注意，“Quake3”格式（将包含 Quake 3 Brush 图元支持）尚未完全实现，因此从上表中省略。“Quake3 (Valve)”格式在材质放置方面的表达能力与 Brush 图元格式相同，但“Quake3 (Valve)”不能用于读取包含 Brush 图元的现有地图文件。
 
 数组的每个条目必须具有以下结构：
 
