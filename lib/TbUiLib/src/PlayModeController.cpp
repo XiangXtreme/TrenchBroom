@@ -437,7 +437,6 @@ void PlayModeController::finishStarting()
   scs_get_state(m_context.get(), &state);
   m_showPre.reset(state);
   m_jumpGuide = {};
-  m_jumpGuideUpdatedMs = -1.0e9;
   m_fallShownMs = -1.0e9;
   m_fallShownCount = state.fall_count;
   m_teleportCount = state.teleport_count;
@@ -679,7 +678,6 @@ void PlayModeController::update()
       m_previousEye = m_currentEye;
       m_showPre.reset(state);
       m_jumpGuide = {};
-      m_jumpGuideUpdatedMs = -1.0e9;
     }
     m_showPre.tick(m_timeline.lastCommand(), state, now);
 
@@ -714,29 +712,16 @@ void PlayModeController::update()
     || state.waterlevel >= 2 || state.teleport_time != 0.0f)
   {
     m_jumpGuide = {};
-    m_jumpGuideUpdatedMs = -1.0e9;
   }
   else
   {
-    // Geometry selection runs at 10 Hz; physics and camera remain at their normal
-    // cadence. The live friction highlight is queried every frame, independently.
-    if (now - m_jumpGuideUpdatedMs >= 100.0)
-    {
-      m_jumpGuide = measurePlayModeJumpGuide(
-        m_context.get(),
-        m_world.jumpSurfaces,
-        state,
-        forwardFromAngles({0, m_timeline.latestViewAngles().y(), 0}),
-        showSpan,
-        showEdge);
-      m_jumpGuideUpdatedMs = now;
-    }
-    if (!showSpan)
-      m_jumpGuide.span.reset();
-    if (!showEdge || state.friction <= 0.0f)
-      m_jumpGuide.edge.reset();
-    else if (m_jumpGuide.edge)
-      m_jumpGuide.edge->active = playModeEdgeFriction(m_context.get(), state);
+    m_jumpGuide = measurePlayModeJumpGuide(
+      m_context.get(),
+      m_world.jumpSurfaces,
+      state,
+      forwardFromAngles({0, m_timeline.latestViewAngles().y(), 0}),
+      showSpan,
+      showEdge && state.friction > 0.0f);
   }
 }
 

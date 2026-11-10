@@ -187,7 +187,75 @@ TEST_CASE("PlayModeJumpGuide")
       true,
       false);
     REQUIRE(guide.span);
-    CHECK(guide.span->distance == Catch::Approx(100.0f * std::sqrt(1.01f)).margin(0.01));
+    CHECK(guide.span->distance == Catch::Approx(100).margin(0.01));
+    CHECK(guide.span->start.y() == Catch::Approx(guide.span->end.y()).margin(0.01));
+  }
+  SECTION("turning the view keeps dimensions perpendicular and HJ inside the platform")
+  {
+    const auto world = buildPlayModeWorld(map);
+    auto context = contextFor(world);
+    const auto state = groundedAt(context.get(), -48, 12);
+    for (const auto yaw : {-0.8f, -0.3f, 0.0f, 0.3f, 0.8f})
+    {
+      const auto guide = measurePlayModeJumpGuide(
+        context.get(), world.jumpSurfaces, state, {1, yaw, -0.5f}, true, true);
+      REQUIRE(guide.span);
+      CHECK(guide.span->distance == Catch::Approx(176).margin(0.01));
+      CHECK(guide.span->start.x() == Catch::Approx(0).margin(0.01));
+      CHECK(guide.span->start.y() == Catch::Approx(12).margin(0.01));
+      CHECK(guide.span->end.y() == Catch::Approx(12).margin(0.01));
+      REQUIRE(guide.edge);
+      CHECK(guide.edge->position.x() == Catch::Approx(-16).margin(0.1));
+      CHECK(guide.edge->position.y() == Catch::Approx(12).margin(0.01));
+      CHECK(guide.edge->direction.x() == Catch::Approx(1).margin(0.01));
+      CHECK(guide.edge->direction.y() == Catch::Approx(0).margin(0.01));
+    }
+  }
+  SECTION("rotated platforms follow their real edge rather than the world axes")
+  {
+    // Two separate 45-degree platforms, far from the axis-aligned fixture.
+    const auto rotate = [](const double x, const double y, const double z) {
+      const auto scale = std::sqrt(0.5);
+      return vm::vec3d{2048 + (x - y) * scale, (x + y) * scale, z};
+    };
+    const auto builder =
+      mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+    for (const auto bounds : {vm::vec2d{-512, 0}, vm::vec2d{176, 400}})
+    {
+      auto points = std::vector<vm::vec3d>{};
+      for (const auto x : {bounds.x(), bounds.y()})
+        for (const auto y : {-128.0, 128.0})
+          for (const auto z : {-16.0, 0.0})
+            points.push_back(rotate(x, y, z));
+      auto* brush =
+        new mdl::BrushNode{builder.createBrush(points, "stone") | kdl::value()};
+      REQUIRE_FALSE(mdl::addNodes(map, {{&mdl::parentForNodes(map), {brush}}}).empty());
+    }
+    const auto world = buildPlayModeWorld(map);
+    auto context = contextFor(world);
+    const auto origin = vm::vec3f{rotate(-48, 0, 36)};
+    scs_spawn(context.get(), origin.v, nullptr);
+    auto command = scs_usercmd{};
+    command.msec = 10;
+    scs_step(context.get(), &command);
+    auto state = scs_player_state{};
+    scs_get_state(context.get(), &state);
+    REQUIRE(state.ground_entity != -1);
+    for (const auto yaw : {-0.3, 0.0, 0.3})
+    {
+      const auto look = vm::vec3f{rotate(1, yaw, 0) - rotate(0, 0, 0)};
+      const auto guide = measurePlayModeJumpGuide(
+        context.get(), world.jumpSurfaces, state, look, true, true);
+      REQUIRE(guide.span);
+      CHECK(guide.span->distance == Catch::Approx(176).margin(0.02));
+      const auto delta = guide.span->end - guide.span->start;
+      CHECK(delta.x() == Catch::Approx(delta.y()).margin(0.01));
+      REQUIRE(guide.edge);
+      CHECK(guide.edge->direction.x() == Catch::Approx(std::sqrt(0.5)).margin(0.01));
+      CHECK(guide.edge->direction.y() == Catch::Approx(std::sqrt(0.5)).margin(0.01));
+      CHECK(
+        vm::dot(guide.edge->position - guide.span->start, guide.edge->direction) < -1);
+    }
   }
   SECTION("a lower landing reports its own signed height")
   {

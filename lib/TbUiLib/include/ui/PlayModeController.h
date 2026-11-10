@@ -105,7 +105,6 @@ private:
   std::optional<double> m_eventClockOffset[2];
   PlayModeShowPre m_showPre;
   PlayModeJumpGuide m_jumpGuide;
-  double m_jumpGuideUpdatedMs = -1.0e9;
   // when the last hard landing was reported on the HUD
   double m_fallShownMs = -1.0e9;
   uint32_t m_fallShownCount = 0;

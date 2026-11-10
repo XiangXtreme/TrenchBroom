@@ -48,6 +48,7 @@ struct Interval
   float start;
   float end;
   float height;
+  vm::vec3f endNormal;
 };
 
 // Clip a horizontal ray against a convex face's XY footprint. This measures actual
@@ -68,6 +69,7 @@ std::optional<Interval> intersect(
   const auto winding = area > 0.0f ? 1.0f : -1.0f;
   auto from = -Approach;
   auto to = Approach + MaxGap;
+  auto endNormal = vm::vec3f{};
   for (auto i = size_t{0}; i < vertices.size(); ++i)
   {
     const auto edge = vertices[(i + 1) % vertices.size()] - vertices[i];
@@ -80,12 +82,15 @@ std::optional<Interval> intersect(
     }
     else if (rate > 0.0f)
       from = std::max(from, -distance / rate);
-    else
-      to = std::min(to, -distance / rate);
+    else if (-distance / rate < to)
+    {
+      to = -distance / rate;
+      endNormal = vm::normalize(vm::vec3f{edge.y(), -edge.x(), 0} * winding);
+    }
     if (to < from)
       return std::nullopt;
   }
-  return Interval{from, to, vertices.front().z()};
+  return Interval{from, to, vertices.front().z(), endNormal};
 }
 
 std::vector<Interval> intervals(
@@ -111,23 +116,53 @@ std::vector<Interval> intervals(
   return result;
 }
 
-std::optional<float> takeoffEdge(const std::vector<Interval>& spans, const float height)
+std::optional<Interval> takeoffEdge(
+  const std::vector<Interval>& spans, const float height)
 {
   auto end = -std::numeric_limits<float>::infinity();
+  auto result = std::optional<Interval>{};
   for (const auto& span : spans)
   {
     if (std::abs(span.height - height) > SurfaceTolerance)
       continue;
     // A grounded player's center can overhang an edge while the 32-unit hull still
     // has support. Keep that edge visible through the final grounded approach.
-    if (span.start <= 0.0f && span.end >= -24.0f)
-      end = std::max(end, span.end);
-    else if (span.start <= end + SurfaceTolerance)
-      end = std::max(end, span.end);
+    if (
+      ((span.start <= 0.0f && span.end >= -24.0f) || span.start <= end + SurfaceTolerance)
+      && span.end > end)
+    {
+      end = span.end;
+      result = span;
+    }
   }
   if (!std::isfinite(end) || end < -24.0f || end > Approach)
     return std::nullopt;
-  return end;
+  return result;
+}
+
+struct ApproachEdge
+{
+  std::vector<Interval> spans;
+  Interval edge;
+};
+
+std::optional<ApproachEdge> approachEdge(
+  const std::vector<PlayModeJumpSurface>& surfaces,
+  const scs_player_state& state,
+  const vm::vec3f& feet,
+  const vm::vec3f& selectionDirection)
+{
+  const auto selected =
+    takeoffEdge(intervals(surfaces, state, feet, selectionDirection), feet.z());
+  if (!selected || vm::squared_length(selected->endNormal) < 0.5f)
+    return std::nullopt;
+  // The view selects the platform edge. Dimensions follow that edge's outward
+  // normal through the player, so turning the camera cannot skew the same gap.
+  auto spans = intervals(surfaces, state, feet, selected->endNormal);
+  const auto edge = takeoffEdge(spans, feet.z());
+  if (!edge || vm::dot(edge->endNormal, selected->endNormal) < 0.999f)
+    return std::nullopt;
+  return ApproachEdge{std::move(spans), *edge};
 }
 
 std::string number(const float value)
@@ -184,33 +219,33 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
   if (vm::squared_length(forward) < 0.0001f)
     return result;
   forward = vm::normalize(forward);
-  if (measureSpan)
+  const auto approach = approachEdge(surfaces, state, feet, forward);
+  if (measureSpan && approach)
   {
-    const auto spans = intervals(surfaces, state, feet, forward);
-    if (const auto edge = takeoffEdge(spans, feet.z()))
+    const auto& edge = approach->edge;
+    const auto& direction = edge.endNormal;
+    for (const auto& candidate : approach->spans)
     {
-      for (const auto& candidate : spans)
-      {
-        if (
-          candidate.start <= *edge + SurfaceTolerance || candidate.start - *edge > MaxGap)
-          continue;
-        const auto start = feet + forward * *edge;
-        auto end = feet + forward * candidate.start;
-        end[2] = candidate.height;
-        // A platform hidden behind a wall/overhang is not a visible landing target.
-        const auto from = start + vm::vec3f{0, 0, 1};
-        auto to = end + vm::vec3f{0, 0, 1};
-        if (end.z() > start.z())
-          to[2] = from.z();
-        auto trace = scs_trace{};
-        scs_trace_hull(context, from.v, to.v, SCS_HULL_POINT, &trace);
-        // An elevated landing's front face may be the first obstruction.
-        if (trace.startsolid || (trace.fraction < 0.999f
+      if (
+        candidate.start <= edge.end + SurfaceTolerance
+        || candidate.start - edge.end > MaxGap)
+        continue;
+      const auto start = feet + direction * edge.end;
+      auto end = feet + direction * candidate.start;
+      end[2] = candidate.height;
+      // A platform hidden behind a wall/overhang is not a visible landing target.
+      const auto from = start + vm::vec3f{0, 0, 1};
+      auto to = end + vm::vec3f{0, 0, 1};
+      if (end.z() > start.z())
+        to[2] = from.z();
+      auto trace = scs_trace{};
+      scs_trace_hull(context, from.v, to.v, SCS_HULL_POINT, &trace);
+      // An elevated landing's front face may be the first obstruction.
+      if (trace.startsolid || (trace.fraction < 0.999f
             && vm::length(vm::vec3f{trace.endpos[0], trace.endpos[1], trace.endpos[2]} - to) > 1.0f))
-          break;
-        result.span = PlayModeJumpSpan{start, end, candidate.start - *edge};
         break;
-      }
+      result.span = PlayModeJumpSpan{start, end, candidate.start - edge.end};
+      break;
     }
   }
   if (measureEdge)
@@ -218,9 +253,16 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
     auto direction = vm::vec3f{state.velocity[0], state.velocity[1], 0};
     const auto moving = vm::squared_length(direction) >= 0.01f;
     direction = moving ? vm::normalize(direction) : forward;
-    const auto spans = intervals(surfaces, state, feet, direction);
-    if (const auto edge = takeoffEdge(spans, feet.z()))
+    const auto edgeApproach = moving ? approachEdge(surfaces, state, feet, direction)
+                                     : std::optional<ApproachEdge>{};
+    const auto* support = moving ? (edgeApproach ? &*edgeApproach : nullptr)
+                                 : (approach ? &*approach : nullptr);
+    if (support)
     {
+      const auto& normal = support->edge.endNormal;
+      const auto edge = support->edge.end;
+      if (!moving)
+        direction = normal;
       // Locate the support-probe transition for a hypothetical player moving along
       // this approach. In particular, do not draw a fixed 16-unit inset: player hull
       // expansion, shallow support and stance all affect where the probe misses.
@@ -228,13 +270,13 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
         auto predicted = state;
         for (auto i = size_t{0}; i < 3; ++i)
         {
-          predicted.origin[i] += direction[i] * offset;
+          predicted.origin[i] += normal[i] * offset;
           predicted.velocity[i] = direction[i] * 250.0f;
         }
         return playModeEdgeFriction(context, predicted);
       };
-      auto low = *edge - 40.0f;
-      auto high = *edge + 16.0f;
+      auto low = edge - 40.0f;
+      auto high = edge + 32.0f;
       if (!probe(low) && probe(high))
       {
         for (auto i = 0; i < 14; ++i)
@@ -242,9 +284,12 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
           const auto middle = (low + high) / 2.0f;
           (probe(middle) ? high : low) = middle;
         }
+        // Draw the rear edge of the player's footprint at the transition, on the
+        // platform side, rather than projecting the player's center into the gap.
+        const auto halfWidth = 16.0f * (std::abs(normal.x()) + std::abs(normal.y()));
         result.edge = PlayModeEdgeGuide{
-          feet + direction * high,
-          direction,
+          feet + normal * (high - halfWidth),
+          normal,
           moving && playModeEdgeFriction(context, state)};
       }
     }

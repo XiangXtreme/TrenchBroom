@@ -215,15 +215,16 @@ void KreedzBroomPreferencePane::createGui()
     withToolTip(
       boolField(tr("Show platform span"), Preferences::PlayModeShowJumpSpan),
       tr(
-        "Measure between flat platform edges along your view direction. Shows horizontal "
+        "Select a platform edge by looking toward it. Measure perpendicular to the edge. "
+        "Shows horizontal "
         "distance and height difference; does not predict whether a jump is possible.")));
   left->addRow(
     "",
     withToolTip(
       boolField(tr("Show edge friction boundary"), Preferences::PlayModeShowEdgeFriction),
-      tr("Preview the HJ friction boundary along movement direction, or view direction "
-         "when stationary. Highlights when the player's support probe misses. Uses the "
-         "current standing or ducked collision hull.")));
+      tr("Mark the rear edge of the player's footprint at the HJ friction transition, "
+         "parallel to the platform edge. Highlights when the player's support probe "
+         "misses. Only shown while grounded.")));
 
   right->addSection("Keys");
   right->addRow(

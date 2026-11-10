@@ -35,8 +35,8 @@ struct PlayModeJumpSpan
 
 struct PlayModeEdgeGuide
 {
-  vm::vec3f position;
-  vm::vec3f direction;
+  vm::vec3f position;  // Rear footprint edge at the support-probe transition
+  vm::vec3f direction; // Outward platform-edge normal
   bool active;
 };
 
@@ -51,8 +51,9 @@ struct PlayModeJumpGuide
  * configured friction multiplier actually causes extra slowdown. */
 bool playModeEdgeFriction(scs_context* context, const scs_player_state& state);
 
-/** Searches flat supports in a 128-unit approach and a 512-unit gap along lookDirection.
- * Edge prediction follows velocity; at rest, it previews movement along lookDirection.
+/** Selects a flat platform edge within 128 units along lookDirection, then measures
+ * a gap of up to 512 units along its outward normal. Edge prediction follows
+ * velocity; at rest, it previews movement perpendicular to the selected edge.
  * No map mutation or collision-world rebuild is involved. */
 PlayModeJumpGuide measurePlayModeJumpGuide(
   scs_context* context,
