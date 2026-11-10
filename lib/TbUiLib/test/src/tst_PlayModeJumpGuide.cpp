@@ -29,11 +29,13 @@
 
 #include "kd/result.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace tb::ui
 {
@@ -166,6 +168,40 @@ TEST_CASE("PlayModeJumpGuide")
     const auto guide = measurePlayModeJumpGuide(
       context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
     CHECK_FALSE(guide.span);
+  }
+  SECTION("stacked landing faces select the platform top regardless of brush order")
+  {
+    const auto landingHeight = GENERATE(0.0, 32.0, -32.0);
+    const auto floorInset = GENERATE(0.0, 0.05, -0.05);
+    CAPTURE(landingHeight, floorInset);
+    auto stackedFixture = mdl::MapFixture{};
+    auto& stackedMap = stackedFixture.create();
+    addBox(stackedMap, {{-512, -128, -104}, {0, 128, 0}});
+    addBox(stackedMap, {{200 + floorInset, -512, -104}, {512, 512, -88}});
+    addBox(stackedMap, {{200, -128, -88}, {400, 128, landingHeight}});
+    auto world = buildPlayModeWorld(stackedMap);
+    auto context = contextFor(world);
+    const float origin[] = {-48, 0, 40};
+    scs_spawn(context.get(), origin, nullptr);
+    auto command = scs_usercmd{};
+    command.msec = 10;
+    for (auto i = 0; i < 50; ++i)
+      scs_step(context.get(), &command);
+    auto state = scs_player_state{};
+    scs_get_state(context.get(), &state);
+    REQUIRE(state.ground_entity != -1);
+    REQUIRE(state.origin[2] == Catch::Approx(36.03125f).margin(0.001));
+    for (auto order = 0; order < 2; ++order)
+    {
+      CAPTURE(order);
+      const auto guide =
+        measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
+      REQUIRE(guide.span);
+      CHECK(guide.span->distance == Catch::Approx(200).margin(0.01));
+      CHECK(guide.span->start.z() == Catch::Approx(0).margin(0.001));
+      CHECK(guide.span->end.z() == Catch::Approx(landingHeight).margin(0.001));
+      std::ranges::reverse(world.jumpSurfaces);
+    }
   }
   SECTION("thin landing faces and angled measurements are not skipped")
   {

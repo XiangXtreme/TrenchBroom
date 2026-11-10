@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
+#include <iterator>
 #include <limits>
 #include <sstream>
 
@@ -197,16 +198,30 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
   {
     const auto& edge = approach->edge;
     const auto& direction = edge.endNormal;
-    for (const auto& candidate : approach->spans)
+    const auto firstLanding = std::ranges::find_if(
+      approach->spans,
+      [&](const auto& span) { return span.start > edge.end + SurfaceTolerance; });
+    if (firstLanding != approach->spans.end())
     {
-      if (candidate.start <= edge.end + SurfaceTolerance)
-        continue;
+      // A floor and the platform above it can share the same leading edge. Use
+      // the top surface at that edge, independently of brush collection order.
+      auto landing = firstLanding;
+      for (auto next = std::next(firstLanding);
+           next != approach->spans.end()
+           && next->start <= firstLanding->start + SurfaceTolerance;
+           ++next)
+      {
+        if (next->height > landing->height)
+          landing = next;
+      }
+      const auto& candidate = *landing;
       const auto distance = candidate.start - edge.end;
       // Only the nearest landing counts. Do not skip a short ledge or pit floor
       // and label a farther platform as if the intervening support did not exist.
       if (distance < MinGap || distance >= MaxGap)
-        break;
-      const auto start = feet + direction * edge.end;
+        return result;
+      auto start = feet + direction * edge.end;
+      start[2] = edge.height;
       auto end = feet + direction * candidate.start;
       end[2] = candidate.height;
       // A platform hidden behind a wall/overhang is not a visible landing target.
@@ -219,9 +234,8 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
       // An elevated landing's front face may be the first obstruction.
       if (trace.startsolid || (trace.fraction < 0.999f
             && vm::length(vm::vec3f{trace.endpos[0], trace.endpos[1], trace.endpos[2]} - to) > 1.0f))
-        break;
+        return result;
       result.span = PlayModeJumpSpan{start, end, distance};
-      break;
     }
   }
   return result;
