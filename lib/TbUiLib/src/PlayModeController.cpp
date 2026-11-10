@@ -125,7 +125,7 @@ int usehullFor(const scs_player_state& state)
   return (state.flags & SCS_FL_DUCKING) ? SCS_HULL_DUCKED : SCS_HULL_STANDING;
 }
 
-constexpr auto SpeedFontScale = 2.0f;
+constexpr auto SpeedFontScale = 2.5f;
 constexpr auto KeysFontScale = 1.3f;
 // A wheel jump or duck is down for a single 10 ms usercmd; keep keys lit long enough to
 // be seen.
@@ -157,10 +157,6 @@ std::string formatSpeed(const float speed)
 {
   return std::to_string(static_cast<int>(speed));
 }
-
-constexpr auto PreFontScale = 1.5f;
-constexpr auto PreHoldMs = 1500.0;
-constexpr auto PreFadeMs = 500.0;
 
 // The last hard landing's damage stays up for a moment.
 constexpr auto FallFontScale = 1.3f;
@@ -832,9 +828,8 @@ void PlayModeController::render(
 
   if (pref(Preferences::PlayModeShowHud))
   {
-    // KZ jump stats style: the speed below the crosshair and, after a takeoff, the
-    // prestrafe speed above it (showpre), fading out after a moment. Screen positions
-    // are measured from the bottom left.
+    // Keep one live speed readout below the crosshair. Screen positions are measured
+    // from the bottom left.
     auto state = scs_player_state{};
     scs_get_state(m_context.get(), &state);
     const auto speed = std::sqrt(
@@ -851,29 +846,6 @@ void PlayModeController::render(
       1.0f,
       1.0f);
 
-    if (const auto& pre = m_timeline.jumpStats().pre())
-    {
-      const auto age = m_timeline.jumpStats().timeMs() - pre->timeMs;
-      const auto alpha =
-        static_cast<float>(std::clamp(1.0 - (age - PreHoldMs) / PreFadeMs, 0.0, 1.0));
-      if (alpha > 0.0f)
-      {
-        // Jump and duck takeoffs look the same: just the speed, in green.
-        const auto lineHeight =
-          static_cast<float>(pref(Preferences::RendererFontSize)) * SpeedFontScale * 1.4f;
-        renderHudText(
-          renderContext,
-          renderBatch,
-          formatSpeed(pre->speed),
-          PreFontScale,
-          speedPosition + vm::vec2f{0.0f, lineHeight},
-          0.2f,
-          1.0f,
-          0.2f,
-          alpha);
-      }
-    }
-
     if (pref(Preferences::PlayModeShowJumpStats))
     {
       const auto& stats = m_timeline.jumpStats();
@@ -881,23 +853,17 @@ void PlayModeController::render(
           takeoff && stats.timeMs() - takeoff->timeMs < 2500.0
           && takeoff->technique != PlayModeJumpStats::Technique::Unsupported)
       {
-        const auto lines = std::array{
-          std::string{PlayModeJumpStats::name(takeoff->technique)} + " "
-            + std::to_string(takeoff->fog) + " FOG:",
-          formatFloat(takeoff->landingSpeed, 3),
-          formatFloat(takeoff->postSpeed, 3)};
-        const auto lineHeight =
-          static_cast<float>(pref(Preferences::RendererFontSize)) * 1.5f;
-        for (size_t i = 0; i < lines.size(); ++i)
-          renderHudText(
-            renderContext,
-            renderBatch,
-            lines[i],
-            1.0f,
-            {width * 0.5f, height * 0.65f - static_cast<float>(i) * lineHeight},
-            0.35f,
-            0.95f,
-            1.0f);
+        const auto fog = std::string{PlayModeJumpStats::name(takeoff->technique)} + "  "
+          + std::to_string(takeoff->fog) + " FOG";
+        renderHudText(
+          renderContext,
+          renderBatch,
+          fog,
+          1.6f,
+          {width * 0.5f, height * 0.65f},
+          0.35f,
+          0.95f,
+          1.0f);
       }
     }
 
@@ -952,15 +918,13 @@ void PlayModeController::render(
       const auto lines = std::array{
         title,
         "Distance: " + formatFloat(result->distance, 3),
-        "Prestrafe: " + formatFloat(result->preSpeed, 3) + "("
-          + std::to_string(result->takeoff.fog) + ")",
         "Strafes: " + std::to_string(result->strafes.size())};
       for (size_t i = 0; i < lines.size(); ++i)
         renderHudText(
           renderContext,
           renderBatch,
           lines[i],
-          i == 1 ? 1.3f : 1.05f,
+          i == 1 ? 1.5f : 1.2f,
           {width * 0.5f, y - static_cast<float>(i) * line},
           result->failed ? 1.0f : 0.35f,
           result->failed ? 0.4f : 0.95f,
@@ -978,8 +942,8 @@ void PlayModeController::render(
     {
       // Independent columns keep proportional fonts aligned.
       const auto font = static_cast<float>(pref(Preferences::RendererFontSize));
-      const auto scale = std::min(1.0f, width * 0.22f / (font * 18.0f));
-      const auto rowHeight = font * scale * 1.6f;
+      const auto scale = std::min(1.2f, width * 0.22f / (font * 22.0f));
+      const auto rowHeight = font * scale * 1.7f;
       const auto tableX = width * 0.77f;
       const auto tableY = height * 0.78f;
       const auto tableAlpha = current ? 1.0f : alpha;
