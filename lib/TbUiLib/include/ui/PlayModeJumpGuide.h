@@ -23,7 +23,8 @@ namespace tb::ui
 struct PlayModeJumpSurface
 {
   std::vector<vm::vec3f> vertices;
-  uint32_t hullMask; // BSP hull order, like scs_brush::hull_mask
+  uint32_t hullMask;        // BSP hull order, like scs_brush::hull_mask
+  bool allowTakeoff = true; // func_door may be a moving bhop block
 };
 
 struct PlayModeJumpSpan
@@ -36,10 +37,18 @@ struct PlayModeJumpSpan
 struct PlayModeJumpGuide
 {
   std::optional<PlayModeJumpSpan> span;
+  struct Edge
+  {
+    vm::vec3f center;
+    vm::vec3f normal;
+    bool highJump;
+  };
+  std::optional<Edge> edge;
 };
 
 /** Selects a flat platform edge within 128 units along lookDirection, then measures
- * a gap in [160, 300) units along its outward normal while grounded.
+ * a gap in [160, 300) units along its outward normal while grounded. The takeoff
+ * guide uses the local drop to distinguish LJ from HJ; its HJ offset is 13 units.
  * No map mutation or collision-world rebuild is involved. */
 PlayModeJumpGuide measurePlayModeJumpGuide(
   scs_context* context,

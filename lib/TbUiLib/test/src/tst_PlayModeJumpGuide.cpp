@@ -12,6 +12,7 @@
 #include "gl/PerspectiveCamera.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushNode.h"
+#include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
 #include "mdl/Map.h"
 #include "mdl/MapFixture.h"
@@ -48,11 +49,21 @@ struct ContextDeleter
 using ContextPtr = std::unique_ptr<scs_context, ContextDeleter>;
 
 void addBox(
-  mdl::Map& map, const vm::bbox3d& bounds, const std::string& material = "stone")
+  mdl::Map& map,
+  const vm::bbox3d& bounds,
+  const std::string& material = "stone",
+  const std::string& classname = "")
 {
   const auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
   auto* brush = new mdl::BrushNode{builder.createCuboid(bounds, material) | kdl::value()};
-  REQUIRE_FALSE(mdl::addNodes(map, {{&mdl::parentForNodes(map), {brush}}}).empty());
+  auto* parent = &mdl::parentForNodes(map);
+  if (!classname.empty())
+  {
+    auto* entity = new mdl::EntityNode{mdl::Entity{{{"classname", classname}}}};
+    REQUIRE_FALSE(mdl::addNodes(map, {{parent, {entity}}}).empty());
+    parent = entity;
+  }
+  REQUIRE_FALSE(mdl::addNodes(map, {{parent, {brush}}}).empty());
 }
 
 ContextPtr contextFor(const PlayModeWorld& world)
@@ -159,6 +170,77 @@ TEST_CASE("PlayModeJumpGuide")
       CHECK(guide.span->start.x() == Catch::Approx(0).margin(0.01));
       CHECK(guide.span->end.x() == Catch::Approx(176).margin(0.01));
       CHECK(guide.span->end.z() == Catch::Approx(0).margin(0.01));
+      REQUIRE(guide.edge);
+      CHECK(guide.edge->highJump);
+      CHECK(guide.edge->center == vm::vec3f{-13, 0, 0});
+      CHECK(guide.edge->normal == vm::vec3f{1, 0, 0});
+    }
+  }
+  SECTION("edge drop determines HJ independently of the landing height")
+  {
+    const auto drop = GENERATE(4.0, 32.0, 69.0, 70.0, 128.0);
+    const auto landingHeight = GENERATE(-32.0, 0.0, 32.0);
+    CAPTURE(drop, landingHeight);
+    auto dropFixture = mdl::MapFixture{};
+    auto& dropMap = dropFixture.create();
+    addBox(dropMap, {{-512, -128, -256}, {0, 128, 0}});
+    addBox(dropMap, {{176, -128, -256}, {400, 128, landingHeight}});
+    addBox(dropMap, {{-512, -512, -272}, {512, 512, -drop}});
+    const auto world = buildPlayModeWorld(dropMap);
+    auto context = contextFor(world);
+    const auto guide = measurePlayModeJumpGuide(
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
+    if (drop <= 8)
+      CHECK_FALSE(guide.edge);
+    else
+    {
+      REQUIRE(guide.edge);
+      CHECK(guide.edge->highJump == (drop >= 70));
+      CHECK(guide.edge->center.x() == (drop >= 70 ? -13.0f : 0.0f));
+      CHECK(guide.edge->center.z() == 0);
+    }
+  }
+  SECTION("takeoff edges remain visible without a landing")
+  {
+    auto edgeFixture = mdl::MapFixture{};
+    auto& edgeMap = edgeFixture.create();
+    addBox(edgeMap, {{-512, -128, -16}, {0, 128, 0}});
+    const auto world = buildPlayModeWorld(edgeMap);
+    auto context = contextFor(world);
+    const auto guide = measurePlayModeJumpGuide(
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
+    CHECK_FALSE(guide.span);
+    REQUIRE(guide.edge);
+    CHECK(guide.edge->highJump);
+    CHECK(guide.edge->center == vm::vec3f{-13, 0, 0});
+  }
+  SECTION("door edges are excluded without losing adjoining static edges or landings")
+  {
+    const auto doorAtEdge = GENERATE(false, true);
+    CAPTURE(doorAtEdge);
+    auto doorFixture = mdl::MapFixture{};
+    auto& doorMap = doorFixture.create();
+    addBox(
+      doorMap,
+      {{-512, -128, -16}, {-64, 128, 0}},
+      "stone",
+      doorAtEdge ? "func_detail" : "func_door");
+    addBox(
+      doorMap,
+      {{-64, -128, -16}, {0, 128, 0}},
+      "stone",
+      doorAtEdge ? "func_door" : "func_detail");
+    addBox(doorMap, {{176, -128, -16}, {400, 128, 0}}, "stone", "func_door");
+    auto world = buildPlayModeWorld(doorMap);
+    auto context = contextFor(world);
+    const auto state = groundedAt(context.get(), -48);
+    for (auto order = 0; order < 2; ++order)
+    {
+      const auto guide =
+        measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
+      CHECK(guide.edge.has_value() == !doorAtEdge);
+      CHECK(guide.span.has_value() == !doorAtEdge);
+      std::ranges::reverse(world.jumpSurfaces);
     }
   }
   SECTION("joining coplanar brushes does not create a gap")
@@ -296,6 +378,7 @@ TEST_CASE("PlayModeJumpGuide")
       const auto guide = measurePlayModeJumpGuide(
         context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
       CHECK(guide.span.has_value() == (gap >= 160 && gap < 300));
+      CHECK(guide.edge.has_value());
       if (guide.span)
         CHECK(guide.span->distance == Catch::Approx(gap).margin(0.01));
     }
@@ -323,6 +406,9 @@ TEST_CASE("PlayModeJumpGuide")
       CHECK(guide.span->start.x() == Catch::Approx(0).margin(0.01));
       CHECK(guide.span->start.y() == Catch::Approx(12).margin(0.01));
       CHECK(guide.span->end.y() == Catch::Approx(12).margin(0.01));
+      REQUIRE(guide.edge);
+      CHECK(guide.edge->center == vm::vec3f{-13, 12, 0});
+      CHECK(guide.edge->normal == vm::vec3f{1, 0, 0});
     }
   }
   SECTION("rotated platforms follow their real edge rather than the world axes")
@@ -364,6 +450,9 @@ TEST_CASE("PlayModeJumpGuide")
       CHECK(guide.span->distance == Catch::Approx(176).margin(0.02));
       const auto delta = guide.span->end - guide.span->start;
       CHECK(delta.x() == Catch::Approx(delta.y()).margin(0.01));
+      REQUIRE(guide.edge);
+      CHECK(guide.edge->highJump);
+      CHECK(vm::length(guide.edge->center - vm::vec3f{rotate(-13, 0, 0)}) < 0.02f);
     }
   }
   SECTION("a lower landing reports its own signed height")
@@ -416,6 +505,7 @@ TEST_CASE("PlayModeJumpGuide")
     const auto guide =
       measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     CHECK_FALSE(guide.span);
+    CHECK_FALSE(guide.edge);
   }
   SECTION("a real jump hides the span until landing")
   {
@@ -425,6 +515,7 @@ TEST_CASE("PlayModeJumpGuide")
     const auto before =
       measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     REQUIRE(before.span);
+    REQUIRE(before.edge);
     auto command = scs_usercmd{};
     command.msec = 10;
     command.buttons = SCS_IN_JUMP;
@@ -434,6 +525,7 @@ TEST_CASE("PlayModeJumpGuide")
     const auto during =
       measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     CHECK_FALSE(during.span);
+    CHECK_FALSE(during.edge);
     command.buttons = 0;
     for (auto i = 0; i < 150 && state.ground_entity == -1; ++i)
     {
@@ -444,6 +536,33 @@ TEST_CASE("PlayModeJumpGuide")
     const auto after =
       measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     CHECK(after.span.has_value());
+    CHECK(after.edge.has_value());
+  }
+  SECTION("swimming climbing and teleporting hide all jump guides")
+  {
+    const auto world = buildPlayModeWorld(map);
+    auto context = contextFor(world);
+    auto state = groundedAt(context.get(), -48);
+    SECTION("swimming")
+    {
+      state.waterlevel = 2;
+    }
+    SECTION("climbing")
+    {
+      state.movetype = SCS_MOVETYPE_FLY;
+    }
+    SECTION("teleporting")
+    {
+      state.teleport_time = 1;
+    }
+    SECTION("ground flag cleared")
+    {
+      state.flags &= ~SCS_FL_ONGROUND;
+    }
+    const auto guide =
+      measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
+    CHECK_FALSE(guide.span);
+    CHECK_FALSE(guide.edge);
   }
   SECTION("non-colliding surfaces are excluded by the collision compiler")
   {
@@ -474,11 +593,30 @@ TEST_CASE("PlayModeJumpGuide")
       for (auto x = 0; x < labeled.width(); ++x)
         changed += labeled.pixel(x, y) != plain.pixel(x, y) ? 1 : 0;
     CHECK(changed > 100);
+    const auto coloredPixels = [](const QImage& frame, const bool red) {
+      auto count = 0;
+      for (auto y = 0; y < frame.height(); ++y)
+        for (auto x = 0; x < frame.width(); ++x)
+        {
+          const auto color = frame.pixelColor(x, y);
+          count += (red ? color.red() > 200 && color.green() < 100
+                        : color.green() > 200 && color.red() < 100)
+                     ? 1
+                     : 0;
+        }
+      return count;
+    };
+    CHECK(coloredPixels(labeled, true) > 100);
+    view.guide.edge->highJump = false;
+    view.guide.edge->center = view.guide.span->start;
+    const auto lj = view.grabFramebuffer();
+    CHECK(coloredPixels(lj, false) > 100);
     const auto directory = qEnvironmentVariable("TB_RENDER_TEST_ARTIFACT_DIR");
     if (!directory.isEmpty())
     {
       REQUIRE(QDir{}.mkpath(directory));
       REQUIRE(labeled.save(directory + "/play-jump-guides.png"));
+      REQUIRE(lj.save(directory + "/play-jump-guides-lj.png"));
     }
   }
 }

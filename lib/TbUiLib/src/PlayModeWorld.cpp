@@ -396,22 +396,23 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   auto teleports = std::vector<CollectedTeleport>{};
   auto destinations = std::vector<NamedDestination>{};
 
-  const auto addJumpSurfaces = [&](const mdl::Brush& brush, const BrushInfo& info) {
-    const auto mask = (info.hullMask != 0 ? info.hullMask : options.hullMask)
-                      & options.hullMask & 0b1010u;
-    if (
-      mask == 0
-      || (info.contents != SCS_CONTENTS_SOLID && info.contents != SCS_CONTENTS_CLIP))
-      return;
-    for (const auto& face : brush.faces())
-      if (face.boundary().normal.z() > 0.99999)
-      {
-        auto surface = PlayModeJumpSurface{{}, mask};
-        for (const auto& vertex : face.vertexPositions())
-          surface.vertices.emplace_back(vertex);
-        result.jumpSurfaces.push_back(std::move(surface));
-      }
-  };
+  const auto addJumpSurfaces =
+    [&](const mdl::Brush& brush, const BrushInfo& info, const bool allowTakeoff = true) {
+      const auto mask = (info.hullMask != 0 ? info.hullMask : options.hullMask)
+                        & options.hullMask & 0b1010u;
+      if (
+        mask == 0
+        || (info.contents != SCS_CONTENTS_SOLID && info.contents != SCS_CONTENTS_CLIP))
+        return;
+      for (const auto& face : brush.faces())
+        if (face.boundary().normal.z() > 0.99999)
+        {
+          auto surface = PlayModeJumpSurface{{}, mask, allowTakeoff};
+          for (const auto& vertex : face.vertexPositions())
+            surface.vertices.emplace_back(vertex);
+          result.jumpSurfaces.push_back(std::move(surface));
+        }
+    };
 
   const auto addWorldBrush = [&](const mdl::BrushNode& brushNode, const bool noclip) {
     if (const auto info = brushInfo(brushNode.brush(), noclip, zhlt))
@@ -534,7 +535,8 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
                 // brush entity contents come from the entity, not the material
                 collected->brushes.add(brushNode.brush(), *info, SCS_CONTENTS_SOLID);
                 if (role == EntityRole::Solid)
-                  addJumpSurfaces(brushNode.brush(), *info);
+                  addJumpSurfaces(
+                    brushNode.brush(), *info, toLower(entity.classname()) != "func_door");
               }
             },
             [](const mdl::PatchNode&) {}));

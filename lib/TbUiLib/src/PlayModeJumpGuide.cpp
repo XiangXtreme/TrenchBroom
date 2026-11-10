@@ -29,6 +29,10 @@ constexpr auto MinGap = 160.0f;
 constexpr auto MaxGap = 300.0f;
 constexpr auto MaxHeightDifference = 256.0f;
 constexpr auto SurfaceTolerance = 0.125f;
+constexpr auto HighJumpDrop = 69.5f;
+constexpr auto EdgeProbeDepth = 80.0f;
+constexpr auto HighJumpInset = 13.0f;
+constexpr auto EdgeHalfLength = 15.0f;
 
 float halfHeight(const scs_player_state& state)
 {
@@ -46,6 +50,7 @@ struct Interval
   float end;
   float height;
   vm::vec3f endNormal;
+  bool allowTakeoff;
 };
 
 // Clip a horizontal ray against a convex face's XY footprint. This measures actual
@@ -87,7 +92,7 @@ std::optional<Interval> intersect(
     if (to < from)
       return std::nullopt;
   }
-  return Interval{from, to, vertices.front().z(), endNormal};
+  return Interval{from, to, vertices.front().z(), endNormal, surface.allowTakeoff};
 }
 
 std::vector<Interval> intervals(
@@ -133,7 +138,10 @@ std::vector<Interval> intervals(
         {
           merged.back().end = current->end;
           merged.back().endNormal = current->endNormal;
+          merged.back().allowTakeoff = current->allowTakeoff;
         }
+        else if (current->end == merged.back().end)
+          merged.back().allowTakeoff |= current->allowTakeoff;
       }
       else
         merged.push_back(*current);
@@ -163,7 +171,7 @@ std::optional<Interval> takeoffEdge(
       result = span;
     }
   }
-  if (!std::isfinite(end) || end < -24.0f || end > Approach)
+  if (!std::isfinite(end) || end < -24.0f || end > Approach || !result->allowTakeoff)
     return std::nullopt;
   return result;
 }
@@ -191,6 +199,32 @@ std::optional<ApproachEdge> approachEdge(
   if (!edge || vm::dot(edge->endNormal, selected->endNormal) < 0.999f)
     return std::nullopt;
   return ApproachEdge{std::move(spans), *edge};
+}
+
+std::optional<PlayModeJumpGuide::Edge> takeoffGuide(
+  scs_context* context, const vm::vec3f& feet, const Interval& edge)
+{
+  auto position = feet + edge.endNormal * edge.end;
+  position[2] = edge.height;
+  // Sample just outside the physical lip. Starting on the plane can hit the
+  // takeoff brush itself; use the same point hull as jumpaids' downward trace.
+  const auto from =
+    position + edge.endNormal * SurfaceTolerance + vm::vec3f{0, 0, SurfaceTolerance};
+  const auto to = vm::vec3f{from.xy(), edge.height - EdgeProbeDepth};
+  auto trace = scs_trace{};
+  scs_trace_hull(context, from.v, to.v, SCS_HULL_POINT, &trace);
+  if (trace.startsolid || trace.allsolid)
+    return std::nullopt;
+  const auto drop = edge.height - trace.endpos[2];
+  if (drop <= 8.0f)
+    return std::nullopt;
+  const auto highJump = drop > HighJumpDrop;
+  // jumpaids 1.21 (SiMen) uses a 13-unit takeoff hint for HJ. This is a
+  // placement aid, not a simulation of the movement-dependent friction boundary.
+  return PlayModeJumpGuide::Edge{
+    position - edge.endNormal * (highJump ? HighJumpInset : 0.0f),
+    edge.endNormal,
+    highJump};
 }
 
 std::string number(const float value)
@@ -229,6 +263,7 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
   {
     const auto& edge = approach->edge;
     const auto& direction = edge.endNormal;
+    result.edge = takeoffGuide(context, feet, edge);
     const auto canLand = [&](const Interval& span) {
       // Raw brush faces include covered floors and narrow lips beside taller
       // blocks. A landing needs room for the player's current collision hull.
@@ -289,13 +324,24 @@ void renderPlayModeJumpGuide(
   render::RenderContext& renderContext,
   render::RenderBatch& renderBatch)
 {
-  if (!guide.span)
+  if (!guide.span && !guide.edge)
     return;
   auto service = render::RenderService{renderContext, renderBatch};
   service.setHideOccludedObjects();
   service.setLineWidth(2.0f);
-  service.setForegroundColor(pref(Preferences::InfoOverlayTextColor));
+  const auto highJump = guide.edge && guide.edge->highJump;
+  service.setForegroundColor(
+    highJump ? Color{RgbF{1.0f, 0.2f, 0.2f}} : Color{RgbF{0.2f, 1.0f, 0.2f}});
   service.setBackgroundColor(pref(Preferences::InfoOverlayBackgroundColor));
+  if (guide.edge)
+  {
+    const auto& edge = *guide.edge;
+    const auto center = edge.center + vm::vec3f{0, 0, 0.2f};
+    const auto cap = vm::vec3f{-edge.normal.y(), edge.normal.x(), 0} * EdgeHalfLength;
+    service.renderLine(center - cap, center + cap);
+  }
+  if (!guide.span)
+    return;
   constexpr auto lift = vm::vec3f{0, 0, 1};
   const auto& span = *guide.span;
   const auto start = span.start + lift;
@@ -304,7 +350,8 @@ void renderPlayModeJumpGuide(
   const auto direction = vm::normalize(end - start);
   const auto cap = vm::vec3f{-direction.y(), direction.x(), 0} * 12.0f;
   service.renderLine(start, end);
-  service.renderLine(start - cap, start + cap);
+  if (!guide.edge || highJump)
+    service.renderLine(start - cap, start + cap);
   service.renderLine(end - cap, end + cap);
   if (std::abs(span.end.z() - span.start.z()) > SurfaceTolerance)
     service.renderLine(end, span.end + lift);

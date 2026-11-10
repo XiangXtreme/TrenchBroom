@@ -44,7 +44,7 @@ TEST_CASE("KreedzBroomPreferencePane")
   auto* span = static_cast<QCheckBox*>(nullptr);
   for (auto* box : pane.findChildren<QCheckBox*>())
   {
-    if (box->text() == "Show platform span")
+    if (box->text() == "Show jump guides")
       span = box;
   }
   REQUIRE(span);

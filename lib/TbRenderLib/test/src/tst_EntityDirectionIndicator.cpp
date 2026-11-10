@@ -76,8 +76,8 @@ TEST_CASE("EntityDirectionIndicator")
       REQUIRE(indicator);
       CHECK(indicator->kind == EntityDirectionIndicatorKind::Arrow);
       const auto length = screenLength(camera, *indicator, center);
-      CHECK(length >= 23.9f);
-      CHECK(length <= 40.1f);
+      CHECK(length >= 31.9f);
+      CHECK(length <= 53.4f);
       CHECK(screenTip(camera, *indicator, center).x() > 0);
     }
   }
@@ -97,8 +97,11 @@ TEST_CASE("EntityDirectionIndicator")
       CHECK(away->kind == EntityDirectionIndicatorKind::AwayFromViewer);
       CHECK(towards->kind == EntityDirectionIndicatorKind::TowardsViewer);
       CHECK(away->fill != towards->fill);
-      CHECK(screenLength(camera, *away, center) == Catch::Approx(6.5f).margin(0.01f));
-      CHECK(screenLength(camera, *towards, center) == Catch::Approx(6.5f).margin(0.01f));
+      CHECK(
+        screenLength(camera, *away, center) == Catch::Approx(26.0f / 3.0f).margin(0.01f));
+      CHECK(
+        screenLength(camera, *towards, center)
+        == Catch::Approx(26.0f / 3.0f).margin(0.01f));
     }
   }
 
@@ -110,7 +113,8 @@ TEST_CASE("EntityDirectionIndicator")
     REQUIRE(first);
     REQUIRE(moved);
     CHECK(first->kind == moved->kind);
-    CHECK(screenLength(camera, *moved, center) == Catch::Approx(6.5f).margin(0.01f));
+    CHECK(
+      screenLength(camera, *moved, center) == Catch::Approx(26.0f / 3.0f).margin(0.01f));
   }
 
   SECTION("perspective arrows retain direction and size beyond the old distance limit")
@@ -124,8 +128,8 @@ TEST_CASE("EntityDirectionIndicator")
       REQUIRE(indicator);
       CHECK(indicator->kind == EntityDirectionIndicatorKind::Arrow);
       const auto length = screenLength(perspective, *indicator, center);
-      CHECK(length >= 23.9f);
-      CHECK(length <= 40.1f);
+      CHECK(length >= 31.9f);
+      CHECK(length <= 53.4f);
       CHECK(screenTip(perspective, *indicator, center).x() > 0);
     }
   }

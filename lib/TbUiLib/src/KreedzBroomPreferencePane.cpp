@@ -213,12 +213,12 @@ void KreedzBroomPreferencePane::createGui()
   left->addRow(
     "",
     withToolTip(
-      boolField(tr("Show platform span"), Preferences::PlayModeShowJumpSpan),
-      tr(
-        "Select a platform edge by looking toward it. Measure perpendicular to the edge. "
-        "Only gaps from 160 units up to, but not including, 300 units are shown. "
-        "Shows horizontal distance and height difference; does not predict whether a "
-        "jump is possible.")));
+      boolField(tr("Show jump guides"), Preferences::PlayModeShowJumpSpan),
+      tr("While grounded, look toward a platform edge to show jump guides. "
+         "Green marks an LJ edge; red marks an HJ takeoff hint 13 units inside the edge. "
+         "Measure perpendicular to the edge for gaps from 160 units up to, but not "
+         "including, 300 units. Shows horizontal distance and height difference; "
+         "does not predict whether a jump is possible.")));
   right->addSection("Keys");
   right->addRow(
     "Forward / Back",

@@ -5872,12 +5872,12 @@ By %2</source>
             <translation>跳台辅助</translation>
         </message>
         <message>
-            <source>Show platform span</source>
-            <translation>显示平台跨度</translation>
+            <source>Show jump guides</source>
+            <translation>显示跳台辅助</translation>
         </message>
         <message>
-            <source>Select a platform edge by looking toward it. Measure perpendicular to the edge. Only gaps from 160 units up to, but not including, 300 units are shown. Shows horizontal distance and height difference; does not predict whether a jump is possible.</source>
-            <translation>朝向平台边缘选择目标，沿垂直于该边缘的方向测量水平跨度与高差。只显示大于等于 160、小于 300 units 的跨度，不预测能否跳过。</translation>
+            <source>While grounded, look toward a platform edge to show jump guides. Green marks an LJ edge; red marks an HJ takeoff hint 13 units inside the edge. Measure perpendicular to the edge for gaps from 160 units up to, but not including, 300 units. Shows horizontal distance and height difference; does not predict whether a jump is possible.</source>
+            <translation>着地时朝向平台边缘显示跳台辅助。绿色标记普通 LJ 台边，红色提示线位于 HJ 台边内侧 13 units。沿垂直于台边的方向测量，只显示大于等于 160、小于 300 units 的水平跨度及高差，不预测能否跳过。</translation>
         </message>
         <message>
             <source>Full screen during play</source>

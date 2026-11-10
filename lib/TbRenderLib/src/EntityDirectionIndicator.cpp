@@ -85,7 +85,7 @@ std::optional<EntityDirectionIndicator> makeEntityDirectionIndicator(
     return std::nullopt;
   }
   const auto screen = camera.project(center);
-  constexpr auto margin = 48.0f;
+  constexpr auto margin = 64.0f;
   if (
     screen.x() < static_cast<float>(viewport.x) - margin
     || screen.x() > static_cast<float>(viewport.x + viewport.width) + margin
@@ -103,7 +103,8 @@ std::optional<EntityDirectionIndicator> makeEntityDirectionIndicator(
     camera.up() / vm::length((camera.project(center + camera.up()) - screen).xy());
   auto result = EntityDirectionIndicator{};
   const auto worldPoint = [&](const vm::vec2f& p) {
-    return center + right * p.x() + up * p.y();
+    constexpr auto scale = 4.0f / 3.0f;
+    return center + (right * p.x() + up * p.y()) * scale;
   };
   const auto triangle =
     [&](const vm::vec2f& a, const vm::vec2f& b, const vm::vec2f& c, auto& vertices) {
