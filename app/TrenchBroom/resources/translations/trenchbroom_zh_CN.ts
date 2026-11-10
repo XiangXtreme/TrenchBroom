@@ -5876,16 +5876,8 @@ By %2</source>
             <translation>显示平台跨度</translation>
         </message>
         <message>
-            <source>Show HJ takeoff hint</source>
-            <translation>显示 HJ 起跳提示线</translation>
-        </message>
-        <message>
             <source>Select a platform edge by looking toward it. Measure perpendicular to the edge. Only gaps from 160 units up to, but not including, 300 units are shown. Shows horizontal distance and height difference; does not predict whether a jump is possible.</source>
             <translation>朝向平台边缘选择目标，沿垂直于该边缘的方向测量水平跨度与高差。只显示大于等于 160、小于 300 units 的跨度，不预测能否跳过。</translation>
-        </message>
-        <message>
-            <source>Show a takeoff hint 16 units inside the HJ friction transition, parallel to the platform edge. Highlights when the player's support probe misses. Only shown while grounded.</source>
-            <translation>在 HJ 摩擦触发临界位置内侧 16 单位处显示起跳提示线，提示线与台边平行。玩家的支撑探测未命中时高亮，仅着地时显示。</translation>
         </message>
         <message>
             <source>Full screen during play</source>

@@ -219,14 +219,6 @@ void KreedzBroomPreferencePane::createGui()
         "Only gaps from 160 units up to, but not including, 300 units are shown. "
         "Shows horizontal distance and height difference; does not predict whether a "
         "jump is possible.")));
-  left->addRow(
-    "",
-    withToolTip(
-      boolField(tr("Show HJ takeoff hint"), Preferences::PlayModeShowEdgeFriction),
-      tr("Show a takeoff hint 16 units inside the HJ friction transition, parallel to "
-         "the platform edge. Highlights when the player's support probe misses. "
-         "Only shown while grounded.")));
-
   right->addSection("Keys");
   right->addRow(
     "Forward / Back",

@@ -33,35 +33,19 @@ struct PlayModeJumpSpan
   float distance;
 };
 
-struct PlayModeEdgeGuide
-{
-  vm::vec3f position;  // Player-center position at the support-probe transition
-  vm::vec3f direction; // Outward platform-edge normal
-  bool active;
-};
-
 struct PlayModeJumpGuide
 {
   std::optional<PlayModeJumpSpan> span;
-  std::optional<PlayModeEdgeGuide> edge;
 };
 
-/** PM_Friction's support probe, using the current standing/ducked collision hull.
- * Does not advance or change the player state. The caller controls whether the
- * configured friction multiplier actually causes extra slowdown. */
-bool playModeEdgeFriction(scs_context* context, const scs_player_state& state);
-
 /** Selects a flat platform edge within 128 units along lookDirection, then measures
- * a gap in [160, 300) units along its outward normal. Edge prediction follows
- * velocity; at rest, it previews movement perpendicular to the selected edge.
+ * a gap in [160, 300) units along its outward normal while grounded.
  * No map mutation or collision-world rebuild is involved. */
 PlayModeJumpGuide measurePlayModeJumpGuide(
   scs_context* context,
   const std::vector<PlayModeJumpSurface>& surfaces,
   const scs_player_state& state,
-  const vm::vec3f& lookDirection,
-  bool measureSpan,
-  bool measureEdge);
+  const vm::vec3f& lookDirection);
 
 void renderPlayModeJumpGuide(
   const PlayModeJumpGuide& guide,

@@ -34,11 +34,6 @@ float halfHeight(const scs_player_state& state)
   return state.flags & SCS_FL_DUCKING ? 18.0f : 36.0f;
 }
 
-int hull(const scs_player_state& state)
-{
-  return state.flags & SCS_FL_DUCKING ? SCS_HULL_DUCKED : SCS_HULL_STANDING;
-}
-
 float cross2(const vm::vec3f& a, const vm::vec3f& b)
 {
   return a.x() * b.y() - a.y() * b.x();
@@ -179,34 +174,11 @@ std::string number(const float value)
 }
 } // namespace
 
-bool playModeEdgeFriction(scs_context* context, const scs_player_state& state)
-{
-  // Keep this probe equivalent to PM_Friction in the vendored pm_shared.cpp.
-  // https://github.com/ValveSoftware/halflife/blob/master/pm_shared/pm_shared.c
-  const auto speed = std::sqrt(
-    state.velocity[0] * state.velocity[0] + state.velocity[1] * state.velocity[1]
-    + state.velocity[2] * state.velocity[2]);
-  if (
-    !context || state.ground_entity == -1 || !(state.flags & SCS_FL_ONGROUND)
-    || state.movetype != SCS_MOVETYPE_WALK || state.teleport_time != 0.0f || speed < 0.1f)
-    return false;
-  const float start[] = {
-    state.origin[0] + state.velocity[0] / speed * 16.0f,
-    state.origin[1] + state.velocity[1] / speed * 16.0f,
-    state.origin[2] - halfHeight(state)};
-  const float end[] = {start[0], start[1], start[2] - 34.0f};
-  auto trace = scs_trace{};
-  scs_trace_hull(context, start, end, hull(state), &trace);
-  return trace.fraction == 1.0f;
-}
-
 PlayModeJumpGuide measurePlayModeJumpGuide(
   scs_context* context,
   const std::vector<PlayModeJumpSurface>& surfaces,
   const scs_player_state& state,
-  const vm::vec3f& lookDirection,
-  const bool measureSpan,
-  const bool measureEdge)
+  const vm::vec3f& lookDirection)
 {
   auto result = PlayModeJumpGuide{};
   if (
@@ -221,7 +193,7 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
     return result;
   forward = vm::normalize(forward);
   const auto approach = approachEdge(surfaces, state, feet, forward);
-  if (measureSpan && approach)
+  if (approach)
   {
     const auto& edge = approach->edge;
     const auto& direction = edge.endNormal;
@@ -252,50 +224,6 @@ PlayModeJumpGuide measurePlayModeJumpGuide(
       break;
     }
   }
-  if (measureEdge)
-  {
-    auto direction = vm::vec3f{state.velocity[0], state.velocity[1], 0};
-    const auto moving = vm::squared_length(direction) >= 0.01f;
-    direction = moving ? vm::normalize(direction) : forward;
-    const auto edgeApproach = moving ? approachEdge(surfaces, state, feet, direction)
-                                     : std::optional<ApproachEdge>{};
-    const auto* support = moving ? (edgeApproach ? &*edgeApproach : nullptr)
-                                 : (approach ? &*approach : nullptr);
-    if (support)
-    {
-      const auto& normal = support->edge.endNormal;
-      const auto edge = support->edge.end;
-      if (!moving)
-        direction = normal;
-      // Locate the support-probe transition for a hypothetical player moving along
-      // this approach. In particular, do not draw a fixed 16-unit inset: player hull
-      // expansion, shallow support and stance all affect where the probe misses.
-      const auto probe = [&](const float offset) {
-        auto predicted = state;
-        for (auto i = size_t{0}; i < 3; ++i)
-        {
-          predicted.origin[i] += normal[i] * offset;
-          predicted.velocity[i] = direction[i] * 250.0f;
-        }
-        return playModeEdgeFriction(context, predicted);
-      };
-      auto low = edge - 40.0f;
-      auto high = edge + 32.0f;
-      if (!probe(low) && probe(high))
-      {
-        for (auto i = 0; i < 14; ++i)
-        {
-          const auto middle = (low + high) / 2.0f;
-          (probe(middle) ? high : low) = middle;
-        }
-        // The line marks the player's center at the last supported probe position.
-        // JumpStats Jumpoff measures from the rear of the hull, so its 11-14 unit
-        // readings during diagonal approaches are not an inset from this position.
-        result.edge = PlayModeEdgeGuide{
-          feet + normal * low, normal, moving && playModeEdgeFriction(context, state)};
-      }
-    }
-  }
   return result;
 }
 
@@ -304,7 +232,7 @@ void renderPlayModeJumpGuide(
   render::RenderContext& renderContext,
   render::RenderBatch& renderBatch)
 {
-  if (!guide.span && !guide.edge)
+  if (!guide.span)
     return;
   auto service = render::RenderService{renderContext, renderBatch};
   service.setHideOccludedObjects();
@@ -312,39 +240,24 @@ void renderPlayModeJumpGuide(
   service.setForegroundColor(pref(Preferences::InfoOverlayTextColor));
   service.setBackgroundColor(pref(Preferences::InfoOverlayBackgroundColor));
   constexpr auto lift = vm::vec3f{0, 0, 1};
-  if (guide.span)
-  {
-    const auto& span = *guide.span;
-    const auto start = span.start + lift;
-    auto end = span.end + lift;
-    end[2] = start.z();
-    const auto direction = vm::normalize(end - start);
-    const auto cap = vm::vec3f{-direction.y(), direction.x(), 0} * 12.0f;
-    service.renderLine(start, end);
-    service.renderLine(start - cap, start + cap);
-    service.renderLine(end - cap, end + cap);
-    if (std::abs(span.end.z() - span.start.z()) > SurfaceTolerance)
-      service.renderLine(end, span.end + lift);
-    auto label = number(span.distance);
-    const auto height = span.end.z() - span.start.z();
-    if (std::abs(height) > SurfaceTolerance)
-      label += "  Z " + std::string{height > 0 ? "+" : ""} + number(height);
-    service.renderString(
-      label,
-      render::SimpleTextAnchor{
-        (start + end) / 2.0f, render::TextAlignment::Center, {0, 12}});
-  }
-  if (guide.edge)
-  {
-    const auto& edge = *guide.edge;
-    service.setForegroundColor(Color{RgbaF{1.0f, 0.2f, 0.2f, 1.0f}});
-    service.setLineWidth(edge.active ? 3.0f : 2.0f);
-    const auto cap = vm::vec3f{-edge.direction.y(), edge.direction.x(), 0} * 24.0f;
-    const auto position = edge.position + lift;
-    service.renderLine(position - cap, position + cap);
-    service.renderString(
-      "HJ",
-      render::SimpleTextAnchor{position + cap, render::TextAlignment::Left, {6, 8}});
-  }
+  const auto& span = *guide.span;
+  const auto start = span.start + lift;
+  auto end = span.end + lift;
+  end[2] = start.z();
+  const auto direction = vm::normalize(end - start);
+  const auto cap = vm::vec3f{-direction.y(), direction.x(), 0} * 12.0f;
+  service.renderLine(start, end);
+  service.renderLine(start - cap, start + cap);
+  service.renderLine(end - cap, end + cap);
+  if (std::abs(span.end.z() - span.start.z()) > SurfaceTolerance)
+    service.renderLine(end, span.end + lift);
+  auto label = number(span.distance);
+  const auto height = span.end.z() - span.start.z();
+  if (std::abs(height) > SurfaceTolerance)
+    label += "  Z " + std::string{height > 0 ? "+" : ""} + number(height);
+  service.renderString(
+    label,
+    render::SimpleTextAnchor{
+      (start + end) / 2.0f, render::TextAlignment::Center, {0, 12}});
 }
 } // namespace tb::ui

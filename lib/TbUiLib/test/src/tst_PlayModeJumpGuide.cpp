@@ -31,7 +31,6 @@
 
 #include <cmath>
 #include <memory>
-#include <numbers>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -74,22 +73,6 @@ scs_player_state groundedAt(scs_context* context, const float x, const float y =
   scs_get_state(context, &state);
   REQUIRE(state.ground_entity != -1);
   return state;
-}
-
-void checkEdgeTransition(
-  scs_context* context, scs_player_state state, const PlayModeEdgeGuide& edge)
-{
-  if (std::hypot(state.velocity[0], state.velocity[1]) < 0.1f)
-  {
-    for (auto i = size_t{0}; i < 2; ++i)
-      state.velocity[i] = edge.direction[i] * 250.0f;
-  }
-  for (const auto offset : {-0.1f, 0.1f})
-  {
-    for (auto i = size_t{0}; i < 2; ++i)
-      state.origin[i] = edge.position[i] + edge.direction[i] * offset;
-    CHECK(playModeEdgeFriction(context, state) == (offset > 0));
-  }
 }
 
 class JumpGuideView : public RenderView
@@ -166,15 +149,13 @@ TEST_CASE("PlayModeJumpGuide")
     for (const auto x : {-96.0f, -48.0f, -8.0f})
     {
       const auto state = groundedAt(context.get(), x);
-      const auto guide = measurePlayModeJumpGuide(
-        context.get(), world.jumpSurfaces, state, {1, 0, -0.8f}, true, true);
+      const auto guide =
+        measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, -0.8f});
       REQUIRE(guide.span);
       CHECK(guide.span->distance == Catch::Approx(176).margin(0.01));
       CHECK(guide.span->start.x() == Catch::Approx(0).margin(0.01));
       CHECK(guide.span->end.x() == Catch::Approx(176).margin(0.01));
       CHECK(guide.span->end.z() == Catch::Approx(0).margin(0.01));
-      REQUIRE(guide.edge);
-      CHECK_FALSE(guide.edge->active);
     }
   }
   SECTION("joining coplanar brushes does not create a gap")
@@ -183,12 +164,7 @@ TEST_CASE("PlayModeJumpGuide")
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
-      context.get(),
-      world.jumpSurfaces,
-      groundedAt(context.get(), -48),
-      {1, 0, 0},
-      true,
-      false);
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
     CHECK_FALSE(guide.span);
   }
   SECTION("thin landing faces and angled measurements are not skipped")
@@ -197,12 +173,7 @@ TEST_CASE("PlayModeJumpGuide")
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
-      context.get(),
-      world.jumpSurfaces,
-      groundedAt(context.get(), -48),
-      {1, 0.1f, 0},
-      true,
-      false);
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0.1f, 0});
     REQUIRE(guide.span);
     CHECK(guide.span->distance == Catch::Approx(168).margin(0.01));
     CHECK(guide.span->start.y() == Catch::Approx(guide.span->end.y()).margin(0.01));
@@ -219,12 +190,7 @@ TEST_CASE("PlayModeJumpGuide")
       const auto world = buildPlayModeWorld(rangeMap);
       auto context = contextFor(world);
       const auto guide = measurePlayModeJumpGuide(
-        context.get(),
-        world.jumpSurfaces,
-        groundedAt(context.get(), -48),
-        {1, 0, 0},
-        true,
-        false);
+        context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
       CHECK(guide.span.has_value() == (gap >= 160 && gap < 300));
       if (guide.span)
         CHECK(guide.span->distance == Catch::Approx(gap).margin(0.01));
@@ -236,15 +202,10 @@ TEST_CASE("PlayModeJumpGuide")
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
-      context.get(),
-      world.jumpSurfaces,
-      groundedAt(context.get(), -48),
-      {1, 0, 0},
-      true,
-      false);
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
     CHECK_FALSE(guide.span);
   }
-  SECTION("turning the view keeps dimensions perpendicular and the HJ boundary fixed")
+  SECTION("turning the view keeps dimensions perpendicular to the platform edge")
   {
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
@@ -252,59 +213,12 @@ TEST_CASE("PlayModeJumpGuide")
     for (const auto yaw : {-0.8f, -0.3f, 0.0f, 0.3f, 0.8f})
     {
       const auto guide = measurePlayModeJumpGuide(
-        context.get(), world.jumpSurfaces, state, {1, yaw, -0.5f}, true, true);
+        context.get(), world.jumpSurfaces, state, {1, yaw, -0.5f});
       REQUIRE(guide.span);
       CHECK(guide.span->distance == Catch::Approx(176).margin(0.01));
       CHECK(guide.span->start.x() == Catch::Approx(0).margin(0.01));
       CHECK(guide.span->start.y() == Catch::Approx(12).margin(0.01));
       CHECK(guide.span->end.y() == Catch::Approx(12).margin(0.01));
-      REQUIRE(guide.edge);
-      CHECK(guide.edge->position.x() == Catch::Approx(0).margin(0.01));
-      CHECK(guide.edge->position.y() == Catch::Approx(12).margin(0.01));
-      CHECK(guide.edge->direction.x() == Catch::Approx(1).margin(0.01));
-      CHECK(guide.edge->direction.y() == Catch::Approx(0).margin(0.01));
-      checkEdgeTransition(context.get(), state, *guide.edge);
-    }
-  }
-  SECTION("diagonal HJ boundaries correspond to JumpStats Jumpoff distances")
-  {
-    const auto world = buildPlayModeWorld(map);
-    auto context = contextFor(world);
-    struct Approach
-    {
-      float degrees;
-      float jumpoff;
-    };
-    for (const auto approach :
-         {Approach{0, 16},
-          Approach{30, 13.8564f},
-          Approach{40, 12.2567f},
-          Approach{45, 11.3137f}})
-    {
-      CAPTURE(approach.degrees);
-      auto state = groundedAt(context.get(), -48, 12);
-      const auto angle = approach.degrees * std::numbers::pi_v<float> / 180.0f;
-      state.velocity[0] = 280.0f * std::cos(angle);
-      state.velocity[1] = 280.0f * std::sin(angle);
-      for (const auto x : {-48.0f, -8.0f, 6.0f})
-      {
-        state.origin[0] = x;
-        for (const auto yaw : {-0.8f, 0.0f, 0.8f})
-        {
-          const auto guide = measurePlayModeJumpGuide(
-            context.get(), world.jumpSurfaces, state, {1, yaw, -0.5f}, false, true);
-          REQUIRE(guide.edge);
-          // On this +X approach, JumpStats measures from the player's rear at x-16.
-          CHECK(
-            16.0f - guide.edge->position.x()
-            == Catch::Approx(approach.jumpoff).margin(0.01));
-          CHECK(guide.edge->position.y() == Catch::Approx(12).margin(0.01));
-          CHECK(guide.edge->direction.x() == Catch::Approx(1).margin(0.01));
-          CHECK(guide.edge->direction.y() == Catch::Approx(0).margin(0.01));
-          CHECK(guide.edge->active == (x > 16.0f - approach.jumpoff));
-          checkEdgeTransition(context.get(), state, *guide.edge);
-        }
-      }
     }
   }
   SECTION("rotated platforms follow their real edge rather than the world axes")
@@ -340,16 +254,12 @@ TEST_CASE("PlayModeJumpGuide")
     for (const auto yaw : {-0.3, 0.0, 0.3})
     {
       const auto look = vm::vec3f{rotate(1, yaw, 0) - rotate(0, 0, 0)};
-      const auto guide = measurePlayModeJumpGuide(
-        context.get(), world.jumpSurfaces, state, look, true, true);
+      const auto guide =
+        measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, look);
       REQUIRE(guide.span);
       CHECK(guide.span->distance == Catch::Approx(176).margin(0.02));
       const auto delta = guide.span->end - guide.span->start;
       CHECK(delta.x() == Catch::Approx(delta.y()).margin(0.01));
-      REQUIRE(guide.edge);
-      CHECK(guide.edge->direction.x() == Catch::Approx(std::sqrt(0.5)).margin(0.01));
-      CHECK(guide.edge->direction.y() == Catch::Approx(std::sqrt(0.5)).margin(0.01));
-      checkEdgeTransition(context.get(), state, *guide.edge);
     }
   }
   SECTION("a lower landing reports its own signed height")
@@ -358,12 +268,7 @@ TEST_CASE("PlayModeJumpGuide")
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
-      context.get(),
-      world.jumpSurfaces,
-      groundedAt(context.get(), -48),
-      {1, 0, 0},
-      true,
-      false);
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
     REQUIRE(guide.span);
     CHECK(guide.span->distance == Catch::Approx(168).margin(0.01));
     CHECK(guide.span->end.z() - guide.span->start.z() == Catch::Approx(-32).margin(0.05));
@@ -374,12 +279,7 @@ TEST_CASE("PlayModeJumpGuide")
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
-      context.get(),
-      world.jumpSurfaces,
-      groundedAt(context.get(), -48),
-      {1, 0, 0},
-      true,
-      false);
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
     CHECK_FALSE(guide.span);
   }
   SECTION("an elevated landing still measures the horizontal gap")
@@ -388,131 +288,17 @@ TEST_CASE("PlayModeJumpGuide")
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
-      context.get(),
-      world.jumpSurfaces,
-      groundedAt(context.get(), -48),
-      {1, 0, 0},
-      true,
-      false);
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -48), {1, 0, 0});
     REQUIRE(guide.span);
     CHECK(guide.span->distance == Catch::Approx(168).margin(0.01));
     CHECK(guide.span->end.z() - guide.span->start.z() == Catch::Approx(32).margin(0.05));
   }
-  SECTION("edge friction follows velocity rather than viewing direction")
-  {
-    const auto world = buildPlayModeWorld(map);
-    auto context = contextFor(world);
-    auto state = groundedAt(context.get(), -2);
-    state.velocity[0] = 250;
-    CHECK_FALSE(playModeEdgeFriction(context.get(), state));
-    state.origin[0] = 2;
-    CHECK(playModeEdgeFriction(context.get(), state));
-    const auto activeGuide = measurePlayModeJumpGuide(
-      context.get(), world.jumpSurfaces, state, {1, 0, 0}, true, true);
-    REQUIRE(activeGuide.span);
-    CHECK(activeGuide.span->distance == Catch::Approx(176).margin(0.01));
-    REQUIRE(activeGuide.edge);
-    CHECK(activeGuide.edge->active);
-    state.velocity[0] = -250;
-    CHECK_FALSE(playModeEdgeFriction(context.get(), state));
-    state.origin[0] = -8;
-    state.velocity[0] = 250;
-    const auto guide = measurePlayModeJumpGuide(
-      context.get(), world.jumpSurfaces, state, {-1, 0, 0}, true, true);
-    CHECK_FALSE(guide.span);
-    REQUIRE(guide.edge);
-    CHECK(guide.edge->direction.x() > 0.99f);
-  }
-  SECTION("shallow support and stance affect the boundary")
-  {
-    // At a 60-unit drop the standing hull's 34-unit downward probe still finds
-    // support; a ducked hull reaches only about 52 units below its feet.
-    addBox(map, {{0, -128, -80}, {176, 128, -60}});
-    const auto world = buildPlayModeWorld(map);
-    auto context = contextFor(world);
-    auto state = groundedAt(context.get(), -8);
-    state.velocity[0] = 250;
-    state.origin[0] = 2;
-    CHECK_FALSE(playModeEdgeFriction(context.get(), state));
-    state.flags |= SCS_FL_DUCKING;
-    state.origin[2] -= 18;
-    CHECK(playModeEdgeFriction(context.get(), state));
-  }
-  SECTION("standing support distinguishes a 69-unit and 70-unit drop")
-  {
-    auto drop = 69.0;
-    SECTION("69 units") {}
-    SECTION("70 units")
-    {
-      drop = 70.0;
-    }
-    addBox(map, {{0, -128, -100}, {176, 128, -drop}});
-    const auto world = buildPlayModeWorld(map);
-    auto context = contextFor(world);
-    auto state = groundedAt(context.get(), -8);
-    state.origin[0] = 2;
-    state.velocity[0] = 250;
-    CHECK(playModeEdgeFriction(context.get(), state) == (drop >= 70.0));
-  }
-  SECTION("the live probe agrees with the actual extra ground slowdown")
-  {
-    const auto world = buildPlayModeWorld(map);
-    auto context = contextFor(world);
-    auto state = groundedAt(context.get(), -8);
-    auto speed = [&](const float multiplier, const bool jump) {
-      auto config = scs_config{};
-      scs_config_defaults(&config);
-      config.movevars.edgefriction = multiplier;
-      auto player = ContextPtr{scs_init(&config)};
-      REQUIRE(scs_set_world(player.get(), world.world.get()) == SCS_OK);
-      scs_set_state(player.get(), &state);
-      auto command = scs_usercmd{};
-      command.msec = 10;
-      command.buttons = jump ? SCS_IN_JUMP : 0;
-      scs_step(player.get(), &command);
-      auto after = scs_player_state{};
-      scs_get_state(player.get(), &after);
-      if (jump)
-        CHECK(after.ground_entity == -1);
-      return std::hypot(after.velocity[0], after.velocity[1]);
-    };
-    struct Takeoff
-    {
-      float degrees;
-      float jumpoff;
-      bool extraFriction;
-    };
-    for (const auto takeoff :
-         {Takeoff{30, 10, true},
-          Takeoff{30, 12, true},
-          Takeoff{30, 14, false},
-          Takeoff{45, 10, true},
-          Takeoff{45, 12, false},
-          Takeoff{45, 14, false}})
-    {
-      CAPTURE(takeoff.degrees, takeoff.jumpoff);
-      const auto angle = takeoff.degrees * std::numbers::pi_v<float> / 180.0f;
-      state.origin[0] = 16.0f - takeoff.jumpoff;
-      state.velocity[0] = 280.0f * std::cos(angle);
-      state.velocity[1] = 280.0f * std::sin(angle);
-      CHECK(playModeEdgeFriction(context.get(), state) == takeoff.extraFriction);
-      CHECK(speed(1, false) == Catch::Approx(268.8f).margin(0.01));
-      CHECK(
-        speed(2, false)
-        == Catch::Approx(takeoff.extraFriction ? 257.6f : 268.8f).margin(0.01));
-      // A successful jump skips ground friction on that command. Any edge slowdown
-      // in the takeoff speed must have occurred on preceding grounded commands.
-      CHECK(speed(1, true) == Catch::Approx(280).margin(0.01));
-      CHECK(speed(2, true) == Catch::Approx(280).margin(0.01));
-    }
-  }
-  SECTION("measuring does not advance physics and airborne states have no guides")
+  SECTION("measuring does not advance physics and airborne states have no span")
   {
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     auto state = groundedAt(context.get(), -48);
-    measurePlayModeJumpGuide(
-      context.get(), world.jumpSurfaces, state, {1, 0, 0}, true, true);
+    measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     auto after = scs_player_state{};
     scs_get_state(context.get(), &after);
     CHECK(after.origin[0] == state.origin[0]);
@@ -520,31 +306,27 @@ TEST_CASE("PlayModeJumpGuide")
     CHECK(after.velocity[0] == state.velocity[0]);
     CHECK(after.ground_entity == state.ground_entity);
     state.ground_entity = -1;
-    const auto guide = measurePlayModeJumpGuide(
-      context.get(), world.jumpSurfaces, state, {1, 0, 0}, true, true);
+    const auto guide =
+      measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     CHECK_FALSE(guide.span);
-    CHECK_FALSE(guide.edge);
-    CHECK_FALSE(playModeEdgeFriction(context.get(), state));
   }
-  SECTION("a real jump hides both guides until landing")
+  SECTION("a real jump hides the span until landing")
   {
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     auto state = groundedAt(context.get(), -48);
-    const auto before = measurePlayModeJumpGuide(
-      context.get(), world.jumpSurfaces, state, {1, 0, 0}, true, true);
+    const auto before =
+      measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     REQUIRE(before.span);
-    REQUIRE(before.edge);
     auto command = scs_usercmd{};
     command.msec = 10;
     command.buttons = SCS_IN_JUMP;
     scs_step(context.get(), &command);
     scs_get_state(context.get(), &state);
     REQUIRE(state.ground_entity == -1);
-    const auto during = measurePlayModeJumpGuide(
-      context.get(), world.jumpSurfaces, state, {1, 0, 0}, true, true);
+    const auto during =
+      measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     CHECK_FALSE(during.span);
-    CHECK_FALSE(during.edge);
     command.buttons = 0;
     for (auto i = 0; i < 150 && state.ground_entity == -1; ++i)
     {
@@ -552,10 +334,9 @@ TEST_CASE("PlayModeJumpGuide")
       scs_get_state(context.get(), &state);
     }
     REQUIRE(state.ground_entity != -1);
-    const auto after = measurePlayModeJumpGuide(
-      context.get(), world.jumpSurfaces, state, {1, 0, 0}, true, true);
+    const auto after =
+      measurePlayModeJumpGuide(context.get(), world.jumpSurfaces, state, {1, 0, 0});
     CHECK(after.span.has_value());
-    CHECK(after.edge.has_value());
   }
   SECTION("non-colliding surfaces are excluded by the collision compiler")
   {
@@ -564,19 +345,13 @@ TEST_CASE("PlayModeJumpGuide")
     addBox(map, {{90, -128, -16}, {96, 128, 0}}, "!water");
     CHECK(buildPlayModeWorld(map).jumpSurfaces.size() == count);
   }
-  SECTION("span labels and the friction boundary render in the 3D framebuffer")
+  SECTION("span labels render in the 3D framebuffer")
   {
     const auto world = buildPlayModeWorld(map);
     auto context = contextFor(world);
     const auto guide = measurePlayModeJumpGuide(
-      context.get(),
-      world.jumpSurfaces,
-      groundedAt(context.get(), -64),
-      {1, 0, 0},
-      true,
-      true);
+      context.get(), world.jumpSurfaces, groundedAt(context.get(), -64), {1, 0, 0});
     REQUIRE(guide.span);
-    REQUIRE(guide.edge);
     auto app = AppControllerFixture{};
     auto view = JumpGuideView{app.appController()};
     view.resize(768, 480);

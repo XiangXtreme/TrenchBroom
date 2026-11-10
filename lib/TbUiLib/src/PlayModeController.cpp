@@ -701,15 +701,12 @@ void PlayModeController::update()
   syncCamera(m_timeline.tickFraction(now));
 
   const auto showSpan = pref(Preferences::PlayModeShowJumpSpan);
-  const auto showEdge = pref(Preferences::PlayModeShowEdgeFriction)
-                        && pref(Preferences::PlayModeEdgeFriction) > 1.0f
-                        && pref(Preferences::PlayModeFriction) > 0.0f;
   auto state = scs_player_state{};
   scs_get_state(m_context.get(), &state);
   if (
-    (!showSpan && !showEdge) || state.ground_entity == -1
-    || !(state.flags & SCS_FL_ONGROUND) || state.movetype != SCS_MOVETYPE_WALK
-    || state.waterlevel >= 2 || state.teleport_time != 0.0f)
+    !showSpan || state.ground_entity == -1 || !(state.flags & SCS_FL_ONGROUND)
+    || state.movetype != SCS_MOVETYPE_WALK || state.waterlevel >= 2
+    || state.teleport_time != 0.0f)
   {
     m_jumpGuide = {};
   }
@@ -719,9 +716,7 @@ void PlayModeController::update()
       m_context.get(),
       m_world.jumpSurfaces,
       state,
-      forwardFromAngles({0, m_timeline.latestViewAngles().y(), 0}),
-      showSpan,
-      showEdge && state.friction > 0.0f);
+      forwardFromAngles({0, m_timeline.latestViewAngles().y(), 0}));
   }
 }
 

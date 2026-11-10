@@ -38,33 +38,22 @@ TEST_CASE("KreedzBroomPreferencePane")
 {
   auto fixture = AppControllerFixture{};
   setPref(Preferences::PlayModeShowJumpSpan, false);
-  setPref(Preferences::PlayModeShowEdgeFriction, false);
   auto pane = KreedzBroomPreferencePane{};
   auto& base = static_cast<PreferencePane&>(pane);
   base.updateControls();
   auto* span = static_cast<QCheckBox*>(nullptr);
-  auto* edge = static_cast<QCheckBox*>(nullptr);
   for (auto* box : pane.findChildren<QCheckBox*>())
   {
     if (box->text() == "Show platform span")
       span = box;
-    if (box->text() == "Show edge friction boundary")
-      edge = box;
   }
   REQUIRE(span);
-  REQUIRE(edge);
   CHECK_FALSE(span->isChecked());
-  CHECK_FALSE(edge->isChecked());
   span->click();
   CHECK(pref(Preferences::PlayModeShowJumpSpan));
-  CHECK_FALSE(pref(Preferences::PlayModeShowEdgeFriction));
-  edge->click();
-  CHECK(pref(Preferences::PlayModeShowEdgeFriction));
   base.resetToDefaults();
   CHECK_FALSE(pref(Preferences::PlayModeShowJumpSpan));
-  CHECK_FALSE(pref(Preferences::PlayModeShowEdgeFriction));
   CHECK_FALSE(span->isChecked());
-  CHECK_FALSE(edge->isChecked());
 }
 
 TEST_CASE("playModeKeyName")

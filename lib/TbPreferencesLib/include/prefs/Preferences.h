@@ -414,8 +414,6 @@ inline auto PlayModeRestoreCheckpointView =
 inline auto PlayModeShowHud = Preference<bool>{"Controls/Play mode/Show HUD", true};
 inline auto PlayModeShowJumpSpan =
   Preference<bool>{"Controls/Play mode/Show jump span", false};
-inline auto PlayModeShowEdgeFriction =
-  Preference<bool>{"Controls/Play mode/Show edge friction", false};
 inline auto PlayModeShowFallDamage =
   Preference<bool>{"Controls/Play mode/Show fall damage", true};
 // Like the game's "volume" cvar; 0 mutes the footsteps and other movement sounds.
