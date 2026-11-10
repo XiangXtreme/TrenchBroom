@@ -810,9 +810,7 @@ void PlayModeController::render(
     service.setLineWidth(2.0f);
     service.setForegroundColor(RgbF{0.2f, 0.8f, 1.0f});
     service.renderLine(
-      m_camera.position() + m_camera.direction() * 8.0f + m_camera.right() * 6.0f
-        - m_camera.up() * 6.0f,
-      *anchor);
+      m_camera.position() + m_camera.direction() * 8.0f - m_camera.up() * 6.0f, *anchor);
   }
   auto travelState = scs_player_state{};
   scs_get_state(m_context.get(), &travelState);
