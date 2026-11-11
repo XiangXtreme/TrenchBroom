@@ -851,13 +851,13 @@ void PlayModeController::render(
           case PlayModeJumpStats::Technique::DuckBhop:
             return "duckbhop";
           case PlayModeJumpStats::Technique::CountJump:
-            return "cj";
+            return "dd";
           case PlayModeJumpStats::Technique::StandupCountJump:
-            return "scj";
+            return "dd";
           case PlayModeJumpStats::Technique::DoubleCountJump:
-            return "dcj";
+            return "dd";
           case PlayModeJumpStats::Technique::MultiCountJump:
-            return "mcj";
+            return "dd";
           default:
             return PlayModeJumpStats::name(takeoff->technique);
           }
