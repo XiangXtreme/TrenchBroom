@@ -46,6 +46,31 @@ TEST_CASE("CompilationPlan")
     CHECK(plan.diagnostic->field == CompilationField::Parameters);
     CHECK(plan.diagnostic->message.contains("UNKNOWN_TOOL_ARGUMENT"));
   }
+  SECTION("project-only variables explain how to correct a standalone map profile")
+  {
+    profile.tasks = {mdl::CompilationRunTool{
+      true,
+      "hltools",
+      "compile --project \"${PROJECT_PATH}\" --map \"${MAP_NAME}\"",
+      true}};
+    const auto plan = buildCompilationPlan(profile, map, input);
+    REQUIRE(plan.diagnostic);
+    CHECK(plan.diagnostic->field == CompilationField::Parameters);
+    CHECK(plan.diagnostic->summary.contains("Open the map from a project"));
+    CHECK(plan.diagnostic->message.contains("PROJECT_PATH"));
+    const auto project = ProjectCompileInfo{input.parent_path() / "game.tbproj", "room"};
+    CHECK_FALSE(buildCompilationPlan(profile, map, input, project).diagnostic);
+  }
+  SECTION("project variable help does not replace unrelated expression errors")
+  {
+    for (const auto& spec : {"${'literal ${PROJECT_PATH}'} ${UNKNOWN}", "${PROJECT_PATH"})
+    {
+      profile.tasks = {mdl::CompilationRunTool{true, "hltools", spec, true}};
+      const auto plan = buildCompilationPlan(profile, map, input);
+      REQUIRE(plan.diagnostic);
+      CHECK_FALSE(plan.diagnostic->summary.contains("Open the map from a project"));
+    }
+  }
   SECTION("disabled tasks do not participate in validation")
   {
     profile.tasks.insert(

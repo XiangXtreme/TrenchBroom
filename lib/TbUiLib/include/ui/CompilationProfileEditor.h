@@ -25,6 +25,7 @@
 
 class QAbstractButton;
 class QLineEdit;
+class QLabel;
 class QStackedWidget;
 
 namespace tb
@@ -52,6 +53,8 @@ private:
   QStackedWidget* m_stackedWidget{nullptr};
   QLineEdit* m_nameTxt{nullptr};
   MultiCompletionLineEdit* m_workDirTxt{nullptr};
+  QLabel* m_diagnosticLabel{nullptr};
+  QLabel* m_tasksDiagnosticLabel{nullptr};
   CompilationTaskListBox* m_taskList{nullptr};
   QAbstractButton* m_addTaskButton{nullptr};
   QAbstractButton* m_removeTaskButton{nullptr};
@@ -83,6 +86,7 @@ public:
   void setProfile(mdl::CompilationProfile* profile);
   void refreshTaskEditors();
   void focusDiagnostic(const CompilationDiagnostic& diagnostic);
+  void setDiagnostic(const std::optional<CompilationDiagnostic>& diagnostic);
 
 private:
   void refresh();

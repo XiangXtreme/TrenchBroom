@@ -178,6 +178,12 @@ void CompilationProfileManager::focusDiagnostic(const CompilationDiagnostic& dia
   m_profileEditor->focusDiagnostic(diagnostic);
 }
 
+void CompilationProfileManager::setDiagnostic(
+  const std::optional<CompilationDiagnostic>& diagnostic)
+{
+  m_profileEditor->setDiagnostic(diagnostic);
+}
+
 void CompilationProfileManager::addProfile()
 {
   m_config.profiles.push_back(mdl::CompilationProfile{"unnamed", "${MAP_DIR_PATH}", {}});

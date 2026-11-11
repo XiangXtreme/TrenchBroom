@@ -76,6 +76,7 @@ public:
   /** Add a complete built-in GoldSrc compile profile without executable paths. */
   void addHltoolsProfile();
   void focusDiagnostic(const CompilationDiagnostic& diagnostic);
+  void setDiagnostic(const std::optional<CompilationDiagnostic>& diagnostic);
 
 private:
   void updateGui();

@@ -112,6 +112,7 @@ protected:
    * labels changed.)
    */
   void updateItems();
+  void updateItemSizes();
 
   const ControlListBoxItemRenderer* renderer(int i) const;
   ControlListBoxItemRenderer* renderer(int i);

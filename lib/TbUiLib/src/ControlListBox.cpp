@@ -32,6 +32,8 @@
 #include "kd/optional_utils.h"
 #include "kd/range_utils.h"
 
+#include <algorithm>
+
 namespace tb::ui
 {
 // ControlListBoxItemRenderer
@@ -307,6 +309,19 @@ void ControlListBox::updateItems()
   for (int i = 0; i < m_listWidget->count(); ++i)
   {
     renderer(i)->updateItem();
+  }
+}
+
+void ControlListBox::updateItemSizes()
+{
+  for (int i = 0; i < count(); ++i)
+  {
+    auto* item = renderer(i);
+    auto size = item->minimumSizeHint();
+    if (item->hasHeightForWidth())
+      size.setHeight(
+        std::max(size.height(), item->heightForWidth(m_listWidget->viewport()->width())));
+    m_listWidget->item(i)->setSizeHint(size);
   }
 }
 

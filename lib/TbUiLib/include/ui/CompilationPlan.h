@@ -49,6 +49,7 @@ struct CompilationDiagnostic
   std::optional<size_t> taskIndex;
   CompilationField field;
   QString message;
+  QString summary = {};
 };
 
 /** A side-effect-free preview, also used to validate the actual frozen input. */

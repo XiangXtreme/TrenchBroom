@@ -72,6 +72,20 @@ CompilationPlan buildCompilationPlan(
     const auto result = el::interpolate(variables, spec);
     if (result.is_error())
     {
+      auto summary = tr("Cannot resolve this field. Check its variables and expression.");
+      if (!project)
+      {
+        // Explain missing project context only if supplying it resolves the actual
+        // expression. Literal text and fallback expressions are not variable uses.
+        auto projectVariables = variables;
+        projectVariables.set(
+          CompilationVariableNames::PROJECT_PATH, el::Value{"project.tbproj"});
+        projectVariables.set(CompilationVariableNames::MAP_NAME, el::Value{"map"});
+        if (el::interpolate(projectVariables, spec).is_success())
+          summary = tr(
+            "This field uses project variables. Open the map from a project, or use a "
+            "map compilation profile.");
+      }
       plan.diagnostic = CompilationDiagnostic{
         index,
         field,
@@ -79,7 +93,8 @@ CompilationPlan buildCompilationPlan(
           .arg(
             label,
             QString::fromStdString(std::get<Error>(result.error()).msg),
-            QString::fromStdString(spec))};
+            QString::fromStdString(spec)),
+        std::move(summary)};
       return std::nullopt;
     }
     if (required && QString::fromStdString(result.value()).trimmed().isEmpty())

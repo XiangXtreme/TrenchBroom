@@ -80,7 +80,7 @@ CompilationDialog::CompilationDialog(
   createGui();
   setMinimumSize(760, 580);
   resize(1000, 760);
-  updateTarget();
+  updatePlan();
   updateCompileButtons();
 }
 
@@ -136,36 +136,6 @@ void CompilationDialog::createGui()
 
   m_profileManager =
     new CompilationProfileManager{m_appController, m_document, compilationConfig};
-
-  auto* summary = new QWidget{};
-  auto* summaryLayout = new QVBoxLayout{summary};
-  summaryLayout->setContentsMargins(16, 12, 16, 12);
-  summaryLayout->setSpacing(8);
-  m_targetLabel = new QLabel{};
-  m_targetLabel->setObjectName("CompilationTarget");
-  m_targetLabel->setTextFormat(Qt::PlainText);
-  m_targetLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  m_targetLabel->setWordWrap(true);
-  m_targetLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-  summaryLayout->addWidget(m_targetLabel);
-
-  auto* preflightLayout = new QHBoxLayout{};
-  preflightLayout->setSpacing(12);
-  m_preflightLabel = new QLabel{};
-  m_preflightLabel->setObjectName("CompilationPreflight");
-  m_preflightLabel->setTextFormat(Qt::PlainText);
-  m_preflightLabel->setWordWrap(true);
-  m_preflightLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-  m_locateButton = new QPushButton{tr("Locate setting")};
-  m_locateButton->setObjectName("CompilationLocateSetting");
-  m_locateButton->setAutoDefault(false);
-  preflightLayout->addWidget(m_preflightLabel, 1);
-  preflightLayout->addWidget(m_locateButton, 0, Qt::AlignTop);
-  summaryLayout->addLayout(preflightLayout);
-  connect(m_locateButton, &QPushButton::clicked, this, [this] {
-    if (m_plan.diagnostic)
-      m_profileManager->focusDiagnostic(*m_plan.diagnostic);
-  });
 
   auto* outputPanel = new QWidget{};
   auto* outputLayout = new QVBoxLayout{outputPanel};
@@ -238,6 +208,13 @@ void CompilationDialog::createGui()
 
   m_launchButton = new QPushButton{tr("Launch...")};
   m_launchButton->setAutoDefault(false);
+  m_locateButton = new QPushButton{tr("Locate setting")};
+  m_locateButton->setObjectName("CompilationLocateSetting");
+  m_locateButton->setAutoDefault(false);
+  connect(m_locateButton, &QPushButton::clicked, this, [this] {
+    if (m_plan.diagnostic)
+      m_profileManager->focusDiagnostic(*m_plan.diagnostic);
+  });
   m_testCompileButton = new QPushButton{tr("Simulate")};
   m_testCompileButton->setObjectName("CompilationSimulate");
   m_testCompileButton->setToolTip(
@@ -250,6 +227,7 @@ void CompilationDialog::createGui()
   buttonLayout->setContentsMargins(0, 0, 0, 0);
   buttonLayout->addWidget(m_launchButton);
   buttonLayout->addStretch();
+  buttonLayout->addWidget(m_locateButton);
   // Keep action positions stable when the running state swaps Compile for Cancel.
   for (auto* button :
        {m_testCompileButton, m_compileButton, m_stopCompileButton, m_closeButton})
@@ -261,7 +239,6 @@ void CompilationDialog::createGui()
   auto* dialogLayout = new QVBoxLayout{};
   dialogLayout->setContentsMargins(0, 0, 0, 0);
   dialogLayout->setSpacing(0);
-  dialogLayout->addWidget(summary);
   dialogLayout->addWidget(splitter, 1);
   dialogLayout->addLayout(wrapDialogButtonBox(buttonLayout));
   insertTitleBarSeparator(dialogLayout);
@@ -355,17 +332,16 @@ void CompilationDialog::updateCompileButtons()
   m_stopCompileButton->setVisible(m_run.running());
   m_stopCompileButton->setEnabled(m_run.running());
   m_profileManager->setEnabled(!m_run.running());
-  m_locateButton->setEnabled(!m_run.running());
+  m_locateButton->setVisible(!m_run.running() && m_plan.diagnostic.has_value());
 }
 
-void CompilationDialog::updateTarget()
+void CompilationDialog::updatePlan()
 {
   const auto* profile = m_profileManager->selectedProfile();
   if (!profile)
   {
-    m_targetLabel->setText(tr("Select a compilation profile"));
-    m_preflightLabel->clear();
-    m_locateButton->hide();
+    m_sourceIdentity.clear();
+    m_profileManager->setDiagnostic(std::nullopt);
     m_plan = {};
     return;
   }
@@ -397,39 +373,15 @@ void CompilationDialog::updateTarget()
     }
   }
   m_plan = buildCompilationPlan(*profile, map, mapPath, projectInfo, !frozen);
-  auto target = (projectInfo ? tr("Project: %1") : tr("Map: %1")).arg(source);
-  const auto temporaryOutput =
-    frozen && std::ranges::any_of(profile->tasks, [](const auto& task) {
-      if (const auto* compiler = std::get_if<mdl::CompilationHltools>(&task))
-        return compiler->enabled && (compiler->targetSpec.find("MAP_DIR_PATH") != std::string::npos || compiler->targetSpec.find("WORK_DIR_PATH") != std::string::npos);
-      return false;
-    });
-  if (temporaryOutput)
-    target += "\n" + tr("BSP path will be resolved after preparing the snapshot");
-  else if (!m_plan.outputs.empty())
-    target += "\n" + tr("BSP: %1").arg(pathAsQString(m_plan.outputs.back()));
-  else
-    target += "\n" + tr("Output is defined by the profile's tasks");
-  if (frozen)
-    target += "\n" + tr("A frozen project snapshot will be prepared for this run");
-  m_targetLabel->setText(target);
-  m_targetLabel->setToolTip(target);
-  m_preflightLabel->setText(
-    m_plan.diagnostic ? m_plan.diagnostic->message
-                      : tr("Variables checked · enabled tasks: %1")
-                          .arg(qulonglong(m_plan.enabledTaskCount)));
-  if (m_plan.diagnostic)
-    setErrorStyle(m_preflightLabel);
-  else
-    setInfoStyle(m_preflightLabel);
-  m_locateButton->setVisible(m_plan.diagnostic.has_value());
+  m_sourceIdentity = (projectInfo ? tr("Project: %1") : tr("Map: %1")).arg(source);
+  m_profileManager->setDiagnostic(m_plan.diagnostic);
 }
 
 void CompilationDialog::startCompilation(const bool test)
 {
   if (m_run.running())
     return;
-  updateTarget();
+  updatePlan();
   const auto* profile = m_profileManager->selectedProfile();
   if (!profile)
     return;
@@ -449,7 +401,7 @@ void CompilationDialog::startCompilation(const bool test)
   m_runIdentity = tr("%1 · %2 · %3")
                     .arg(
                       m_runProfileName,
-                      m_targetLabel->text().section('\n', 0, 0),
+                      m_sourceIdentity,
                       QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss"));
   m_logIdentityLabel->setText(
     m_runIdentity + (test ? " · " + tr("Simulation") : QString{}));
@@ -463,9 +415,7 @@ void CompilationDialog::startCompilation(const bool test)
     if (m_run.diagnostic() && m_run.diagnostic()->message.toStdString() == e.msg)
     {
       m_plan.diagnostic = m_run.diagnostic();
-      m_preflightLabel->setText(m_plan.diagnostic->message);
-      setErrorStyle(m_preflightLabel);
-      m_locateButton->show();
+      m_profileManager->setDiagnostic(m_plan.diagnostic);
     }
     updateRunStatus();
     updateCompileButtons();
@@ -709,13 +659,13 @@ void CompilationDialog::compilationEnded()
 
 void CompilationDialog::selectedProfileChanged()
 {
-  updateTarget();
+  updatePlan();
   updateCompileButtons();
 }
 
 void CompilationDialog::profileChanged()
 {
-  updateTarget();
+  updatePlan();
   updateCompileButtons();
 }
 

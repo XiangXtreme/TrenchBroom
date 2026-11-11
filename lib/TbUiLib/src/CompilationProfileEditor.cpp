@@ -21,6 +21,7 @@
 
 #include <QCompleter>
 #include <QFormLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QStackedWidget>
@@ -94,6 +95,14 @@ Variables are allowed.)");
   auto* upperLayout = createPanelForm(nullptr, PanelInsets::Content);
   upperLayout->addRow(tr("Name"), m_nameTxt);
   upperLayout->addRow(tr("Working Directory"), m_workDirTxt);
+  m_diagnosticLabel = new QLabel{};
+  m_diagnosticLabel->setObjectName("CompilationProfileDiagnostic");
+  m_diagnosticLabel->setTextFormat(Qt::PlainText);
+  m_diagnosticLabel->setWordWrap(true);
+  m_diagnosticLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+  setErrorStyle(m_diagnosticLabel);
+  upperLayout->addRow(QString{}, m_diagnosticLabel);
+  upperLayout->setRowVisible(m_diagnosticLabel, false);
   upperPanel->setLayout(upperLayout);
 
   m_taskList = new CompilationTaskListBox{m_document, containerPanel};
@@ -117,6 +126,14 @@ Variables are allowed.)");
   layout->addWidget(upperPanel);
   layout->addWidget(new BorderLine{BorderLine::Direction::Horizontal});
   layout->addWidget(m_taskList, 1);
+  m_tasksDiagnosticLabel = new QLabel{};
+  m_tasksDiagnosticLabel->setObjectName("CompilationTasksDiagnostic");
+  m_tasksDiagnosticLabel->setTextFormat(Qt::PlainText);
+  m_tasksDiagnosticLabel->setWordWrap(true);
+  m_tasksDiagnosticLabel->setContentsMargins(12, 4, 12, 4);
+  setErrorStyle(m_tasksDiagnosticLabel);
+  m_tasksDiagnosticLabel->hide();
+  layout->addWidget(m_tasksDiagnosticLabel);
   layout->addWidget(new BorderLine{BorderLine::Direction::Horizontal});
   layout->addLayout(buttonLayout);
 
@@ -365,6 +382,24 @@ void CompilationProfileEditor::focusDiagnostic(const CompilationDiagnostic& diag
     m_taskList->focusField(*diagnostic.taskIndex, diagnostic.field);
   else
     m_taskList->focusField(0, diagnostic.field);
+}
+
+void CompilationProfileEditor::setDiagnostic(
+  const std::optional<CompilationDiagnostic>& diagnostic)
+{
+  const auto profileError =
+    diagnostic && diagnostic->field == CompilationField::WorkDirectory;
+  auto* form = qobject_cast<QFormLayout*>(m_diagnosticLabel->parentWidget()->layout());
+  form->setRowVisible(m_diagnosticLabel, profileError);
+  m_diagnosticLabel->setText(
+    profileError
+      ? (diagnostic->summary.isEmpty() ? diagnostic->message : diagnostic->summary)
+      : QString{});
+  m_diagnosticLabel->setToolTip(profileError ? diagnostic->message : QString{});
+  const auto tasksError = diagnostic && !diagnostic->taskIndex && !profileError;
+  m_tasksDiagnosticLabel->setText(tasksError ? diagnostic->message : QString{});
+  m_tasksDiagnosticLabel->setVisible(tasksError);
+  m_taskList->setDiagnostic(diagnostic);
 }
 
 void CompilationProfileEditor::refresh()

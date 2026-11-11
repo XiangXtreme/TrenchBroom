@@ -1029,14 +1029,18 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
     const auto* output = targetWidget.findChild<QLineEdit*>("HltoolsOutput");
     const auto* quality = targetWidget.findChild<QComboBox*>("HltoolsQuality");
     const auto* gpu = targetWidget.findChild<QCheckBox*>("HltoolsGpu");
-    const auto* diagnostic = targetWidget.findChild<QLabel*>("CompilationPreflight");
+    const auto* diagnostic = targetWidget.findChild<QLabel*>("CompilationTaskDiagnostic");
     const auto* compile = targetWidget.findChild<QPushButton*>("CompilationCompile");
     const auto* status = targetWidget.findChild<QLabel*>("CompilationRunStatus");
-    const auto* locate = targetWidget.findChild<QPushButton*>("CompilationLocateSetting");
-    const auto stateReady = diagnostic && compile && status && locate &&
-      (targetName == "compilation-error"
-        ? diagnostic->text().contains("MISSING_COMPILER_OPTION") && !compile->isEnabled() && locate->isVisible()
-        : compile->isEnabled() && (targetName != "compilation-simulated" || status->text().contains("Simulation completed")));
+    const auto stateReady = compile && status
+      && !targetWidget.findChild<QLabel*>("CompilationTarget")
+      && (targetName == "compilation-error"
+        ? diagnostic && diagnostic->isVisible()
+          && diagnostic->toolTip().contains("MISSING_COMPILER_OPTION")
+          && !compile->isEnabled()
+        : compile->isEnabled() && (!diagnostic || !diagnostic->isVisible())
+          && (targetName != "compilation-simulated"
+              || status->text().contains("Simulation completed")));
     const auto ready = stateReady && output && quality && gpu && output->isVisible()
                        && quality->isVisible() && gpu->isVisible()
                        && !output->text().isEmpty() && quality->currentData() == "normal"

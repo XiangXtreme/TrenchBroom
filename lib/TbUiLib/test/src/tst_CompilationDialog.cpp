@@ -142,7 +142,7 @@ TEST_CASE("CompilationDialog")
     REQUIRE(profileManager->selectedProfile()->name == profiles[0].name);
   }
 
-  SECTION("variable diagnostics locate the input and recover when it is fixed")
+  SECTION("inline variable diagnostics locate the input and recover when it is fixed")
   {
     auto fixture = MapDocumentFixture{};
     auto& document = fixture.create(fixtureConfigWithCompilationProfiles(
@@ -150,23 +150,45 @@ TEST_CASE("CompilationDialog")
         "",
         {mdl::CompilationRunTool{true, "compiler", "${MISSING_ARGUMENT}", true}}}}));
     const auto camera = gl::PerspectiveCamera{};
-    auto dialog = CompilationDialog{appController, document, camera};
+    auto dialog = CompilationDialog{appController, document, camera, nullptr, false};
     auto* compile = dialog.findChild<QPushButton*>("CompilationCompile");
-    auto* diagnostic = dialog.findChild<QLabel*>("CompilationPreflight");
-    auto* locate = dialog.findChild<QPushButton*>("CompilationLocateSetting");
+    auto* diagnostic = dialog.findChild<QLabel*>("CompilationTaskDiagnostic");
     REQUIRE(compile);
     REQUIRE(diagnostic);
-    REQUIRE(locate);
+    CHECK_FALSE(dialog.findChild<QLabel*>("CompilationTarget"));
+    CHECK_FALSE(dialog.findChild<QLabel*>("CompilationPreflight"));
     CHECK_FALSE(compile->isEnabled());
-    CHECK(diagnostic->text().contains("MISSING_ARGUMENT"));
+    CHECK(diagnostic->toolTip().contains("MISSING_ARGUMENT"));
+    CHECK_FALSE(diagnostic->text().contains("Undefined"));
+    auto* locate = dialog.findChild<QPushButton*>("CompilationLocateSetting");
+    REQUIRE(locate);
+    CHECK_FALSE(locate->isHidden());
     locate->click();
     auto* field = qobject_cast<QLineEdit*>(dialog.focusWidget());
     REQUIRE(field);
     CHECK(field->text() == "${MISSING_ARGUMENT}");
+    CHECK(diagnostic->parentWidget() == field->parentWidget());
     field->setText("-threads 2");
     QApplication::processEvents();
     CHECK(compile->isEnabled());
-    CHECK_FALSE(diagnostic->text().contains("MISSING_ARGUMENT"));
+    CHECK(diagnostic->isHidden());
+    CHECK(locate->isHidden());
+
+    auto* work = dialog.findChild<QLineEdit*>("CompilationWorkDirectory");
+    REQUIRE(work);
+    work->setText("${MISSING_DIRECTORY}");
+    QApplication::processEvents();
+    auto* workError = dialog.findChild<QLabel*>("CompilationProfileDiagnostic");
+    REQUIRE(workError);
+    CHECK_FALSE(workError->isHidden());
+    CHECK(diagnostic->isHidden());
+    CHECK_FALSE(compile->isEnabled());
+    dialog.runSelectedProfile();
+    CHECK(dialog.focusWidget() == work);
+    work->clear();
+    QApplication::processEvents();
+    CHECK(workError->isHidden());
+    CHECK(compile->isEnabled());
   }
 
   SECTION("finished simulation keeps its identity when another profile is selected")

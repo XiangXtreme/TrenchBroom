@@ -68,12 +68,11 @@ private:
   QPushButton* m_stopCompileButton = nullptr;
   QPushButton* m_closeButton = nullptr;
   QLabel* m_currentRunLabel = nullptr;
-  QLabel* m_targetLabel = nullptr;
-  QLabel* m_preflightLabel = nullptr;
   QLabel* m_logIdentityLabel = nullptr;
-  QPushButton* m_locateButton = nullptr;
   QPushButton* m_openOutputButton = nullptr;
+  QPushButton* m_locateButton = nullptr;
   CompilationPlan m_plan;
+  QString m_sourceIdentity;
   QString m_runProfileName;
   QString m_runIdentity;
   QString m_currentTaskName;
@@ -113,7 +112,7 @@ private:
   void keyPressEvent(QKeyEvent* event) override;
 
   void updateCompileButtons();
-  void updateTarget();
+  void updatePlan();
   void updateRunStatus();
   void saveLog();
   void startCompilation(bool test);

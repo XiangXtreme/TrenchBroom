@@ -26,6 +26,7 @@
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -42,6 +43,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MultiCompletionLineEdit.h"
 #include "ui/PanelLayout.h"
+#include "ui/QStyleUtils.h"
 #include "ui/TitleBar.h"
 #include "ui/TitledPanel.h"
 #include "ui/VariableStoreModel.h"
@@ -112,6 +114,49 @@ void CompilationTaskEditorBase::addMainLayout(QLayout* layout)
 void CompilationTaskEditorBase::updateItem()
 {
   std::visit([&](const auto& t) { m_enabledCheckbox->setChecked(t.enabled); }, m_task);
+}
+
+void CompilationTaskEditorBase::setDiagnostic(
+  const std::optional<CompilationDiagnostic>& diagnostic)
+{
+  auto* form = qobject_cast<QFormLayout*>(m_taskLayout->itemAt(0)->layout());
+  if (!diagnostic)
+  {
+    if (m_diagnosticLabel)
+      form->setRowVisible(m_diagnosticLabel, false);
+    return;
+  }
+  if (m_diagnosticLabel && m_diagnosticField != diagnostic->field)
+  {
+    form->removeRow(m_diagnosticLabel);
+    m_diagnosticLabel = nullptr;
+  }
+  if (!m_diagnosticLabel)
+  {
+    auto row = form->rowCount();
+    for (auto* input : findChildren<QWidget*>())
+      if (
+        input->property("compilationField").isValid()
+        && input->property("compilationField").toInt() == int(diagnostic->field))
+        for (int i = 0; i < form->rowCount(); ++i)
+          if (
+            auto* item = form->itemAt(i, QFormLayout::FieldRole);
+            item
+            && (item->widget() == input || (item->layout() && item->layout()->indexOf(input) >= 0)))
+            row = i + 1;
+    m_diagnosticLabel = new QLabel{};
+    m_diagnosticLabel->setObjectName("CompilationTaskDiagnostic");
+    m_diagnosticLabel->setTextFormat(Qt::PlainText);
+    m_diagnosticLabel->setWordWrap(true);
+    m_diagnosticLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    setErrorStyle(m_diagnosticLabel);
+    form->insertRow(row, QString{}, m_diagnosticLabel);
+    m_diagnosticField = diagnostic->field;
+  }
+  m_diagnosticLabel->setText(
+    diagnostic->summary.isEmpty() ? diagnostic->message : diagnostic->summary);
+  m_diagnosticLabel->setToolTip(diagnostic->message);
+  form->setRowVisible(m_diagnosticLabel, true);
 }
 
 void CompilationTaskEditorBase::updateCompleter(QCompleter* completer)
@@ -856,7 +901,7 @@ ControlListBoxItemRenderer* CompilationTaskListBox::createItemRenderer(
     });
 
   // Connect after the editor's model updates. Queue notification so refreshing the
-  // summary cannot observe half-edited controls during renderer construction.
+  // validation cannot observe half-edited controls during renderer construction.
   for (auto* input : renderer->findChildren<QLineEdit*>())
     connect(
       input,
@@ -898,6 +943,23 @@ void CompilationTaskListBox::focusField(const size_t index, const CompilationFie
       return;
     }
   item->setFocus(Qt::OtherFocusReason);
+}
+
+void CompilationTaskListBox::setDiagnostic(
+  const std::optional<CompilationDiagnostic>& diagnostic)
+{
+  for (int i = 0; i < count(); ++i)
+    if (auto* editor = qobject_cast<CompilationTaskEditorBase*>(renderer(i)))
+      editor->setDiagnostic(
+        diagnostic && diagnostic->taskIndex == size_t(i) ? diagnostic : std::nullopt);
+  // Inline feedback changes a renderer's height; let the list refresh its row sizes.
+  updateItemSizes();
+}
+
+void CompilationTaskListBox::resizeEvent(QResizeEvent* event)
+{
+  ControlListBox::resizeEvent(event);
+  updateItemSizes();
 }
 
 } // namespace tb::ui

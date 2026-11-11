@@ -31,6 +31,7 @@ class QComboBox;
 class QHBoxLayout;
 class QLayout;
 class QLineEdit;
+class QLabel;
 class QWidget;
 
 namespace tb
@@ -56,6 +57,8 @@ protected:
   mdl::CompilationTask& m_task;
   QCheckBox* m_enabledCheckbox = nullptr;
   QHBoxLayout* m_taskLayout = nullptr;
+  QLabel* m_diagnosticLabel = nullptr;
+  std::optional<CompilationField> m_diagnosticField;
 
   std::vector<QCompleter*> m_completers;
 
@@ -72,6 +75,7 @@ protected:
 
 public:
   void updateItem() override;
+  void setDiagnostic(const std::optional<CompilationDiagnostic>& diagnostic);
 
 private:
   void updateCompleter(QCompleter* completer);
@@ -254,9 +258,11 @@ public:
   void reloadTasks();
   void updateTasks();
   void focusField(size_t index, CompilationField field);
+  void setDiagnostic(const std::optional<CompilationDiagnostic>& diagnostic);
 
 private:
   size_t itemCount() const override;
+  void resizeEvent(QResizeEvent* event) override;
   ControlListBoxItemRenderer* createItemRenderer(QWidget* parent, size_t index) override;
 signals:
   void taskChanged();

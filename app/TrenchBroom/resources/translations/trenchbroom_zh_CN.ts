@@ -10355,6 +10355,14 @@ Expression: %3</source>
             <source>Enable at least one task</source>
             <translation>请至少启用一项任务</translation>
         </message>
+        <message>
+            <source>This field uses project variables. Open the map from a project, or use a map compilation profile.</source>
+            <translation>此处使用了工程变量。请从工程中打开地图，或选择普通地图编译配置。</translation>
+        </message>
+        <message>
+            <source>Cannot resolve this field. Check its variables and expression.</source>
+            <translation>无法解析此项，请检查变量名称和表达式。</translation>
+        </message>
     </context>
     <context>
         <name>tb::ui::CompilationTaskRunner</name>
