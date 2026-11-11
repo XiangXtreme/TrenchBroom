@@ -49,7 +49,10 @@ def main():
              "src/collision/test.cpp", "src/collision/README.md",
              "src/collision/verify_cli_parity.py", "src/preview/CMakeLists.txt",
              "src/preview/main.cpp", "src/preview/README.md",
-             "src/preview/verify_cli_parity.py", "LICENSE"]
+             "src/preview/verify_cli_parity.py", "src/rad/gpu/gpu.cpp",
+             "src/rad/gpu/shaders/trace_bsp.comp", "src/rad/gpu/shaders/gather.comp",
+             "src/rad/gpu/shaders/formfactor.comp", "src/rad/gpu/shaders/trace_lib.glsl",
+             "cmake/embed_binary.cmake", "LICENSE"]
     files = {}
     while todo:
         name = todo.pop()
@@ -66,6 +69,9 @@ def main():
             include = include.decode("utf-8")
             if include == "sqlite3.h":
                 # Both parents provide SQLite through an existing CMake target.
+                continue
+            if include.endswith("_spirv.h"):
+                # CMake generates these embedded shader headers into the build tree.
                 continue
             candidate = path.parent / include
             if not candidate.exists():

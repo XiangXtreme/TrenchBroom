@@ -62,6 +62,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker", required=True, type=Path)
     parser.add_argument("--cli", type=Path)
+    parser.add_argument("--gpu", action="store_true", help="request GPU lighting")
+    parser.add_argument("--require-gpu", action="store_true", help="fail unless a GPU was used")
     args = parser.parse_args()
     worker = args.worker.resolve()
     cli = args.cli.resolve() if args.cli else worker
@@ -81,7 +83,13 @@ def main():
                     else:
                         source = [map_path]
                         bsp = map_path.with_suffix(".bsp")
-                    invoke([executable,"compile",*source,"-threads","2","-minlight","1",*quality],directory)
+                    compile_output = invoke([
+                        executable,"compile",*source,"-threads","2","-minlight","1",
+                        *( ["-gpu"] if args.gpu else [] ),*quality],directory)
+                    if args.require_gpu:
+                        text = compile_output.decode(errors="replace")
+                        assert "gpu device" in text.lower() and "none found" not in text.lower(), text
+                        assert "-gpu:" not in text, text
                     invoke([executable,"lightmap",bsp,output/"atlas.bmp","-manifest",output/"atlas.json","-force"],directory)
                     data = bsp.read_bytes()
                     lumps = [struct.unpack_from("<ii",data,4+8*j) for j in range(15)]

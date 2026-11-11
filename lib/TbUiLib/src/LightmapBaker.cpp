@@ -279,6 +279,7 @@ void LightmapBaker::runStage()
         m_workDir->filePath(BspFileName),
         QStringLiteral("-minlight"),
         QStringLiteral("1"),
+        QStringLiteral("-gpu"),
         QStringLiteral("-threads"),
         QString::number(m_threadCount)};
     }
@@ -289,6 +290,7 @@ void LightmapBaker::runStage()
         m_workDir->filePath(MapFileName),
         QStringLiteral("-minlight"),
         QStringLiteral("1"),
+        QStringLiteral("-gpu"),
         QStringLiteral("-threads"),
         QString::number(m_threadCount)};
       if (QFile::exists(m_workDir->filePath("wads.cfg")))

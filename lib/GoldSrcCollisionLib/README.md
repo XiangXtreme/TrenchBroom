@@ -38,8 +38,10 @@ statically linking the full CSG/BSP/VIS/RAD stages and atlas exporter. TB builds
 deploys and installs it beside the editor, and locates it automatically. Lightmap
 preview needs no external hltools installation or executable-path preference.
 It uses the existing MAP/WAD export or frozen project resources, quality settings,
-progress pipe and cancellation. CPU lighting follows the full CLI; the optional
-GPU backend and source ZIP output are not part of the worker build. Fatal errors
+progress pipe and cancellation. Vulkan GPU lighting is requested by default when
+the worker is built with the SDK; missing devices and unsupported maps automatically
+use CPU lighting. Builds without the SDK keep the CPU path. Source ZIP output is not
+part of the worker build. Fatal errors
 and compiler globals stay isolated in the worker process. Project extraction
 stays in TB-owned scratch storage so cancellation also cleans extracted assets.
 
