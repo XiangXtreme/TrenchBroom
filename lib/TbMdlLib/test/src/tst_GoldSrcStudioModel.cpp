@@ -599,18 +599,32 @@ TEST_CASE("GoldSrcStudioModel real model")
     std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
   REQUIRE(isGoldSrcStudioModel(bytes));
 
-  const auto info = readGoldSrcStudioModelInfo(bytes);
+  auto textureHeader = std::vector<std::uint8_t>{};
+  {
+    const auto texturePath = std::filesystem::path{path}.parent_path()
+                             / (std::filesystem::path{path}.stem().string() + "T.mdl");
+    auto textureStream = std::ifstream{texturePath, std::ios::binary};
+    if (textureStream)
+      textureHeader = std::vector<std::uint8_t>{
+        std::istreambuf_iterator<char>{textureStream}, std::istreambuf_iterator<char>{}};
+  }
+  const auto external =
+    GoldSrcStudioExternalData{textureHeader.empty() ? nullptr : &textureHeader, nullptr};
+
+  const auto baseHeader = *reinterpret_cast<const StudioHeader*>(bytes.data());
+  const auto info = readGoldSrcStudioModelInfo(bytes, external);
   REQUIRE(info.is_success());
   const auto& model = info.value();
   CHECK_FALSE(model.name.empty());
   CHECK(model.bones > 0);
   CHECK_FALSE(model.bodyParts.empty());
-  CHECK_FALSE(model.textures.empty());
+  if (baseHeader.numtextures > 0 || !textureHeader.empty())
+    CHECK_FALSE(model.textures.empty());
   CHECK(model.bounds.size().x() > 1.0f);
   for (const auto& bodyPart : model.bodyParts)
     CHECK_FALSE(bodyPart.variants.empty());
 
-  const auto mesh = buildGoldSrcStudioMesh(bytes);
+  const auto mesh = buildGoldSrcStudioMesh(bytes, {}, 0, 0, true, external);
   if (mesh.is_error())
   {
     // Sequence-driven models are refused instead of drawn with a folded rest pose.
@@ -628,7 +642,8 @@ TEST_CASE("GoldSrcStudioModel real model")
          ++variant)
     {
       variants[part] = variant;
-      const auto variantMesh = buildGoldSrcStudioMesh(bytes, variants);
+      const auto variantMesh =
+        buildGoldSrcStudioMesh(bytes, variants, 0, 0, true, external);
       if (variantMesh.is_success())
         CHECK_FALSE(variantMesh.value().triangles.empty());
     }

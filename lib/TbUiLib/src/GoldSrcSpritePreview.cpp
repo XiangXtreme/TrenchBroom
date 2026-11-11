@@ -177,15 +177,17 @@ std::optional<GoldSrcSpritePreview> decodeFrame(
   {
     const auto paletteIndex = std::size_t((*pixels)[i]);
     const auto paletteOffset = paletteIndex * 3u;
-    if (paletteOffset + 2u >= palette.size())
+    const auto colorOffset =
+      alphaType == SpriteAlphaType::IndexAlpha ? 255u * 3u : paletteOffset;
+    if (colorOffset + 2u >= palette.size() || paletteOffset + 2u >= palette.size())
     {
       return std::nullopt;
     }
 
     const auto outOffset = i * 4u;
-    rgba[outOffset + 0u] = palette[paletteOffset + 0u];
-    rgba[outOffset + 1u] = palette[paletteOffset + 1u];
-    rgba[outOffset + 2u] = palette[paletteOffset + 2u];
+    rgba[outOffset + 0u] = palette[colorOffset + 0u];
+    rgba[outOffset + 1u] = palette[colorOffset + 1u];
+    rgba[outOffset + 2u] = palette[colorOffset + 2u];
 
     switch (alphaType)
     {
@@ -196,17 +198,13 @@ std::optional<GoldSrcSpritePreview> decodeFrame(
       rgba[outOffset + 3u] = (*pixels)[i];
       break;
     case SpriteAlphaType::Additive:
-      // An additive sprite carries no alpha of its own: it contributes its brightness, so
-      // a black background has to fade out instead of showing as a black card. Palette
-      // index 255 is the classic GoldSrc colour key, and painting its fill colour would
-      // show the key colour as if it were part of the artwork.
-      rgba[outOffset + 3u] =
-        (*pixels)[i] == 255u
-          ? 0u
-          : std::uint8_t(
-              (std::uint32_t(rgba[outOffset]) + std::uint32_t(rgba[outOffset + 1u])
-               + std::uint32_t(rgba[outOffset + 2u]) + 1u)
-              / 3u);
+      // Additive sprites use palette brightness as their alpha channel. Index 255 is
+      // still a valid colour in this mode; only AlphaTest treats it as transparent.
+      rgba[outOffset + 3u] = std::uint8_t(
+        (std::uint32_t(palette[paletteOffset + 0u])
+         + std::uint32_t(palette[paletteOffset + 1u])
+         + std::uint32_t(palette[paletteOffset + 2u]) + 1u)
+        / 3u);
       break;
     case SpriteAlphaType::Normal:
       rgba[outOffset + 3u] = 255u;

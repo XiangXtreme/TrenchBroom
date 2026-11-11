@@ -81,6 +81,16 @@ struct GoldSrcMStudioBone
   float scale[6]{};
 };
 
+struct GoldSrcMStudioBoneController
+{
+  int32_t bone{};
+  int32_t type{};
+  float start{};
+  float end{};
+  int32_t rest{};
+  int32_t index{};
+};
+
 struct GoldSrcMStudioHitbox
 {
   int32_t bone{};
@@ -191,6 +201,10 @@ Result<void> scaleGoldSrcMdlBuffer(std::vector<uint8_t>& data, const float s)
   {
     return Error{"Not a GoldSrc Studio MDL"};
   }
+  if (header->length < int32_t(sizeof(GoldSrcStudioHdr)) || size_t(header->length) > size)
+  {
+    return Error{"GoldSrc Studio MDL length is out of bounds"};
+  }
 
   if (
     header->numbones < 0 || header->numbonecontrollers < 0 || header->numhitboxes < 0
@@ -221,6 +235,33 @@ Result<void> scaleGoldSrcMdlBuffer(std::vector<uint8_t>& data, const float s)
       bones[i].value[0] *= s;
       bones[i].value[1] *= s;
       bones[i].value[2] *= s;
+      bones[i].scale[0] *= s;
+      bones[i].scale[1] *= s;
+      bones[i].scale[2] *= s;
+    }
+  }
+
+  if (header->numbonecontrollers > 0)
+  {
+    auto* controllers = ptrAt<GoldSrcMStudioBoneController>(
+      base, size, header->bonecontrollerindex, size_t(header->numbonecontrollers));
+    if (!controllers)
+    {
+      return Error{"GoldSrc Studio MDL bone controller index is out of bounds"};
+    }
+    for (int32_t i = 0; i < header->numbonecontrollers; ++i)
+    {
+      switch (controllers[i].type & 0x7FFF)
+      {
+      case 0x0001: // STUDIO_X
+      case 0x0002: // STUDIO_Y
+      case 0x0004: // STUDIO_Z
+        controllers[i].start *= s;
+        controllers[i].end *= s;
+        break;
+      default:
+        break;
+      }
     }
   }
 

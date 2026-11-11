@@ -1356,7 +1356,9 @@ TEST_CASE("AssetInspection")
     REQUIRE(play);
     CHECK_FALSE(sequence->isHidden());
     CHECK(sequence->count() == int(scene->studioModel->sequenceList.size()));
-    CHECK(frame->maximum() > 0);
+    const auto firstFrameCount =
+      std::max<std::size_t>(1, scene->studioModel->sequenceList.front().frameCount);
+    CHECK(frame->maximum() == int(firstFrameCount) - 1);
     if (out && *out)
     {
       inspector.show();

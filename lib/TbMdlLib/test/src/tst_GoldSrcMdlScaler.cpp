@@ -116,6 +116,16 @@ struct GoldSrcMStudioBone
   float scale[6]{};
 };
 
+struct GoldSrcMStudioBoneController
+{
+  int32_t bone{};
+  int32_t type{};
+  float start{};
+  float end{};
+  int32_t rest{};
+  int32_t index{};
+};
+
 struct GoldSrcMStudioHitbox
 {
   int32_t bone{};
@@ -193,7 +203,8 @@ std::vector<uint8_t> makeMinimalGoldSrcMdl()
   auto header = GoldSrcStudioHdr{};
 
   const auto boneOffset = sizeof(GoldSrcStudioHdr);
-  const auto hitboxOffset = boneOffset + sizeof(GoldSrcMStudioBone);
+  const auto controllerOffset = boneOffset + sizeof(GoldSrcMStudioBone);
+  const auto hitboxOffset = controllerOffset + sizeof(GoldSrcMStudioBoneController);
   const auto attachmentOffset = hitboxOffset + sizeof(GoldSrcMStudioHitbox);
   const auto bodyPartOffset = attachmentOffset + sizeof(GoldSrcMStudioAttachment);
   const auto modelOffset = bodyPartOffset + sizeof(GoldSrcMStudioBodyPart);
@@ -220,6 +231,8 @@ std::vector<uint8_t> makeMinimalGoldSrcMdl()
   header.bbmax[2] = 9.0f;
   header.numbones = 1;
   header.boneindex = int32_t(boneOffset);
+  header.numbonecontrollers = 1;
+  header.bonecontrollerindex = int32_t(controllerOffset);
   header.numhitboxes = 1;
   header.hitboxindex = int32_t(hitboxOffset);
   header.numattachments = 1;
@@ -233,7 +246,17 @@ std::vector<uint8_t> makeMinimalGoldSrcMdl()
   bone.value[1] = 20.0f;
   bone.value[2] = 30.0f;
   bone.value[3] = 40.0f;
+  bone.scale[0] = 1.5f;
+  bone.scale[3] = 2.5f;
+  bone.bonecontroller[0] = 0;
   write(data, boneOffset, bone);
+
+  auto controller = GoldSrcMStudioBoneController{};
+  controller.type = 0x0001; // STUDIO_X
+  controller.start = -4.0f;
+  controller.end = 8.0f;
+  controller.index = 0;
+  write(data, controllerOffset, controller);
 
   auto hitbox = GoldSrcMStudioHitbox{};
   hitbox.bbmin[0] = -10.0f;
@@ -297,6 +320,13 @@ TEST_CASE("GoldSrcMdlScaler")
     CHECK(bone.value[1] == 40.0f);
     CHECK(bone.value[2] == 60.0f);
     CHECK(bone.value[3] == 40.0f);
+    CHECK(bone.scale[0] == 3.0f);
+    CHECK(bone.scale[3] == 2.5f);
+
+    const auto& controller =
+      read<GoldSrcMStudioBoneController>(data, size_t(header.bonecontrollerindex));
+    CHECK(controller.start == -8.0f);
+    CHECK(controller.end == 16.0f);
 
     const auto& hitbox = read<GoldSrcMStudioHitbox>(data, size_t(header.hitboxindex));
     CHECK(hitbox.bbmin[0] == -20.0f);
@@ -366,6 +396,23 @@ TEST_CASE("GoldSrcMdlScaler")
     header.numhitboxes = -1;
     writeBinaryFile(path, data);
 
+    CHECK(scaleGoldSrcMdlFile(path, 2.0f).is_error());
+    CHECK(readBinaryFile(path) == data);
+  }
+
+  SECTION("rejects an invalid declared length")
+  {
+    const auto path = testDir.path() / "invalid.mdl";
+    auto data = makeMinimalGoldSrcMdl();
+    auto& header = *reinterpret_cast<GoldSrcStudioHdr*>(data.data());
+    header.length = int32_t(data.size() + 1);
+    writeBinaryFile(path, data);
+
+    CHECK(scaleGoldSrcMdlFile(path, 2.0f).is_error());
+    CHECK(readBinaryFile(path) == data);
+
+    header.length = int32_t(sizeof(GoldSrcStudioHdr) - 1);
+    writeBinaryFile(path, data);
     CHECK(scaleGoldSrcMdlFile(path, 2.0f).is_error());
     CHECK(readBinaryFile(path) == data);
   }

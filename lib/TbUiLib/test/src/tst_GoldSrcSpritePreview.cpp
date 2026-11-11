@@ -157,6 +157,13 @@ TEST_CASE("GoldSrcSpritePreview")
     const auto preview = loadGoldSrcSpritePreview(data);
 
     REQUIRE(preview.has_value());
+    // GoldSrc uses palette entry 255 as the colour and the indexed pixel as alpha.
+    CHECK(preview->rgba[0] == 255u);
+    CHECK(preview->rgba[1] == 0u);
+    CHECK(preview->rgba[2] == 254u);
+    CHECK(preview->rgba[4] == 255u);
+    CHECK(preview->rgba[5] == 0u);
+    CHECK(preview->rgba[6] == 254u);
     CHECK(preview->rgba[3] == 8u);
     CHECK(preview->rgba[7] == 192u);
   }
@@ -172,17 +179,17 @@ TEST_CASE("GoldSrcSpritePreview")
     CHECK(preview->rgba[7] == 0u);
   }
 
-  SECTION("uses brightness as alpha and keys index 255 for additive sprites")
+  SECTION("uses palette brightness as alpha for additive sprites")
   {
     const auto data = makeSingleFrameSprite(AlphaType::Additive, 2, 1, {1, 255});
 
     const auto preview = loadGoldSrcSpritePreview(data);
 
     REQUIRE(preview.has_value());
-    // Index 1 is rgb(1, 254, 2), so the additive contribution is its brightness; index
-    // 255 is the GoldSrc colour key and stays fully transparent.
+    // Index 1 is rgb(1, 254, 2), so the additive contribution is its brightness. Index
+    // 255 remains a valid colour in additive mode and has brightness 170.
     CHECK(preview->rgba[3] == 86u);
-    CHECK(preview->rgba[7] == 0u);
+    CHECK(preview->rgba[7] == 170u);
   }
 
   SECTION("decodes first frame in a group")
