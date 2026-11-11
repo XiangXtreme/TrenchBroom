@@ -10,7 +10,6 @@
 #include <QScopeGuard>
 #include <QSettings>
 #include <QStyleOptionToolButton>
-#include <QTemporaryDir>
 #include <QTimer>
 #include <QToolButton>
 #include <QtTest/QTest>
@@ -26,14 +25,12 @@
 #include "ui/AppControllerFixture.h"
 #include "ui/AreaMapView.h"
 #include "ui/CyclingMapView.h"
-#include "ui/LightmapBaker.h"
 #include "ui/LightmapPreview.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView3D.h"
 #include "ui/MapViewBase.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
-#include "ui/QPathUtils.h"
 #include "ui/SwitchableMapViewContainer.h"
 
 #include <algorithm>
@@ -203,55 +200,6 @@ TEST_CASE("AreaMapView")
     CHECK(map.modificationCount() == editedCount);
     CHECK(changes == 2);
     QObject::disconnect(connection);
-  }
-
-  SECTION("a cancelled compiler cannot complete a replacement bake")
-  {
-    auto cancelledCallbacks = 0;
-    auto replacementError = std::string{};
-    auto baker = LightmapBaker{};
-    auto temp = QTemporaryDir{};
-    REQUIRE(temp.isValid());
-
-    // Use a guaranteed executable. Its compiler arguments are irrelevant because
-    // cancellation happens before the event loop can deliver the result.
-    baker.start(
-      document->map(),
-      pathFromQString(QCoreApplication::applicationFilePath()),
-      1,
-      Preferences::LightmapQualityNormal,
-      [&](auto, const auto&) { ++cancelledCallbacks; });
-    REQUIRE(baker.running());
-    baker.cancel();
-    CHECK_FALSE(baker.running());
-
-    baker.start(
-      document->map(),
-      pathFromQString(temp.filePath("missing-toolchain")),
-      1,
-      Preferences::LightmapQualityNormal,
-      [&](auto, const auto& error) { replacementError = error; });
-    REQUIRE(QTest::qWaitFor([&] { return !replacementError.empty(); }, 3000));
-    CHECK(replacementError == "could not start the map toolchain");
-    CHECK_FALSE(baker.running());
-    CHECK(cancelledCallbacks == 0);
-  }
-
-  SECTION("a project preview preparation error does not fall back to map compilation")
-  {
-    auto error = std::string{};
-    auto baker = LightmapBaker{};
-    baker.start(
-      document->map(),
-      pathFromQString(QCoreApplication::applicationFilePath()),
-      1,
-      Preferences::LightmapQualityNormal,
-      [&](auto, const auto& message) { error = message; },
-      [](const auto&) -> Result<std::optional<ProjectCompileInfo>> {
-        return Error{"Project preview preparation failed."};
-      });
-    CHECK(error == "Project preview preparation failed.");
-    CHECK_FALSE(baker.running());
   }
 
   SECTION("each area can select every view without losing cameras or changing the map")

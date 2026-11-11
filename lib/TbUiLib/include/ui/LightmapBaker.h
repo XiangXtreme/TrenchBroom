@@ -49,7 +49,7 @@ namespace tb::ui
  * The toolchain runs in its own process: baking takes seconds, and a compiler that
  * gives up on a malformed map must not take the editor with it.
  *
- * The recipe is two calls - compile the map, then export the lightmap with its
+ * The bundled hltools worker compiles the map, then exports the lightmap with its
  * manifest - and the result comes back as a bake that can be turned into a lightmap
  * atlas.
  */
@@ -68,17 +68,19 @@ public:
   bool running() const;
 
   /**
-   * Starts a bake, replacing any bake that is still running. `executable` is the map
-   * toolchain binary; `threadCount` caps how many cores it may use, so that the editor
+   * Starts a bake with the bundled compiler, replacing any running bake.
+   * `threadCount` caps how many cores it may use, so that the editor
    * stays responsive while it works.
    */
   void start(
     const mdl::Map& map,
-    const std::filesystem::path& executable,
     int threadCount,
     const std::string& quality,
     Callback callback,
     ProjectInfoProvider projectInfoProvider = {});
+
+  /** The statically linked worker shipped beside the application. */
+  static std::filesystem::path workerPath();
 
   void cancel();
 

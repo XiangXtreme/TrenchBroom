@@ -130,6 +130,7 @@ get_build_platform(APP_PLATFORM_NAME)
 
 # Create the executable target and link with libraries
 add_executable(TrenchBroom WIN32 MACOSX_BUNDLE)
+tb_deploy_lightmap_worker(TrenchBroom)
 target_sources(TrenchBroom PRIVATE ${APP_SOURCE} ${DOC_MANUAL_INDEX_FILES_ABSOLUTE} ${DOC_MANUAL_TARGET_FILES_ABSOLUTE} ${DOC_MANUAL_SHORTCUTS_JS_TARGET_FILES_ABSOLUTE} ${DOC_MANUAL_TARGET_IMAGE_FILES_ABSOLUTE})
 
 if(WIN32 OR ${CMAKE_SYSTEM_NAME} MATCHES "Linux|FreeBSD")
@@ -258,7 +259,7 @@ if(WIN32)
                 COMMAND "${TB_WINDEPLOYQT_PATH}"
                         --no-compiler-runtime
                         $<$<CONFIG:Debug>:--no-translations>
-                        "$<TARGET_FILE_DIR:TrenchBroom>")
+                        "$<TARGET_FILE:TrenchBroom>")
     else()
         message(STATUS "windeployqt skipped")
     endif()
@@ -372,6 +373,27 @@ set(CPACK_PACKAGE_VENDOR "TrenchBroom")
 set(CPACK_STRIP_FILES FALSE)
 
 # Platform specific CPack configuration
+if(APPLE)
+    # Bundle resources must be present before macdeployqt seals the bundle.
+    set(HLTOOLS_LICENSE_FILES
+        "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/LICENSE"
+        "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/manifest.json")
+    target_sources(TrenchBroom PRIVATE ${HLTOOLS_LICENSE_FILES})
+    set_source_files_properties(${HLTOOLS_LICENSE_FILES} PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources/licenses/hltools")
+    set_property(TARGET TrenchBroom APPEND PROPERTY LINK_DEPENDS ${HLTOOLS_LICENSE_FILES})
+elseif(WIN32)
+    set(HLTOOLS_LICENSE_DESTINATION "licenses/hltools")
+else()
+    set(HLTOOLS_LICENSE_DESTINATION "share/TrenchBroom/licenses/hltools")
+endif()
+if(NOT APPLE)
+    install(FILES
+        "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/LICENSE"
+        "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/manifest.json"
+        DESTINATION "${HLTOOLS_LICENSE_DESTINATION}" COMPONENT TrenchBroom)
+endif()
+
 if(WIN32)
     # Copy PDB files (msvc debug symbols)
     if(COMPILER_IS_MSVC)
@@ -386,6 +408,7 @@ if(WIN32)
     endif()
 
     install(TARGETS TrenchBroom RUNTIME DESTINATION . COMPONENT TrenchBroom)
+    install(TARGETS HltoolsLightmapWorker RUNTIME DESTINATION . COMPONENT TrenchBroom)
     install(DIRECTORY "$<TARGET_FILE_DIR:TrenchBroom>/python"
             DESTINATION . COMPONENT TrenchBroom
             PATTERN "__pycache__" EXCLUDE
@@ -516,6 +539,7 @@ elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
     # add files
     install(TARGETS TrenchBroom RUNTIME DESTINATION bin COMPONENT TrenchBroom)
+    install(TARGETS HltoolsLightmapWorker RUNTIME DESTINATION bin COMPONENT TrenchBroom)
     install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fonts"           DESTINATION ${LINUX_RESOURCE_LOCATION} COMPONENT TrenchBroom)
     install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/defaults"        DESTINATION ${LINUX_RESOURCE_LOCATION} COMPONENT TrenchBroom)
     install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/games"           DESTINATION ${LINUX_RESOURCE_LOCATION} COMPONENT TrenchBroom)

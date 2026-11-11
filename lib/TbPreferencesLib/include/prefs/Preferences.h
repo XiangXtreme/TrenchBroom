@@ -464,8 +464,6 @@ inline constexpr auto LightmapQualityNormal = "normal";
 inline constexpr auto LightmapQualityUltra = "ultra";
 inline auto LightmapQuality =
   Preference<std::string>{"Lightmap/Preview quality", LightmapQualityNormal};
-inline auto LightmapToolPath =
-  Preference<std::filesystem::path>{"Lightmap/Tool path", {}};
 inline auto ShowFog = Preference<bool>{"Map view/Show fog", false};
 inline auto ShowEdges = Preference<bool>{"Map view/Show edges", true};
 inline auto UseReadable2DBrushOutlines =

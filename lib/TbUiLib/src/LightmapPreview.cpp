@@ -19,15 +19,12 @@
 
 #include "ui/LightmapPreview.h"
 
-#include <QStandardPaths>
-
 #include "base/Logger.h"
 #include "base/PreferenceManager.h"
 #include "mdl/Map.h"
 #include "prefs/Preferences.h"
 #include "render/RenderContext.h"
 #include "ui/MapDocument.h"
-#include "ui/QPathUtils.h"
 
 #include <chrono>
 
@@ -61,9 +58,7 @@ LightmapPreview::LightmapPreview(MapDocument& document)
   m_notifierConnection +=
     PreferenceManager::instance().preferenceDidChangeNotifier.connect(
       [this](const std::filesystem::path& path) {
-        if (
-          path == Preferences::LightmapQuality.path
-          || path == Preferences::LightmapToolPath.path)
+        if (path == Preferences::LightmapQuality.path)
         {
           invalidate();
         }
@@ -139,22 +134,11 @@ void LightmapPreview::setProgress(const bool baking, const int remainingSeconds)
 void LightmapPreview::startBake()
 {
   auto& logger = m_document.map().logger();
-  auto executable = pref(Preferences::LightmapToolPath);
-  if (executable.empty())
-    executable =
-      pathFromQString(QStandardPaths::findExecutable(QStringLiteral("hltools")));
-  if (executable.empty())
-  {
-    logger.error() << "Cannot bake a lightmap: no map toolchain is configured.";
-    return;
-  }
-
   const auto startedAt = std::chrono::steady_clock::now();
   logger.info() << "Baking a lightmap for the view.";
   setProgress(true, -1);
   m_baker.start(
     m_document.map(),
-    executable,
     8,
     pref(Preferences::LightmapQuality),
     [this, startedAt](
@@ -179,10 +163,9 @@ void LightmapPreview::startBake()
                              std::chrono::steady_clock::now() - startedAt)
                              .count();
       const auto totalLit = assembly->blocks.size() + assembly->terrainBlocks.size();
-      logger.info() << "Lightmap baked in " << elapsed
-                    << " ms: " << totalLit << " of " << bake->faces.size()
-                    << " faces lit, " << assembly->width << "x" << assembly->height
-                    << " atlas.";
+      logger.info() << "Lightmap baked in " << elapsed << " ms: " << totalLit << " of "
+                    << bake->faces.size() << " faces lit, " << assembly->width << "x"
+                    << assembly->height << " atlas.";
 
       m_atlas.setData(assembly->width, assembly->height, assembly->pixels);
       assembly->pixels = std::vector<std::uint8_t>{};

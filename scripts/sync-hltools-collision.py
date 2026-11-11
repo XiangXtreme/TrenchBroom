@@ -1,4 +1,4 @@
-"""Vendor or verify the exact source closure of hltools' embedded collision target."""
+"""Vendor or verify hltools' shared collision and lightmap source closure."""
 
 import argparse
 import hashlib
@@ -42,11 +42,14 @@ def main():
         raise SystemExit("Commit the hltools changes before syncing a reproducible revision")
     revision = subprocess.check_output(
         ["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
-    sources = "src/collision/sources.cmake"
-    todo = re.findall(r"src/[\w/]+\.cpp", (source / sources).read_text())
-    todo += [sources, "src/collision/CMakeLists.txt", "src/collision/collision.h",
+    source_lists = ["src/collision/sources.cmake", "src/preview/sources.cmake"]
+    todo = [name for sources in source_lists
+            for name in re.findall(r"src/[\w/]+\.cpp", (source / sources).read_text())]
+    todo += source_lists + ["src/collision/CMakeLists.txt", "src/collision/collision.h",
              "src/collision/test.cpp", "src/collision/README.md",
-             "src/collision/verify_cli_parity.py", "LICENSE"]
+             "src/collision/verify_cli_parity.py", "src/preview/CMakeLists.txt",
+             "src/preview/main.cpp", "src/preview/README.md",
+             "src/preview/verify_cli_parity.py", "LICENSE"]
     files = {}
     while todo:
         name = todo.pop()
@@ -61,6 +64,9 @@ def main():
         files[name] = data
         for include in re.findall(rb'^\s*#include\s+"([^"\r\n]+)"', data, re.MULTILINE):
             include = include.decode("utf-8")
+            if include == "sqlite3.h":
+                # Both parents provide SQLite through an existing CMake target.
+                continue
             candidate = path.parent / include
             if not candidate.exists():
                 candidate = source / "src" / include

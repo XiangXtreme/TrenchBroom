@@ -1,0 +1,90 @@
+set(HLTOOLS_PREVIEW_COMMON_SOURCES
+  src/common/build_info.cpp
+  src/common/log.cpp
+  src/common/error.cpp
+  src/common/filesystem.cpp
+  src/common/threads.cpp
+  src/common/cmdline.cpp
+  src/common/direct_clip_io.cpp
+  src/common/progress.cpp
+)
+set(HLTOOLS_PREVIEW_CSG_SOURCES
+  src/csg/bsp_output.cpp
+  src/csg/brush.cpp
+  src/csg/brush_union.cpp
+  src/csg/clip_merge.cpp
+  src/csg/csg.cpp
+  src/csg/entity_output_fixups.cpp
+  src/csg/hull_file.cpp
+  src/csg/map_parser.cpp
+  src/csg/map_post.cpp
+  src/csg/studio_bsp.cpp
+  src/csg/surface_clip.cpp
+  src/csg/textures.cpp
+  src/csg/wad_path.cpp
+)
+set(HLTOOLS_PREVIEW_BSP_SOURCES
+  src/bsp/brush.cpp
+  src/bsp/face.cpp
+  src/bsp/inputs.cpp
+  src/bsp/merge.cpp
+  src/bsp/bsp.cpp
+  src/bsp/brink.cpp
+  src/bsp/outside.cpp
+  src/bsp/portals.cpp
+  src/bsp/solid_bsp.cpp
+  src/bsp/surfaces.cpp
+  src/bsp/tjunc.cpp
+  src/bsp/write_bsp.cpp
+)
+set(HLTOOLS_PREVIEW_VIS_SOURCES
+  src/vis/vis.cpp
+  src/vis/flow.cpp
+)
+set(HLTOOLS_PREVIEW_RAD_SOURCES
+  src/rad/compress.cpp
+  src/rad/embed_lightmap.cpp
+  src/rad/final.cpp
+  src/rad/gpu_gather.cpp
+  src/rad/lerp.cpp
+  src/rad/light_budget.cpp
+  src/rad/lightmap.cpp
+  src/rad/nomatrix.cpp
+  src/rad/patches.cpp
+  src/rad/rad.cpp
+  src/rad/position.cpp
+  src/rad/sparse.cpp
+  src/rad/studio.cpp
+  src/rad/studio_simplify.cpp
+  src/rad/textures.cpp
+  src/rad/trace.cpp
+  src/rad/transfers.cpp
+  src/rad/transparency.cpp
+  src/rad/util.cpp
+  src/rad/vismatrix.cpp
+)
+set(HLTOOLS_PREVIEW_FORMAT_SOURCES
+  src/format/bmp/file.cpp
+  src/format/bsp/entity_lump.cpp
+  src/format/bsp/face_extents.cpp
+  src/format/bsp/file.cpp
+  src/format/bsp/lightmap_atlas.cpp
+  src/format/bsp/texture_lump.cpp
+  src/format/bsp/usage_chart.cpp
+  src/format/map/document.cpp
+  src/format/mdl/goldsrc/read.cpp
+  src/format/miptex/texture.cpp
+  src/format/rad/texlights.cpp
+  src/format/wad/archive.cpp
+  src/format/tbproject/project.cpp
+)
+set(HLTOOLS_PREVIEW_DRIVER_SOURCES
+  src/cli/hltools/compile.cpp
+  src/cli/hltools/project_input.cpp
+  src/cli/tools/compile_parameters.cpp
+  src/cli/tools/lightmap_tool.cpp
+  src/cli/tools/csg_options.cpp
+  src/cli/tools/bsp_options.cpp
+  src/cli/tools/vis_options.cpp
+  src/cli/tools/rad_options.cpp
+)

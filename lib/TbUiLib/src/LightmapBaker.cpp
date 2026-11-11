@@ -80,9 +80,18 @@ const std::string& LightmapBaker::output() const
   return m_output;
 }
 
+std::filesystem::path LightmapBaker::workerPath()
+{
+#ifdef Q_OS_WIN
+  constexpr auto name = "HltoolsLightmapWorker.exe";
+#else
+  constexpr auto name = "HltoolsLightmapWorker";
+#endif
+  return pathFromQString(QDir{QCoreApplication::applicationDirPath()}.filePath(name));
+}
+
 void LightmapBaker::start(
   const mdl::Map& map,
-  const std::filesystem::path& executable,
   const int threadCount,
   const std::string& quality,
   Callback callback,
@@ -91,7 +100,7 @@ void LightmapBaker::start(
   cancel();
 
   m_callback = std::move(callback);
-  m_executable = executable;
+  m_executable = workerPath();
   m_threadCount = clampedThreadCount(threadCount);
   m_quality = quality;
   m_project.reset();
@@ -156,6 +165,10 @@ void LightmapBaker::start(
 
   m_process = std::make_unique<QProcess>();
   m_process->setProcessChannelMode(QProcess::MergedChannels);
+  // Project extraction must stay inside the owned scratch directory when killed.
+  // Plain MAP builds retain the editor's working directory for relative WAD paths.
+  if (m_project)
+    m_process->setWorkingDirectory(m_workDir->path());
   connect(m_process.get(), &QProcess::readyRead, this, &LightmapBaker::readOutput);
   connect(
     m_process.get(),
@@ -168,7 +181,9 @@ void LightmapBaker::start(
     m_process.get(), &QProcess::errorOccurred, this, [this](QProcess::ProcessError) {
       if (running() && m_process->error() == QProcess::FailedToStart)
       {
-        finish(std::nullopt, "could not start the map toolchain");
+        finish(
+          std::nullopt,
+          "could not start the bundled lightmap compiler: " + m_executable.string());
       }
     });
 
@@ -335,8 +350,7 @@ void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
   finish(std::move(bake), {});
 }
 
-void LightmapBaker::finish(
-  std::optional<render::LightmapBake> bake, std::string error)
+void LightmapBaker::finish(std::optional<render::LightmapBake> bake, std::string error)
 {
   auto callback = std::move(m_callback);
   cancel();

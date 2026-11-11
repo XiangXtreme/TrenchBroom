@@ -33,7 +33,18 @@ error and bounded warning text instead of terminating the editor.
 
 ## Updating the single source
 
-Algorithm changes belong in hltools, including its `src/collision` entry point.
+The same snapshot also supplies `HltoolsLightmapWorker`, a separate executable
+statically linking the full CSG/BSP/VIS/RAD stages and atlas exporter. TB builds,
+deploys and installs it beside the editor, and locates it automatically. Lightmap
+preview needs no external hltools installation or executable-path preference.
+It uses the existing MAP/WAD export or frozen project resources, quality settings,
+progress pipe and cancellation. CPU lighting follows the full CLI; the optional
+GPU backend and source ZIP output are not part of the worker build. Fatal errors
+and compiler globals stay isolated in the worker process. Project extraction
+stays in TB-owned scratch storage so cancellation also cleans extracted assets.
+
+Algorithm changes belong in hltools, including its `src/collision` and
+`src/preview` entry points. Both targets use one copy of the shared stage sources.
 Do not patch the bundled copy. Commit and validate upstream first, then run:
 
 ```powershell
@@ -41,7 +52,7 @@ python scripts/sync-hltools-collision.py --source D:/Code_Development/Source_cod
 python scripts/sync-hltools-collision.py --check
 ```
 
-The script copies the target's quoted-include dependency closure verbatim
+The script copies both targets' quoted-include dependency closure verbatim
 (normalizing line endings), its license, tests and parity checker. The manifest
 pins the upstream Git revision and each file's SHA256. CMake verifies the hashes
 on configure, and `--check` additionally verifies the file inventory. Updates
@@ -57,5 +68,10 @@ collision target also tests failure recovery and concurrent callers. Its
 `verify_cli_parity.py` compares planes, clipnodes and model headnodes byte for
 byte with the real hltools CLI for five fixture maps and six cliptypes (30
 pairs), using the same embedded compile options.
+
+`LightmapBaker` tests exercise real baking, brush lightmap assembly, current project
+resources, cancellation and failure recovery. The worker's `verify_cli_parity.py`
+tests MAP and project inputs at all three quality levels and compares lighting
+lumps, atlas pixels and manifests against the full CLI when `--cli` is supplied.
 
 The upstream license is preserved at `thirdparty/hltools/LICENSE`.

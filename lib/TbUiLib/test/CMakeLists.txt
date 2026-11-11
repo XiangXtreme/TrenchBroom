@@ -1,4 +1,5 @@
 add_executable(TbUiLibTest)
+tb_deploy_lightmap_worker(TbUiLibTest)
 EMBED_UTF8_MANIFEST(TbUiLibTest)
 
 target_sources(TbUiLibTest
@@ -33,6 +34,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_SelectionPropertyEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityMotionPreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LayerActions.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LightmapBaker.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GoldSrcSpritePreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_GlFunctions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_FlyModeHelper.cpp

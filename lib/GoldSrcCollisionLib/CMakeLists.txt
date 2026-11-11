@@ -20,6 +20,20 @@ foreach(index RANGE ${HLTOOLS_LAST_FILE})
 endforeach()
 
 add_subdirectory(thirdparty/hltools/src/collision)
+add_subdirectory(thirdparty/hltools/src/preview)
+
+# Run deployment even when only the worker changed and the consumer does not link.
+function(tb_deploy_lightmap_worker target)
+  add_custom_target(${target}-lightmap-worker
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target}>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:HltoolsLightmapWorker>" "$<TARGET_FILE_DIR:${target}>"
+    DEPENDS HltoolsLightmapWorker
+    VERBATIM)
+  add_dependencies(${target} ${target}-lightmap-worker)
+  # Refresh bundle deployment/signatures after a worker update on Make/Ninja.
+  set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "$<TARGET_FILE:HltoolsLightmapWorker>")
+endfunction()
 
 add_library(GoldSrcCollisionLib STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/BspTypes.h
