@@ -1,19 +1,22 @@
 """Compare embedded planes, clipnodes and model headnodes with the real CLI."""
 
 import argparse
+import math
 from pathlib import Path
 import struct
 import subprocess
 import tempfile
 
 
-def box(x0, y0, z0, x1, y1, z1, material="__TB_empty"):
+def box(x0, y0, z0, x1, y1, z1, material="__TB_empty", transform=None):
     faces = [((x0, y0, z0), (x0, y1, z0), (x0, y0, z1)),
              ((x1, y0, z0), (x1, y0, z1), (x1, y1, z0)),
              ((x0, y0, z0), (x0, y0, z1), (x1, y0, z0)),
              ((x0, y1, z0), (x1, y1, z0), (x0, y1, z1)),
              ((x0, y0, z0), (x1, y0, z0), (x0, y1, z0)),
              ((x0, y0, z1), (x0, y1, z1), (x1, y0, z1))]
+    if transform:
+        faces = [[transform(*point) for point in face] for face in faces]
     return "{\n" + "".join(" ".join("( %s )" % " ".join(map(str, p)) for p in f)
                                  + f" {material} 0 0 0 1 1\n" for f in faces) + "}\n"
 
@@ -31,6 +34,23 @@ def main():
     ramp = box(0, -64, -64, 128, 64, 128).replace(
         "( 0 -64 128 ) ( 0 64 128 ) ( 128 -64 128 )",
         "( 0 -64 0 ) ( 0 64 0 ) ( 128 -64 128 )")
+
+    def roof(x, y, z):
+        return (2 * x - 64, y / 8 + (64 - z) * 8, z * 3)
+
+    def diagonal_roof(x, y, z):
+        x, y, z = roof(x, y, z)
+        return ((x - y) / math.sqrt(2), (x + y) / math.sqrt(2), z)
+
+    def ring_segment(segment):
+        def transform(x, y, z):
+            angle = -(segment + x / 64) * 2 * math.pi / 24
+            radius = 1024 - z * 8 + y / 8
+            return (radius * math.cos(angle), radius * math.sin(angle), z * 3)
+        return box(0, 0, 0, 64, 64, 64, transform=transform)
+
+    detail = lambda b: world(box(-32, -32, -128, 32, 32, -64)) + entity(
+        {"classname": "func_detail", "zhlt_cliptype": "legacytrim"}, b)
     fixtures = {
         "cube": world(box(0, 0, 0, 64, 64, 64)),
         "seams": world(box(-128, -128, -16, 0, 128, 0)
@@ -43,6 +63,9 @@ def main():
         "origin": world(box(-256, -128, -16, 256, 128, 0)) + entity(
             {"classname": "func_wall"}, box(100, -32, 0, 116, 32, 96)
             + box(104, -4, 40, 112, 4, 48, "ORIGIN")),
+        "thin-roof": detail(box(0, 0, 0, 64, 64, 64, transform=roof)),
+        "diagonal-roof": detail(box(0, 0, 0, 64, 64, 64, transform=diagonal_roof)),
+        "roof-ring": detail("".join(ring_segment(i) for i in range(24))),
     }
     with tempfile.TemporaryDirectory(prefix="hltools-parity-") as directory:
         work = Path(directory)

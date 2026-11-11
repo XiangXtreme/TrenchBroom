@@ -28,9 +28,9 @@ void require(bool value)
         throw std::runtime_error("collision regression");
 }
 
-int contents(const format::map_data &map, int hull, float x, float y, float z)
+int contents(const format::map_data &map, int hull, float x, float y, float z, size_t model = 0)
 {
-    int index = map.models.at(0).headnode[hull];
+    int index = map.models.at(model).headnode[hull];
     while (index >= 0)
     {
         const auto &node = map.clipnodes.at(static_cast<size_t>(index));
@@ -83,6 +83,29 @@ int main(int argc, char **argv)
             require(contents(output.bsp, 1, 32, 32, 101) == -1);
             require(contents(output.bsp, 3, 32, 32, 81) == -2);
             require(contents(output.bsp, 3, 32, 32, 83) == -1);
+        }
+        const std::string roof = std::string(cube) + R"MAP(
+{
+"classname" "func_detail"
+"zhlt_cliptype" "legacytrim"
+{
+( -64 512 0 ) ( -64 520 0 ) ( -64 0 192 ) __TB_empty 0 0 0 1 1
+( 64 512 0 ) ( 64 0 192 ) ( 64 520 0 ) __TB_empty 0 0 0 1 1
+( -64 512 0 ) ( -64 0 192 ) ( 64 512 0 ) __TB_empty 0 0 0 1 1
+( -64 520 0 ) ( 64 520 0 ) ( -64 8 192 ) __TB_empty 0 0 0 1 1
+( -64 512 0 ) ( 64 512 0 ) ( -64 520 0 ) __TB_empty 0 0 0 1 1
+( -64 0 192 ) ( -64 8 192 ) ( 64 0 192 ) __TB_empty 0 0 0 1 1
+}
+}
+)MAP";
+        const auto thin_roof = compile(roof);
+        require(thin_roof.bsp.models.size() == 2);
+        for (int hull : {1, 3})
+        {
+            require(contents(thin_roof.bsp, hull, 0, 600, -16, 1) == -1);
+            require(contents(thin_roof.bsp, hull, 0, 260, 96, 1) == -2);
+            require(contents(thin_roof.bsp, hull, 0, 535, 0, 1) == -2);
+            require(contents(thin_roof.bsp, hull, 0, 537, 0, 1) == -1);
         }
         bool failed = false;
         try

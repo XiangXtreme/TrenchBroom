@@ -68,7 +68,7 @@ Build `TbCsLibTest` and `TbUiLibTest`; run the full collision suite plus
 `buildPlayModeWorld` and `KreedzBroomPreferencePane`. The bundled standalone
 collision target also tests failure recovery and concurrent callers. Its
 `verify_cli_parity.py` compares planes, clipnodes and model headnodes byte for
-byte with the real hltools CLI for five fixture maps and six cliptypes (30
+byte with the real hltools CLI for eight fixture maps and six cliptypes (48
 pairs), using the same embedded compile options.
 
 `LightmapBaker` tests exercise real baking, brush lightmap assembly, current project

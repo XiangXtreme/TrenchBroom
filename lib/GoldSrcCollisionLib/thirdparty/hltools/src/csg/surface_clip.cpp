@@ -329,6 +329,7 @@ namespace csg
         {
             std::vector<int> members;
             math::bounding_box bounds;
+            std::vector<direct_clip::plane> bevels = {};
         };
 
         // The adaptive split topology depends on the normalized exterior
@@ -1952,6 +1953,55 @@ namespace csg
             return false;
         }
 
+        std::vector<direct_clip::plane> boundary_bevel_planes(const boundary_poly &poly)
+        {
+            std::vector<direct_clip::plane> planes;
+            const auto add_support = [&](math::vec3v normal) {
+                if (math::normalize(normal) <= boundary_plane_epsilon)
+                    return;
+                vec_t dist = -std::numeric_limits<vec_t>::max();
+                for (const auto &v : poly.vertices)
+                    dist = std::max(dist, math::dot(normal, v));
+                boundary_add_plane(planes, {normal, dist});
+            };
+            for (int axis = 0; axis < 3; axis++)
+            {
+                math::vec3v normal{};
+                normal[axis] = 1;
+                add_support(normal);
+                add_support(-normal);
+            }
+            // A box sweep also has supporting planes through a polyhedron
+            // edge and a box axis. Build these on the composed exterior terms,
+            // not the original brushes, so discarded partition seams stay gone.
+            for (const auto &edge : boundary_hull_edges(poly))
+            {
+                const auto &a = poly.vertices[edge.first];
+                const auto &b = poly.vertices[edge.second];
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    math::vec3v direction{}, normal;
+                    direction[axis] = 1;
+                    math::cross(b - a, direction, normal);
+                    if (math::normalize(normal) <= boundary_plane_epsilon)
+                        continue;
+                    const vec_t dist = math::dot(normal, a);
+                    bool front = false, back = false;
+                    for (const auto &v : poly.vertices)
+                    {
+                        const vec_t side = math::dot(normal, v) - dist;
+                        front |= side > boundary_clip_epsilon;
+                        back |= side < -boundary_clip_epsilon;
+                    }
+                    if (!front)
+                        add_support(normal);
+                    if (!back)
+                        add_support(-normal);
+                }
+            }
+            return planes;
+        }
+
         boundary_composition prepare_boundary_composition(
             const std::vector<triangle> &triangles,
             const std::vector<const built_brush *> &brushes,
@@ -1983,6 +2033,13 @@ namespace csg
             }
             composition.terms = compose_boundary_terms(
                 composition.boundaries, bounds, source_pieces, allowed);
+            for (auto &term : composition.terms)
+            {
+                const auto poly = boundary_closure(bounds, composition.boundaries, term.members);
+                if (!poly)
+                    err::fatal("legacytrim: composed term has no boundary");
+                term.bevels = boundary_bevel_planes(*poly);
+            }
             return composition;
         }
 
@@ -2006,15 +2063,26 @@ namespace csg
             std::vector<fragment> fragments;
             for (const auto &term : terms)
             {
-                auto poly = boundary_closure(bounds, shifted, term.members);
+                std::vector<direct_clip::plane> term_planes;
+                for (int member : term.members)
+                    term_planes.push_back(shifted[(size_t)member]);
+                for (auto p : term.bevels)
+                {
+                    p.dist += std::fabs(p.normal.x) * half.x + std::fabs(p.normal.y) * half.y +
+                              std::fabs(p.normal.z) * half.z;
+                    boundary_add_plane(term_planes, p);
+                }
+                std::vector<int> members;
+                for (size_t i = 0; i < term_planes.size(); i++)
+                    members.push_back((int)i);
+                auto poly = boundary_closure(bounds, term_planes, members);
                 if (!poly || poly->vertices.size() < 4) continue;
 
                 fragment f;
                 f.vertices = poly->vertices;
                 f.incidence.resize(f.vertices.size());
-                for (int member : term.members)
+                for (const auto &p : term_planes)
                 {
-                    const auto &p = shifted[(size_t)member];
                     if (!boundary_supporting_plane(*poly, p)) continue;
                     const int pid = output_planes.add(p.normal, p.dist);
                     int count = 0;

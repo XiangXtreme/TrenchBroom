@@ -160,6 +160,36 @@ TEST_CASE("hltools collision world")
     CHECK(trace.endpos[0] == Catch::Approx(83.96875f));
   }
 
+  SECTION("legacytrim thin roof ends remain inside the player box sweep")
+  {
+    const auto roof = std::string{R"MAP(
+{
+( -64 512 0 ) ( -64 520 0 ) ( -64 0 192 ) __TB_empty 0 0 0 1 1
+( 64 512 0 ) ( 64 0 192 ) ( 64 520 0 ) __TB_empty 0 0 0 1 1
+( -64 512 0 ) ( -64 0 192 ) ( 64 512 0 ) __TB_empty 0 0 0 1 1
+( -64 520 0 ) ( 64 520 0 ) ( -64 8 192 ) __TB_empty 0 0 0 1 1
+( -64 512 0 ) ( 64 512 0 ) ( -64 520 0 ) __TB_empty 0 0 0 1 1
+( -64 0 192 ) ( -64 8 192 ) ( 64 0 192 ) __TB_empty 0 0 0 1 1
+}
+)MAP"};
+    auto world = compileMap(
+      entity("worldspawn", box(-32, -32, -128, 32, 32, -64))
+      + entity("func_detail", roof, "\"zhlt_cliptype\" \"legacytrim\"\n"));
+    auto context = contextFor(world.get());
+    for (const auto hull : {SCS_HULL_STANDING, SCS_HULL_DUCKED})
+    {
+      CAPTURE(hull);
+      const float beyondEnd[] = {0, 600, -16};
+      const float onRoof[] = {0, 260, 96};
+      const float insideEdge[] = {0, 535, 0};
+      const float outsideEdge[] = {0, 537, 0};
+      CHECK(scs_position_is_free(context.get(), beyondEnd, hull));
+      CHECK_FALSE(scs_position_is_free(context.get(), onRoof, hull));
+      CHECK_FALSE(scs_position_is_free(context.get(), insideEdge, hull));
+      CHECK(scs_position_is_free(context.get(), outsideEdge, hull));
+    }
+  }
+
   SECTION("tool textures preserve hull masks")
   {
     auto world = compileMap(entity(

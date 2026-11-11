@@ -19,6 +19,12 @@ logging/progress with an in-memory sink and fatal exits with exceptions. Calls
 are serialized around the BSP stage's shared scratch state. Legacytrim's
 workers propagate errors through their futures.
 
+Legacytrim bounds each composed exterior region with axial and edge/box-axis
+bevel planes. These keep thin sloped ends inside the player-box sweep while
+preserving the legacy slope offsets and removal of source-brush partition seams.
+The collision parity checker includes thin roofs, diagonal ends and a segmented
+roof ring alongside the basic brush fixtures (48 CLI/embedded pairs).
+
 The embedded stage uses `-nofill -noopt`: an editor's map can be incomplete,
 and texture pixels are not loaded. It writes no BSP, sidecars, leak files or
 face extents. VIS, RAD, WAD resolution and studio asset injection are outside
