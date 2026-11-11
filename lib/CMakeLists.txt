@@ -1,4 +1,5 @@
 add_subdirectory(KdLib)
+add_subdirectory(GoldSrcCollisionLib)
 add_subdirectory(TbAppLib)
 add_subdirectory(TbBaseLib)
 add_subdirectory(TbCsLib)

@@ -13,7 +13,7 @@ projects that were reverse engineered from the original game binaries:
 | Movement (`pm_shared`) | `thirdparty/regamedll` | [ReGameDLL_CS](https://github.com/rehlds/ReGameDLL_CS) (the CS 1.6 server game library), compiled unmodified with its `REGAMEDLL_*` extensions off |
 | Engine: hull traces, point contents, position tests | `src/PmTrace` | [ReHLDS](https://github.com/rehlds/ReHLDS) `engine/pmovetst.cpp`, `engine/world.cpp` |
 | Engine: per-command player setup, physents | `src/PlayerHost` | ReHLDS `engine/sv_user.cpp` (`SV_RunCmd`, `SV_AddLinksToPM`) |
-| Clip hulls from brushes, in memory | `src/HullCompiler` | VHLT and ZHLT hlcsg `ExpandBrush` (all five `-cliptype`s, BEVEL / CLIPHULLn / NOCLIP), hlbsp contents rules |
+| Clip hulls from brushes, in memory | [`GoldSrcCollisionLib`](../GoldSrcCollisionLib) | VHLT and ZHLT hlcsg `ExpandBrush` (all five `-cliptype`s, BEVEL / CLIPHULLn / NOCLIP), hlbsp contents rules |
 | C API used by TbUiLib | `include/cs/scs.h`, `src/ScsApi` | Half-Life SDK `cl_dll/input.cpp` for the client side helpers |
 
 `src/ReGameDllCompat.h` stands in for ReGameDLL's `precompiled.h`, providing only

@@ -48,10 +48,7 @@ add_library(TbCsLib STATIC)
 
 target_sources(TbCsLib
   PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/BspTypes.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Hlsdk.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/HullCompiler.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/HullCompiler.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayerHost.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayerHost.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PmTrace.cpp
@@ -66,7 +63,11 @@ target_sources(TbCsLib
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/cs/scs.h
 )
 
-target_include_directories(TbCsLib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(TbCsLib
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(TbCsLib PRIVATE GoldSrcCollisionLib)
 # Third-party headers: their warnings are not ours to fix.
 target_include_directories(TbCsLib SYSTEM PRIVATE ${TB_CS_GAME_INCLUDES})
 target_compile_options(TbCsLib PRIVATE ${TB_CS_FP_FLAGS})
