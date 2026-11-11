@@ -86,6 +86,35 @@ void append(inspection::Bytes& bytes, const std::uint32_t value)
     bytes.push_back(std::uint8_t(value >> (i * 8)));
 }
 
+inspection::Bytes miptex(const std::uint32_t width, const std::uint32_t height)
+{
+  auto bytes = inspection::Bytes{};
+  bytes.resize(16, 0);
+  append(bytes, width);
+  append(bytes, height);
+  auto offset = std::uint32_t{40};
+  for (auto level = 0u; level < 4; ++level)
+  {
+    append(bytes, offset);
+    offset += (width >> level) * (height >> level);
+  }
+  for (auto level = 0u; level < 4; ++level)
+    bytes.insert(
+      bytes.end(), std::size_t(width >> level) * std::size_t(height >> level), 0);
+  append(bytes, 256);
+  bytes.resize(bytes.size() + 768, 0);
+  bytes
+    [40 + (width >> 0) * (height >> 0) + (width >> 1) * (height >> 1)
+     + (width >> 2) * (height >> 2) + (width >> 3) * (height >> 3) + 2] = 200;
+  bytes
+    [40 + (width >> 0) * (height >> 0) + (width >> 1) * (height >> 1)
+     + (width >> 2) * (height >> 2) + (width >> 3) * (height >> 3) + 3] = 30;
+  bytes
+    [40 + (width >> 0) * (height >> 0) + (width >> 1) * (height >> 1)
+     + (width >> 2) * (height >> 2) + (width >> 3) * (height >> 3) + 4] = 10;
+  return bytes;
+}
+
 /**
  * Minimal GoldSrc studio model: two bones, one body part with two variants and one
  * triangle per variant. Variant 1 skips the child bone, so a body switch moves geometry.
@@ -314,6 +343,17 @@ TEST_CASE("AssetInspection")
       require(inspection::decodeImage(named, "goldsrc-miptex")).size() == decoded.size());
     CHECK(inspection::decodeImage(inspection::Bytes{'W', 'A', 'D', '3'}).is_error());
     CHECK(inspection::decodeImage(inspection::Bytes{1, 2, 3}).is_error());
+  }
+  SECTION("decodes WAD2 and derives the palette after all mip levels")
+  {
+    auto wad = require(project::buildGoldSrcWad({miptex(15, 15)}));
+    std::copy_n("WAD2", 4, wad.begin());
+    const auto directory = std::size_t(wad[8]) | (std::size_t(wad[9]) << 8)
+                           | (std::size_t(wad[10]) << 16) | (std::size_t(wad[11]) << 24);
+    wad[directory + 12] = 0x44;
+    const auto decoded = require(inspection::decodeImage(wad));
+    CHECK(decoded.size() == QSize{15, 15});
+    CHECK(decoded.pixelColor(0, 0) == QColor{200, 30, 10});
   }
   SECTION("WAD members have library thumbnails and original and compatible previews")
   {

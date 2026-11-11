@@ -7,6 +7,7 @@
 #include "GoldSrcFixtures.h"
 #include "project/GoldSrcWad.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,13 @@ std::vector<std::uint8_t> withDirectoryEntry(
                          | (std::uint32_t{copy[10]} << 16)
                          | (std::uint32_t{copy[11]} << 24);
   copy[directory + 12] = lumpType;
+  return copy;
+}
+
+std::vector<std::uint8_t> asWad2(const std::vector<std::uint8_t>& wad)
+{
+  auto copy = withDirectoryEntry(wad, 0x44);
+  std::copy_n("WAD2", 4, copy.begin());
   return copy;
 }
 
@@ -82,6 +90,17 @@ TEST_CASE("GoldSrcWad")
     const auto palette = withDirectoryEntry(require(buildGoldSrcWad({wall})), 0x40);
     const auto archive = require(readGoldSrcWad(palette));
     CHECK(archive.textures.empty());
+  }
+
+  SECTION("reads Quake WAD2 miptex entries")
+  {
+    const auto wall = test::makeMiptex("WALL01", 16, 16, 3);
+    const auto wad = asWad2(require(buildGoldSrcWad({wall})));
+    const auto archive = require(readGoldSrcWad(wad));
+    REQUIRE(archive.signature == "WAD2");
+    REQUIRE(archive.textures.size() == 1);
+    CHECK(archive.textures.front().valid);
+    CHECK(archive.textures.front().miptex == wall);
   }
 
   SECTION("reports damaged lumps without failing the archive")

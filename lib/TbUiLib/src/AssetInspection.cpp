@@ -425,7 +425,9 @@ Result<QImage> decodeImage(
 {
   // Library WAD members are stored as miptex lumps, without the archive header. Use
   // the same validated WAD decoder for them; ordinary images are never guessed as miptex.
-  const auto isWad = bytes.size() >= 4 && std::memcmp(bytes.data(), "WAD3", 4) == 0;
+  const auto isWad =
+    bytes.size() >= 4
+    && (std::memcmp(bytes.data(), "WAD3", 4) == 0 || std::memcmp(bytes.data(), "WAD2", 4) == 0);
   if (isWad)
   {
     const auto archive = project::readGoldSrcWadView(bytes);
@@ -441,7 +443,23 @@ Result<QImage> decodeImage(
           continue;
         const auto count = size_t(width) * height;
         const auto pixels = size_t(u32(lump, 24));
-        const auto palette = size_t(u32(lump, 36)) + count / 64 + 2;
+        auto palette = size_t{0};
+        for (auto level = 0u; level < 4; ++level)
+        {
+          const auto levelWidth = size_t(width) >> level;
+          const auto levelHeight = size_t(height) >> level;
+          const auto offset = size_t(u32(lump, 24 + level * 4));
+          const auto levelSize = levelWidth * levelHeight;
+          if (
+            levelWidth == 0 || levelHeight == 0 || offset > lump.size()
+            || levelSize > lump.size() - offset)
+          {
+            palette = 0;
+            break;
+          }
+          palette = std::max(palette, offset + levelSize);
+        }
+        palette += 2;
         if (
           pixels > lump.size() || count > lump.size() - pixels || palette > lump.size()
           || 768 > lump.size() - palette)

@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -329,6 +330,9 @@ TEST_CASE("GoldSrcMdlScaler")
 
     CHECK(scaleGoldSrcMdlFile(path, 0.0f).is_error());
     CHECK(readBinaryFile(path) == originalData);
+
+    CHECK(scaleGoldSrcMdlFile(path, std::numeric_limits<float>::infinity()).is_error());
+    CHECK(readBinaryFile(path) == originalData);
   }
 
   SECTION("rejects non GoldSrc Studio MDL file")
@@ -352,6 +356,18 @@ TEST_CASE("GoldSrcMdlScaler")
     writeBinaryFile(path, data);
 
     CHECK(scaleGoldSrcMdlFile(path, 2.0f).is_error());
+  }
+
+  SECTION("rejects negative section counts")
+  {
+    const auto path = testDir.path() / "invalid.mdl";
+    auto data = makeMinimalGoldSrcMdl();
+    auto& header = *reinterpret_cast<GoldSrcStudioHdr*>(data.data());
+    header.numhitboxes = -1;
+    writeBinaryFile(path, data);
+
+    CHECK(scaleGoldSrcMdlFile(path, 2.0f).is_error());
+    CHECK(readBinaryFile(path) == data);
   }
 }
 

@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -483,6 +484,18 @@ TEST_CASE("GoldSrcStudioModel")
     REQUIRE(rest.is_success());
     CHECK_THAT(
       rest.value().positions.front().x(), Catch::Matchers::WithinAbs(11.0f, 0.001));
+
+    // A sequence cannot use an externally supplied group that the model header does not
+    // declare.
+    auto undeclared = main;
+    auto undeclaredHeader = *reinterpret_cast<const StudioHeader*>(undeclared.data());
+    undeclaredHeader.numseqgroups = 1;
+    undeclaredHeader.seqgroupindex = 0;
+    writeAt(undeclared, 0, undeclaredHeader);
+    const auto fallback = buildGoldSrcStudioMesh(undeclared, {}, 0, 0, true, external);
+    REQUIRE(fallback.is_success());
+    CHECK_THAT(
+      fallback.value().positions.front().x(), Catch::Matchers::WithinAbs(11.0f, 0.001));
   }
 
   SECTION("applies neutral bone controller offsets")
@@ -564,6 +577,11 @@ TEST_CASE("GoldSrcStudioModel")
     header.numbodyparts = 0;
     writeAt(empty, 0, header);
     CHECK(buildGoldSrcStudioMesh(empty).is_error());
+
+    auto nonFinite = makeStudioModel();
+    const auto nan = std::numeric_limits<float>::quiet_NaN();
+    writeAt(nonFinite, nonFinite.size() - 72, nan);
+    CHECK(buildGoldSrcStudioMesh(nonFinite).is_error());
   }
 }
 

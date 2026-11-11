@@ -515,7 +515,9 @@ std::optional<std::vector<BonePose>> readSequencePose(
   if (group != 0)
   {
     const auto groupIndex = std::size_t(group);
-    if (!external.sequenceGroups || groupIndex > external.sequenceGroups->size())
+    if (
+      groupIndex >= header.sequenceGroups || !external.sequenceGroups
+      || groupIndex > external.sequenceGroups->size())
       return std::nullopt;
     const auto& groupBytes = (*external.sequenceGroups)[groupIndex - 1];
     if (groupBytes.size() < SequenceHeaderSize)
@@ -820,6 +822,13 @@ Result<GoldSrcStudioMesh> buildGoldSrcStudioMesh(
               readf32(bytes, vertexOffset + index * 12),
               readf32(bytes, vertexOffset + index * 12 + 4),
               readf32(bytes, vertexOffset + index * 12 + 8)};
+            if (
+              !std::isfinite(position.x()) || !std::isfinite(position.y())
+              || !std::isfinite(position.z()))
+            {
+              skipped = true;
+              break;
+            }
             result.positions.push_back(
               bone < bones.size() ? applyTransform(bones[bone], position) : position);
             result.texCoords.push_back(runCoords[corner]);

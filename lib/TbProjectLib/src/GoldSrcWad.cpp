@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <limits>
 
 namespace tb::project
 {
@@ -77,24 +78,31 @@ void inspectMiptex(BasicWadTextureEntry<MiptexBytes>& entry)
     const auto offset = readU32(lump, 24 + level * 4);
     const auto levelWidth = std::size_t{width} >> level;
     const auto levelHeight = std::size_t{height} >> level;
+    if (
+      levelWidth == 0 || levelHeight == 0
+      || levelWidth > std::numeric_limits<std::size_t>::max() / levelHeight)
+    {
+      entry.problem = "miptex mip level is out of range";
+      return;
+    }
     const auto size = levelWidth * levelHeight;
     if (
-      levelWidth == 0 || levelHeight == 0 || offset < MiptexHeaderSize
-      || std::size_t{offset} + size > lump.size())
+      offset < MiptexHeaderSize || std::size_t{offset} > lump.size()
+      || size > lump.size() - std::size_t{offset})
     {
       entry.problem = "miptex mip level is out of range";
       return;
     }
     expected = std::max(expected, std::size_t{offset} + size);
   }
-  if (expected + PaletteSize > lump.size())
+  if (expected > lump.size() || PaletteSize > lump.size() - expected)
   {
     entry.problem = "miptex palette is truncated";
     return;
   }
   const auto colors =
     std::size_t(std::uint32_t(lump[expected]) | (std::uint32_t{lump[expected + 1]} << 8));
-  if (colors > 256 || expected + 2 + colors * 3 > lump.size())
+  if (colors > 256 || colors > (lump.size() - expected - 2) / 3)
   {
     entry.problem = "miptex palette is invalid";
     return;
@@ -111,6 +119,12 @@ bool hasWadMagic(const std::span<const std::uint8_t> bytes)
   const auto magic =
     std::string_view{reinterpret_cast<const char*>(bytes.data()), std::size_t{4}};
   return magic == "WAD3" || magic == "WAD2";
+}
+
+bool isMiptexLump(const std::string_view signature, const std::uint8_t type)
+{
+  // Quake WAD2 uses TYP_MIPTEX ('D'); GoldSrc WAD3 uses TYP_MIPTEX ('C').
+  return signature == "WAD2" ? type == 0x44 : type == 0x43;
 }
 
 template <typename Archive, typename ReadLump>
@@ -139,9 +153,9 @@ Result<Archive> readWad(
     const auto compression = bytes[base + 13];
     auto entry = typename decltype(archive.textures)::value_type{};
     entry.name = readName(bytes.data() + base + 16, MiptexNameSize);
-    // WAD3 texture lumps carry 'C'; other lump types (palettes, qpics) are not
-    // textures and are skipped without failing the archive.
-    if (bytes[base + 12] != 0x43)
+    // Other lump types (palettes, qpics) are not textures and are skipped without
+    // failing the archive. WAD2 and WAD3 use different miptex type bytes.
+    if (!isMiptexLump(archive.signature, bytes[base + 12]))
       continue;
     if (compression != 0)
     {

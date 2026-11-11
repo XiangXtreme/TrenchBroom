@@ -17,7 +17,7 @@ namespace tb::project
 {
 
 /**
- * Member level access to GoldSrc WAD3 archives.
+ * Member level access to GoldSrc-compatible WAD2/WAD3 archives.
  *
  * A WAD is only a container. Everything the asset library and the project snapshot do
  * with textures operates on one miptex entry at a time, so this reader preserves each

@@ -5,6 +5,7 @@
 #include "kd/filesystem_utils.h"
 #include "kd/path_utils.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -176,7 +177,7 @@ void scaleVec3(float v[3], const float s)
 
 Result<void> scaleGoldSrcMdlBuffer(std::vector<uint8_t>& data, const float s)
 {
-  if (!(s > 0.0f))
+  if (!(s > 0.0f) || !std::isfinite(s))
   {
     return Error{"Invalid scale"};
   }
@@ -184,9 +185,21 @@ Result<void> scaleGoldSrcMdlBuffer(std::vector<uint8_t>& data, const float s)
   auto* base = data.data();
   const auto size = data.size();
   auto* header = ptrAt<GoldSrcStudioHdr>(base, size, 0);
-  if (!header || header->id != GoldSrcStudioId_IDST || header->version != GoldSrcStudioVersion)
+  if (
+    !header || header->id != GoldSrcStudioId_IDST
+    || header->version != GoldSrcStudioVersion)
   {
     return Error{"Not a GoldSrc Studio MDL"};
+  }
+
+  if (
+    header->numbones < 0 || header->numbonecontrollers < 0 || header->numhitboxes < 0
+    || header->numseq < 0 || header->numseqgroups < 0 || header->numtextures < 0
+    || header->numskinref < 0 || header->numskinfamilies < 0 || header->numbodyparts < 0
+    || header->numattachments < 0 || header->soundgroups < 0
+    || header->numtransitions < 0)
+  {
+    return Error{"GoldSrc Studio MDL contains a negative section count"};
   }
 
   scaleVec3(header->eyeposition, s);
@@ -252,7 +265,11 @@ Result<void> scaleGoldSrcMdlBuffer(std::vector<uint8_t>& data, const float s)
     for (int32_t i = 0; i < header->numbodyparts; ++i)
     {
       const auto modelCount = bodyparts[i].nummodels;
-      if (modelCount <= 0)
+      if (modelCount < 0)
+      {
+        return Error{"GoldSrc Studio MDL bodypart contains a negative model count"};
+      }
+      if (modelCount == 0)
       {
         continue;
       }
@@ -266,17 +283,20 @@ Result<void> scaleGoldSrcMdlBuffer(std::vector<uint8_t>& data, const float s)
 
       for (int32_t m = 0; m < modelCount; ++m)
       {
+        if (
+          models[m].nummesh < 0 || models[m].numverts < 0 || models[m].numnorms < 0
+          || models[m].numgroups < 0)
+        {
+          return Error{"GoldSrc Studio MDL model contains a negative section count"};
+        }
         models[m].boundingradius *= s;
-        if (models[m].numverts <= 0)
+        if (models[m].numverts == 0)
         {
           continue;
         }
 
         auto* verts = ptrAt<float>(
-          base,
-          size,
-          models[m].vertindex,
-          size_t(models[m].numverts) * size_t(3));
+          base, size, models[m].vertindex, size_t(models[m].numverts) * size_t(3));
         if (!verts)
         {
           return Error{"GoldSrc Studio MDL vertex index is out of bounds"};
@@ -329,4 +349,3 @@ Result<void> scaleGoldSrcMdlFile(const std::filesystem::path& absPath, const flo
 }
 
 } // namespace tb::io
-
