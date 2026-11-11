@@ -1,5 +1,6 @@
 #include "collision.h"
 
+#include <chrono>
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -47,6 +48,29 @@ int main(int argc, char **argv)
     try
     {
         using namespace hltools::collision;
+        if (argc == 5 && std::string(argv[1]) == "--benchmark")
+        {
+            std::ifstream input(argv[2], std::ios::binary);
+            require(input.good());
+            const std::string text{std::istreambuf_iterator<char>(input), {}};
+            const auto clip = static_cast<clip_type>(std::stoi(argv[3]));
+            const int repetitions = std::stoi(argv[4]);
+            require(repetitions > 0);
+            for (int i = 0; i < repetitions; i++)
+            {
+                const auto start = std::chrono::steady_clock::now();
+                const auto output = compile(text, clip);
+                const auto total =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                const auto &t = output.timings;
+                std::cout << "{\"run\":" << i + 1 << ",\"total_ms\":" << total
+                          << ",\"parse_ms\":" << t.parse_milliseconds << ",\"csg_ms\":" << t.csg_milliseconds
+                          << ",\"intermediate_ms\":" << t.intermediate_milliseconds
+                          << ",\"bsp_data_ms\":" << t.bsp_data_milliseconds << ",\"bsp_ms\":" << t.bsp_milliseconds
+                          << "}\n";
+            }
+            return 0;
+        }
         if (argc == 4)
         {
             std::ifstream input(argv[1], std::ios::binary);

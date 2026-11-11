@@ -70,6 +70,10 @@ collision target also tests failure recovery and concurrent callers. Its
 `verify_cli_parity.py` compares planes, clipnodes and model headnodes byte for
 byte with the real hltools CLI for eight fixture maps and six cliptypes (48
 pairs), using the same embedded compile options.
+Pass `--baseline-embedded <saved-test-executable>` to additionally require the
+same collision records as a previous build when optimizing the compiler. The
+standalone test executable's `--benchmark <map> <cliptype-0..5> <repetitions>`
+mode reports per-stage timings without modifying the input map.
 
 `LightmapBaker` tests exercise real baking, brush lightmap assembly, current project
 resources, cancellation and failure recovery. The worker's `verify_cli_parity.py`

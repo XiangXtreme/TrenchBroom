@@ -204,6 +204,9 @@ namespace bsp
         std::string base_path;
 
         std::vector<plane> planes; // double planes from the csg pln file
+        // Partition scores are consumed before descending into child nodes.
+        // Retain their storage across choices without changing plane order.
+        std::vector<double> partition_scores;
         math::vec3v hull_size[num_hulls][2] = {
             {{0, 0, 0}, {0, 0, 0}},
             {{-16, -16, -36}, {16, 16, 36}},

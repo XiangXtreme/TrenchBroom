@@ -29,6 +29,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--embedded", required=True, type=Path)
+    parser.add_argument("--baseline-embedded", type=Path,
+                        help="also require byte-identical output from a previous build")
     args = parser.parse_args()
     world = lambda b: entity({"classname": "worldspawn"}, b)
     ramp = box(0, -64, -64, 128, 64, 128).replace(
@@ -100,6 +102,15 @@ def main():
                 expected += b"".join(models[j + 36:j + 52] for j in range(0, len(models), 64))
                 if expected != (work / "embedded.bin").read_bytes():
                     raise AssertionError(f"Collision differs for {name}/{mode}")
+                if args.baseline_embedded:
+                    run = subprocess.run(
+                        [str(args.baseline_embedded.resolve()), str(path), str(i),
+                         str(work / "baseline.bin")], cwd=work,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    if run.returncode:
+                        raise RuntimeError(run.stdout.decode(errors="replace"))
+                    if expected != (work / "baseline.bin").read_bytes():
+                        raise AssertionError(f"Collision changed from baseline for {name}/{mode}")
                 print(f"MATCH {name}/{mode}")
         print(f"Verified {len(fixtures) * 6} CLI/embedded collision pairs")
 

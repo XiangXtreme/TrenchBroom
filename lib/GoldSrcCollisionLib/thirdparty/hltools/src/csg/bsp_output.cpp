@@ -454,7 +454,7 @@ namespace csg
                 const char *name = texture_name(result, face.texinfo);
                 if (face.texinfo == -1 || is_hint_texture(name))
                 {
-                    outside.insert(outside.begin(), std::move(face));
+                    outside.push_back(std::move(face));
                     return;
                 }
             }
@@ -462,7 +462,7 @@ namespace csg
             math::winding inside;
             if (!face_inside_cutter(result, face, cutter, hull, overwrite, inside))
             {
-                outside.insert(outside.begin(), std::move(face));
+                outside.push_back(std::move(face));
                 return;
             }
 
@@ -489,7 +489,7 @@ namespace csg
                     face_fragment front_face = face;
                     front_face.winding = std::move(front);
                     update_bounds(front_face);
-                    outside.insert(outside.begin(), std::move(front_face));
+                    outside.push_back(std::move(front_face));
                 }
                 if (!back.empty())
                 {
@@ -508,7 +508,7 @@ namespace csg
             if (cutter_has_higher_detail(brush, cutter, hull))
             {
                 face.texinfo = -1;
-                outside.insert(outside.begin(), std::move(face));
+                outside.push_back(std::move(face));
                 return;
             }
             if (cutter_has_lower_detail(brush, cutter, hull) && cutter.contents == content::solid)
@@ -535,7 +535,7 @@ namespace csg
                 {
                     return;
                 }
-                outside.insert(outside.begin(), std::move(face));
+                outside.push_back(std::move(face));
                 return;
             }
 
@@ -544,7 +544,7 @@ namespace csg
                     && is_solid_hint_texture(texture_name(result, face.texinfo))))
             {
                 face.contents = cutter.contents;
-                outside.insert(outside.begin(), std::move(face));
+                outside.push_back(std::move(face));
             }
         }
 
@@ -571,6 +571,7 @@ namespace csg
                 }
             }
 
+            std::vector<face_fragment> current;
             for (int cutter_pos = 0; cutter_pos < (int)brush_order.size(); cutter_pos++)
             {
                 if (cutter_pos == order_pos)
@@ -586,17 +587,21 @@ namespace csg
                     continue;
 
                 bool overwrite = overwrite_for_cutter(brush, cutter, order_pos, cutter_pos, hull);
-                std::vector<face_fragment> current = std::move(outside);
+                current.swap(outside);
                 outside.clear();
                 for (face_fragment &face : current)
                 {
                     if (cutter.hulls[hull].bounds.disjoint(face.bounds))
                     {
-                        outside.insert(outside.begin(), std::move(face));
+                        outside.push_back(std::move(face));
                         continue;
                     }
                     carve_face_by_cutter(result, brush, cutter, std::move(face), hull, overwrite, outside);
                 }
+                // The reference prepends each emitted fragment. Appending and
+                // reversing once preserves that exact order without shifting
+                // all previous fragments on every insertion.
+                std::reverse(outside.begin(), outside.end());
             }
             return outside;
         }

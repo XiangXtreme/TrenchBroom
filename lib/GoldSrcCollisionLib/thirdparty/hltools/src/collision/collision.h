@@ -19,10 +19,20 @@ enum class clip_type
     legacytrim
 };
 
+struct stage_timings
+{
+    double parse_milliseconds = 0;
+    double csg_milliseconds = 0;
+    double intermediate_milliseconds = 0;
+    double bsp_data_milliseconds = 0;
+    double bsp_milliseconds = 0;
+};
+
 struct result
 {
     format::map_data bsp;
     std::vector<std::string> warnings;
+    stage_timings timings;
 };
 
 // Compiles GoldSrc MAP text without reading WADs or writing sidecars. Uses

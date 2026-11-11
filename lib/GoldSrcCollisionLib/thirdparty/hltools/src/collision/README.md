@@ -25,6 +25,29 @@ preserving the legacy slope offsets and removal of source-brush partition seams.
 The collision parity checker includes thin roofs, diagonal ends and a segmented
 roof ring alongside the basic brush fixtures (48 CLI/embedded pairs).
 
+`result.timings` reports MAP parsing, CSG brush construction, intermediate
+generation, BSP-data preparation and BSP processing in milliseconds. The
+standalone test executable can benchmark a saved MAP without modifying it:
+
+```sh
+build/collision/HltoolsCollisionTest --benchmark example.map 5 5
+```
+
+The arguments select cliptype 0..5 and repetition count; each run prints a JSON
+record. Total time includes compilation and its temporary-data cleanup, but
+excludes editor snapshot/export, movement-world import and UI startup.
+
+Geometry work retains its original order and precision. Small winding scratch
+uses stack storage with a heap fallback, CSG fragment buffers retain capacity,
+BSP partition scores reuse storage, and brink expansion allocates its actual
+tree size. These changes preserve the compiled collision instead of substituting
+a different hull or spatial-partition algorithm.
+
+Use `verify_cli_parity.py --cli <cli> --embedded <current-test-executable>
+--baseline-embedded <previous-test-executable>` to additionally compare every
+fixture against a saved build before a performance change. This compares the
+plane and clipnode records and all model headnodes byte for byte.
+
 The embedded stage uses `-nofill -noopt`: an editor's map can be incomplete,
 and texture pixels are not loaded. It writes no BSP, sidecars, leak files or
 face extents. VIS, RAD, WAD resolution and studio asset injection are outside

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -161,8 +162,22 @@ namespace math
         {
             const T epsilon = (T)on_epsilon;
             int n = size();
-            std::vector<T> dists(n + 1);
-            std::vector<int> sides(n + 1);
+            // Most clipped faces are small. Keep their classification scratch
+            // on the stack, with the same zero initialization and an unbounded
+            // heap fallback for larger polygons.
+            std::array<T, 65> local_dists{};
+            std::array<int, 65> local_sides{};
+            std::vector<T> large_dists;
+            std::vector<int> large_sides;
+            T *dists = local_dists.data();
+            int *sides = local_sides.data();
+            if ((size_t)n + 1 > local_dists.size())
+            {
+                large_dists.resize((size_t)n + 1);
+                large_sides.resize((size_t)n + 1);
+                dists = large_dists.data();
+                sides = large_sides.data();
+            }
             int counts[3] = { 0, 0, 0 };
 
             for (int i = 0; i < n; i++)
@@ -194,6 +209,8 @@ namespace math
                 return;
             }
 
+            front.points_.reserve((size_t)n + 1);
+            back.points_.reserve((size_t)n + 1);
             for (int i = 0; i < n; i++)
             {
                 const vec3<T> &p1 = points_[i];

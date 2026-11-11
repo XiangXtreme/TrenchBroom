@@ -1,5 +1,6 @@
 #include "collision.h"
 
+#include <chrono>
 #include <mutex>
 #include <utility>
 
@@ -19,11 +20,21 @@ result compile(std::string map_text, clip_type clip)
     if (clip < clip_type::smallest || clip > clip_type::legacytrim)
         err::fatal("invalid collision cliptype");
 
+    auto phase_start = std::chrono::steady_clock::now();
+    const auto elapsed = [&phase_start]() {
+        const auto now = std::chrono::steady_clock::now();
+        const auto milliseconds = std::chrono::duration<double, std::milli>(now - phase_start).count();
+        phase_start = now;
+        return milliseconds;
+    };
+    result output;
     csg::csg_options options;
     options.brush.clip =
         static_cast<csg::clip_type>(static_cast<int>(clip) + 1);
-    auto csg = csg::run_csg(csg::parse_map_text(std::move(map_text)), options);
-    result output;
+    auto map = csg::parse_map_text(std::move(map_text));
+    output.timings.parse_milliseconds = elapsed();
+    auto csg = csg::run_csg(std::move(map), options);
+    output.timings.csg_milliseconds = elapsed();
     if (csg.planes.empty())
     {
         format::dmodel_t model{};
@@ -34,7 +45,9 @@ result compile(std::string map_text, clip_type clip)
     else
     {
         auto input = csg::build_intermediate_data(csg, options.brush);
+        output.timings.intermediate_milliseconds = elapsed();
         output.bsp = csg::build_bsp_data(csg);
+        output.timings.bsp_data_milliseconds = elapsed();
         bsp::bsp_input bsp_input;
         for (int h = 0; h < 4; ++h)
         {
@@ -50,6 +63,7 @@ result compile(std::string map_text, clip_type clip)
         // to optimize in this build. All geometry/clipnode passes remain on.
         bsp_options.noopt = true;
         bsp::run_bsp(output.bsp, {}, bsp_options, std::move(bsp_input));
+        output.timings.bsp_milliseconds = elapsed();
     }
     output.warnings = detail::take_warnings();
     return output;

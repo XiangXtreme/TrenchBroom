@@ -998,25 +998,27 @@ namespace bsp
             return c;
         }
 
+        void count_expanded_clipnodes(const format::dclipnode_t *clipnodes, int headnode, int &count)
+        {
+            if (count >= max_expanded_clipnodes)
+                err::fatal("expand_clipnodes_r: exceeded max_expanded_clipnodes");
+            count++;
+            if (headnode >= 0)
+                for (int side = 0; side < 2; side++)
+                    count_expanded_clipnodes(clipnodes, clipnodes[headnode].children[side], count);
+        }
+
         void expand_clipnodes(const bsp_state &state, bbrinkinfo *info,
                               const format::dclipnode_t *clipnodes, int headnode)
         {
-            std::vector<bclipnode> temp((size_t)max_expanded_clipnodes);
+            // Count the expanded tree, including each occurrence of a shared
+            // subtree. Allocate stable storage once instead of initializing the
+            // maximum-sized scratch array for every model/hull and copying it.
+            int count = 0;
+            count_expanded_clipnodes(clipnodes, headnode, count);
+            info->clipnodes = new bclipnode[(size_t)count];
             info->numclipnodes = 0;
-            expand_clipnodes_r(state, temp.data(), info->numclipnodes, clipnodes, headnode);
-            info->clipnodes = new bclipnode[(size_t)info->numclipnodes];
-            for (int i = 0; i < info->numclipnodes; i++)
-            {
-                info->clipnodes[i] = temp[(size_t)i];
-                for (int k = 0; k < 2; k++)
-                {
-                    if (!temp[(size_t)i].isleaf)
-                    {
-                        info->clipnodes[i].children[k] =
-                            info->clipnodes + (temp[(size_t)i].children[k] - temp.data());
-                    }
-                }
-            }
+            expand_clipnodes_r(state, info->clipnodes, info->numclipnodes, clipnodes, headnode);
         }
 
         void build_tree_cells(bbrinkinfo *info)

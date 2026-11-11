@@ -430,7 +430,8 @@ namespace bsp
 
             double planecount = 0;
             double totalsplit = 0;
-            std::vector<double> tmpvalue(state.planes.size() * 2);
+            auto &tmpvalue = state.partition_scores;
+            tmpvalue.resize(state.planes.size() * 2);
             surface_tree *surfacetree = build_surface_tree(surfaces, (vec_t)math::on_epsilon);
 
             vec_t bestvalue = 9e30;
