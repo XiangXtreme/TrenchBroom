@@ -841,6 +841,27 @@ void PlayModeController::render(
           takeoff && stats.timeMs() - takeoff->timeMs < 1000.0
           && takeoff->technique != PlayModeJumpStats::Technique::Unsupported)
       {
+        const auto preName = [&]() -> std::string_view {
+          switch (takeoff->technique)
+          {
+          case PlayModeJumpStats::Technique::Bhop:
+            return "bhop";
+          case PlayModeJumpStats::Technique::StandupBhop:
+            return "sbj";
+          case PlayModeJumpStats::Technique::DuckBhop:
+            return "duckbhop";
+          case PlayModeJumpStats::Technique::CountJump:
+            return "cj";
+          case PlayModeJumpStats::Technique::StandupCountJump:
+            return "scj";
+          case PlayModeJumpStats::Technique::DoubleCountJump:
+            return "dcj";
+          case PlayModeJumpStats::Technique::MultiCountJump:
+            return "mcj";
+          default:
+            return PlayModeJumpStats::name(takeoff->technique);
+          }
+        };
         const auto isLongJump =
           takeoff->technique == PlayModeJumpStats::Technique::LongJump
           || takeoff->technique == PlayModeJumpStats::Technique::HighJump;
@@ -853,7 +874,7 @@ void PlayModeController::render(
                                  formatFloat(takeoff->postSpeed, 3),
                                  std::string{}}
                              : std::array{
-                                 std::string{PlayModeJumpStats::name(takeoff->technique)}
+                                 std::string{preName()}
                                    + " " + std::to_string(takeoff->fog) + " FOG:",
                                  formatFloat(takeoff->preSpeed, 3),
                                  formatFloat(takeoff->postSpeed, 3)};

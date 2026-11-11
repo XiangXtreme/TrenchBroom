@@ -277,7 +277,10 @@ void PlayModeJumpStats::finish(const vm::vec3f& endFeet, const bool failed)
   const auto delta = endFeet - m_flight->startFeet;
   auto result = std::move(m_flight->analysis);
   result.failed = failed || result.touched;
-  result.distance = std::hypot(delta.x(), delta.y());
+  // KZ jump statistics report the horizontal center displacement plus the
+  // player's 32-unit width.  The plugin uses this convention for the value
+  // shown as `distance`; omitting it makes every result appear 32 units short.
+  result.distance = std::hypot(delta.x(), delta.y()) + 32.0f;
   result.heightDifference = delta.z();
   result.timeMs = m_timeMs;
   m_result = std::move(result);
