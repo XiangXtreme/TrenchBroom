@@ -46,6 +46,7 @@ namespace ui
 class MapDocument;
 class MultiCompletionLineEdit;
 class TitledPanel;
+class HltoolsOptionsEditor;
 
 class CompilationTaskEditorBase : public ControlListBoxItemRenderer
 {
@@ -76,6 +77,9 @@ protected:
 public:
   void updateItem() override;
   void setDiagnostic(const std::optional<CompilationDiagnostic>& diagnostic);
+
+signals:
+  void layoutChanged();
 
 private:
   void updateCompleter(QCompleter* completer);
@@ -209,6 +213,7 @@ private:
   MultiCompletionLineEdit* m_parametersEditor = nullptr;
   QComboBox* m_qualityEditor = nullptr;
   QCheckBox* m_gpuEditor = nullptr;
+  HltoolsOptionsEditor* m_optionsEditor = nullptr;
 
 public:
   CompilationHltoolsTaskEditor(

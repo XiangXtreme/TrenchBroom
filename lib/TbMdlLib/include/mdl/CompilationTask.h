@@ -87,7 +87,7 @@ struct CompilationRunTool
 struct CompilationHltools
 {
   bool enabled = true;
-  std::string targetSpec = "${OUTPUT_DIR_PATH}/${MAP_BASE_NAME}.bsp";
+  std::string targetSpec = "${MAP_BASE_NAME}.bsp";
   std::string quality = "normal";
   bool gpu = true;
   std::string parameterSpec;

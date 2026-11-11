@@ -20,14 +20,17 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QtTest/QSignalSpy>
 
 #include "mdl/CompilationProfile.h"
 #include "mdl/CompilationTask.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityProperties.h"
 #include "ui/CatchConfig.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/CompilationTaskListBox.h"
 #include "ui/ControlListBox.h"
+#include "ui/HltoolsOptionsEditor.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
 
@@ -68,6 +71,7 @@ TEST_CASE("CompilationHltoolsTaskEditor")
   REQUIRE(quality);
   REQUIRE(gpu);
   REQUIRE(parameters);
+  CHECK(output->text() == "${MAP_BASE_NAME}.bsp");
   CHECK(quality->currentData().toString() == "normal");
   CHECK(gpu->isChecked());
   output->setText("custom.bsp");
@@ -82,6 +86,116 @@ TEST_CASE("CompilationHltoolsTaskEditor")
   CHECK(quality->currentData().toString() == "normal");
   CHECK(gpu->isChecked());
   CHECK(parameters->text().isEmpty());
+  SECTION("visual options and the saved parameter expression stay synchronized")
+  {
+    auto* sky = editor.findChild<QCheckBox*>("HltoolsOption_noskyclip");
+    auto* wad = editor.findChild<QCheckBox*>("HltoolsOption_wadtextures");
+    auto* bounce = editor.findChild<QCheckBox*>("HltoolsOption_bounce");
+    auto* bounceValue = editor.findChild<QComboBox*>("HltoolsOption_bounceValue");
+    REQUIRE(sky);
+    REQUIRE(wad);
+    REQUIRE(bounce);
+    REQUIRE(bounceValue);
+    const auto original = QString{
+      R"(-lights "C:\my lights\custom.rad" -threads ${CPU_COUNT} ${'literal -noskyclip'})"};
+    parameters->setText(original);
+    CHECK_FALSE(sky->isChecked());
+    sky->click();
+    CHECK(parameters->text() == original + " -noskyclip");
+    CHECK(
+      std::get<mdl::CompilationHltools>(task).parameterSpec
+      == parameters->text().toStdString());
+    sky->click();
+    CHECK(parameters->text() == original);
+    parameters->setText("-wadtextures -noskyclip -noskyclip -bounce ${CPU_COUNT}");
+    CHECK(wad->isChecked());
+    CHECK(sky->isChecked());
+    CHECK(bounce->isChecked());
+    CHECK(bounceValue->currentText() == "${CPU_COUNT}");
+    sky->click();
+    CHECK_FALSE(parameters->text().contains("-noskyclip"));
+    CHECK(parameters->text().contains("-bounce ${CPU_COUNT}"));
+    bounce->click();
+    CHECK_FALSE(parameters->text().contains("-bounce"));
+    CHECK_FALSE(parameters->text().contains("CPU_COUNT"));
+    CHECK(parameters->text().contains("-wadtextures"));
+  }
+  SECTION("quoted flags and the opaque alias reflect effective options")
+  {
+    auto* sky = editor.findChild<QCheckBox*>("HltoolsOption_noskyclip");
+    auto* opaque = editor.findChild<QCheckBox*>("HltoolsOption_nopaque");
+    REQUIRE(sky);
+    REQUIRE(opaque);
+    parameters->setText("\"-noskyclip\" -noopaque");
+    CHECK(sky->isChecked());
+    CHECK(opaque->isChecked());
+    sky->click();
+    CHECK_FALSE(parameters->text().contains("noskyclip"));
+    opaque->click();
+    CHECK(parameters->text().isEmpty());
+  }
+  SECTION("value selectors preserve expressions and remove stale duplicate overrides")
+  {
+    auto* clip = editor.findChild<QCheckBox*>("HltoolsOption_cliptype");
+    auto* clipValue = editor.findChild<QComboBox*>("HltoolsOption_cliptypeValue");
+    auto* bounce = editor.findChild<QCheckBox*>("HltoolsOption_bounce");
+    auto* bounceValue = editor.findChild<QComboBox*>("HltoolsOption_bounceValue");
+    REQUIRE(clip);
+    REQUIRE(clipValue);
+    REQUIRE(bounce);
+    REQUIRE(bounceValue);
+    parameters->setText(
+      "-bounce -1 -cliptype simple -cliptype precise -lights \"custom lights.rad\"");
+    CHECK(clip->isChecked());
+    CHECK(clipValue->currentText() == "precise");
+    bounce->click();
+    CHECK_FALSE(parameters->text().contains("-1"));
+    clipValue->setCurrentIndex(clipValue->findText("normalized"));
+    QMetaObject::invokeMethod(
+      clipValue,
+      "activated",
+      Qt::DirectConnection,
+      Q_ARG(int, clipValue->currentIndex()));
+    CHECK(parameters->text().count("-cliptype") == 1);
+    CHECK(parameters->text().contains("-cliptype normalized"));
+    CHECK(parameters->text().contains("-lights \"custom lights.rad\""));
+    bounce->click();
+    bounceValue->setEditText("${CPU_COUNT}");
+    QMetaObject::invokeMethod(
+      bounceValue->lineEdit(), "editingFinished", Qt::DirectConnection);
+    CHECK(parameters->text().contains("-bounce ${CPU_COUNT}"));
+  }
+  SECTION("option search and modified filter do not edit task parameters")
+  {
+    auto* panel = editor.findChild<CollapsibleTitledPanel*>("HltoolsOptionsPanel");
+    auto* sky = editor.findChild<QCheckBox*>("HltoolsOption_noskyclip");
+    auto* wad = editor.findChild<QCheckBox*>("HltoolsOption_wadtextures");
+    auto* filter = editor.findChild<QLineEdit*>("HltoolsOptionFilter");
+    auto* modified = editor.findChild<QCheckBox*>("HltoolsModifiedOnly");
+    REQUIRE(panel);
+    REQUIRE(sky);
+    REQUIRE(wad);
+    REQUIRE(filter);
+    REQUIRE(modified);
+    CHECK_FALSE(panel->expanded());
+    parameters->setText("-noskyclip");
+    modified->setChecked(true);
+    CHECK_FALSE(sky->parentWidget()->isHidden());
+    CHECK(wad->parentWidget()->isHidden());
+    filter->setText("wad");
+    CHECK(sky->parentWidget()->isHidden());
+    CHECK(parameters->text() == "-noskyclip");
+    modified->setChecked(false);
+    CHECK_FALSE(wad->parentWidget()->isHidden());
+    CHECK(std::get<mdl::CompilationHltools>(task).parameterSpec == "-noskyclip");
+    filter->clear();
+    auto* stage = editor.findChild<QComboBox*>("HltoolsOptionStage");
+    REQUIRE(stage);
+    stage->setCurrentIndex(stage->findData("RAD"));
+    CHECK(sky->parentWidget()->isHidden());
+    CHECK_FALSE(
+      editor.findChild<QCheckBox*>("HltoolsOption_bounce")->parentWidget()->isHidden());
+  }
 }
 
 TEST_CASE("CompilationExportMapTaskEditor")

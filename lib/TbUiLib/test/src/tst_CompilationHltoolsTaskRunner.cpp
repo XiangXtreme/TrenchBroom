@@ -117,6 +117,24 @@ TEST_CASE("CompilationHltoolsTaskRunner")
     CHECK_FALSE(QFile::exists(directory.filePath("room.map")));
   }
 
+  SECTION("visual option flags reach the bundled compiler")
+  {
+    task.parameterSpec =
+      "-threads 2 -cliptype precise -noskyclip -allleaks -bounce 2 -rgbtransfers";
+    auto context =
+      CompilationContext{map, camera, variables, TextOutputAdapter{&output}, false};
+    auto runner = CompilationHltoolsTaskRunner{context, task};
+    auto ended = QSignalSpy{&runner, &CompilationTaskRunner::end};
+    auto failed = QSignalSpy{&runner, &CompilationTaskRunner::error};
+    runner.execute();
+    REQUIRE(QTest::qWaitFor([&] { return !ended.empty() || !failed.empty(); }, 30000));
+    INFO(output.toPlainText().toStdString());
+    REQUIRE(failed.empty());
+    REQUIRE(ended.count() == 1);
+    CHECK(QFile::exists(outputPath));
+    CHECK(output.toPlainText().contains("precise"));
+  }
+
   SECTION("test mode plans the compile without creating output or scratch")
   {
     auto context =

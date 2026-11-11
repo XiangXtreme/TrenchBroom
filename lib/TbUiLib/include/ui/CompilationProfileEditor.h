@@ -49,6 +49,7 @@ class CompilationProfileEditor : public QWidget
   Q_OBJECT
 private:
   MapDocument& m_document;
+  const bool m_projectMap;
   mdl::CompilationProfile* m_profile{nullptr};
   QStackedWidget* m_stackedWidget{nullptr};
   QLineEdit* m_nameTxt{nullptr};
@@ -62,7 +63,8 @@ private:
   QAbstractButton* m_moveTaskDownButton{nullptr};
 
 public:
-  explicit CompilationProfileEditor(MapDocument& document, QWidget* parent = nullptr);
+  explicit CompilationProfileEditor(
+    MapDocument& document, QWidget* parent = nullptr, bool projectMap = false);
 
 private:
   QWidget* createEditorPage(QWidget* parent);

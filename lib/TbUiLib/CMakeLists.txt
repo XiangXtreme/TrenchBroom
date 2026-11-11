@@ -60,6 +60,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationPlan.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationHltoolsTaskRunner.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HltoolsOptionsEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationProfileEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationProfileListBox.cpp
@@ -369,6 +370,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationRun.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationRunner.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationTaskListBox.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/HltoolsOptionsEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationVariables.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CommandPaletteDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CreateTerrainMaterialDialog.h

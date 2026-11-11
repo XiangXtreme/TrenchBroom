@@ -37,9 +37,11 @@
 #include "mdl/GameInfo.h"
 #include "mdl/Map.h"
 #include "ui/BorderLine.h"
+#include "ui/CollapsibleTitledPanel.h"
 #include "ui/CompilationVariables.h"
 #include "ui/FileDialogDefaultDir.h"
 #include "ui/FixedWidthFont.h"
+#include "ui/HltoolsOptionsEditor.h"
 #include "ui/MapDocument.h"
 #include "ui/MultiCompletionLineEdit.h"
 #include "ui/PanelLayout.h"
@@ -705,6 +707,24 @@ CompilationHltoolsTaskEditor::CompilationHltoolsTaskEditor(
   setupCompleter(m_parametersEditor);
   form->addRow(tr("Additional Parameters"), m_parametersEditor);
 
+  auto* options = new CollapsibleTitledPanel{tr("Compiler options"), false};
+  options->setObjectName("HltoolsOptionsPanel");
+  m_optionsEditor = new HltoolsOptionsEditor{};
+  options->createContentLayout()->addWidget(m_optionsEditor);
+  form->addRow(options);
+  connect(
+    options, &CollapsibleTitledPanel::toggled, this, [this] { emit layoutChanged(); });
+  connect(
+    m_optionsEditor,
+    &HltoolsOptionsEditor::parametersChanged,
+    m_parametersEditor,
+    &QLineEdit::setText);
+  connect(
+    m_parametersEditor,
+    &QLineEdit::textChanged,
+    m_optionsEditor,
+    &HltoolsOptionsEditor::setParameters);
+
   connect(m_targetEditor, &QLineEdit::textChanged, this, [this](const auto& text) {
     std::get<mdl::CompilationHltools>(m_task).targetSpec = text.toStdString();
   });
@@ -741,6 +761,7 @@ void CompilationHltoolsTaskEditor::updateItem()
     m_qualityEditor->findData(QString::fromStdString(task.quality)));
   m_gpuEditor->setChecked(task.gpu);
   m_parametersEditor->setText(QString::fromStdString(task.parameterSpec));
+  m_optionsEditor->setParameters(QString::fromStdString(task.parameterSpec));
 }
 
 // CompilationLaunchEngineTaskEditor
@@ -890,6 +911,12 @@ ControlListBoxItemRenderer* CompilationTaskListBox::createItemRenderer(
           m_document, *m_profile, task, parent};
       }),
     task);
+
+  connect(
+    static_cast<CompilationTaskEditorBase*>(renderer),
+    &CompilationTaskEditorBase::layoutChanged,
+    this,
+    &CompilationTaskListBox::updateItemSizes);
 
   connect(
     renderer,

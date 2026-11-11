@@ -53,9 +53,11 @@
 namespace tb::ui
 {
 
-CompilationProfileEditor::CompilationProfileEditor(MapDocument& document, QWidget* parent)
+CompilationProfileEditor::CompilationProfileEditor(
+  MapDocument& document, QWidget* parent, const bool projectMap)
   : QWidget{parent}
   , m_document{document}
+  , m_projectMap{projectMap}
 {
   setBaseWindowColor(this);
 
@@ -265,7 +267,12 @@ void CompilationProfileEditor::addTask()
         !K(treatLaunchFailureAsError)};
     }
     if (chosenAction == hltoolsAction)
-      return mdl::CompilationHltools{};
+    {
+      auto compiler = mdl::CompilationHltools{};
+      if (m_projectMap)
+        compiler.targetSpec = "${OUTPUT_DIR_PATH}/${MAP_BASE_NAME}.bsp";
+      return compiler;
+    }
     {
       return std::nullopt;
     }

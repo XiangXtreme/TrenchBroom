@@ -55,6 +55,7 @@ class CompilationProfileManager : public QWidget
   Q_OBJECT
 private:
   MapDocument& m_document;
+  const bool m_projectMap;
   mdl::CompilationConfig m_config;
   CompilationProfileListBox* m_profileList = nullptr;
   CompilationProfileEditor* m_profileEditor = nullptr;

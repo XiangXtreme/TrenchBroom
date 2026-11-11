@@ -32,7 +32,7 @@ TEST_CASE("CompilationPlan")
     const auto plan = buildCompilationPlan(profile, map, input);
     REQUIRE(!plan.diagnostic);
     REQUIRE(plan.outputs.size() == 1);
-    CHECK(plan.outputs.front() == input.parent_path() / "compiled/room.bsp");
+    CHECK(plan.outputs.front() == input.parent_path() / "room.bsp");
     CHECK(plan.enabledTaskCount == 1);
     CHECK_FALSE(std::filesystem::exists(plan.outputs.front()));
   }
@@ -112,6 +112,8 @@ TEST_CASE("CompilationPlan")
       ProjectCompileInfo{pathFromQString(directory.filePath("game.tbproj")), "room"};
     const auto frozen = pathFromQString(directory.filePath("snapshot/room.map"));
     profile.workDirSpec = "${OUTPUT_DIR_PATH}/..";
+    std::get<mdl::CompilationHltools>(profile.tasks.front()).targetSpec =
+      "${OUTPUT_DIR_PATH}/${MAP_BASE_NAME}.bsp";
     const auto plan = buildCompilationPlan(profile, map, frozen, project, false);
     REQUIRE(!plan.diagnostic);
     REQUIRE(plan.outputs.size() == 1);

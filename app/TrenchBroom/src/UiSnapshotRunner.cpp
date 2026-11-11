@@ -129,6 +129,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("map"),
     QStringLiteral("map-settings"),
     QStringLiteral("compilation-hltools"),
+    QStringLiteral("compilation-options"),
     QStringLiteral("compilation-error"),
     QStringLiteral("compilation-simulated"),
     QStringLiteral("map-areas"),
@@ -1044,7 +1045,19 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
     const auto ready = stateReady && output && quality && gpu && output->isVisible()
                        && quality->isVisible() && gpu->isVisible()
                        && !output->text().isEmpty() && quality->currentData() == "normal"
-                       && gpu->isChecked();
+                       && gpu->isChecked() && output->text() == "${MAP_BASE_NAME}.bsp";
+    if (targetName == "compilation-options")
+    {
+      const auto* options =
+        targetWidget.findChild<CollapsibleTitledPanel*>("HltoolsOptionsPanel");
+      const auto* sky = targetWidget.findChild<QCheckBox*>("HltoolsOption_noskyclip");
+      if (
+        !options || !options->expanded() || !sky || !sky->isVisible()
+        || !sky->isChecked())
+        return {
+          UiSnapshotReadinessState::Failed,
+          "Compiler option list must be expanded and reflect the parameter expression"};
+    }
     return {
       ready ? UiSnapshotReadinessState::Ready : UiSnapshotReadinessState::Failed,
       "Built-in compiler output, quality and GPU controls must be visible"};
@@ -1803,6 +1816,17 @@ int runUiSnapshot(
             compilationDialog->findChild<QPushButton*>("CompilationSimulate")->click();
           targetWidget = compilationDialog.get();
           targetWidget->resize(1080, 720);
+          if (options.page == "compilation-options")
+          {
+            compilationDialog->findChild<QLineEdit*>("HltoolsParameters")
+              ->setText("-noskyclip -allleaks -bounce 4");
+            compilationDialog->findChild<CollapsibleTitledPanel*>("HltoolsOptionsPanel")
+              ->expand();
+            targetWidget->resize(1080, 860);
+            for (auto* splitter : targetWidget->findChildren<QSplitter*>())
+              if (splitter->orientation() == Qt::Vertical)
+                splitter->setSizes({560, 240});
+          }
         }
         else if (options.page == QStringLiteral("command-palette"))
         {

@@ -52,6 +52,7 @@ CompilationProfileManager::CompilationProfileManager(
   QWidget* parent)
   : QWidget{parent}
   , m_document{document}
+  , m_projectMap{bool(appController.projectFor(document))}
   , m_config{std::move(config)}
 {
   setBaseWindowColor(this);
@@ -60,7 +61,8 @@ CompilationProfileManager::CompilationProfileManager(
   auto* editorPanel = new TitledPanel{tr("Details")};
 
   m_profileList = new CompilationProfileListBox{m_config, listPanel->getPanel()};
-  m_profileEditor = new CompilationProfileEditor{document, editorPanel->getPanel()};
+  m_profileEditor =
+    new CompilationProfileEditor{document, editorPanel->getPanel(), m_projectMap};
 
   auto* addProfileButton = createBitmapButton("Add.svg", "Add profile");
   m_removeProfileButton = createBitmapButton("Remove.svg", "Remove the selected profile");
@@ -198,8 +200,13 @@ void CompilationProfileManager::addHltoolsProfile()
          m_config.profiles, [&](const auto& profile) { return profile.name == name; });
        ++suffix)
     name = "Built-in hltools " + std::to_string(suffix);
-  m_config.profiles.push_back(mdl::CompilationProfile{
-    std::move(name), "${MAP_DIR_PATH}", {mdl::CompilationHltools{}}});
+  auto compiler = mdl::CompilationHltools{};
+  // Project MAP_DIR_PATH describes a disposable frozen input. Keep its BSP in
+  // the persistent project output directory rather than beside that snapshot.
+  if (m_projectMap)
+    compiler.targetSpec = "${OUTPUT_DIR_PATH}/${MAP_BASE_NAME}.bsp";
+  m_config.profiles.push_back(
+    mdl::CompilationProfile{std::move(name), "${MAP_DIR_PATH}", {std::move(compiler)}});
   m_profileList->reloadProfiles();
   m_profileList->setCurrentRow(static_cast<int>(m_config.profiles.size() - 1));
   emit profileChanged();
