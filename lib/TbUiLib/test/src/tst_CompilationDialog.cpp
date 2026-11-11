@@ -18,6 +18,8 @@ along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <QApplication>
+#include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QtTest/QSignalSpy>
 
@@ -138,6 +140,59 @@ TEST_CASE("CompilationDialog")
     dialog.selectFirstProfile();
 
     REQUIRE(profileManager->selectedProfile()->name == profiles[0].name);
+  }
+
+  SECTION("variable diagnostics locate the input and recover when it is fixed")
+  {
+    auto fixture = MapDocumentFixture{};
+    auto& document = fixture.create(fixtureConfigWithCompilationProfiles(
+      {{"broken",
+        "",
+        {mdl::CompilationRunTool{true, "compiler", "${MISSING_ARGUMENT}", true}}}}));
+    const auto camera = gl::PerspectiveCamera{};
+    auto dialog = CompilationDialog{appController, document, camera};
+    auto* compile = dialog.findChild<QPushButton*>("CompilationCompile");
+    auto* diagnostic = dialog.findChild<QLabel*>("CompilationPreflight");
+    auto* locate = dialog.findChild<QPushButton*>("CompilationLocateSetting");
+    REQUIRE(compile);
+    REQUIRE(diagnostic);
+    REQUIRE(locate);
+    CHECK_FALSE(compile->isEnabled());
+    CHECK(diagnostic->text().contains("MISSING_ARGUMENT"));
+    locate->click();
+    auto* field = qobject_cast<QLineEdit*>(dialog.focusWidget());
+    REQUIRE(field);
+    CHECK(field->text() == "${MISSING_ARGUMENT}");
+    field->setText("-threads 2");
+    QApplication::processEvents();
+    CHECK(compile->isEnabled());
+    CHECK_FALSE(diagnostic->text().contains("MISSING_ARGUMENT"));
+  }
+
+  SECTION("finished simulation keeps its identity when another profile is selected")
+  {
+    const auto profiles = std::vector<mdl::CompilationProfile>{
+      {"first", "", {mdl::CompilationRunTool{true, "compiler", "", true}}},
+      {"second", "", {mdl::CompilationRunTool{true, "compiler", "", true}}}};
+    auto fixture = MapDocumentFixture{};
+    auto& document = fixture.create(fixtureConfigWithCompilationProfiles(profiles));
+    const auto camera = gl::PerspectiveCamera{};
+    auto dialog = CompilationDialog{appController, document, camera};
+    auto* simulate = dialog.findChild<QPushButton*>("CompilationSimulate");
+    REQUIRE(simulate);
+    simulate->click();
+    CHECK_FALSE(dialog.isRunning());
+    auto* identity = dialog.findChild<QLabel*>("CompilationLogIdentity");
+    auto* status = dialog.findChild<QLabel*>("CompilationRunStatus");
+    REQUIRE(identity);
+    REQUIRE(status);
+    const auto completedStatus = status->text();
+    CHECK(identity->text().contains("first"));
+    CHECK(completedStatus.contains("Simulation completed"));
+    REQUIRE(dialog.selectProfile(profiles[1]));
+    CHECK(identity->text().contains("first"));
+    CHECK(status->text() == completedStatus);
+    CHECK(dialog.outputText().contains("compiler"));
   }
 
   SECTION("runSelectedProfile")

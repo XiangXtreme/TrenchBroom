@@ -21,6 +21,8 @@
 
 #include <QWidget>
 
+#include "ui/CompilationPlan.h"
+
 class QAbstractButton;
 class QLineEdit;
 class QStackedWidget;
@@ -80,6 +82,7 @@ private slots:
 public:
   void setProfile(mdl::CompilationProfile* profile);
   void refreshTaskEditors();
+  void focusDiagnostic(const CompilationDiagnostic& diagnostic);
 
 private:
   void refresh();

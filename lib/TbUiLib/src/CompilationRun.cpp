@@ -176,45 +176,50 @@ Result<void> CompilationRun::run(
 
   cleanup();
 
-  return buildWorkDir(profile, map, mapPath) | kdl::transform([&](const auto& workDir) {
-           auto variables =
-             CompilationVariables{map, workDir, mapPath.value_or(map.path())};
-           if (project)
-             variables.setProject(project->projectPath.string(), project->mapName);
-           auto compilationContext =
-             projectToolOnly
-               ? CompilationContext{variables, TextOutputAdapter{currentOutput}, test}
-               : CompilationContext{
-                   map,
-                   camera,
-                   variables,
-                   TextOutputAdapter{currentOutput},
-                   test,
-                   std::move(snapshot)};
-           if (project && mapPath && !projectToolOnly)
-             compilationContext.setProjectSnapshotDirectory(mapPath->parent_path());
-           m_currentRun =
-             new CompilationRunner{std::move(compilationContext), profile, this};
-           connect(
-             m_currentRun,
-             &CompilationRunner::compilationStarted,
-             this,
-             &CompilationRun::compilationStarted);
-           connect(m_currentRun, &CompilationRunner::compilationEnded, this, [&]() {
-             cleanup();
-             emit compilationEnded();
-           });
-           m_currentRun->execute();
-         });
+  const auto plan =
+    buildCompilationPlan(profile, map, mapPath.value_or(map.path()), project);
+  m_diagnostic = plan.diagnostic;
+  if (m_diagnostic)
+    return Error{m_diagnostic->message.toStdString()};
+  emit planReady(plan);
+  auto compilationContext =
+    projectToolOnly
+      ? CompilationContext{plan.variables, TextOutputAdapter{currentOutput}, test}
+      : CompilationContext{
+          map,
+          camera,
+          plan.variables,
+          TextOutputAdapter{currentOutput},
+          test,
+          std::move(snapshot)};
+  if (project && mapPath && !projectToolOnly)
+    compilationContext.setProjectSnapshotDirectory(mapPath->parent_path());
+  m_currentRun = new CompilationRunner{std::move(compilationContext), profile, this};
+  connect(
+    m_currentRun,
+    &CompilationRunner::compilationStarted,
+    this,
+    &CompilationRun::compilationStarted);
+  connect(
+    m_currentRun, &CompilationRunner::taskChanged, this, &CompilationRun::taskChanged);
+  connect(
+    m_currentRun, &CompilationRunner::stageChanged, this, &CompilationRun::stageChanged);
+  connect(
+    m_currentRun,
+    &CompilationRunner::compilationFinished,
+    this,
+    &CompilationRun::compilationFinished);
+  connect(m_currentRun, &CompilationRunner::compilationEnded, this, [&]() {
+    cleanup();
+    emit compilationEnded();
+  });
+  m_currentRun->execute();
+  return {};
 }
 
-Result<std::string> CompilationRun::buildWorkDir(
-  const mdl::CompilationProfile& profile,
-  const mdl::Map& map,
-  const std::optional<std::filesystem::path>& mapPath)
+const std::optional<CompilationDiagnostic>& CompilationRun::diagnostic() const
 {
-  return el::interpolate(
-    CompilationWorkDirVariables{map, mapPath.value_or(map.path())}, profile.workDirSpec);
+  return m_diagnostic;
 }
 
 void CompilationRun::cleanup()

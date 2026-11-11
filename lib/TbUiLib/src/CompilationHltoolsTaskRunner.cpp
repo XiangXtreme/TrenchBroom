@@ -291,6 +291,7 @@ Result<QStringList> CompilationHltoolsTaskRunner::prepare()
 void CompilationHltoolsTaskRunner::doExecute()
 {
   emit start();
+  emit stageChanged(tr("Preparing hltools input"));
   const auto arguments = prepare();
   if (arguments.is_error())
   {
@@ -300,6 +301,7 @@ void CompilationHltoolsTaskRunner::doExecute()
   if (m_context.test())
   {
     m_context.setBspPath(m_target);
+    emit stageChanged(tr("CSG → BSP → VIS → RAD (planned)"));
     m_context << "#### Test: export current map, compile CSG/BSP/VIS/RAD ("
               << QString::fromStdString(m_task.quality) << "), GPU "
               << (m_task.gpu ? "requested" : "off") << "\n";
@@ -328,7 +330,40 @@ void CompilationHltoolsTaskRunner::readOutput()
 {
   const auto bytes = m_process->readAll();
   m_log += bytes;
-  m_context << QString::fromLocal8Bit(bytes);
+  m_context << m_decoder(bytes);
+  // The bundled compiler's documented console sections are deliberately adapted
+  // here, not in the dialog or for arbitrary external tools. Keep partial records
+  // across pipe reads (live progress uses carriage returns).
+  m_pendingStatus += bytes;
+  while (true)
+  {
+    auto end = m_pendingStatus.indexOf('\n');
+    const auto carriage = m_pendingStatus.indexOf('\r');
+    if (end < 0 || (carriage >= 0 && carriage < end))
+      end = carriage;
+    if (end < 0)
+      break;
+    const auto line = m_pendingStatus.left(end).trimmed();
+    m_pendingStatus.remove(0, end + 1);
+    if (line == "processing")
+      m_stage = "CSG";
+    else if (line == "building bsp tree")
+      m_stage = "BSP";
+    else if (line == "computing visibility")
+      m_stage = "VIS";
+    else if (line == "lighting")
+      m_stage = "RAD";
+    if (line.contains("gathering light on the gpu"))
+      m_backend = tr("GPU gather");
+    else if (line.contains("-gpu:") && line.contains("cpu"))
+      m_backend = tr("CPU fallback reported");
+    const auto status = m_stage + (m_backend.isEmpty() ? QString{} : " · " + m_backend);
+    if (!m_stage.isEmpty() && status != m_reportedStage)
+    {
+      m_reportedStage = status;
+      emit stageChanged(status);
+    }
+  }
 }
 
 Result<void> CompilationHltoolsTaskRunner::writeLog() const

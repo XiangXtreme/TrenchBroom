@@ -20,6 +20,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QElapsedTimer>
 
 #include "ui/CompilationRun.h"
 
@@ -58,6 +59,7 @@ private:
   AppController& m_appController;
   MapDocument& m_document;
   const gl::PerspectiveCamera& m_camera;
+  const bool m_persistProfiles;
 
   CompilationProfileManager* m_profileManager = nullptr;
   QPushButton* m_launchButton = nullptr;
@@ -66,6 +68,20 @@ private:
   QPushButton* m_stopCompileButton = nullptr;
   QPushButton* m_closeButton = nullptr;
   QLabel* m_currentRunLabel = nullptr;
+  QLabel* m_targetLabel = nullptr;
+  QLabel* m_preflightLabel = nullptr;
+  QLabel* m_logIdentityLabel = nullptr;
+  QPushButton* m_locateButton = nullptr;
+  QPushButton* m_openOutputButton = nullptr;
+  CompilationPlan m_plan;
+  QString m_runProfileName;
+  QString m_runIdentity;
+  QString m_currentTaskName;
+  QString m_currentStage;
+  std::vector<std::filesystem::path> m_runOutputs;
+  std::optional<CompilationOutcome> m_outcome;
+  QElapsedTimer m_runTimer;
+  bool m_simulation = false;
   QTextEdit* m_output = nullptr;
   CompilationRun m_run;
   // One frozen input folder per run; kept alive until the dialog closes so a finished
@@ -77,7 +93,8 @@ public:
     AppController& appController,
     MapDocument& document,
     const gl::PerspectiveCamera& camera,
-    QWidget* parent = nullptr);
+    QWidget* parent = nullptr,
+    bool persistProfiles = true);
 
   bool selectProfile(const mdl::CompilationProfile& profile);
   void selectFirstProfile();
@@ -96,6 +113,9 @@ private:
   void keyPressEvent(QKeyEvent* event) override;
 
   void updateCompileButtons();
+  void updateTarget();
+  void updateRunStatus();
+  void saveLog();
   void startCompilation(bool test);
   Result<void> runProfile(const mdl::CompilationProfile& profile, bool test);
   /**

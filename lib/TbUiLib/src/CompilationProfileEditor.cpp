@@ -77,7 +77,9 @@ QWidget* CompilationProfileEditor::createEditorPage(QWidget* parent)
   setDefaultWindowColor(upperPanel);
 
   m_nameTxt = new QLineEdit{};
+  m_nameTxt->setObjectName("CompilationProfileName");
   m_workDirTxt = new MultiCompletionLineEdit{};
+  m_workDirTxt->setObjectName("CompilationWorkDirectory");
 
   const auto variables = CompilationWorkDirVariables{m_document.map()};
   auto* completer = new QCompleter{new VariableStoreModel{variables}};
@@ -90,11 +92,16 @@ QWidget* CompilationProfileEditor::createEditorPage(QWidget* parent)
 Variables are allowed.)");
 
   auto* upperLayout = createPanelForm(nullptr, PanelInsets::Content);
-  upperLayout->addRow("Name", m_nameTxt);
-  upperLayout->addRow("Working Directory", m_workDirTxt);
+  upperLayout->addRow(tr("Name"), m_nameTxt);
+  upperLayout->addRow(tr("Working Directory"), m_workDirTxt);
   upperPanel->setLayout(upperLayout);
 
   m_taskList = new CompilationTaskListBox{m_document, containerPanel};
+  connect(
+    m_taskList,
+    &CompilationTaskListBox::taskChanged,
+    this,
+    &CompilationProfileEditor::profileChanged);
 
   m_addTaskButton = createBitmapButton("Add.svg", "Add task");
   m_removeTaskButton = createBitmapButton("Remove.svg", "Remove the selected task");
@@ -345,6 +352,19 @@ void CompilationProfileEditor::refreshTaskEditors()
 {
   m_taskList->updateTasks();
   refresh();
+}
+
+void CompilationProfileEditor::focusDiagnostic(const CompilationDiagnostic& diagnostic)
+{
+  if (diagnostic.field == CompilationField::WorkDirectory)
+  {
+    m_workDirTxt->setFocus(Qt::OtherFocusReason);
+    m_workDirTxt->selectAll();
+  }
+  else if (diagnostic.taskIndex)
+    m_taskList->focusField(*diagnostic.taskIndex, diagnostic.field);
+  else
+    m_taskList->focusField(0, diagnostic.field);
 }
 
 void CompilationProfileEditor::refresh()

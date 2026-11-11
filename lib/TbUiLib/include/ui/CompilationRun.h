@@ -22,6 +22,7 @@
 #include <QObject>
 
 #include "base/Result.h"
+#include "ui/CompilationPlan.h"
 
 #include <filesystem>
 #include <memory>
@@ -50,13 +51,6 @@ namespace ui
 {
 class CompilationRunner;
 
-/** The project file a compiled map belongs to. */
-struct ProjectCompileInfo
-{
-  std::filesystem::path projectPath;
-  std::string mapName;
-};
-
 /** Whether a profile consists of one enabled tool that takes its input from a project. */
 bool isDirectProjectCompilation(const mdl::CompilationProfile& profile);
 
@@ -65,11 +59,13 @@ class CompilationRun : public QObject
   Q_OBJECT
 private:
   CompilationRunner* m_currentRun{nullptr};
+  std::optional<CompilationDiagnostic> m_diagnostic;
 
 public:
   ~CompilationRun() override;
 
   bool running() const;
+  const std::optional<CompilationDiagnostic>& diagnostic() const;
   /** Runs the profile against the live map. */
   Result<void> run(
     const mdl::CompilationProfile& profile,
@@ -124,13 +120,13 @@ private:
     bool projectToolOnly = false);
 
 private:
-  Result<std::string> buildWorkDir(
-    const mdl::CompilationProfile& profile,
-    const mdl::Map& map,
-    const std::optional<std::filesystem::path>& mapPath);
   void cleanup();
 signals:
   void compilationStarted();
+  void planReady(const CompilationPlan& plan);
+  void taskChanged(int index, const QString& name);
+  void stageChanged(const QString& stage);
+  void compilationFinished(CompilationOutcome outcome);
   void compilationEnded();
 };
 

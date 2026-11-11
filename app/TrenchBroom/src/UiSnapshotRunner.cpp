@@ -129,6 +129,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("map"),
     QStringLiteral("map-settings"),
     QStringLiteral("compilation-hltools"),
+    QStringLiteral("compilation-error"),
+    QStringLiteral("compilation-simulated"),
     QStringLiteral("map-areas"),
     QStringLiteral("map-area-split-preview"),
     QStringLiteral("map-area-join-preview"),
@@ -1022,12 +1024,20 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
       ready ? UiSnapshotReadinessState::Ready : UiSnapshotReadinessState::Failed,
       "Preference search must show the matching tab or its empty state"};
   }
-  if (targetName == "compilation-hltools")
+  if (targetName.startsWith("compilation-"))
   {
     const auto* output = targetWidget.findChild<QLineEdit*>("HltoolsOutput");
     const auto* quality = targetWidget.findChild<QComboBox*>("HltoolsQuality");
     const auto* gpu = targetWidget.findChild<QCheckBox*>("HltoolsGpu");
-    const auto ready = output && quality && gpu && output->isVisible()
+    const auto* diagnostic = targetWidget.findChild<QLabel*>("CompilationPreflight");
+    const auto* compile = targetWidget.findChild<QPushButton*>("CompilationCompile");
+    const auto* status = targetWidget.findChild<QLabel*>("CompilationRunStatus");
+    const auto* locate = targetWidget.findChild<QPushButton*>("CompilationLocateSetting");
+    const auto stateReady = diagnostic && compile && status && locate &&
+      (targetName == "compilation-error"
+        ? diagnostic->text().contains("MISSING_COMPILER_OPTION") && !compile->isEnabled() && locate->isVisible()
+        : compile->isEnabled() && (targetName != "compilation-simulated" || status->text().contains("Simulation completed")));
+    const auto ready = stateReady && output && quality && gpu && output->isVisible()
                        && quality->isVisible() && gpu->isVisible()
                        && !output->text().isEmpty() && quality->currentData() == "normal"
                        && gpu->isChecked();
@@ -1777,11 +1787,16 @@ int runUiSnapshot(
             std::make_unique<MapSettingsDialog>(mapWindow->document(), mapWindow);
           targetWidget = mapSettingsDialog.get();
         }
-        else if (options.page == QStringLiteral("compilation-hltools"))
+        else if (options.page.startsWith(QStringLiteral("compilation-")))
         {
           compilationDialog = std::make_unique<CompilationDialog>(
-            appController, mapWindow->document(), compilationCamera, mapWindow);
+            appController, mapWindow->document(), compilationCamera, mapWindow, false);
           compilationDialog->findChild<CompilationProfileManager*>()->addHltoolsProfile();
+          if (options.page == "compilation-error")
+            compilationDialog->findChild<QLineEdit*>("HltoolsParameters")
+              ->setText("${MISSING_COMPILER_OPTION}");
+          else if (options.page == "compilation-simulated")
+            compilationDialog->findChild<QPushButton*>("CompilationSimulate")->click();
           targetWidget = compilationDialog.get();
           targetWidget->resize(1080, 720);
         }

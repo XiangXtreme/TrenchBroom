@@ -5,6 +5,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QStringConverter>
 #include <QStringList>
 
 #include "ui/CompilationRunner.h"
@@ -28,6 +29,11 @@ private:
   std::filesystem::path m_target;
   std::filesystem::path m_inputPath;
   QByteArray m_log;
+  QByteArray m_pendingStatus;
+  QStringDecoder m_decoder{QStringDecoder::Utf8};
+  QString m_stage;
+  QString m_backend;
+  QString m_reportedStage;
   bool m_finished = false;
 
 public:

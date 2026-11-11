@@ -56,8 +56,8 @@ CompilationProfileManager::CompilationProfileManager(
 {
   setBaseWindowColor(this);
 
-  auto* listPanel = new TitledPanel{"Profiles"};
-  auto* editorPanel = new TitledPanel{"Details"};
+  auto* listPanel = new TitledPanel{tr("Profiles")};
+  auto* editorPanel = new TitledPanel{tr("Details")};
 
   m_profileList = new CompilationProfileListBox{m_config, listPanel->getPanel()};
   m_profileEditor = new CompilationProfileEditor{document, editorPanel->getPanel()};
@@ -171,6 +171,11 @@ void CompilationProfileManager::selectFirstProfile()
 const mdl::CompilationConfig& CompilationProfileManager::config() const
 {
   return m_config;
+}
+
+void CompilationProfileManager::focusDiagnostic(const CompilationDiagnostic& diagnostic)
+{
+  m_profileEditor->focusDiagnostic(diagnostic);
 }
 
 void CompilationProfileManager::addProfile()

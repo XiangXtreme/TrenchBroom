@@ -82,6 +82,7 @@ TEST_CASE("CompilationHltoolsTaskRunner")
     auto context =
       CompilationContext{map, camera, variables, TextOutputAdapter{&output}, false};
     auto runner = CompilationHltoolsTaskRunner{context, task};
+    auto stages = QSignalSpy{&runner, &CompilationTaskRunner::stageChanged};
     auto ended = QSignalSpy{&runner, &CompilationTaskRunner::end};
     auto failed = QSignalSpy{&runner, &CompilationTaskRunner::error};
     runner.execute();
@@ -89,6 +90,14 @@ TEST_CASE("CompilationHltoolsTaskRunner")
     INFO(output.toPlainText().toStdString());
     REQUIRE(failed.empty());
     REQUIRE(ended.count() == 1);
+    auto reported = QStringList{};
+    for (const auto& event : stages)
+      reported.push_back(event.front().toString());
+    INFO(reported.join(", ").toStdString());
+    CHECK(reported.contains("CSG"));
+    CHECK(reported.contains("BSP"));
+    CHECK(reported.contains("VIS"));
+    CHECK(reported.contains("RAD"));
     auto bsp = QFile{outputPath};
     REQUIRE(bsp.open(QIODevice::ReadOnly));
     CHECK(bsp.read(4) == QByteArray::fromHex("1e000000"));

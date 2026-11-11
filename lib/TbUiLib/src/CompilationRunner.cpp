@@ -650,6 +650,10 @@ CompilationRunner::CompilationRunner(
   , m_taskRunners{createTaskRunners(m_context, profile)}
   , m_currentTask{std::end(m_taskRunners)}
 {
+  for (size_t i = 0; i < profile.tasks.size(); ++i)
+    if (std::visit([](const auto& t) { return t.enabled; }, profile.tasks[i]))
+      m_taskDescriptions.emplace_back(
+        static_cast<int>(i), compilationTaskName(profile.tasks[i]));
 }
 
 CompilationRunner::~CompilationRunner() = default;
@@ -723,8 +727,6 @@ void CompilationRunner::execute()
   {
     return;
   }
-  bindEvents(*m_currentTask->get());
-
   emit compilationStarted();
 
   workDir(m_context)
@@ -738,12 +740,15 @@ void CompilationRunner::execute()
       {
         m_context << "#### Error: working directory '" << workDirQStr
                   << "' does not exist\n";
+        finish(CompilationOutcome::Failed);
+        return;
       }
-      m_currentTask->get()->execute();
+      executeCurrentTask();
     })
     .transform_error([&](const auto& e) {
-      m_context << "#### Error: Could not get determine working directory: "
+      m_context << "#### Error: Could not determine working directory: "
                 << QString::fromStdString(e.msg) << "\n";
+      finish(CompilationOutcome::Failed);
     });
 }
 
@@ -753,8 +758,23 @@ void CompilationRunner::terminate()
 
   unbindEvents(*m_currentTask->get());
   m_currentTask->get()->terminate();
-  m_currentTask = std::end(m_taskRunners);
+  finish(CompilationOutcome::Cancelled);
+}
 
+void CompilationRunner::executeCurrentTask()
+{
+  const auto index =
+    static_cast<size_t>(std::distance(m_taskRunners.begin(), m_currentTask));
+  const auto& [taskIndex, name] = m_taskDescriptions[index];
+  emit taskChanged(taskIndex, name);
+  bindEvents(*m_currentTask->get());
+  m_currentTask->get()->execute();
+}
+
+void CompilationRunner::finish(const CompilationOutcome outcome)
+{
+  m_currentTask = m_taskRunners.end();
+  emit compilationFinished(outcome);
   emit compilationEnded();
 }
 
@@ -765,6 +785,11 @@ bool CompilationRunner::running() const
 
 void CompilationRunner::bindEvents(CompilationTaskRunner& runner) const
 {
+  connect(
+    &runner,
+    &CompilationTaskRunner::stageChanged,
+    this,
+    &CompilationRunner::stageChanged);
   connect(&runner, &CompilationTaskRunner::error, this, &CompilationRunner::taskError);
   connect(&runner, &CompilationTaskRunner::end, this, &CompilationRunner::taskEnd);
 }
@@ -779,8 +804,7 @@ void CompilationRunner::taskError()
   if (running())
   {
     unbindEvents(*m_currentTask->get());
-    m_currentTask = std::end(m_taskRunners);
-    emit compilationEnded();
+    finish(CompilationOutcome::Failed);
   }
 }
 
@@ -792,12 +816,11 @@ void CompilationRunner::taskEnd()
     ++m_currentTask;
     if (m_currentTask != std::end(m_taskRunners))
     {
-      bindEvents(*m_currentTask->get());
-      m_currentTask->get()->execute();
+      executeCurrentTask();
     }
     else
     {
-      emit compilationEnded();
+      finish(CompilationOutcome::Succeeded);
     }
   }
 }

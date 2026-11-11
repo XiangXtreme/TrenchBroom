@@ -26,6 +26,7 @@
 #include "base/Result.h"
 #include "mdl/CompilationTask.h"
 #include "ui/CompilationContext.h"
+#include "ui/CompilationPlan.h"
 
 #include <memory>
 #include <string>
@@ -57,6 +58,7 @@ public:
   void execute();
   void terminate();
 signals:
+  void stageChanged(const QString& stage);
   void start();
   void error();
   void end();
@@ -199,6 +201,7 @@ private:
   CompilationContext m_context;
   TaskRunnerList m_taskRunners;
   TaskRunnerList::iterator m_currentTask;
+  std::vector<std::pair<int, QString>> m_taskDescriptions;
 
 public:
   CompilationRunner(
@@ -217,6 +220,8 @@ public:
   bool running() const;
 
 private:
+  void executeCurrentTask();
+  void finish(CompilationOutcome outcome);
   void bindEvents(CompilationTaskRunner& runner) const;
   void unbindEvents(CompilationTaskRunner& runner) const;
 private slots:
@@ -224,6 +229,9 @@ private slots:
   void taskEnd();
 signals:
   void compilationStarted();
+  void taskChanged(int index, const QString& name);
+  void stageChanged(const QString& stage);
+  void compilationFinished(CompilationOutcome outcome);
   void compilationEnded();
 
   deleteCopyAndMove(CompilationRunner);

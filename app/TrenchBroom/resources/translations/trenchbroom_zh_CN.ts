@@ -2298,7 +2298,139 @@ Recover them? The current project file is kept as a backup in the autosave folde
             <source>Clear</source>
             <translation>清空</translation>
             </message>
-        </context>
+        <message>
+            <source>Locate setting</source>
+            <translation>定位设置</translation>
+        </message>
+        <message>
+            <source>Build log</source>
+            <translation>编译日志</translation>
+        </message>
+        <message>
+            <source>Copy log</source>
+            <translation>复制日志</translation>
+        </message>
+        <message>
+            <source>Save log...</source>
+            <translation>保存日志...</translation>
+        </message>
+        <message>
+            <source>Output folder</source>
+            <translation>输出目录</translation>
+        </message>
+        <message>
+            <source>No compilation has run</source>
+            <translation>尚未运行编译</translation>
+        </message>
+        <message>
+            <source>Compiler output will appear here</source>
+            <translation>编译输出将在此显示</translation>
+        </message>
+        <message>
+            <source>Simulate</source>
+            <translation>模拟运行</translation>
+        </message>
+        <message>
+            <source>Resolve variables and list commands without running tools</source>
+            <translation>解析变量并列出命令，不执行工具</translation>
+        </message>
+        <message>
+            <source>Cancel compilation</source>
+            <translation>取消编译</translation>
+        </message>
+        <message>
+            <source>Select a compilation profile</source>
+            <translation>选择编译配置</translation>
+        </message>
+        <message>
+            <source>%1 / %2</source>
+            <translation>%1 / %2</translation>
+        </message>
+        <message>
+            <source>Project: %1</source>
+            <translation>工程：%1</translation>
+        </message>
+        <message>
+            <source>Map: %1</source>
+            <translation>地图：%1</translation>
+        </message>
+        <message>
+            <source>BSP: %1</source>
+            <translation>BSP：%1</translation>
+        </message>
+        <message>
+            <source>Output is defined by the profile's tasks</source>
+            <translation>输出由配置中的任务决定</translation>
+        </message>
+        <message>
+            <source>A frozen project snapshot will be prepared for this run</source>
+            <translation>本次运行将生成冻结的工程快照</translation>
+        </message>
+        <message>
+            <source>BSP path will be resolved after preparing the snapshot</source>
+            <translation>BSP 路径将在生成快照后解析</translation>
+        </message>
+        <message>
+            <source>Variables checked · enabled tasks: %1</source>
+            <translation>变量检查通过 · 已启用 %1 项任务</translation>
+        </message>
+        <message>
+            <source>%1 · %2 · %3</source>
+            <translation>%1 · %2 · %3</translation>
+        </message>
+        <message>
+            <source>Simulation</source>
+            <translation>模拟运行</translation>
+        </message>
+        <message>
+            <source>Preparing input</source>
+            <translation>正在准备输入</translation>
+        </message>
+        <message>
+            <source>Simulating</source>
+            <translation>正在模拟</translation>
+        </message>
+        <message>
+            <source>Running</source>
+            <translation>正在运行</translation>
+        </message>
+        <message>
+            <source>Simulation completed</source>
+            <translation>模拟完成</translation>
+        </message>
+        <message>
+            <source>Succeeded</source>
+            <translation>编译成功</translation>
+        </message>
+        <message>
+            <source>Failed</source>
+            <translation>编译失败</translation>
+        </message>
+        <message>
+            <source>Cancelled</source>
+            <translation>已取消</translation>
+        </message>
+        <message>
+            <source>%1 · %2 s%3%4</source>
+            <translation>%1 · %2 秒%3%4</translation>
+        </message>
+        <message>
+            <source>Save compilation log</source>
+            <translation>保存编译日志</translation>
+        </message>
+        <message>
+            <source>Log files (*.log);;All files (*)</source>
+            <translation>日志文件 (*.log);;所有文件 (*)</translation>
+        </message>
+        <message>
+            <source>Could not save log: %1</source>
+            <translation>无法保存日志：%1</translation>
+        </message>
+        <message>
+            <source>Task %1 — %2</source>
+            <translation>任务 %1 — %2</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::CompilationExportMapTaskEditor</name>
         <message>
@@ -2343,6 +2475,14 @@ Recover them? The current project file is kept as a backup in the autosave folde
             <source>Built-in hltools (GoldSrc)</source>
             <translation>内置 hltools（GoldSrc）</translation>
         </message>
+            <message>
+            <source>Name</source>
+            <translation>名称</translation>
+        </message>
+        <message>
+            <source>Working Directory</source>
+            <translation>工作目录</translation>
+        </message>
     </context>
     <context>
         <name>tb::ui::CompilationProfileManager</name>
@@ -2363,6 +2503,14 @@ Recover them? The current project file is kept as a backup in the autosave folde
         <message>
             <source>Add a GoldSrc compile profile using the compiler included with TrenchBroom.</source>
             <translation>使用 TrenchBroom 自带的编译器添加 GoldSrc 编译配置。</translation>
+        </message>
+            <message>
+            <source>Profiles</source>
+            <translation>编译配置</translation>
+        </message>
+        <message>
+            <source>Details</source>
+            <translation>配置详情</translation>
         </message>
     </context>
     <context>
@@ -2385,7 +2533,11 @@ Recover them? The current project file is kept as a backup in the autosave folde
             <source>Whether to include this task when running the compile profile</source>
             <translation>运行编译配置文件时是否包含此任务</translation>
             </message>
-        </context>
+        <message>
+            <source>Enabled</source>
+            <translation>启用</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::Console</name>
         <message>
@@ -4680,7 +4832,7 @@ Map: %2</source>
             <source>%1 entity types</source>
             <translation>%1 种实体类型</translation>
         </message>
-</context>
+    </context>
     <context>
         <name>tb::ui::ModelBrowserView</name>
         <message>
@@ -4771,7 +4923,7 @@ Map: %2</source>
             <source>Show Project Snapshot</source>
             <translation>显示工程快照</translation>
         </message>
-</context>
+    </context>
     <context>
         <name>tb::ui::MousePreferencePane</name>
         <message>
@@ -8498,7 +8650,7 @@ Projects keep their captured copies.</source>
         <source>Destination folder</source>
         <translation>目标文件夹</translation>
     </message>
-</context>
+    </context>
         <context>
         <name>tb::ui::ProjectAssetPanel</name>
         <message>
@@ -10125,6 +10277,102 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
         <message>
             <source>Installed plugins</source>
             <translation>已安装插件</translation>
+        </message>
+    </context>
+    <context>
+        <name>CompilationPlan</name>
+        <message>
+            <source>Export map</source>
+            <translation>导出地图</translation>
+        </message>
+        <message>
+            <source>Copy files</source>
+            <translation>复制文件</translation>
+        </message>
+        <message>
+            <source>Rename file</source>
+            <translation>重命名文件</translation>
+        </message>
+        <message>
+            <source>Delete files</source>
+            <translation>删除文件</translation>
+        </message>
+        <message>
+            <source>Run tool</source>
+            <translation>运行工具</translation>
+        </message>
+        <message>
+            <source>Built-in hltools</source>
+            <translation>内置 hltools</translation>
+        </message>
+        <message>
+            <source>Launch engine</source>
+            <translation>启动引擎</translation>
+        </message>
+        <message>
+            <source>%1: %2
+Expression: %3</source>
+            <translation>%1：%2
+表达式：%3</translation>
+        </message>
+        <message>
+            <source>%1 is empty</source>
+            <translation>%1 为空</translation>
+        </message>
+        <message>
+            <source>Working directory</source>
+            <translation>工作目录</translation>
+        </message>
+        <message>
+            <source>Working directory does not exist: %1</source>
+            <translation>工作目录不存在：%1</translation>
+        </message>
+        <message>
+            <source>Task %1 — %2</source>
+            <translation>任务 %1 — %2</translation>
+        </message>
+        <message>
+            <source>Source</source>
+            <translation>源路径</translation>
+        </message>
+        <message>
+            <source>Target</source>
+            <translation>目标路径</translation>
+        </message>
+        <message>
+            <source>Tool</source>
+            <translation>工具路径</translation>
+        </message>
+        <message>
+            <source>Parameters</source>
+            <translation>参数</translation>
+        </message>
+        <message>
+            <source>Select an engine profile</source>
+            <translation>请选择引擎配置</translation>
+        </message>
+        <message>
+            <source>Enable at least one task</source>
+            <translation>请至少启用一项任务</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::CompilationTaskRunner</name>
+        <message>
+            <source>Preparing hltools input</source>
+            <translation>正在准备 hltools 输入</translation>
+        </message>
+        <message>
+            <source>GPU gather</source>
+            <translation>GPU 光照采样</translation>
+        </message>
+        <message>
+            <source>CPU fallback reported</source>
+            <translation>已报告 CPU 回退</translation>
+        </message>
+        <message>
+            <source>CSG → BSP → VIS → RAD (planned)</source>
+            <translation>CSG → BSP → VIS → RAD（计划）</translation>
         </message>
     </context>
 </TS>

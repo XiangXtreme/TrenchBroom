@@ -800,14 +800,62 @@ TEST_CASE("CompilationRunner")
     "test/ui/CompilationRunner/valveFormatMapWithoutFormatTag.map", fixtureConfig);
   auto camera = gl::PerspectiveCamera{};
 
-  const auto testWorkDir = std::string{"/some/path"};
+  auto testEnvironment = fs::TestEnvironment{};
+  const auto testWorkDir = testEnvironment.dir().string();
   auto variables = CompilationVariables{map, testWorkDir};
   auto output = QTextEdit{};
   auto outputAdapter = TextOutputAdapter{&output};
 
   auto context = CompilationContext{map, camera, variables, outputAdapter, false};
 
-  auto testEnvironment = fs::TestEnvironment{};
+  SECTION("missing working directory finishes with failure and runs no tasks")
+  {
+    variables.set(
+      CompilationVariableNames::WORK_DIR_PATH,
+      el::Value{(testEnvironment.dir() / "missing").string()});
+    auto profile = mdl::CompilationProfile{
+      "compile", "", {mdl::CompilationDeleteFiles{true, "unused"}}};
+    auto runner = CompilationRunner{
+      CompilationContext{map, camera, variables, outputAdapter, true}, profile};
+    auto finished = std::optional<CompilationOutcome>{};
+    auto tasks = 0;
+    QObject::connect(
+      &runner, &CompilationRunner::compilationFinished, [&](const auto outcome) {
+        finished = outcome;
+      });
+    QObject::connect(
+      &runner, &CompilationRunner::taskChanged, [&](int, const QString&) { ++tasks; });
+    runner.execute();
+    CHECK_FALSE(runner.running());
+    CHECK(finished == CompilationOutcome::Failed);
+    CHECK(tasks == 0);
+  }
+
+  SECTION("reports original task indices and a successful terminal state")
+  {
+    auto profile = mdl::CompilationProfile{
+      "compile",
+      "",
+      {mdl::CompilationDeleteFiles{false, "ignored"},
+       mdl::CompilationRunTool{true, "compiler", "", true},
+       mdl::CompilationRunTool{true, "other-compiler", "", true}}};
+    auto runner = CompilationRunner{
+      CompilationContext{map, camera, variables, outputAdapter, true}, profile};
+    auto finished = std::optional<CompilationOutcome>{};
+    auto tasks = std::vector<int>{};
+    QObject::connect(
+      &runner, &CompilationRunner::compilationFinished, [&](const auto outcome) {
+        finished = outcome;
+      });
+    QObject::connect(
+      &runner, &CompilationRunner::taskChanged, [&](const int index, const QString&) {
+        tasks.push_back(index);
+      });
+    runner.execute();
+    CHECK_FALSE(runner.running());
+    CHECK(finished == CompilationOutcome::Succeeded);
+    CHECK(tasks == std::vector<int>{1, 2});
+  }
 
   SECTION("stopAfterFirstError")
   {

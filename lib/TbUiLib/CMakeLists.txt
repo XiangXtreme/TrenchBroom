@@ -57,6 +57,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ColorModel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ColorTable.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ColorsPreferencePane.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationPlan.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationHltoolsTaskRunner.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationDialog.cpp
@@ -359,6 +360,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ColorModel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ColorTable.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ColorsPreferencePane.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationPlan.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationContext.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationProfileEditor.h

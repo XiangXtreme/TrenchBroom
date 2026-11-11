@@ -20,6 +20,7 @@
 #pragma once
 
 #include "mdl/CompilationTask.h"
+#include "ui/CompilationPlan.h"
 #include "ui/ControlListBox.h"
 
 #include <vector>
@@ -252,11 +253,13 @@ public:
 public:
   void reloadTasks();
   void updateTasks();
+  void focusField(size_t index, CompilationField field);
 
 private:
   size_t itemCount() const override;
   ControlListBoxItemRenderer* createItemRenderer(QWidget* parent, size_t index) override;
 signals:
+  void taskChanged();
   void taskContextMenuRequested(const QPoint& globalPos, mdl::CompilationTask& task);
 };
 

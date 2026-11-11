@@ -23,6 +23,7 @@
 
 #include "base/NotifierConnection.h"
 #include "mdl/CompilationConfig.h"
+#include "ui/CompilationPlan.h"
 
 #include <string>
 
@@ -74,6 +75,7 @@ public:
   const mdl::CompilationConfig& config() const;
   /** Add a complete built-in GoldSrc compile profile without executable paths. */
   void addHltoolsProfile();
+  void focusDiagnostic(const CompilationDiagnostic& diagnostic);
 
 private:
   void updateGui();

@@ -42,6 +42,7 @@
 #include "ui/MapDocument.h"
 #include "ui/MultiCompletionLineEdit.h"
 #include "ui/PanelLayout.h"
+#include "ui/TitleBar.h"
 #include "ui/TitledPanel.h"
 #include "ui/VariableStoreModel.h"
 #include "ui/ViewConstants.h"
@@ -77,16 +78,14 @@ CompilationTaskEditorBase::CompilationTaskEditorBase(
   layout->addWidget(new BorderLine{});
   setLayout(layout);
 
-  m_enabledCheckbox = new QCheckBox{};
+  m_enabledCheckbox = new QCheckBox{tr("Enabled")};
   m_enabledCheckbox->setToolTip(
     tr("Whether to include this task when running the compile profile"));
 
   m_taskLayout = new QHBoxLayout{};
   m_taskLayout->setContentsMargins(0, 0, 0, 0);
-  m_taskLayout->addSpacing(LayoutConstants::NarrowHMargin);
-  m_taskLayout->addWidget(m_enabledCheckbox, 0, Qt::AlignVCenter);
-  m_taskLayout->addSpacing(LayoutConstants::NarrowHMargin);
-  // subclasses call addMainLayout() to add their contents after the checkbox
+  panel->getTitleBar()->layout()->addWidget(m_enabledCheckbox);
+  // Subclasses add the form below the task's title and enable toggle.
   panel->getPanel()->setLayout(m_taskLayout);
 
   connect(m_enabledCheckbox, &QCheckBox::clicked, this, [&](const bool checked) {
@@ -141,6 +140,7 @@ CompilationExportMapTaskEditor::CompilationExportMapTaskEditor(
   addMainLayout(formLayout);
 
   m_targetEditor = new MultiCompletionLineEdit{};
+  m_targetEditor->setProperty("compilationField", int(CompilationField::Target));
   m_targetEditor->setFont(Fonts::fixedWidthFont());
   m_targetEditor->setToolTip(R"(The path of the exported file.
 Variables are allowed.)");
@@ -278,6 +278,7 @@ CompilationCopyFilesTaskEditor::CompilationCopyFilesTaskEditor(
   addMainLayout(formLayout);
 
   m_sourceEditor = new MultiCompletionLineEdit{};
+  m_sourceEditor->setProperty("compilationField", int(CompilationField::Source));
   m_sourceEditor->setFont(Fonts::fixedWidthFont());
   m_sourceEditor->setToolTip(R"(The file(s) or directory to copy.
 
@@ -288,6 +289,7 @@ Variables are allowed.)");
   formLayout->addRow("Source File Path", m_sourceEditor);
 
   m_targetEditor = new MultiCompletionLineEdit{};
+  m_targetEditor->setProperty("compilationField", int(CompilationField::Target));
   m_targetEditor->setFont(Fonts::fixedWidthFont());
   m_targetEditor->setToolTip(R"(The directory to copy the files to.
 
@@ -356,6 +358,7 @@ CompilationRenameFileTaskEditor::CompilationRenameFileTaskEditor(
   addMainLayout(formLayout);
 
   m_sourceEditor = new MultiCompletionLineEdit{};
+  m_sourceEditor->setProperty("compilationField", int(CompilationField::Source));
   m_sourceEditor->setFont(Fonts::fixedWidthFont());
   m_sourceEditor->setToolTip(R"(The file to rename or move.
 
@@ -365,6 +368,7 @@ Variables are allowed.)");
   formLayout->addRow("Source File Path", m_sourceEditor);
 
   m_targetEditor = new MultiCompletionLineEdit{};
+  m_targetEditor->setProperty("compilationField", int(CompilationField::Target));
   m_targetEditor->setFont(Fonts::fixedWidthFont());
   m_targetEditor->setToolTip(R"(The new path for the file.
 
@@ -434,6 +438,7 @@ CompilationDeleteFilesTaskEditor::CompilationDeleteFilesTaskEditor(
   addMainLayout(formLayout);
 
   m_targetEditor = new MultiCompletionLineEdit{};
+  m_targetEditor->setProperty("compilationField", int(CompilationField::Target));
   m_targetEditor->setFont(Fonts::fixedWidthFont());
   m_targetEditor->setToolTip(R"(The file(s) to delete.
 
@@ -488,6 +493,7 @@ CompilationRunToolTaskEditor::CompilationRunToolTaskEditor(
   addMainLayout(formLayout);
 
   m_toolEditor = new MultiCompletionLineEdit{};
+  m_toolEditor->setProperty("compilationField", int(CompilationField::Tool));
   m_toolEditor->setFont(Fonts::fixedWidthFont());
   m_toolEditor->setToolTip(
     R"(The absolute path to the executable of the tool that should be run.
@@ -508,6 +514,7 @@ Variables are allowed.)");
   formLayout->addRow("Tool Path", toolLayout);
 
   m_parametersEditor = new MultiCompletionLineEdit{};
+  m_parametersEditor->setProperty("compilationField", int(CompilationField::Parameters));
   m_parametersEditor->setFont(Fonts::fixedWidthFont());
   m_parametersEditor->setToolTip(
     R"(The parameters that should be passed to the tool when it is executed.
@@ -617,6 +624,7 @@ CompilationHltoolsTaskEditor::CompilationHltoolsTaskEditor(
   addMainLayout(form);
 
   m_targetEditor = new MultiCompletionLineEdit{};
+  m_targetEditor->setProperty("compilationField", int(CompilationField::Target));
   m_targetEditor->setObjectName("HltoolsOutput");
   m_targetEditor->setFont(Fonts::fixedWidthFont());
   m_targetEditor->setToolTip(
@@ -643,6 +651,7 @@ CompilationHltoolsTaskEditor::CompilationHltoolsTaskEditor(
   form->addRow("", m_gpuEditor);
 
   m_parametersEditor = new MultiCompletionLineEdit{};
+  m_parametersEditor->setProperty("compilationField", int(CompilationField::Parameters));
   m_parametersEditor->setObjectName("HltoolsParameters");
   m_parametersEditor->setFont(Fonts::fixedWidthFont());
   m_parametersEditor->setToolTip(
@@ -704,6 +713,7 @@ CompilationLaunchEngineTaskEditor::CompilationLaunchEngineTaskEditor(
   addMainLayout(formLayout);
 
   m_engineProfileEditor = new QComboBox{};
+  m_engineProfileEditor->setProperty("compilationField", int(CompilationField::Engine));
   m_engineProfileEditor->setToolTip(
     tr("The Launch Engine profile to start when this task runs"));
   formLayout->addRow("Engine Profile", m_engineProfileEditor);
@@ -845,7 +855,49 @@ ControlListBoxItemRenderer* CompilationTaskListBox::createItemRenderer(
         renderer->mapToGlobal(pos), m_profile->tasks[index]);
     });
 
+  // Connect after the editor's model updates. Queue notification so refreshing the
+  // summary cannot observe half-edited controls during renderer construction.
+  for (auto* input : renderer->findChildren<QLineEdit*>())
+    connect(
+      input,
+      &QLineEdit::textChanged,
+      this,
+      &CompilationTaskListBox::taskChanged,
+      Qt::QueuedConnection);
+  for (auto* input : renderer->findChildren<QCheckBox*>())
+    connect(
+      input,
+      &QCheckBox::clicked,
+      this,
+      &CompilationTaskListBox::taskChanged,
+      Qt::QueuedConnection);
+  for (auto* input : renderer->findChildren<QComboBox*>())
+    connect(
+      input,
+      &QComboBox::currentIndexChanged,
+      this,
+      &CompilationTaskListBox::taskChanged,
+      Qt::QueuedConnection);
   return renderer;
+}
+
+void CompilationTaskListBox::focusField(const size_t index, const CompilationField field)
+{
+  if (index >= size_t(count()))
+    return;
+  setCurrentRow(static_cast<int>(index));
+  auto* item = renderer(static_cast<int>(index));
+  for (auto* input : item->findChildren<QWidget*>())
+    if (
+      input->property("compilationField").isValid()
+      && input->property("compilationField").toInt() == int(field))
+    {
+      input->setFocus(Qt::OtherFocusReason);
+      if (auto* line = qobject_cast<QLineEdit*>(input))
+        line->selectAll();
+      return;
+    }
+  item->setFocus(Qt::OtherFocusReason);
 }
 
 } // namespace tb::ui
