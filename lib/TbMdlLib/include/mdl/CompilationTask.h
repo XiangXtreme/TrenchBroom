@@ -84,6 +84,17 @@ struct CompilationRunTool
     CompilationRunTool, enabled, toolSpec, parameterSpec, treatNonZeroResultCodeAsError);
 };
 
+struct CompilationHltools
+{
+  bool enabled = true;
+  std::string targetSpec = "${OUTPUT_DIR_PATH}/${MAP_BASE_NAME}.bsp";
+  std::string quality = "normal";
+  bool gpu = true;
+  std::string parameterSpec;
+
+  kdl_reflect_decl(CompilationHltools, enabled, targetSpec, quality, gpu, parameterSpec);
+};
+
 struct CompilationLaunchEngine
 {
   bool enabled;
@@ -100,6 +111,7 @@ using CompilationTask = std::variant<
   CompilationRenameFile,
   CompilationDeleteFiles,
   CompilationRunTool,
+  CompilationHltools,
   CompilationLaunchEngine>;
 
 std::ostream& operator<<(std::ostream& lhs, const CompilationTask& rhs);

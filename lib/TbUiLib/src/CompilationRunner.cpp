@@ -37,6 +37,7 @@
 #include "mdl/GameInfo.h"
 #include "mdl/Map.h"
 #include "ui/CompilationContext.h"
+#include "ui/CompilationHltoolsTaskRunner.h"
 #include "ui/CompilationVariables.h"
 #include "ui/LaunchGameEngine.h"
 #include "ui/QPathUtils.h"
@@ -625,12 +626,19 @@ void CompilationLaunchEngineTaskRunner::doExecute()
     return;
   }
 
-  launchGameEngineProfile(profile, LaunchGameEngineVariables{m_context.map()})
-    | kdl::transform([&]() {
-        m_context << "#### Launched\n";
-        emit end();
-      })
-    | kdl::transform_error([&](auto e) { fail(QString::fromStdString(e.msg)); });
+  auto variables = LaunchGameEngineVariables{m_context.map()};
+  if (m_context.bspPath())
+  {
+    variables.set(
+      CompilationVariableNames::MAP_BASE_NAME,
+      el::Value{m_context.bspPath()->stem().string()});
+    variables.set(
+      CompilationVariableNames::BSP_PATH, el::Value{m_context.bspPath()->string()});
+  }
+  launchGameEngineProfile(profile, variables) | kdl::transform([&]() {
+    m_context << "#### Launched\n";
+    emit end();
+  }) | kdl::transform_error([&](auto e) { fail(QString::fromStdString(e.msg)); });
 }
 
 void CompilationLaunchEngineTaskRunner::doTerminate() {}
@@ -688,6 +696,11 @@ CompilationRunner::TaskRunnerList CompilationRunner::createTaskRunners(
             result.push_back(
               std::make_unique<CompilationRunToolTaskRunner>(context, runTool));
           }
+        },
+        [&](const mdl::CompilationHltools& compiler) {
+          if (compiler.enabled)
+            result.push_back(
+              std::make_unique<CompilationHltoolsTaskRunner>(context, compiler));
         },
         [&](const mdl::CompilationLaunchEngine& launchEngine) {
           if (launchEngine.enabled)

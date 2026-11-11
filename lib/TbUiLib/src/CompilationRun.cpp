@@ -191,6 +191,8 @@ Result<void> CompilationRun::run(
                    TextOutputAdapter{currentOutput},
                    test,
                    std::move(snapshot)};
+           if (project && mapPath && !projectToolOnly)
+             compilationContext.setProjectSnapshotDirectory(mapPath->parent_path());
            m_currentRun =
              new CompilationRunner{std::move(compilationContext), profile, this};
            connect(

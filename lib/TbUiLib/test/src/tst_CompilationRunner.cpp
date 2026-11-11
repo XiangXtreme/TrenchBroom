@@ -22,6 +22,7 @@ along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
 #include <QTextEdit>
 #include <QtSystemDetection>
 #include <QtTest/QSignalSpy>
+#include <QtTest/QTest>
 
 #include "CmdTool.h"
 #include "fs/TestEnvironment.h"
@@ -362,6 +363,38 @@ TEST_CASE("CompilationLaunchEngineTaskRunner")
     CHECK(exec.ended == !treatLaunchFailureAsError);
     CHECK_THAT(
       output.toPlainText().toStdString(), ContainsSubstring("#### Launch failed: "));
+  }
+
+  SECTION("launchUsesTheCompiledBspNameAndPath")
+  {
+    auto environment = fs::TestEnvironment{};
+    const auto logPath = environment.dir() / "engine-arguments.txt";
+    fixtureConfig.gameInfo.gameEngineConfig.profiles.front().parameterSpec =
+      "--logArgs \"" + logPath.string() + "\" ${MAP_BASE_NAME} \"${BSP_PATH}\"";
+    auto launchFixture = mdl::MapFixture{};
+    auto& launchMap = launchFixture.create(fixtureConfig);
+    auto output = QTextEdit{};
+    auto context = CompilationContext{
+      launchMap,
+      camera,
+      CompilationVariables{launchMap, ""},
+      TextOutputAdapter{&output},
+      false};
+    const auto bspPath = environment.dir() / "compiled/custom-name.bsp";
+    context.setBspPath(bspPath);
+    auto runner = CompilationLaunchEngineTaskRunner{
+      context, mdl::CompilationLaunchEngine{true, "quakespasm-id", true}};
+    auto exec = ExecuteTask{runner};
+    REQUIRE(exec.executeAndWait(5000ms));
+    REQUIRE_FALSE(exec.errored);
+    REQUIRE(QTest::qWaitFor(
+      [&] {
+        return environment.fileExists("engine-arguments.txt")
+               && environment.loadFile("engine-arguments.txt").find(bspPath.string())
+                    != std::string::npos;
+      },
+      5000));
+    CHECK(environment.loadFile("engine-arguments.txt").starts_with("custom-name\n"));
   }
 
   SECTION("launchFailure")

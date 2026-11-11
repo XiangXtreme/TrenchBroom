@@ -182,7 +182,7 @@ In addition to making you aware of issues, TrenchBroom can also fix them for you
 
 ## Compiling Maps {#compiling_maps}
 
-TrenchBroom supports compiling your maps from inside the editor. This means that you can create compilation profiles and configure those profiles to run external compilation tools for you. Note however that TrenchBroom does not come with prepackaged compilation tools - you'll have to download and install those yourself. The following screenshot shows the compilation dialog that comes up when choosing #menu(Menu/Run/Compile...).
+TrenchBroom supports compiling your maps from inside the editor. GoldSrc maps can use the bundled hltools compiler; other toolchains can be configured as external tools. The following screenshot shows the compilation dialog that comes up when choosing #menu(Menu/Run/Compile...).
 
 ![Compilation Dialog (macOS)](images/CompilationDialog.png)
 
@@ -200,6 +200,18 @@ Tasks
 The checkbox on each task lets you selectively exclude a task from running when you run the compilation profile.
 
 There are the following types of tasks, each with different parameters:
+
+### Built-in hltools (GoldSrc) {#built-in-hltools}
+
+Click **Built-in hltools** below the profile list to create a ready-to-run GoldSrc profile. You can also add this task to an existing profile with the task list's **+** button. No external hltools installation or executable path is required. This compiler produces GoldSrc BSP files; use the appropriate external toolchain for other engines.
+
+Choose a BSP output path, Fast/Normal/Extra lighting quality, GPU lighting, and optional additional `hltools compile` parameters such as `-bounce 8` or `-threads 4`. Vulkan lighting falls back to CPU when unavailable. The task exports the current map, respecting layers omitted from export, and runs CSG, BSP, VIS and RAD. It does not need a separate Export Map task and does not rewrite the source MAP. Source ZIP embedding is unavailable in the bundled worker.
+
+The default output is `${OUTPUT_DIR_PATH}/${MAP_BASE_NAME}.bsp`. For standalone maps, `OUTPUT_DIR_PATH` is the map directory's `compiled` subdirectory. For project maps, it is the `compiled` directory beside the `.tbproj`. Project input uses a frozen resource snapshot, including captured textures and compiled terrain, so the BSP survives closing the dialog. Project resource validation and configured resource publishing run before compilation.
+
+Compiler output appears live in the existing output pane. A `.log` and any generated `.lin`/`.pts` leak files are saved beside the BSP. **Stop** cancels the worker; a failed or cancelled compile leaves the previous BSP intact and prevents later tasks from running. **Test** displays the plan without launching the compiler or publishing its output.
+
+Append **Copy Files** to deploy `${BSP_PATH}` to a game's `maps` directory, and **Launch Engine** to start a configured game profile after successful compilation. The launch task's `${MAP_BASE_NAME}` follows the compiled BSP's filename, including a custom output name. Set the output directly to the game's `maps` directory if no copy is needed. Project automatic resource publishing remains controlled by the project's publish settings.
 
 ### Export Map {#export-map}
 
@@ -297,6 +309,8 @@ Variable         Scope             Description
 `MODS`           Tool, Workdir     An array containing all enabled mods for the current map.
 `APP_DIR_PATH`   Tool, Workdir     The full path to the directory containing the TrenchBroom application binary.
 `CPU_COUNT`      Tool              The number of CPUs in the current machine.
+`OUTPUT_DIR_PATH` Tool             The persistent compiled-output directory beside the map or project.
+`BSP_PATH`        Tool             The BSP produced by a preceding built-in hltools task.
 
 If the [game configuration](#game_configuration) for the current game includes compilation tools, then the names of those tools are also available as variables in the Tool scope. The following screenshot is a section of a compilation profile showing the use of such variables.
 

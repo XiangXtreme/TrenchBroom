@@ -17,6 +17,8 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QLineEdit>
 
 #include "mdl/CompilationProfile.h"
@@ -49,6 +51,38 @@ QLineEdit* findLineEditByPlaceholder(const QWidget& widget, const QString& place
 }
 
 } // namespace
+
+TEST_CASE("CompilationHltoolsTaskEditor")
+{
+  auto fixture = MapDocumentFixture{};
+  auto& document = fixture.create();
+  auto profile = mdl::CompilationProfile{"Built-in", "", {}};
+  auto task = mdl::CompilationTask{mdl::CompilationHltools{}};
+  auto editor = CompilationHltoolsTaskEditor{document, profile, task};
+  editor.updateItem();
+  auto* output = editor.findChild<QLineEdit*>("HltoolsOutput");
+  auto* quality = editor.findChild<QComboBox*>("HltoolsQuality");
+  auto* gpu = editor.findChild<QCheckBox*>("HltoolsGpu");
+  auto* parameters = editor.findChild<QLineEdit*>("HltoolsParameters");
+  REQUIRE(output);
+  REQUIRE(quality);
+  REQUIRE(gpu);
+  REQUIRE(parameters);
+  CHECK(quality->currentData().toString() == "normal");
+  CHECK(gpu->isChecked());
+  output->setText("custom.bsp");
+  quality->setCurrentIndex(quality->findData("extra"));
+  gpu->setChecked(false);
+  parameters->setText("-bounce 8");
+  CHECK(
+    std::get<mdl::CompilationHltools>(task)
+    == mdl::CompilationHltools{true, "custom.bsp", "extra", false, "-bounce 8"});
+  std::get<mdl::CompilationHltools>(task) = mdl::CompilationHltools{};
+  editor.updateItem();
+  CHECK(quality->currentData().toString() == "normal");
+  CHECK(gpu->isChecked());
+  CHECK(parameters->text().isEmpty());
+}
 
 TEST_CASE("CompilationExportMapTaskEditor")
 {

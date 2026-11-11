@@ -37,6 +37,9 @@ namespace ui
 namespace CompilationVariableNames
 {
 inline const std::string WORK_DIR_PATH = "WORK_DIR_PATH";
+// Persistent output location, independent of a project's temporary compile snapshot.
+inline const std::string OUTPUT_DIR_PATH = "OUTPUT_DIR_PATH";
+inline const std::string BSP_PATH = "BSP_PATH";
 inline const std::string MAP_DIR_PATH = "MAP_DIR_PATH";
 inline const std::string MAP_BASE_NAME = "MAP_BASE_NAME";
 inline const std::string MAP_FULL_NAME = "MAP_FULL_NAME";

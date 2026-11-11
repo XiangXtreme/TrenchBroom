@@ -20,6 +20,7 @@
 #include "ui/CompilationProfileManager.h"
 
 #include <QMenu>
+#include <QPushButton>
 #include <QToolButton>
 
 #include "mdl/CompilationConfig.h"
@@ -38,6 +39,8 @@
 
 #include "kd/range_utils.h"
 #include "kd/vector_utils.h"
+
+#include <algorithm>
 
 namespace tb::ui
 {
@@ -64,6 +67,16 @@ CompilationProfileManager::CompilationProfileManager(
   addProfileButton->setObjectName("CompilationProfileManager_AddProfileButton");
   m_removeProfileButton->setObjectName("CompilationProfileManager_RemoveProfileButton");
   auto* buttonLayout = createMiniToolBarLayout(addProfileButton, m_removeProfileButton);
+  auto* builtinButton = new QPushButton{tr("Built-in hltools")};
+  builtinButton->setObjectName("CompilationProfileManager_HltoolsButton");
+  builtinButton->setToolTip(
+    tr("Add a GoldSrc compile profile using the compiler included with TrenchBroom."));
+  buttonLayout->addWidget(builtinButton);
+  connect(
+    builtinButton,
+    &QPushButton::clicked,
+    this,
+    &CompilationProfileManager::addHltoolsProfile);
 
   auto* listLayout = new QVBoxLayout{};
   listLayout->setContentsMargins(0, 0, 0, 0);
@@ -165,6 +178,20 @@ void CompilationProfileManager::addProfile()
   m_config.profiles.push_back(mdl::CompilationProfile{"unnamed", "${MAP_DIR_PATH}", {}});
   m_profileList->reloadProfiles();
   m_profileList->setCurrentRow(int(m_config.profiles.size() - 1));
+}
+
+void CompilationProfileManager::addHltoolsProfile()
+{
+  auto name = std::string{"Built-in hltools"};
+  for (auto suffix = 2; std::ranges::any_of(
+         m_config.profiles, [&](const auto& profile) { return profile.name == name; });
+       ++suffix)
+    name = "Built-in hltools " + std::to_string(suffix);
+  m_config.profiles.push_back(mdl::CompilationProfile{
+    std::move(name), "${MAP_DIR_PATH}", {mdl::CompilationHltools{}}});
+  m_profileList->reloadProfiles();
+  m_profileList->setCurrentRow(static_cast<int>(m_config.profiles.size() - 1));
+  emit profileChanged();
 }
 
 void CompilationProfileManager::removeProfile()

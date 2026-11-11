@@ -22,6 +22,7 @@
 #include "el/EvaluationContext.h"
 #include "el/Interpolate.h"
 #include "el/Types.h"
+#include "ui/CompilationVariables.h"
 
 #include "kd/contracts.h"
 
@@ -67,6 +68,28 @@ const gl::PerspectiveCamera& CompilationContext::camera() const
 bool CompilationContext::test() const
 {
   return m_test;
+}
+
+void CompilationContext::setBspPath(std::filesystem::path path)
+{
+  m_bspPath = std::move(path);
+  m_variables.set(CompilationVariableNames::BSP_PATH, el::Value{m_bspPath->string()});
+}
+
+const std::optional<std::filesystem::path>& CompilationContext::bspPath() const
+{
+  return m_bspPath;
+}
+
+void CompilationContext::setProjectSnapshotDirectory(std::filesystem::path path)
+{
+  m_projectSnapshotDirectory = std::move(path);
+}
+
+const std::optional<std::filesystem::path>& CompilationContext::projectSnapshotDirectory()
+  const
+{
+  return m_projectSnapshotDirectory;
 }
 
 Result<std::string> CompilationContext::interpolate(const std::string& input) const

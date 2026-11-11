@@ -4,15 +4,14 @@
   This file is part of TrenchBroom, licensed under GPL version 3 or later.
 */
 
-#include "ui/CompilationVariables.h"
-
 #include "el/Interpolate.h"
 #include "el/VariableStore.h"
 #include "mdl/MapFixture.h"
-
-#include <catch2/catch_test_macros.hpp>
+#include "ui/CompilationVariables.h"
 
 #include <string>
+
+#include <catch2/catch_test_macros.hpp>
 
 namespace tb::ui
 {
@@ -37,6 +36,9 @@ TEST_CASE("CompilationVariables")
     CHECK(expand(variables, "${MAP_BASE_NAME}") == "alpha");
     CHECK(expand(variables, "${MAP_FULL_NAME}") == "alpha.map");
     CHECK(expand(variables, "${WORK_DIR_PATH}") == "/work");
+    CHECK(
+      std::filesystem::path{expand(variables, "${OUTPUT_DIR_PATH}")}
+      == std::filesystem::path{"/maps/compiled"});
   }
 
   SECTION("project variables name the project file and map")
@@ -46,6 +48,9 @@ TEST_CASE("CompilationVariables")
 
     CHECK(expand(variables, "${PROJECT_PATH}") == "/projects/game.tbproj");
     CHECK(expand(variables, "${MAP_NAME}") == "alpha");
+    CHECK(
+      std::filesystem::path{expand(variables, "${OUTPUT_DIR_PATH}")}
+      == std::filesystem::path{"/projects/compiled"});
     // a profile can mix both: the project is the input, the export is the work area
     CHECK(
       expand(variables, "compile --project ${PROJECT_PATH} --map ${MAP_NAME}")

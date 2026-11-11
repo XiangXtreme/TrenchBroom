@@ -181,7 +181,7 @@ TrenchBroom 会在以下位置通知你有新更新：
 
 ## 编译地图 {#compiling_maps}
 
-TrenchBroom 支持直接在编辑器中编译地图。你可以创建编译配置，并配置这些配置来运行外部编译工具。不过，TrenchBroom 不附带预打包的编译工具，你需要自行下载和安装。选择 #menu(Menu/Run/Compile...) 后会打开如下编译对话框。
+TrenchBroom 支持直接在编辑器中编译地图。GoldSrc 地图可以使用随编辑器提供的 hltools 编译器，其他工具链可以配置为外部工具。选择 #menu(Menu/Run/Compile...) 后会打开如下编译对话框。
 
 ![编译对话框（macOS）](images/CompilationDialog.png)
 
@@ -199,6 +199,18 @@ TrenchBroom 支持直接在编辑器中编译地图。你可以创建编译配�
 每个任务旁的复选框可以让你在运行编译配置时选择性地排除该任务。
 
 任务有以下类型，每种类型都有不同的参数：
+
+### 内置 hltools（GoldSrc） {#built-in-hltools}
+
+点击配置列表下方的 **内置 hltools**，即可创建可直接运行的 GoldSrc 编译配置。也可以通过任务列表的 **+** 按钮将该任务加入已有配置，无需另外安装 hltools 或设置可执行文件路径。此编译器生成 GoldSrc BSP；其他引擎请使用对应的外部工具链。
+
+任务支持设置 BSP 输出路径、快速/标准/精细光照质量、GPU 光照，以及 `-bounce 8`、`-threads 4` 等附加 `hltools compile` 参数。Vulkan 不可用时自动使用 CPU。该任务自动导出当前地图，遵守图层的“不导出”设置，再执行 CSG、BSP、VIS 和 RAD，无需另外添加“导出地图”任务，也不会改写源 MAP。随编辑器提供的编译程序不支持嵌入源 ZIP。
+
+默认输出为 `${OUTPUT_DIR_PATH}/${MAP_BASE_NAME}.bsp`。独立地图的 `OUTPUT_DIR_PATH` 为地图目录下的 `compiled` 子目录；工程地图则为 `.tbproj` 旁的 `compiled` 目录。工程输入采用冻结的资源快照，包含已捕获纹理和地形编译结果，因此关闭编译对话框后 BSP 仍会保留。工程资源检查和已配置的资源自动发布会在编译前执行。
+
+编译输出实时显示在已有输出区域，`.log` 和生成的 `.lin`/`.pts` 漏点文件保存到 BSP 旁。**停止**会取消编译；失败或取消均保留旧 BSP，并阻止后续任务执行。**测试**只显示计划，不启动编译器或写入编译产物。
+
+在任务末尾添加 **复制文件**，可将 `${BSP_PATH}` 部署到游戏的 `maps` 目录；添加 **启动引擎**，可在成功编译后启动已有游戏配置。启动任务的 `${MAP_BASE_NAME}` 使用实际 BSP 文件名，支持自定义输出名称。也可以直接把 BSP 输出路径设为游戏的 `maps` 目录。工程资源的自动发布仍由工程发布设置控制。
 
 ### 导出地图 {#export-map}
 
@@ -296,6 +308,8 @@ TrenchBroom 支持直接在编辑器中编译地图。你可以创建编译配�
 `MODS`           Tool, Workdir     包含当前地图所有启用模组的数组。
 `APP_DIR_PATH`   Tool, Workdir     包含 TrenchBroom 应用程序二进制文件的目录的完整路径。
 `CPU_COUNT`      Tool              当前计算机中的 CPU 数量。
+`OUTPUT_DIR_PATH` Tool             地图或工程旁用于持久保存编译输出的目录。
+`BSP_PATH`        Tool             前一个内置 hltools 任务生成的 BSP 完整路径。
 
 如果当前游戏的[游戏配置](#game_configuration)包含编译工具，这些工具的名称也会作为 Tool 作用域中的变量使用。下图展示了编译配置中使用此类变量的部分内容。
 

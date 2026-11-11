@@ -72,6 +72,8 @@ public:
   bool selectProfile(const mdl::CompilationProfile& profile);
   void selectFirstProfile();
   const mdl::CompilationConfig& config() const;
+  /** Add a complete built-in GoldSrc compile profile without executable paths. */
+  void addHltoolsProfile();
 
 private:
   void updateGui();

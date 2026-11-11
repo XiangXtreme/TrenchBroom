@@ -21,6 +21,7 @@
 #include "el/ParseExpression.h"
 #include "mdl/CatchConfig.h"
 #include "mdl/CompilationConfig.h"
+#include "mdl/ParseCompilationConfig.h"
 
 #include "kd/ranges/to.h"
 
@@ -342,6 +343,27 @@ TEST_CASE("toValue")
       }})",
         enabled,
         treatLaunchFailureAsError)));
+  }
+
+  SECTION("built-in hltools round trips compiler settings")
+  {
+    const auto gpu = GENERATE(true, false);
+    const auto quality = GENERATE("fast", "normal", "extra");
+    const auto config = CompilationConfig{
+      {{"Built-in",
+        "${MAP_DIR_PATH}",
+        {CompilationHltools{
+          true, "${OUTPUT_DIR_PATH}/custom.bsp", quality, gpu, "-bounce 8"}}}}};
+    CHECK(parseCompilationConfig(toValue(config).asString()) == config);
+    const auto defaults = parseCompilationConfig(R"({"version":1,"profiles":[{
+      "name":"Built-in", "workdir":"", "tasks":[{"type":"hltools"}]}]})");
+    REQUIRE(defaults.is_success());
+    CHECK(
+      std::get<CompilationHltools>(defaults.value().profiles.front().tasks.front())
+      == CompilationHltools{});
+    CHECK(parseCompilationConfig(R"({"version":1,"profiles":[{
+      "name":"Built-in", "workdir":"", "tasks":[{"type":"hltools","quality":"invalid"}]}]})")
+            .is_error());
   }
 }
 

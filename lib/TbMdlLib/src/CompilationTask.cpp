@@ -36,6 +36,8 @@ kdl_reflect_impl(CompilationDeleteFiles);
 
 kdl_reflect_impl(CompilationRunTool);
 
+kdl_reflect_impl(CompilationHltools);
+
 kdl_reflect_impl(CompilationLaunchEngine);
 
 std::ostream& operator<<(std::ostream& lhs, const CompilationTask& rhs)

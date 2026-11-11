@@ -23,6 +23,7 @@
 #include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
 
+#include "TestEnvironment.h"
 #include "base/PreferenceManager.h"
 #include "gl/OrthographicCamera.h"
 #include "gl/PerspectiveCamera.h"
@@ -60,6 +61,7 @@
 #include "ui/ClickableTitleBar.h"
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/CompilationDialog.h"
+#include "ui/CompilationProfileManager.h"
 #include "ui/Inspector.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorController.h"
@@ -2094,6 +2096,114 @@ TEST_CASE("ProjectCompilation")
       CHECK_FALSE(laterBytes.contains("Frozen content"));
     }
   }
+}
+
+TEST_CASE("ProjectCompilation.builtInHltools")
+{
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto projectPath = pathFromQString(directory.filePath("compile.tbproj"));
+  require(ProjectSession::create(projectPath, "Compile", GameName));
+  auto fixture = AppControllerFixture{[](const auto& writeGameConfig) {
+    writeGameConfig(GameName, GameConfig, std::nullopt, std::nullopt);
+  }};
+  auto& app = fixture.appController();
+  REQUIRE(app.openProject(projectPath));
+  auto* projectWindow = findProjectWindow(projectPath);
+  REQUIRE(projectWindow);
+  auto session = projectWindow->session();
+  const auto texture = require(img::convertGoldSrcTexture(
+    {16, 16, std::vector<unsigned char>(16 * 16 * 4, 180)}, "project_wall"));
+  auto asset = project::AssetImport{};
+  asset.type = project::AssetType::Texture;
+  asset.virtualPath = "textures/project_wall.wad";
+  asset.displayName = "project_wall";
+  asset.original = asset.compatible = texture.wad;
+  require(session->importAsset(asset));
+  auto modelFile = QFile{pathAsQString(getFixtureRoot() / "test/publish-model.mdl")};
+  REQUIRE(modelFile.open(QIODevice::ReadOnly));
+  const auto modelBytes = modelFile.readAll();
+  asset.type = project::AssetType::Model;
+  asset.virtualPath = "models/compile_prop.mdl";
+  asset.displayName = "compile_prop";
+  asset.original = asset.compatible = {modelBytes.begin(), modelBytes.end()};
+  require(session->importAsset(asset));
+  require(
+    app.mapWindowManager().createProjectMap(session, "alpha", mdl::MapFormat::Valve));
+  auto* window = app.mapWindowManager().topMapWindow();
+  REQUIRE(window);
+  auto& document = window->document();
+  auto& map = document.map();
+  mdl::selectAllNodes(map);
+  mdl::removeSelectedNodes(map);
+  const auto builder = mdl::BrushBuilder{map.worldNode().mapFormat(), map.worldBounds()};
+  for (const auto& bounds :
+       {vm::bbox3d{{-144, -144, -16}, {144, 144, 0}},
+        vm::bbox3d{{-144, -144, 128}, {144, 144, 144}},
+        vm::bbox3d{{-144, -144, 0}, {-128, 144, 128}},
+        vm::bbox3d{{128, -144, 0}, {144, 144, 128}},
+        vm::bbox3d{{-128, -144, 0}, {128, -128, 128}},
+        vm::bbox3d{{-128, 128, 0}, {128, 144, 128}}})
+  {
+    auto* brush =
+      new mdl::BrushNode{require(builder.createCuboid(bounds, "project_wall"))};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {brush}}});
+  }
+  auto* light = new mdl::EntityNode{mdl::Entity{
+    {{"classname", "light"}, {"origin", "0 0 80"}, {"_light", "255 210 150 300"}}}};
+  auto* player = new mdl::EntityNode{
+    mdl::Entity{{{"classname", "info_player_start"}, {"origin", "0 0 40"}}}};
+  auto* model = new mdl::EntityNode{mdl::Entity{
+    {{"classname", "cycler"},
+     {"origin", "64 0 8"},
+     {"model", "models/compile_prop.mdl"},
+     {"zhlt_studiobsp", "2"}}}};
+  mdl::addNodes(map, {{&mdl::parentForNodes(map), {light, player, model}}});
+  REQUIRE(mdl::setEntityProperty(map, "message", "Current project content"));
+  // Captured resources take precedence over stale external WAD settings, including
+  // named configurations retained from imported MAP files.
+  REQUIRE(mdl::setEntityProperty(map, "wad", "missing-original.wad"));
+  REQUIRE(mdl::setEntityProperty(map, "wadcfgfile", "missing-original.cfg"));
+  REQUIRE(mdl::setEntityProperty(map, "wadconfig", "Original"));
+  auto camera = gl::PerspectiveCamera{};
+  const auto bspPath = directory.filePath("compiled/alpha.bsp");
+  {
+    auto dialog = CompilationDialog{app, document, camera};
+    auto* manager = dialog.findChild<CompilationProfileManager*>();
+    REQUIRE(manager);
+    manager->addHltoolsProfile();
+    SECTION("missing project resources prevent compilation")
+    {
+      auto* missing = new mdl::EntityNode{
+        mdl::Entity{{{"classname", "cycler"}, {"model", "models/missing.mdl"}}}};
+      mdl::addNodes(map, {{&mdl::parentForNodes(map), {missing}}});
+      REQUIRE(dialog.runProfileByName("Built-in hltools"));
+      CHECK_FALSE(dialog.isRunning());
+      CHECK(dialog.outputText().contains("models/missing.mdl"));
+      CHECK_FALSE(QFile::exists(bspPath));
+      return;
+    }
+    SECTION("compiles captured textures and model collision into persistent output")
+    {
+      REQUIRE(dialog.runProfileByName("Built-in hltools"));
+      REQUIRE(dialog.isRunning());
+      REQUIRE(mdl::setEntityProperty(map, "message", "Later live edit"));
+      REQUIRE(QTest::qWaitFor([&] { return !dialog.isRunning(); }, 30000));
+      INFO(dialog.outputText().toStdString());
+      REQUIRE_FALSE(dialog.outputText().contains("Compilation failed"));
+      auto bsp = QFile{bspPath};
+      REQUIRE(bsp.open(QIODevice::ReadOnly));
+      const auto bytes = bsp.readAll();
+      CHECK(bytes.startsWith(QByteArray::fromHex("1e000000")));
+      CHECK(bytes.contains("project_wall"));
+      CHECK(bytes.contains("Current project content"));
+      CHECK_FALSE(bytes.contains("Later live edit"));
+      CHECK(
+        bytes.contains("func_wall")); // The captured studio model became collision BSP.
+      CHECK(QFile::exists(directory.filePath("compiled/alpha.log")));
+    }
+  }
+  CHECK(QFile::exists(bspPath)); // Closing the dialog removes snapshots, not the BSP.
 }
 
 TEST_CASE("ProjectCompilation.projectAwareProfilesSkipTheSnapshot")

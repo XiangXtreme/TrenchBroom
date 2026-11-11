@@ -88,6 +88,7 @@ CommonCompilationVariables::CommonCompilationVariables(
   set(MAP_FULL_NAME, el::Value{filename.string()});
   set(MAP_DIR_PATH, el::Value{filePath.string()});
   set(APP_DIR_PATH, el::Value{appPath.string()});
+  set(OUTPUT_DIR_PATH, el::Value{(mapPath.parent_path() / "compiled").string()});
 }
 
 CompilationWorkDirVariables::CompilationWorkDirVariables(const mdl::Map& map)
@@ -118,10 +119,12 @@ CompilationVariables::CompilationVariables(
   set(WORK_DIR_PATH, el::Value{workDir});
 }
 
-void CompilationVariables::setProject(
-  std::string projectPath, std::string mapName)
+void CompilationVariables::setProject(std::string projectPath, std::string mapName)
 {
   using namespace CompilationVariableNames;
+  set(
+    OUTPUT_DIR_PATH,
+    el::Value{(std::filesystem::path{projectPath}.parent_path() / "compiled").string()});
   set(PROJECT_PATH, el::Value{std::move(projectPath)});
   set(MAP_NAME, el::Value{std::move(mapName)});
 }

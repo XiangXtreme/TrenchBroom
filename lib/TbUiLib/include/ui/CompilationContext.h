@@ -23,7 +23,9 @@
 #include "el/VariableStore.h"
 #include "ui/TextOutputAdapter.h"
 
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace tb
@@ -51,6 +53,8 @@ private:
 
   TextOutputAdapter m_output;
   bool m_test;
+  std::optional<std::filesystem::path> m_bspPath;
+  std::optional<std::filesystem::path> m_projectSnapshotDirectory;
 
 public:
   // A standalone tool needs only the captured variables and never accesses the map.
@@ -66,6 +70,10 @@ public:
   const mdl::Map& map() const;
   const gl::PerspectiveCamera& camera() const;
   bool test() const;
+  void setBspPath(std::filesystem::path path);
+  const std::optional<std::filesystem::path>& bspPath() const;
+  void setProjectSnapshotDirectory(std::filesystem::path path);
+  const std::optional<std::filesystem::path>& projectSnapshotDirectory() const;
 
   Result<std::string> interpolate(const std::string& input) const;
   Result<std::string> variableValue(const std::string& variableName) const;

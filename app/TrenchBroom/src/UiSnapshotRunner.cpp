@@ -21,6 +21,7 @@
 
 #include <QAbstractButton>
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDeadlineTimer>
 #include <QDebug>
@@ -55,6 +56,7 @@
 #include "gl/Camera.h"
 #include "gl/Material.h"
 #include "gl/MaterialManager.h"
+#include "gl/PerspectiveCamera.h"
 #include "gl/Resource.h"
 #include "gl/Texture.h"
 #include "mdl/BrushBuilder.h"
@@ -82,6 +84,8 @@
 #include "ui/ClickableTitleBar.h"
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/CommandPaletteDialog.h"
+#include "ui/CompilationDialog.h"
+#include "ui/CompilationProfileManager.h"
 #include "ui/CyclingMapView.h"
 #include "ui/EntityBrowserView.h"
 #include "ui/EntityMotionPreview.h"
@@ -123,6 +127,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
   static const auto pages = QStringList{
     QStringLiteral("map"),
     QStringLiteral("map-settings"),
+    QStringLiteral("compilation-hltools"),
     QStringLiteral("map-areas"),
     QStringLiteral("map-area-split-preview"),
     QStringLiteral("map-area-join-preview"),
@@ -992,6 +997,19 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
 
 UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& targetName)
 {
+  if (targetName == "compilation-hltools")
+  {
+    const auto* output = targetWidget.findChild<QLineEdit*>("HltoolsOutput");
+    const auto* quality = targetWidget.findChild<QComboBox*>("HltoolsQuality");
+    const auto* gpu = targetWidget.findChild<QCheckBox*>("HltoolsGpu");
+    const auto ready = output && quality && gpu && output->isVisible()
+                       && quality->isVisible() && gpu->isVisible()
+                       && !output->text().isEmpty() && quality->currentData() == "normal"
+                       && gpu->isChecked();
+    return {
+      ready ? UiSnapshotReadinessState::Ready : UiSnapshotReadinessState::Failed,
+      "Built-in compiler output, quality and GPU controls must be visible"};
+  }
   if (targetName == "terrain" || targetName == "terrain-collapsed")
   {
     for (const auto* name : {"Creation", "Editing", "Compilation"})
@@ -1642,6 +1660,8 @@ int runUiSnapshot(
   auto componentSnapshot = std::unique_ptr<QWidget>{};
   auto preferencesDialog = std::unique_ptr<PreferenceDialog>{};
   auto mapSettingsDialog = std::unique_ptr<MapSettingsDialog>{};
+  auto compilationCamera = gl::PerspectiveCamera{};
+  auto compilationDialog = std::unique_ptr<CompilationDialog>{};
   auto commandPaletteDialog = std::unique_ptr<CommandPaletteDialog>{};
   auto workspaceSnapshot = std::unique_ptr<UiWorkspaceSnapshot>{};
   auto assetLibrarySnapshot = std::unique_ptr<QWidget>{};
@@ -1724,6 +1744,14 @@ int runUiSnapshot(
           mapSettingsDialog =
             std::make_unique<MapSettingsDialog>(mapWindow->document(), mapWindow);
           targetWidget = mapSettingsDialog.get();
+        }
+        else if (options.page == QStringLiteral("compilation-hltools"))
+        {
+          compilationDialog = std::make_unique<CompilationDialog>(
+            appController, mapWindow->document(), compilationCamera, mapWindow);
+          compilationDialog->findChild<CompilationProfileManager*>()->addHltoolsProfile();
+          targetWidget = compilationDialog.get();
+          targetWidget->resize(1080, 720);
         }
         else if (options.page == QStringLiteral("command-palette"))
         {

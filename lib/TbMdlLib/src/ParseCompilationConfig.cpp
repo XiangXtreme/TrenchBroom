@@ -162,6 +162,19 @@ CompilationTask toTask(const el::Value& value)
   {
     return toLaunchEngineTask(value);
   }
+  if (typeName == "hltools")
+  {
+    auto task = CompilationHltools{};
+    task.enabled = value.atOrDefault("enabled", el::Value{true}).booleanValue();
+    task.targetSpec =
+      value.atOrDefault("target", el::Value{task.targetSpec}).stringValue();
+    task.quality = value.atOrDefault("quality", el::Value{"normal"}).stringValue();
+    if (task.quality != "normal" && task.quality != "fast" && task.quality != "extra")
+      throw ParserException{"Unknown hltools lighting quality '" + task.quality + "'"};
+    task.gpu = value.atOrDefault("gpu", el::Value{true}).booleanValue();
+    task.parameterSpec = value.atOrDefault("parameters", el::Value{""}).stringValue();
+    return task;
+  }
 
   throw ParserException{fmt::format("Unknown compilation task type '{}'", typeName)};
 }

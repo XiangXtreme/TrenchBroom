@@ -93,6 +93,16 @@ el::Value toValue(const CompilationTask& task)
         map["parameters"] = el::Value{runTool.parameterSpec};
         return map;
       },
+      [](const CompilationHltools& compiler) {
+        return el::MapType{
+          {"type", el::Value{"hltools"}},
+          {"enabled", el::Value{compiler.enabled}},
+          {"target", el::Value{compiler.targetSpec}},
+          {"quality", el::Value{compiler.quality}},
+          {"gpu", el::Value{compiler.gpu}},
+          {"parameters", el::Value{compiler.parameterSpec}},
+        };
+      },
       [](const CompilationLaunchEngine& launchEngine) {
         auto map = el::MapType{};
         map["type"] = el::Value{"launchEngine"};

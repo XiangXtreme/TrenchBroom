@@ -19,6 +19,7 @@ along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
 
 #include <QApplication>
 #include <QListWidget>
+#include <QPushButton>
 #include <QToolButton>
 #include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
@@ -79,6 +80,24 @@ TEST_CASE("CompilationProfileManager")
       REQUIRE(manager->selectedProfile() != nullptr);
       CHECK(manager->selectedProfile()->name == "test 2");
     }
+  }
+
+  SECTION("one click adds an editable built-in compiler profile")
+  {
+    auto manager = CompilationProfileManager{appController, document, config};
+    auto* button =
+      manager.findChild<QPushButton*>("CompilationProfileManager_HltoolsButton");
+    REQUIRE(button);
+    button->click();
+    REQUIRE(manager.selectedProfile());
+    CHECK(manager.selectedProfile()->name == "Built-in hltools");
+    REQUIRE(manager.selectedProfile()->tasks.size() == 1);
+    CHECK(
+      std::get<mdl::CompilationHltools>(manager.selectedProfile()->tasks.front())
+      == mdl::CompilationHltools{});
+    button->click();
+    REQUIRE(manager.config().profiles.size() == 2);
+    CHECK(manager.selectedProfile()->name == "Built-in hltools 2");
   }
 
   SECTION("selectProfile")

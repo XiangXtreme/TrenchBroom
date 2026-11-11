@@ -196,6 +196,24 @@ private slots:
   void treatNonZeroResultCodeAsErrorChanged(int state);
 };
 
+class CompilationHltoolsTaskEditor : public CompilationTaskEditorBase
+{
+  Q_OBJECT
+private:
+  MultiCompletionLineEdit* m_targetEditor = nullptr;
+  MultiCompletionLineEdit* m_parametersEditor = nullptr;
+  QComboBox* m_qualityEditor = nullptr;
+  QCheckBox* m_gpuEditor = nullptr;
+
+public:
+  CompilationHltoolsTaskEditor(
+    MapDocument& document,
+    mdl::CompilationProfile& profile,
+    mdl::CompilationTask& task,
+    QWidget* parent = nullptr);
+  void updateItem() override;
+};
+
 class CompilationLaunchEngineTaskEditor : public CompilationTaskEditorBase
 {
   Q_OBJECT

@@ -604,6 +604,91 @@ void CompilationRunToolTaskEditor::treatNonZeroResultCodeAsErrorChanged(const in
   task().treatNonZeroResultCodeAsError = value;
 }
 
+CompilationHltoolsTaskEditor::CompilationHltoolsTaskEditor(
+  MapDocument& document,
+  mdl::CompilationProfile& profile,
+  mdl::CompilationTask& task,
+  QWidget* parent)
+  : CompilationTaskEditorBase{
+      tr("Built-in hltools (GoldSrc)"), document, profile, task, parent}
+{
+  contract_pre(std::holds_alternative<mdl::CompilationHltools>(task));
+  auto* form = createPanelForm(nullptr, PanelInsets::Content);
+  addMainLayout(form);
+
+  m_targetEditor = new MultiCompletionLineEdit{};
+  m_targetEditor->setObjectName("HltoolsOutput");
+  m_targetEditor->setFont(Fonts::fixedWidthFont());
+  m_targetEditor->setToolTip(
+    tr("The BSP output path. Variables are allowed. Logs are saved beside the BSP."));
+  setupCompleter(m_targetEditor);
+  auto* browse = new QPushButton{tr("...")};
+  browse->setToolTip(tr("Choose BSP output"));
+  auto* output = new QHBoxLayout{};
+  output->setContentsMargins(0, 0, 0, 0);
+  output->addWidget(m_targetEditor, 1);
+  output->addWidget(browse);
+  form->addRow(tr("BSP Output"), output);
+
+  m_qualityEditor = new QComboBox{};
+  m_qualityEditor->setObjectName("HltoolsQuality");
+  m_qualityEditor->addItem(tr("Fast"), "fast");
+  m_qualityEditor->addItem(tr("Normal"), "normal");
+  m_qualityEditor->addItem(tr("Extra"), "extra");
+  form->addRow(tr("Lighting Quality"), m_qualityEditor);
+  m_gpuEditor = new QCheckBox{tr("Use GPU lighting when available")};
+  m_gpuEditor->setObjectName("HltoolsGpu");
+  m_gpuEditor->setToolTip(
+    tr("Uses Vulkan compute and falls back to CPU when unavailable."));
+  form->addRow("", m_gpuEditor);
+
+  m_parametersEditor = new MultiCompletionLineEdit{};
+  m_parametersEditor->setObjectName("HltoolsParameters");
+  m_parametersEditor->setFont(Fonts::fixedWidthFont());
+  m_parametersEditor->setToolTip(
+    tr("Additional hltools compile options, for example -bounce 8 or -threads 4. "
+       "Variables are allowed."));
+  setupCompleter(m_parametersEditor);
+  form->addRow(tr("Additional Parameters"), m_parametersEditor);
+
+  connect(m_targetEditor, &QLineEdit::textChanged, this, [this](const auto& text) {
+    std::get<mdl::CompilationHltools>(m_task).targetSpec = text.toStdString();
+  });
+  connect(browse, &QPushButton::clicked, this, [this] {
+    const auto path = QFileDialog::getSaveFileName(
+      this, tr("Choose BSP Output"), "", tr("GoldSrc BSP (*.bsp)"));
+    if (!path.isEmpty())
+      m_targetEditor->setText(path);
+  });
+  connect(
+    m_qualityEditor, &QComboBox::currentIndexChanged, this, [this](const int index) {
+      if (index >= 0)
+        std::get<mdl::CompilationHltools>(m_task).quality =
+          m_qualityEditor->itemData(index).toString().toStdString();
+    });
+  connect(m_gpuEditor, &QCheckBox::toggled, this, [this](const bool value) {
+    std::get<mdl::CompilationHltools>(m_task).gpu = value;
+  });
+  connect(m_parametersEditor, &QLineEdit::textChanged, this, [this](const auto& text) {
+    std::get<mdl::CompilationHltools>(m_task).parameterSpec = text.toStdString();
+  });
+}
+
+void CompilationHltoolsTaskEditor::updateItem()
+{
+  CompilationTaskEditorBase::updateItem();
+  const auto& task = std::get<mdl::CompilationHltools>(m_task);
+  const auto targetBlocker = QSignalBlocker{m_targetEditor};
+  const auto qualityBlocker = QSignalBlocker{m_qualityEditor};
+  const auto gpuBlocker = QSignalBlocker{m_gpuEditor};
+  const auto parametersBlocker = QSignalBlocker{m_parametersEditor};
+  m_targetEditor->setText(QString::fromStdString(task.targetSpec));
+  m_qualityEditor->setCurrentIndex(
+    m_qualityEditor->findData(QString::fromStdString(task.quality)));
+  m_gpuEditor->setChecked(task.gpu);
+  m_parametersEditor->setText(QString::fromStdString(task.parameterSpec));
+}
+
 // CompilationLaunchEngineTaskEditor
 
 CompilationLaunchEngineTaskEditor::CompilationLaunchEngineTaskEditor(
@@ -741,6 +826,9 @@ ControlListBoxItemRenderer* CompilationTaskListBox::createItemRenderer(
       },
       [&](const mdl::CompilationRunTool&) -> ControlListBoxItemRenderer* {
         return new CompilationRunToolTaskEditor{m_document, *m_profile, task, parent};
+      },
+      [&](const mdl::CompilationHltools&) -> ControlListBoxItemRenderer* {
+        return new CompilationHltoolsTaskEditor{m_document, *m_profile, task, parent};
       },
       [&](const mdl::CompilationLaunchEngine&) -> ControlListBoxItemRenderer* {
         return new CompilationLaunchEngineTaskEditor{

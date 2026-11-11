@@ -2083,7 +2083,11 @@ Recover them? The current project file is kept as a backup in the autosave folde
             <source>Remove</source>
             <translation>移除</translation>
             </message>
-        </context>
+        <message>
+            <source>Built-in hltools (GoldSrc)</source>
+            <translation>内置 hltools（GoldSrc）</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::CompilationProfileManager</name>
         <message>
@@ -2096,7 +2100,15 @@ Recover them? The current project file is kept as a backup in the autosave folde
             <source>Remove</source>
             <translation>移除</translation>
             </message>
-        </context>
+        <message>
+            <source>Built-in hltools</source>
+            <translation>内置 hltools</translation>
+        </message>
+        <message>
+            <source>Add a GoldSrc compile profile using the compiler included with TrenchBroom.</source>
+            <translation>使用 TrenchBroom 自带的编译器添加 GoldSrc 编译配置。</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::CompilationRunToolTaskEditor</name>
         <message>
@@ -9607,6 +9619,69 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
         <message>
             <source>Failed (estimate)</source>
             <translation>失败（估算）</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::CompilationHltoolsTaskEditor</name>
+        <message>
+            <source>Built-in hltools (GoldSrc)</source>
+            <translation>内置 hltools（GoldSrc）</translation>
+        </message>
+        <message>
+            <source>The BSP output path. Variables are allowed. Logs are saved beside the BSP.</source>
+            <translation>BSP 输出路径，支持变量。日志保存在 BSP 旁。</translation>
+        </message>
+        <message>
+            <source>...</source>
+            <translation>...</translation>
+        </message>
+        <message>
+            <source>Choose BSP output</source>
+            <translation>选择 BSP 输出位置</translation>
+        </message>
+        <message>
+            <source>BSP Output</source>
+            <translation>BSP 输出</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>快速</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>标准</translation>
+        </message>
+        <message>
+            <source>Extra</source>
+            <translation>精细</translation>
+        </message>
+        <message>
+            <source>Lighting Quality</source>
+            <translation>光照质量</translation>
+        </message>
+        <message>
+            <source>Use GPU lighting when available</source>
+            <translation>可用时使用 GPU 光照</translation>
+        </message>
+        <message>
+            <source>Uses Vulkan compute and falls back to CPU when unavailable.</source>
+            <translation>使用 Vulkan 计算，不可用时自动使用 CPU。</translation>
+        </message>
+        <message>
+            <source>Additional hltools compile options, for example -bounce 8 or -threads 4. Variables are allowed.</source>
+            <translation>附加 hltools 编译选项，例如 -bounce 8 或 -threads 4，支持变量。</translation>
+        </message>
+        <message>
+            <source>Additional Parameters</source>
+            <translation>附加参数</translation>
+        </message>
+        <message>
+            <source>Choose BSP Output</source>
+            <translation>选择 BSP 输出位置</translation>
+        </message>
+        <message>
+            <source>GoldSrc BSP (*.bsp)</source>
+            <translation>GoldSrc BSP (*.bsp)</translation>
         </message>
     </context>
 </TS>

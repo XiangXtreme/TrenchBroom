@@ -32,6 +32,7 @@
 #include "mdl/Map.h"
 #include "prefs/Preferences.h"
 #include "ui/BuiltinGoldSrcAssets.h"
+#include "ui/CompilationHltoolsTaskRunner.h"
 #include "ui/LightmapBakeReader.h"
 #include "ui/QPathUtils.h"
 
@@ -82,12 +83,7 @@ const std::string& LightmapBaker::output() const
 
 std::filesystem::path LightmapBaker::workerPath()
 {
-#ifdef Q_OS_WIN
-  constexpr auto name = "HltoolsLightmapWorker.exe";
-#else
-  constexpr auto name = "HltoolsLightmapWorker";
-#endif
-  return pathFromQString(QDir{QCoreApplication::applicationDirPath()}.filePath(name));
+  return hltoolsWorkerPath();
 }
 
 void LightmapBaker::start(

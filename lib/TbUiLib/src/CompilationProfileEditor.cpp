@@ -202,6 +202,7 @@ void CompilationProfileEditor::addTask()
   auto* renameFileAction = menu.addAction("Rename File");
   auto* deleteFilesAction = menu.addAction("Delete Files");
   auto* runToolAction = menu.addAction("Run Tool");
+  auto* hltoolsAction = menu.addAction(tr("Built-in hltools (GoldSrc)"));
   auto* launchEngineAction = menu.addAction("Launch Engine");
 
   auto task = [&](const auto* chosenAction) -> std::optional<mdl::CompilationTask> {
@@ -239,6 +240,8 @@ void CompilationProfileEditor::addTask()
         engineProfiles.empty() ? "" : engineProfiles.front().id,
         !K(treatLaunchFailureAsError)};
     }
+    if (chosenAction == hltoolsAction)
+      return mdl::CompilationHltools{};
     {
       return std::nullopt;
     }
