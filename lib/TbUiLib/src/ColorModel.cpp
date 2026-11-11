@@ -20,6 +20,7 @@
 #include "ui/ColorModel.h"
 
 #include <QColorDialog>
+#include <QCoreApplication>
 
 #include "base/Macros.h"
 #include "base/PreferenceManager.h"
@@ -28,11 +29,108 @@
 #include "ui/QPathUtils.h"
 
 #include "kd/contracts.h"
-#include "kd/path_utils.h"
+
+#include <algorithm>
 
 
 namespace tb::ui
 {
+namespace
+{
+QString colorGroup(const Preference<Color>& preference)
+{
+  const auto path = pathAsGenericQString(preference.path);
+  const auto name = pathAsQString(preference.path.filename());
+  if (path.startsWith("Browser/") || path.startsWith("Texture Browser/"))
+    return QCoreApplication::translate("tb::ui::ColorModel", "Asset browsers");
+  if (name.contains("overlay", Qt::CaseInsensitive))
+    return QCoreApplication::translate("tb::ui::ColorModel", "Text overlays");
+  if (
+    name.contains("face", Qt::CaseInsensitive)
+    || name.contains("edge", Qt::CaseInsensitive)
+    || name.contains("entity", Qt::CaseInsensitive)
+    || name.contains("group", Qt::CaseInsensitive) || name == "Selection bounds")
+    return QCoreApplication::translate("tb::ui::ColorModel", "Map geometry");
+  if (
+    name.contains("handle", Qt::CaseInsensitive)
+    || name.contains("scale", Qt::CaseInsensitive)
+    || name.contains("shear", Qt::CaseInsensitive)
+    || name.contains("move", Qt::CaseInsensitive)
+    || name.contains("indicator", Qt::CaseInsensitive) || name == "Texture seam")
+    return QCoreApplication::translate("tb::ui::ColorModel", "Editing tools");
+  return QCoreApplication::translate("tb::ui::ColorModel", "Map views and guides");
+}
+
+QString colorName(const Preference<Color>& preference)
+{
+  // Mark the persisted captions for translation while leaving preference keys intact.
+  static const auto captions = {
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Soft map bounds color"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Background"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "X axis"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Y axis"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Z axis"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Point file"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Portal file border"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Portal file fill"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Compass background"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Compass background outline"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Compass axis outline"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Camera frustum"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Groups"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Linked Groups"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Tutorial overlay text"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Tutorial overlay background"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Faces"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Selected faces"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Locked faces"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Edges"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Selected edges"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Locked edges"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Undefined entity"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Selection bounds"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Info overlay text"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Group info overlay text"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Info overlay background"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Selected info overlay text"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Selected info overlay background"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Locked info overlay text"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Locked info overlay background"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Handle"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Occluded handle"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Selected handle"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Occluded selected handle"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Clip handle"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Clip face"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Resize handle"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Rotate handle"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Scale handle"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Scale fill"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Scale outline"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Shear fill"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Shear outline"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Move trace"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Move indicator outline"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Move indicator fill"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Angle indicator"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Texture seam"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Color2D"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Text color"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Sub text color"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Group background color"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Background color"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Default color"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Selected color"),
+    QT_TRANSLATE_NOOP("tb::ui::ColorModel", "Used color"),
+  };
+  const auto name = pathAsQString(preference.path.filename());
+  for (const auto* caption : captions)
+    if (name == QString::fromUtf8(caption))
+      return QCoreApplication::translate("tb::ui::ColorModel", caption);
+  return name;
+}
+} // namespace
+
 ColorModel::ColorModel(QObject* parent)
   : QAbstractTableModel{parent}
 {
@@ -49,6 +147,10 @@ void ColorModel::initialize()
     }
   }
 
+  std::stable_sort(
+    m_colors.begin(), m_colors.end(), [](const auto* lhs, const auto* rhs) {
+      return QString::localeAwareCompare(colorGroup(*lhs), colorGroup(*rhs)) < 0;
+    });
   m_colorsCount = static_cast<int>(m_colors.size());
 }
 
@@ -84,7 +186,7 @@ QVariant ColorModel::headerData(
     case 0:
       return QString{tr("Color")};
     case 1:
-      return QString{tr("Context")};
+      return QString{tr("Group")};
     case 2:
       return QString{tr("Description")};
       switchDefault();
@@ -110,12 +212,15 @@ QVariant ColorModel::data(const QModelIndex& index, const int role) const
     case 0:
       return {}; // Leave first cell empty
     case 1:
-      return pathAsQString(kdl::path_front(colorPreference.path));
+      return colorGroup(colorPreference);
     case 2:
-      return pathAsGenericQString(kdl::path_pop_front(colorPreference.path));
+      return colorName(colorPreference);
       switchDefault();
     }
   }
+
+  if (role == Qt::ToolTipRole)
+    return pathAsGenericQString(getColorPreference(index.row()).path);
 
   // Use decoration instead of the cell background so application QSS cannot cover the
   // swatch.

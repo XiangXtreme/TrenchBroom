@@ -142,7 +142,7 @@ The Command Palette is useful when you know what an operation is called but do n
 
 Hold the backtick key (`` ` ``) in a map view to open the Pie Menu. Move the pointer toward an enabled action and release the key to run it; release near the center to cancel. The default shortcut can be changed under [Keyboard Shortcuts](#keyboard_shortcuts).
 
-Open **Preferences > Misc > Pie Menu Settings** to choose the actions, remove entries, and reorder them by dragging. The menu uses the same underlying actions as the main menu and Command Palette, so its entries follow the current editor context and custom keyboard configuration.
+Open **Preferences > General > Pie Menu Settings** to choose the actions, remove entries, and reorder them by dragging. The menu uses the same underlying actions as the main menu and Command Palette, so its entries follow the current editor context and custom keyboard configuration.
 
 ### Path Tool {#path_tool}
 

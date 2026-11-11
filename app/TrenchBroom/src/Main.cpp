@@ -174,8 +174,10 @@ std::optional<CommandLineOptions> parseCommandLine(QApplication& app)
     "entity-browser-empty, face-inspector, material-browser-empty, plugin-inspector, "
     "supporting, path-tool-preview, python-console, command-palette, components, "
     "preferences, "
-    "preferences-colors, preferences-mouse, preferences-keyboard, preferences-misc, "
-    "or preferences-kreedzbroom.",
+    "preferences-colors, preferences-mouse, preferences-keyboard, preferences-general, "
+    "preferences-extensions, "
+    "preferences-play-physics, preferences-play-display, preferences-play-analysis, "
+    "preferences-search, preferences-search-empty, or preferences-kreedzbroom.",
     "page",
     "map"};
   const auto uiSnapshotGamePathOption = QCommandLineOption{

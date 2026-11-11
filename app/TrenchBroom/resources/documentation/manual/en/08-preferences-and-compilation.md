@@ -61,7 +61,7 @@ Python Console font and size  Monospace family and point size used for console i
 
 The built-in theme IDs are `builtin.system`, `builtin.light`, `builtin.dark`, and `builtin.blender`. System derives its colors from the operating-system palette. Light and Dark provide stable TrenchBroom palettes, while Blender uses a compact dark palette based on Blender 5.2. Theme changes take effect after restarting TrenchBroom.
 
-Third-party themes are distributable UTF-8 JSON files with the `.tbtheme` extension. Put them in the `themes` directory inside the TrenchBroom user data directory, restart, and select the new name under **Preferences > View > Theme**:
+Third-party themes are distributable UTF-8 JSON files with the `.tbtheme` extension. Put them in the `themes` directory inside the TrenchBroom user data directory, restart, and select the new name under **Preferences > Appearance and views > Theme**:
 
 - Windows: `%APPDATA%\TrenchBroom\themes`
 - macOS: `~/Library/Application Support/TrenchBroom/themes`
@@ -92,7 +92,7 @@ Theme IDs use lowercase letters, digits, dots, dashes, and underscores; `builtin
 
 ![Color Preferences](images/ColorPreferences.png)
 
-The **Colors** page controls editor-specific colors such as the grid, selections, handles, overlays, and browser states. These colors are separate from the widget theme: use **View > Theme** for the application chrome and **Colors** for map and tool visualization. Color swatches show the pending color and open a color chooser when clicked.
+The **Colors** page controls editor-specific colors such as the grid, selections, handles, overlays, and browser states. These colors are separate from the widget theme: use **Appearance and views > Theme** for the application chrome and **Colors** for map and tool visualization. Colors are grouped by map geometry, editing tools, overlays, views and guides, and asset browsers. The table shows readable names; hover a row for its preference key. Double-click a row to edit its color.
 
 ## Mouse Input {#mouse_input}
 
@@ -125,11 +125,15 @@ If you open the preference dialog when a map is currently opened, the list of sh
 
 Note that if you assign a keyboard shortcut to different actions in the same context, the shortcut creates a conflict and you cannot exit the preference pane or close the dialog until you resolve the conflict. Conflicting shortcuts are highlighted in red.
 
-## Miscellaneous and Extensions {#misc_preferences}
+## General and Extensions {#misc_preferences}
 
-The **Misc** page contains language, editor behavior, tool integration, and MCP settings. Display-language changes require an application restart. Editor options include copying a `worldspawn` header and enabling 2D box selection with #key(Ctrl)+drag.
+**General** contains display language, editing behavior, the prefab directory, and [Pie Menu](#pie_menu) configuration. Display-language changes require an application restart.
 
-The **Tools** section configures the prefab directory and opens the [Pie Menu](#pie_menu) and Python Plugin Manager dialogs.
+**Extensions and automation** contains the Python Plugin Manager and MCP connection settings. Restoring defaults in General leaves MCP configuration unchanged.
+
+The search field above the page filters categories by their captions, choices, colors, and shortcut descriptions. Selecting a matching category opens the matching tab or scrolls to the setting. Use #key(Ctrl)+F to focus search, #key(Return) to move to category navigation, and #key(Escape) to clear the query. Colors and Keyboard shortcuts also have filters for their own tables. **Restore Page Defaults** restores the current category, including all its tabs.
+
+**KreedzBroom** groups play settings into **Controls**, **Physics and collision**, **View and sound**, and **Jump analysis**. Collision backend and hull expansion apply to play-mode collision; full-map compilation is configured separately in the compilation dialog.
 
 ## Automatic Updates {#automatic_updates}
 

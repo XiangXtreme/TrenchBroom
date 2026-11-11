@@ -22,6 +22,6 @@
 
 ### 可复用预制体 {#reusable_prefabs}
 
-选中地图对象，然后点击 Assets 工具栏中的 **Save selection as prefab**。单独打开的地图会在 **Preferences > Misc > Tools** 配置的目录中创建 `.tbprefab` 文件和缩略图；工程则将预制体保存在工程中。预制体会显示在 `prefabs` 根目录下，可以将其拖入地图；右键点击预制体可重命名或删除它。
+选中地图对象，然后点击 Assets 工具栏中的 **Save selection as prefab**。单独打开的地图会在 **Preferences > General > Assets** 配置的目录中创建 `.tbprefab` 文件和缩略图；工程则将预制体保存在工程中。预制体会显示在 `prefabs` 根目录下，可以将其拖入地图；右键点击预制体可重命名或删除它。
 
 预制体文件会保留选中的地图文本和相关材质集合路径。它们用于保存可复用的地图片段。编辑已放置的副本不会修改源预制体或其他已放置的副本。

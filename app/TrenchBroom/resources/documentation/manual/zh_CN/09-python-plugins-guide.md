@@ -31,7 +31,7 @@ Python 控制台会自动将当前活动文档、选区和数学原语注入全�
 - **代码智能补全**：按 #key(Ctrl)+#key(Space) 或 #key(Tab) 可主动呼出补全浮窗；按 #key(Tab) 插入选中的补全项。即使浮窗可见，按 #key(Enter) 也会执行当前脚本。
 - **历史记录翻阅**：在编辑器首行按 #key(Up) 或在尾行按 #key(Down) 可快速翻阅历史脚本（最多 100 条）。若当前输入框中有未提交的代码，翻阅历史时会自动暂存为草稿。
 - **清除输出**：点击顶部的 **Clear** 按钮可清空所有日志。
-- **外观字体设置**：可在 **Preferences > View > Fonts > Python Console** 下自定义控制台的等宽字体系列和字号大小。
+- **外观字体设置**：可在 **Preferences > Appearance and views > Fonts > Python Console** 下自定义控制台的等宽字体系列和字号大小。
 
 ### 输出重定向与错误追踪 {#console_output_and_errors}
 
@@ -126,7 +126,7 @@ with doc.transaction("Batch Align Entities"):
 
 ## Python 插件 {#python_plugins}
 
-TrenchBroom 内置了嵌入式 Python API 运行时与扩展系统。打开 **Preferences > Misc**，然后在 **Tools** 分组中点击 **Python Plugin Manager...** 管理基于清单的 UI 插件。在管理器内使用 **Install UI Plugin...** 配置目录。管理器会列出检测到的插件、加载状态、元数据和错误；使用搜索或 **Only show issues** 可以诊断规模较大的插件集，在修改文件后点击刷新即可。
+TrenchBroom 内置了嵌入式 Python API 运行时与扩展系统。打开 **Preferences > Extensions and automation**，然后在 **Python plugins** 分组中点击 **Python Plugin Manager...** 管理基于清单的 UI 插件。在管理器内使用 **Install UI Plugin...** 配置目录。管理器会列出检测到的插件、加载状态、元数据和错误；使用搜索或 **Only show issues** 可以诊断规模较大的插件集，在修改文件后点击刷新即可。
 
 ![插件检查器面板](images/PluginInspector.png)
 

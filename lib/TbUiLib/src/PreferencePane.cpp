@@ -19,10 +19,21 @@
 
 #include "ui/PreferencePane.h"
 
+#include <QAbstractButton>
+#include <QAbstractItemView>
 #include <QBoxLayout>
+#include <QComboBox>
+#include <QGroupBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QRegularExpression>
 #include <QScrollArea>
+#include <QSortFilterProxyModel>
+#include <QTabWidget>
 
 #include "ui/PanelLayout.h"
+
+#include <algorithm>
 
 namespace tb::ui
 {
@@ -45,6 +56,105 @@ void PreferencePane::resetToDefaults()
 QSize PreferencePane::contentSizeHint() const
 {
   return m_content ? m_content->sizeHint() : sizeHint();
+}
+
+QWidget* PreferencePane::searchMatch(const QString& query, QModelIndex* tableIndex) const
+{
+  const auto words =
+    query.simplified().split(QRegularExpression{"\\s+"}, Qt::SkipEmptyParts);
+  if (words.isEmpty())
+    return nullptr;
+
+  const auto matches = [&](const QString& text) {
+    return std::ranges::all_of(
+      words, [&](const auto& word) { return text.contains(word, Qt::CaseInsensitive); });
+  };
+
+  // Index captions and choices, not editable values or current configuration paths.
+  // Discover on demand because game settings can rebuild their child controls.
+  for (auto* widget : findChildren<QWidget*>())
+  {
+    auto text = widget->property("preferenceSearchTerms").toString();
+    if (const auto* label = qobject_cast<QLabel*>(widget))
+      text += " " + label->text();
+    else if (const auto* button = qobject_cast<QAbstractButton*>(widget))
+      text += " " + button->text();
+    else if (const auto* group = qobject_cast<QGroupBox*>(widget))
+      text += " " + group->title();
+    else if (const auto* combo = qobject_cast<QComboBox*>(widget))
+      for (int i = 0; i < combo->count(); ++i)
+        text += " " + combo->itemText(i);
+
+    auto context = QString{};
+    for (auto* parent = widget->parentWidget(); parent && parent != this;
+         parent = parent->parentWidget())
+      if (const auto* tabs = qobject_cast<QTabWidget*>(parent))
+        for (int i = 0; i < tabs->count(); ++i)
+          if (tabs->widget(i) == widget || tabs->widget(i)->isAncestorOf(widget))
+            context += " " + tabs->tabText(i);
+
+    if (!text.isEmpty() && matches(context + " " + text))
+      return widget;
+
+    if (auto* view = qobject_cast<QAbstractItemView*>(widget); view && view->model())
+    {
+      const auto* model = view->model();
+      // Global discovery must still find rows hidden by a table's local filter.
+      if (!tableIndex)
+        if (const auto* proxy = qobject_cast<const QSortFilterProxyModel*>(model);
+            proxy && proxy->sourceModel())
+          model = proxy->sourceModel();
+      for (int row = 0; row < model->rowCount(); ++row)
+      {
+        auto rowText = context;
+        for (int column = 0; column < model->columnCount(); ++column)
+          rowText += " " + model->data(model->index(row, column)).toString();
+        if (matches(rowText))
+        {
+          if (tableIndex)
+            *tableIndex = model->index(row, 0);
+          return view;
+        }
+      }
+    }
+  }
+  return nullptr;
+}
+
+bool PreferencePane::matchesSearch(const QString& query) const
+{
+  return searchMatch(query) != nullptr;
+}
+
+void PreferencePane::revealSearch(const QString& query)
+{
+  if (!query.trimmed().isEmpty())
+    for (auto* filter : findChildren<QLineEdit*>())
+      if (filter->property("preferenceTableFilter").toBool())
+        filter->clear();
+  auto index = QModelIndex{};
+  auto* match = searchMatch(query, &index);
+  if (!match)
+    return;
+
+  for (auto* parent = match->parentWidget(); parent && parent != this;
+       parent = parent->parentWidget())
+  {
+    if (auto* tabs = qobject_cast<QTabWidget*>(parent))
+      for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->widget(i) == match || tabs->widget(i)->isAncestorOf(match))
+          tabs->setCurrentIndex(i);
+  }
+  for (auto* parent = match->parentWidget(); parent && parent != this;
+       parent = parent->parentWidget())
+    if (auto* scroll = qobject_cast<QScrollArea*>(parent))
+      scroll->ensureWidgetVisible(match, 16, 24);
+  if (index.isValid())
+  {
+    auto* view = static_cast<QAbstractItemView*>(match);
+    view->setCurrentIndex(index);
+    view->scrollTo(index, QAbstractItemView::PositionAtCenter);
+  }
 }
 
 void PreferencePane::createScrollableContent(QLayout* contentLayout)

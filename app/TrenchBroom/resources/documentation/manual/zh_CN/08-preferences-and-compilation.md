@@ -61,7 +61,7 @@ Python Console font and size  用于控制台输入和输出的等宽字体系�
 
 内置主题 ID 包括 `builtin.system`、`builtin.light`、`builtin.dark` 和 `builtin.blender`。System 从操作系统调色板衍生其颜色。Light 和 Dark 提供稳定的 TrenchBroom 调色板，而 Blender 使用基于 Blender 5.2 的紧凑暗色调色板。主题更改将在重启 TrenchBroom 后生效。
 
-第三方主题是扩展名为 `.tbtheme` 的可分发 UTF-8 JSON 文件。将它们放入 TrenchBroom 用户数据目录内的 `themes` 目录中，重启软件，然后在 **Preferences > View > Theme** 下选择新名称：
+第三方主题是扩展名为 `.tbtheme` 的可分发 UTF-8 JSON 文件。将它们放入 TrenchBroom 用户数据目录内的 `themes` 目录中，重启软件，然后在 **Preferences > Appearance and views > Theme** 下选择新名称：
 
 - Windows：`%APPDATA%\TrenchBroom\themes`
 - macOS：`~/Library/Application Support/TrenchBroom/themes`
@@ -92,7 +92,7 @@ Python Console font and size  用于控制台输入和输出的等宽字体系�
 
 ![颜色首选项](images/ColorPreferences.png)
 
-**Colors** 页面控制编辑器特有的颜色，例如网格、选择、控制柄、叠加层和浏览器状态。这些颜色独立于控件主题：**View > Theme** 用于应用程序外观界面，而 **Colors** 用于地图和工具可视化。色块显示待定的颜色，并在点击时打开颜色选择器。
+**Colors** 页面控制编辑器特有的颜色，例如网格、选择、控制柄、叠加层和浏览器状态。这些颜色独立于控件主题：**Appearance and views > Theme** 用于应用程序外观界面，而 **Colors** 用于地图和工具可视化。颜色按地图几何、编辑工具、文字叠加层、视图与辅助线、资源浏览器分组。表格显示易读名称，悬停可查看设置键路径。双击一行可编辑颜色。
 
 ## 鼠标输入 {#mouse_input}
 
@@ -125,11 +125,15 @@ Fly Mode    控制飞行模式速度的滑块。键盘快捷键可以在键盘�
 
 请注意，如果你在同一上下文中将某个键盘快捷键分配给不同的操作，该快捷键将产生冲突，并且在你解决冲突之前无法退出首选项窗格或关闭对话框。冲突的快捷键会以红色高亮显示。
 
-## 杂项与扩展 {#misc_preferences}
+## 常规与扩展 {#misc_preferences}
 
-**Misc** 页面包含语言、编辑器行为、工具集成和 MCP 设置。更改显示语言需要重启应用程序。编辑器选项包括复制 `worldspawn` 头部以及启用通过 #key(Ctrl)+拖动进行 2D 框选。
+**常规（General）**包含显示语言、编辑行为、预制体目录和[饼菜单](#pie_menu)配置。更改显示语言需要重启应用程序。
 
-**Tools** 部分用于配置预制体目录，并打开[饼状菜单](#pie_menu)与 Python 插件管理器对话框。
+**扩展与自动化（Extensions and automation）**包含 Python 插件管理器与 MCP 连接设置。恢复常规设置的默认值不会影响 MCP 配置。
+
+页面上方的搜索框按选项名称、可选值、颜色和快捷键说明筛选分类。选择匹配的分类后，会打开相关标签页或滚动到对应设置。按 #key(Ctrl)+F 聚焦搜索框，按 #key(Return) 转到分类导航，按 #key(Escape) 清空搜索词。颜色和键盘快捷键页面另有各自的表格筛选框。**恢复本页默认值（Restore Page Defaults）**恢复当前分类及其全部标签页的默认设置。
+
+**KreedzBroom** 将试玩设置分为**操作（Controls）**、**物理与碰撞（Physics and collision）**、**显示与声音（View and sound）**和**跳跃分析（Jump analysis）**。碰撞内核与碰撞体扩张方式用于 Play 模式碰撞；全图编译参数在编译对话框中单独设置。
 
 ## 自动更新 {#automatic_updates}
 

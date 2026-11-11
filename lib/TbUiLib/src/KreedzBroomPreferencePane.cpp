@@ -29,10 +29,14 @@
 #include <QMessageBox>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QTabWidget>
+#include <QVBoxLayout>
 
 #include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
 #include "ui/FormWithSectionsLayout.h"
+#include "ui/PanelLayout.h"
+#include "ui/QPathUtils.h"
 #include "ui/ViewConstants.h"
 
 #include <algorithm>
@@ -160,71 +164,79 @@ KreedzBroomPreferencePane::KreedzBroomPreferencePane(QWidget* parent)
 
 void KreedzBroomPreferencePane::createGui()
 {
-  // Two columns of sections use the width of the dialog instead of one long column.
-  auto* left = new FormWithSectionsLayout{};
-  auto* right = new FormWithSectionsLayout{};
+  auto* controls = new FormWithSectionsLayout{};
+  auto* physics = new FormWithSectionsLayout{};
+  auto* navigation = new FormWithSectionsLayout{};
+  auto* player = new FormWithSectionsLayout{};
+  auto* display = new FormWithSectionsLayout{};
+  auto* analysis = new FormWithSectionsLayout{};
 
-  left->addSection("Mouse");
-  left->addRow(
-    "Sensitivity",
+  navigation->addSection(tr("Mouse"));
+  navigation->addRow(
+    tr("Sensitivity"),
     withToolTip(
       floatField(Preferences::PlayModeMouseSensitivity, 0.01, 50.0, 2, 0.1),
       "Same scale as the game's sensitivity."));
-  left->addRow(
+  navigation->addRow(
     "",
     withToolTip(
-      boolField("Raw input", Preferences::PlayModeRawInput),
+      boolField(tr("Raw input"), Preferences::PlayModeRawInput),
       "Unaccelerated mouse counts, like m_rawinput 1."));
 
-  left->addSection("Server");
-  left->addRow(
-    "sv_airaccelerate",
+  physics->addSection(tr("Movement physics"));
+  physics->addRow(
+    tr("Air acceleration"),
     floatField(Preferences::PlayModeAirAccelerate, 0.0, 1000.0, 1, 1.0));
-  left->addRow(
-    "sv_accelerate", floatField(Preferences::PlayModeAccelerate, 0.0, 100.0, 1, 0.5));
-  left->addRow(
-    "sv_friction", floatField(Preferences::PlayModeFriction, 0.0, 100.0, 1, 0.5));
-  left->addRow(
-    "sv_stopspeed", floatField(Preferences::PlayModeStopSpeed, 0.0, 1000.0, 0, 5.0));
-  left->addRow(
-    "sv_gravity", floatField(Preferences::PlayModeGravity, 0.0, 5000.0, 0, 10.0));
-  left->addRow(
-    "sv_maxspeed", floatField(Preferences::PlayModeMaxSpeed, 0.0, 2000.0, 0, 10.0));
-  left->addRow(
-    "edgefriction", floatField(Preferences::PlayModeEdgeFriction, 0.0, 10.0, 1, 0.5));
-  left->addRow(
-    "sv_stepsize", floatField(Preferences::PlayModeStepSize, 0.0, 64.0, 0, 1.0));
+  physics->addRow(
+    tr("Ground acceleration"),
+    floatField(Preferences::PlayModeAccelerate, 0.0, 100.0, 1, 0.5));
+  physics->addRow(
+    tr("Friction"), floatField(Preferences::PlayModeFriction, 0.0, 100.0, 1, 0.5));
+  physics->addRow(
+    tr("Stop speed"), floatField(Preferences::PlayModeStopSpeed, 0.0, 1000.0, 0, 5.0));
+  physics->addRow(
+    tr("Gravity"), floatField(Preferences::PlayModeGravity, 0.0, 5000.0, 0, 10.0));
+  physics->addRow(
+    tr("Maximum speed"), floatField(Preferences::PlayModeMaxSpeed, 0.0, 2000.0, 0, 10.0));
+  physics->addRow(
+    tr("Edge friction"),
+    floatField(Preferences::PlayModeEdgeFriction, 0.0, 10.0, 1, 0.5));
+  physics->addRow(
+    tr("Step height"), floatField(Preferences::PlayModeStepSize, 0.0, 64.0, 0, 1.0));
 
-  left->addSection("View");
-  left->addRow(
+  display->addSection(tr("View"));
+  display->addRow(
     "",
     withToolTip(
       boolField(tr("Full screen during play"), Preferences::PlayModeFullScreen),
       tr("Fill the screen with the 3D view while playing. Restore the editor layout "
          "when play ends.")));
-  left->addRow(
-    "Field of view", floatField(Preferences::PlayModeFov, 10.0, 170.0, 0, 5.0, "°"));
-  left->addRow(
-    "", boolField("Restore checkpoint view", Preferences::PlayModeRestoreCheckpointView));
-  left->addRow("", boolField("Show HUD", Preferences::PlayModeShowHud));
-  left->addRow("", boolField("Show crosshair", Preferences::PlayModeShowCrosshair));
-  left->addRow("", boolField("Show fall damage", Preferences::PlayModeShowFallDamage));
-  left->addSection(tr("Jump analysis"));
-  left->addRow(
+  display->addRow(
+    tr("Field of view"), floatField(Preferences::PlayModeFov, 10.0, 170.0, 0, 5.0, "°"));
+  display->addRow(
+    "",
+    boolField(tr("Restore checkpoint view"), Preferences::PlayModeRestoreCheckpointView));
+  display->addRow("", boolField(tr("Show HUD"), Preferences::PlayModeShowHud));
+  display->addRow(
+    "", boolField(tr("Show crosshair"), Preferences::PlayModeShowCrosshair));
+  display->addRow(
+    "", boolField(tr("Show fall damage"), Preferences::PlayModeShowFallDamage));
+  analysis->addSection(tr("Jump analysis"));
+  analysis->addRow(
     "",
     withToolTip(
       boolField(tr("Show jump results"), Preferences::PlayModeShowJumpStats),
       tr("Jump results with takeoff timing, speed and strafe analysis. Assisted movement "
          "is excluded.")));
-  left->addRow(
+  analysis->addRow(
     "", boolField(tr("Show failed jumps"), Preferences::PlayModeShowFailedJumps));
-  left->addRow(
+  analysis->addRow(
     "", boolField(tr("Show strafe details"), Preferences::PlayModeShowStrafes));
-  left->addRow(
+  analysis->addRow(
     tr("Result duration"),
     floatField(Preferences::PlayModeJumpStatsDuration, 1.0, 15.0, 1, 0.5, " s"));
-  left->addSection(tr("Jump guides"));
-  left->addRow(
+  analysis->addSection(tr("Jump guides"));
+  analysis->addRow(
     "",
     withToolTip(
       boolField(tr("Show jump guides"), Preferences::PlayModeShowJumpSpan),
@@ -233,29 +245,29 @@ void KreedzBroomPreferencePane::createGui()
          "Measure perpendicular to the edge for gaps from 160 units up to, but not "
          "including, 300 units. Shows horizontal distance and height difference; "
          "does not predict whether a jump is possible.")));
-  right->addSection("Keys");
-  right->addRow(
-    "Forward / Back",
+  controls->addSection(tr("Keys"));
+  controls->addRow(
+    tr("Forward / Back"),
     pair(
       keyField(Preferences::PlayModeKeyForward), keyField(Preferences::PlayModeKeyBack)));
-  right->addRow(
-    "Move left / right",
+  controls->addRow(
+    tr("Move left / right"),
     pair(
       keyField(Preferences::PlayModeKeyMoveLeft),
       keyField(Preferences::PlayModeKeyMoveRight)));
-  right->addRow(
-    "Jump / Duck",
+  controls->addRow(
+    tr("Jump / Duck"),
     pair(keyField(Preferences::PlayModeKeyJump), keyField(Preferences::PlayModeKeyDuck)));
-  right->addRow(
-    "Walk / Use",
+  controls->addRow(
+    tr("Walk / Use"),
     pair(keyField(Preferences::PlayModeKeyWalk), keyField(Preferences::PlayModeKeyUse)));
-  right->addRow(
-    "Turn left / right",
+  controls->addRow(
+    tr("Turn left / right"),
     pair(
       keyField(Preferences::PlayModeKeyTurnLeft),
       keyField(Preferences::PlayModeKeyTurnRight)));
-  right->addRow(
-    "Save / load point",
+  controls->addRow(
+    tr("Save / load point"),
     pair(
       keyField(Preferences::PlayModeKeySavePoint),
       keyField(Preferences::PlayModeKeyLoadPoint)));
@@ -264,45 +276,45 @@ void KreedzBroomPreferencePane::createGui()
     {"Jump", Preferences::PlayModeWheelJump},
     {"Duck", Preferences::PlayModeWheelDuck},
   };
-  right->addRow(
-    "Wheel up / down",
+  controls->addRow(
+    tr("Wheel up / down"),
     withToolTip(
       pair(
         choiceField(Preferences::PlayModeWheelUp, wheelChoices),
         choiceField(Preferences::PlayModeWheelDown, wheelChoices)),
       "Each notch presses the action for one frame, like \"bind mwheeldown +jump\"."));
-  right->addRow(
-    "cl_yawspeed", floatField(Preferences::PlayModeYawSpeed, 0.0, 1000.0, 0, 5.0));
+  controls->addRow(
+    tr("Turn speed"), floatField(Preferences::PlayModeYawSpeed, 0.0, 1000.0, 0, 5.0));
 
-  right->addSection(tr("Travel aids"));
-  right->addRow(
+  navigation->addSection(tr("Travel aids"));
+  navigation->addRow(
     tr("Hook (hold)"),
     withToolTip(
       keyField(Preferences::PlayModeKeyHook),
       tr("Hold to pull toward the surface under the crosshair. Release to let go.")));
-  right->addRow(
+  navigation->addRow(
     tr("Noclip (toggle)"),
     withToolTip(
       keyField(Preferences::PlayModeKeyNoclip),
       tr("Fly through geometry. Hold the walk key to move three times faster. "
          "Move out of solid geometry before turning noclip off.")));
-  right->addRow(
+  navigation->addRow(
     tr("Hook speed"),
     floatField(Preferences::PlayModeHookSpeed, 100.0, 2000.0, 0, 50.0, " u/s"));
 
-  right->addSection("Player");
-  right->addRow(
-    "Weapon speed",
+  player->addSection(tr("Player"));
+  player->addRow(
+    tr("Weapon speed"),
     withToolTip(
       floatField(Preferences::PlayModeWeaponSpeed, 1.0, 2000.0, 0, 5.0, " u/s"),
       "250 knife and pistols, 260 Scout, 230 M4A1, 221 AK-47, 210 AWP."));
-  right->addRow(
-    "fps_max",
+  player->addRow(
+    tr("Physics frame rate"),
     withToolTip(
       intField(Preferences::PlayModeFrameRate, 4, 1000, " fps"),
       "The frame rate changes the physics like in the game. 100 is the KZ standard."));
 
-  right->addSection("Clip Hulls");
+  player->addSection(tr("Collision hulls"));
   auto* compilerField = qobject_cast<QComboBox*>(choiceField(
     Preferences::PlayModeCompiler,
     {
@@ -320,9 +332,9 @@ void KreedzBroomPreferencePane::createGui()
       {"Normalized", Preferences::PlayModeClipTypeNormalized},
       {"Smallest", Preferences::PlayModeClipTypeSmallest},
     }));
-  right->addRow("Compiler", compilerField);
-  right->addRow(
-    "Cliptype",
+  player->addRow(tr("Collision backend"), compilerField);
+  player->addRow(
+    tr("Hull expansion"),
     withToolTip(
       cliptypeField, "hlcsg -cliptype. Legacytrim uses the embedded hltools compiler."));
   connect(
@@ -347,23 +359,38 @@ void KreedzBroomPreferencePane::createGui()
           cliptypeField->findData(Preferences::PlayModeClipTypeLegacy));
     });
 
-  right->addSection("Sound");
-  right->addRow(
-    "Volume", floatField(Preferences::PlayModeSoundVolume, 0.0, 1.0, 2, 0.05));
+  display->addSection(tr("Sound"));
+  display->addRow(
+    tr("Volume"), floatField(Preferences::PlayModeSoundVolume, 0.0, 1.0, 2, 0.05));
 
-  auto* layout = new QHBoxLayout{};
-  layout->setContentsMargins(
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin);
-  layout->setSpacing(3 * LayoutConstants::WideHMargin);
-  layout->addLayout(left);
-  layout->addLayout(right);
-  layout->setAlignment(left, Qt::AlignTop);
-  layout->setAlignment(right, Qt::AlignTop);
+  auto* tabs = new QTabWidget{};
+  tabs->setObjectName("KreedzBroomPreference_Tabs");
+  const auto columns = [](FormWithSectionsLayout* first, FormWithSectionsLayout* second) {
+    auto* layout = new QHBoxLayout{};
+    layout->setSpacing(24);
+    layout->addLayout(first, 1);
+    layout->addLayout(second, 1);
+    layout->setAlignment(first, Qt::AlignTop);
+    layout->setAlignment(second, Qt::AlignTop);
+    return layout;
+  };
+  const auto addTab = [&](QLayout* form, const QString& title) {
+    form->setContentsMargins(16, 16, 16, 16);
+    auto* column = createPanelColumn(nullptr, PanelInsets::None);
+    column->addLayout(form);
+    column->addStretch();
+    auto* content = new QWidget{};
+    content->setLayout(column);
+    tabs->addTab(createPanelScrollArea(content), title);
+  };
+  addTab(columns(controls, navigation), tr("Controls"));
+  addTab(columns(physics, player), tr("Physics and collision"));
+  addTab(display, tr("View and sound"));
+  addTab(analysis, tr("Jump analysis"));
 
-  createScrollableContent(layout);
+  auto* layout = new QVBoxLayout{this};
+  layout->setContentsMargins(16, 8, 16, 0);
+  layout->addWidget(tabs);
 }
 
 QWidget* KreedzBroomPreferencePane::floatField(
@@ -381,6 +408,8 @@ QWidget* KreedzBroomPreferencePane::floatField(
   spinBox->setSuffix(suffix);
   spinBox->setKeyboardTracking(false);
   spinBox->setMaximumWidth(FieldWidth);
+  spinBox->setProperty("preferenceSearchTerms", pathAsGenericQString(preference.path));
+  spinBox->setToolTip(pathAsQString(preference.path.filename()));
 
   connect(
     spinBox, &QDoubleSpinBox::valueChanged, this, [&preference](const double value) {
@@ -408,6 +437,8 @@ QWidget* KreedzBroomPreferencePane::intField(
   spinBox->setSuffix(suffix);
   spinBox->setKeyboardTracking(false);
   spinBox->setMaximumWidth(FieldWidth);
+  spinBox->setProperty("preferenceSearchTerms", pathAsGenericQString(preference.path));
+  spinBox->setToolTip(pathAsQString(preference.path.filename()));
 
   connect(spinBox, &QSpinBox::valueChanged, this, [&preference](const int value) {
     PreferenceManager::instance().set(preference, value);
@@ -426,6 +457,7 @@ QWidget* KreedzBroomPreferencePane::boolField(
   const QString& label, Preference<bool>& preference)
 {
   auto* checkBox = new QCheckBox{label};
+  checkBox->setProperty("preferenceSearchTerms", pathAsGenericQString(preference.path));
 
   connect(
     checkBox,
@@ -449,6 +481,7 @@ QWidget* KreedzBroomPreferencePane::keyField(Preference<int>& preference)
   auto* button = new PlayModeKeyButton{
     [&preference](const int key) { PreferenceManager::instance().set(preference, key); }};
   button->setMaximumWidth(FieldWidth);
+  button->setProperty("preferenceSearchTerms", pathAsGenericQString(preference.path));
   button->setToolTip(tr("Click, then press a key"));
 
   m_keyButtons.push_back(button);
@@ -470,6 +503,7 @@ QWidget* KreedzBroomPreferencePane::choiceField(
     comboBox->addItem(text, value);
   }
   comboBox->setMaximumWidth(FieldWidth);
+  comboBox->setProperty("preferenceSearchTerms", pathAsGenericQString(preference.path));
 
   connect(
     comboBox, &QComboBox::currentIndexChanged, this, [comboBox, &preference](const int) {

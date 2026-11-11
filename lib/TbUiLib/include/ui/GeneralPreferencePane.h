@@ -11,15 +11,10 @@ class QRadioButton;
 namespace tb::ui
 {
 
-class AppController;
-class McpSettingsWidget;
-
-class MiscPreferencePane : public PreferencePane
+class GeneralPreferencePane : public PreferencePane
 {
   Q_OBJECT
 private:
-  AppController& m_appController;
-  QString m_mcpConfigPath;
   QRadioButton* m_englishRadioButton = nullptr;
   QRadioButton* m_chineseRadioButton = nullptr;
   QButtonGroup* m_languageButtonGroup = nullptr;
@@ -28,16 +23,12 @@ private:
   QLineEdit* m_prefabDirectoryEdit = nullptr;
   QPushButton* m_choosePrefabDirectoryButton = nullptr;
   QPushButton* m_pieMenuSettingsButton = nullptr;
-  QPushButton* m_pythonPluginManagerButton = nullptr;
-  McpSettingsWidget* m_mcpSettingsWidget = nullptr;
 
 signals:
   void languageChanged();
 
 public:
-  explicit MiscPreferencePane(AppController& appController, QWidget* parent = nullptr);
-  MiscPreferencePane(
-    AppController& appController, QString mcpConfigPath, QWidget* parent = nullptr);
+  explicit GeneralPreferencePane(QWidget* parent = nullptr);
 
 private:
   void createGui();

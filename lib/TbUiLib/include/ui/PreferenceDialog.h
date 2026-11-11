@@ -25,6 +25,7 @@
 
 class QDialogButtonBox;
 class QLabel;
+class QLineEdit;
 class QListWidget;
 class QStackedWidget;
 class QWidget;
@@ -45,6 +46,8 @@ private:
   MapDocument* m_document = nullptr;
   QListWidget* m_navigation = nullptr;
   QLabel* m_pageTitle = nullptr;
+  QLineEdit* m_search = nullptr;
+  QLabel* m_noResults = nullptr;
   QStackedWidget* m_stackedWidget = nullptr;
   QDialogButtonBox* m_buttonBox = nullptr;
 
@@ -56,11 +59,13 @@ public:
 
 protected: // QWidget overrides
   void closeEvent(QCloseEvent* event) override;
+  bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
   void createGui();
   QSize initialDialogSize() const;
   void switchToPane(PrefPane pane);
+  void filterPanes(const QString& query);
   PreferencePane* currentPane() const;
   void connectObservers();
 private slots:

@@ -22,6 +22,6 @@ These folders organize the catalog. Moving assets or renaming folders preserves 
 
 ### Reusable Prefabs {#reusable_prefabs}
 
-Select map objects and click **Save selection as prefab** in the Assets toolbar. A standalone map creates a `.tbprefab` file and thumbnail in the directory configured under **Preferences > Misc > Tools**; a project stores the prefab in the project. Prefabs appear under the `prefabs` root and can be dragged into the map; right-click a prefab to rename or delete it.
+Select map objects and click **Save selection as prefab** in the Assets toolbar. A standalone map creates a `.tbprefab` file and thumbnail in the directory configured under **Preferences > General > Assets**; a project stores the prefab in the project. Prefabs appear under the `prefabs` root and can be dragged into the map; right-click a prefab to rename or delete it.
 
 Prefab files preserve the selected map text and relevant material collection paths. They are intended for reusable map fragments. Editing a placed copy does not modify the source prefab or other placed copies.

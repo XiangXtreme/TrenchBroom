@@ -22,25 +22,30 @@
 #include <QBoxLayout>
 #include <QCloseEvent>
 #include <QDialogButtonBox>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScreen>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QStackedWidget>
 
 #include "base/PreferenceManager.h"
 #include "ui/ColorsPreferencePane.h"
 #include "ui/DialogButtonLayout.h"
+#include "ui/ExtensionsPreferencePane.h"
 #include "ui/GamesPreferencePane.h"
+#include "ui/GeneralPreferencePane.h"
 #include "ui/ImageUtils.h"
 #include "ui/KeyboardPreferencePane.h"
 #include "ui/KreedzBroomPreferencePane.h"
-#include "ui/MiscPreferencePane.h"
 #include "ui/MousePreferencePane.h"
 #include "ui/PreferencePane.h"
 #include "ui/QStyleUtils.h"
+#include "ui/SearchBox.h"
 #include "ui/UpdatePreferencePane.h"
 #include "ui/ViewPreferencePane.h"
 
@@ -54,24 +59,22 @@ namespace
 
 constexpr int PreferenceDialogMinWidth = 920;
 constexpr int PreferenceDialogMinHeight = 560;
-constexpr int PreferenceNavigationWidth = 184;
+constexpr int PreferenceNavigationWidth = 232;
 
 } // namespace
 
 enum class PreferenceDialog::PrefPane
 {
-  First = 0,
-  Games = 0,
-  View = 1,
-  Colors = 2,
-  Mouse = 3,
-  Keyboard = 4,
-  Misc = 5,
-  KreedzBroom = 6,
-  Update = 7,
-  Last = 7
-} PrefPane;
-
+  General = 0,
+  Games,
+  View,
+  Colors,
+  Mouse,
+  Keyboard,
+  KreedzBroom,
+  Extensions,
+  Update
+};
 
 PreferenceDialog::PreferenceDialog(
   AppController& appController, MapDocument* document, QWidget* parent)
@@ -84,7 +87,7 @@ PreferenceDialog::PreferenceDialog(
   setWindowIconTB(this);
   createGui();
   setMinimumSize(PreferenceDialogMinWidth, PreferenceDialogMinHeight);
-  switchToPane(PrefPane::First);
+  switchToPane(PrefPane::General);
   currentPane()->updateControls();
 
   const auto preferredSize = initialDialogSize();
@@ -142,17 +145,27 @@ void PreferenceDialog::closeEvent(QCloseEvent* event)
   }
 }
 
+bool PreferenceDialog::eventFilter(QObject* watched, QEvent* event)
+{
+  if (watched == m_search && event->type() == QEvent::KeyPress)
+  {
+    const auto key = static_cast<QKeyEvent*>(event)->key();
+    if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Down)
+    {
+      m_navigation->setFocus();
+      return true;
+    }
+    if (key == Qt::Key_Escape && !m_search->text().isEmpty())
+    {
+      m_search->clear();
+      return true;
+    }
+  }
+  return QDialog::eventFilter(watched, event);
+}
+
 void PreferenceDialog::createGui()
 {
-  const auto gamesImage = loadSVGIcon("GeneralPreferences.svg");
-  const auto viewImage = loadSVGIcon("ViewPreferences.svg");
-  const auto colorsImage = loadSVGIcon("ColorPreferences.svg");
-  const auto mouseImage = loadSVGIcon("MousePreferences.svg");
-  const auto keyboardImage = loadSVGIcon("KeyboardPreferences.svg");
-  const auto miscImage = loadSVGIcon("GeneralPreferences.svg");
-  const auto kreedzBroomImage = loadSVGIcon("KreedzBroomPreferences.svg");
-  const auto updateImage = loadSVGIcon("UpdatePreferences.svg");
-
   m_navigation = new QListWidget{};
   m_navigation->setObjectName("PreferenceDialog_NavigationList");
   m_navigation->setProperty("tbControlRole", "navigation");
@@ -162,15 +175,6 @@ void PreferenceDialog::createGui()
   m_navigation->setUniformItemSizes(true);
   m_navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_navigation->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-  new QListWidgetItem{gamesImage, tr("Games"), m_navigation};
-  new QListWidgetItem{viewImage, tr("View"), m_navigation};
-  new QListWidgetItem{colorsImage, tr("Colors"), m_navigation};
-  new QListWidgetItem{mouseImage, tr("Mouse"), m_navigation};
-  new QListWidgetItem{keyboardImage, tr("Keyboard"), m_navigation};
-  new QListWidgetItem{miscImage, tr("Misc"), m_navigation};
-  new QListWidgetItem{kreedzBroomImage, tr("KreedzBroom"), m_navigation};
-  new QListWidgetItem{updateImage, tr("Update"), m_navigation};
 
   auto* navigationTitle = new QLabel{tr("Settings")};
   navigationTitle->setObjectName("PreferenceDialog_NavigationTitle");
@@ -190,14 +194,44 @@ void PreferenceDialog::createGui()
 
   m_stackedWidget = new QStackedWidget{};
   m_stackedWidget->setObjectName("PreferenceDialog_Pages");
-  m_stackedWidget->addWidget(new GamesPreferencePane{m_appController, m_document});
-  m_stackedWidget->addWidget(new ViewPreferencePane{});
-  m_stackedWidget->addWidget(new ColorsPreferencePane{});
-  m_stackedWidget->addWidget(new MousePreferencePane{});
-  m_stackedWidget->addWidget(new KeyboardPreferencePane{m_appController, m_document});
-  m_stackedWidget->addWidget(new MiscPreferencePane{m_appController});
-  m_stackedWidget->addWidget(new KreedzBroomPreferencePane{});
-  m_stackedWidget->addWidget(new UpdatePreferencePane{m_appController});
+  const auto addPane =
+    [&](PreferencePane* pane, const QString& id, const QString& title, const char* icon) {
+      m_stackedWidget->addWidget(pane);
+      auto* item = new QListWidgetItem{loadSVGIcon(icon), title, m_navigation};
+      item->setData(Qt::UserRole, id);
+      item->setToolTip(title);
+    };
+  addPane(
+    new GeneralPreferencePane{}, "general", tr("General"), "GeneralPreferences.svg");
+  addPane(
+    new GamesPreferencePane{m_appController, m_document},
+    "games",
+    tr("Games"),
+    "GeneralPreferences.svg");
+  addPane(
+    new ViewPreferencePane{}, "view", tr("Appearance and views"), "ViewPreferences.svg");
+  addPane(new ColorsPreferencePane{}, "colors", tr("Colors"), "ColorPreferences.svg");
+  addPane(new MousePreferencePane{}, "mouse", tr("Mouse"), "MousePreferences.svg");
+  addPane(
+    new KeyboardPreferencePane{m_appController, m_document},
+    "keyboard",
+    tr("Keyboard shortcuts"),
+    "KeyboardPreferences.svg");
+  addPane(
+    new KreedzBroomPreferencePane{},
+    "play",
+    tr("KreedzBroom"),
+    "KreedzBroomPreferences.svg");
+  addPane(
+    new ExtensionsPreferencePane{m_appController},
+    "extensions",
+    tr("Extensions and automation"),
+    "GeneralPreferences.svg");
+  addPane(
+    new UpdatePreferencePane{m_appController},
+    "updates",
+    tr("Updates"),
+    "UpdatePreferences.svg");
 
   m_buttonBox = new QDialogButtonBox{
     PreferenceManager::instance().saveInstantly()
@@ -208,7 +242,9 @@ void PreferenceDialog::createGui()
   m_buttonBox->setObjectName("PreferenceDialog_ButtonBox");
 
   auto* resetButton = m_buttonBox->button(QDialogButtonBox::RestoreDefaults);
-  resetButton->setText(tr("Restore Defaults"));
+  resetButton->setText(tr("Restore Page Defaults"));
+  resetButton->setToolTip(
+    tr("Restore defaults for this category, including all its tabs."));
   connect(resetButton, &QPushButton::clicked, this, &PreferenceDialog::resetToDefaults);
 
   if (!PreferenceManager::instance().saveInstantly())
@@ -239,10 +275,28 @@ void PreferenceDialog::createGui()
   m_pageTitle = new QLabel{};
   m_pageTitle->setObjectName("PreferenceDialog_PageTitle");
 
+  m_search = createSearchBox();
+  m_search->setObjectName("PreferenceDialog_Search");
+  m_search->setProperty("tbControlRole", "prominent");
+  m_search->setPlaceholderText(tr("Search all settings"));
+  m_search->setAccessibleName(tr("Search all settings"));
+  auto* searchLayout = new QHBoxLayout{};
+  searchLayout->setContentsMargins(16, 8, 16, 8);
+  searchLayout->addWidget(m_search);
+
+  m_noResults = new QLabel{tr("No matching settings. Try another search.")};
+  m_noResults->setObjectName("PreferenceDialog_NoResults");
+  m_noResults->setAlignment(Qt::AlignCenter);
+  m_noResults->setWordWrap(true);
+  setInfoStyle(m_noResults);
+  m_noResults->hide();
+
   auto* contentLayout = new QVBoxLayout{};
   contentLayout->setContentsMargins(0, 0, 0, 0);
   contentLayout->setSpacing(0);
   contentLayout->addWidget(m_pageTitle);
+  contentLayout->addLayout(searchLayout);
+  contentLayout->addWidget(m_noResults, 1);
   contentLayout->addWidget(m_stackedWidget, 1);
   contentLayout->addLayout(wrapDialogButtonBox(m_buttonBox));
 
@@ -259,11 +313,18 @@ void PreferenceDialog::createGui()
   setLayout(layout);
 
   connect(m_navigation, &QListWidget::currentRowChanged, this, [this](const int row) {
-    if (row >= int(PrefPane::First) && row <= int(PrefPane::Last))
+    if (row >= 0 && row < m_stackedWidget->count())
     {
       switchToPane(static_cast<PrefPane>(row));
     }
   });
+  connect(m_search, &QLineEdit::textChanged, this, &PreferenceDialog::filterPanes);
+  auto* findShortcut = new QShortcut{QKeySequence::Find, this};
+  connect(findShortcut, &QShortcut::activated, this, [this]() {
+    m_search->setFocus();
+    m_search->selectAll();
+  });
+  m_search->installEventFilter(this);
 }
 
 QSize PreferenceDialog::initialDialogSize() const
@@ -300,9 +361,48 @@ void PreferenceDialog::switchToPane(const PrefPane pane)
   const auto blocker = QSignalBlocker{m_navigation};
   m_navigation->setCurrentRow(paneIndex);
   m_pageTitle->setText(m_navigation->item(paneIndex)->text());
+  currentPane()->revealSearch(m_search->text());
 
   auto* resetButton = m_buttonBox->button(QDialogButtonBox::RestoreDefaults);
   resetButton->setEnabled(currentPane()->canResetToDefaults());
+}
+
+void PreferenceDialog::filterPanes(const QString& query)
+{
+  const auto words = query.simplified().split(' ', Qt::SkipEmptyParts);
+  auto matches = std::vector<bool>{};
+  auto firstMatch = -1;
+  for (int i = 0; i < m_navigation->count(); ++i)
+  {
+    const auto title = m_navigation->item(i)->text();
+    const auto titleMatches = std::ranges::all_of(
+      words, [&](const auto& word) { return title.contains(word, Qt::CaseInsensitive); });
+    const auto* pane = static_cast<PreferencePane*>(m_stackedWidget->widget(i));
+    const auto match = titleMatches || pane->matchesSearch(query);
+    matches.push_back(match);
+    if (match && firstMatch < 0)
+      firstMatch = i;
+  }
+
+  const auto current = m_stackedWidget->currentIndex();
+  if (firstMatch >= 0 && !matches[static_cast<size_t>(current)])
+    switchToPane(static_cast<PrefPane>(firstMatch));
+
+  // If validation prevented leaving a page, keep it available for correction.
+  const auto stayedOnInvalidPage =
+    firstMatch >= 0 && !matches[static_cast<size_t>(m_stackedWidget->currentIndex())];
+  for (int i = 0; i < m_navigation->count(); ++i)
+    m_navigation->item(i)->setHidden(
+      !matches[static_cast<size_t>(i)] && !(stayedOnInvalidPage && i == current));
+
+  m_noResults->setVisible(firstMatch < 0);
+  m_stackedWidget->setVisible(firstMatch >= 0);
+  m_pageTitle->setText(
+    firstMatch < 0 ? tr("Search all settings") : m_navigation->currentItem()->text());
+  m_buttonBox->button(QDialogButtonBox::RestoreDefaults)
+    ->setEnabled(firstMatch >= 0 && currentPane()->canResetToDefaults());
+  if (firstMatch >= 0)
+    currentPane()->revealSearch(query);
 }
 
 PreferencePane* PreferenceDialog::currentPane() const

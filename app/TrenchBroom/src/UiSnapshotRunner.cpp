@@ -43,6 +43,7 @@
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStackedWidget>
+#include <QTabWidget>
 #include <QTextStream>
 #include <QTimer>
 #include <QToolButton>
@@ -181,7 +182,13 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("preferences-colors"),
     QStringLiteral("preferences-mouse"),
     QStringLiteral("preferences-keyboard"),
-    QStringLiteral("preferences-misc"),
+    QStringLiteral("preferences-general"),
+    QStringLiteral("preferences-extensions"),
+    QStringLiteral("preferences-play-physics"),
+    QStringLiteral("preferences-play-display"),
+    QStringLiteral("preferences-play-analysis"),
+    QStringLiteral("preferences-search"),
+    QStringLiteral("preferences-search-empty"),
     QStringLiteral("preferences-kreedzbroom")};
   return pages.contains(page);
 }
@@ -997,6 +1004,24 @@ UiSnapshotReadiness outlinerSnapshotReadiness(
 
 UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& targetName)
 {
+  if (targetName == "preferences-search" || targetName == "preferences-search-empty")
+  {
+    const auto* navigation =
+      targetWidget.findChild<QListWidget*>("PreferenceDialog_NavigationList");
+    const auto* pages = targetWidget.findChild<QStackedWidget*>("PreferenceDialog_Pages");
+    const auto* tabs = targetWidget.findChild<QTabWidget*>("KreedzBroomPreference_Tabs");
+    const auto* empty = targetWidget.findChild<QLabel*>("PreferenceDialog_NoResults");
+    const auto noResults = targetName == "preferences-search-empty";
+    const auto ready = navigation && pages && tabs && empty
+      && (noResults ? empty->isVisible() && pages->isHidden()
+        : navigation->currentItem()
+          && navigation->currentItem()->data(Qt::UserRole) == "play"
+          && pages->currentIndex() == navigation->currentRow()
+          && tabs->currentIndex() == 1 && tabs->isVisible());
+    return {
+      ready ? UiSnapshotReadinessState::Ready : UiSnapshotReadinessState::Failed,
+      "Preference search must show the matching tab or its empty state"};
+  }
   if (targetName == "compilation-hltools")
   {
     const auto* output = targetWidget.findChild<QLineEdit*>("HltoolsOutput");
@@ -1326,13 +1351,19 @@ void configurePreferencesSnapshot(
     auto* navigation = targetWidget.findChild<QListWidget*>(
       QStringLiteral("PreferenceDialog_NavigationList")))
   {
-    const auto row = targetName == QStringLiteral("preferences-colors")        ? 2
-                     : targetName == QStringLiteral("preferences-mouse")       ? 3
-                     : targetName == QStringLiteral("preferences-keyboard")    ? 4
-                     : targetName == QStringLiteral("preferences-misc")        ? 5
-                     : targetName == QStringLiteral("preferences-kreedzbroom") ? 6
-                                                                               : 1;
-    navigation->setCurrentRow(row);
+    const auto id = targetName == QStringLiteral("preferences-colors")     ? "colors"
+                    : targetName == QStringLiteral("preferences-mouse")    ? "mouse"
+                    : targetName == QStringLiteral("preferences-keyboard") ? "keyboard"
+                    : targetName == QStringLiteral("preferences-general")  ? "general"
+                    : targetName == QStringLiteral("preferences-extensions")
+                      ? "extensions"
+                    : targetName == QStringLiteral("preferences-kreedzbroom")
+                        || targetName.startsWith(QStringLiteral("preferences-play-"))
+                      ? "play"
+                      : "view";
+    for (int row = 0; row < navigation->count(); ++row)
+      if (navigation->item(row)->data(Qt::UserRole).toString() == QLatin1String{id})
+        navigation->setCurrentRow(row);
     navigation->setFocus(Qt::OtherFocusReason);
   }
 
@@ -1348,22 +1379,23 @@ void configurePreferencesSnapshot(
     }
   }
 
-  if (
-    targetName == QStringLiteral("preferences-misc")
-    || targetName == QStringLiteral("preferences-kreedzbroom"))
+  if (auto* tabs = targetWidget.findChild<QTabWidget*>("KreedzBroomPreference_Tabs"))
   {
-    if (auto* pages = targetWidget.findChild<QStackedWidget*>(
-          QStringLiteral("PreferenceDialog_Pages"));
-        pages != nullptr)
-    {
-      if (
-        auto* scrollArea = pages->currentWidget()->findChild<QScrollArea*>(
-          QStringLiteral("PreferencePane_ScrollArea")))
-      {
-        scrollArea->verticalScrollBar()->setValue(
-          scrollArea->verticalScrollBar()->maximum());
-      }
-    }
+    if (targetName == QStringLiteral("preferences-play-physics"))
+      tabs->setCurrentIndex(1);
+    if (targetName == QStringLiteral("preferences-play-display"))
+      tabs->setCurrentIndex(2);
+    if (targetName == QStringLiteral("preferences-play-analysis"))
+      tabs->setCurrentIndex(3);
+  }
+  if (auto* search = targetWidget.findChild<QLineEdit*>("PreferenceDialog_Search"))
+  {
+    if (targetName.startsWith(QStringLiteral("preferences-search")))
+      search->clear();
+    if (targetName == QStringLiteral("preferences-search"))
+      search->setText("sv_gravity");
+    if (targetName == QStringLiteral("preferences-search-empty"))
+      search->setText("zzzz-no-setting");
   }
 }
 
@@ -1704,8 +1736,8 @@ int runUiSnapshot(
     targetWidget = preferencesDialog.get();
     targetName = options.page;
     targetWidget->resize(
-      targetName == QStringLiteral("preferences-misc") ? QSize{920, 560}
-                                                       : QSize{960, 640});
+      targetName == QStringLiteral("preferences-general") ? QSize{920, 560}
+                                                          : QSize{960, 640});
     configurePreferencesSnapshot(*targetWidget, targetName, options.theme);
   }
   else if (fileNames.empty())

@@ -15,7 +15,7 @@
 - **已使用** 将浏览器限制为当前地图正在使用的材质。
 - **100%–500%** 更改缩略图缩放比例。你也可以按住 #key(Ctrl)，在浏览器上滚动鼠标滚轮，以步进浏览相同的缩放范围。
 
-选定的缩略图缩放比例与 **Preferences > View > Material Browser > Icon size** 共用。普通滚轮操作仍会滚动浏览器。
+选定的缩略图缩放比例与 **Preferences > Appearance and views > Material Browser > Icon size** 共用。普通滚轮操作仍会滚动浏览器。
 
 要选中使用某种材质的所有面，请在材质浏览器中右键点击该材质，然后在弹出菜单中点击“Select Faces”。
 

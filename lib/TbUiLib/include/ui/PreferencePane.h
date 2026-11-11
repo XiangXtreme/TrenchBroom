@@ -22,6 +22,7 @@
 #include <QWidget>
 
 class QLayout;
+class QModelIndex;
 
 namespace tb::ui
 {
@@ -39,6 +40,8 @@ public:
   void resetToDefaults();
   virtual void updateControls() = 0;
   QSize contentSizeHint() const;
+  bool matchesSearch(const QString& query) const;
+  void revealSearch(const QString& query);
 
   /**
    * Returns whether the settings in the preference pane are valid to save.
@@ -51,6 +54,7 @@ protected:
   void createScrollableContent(QLayout* contentLayout);
 
 private:
+  QWidget* searchMatch(const QString& query, QModelIndex* tableIndex = nullptr) const;
   virtual void doResetToDefaults() = 0;
 };
 

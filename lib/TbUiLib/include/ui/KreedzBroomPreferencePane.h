@@ -40,6 +40,7 @@ namespace tb::ui
  */
 class PlayModeKeyButton : public QPushButton
 {
+  Q_OBJECT
 private:
   int m_key = 0;
   bool m_recording = false;
@@ -70,6 +71,7 @@ QString playModeKeyName(int key);
  */
 class KreedzBroomPreferencePane : public PreferencePane
 {
+  Q_OBJECT
 private:
   struct Binding
   {

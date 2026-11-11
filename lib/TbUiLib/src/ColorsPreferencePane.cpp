@@ -62,29 +62,32 @@ ColorsPreferencePane::ColorsPreferencePane(QWidget* parent)
   m_table->verticalHeader()->setDefaultSectionSize(
     m_table->fontMetrics().lineSpacing() + 2);
 
-  m_table->setSelectionMode(QAbstractItemView::SelectionMode::NoSelection);
+  m_table->setSelectionMode(QAbstractItemView::SingleSelection);
+  m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
 
   auto* searchBox = createSearchBox();
-  setSmallStyle(searchBox);
+  searchBox->setProperty("preferenceTableFilter", true);
+  searchBox->setPlaceholderText(tr("Filter colors"));
+  searchBox->setAccessibleName(tr("Filter colors"));
 
   auto* infoLabel = new QLabel{tr("Double-click a color to begin editing it.")};
   setInfoStyle(infoLabel);
 
-  auto* infoAndSearchLayout = new QHBoxLayout{};
-  infoAndSearchLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::MediumVMargin,
-    LayoutConstants::MediumHMargin,
-    LayoutConstants::MediumVMargin);
-  infoAndSearchLayout->setSpacing(LayoutConstants::WideHMargin);
-  infoAndSearchLayout->addWidget(infoLabel, 1);
-  infoAndSearchLayout->addWidget(searchBox);
+  infoLabel->setWordWrap(true);
+  auto* filterLayout = new QHBoxLayout{};
+  filterLayout->setContentsMargins(16, 0, 16, 8);
+  filterLayout->addWidget(searchBox);
+
+  auto* hintLayout = new QHBoxLayout{};
+  hintLayout->setContentsMargins(16, 8, 16, 8);
+  hintLayout->addWidget(infoLabel);
 
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
+  layout->addLayout(filterLayout);
   layout->addWidget(m_table, 1);
-  layout->addLayout(infoAndSearchLayout);
+  layout->addLayout(hintLayout);
   setLayout(layout);
 
   connect(searchBox, &QLineEdit::textChanged, this, [&](const QString& newText) {

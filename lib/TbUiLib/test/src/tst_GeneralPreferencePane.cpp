@@ -34,14 +34,15 @@
 #include "prefs/Preferences.h"
 #include "ui/AppController.h"
 #include "ui/AppControllerFixture.h"
-#include "ui/MiscPreferencePane.h"
+#include "ui/ExtensionsPreferencePane.h"
+#include "ui/GeneralPreferencePane.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 namespace tb::ui
 {
 
-TEST_CASE("MiscPreferencePane")
+TEST_CASE("GeneralPreferencePane")
 {
   auto appControllerFixture = AppControllerFixture{};
   auto& prefs = PreferenceManager::instance();
@@ -58,9 +59,11 @@ TEST_CASE("MiscPreferencePane")
   auto mcpConfig = mcp::defaultBridgeConfig();
   mcpConfig.mode = mcp::McpMode::Edit;
   REQUIRE(mcp::writeBridgeConfig(mcpConfig, mcpConfigPath));
-  auto pane = MiscPreferencePane{appControllerFixture.appController(), mcpConfigPath};
+  auto pane = GeneralPreferencePane{};
+  auto extensions =
+    ExtensionsPreferencePane{appControllerFixture.appController(), mcpConfigPath};
 
-  SECTION("loads general misc preferences")
+  SECTION("loads general preferences")
   {
     auto* prefixCheckBox = static_cast<QCheckBox*>(nullptr);
     auto* boxSelectionCheckBox = static_cast<QCheckBox*>(nullptr);
@@ -92,7 +95,7 @@ TEST_CASE("MiscPreferencePane")
     CHECK(foundChinese);
   }
 
-  SECTION("reset restores misc and MCP preferences")
+  SECTION("reset only restores the selected category")
   {
     pane.resetToDefaults();
 
@@ -103,6 +106,12 @@ TEST_CASE("MiscPreferencePane")
     CHECK(prefs.get(Preferences::PieMenuAction) == "Menu/Edit/Undo|Menu/Edit/Redo");
     CHECK(prefs.get(Preferences::PrefabDirectory).empty());
 
+    const auto unchangedMcpConfig = mcp::readBridgeConfig(mcpConfigPath);
+    REQUIRE(unchangedMcpConfig);
+    CHECK(unchangedMcpConfig->mode == mcp::McpMode::Edit);
+    prefs.set(Preferences::Enable2DBoxSelection, true);
+    extensions.resetToDefaults();
+    CHECK(prefs.get(Preferences::Enable2DBoxSelection));
     const auto resetMcpConfig = mcp::readBridgeConfig(mcpConfigPath);
     REQUIRE(resetMcpConfig);
     CHECK(resetMcpConfig->mode == mcp::McpMode::Off);
@@ -128,7 +137,9 @@ TEST_CASE("MiscPreferencePane")
     auto foundPieMenuButton = false;
     auto foundPluginButton = false;
 
-    for (auto* button : pane.findChildren<QPushButton*>())
+    auto buttons = pane.findChildren<QPushButton*>();
+    buttons.append(extensions.findChildren<QPushButton*>());
+    for (auto* button : buttons)
     {
       foundPieMenuButton =
         foundPieMenuButton || button->text() == QStringLiteral("Pie Menu Settings...");
@@ -142,16 +153,16 @@ TEST_CASE("MiscPreferencePane")
 
   SECTION("scrolls compact content without compressing MCP rows")
   {
-    pane.resize(720, 420);
-    pane.show();
+    extensions.resize(720, 260);
+    extensions.show();
     QApplication::processEvents();
 
-    auto* scrollArea = pane.findChild<QScrollArea*>("PreferencePane_ScrollArea");
-    auto* modeCombo = pane.findChild<QComboBox*>("McpSettings_Mode");
-    auto* statusLabel = pane.findChild<QLabel*>("McpSettings_Status");
-    auto* httpUrl = pane.findChild<QLineEdit*>("McpSettings_HttpUrl");
+    auto* scrollArea = extensions.findChild<QScrollArea*>("PreferencePane_ScrollArea");
+    auto* modeCombo = extensions.findChild<QComboBox*>("McpSettings_Mode");
+    auto* statusLabel = extensions.findChild<QLabel*>("McpSettings_Status");
+    auto* httpUrl = extensions.findChild<QLineEdit*>("McpSettings_HttpUrl");
     auto* copyClaudeCommand =
-      pane.findChild<QPushButton*>("McpSettings_CopyClaudeCommand");
+      extensions.findChild<QPushButton*>("McpSettings_CopyClaudeCommand");
     REQUIRE(scrollArea != nullptr);
     REQUIRE(modeCombo != nullptr);
     REQUIRE(statusLabel != nullptr);

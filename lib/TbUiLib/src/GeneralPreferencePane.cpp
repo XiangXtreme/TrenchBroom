@@ -1,9 +1,8 @@
-#include "ui/MiscPreferencePane.h"
+#include "ui/GeneralPreferencePane.h"
 
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QFileDialog>
-#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -15,54 +14,25 @@
 
 #include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
-#include "ui/AppController.h"
-#include "ui/McpSettingsWidget.h"
+#include "ui/FormWithSectionsLayout.h"
 #include "ui/PieMenuSettingsDialog.h"
 #include "ui/PrefabAsset.h"
 #include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
 #include "ui/ViewConstants.h"
 
-#include <utility>
 
 namespace tb::ui
 {
-namespace
-{
-QGroupBox* createGroupBox(const QString& title, QLayout* contentLayout)
-{
-  auto* groupBox = new QGroupBox{title};
-  contentLayout->setContentsMargins(
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin,
-    LayoutConstants::WideHMargin,
-    LayoutConstants::WideVMargin);
-  contentLayout->setSpacing(LayoutConstants::WideVMargin);
-  groupBox->setLayout(contentLayout);
-  return groupBox;
-}
-} // namespace
-
-MiscPreferencePane::MiscPreferencePane(AppController& appController, QWidget* parent)
-  : MiscPreferencePane{appController, mcp::defaultConfigPath(), parent}
-{
-}
-
-MiscPreferencePane::MiscPreferencePane(
-  AppController& appController, QString mcpConfigPath, QWidget* parent)
+GeneralPreferencePane::GeneralPreferencePane(QWidget* parent)
   : PreferencePane{parent}
-  , m_appController{appController}
-  , m_mcpConfigPath{std::move(mcpConfigPath)}
 {
   createGui();
   updateControls();
 }
 
-void MiscPreferencePane::createGui()
+void GeneralPreferencePane::createGui()
 {
-  auto* languageLabel = new QLabel{tr("Select the display language.")};
-  setInfoStyle(languageLabel);
-
   m_englishRadioButton =
     new QRadioButton{QString::fromStdString(Preferences::languageEnglish())};
   m_chineseRadioButton =
@@ -93,10 +63,6 @@ void MiscPreferencePane::createGui()
   languageChoicesLayout->addWidget(m_chineseRadioButton);
   languageChoicesLayout->addStretch(1);
 
-  auto* languageLayout = new QVBoxLayout{};
-  languageLayout->addWidget(languageLabel);
-  languageLayout->addLayout(languageChoicesLayout);
-
   m_prefixWorldspawnOnCopyCheckBox =
     new QCheckBox{tr("Prefix worldspawn header on copy")};
   connect(
@@ -118,7 +84,6 @@ void MiscPreferencePane::createGui()
   editorLayout->addWidget(m_enable2DBoxSelectionCheckBox);
 
   m_pieMenuSettingsButton = new QPushButton{tr("Pie Menu Settings...")};
-  m_pythonPluginManagerButton = new QPushButton{tr("Python Plugin Manager...")};
 
   m_prefabDirectoryEdit = new QLineEdit{};
   m_prefabDirectoryEdit->setObjectName("prefabDirectoryEdit");
@@ -154,56 +119,42 @@ void MiscPreferencePane::createGui()
     dialog.exec();
   });
 
-  connect(m_pythonPluginManagerButton, &QPushButton::clicked, this, [this]() {
-    m_appController.showPythonPluginManager();
-  });
-
   auto* prefabDirectoryLayout = new QHBoxLayout{};
   prefabDirectoryLayout->setContentsMargins(QMargins{});
   prefabDirectoryLayout->setSpacing(LayoutConstants::MediumHMargin);
   prefabDirectoryLayout->addWidget(m_prefabDirectoryEdit, 1);
   prefabDirectoryLayout->addWidget(m_choosePrefabDirectoryButton);
 
-  auto* toolLayout = new QVBoxLayout{};
-  toolLayout->addWidget(new QLabel{tr("Prefab directory")});
-  toolLayout->addLayout(prefabDirectoryLayout);
-  toolLayout->addWidget(m_pieMenuSettingsButton);
-  toolLayout->addWidget(m_pythonPluginManagerButton);
-
-  m_mcpSettingsWidget = new McpSettingsWidget{m_appController, m_mcpConfigPath};
-
-  auto* layout = new QVBoxLayout{};
-  layout->setContentsMargins(
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin,
-    LayoutConstants::DialogOuterMargin);
-  layout->setSpacing(LayoutConstants::WideVMargin);
-  layout->addWidget(createGroupBox(tr("Language"), languageLayout));
-  layout->addWidget(createGroupBox(tr("Editor"), editorLayout));
-  layout->addWidget(createGroupBox(tr("Tools"), toolLayout));
-  layout->addWidget(m_mcpSettingsWidget);
-  layout->addStretch(1);
+  auto* layout = new FormWithSectionsLayout{};
+  layout->setContentsMargins(16, 16, 16, 16);
+  layout->addSection(
+    tr("Language"), tr("Language changes take effect after restarting."));
+  layout->addRow(tr("Display language"), languageChoicesLayout);
+  layout->addSection(tr("Editing"));
+  layout->addRow(editorLayout);
+  layout->addSection(tr("Assets"));
+  layout->addRow(tr("Prefab directory"), prefabDirectoryLayout);
+  layout->addSection(tr("Menus"));
+  layout->addRow(tr("Pie menu"), m_pieMenuSettingsButton);
   createScrollableContent(layout);
 }
 
-bool MiscPreferencePane::canResetToDefaults()
+bool GeneralPreferencePane::canResetToDefaults()
 {
   return true;
 }
 
-void MiscPreferencePane::doResetToDefaults()
+void GeneralPreferencePane::doResetToDefaults()
 {
   auto& prefs = PreferenceManager::instance();
   prefs.resetToDefault(Preferences::Language);
   prefs.resetToDefault(Preferences::PrefixWorldspawnHeaderOnCopy);
   prefs.resetToDefault(Preferences::Enable2DBoxSelection);
   prefs.resetToDefault(Preferences::PrefabDirectory);
-  m_mcpSettingsWidget->resetToDefaults();
   updateControls();
 }
 
-void MiscPreferencePane::updateControls()
+void GeneralPreferencePane::updateControls()
 {
   const auto englishBlocker = QSignalBlocker{m_englishRadioButton};
   const auto chineseBlocker = QSignalBlocker{m_chineseRadioButton};
@@ -219,15 +170,14 @@ void MiscPreferencePane::updateControls()
   m_enable2DBoxSelectionCheckBox->setChecked(pref(Preferences::Enable2DBoxSelection));
   m_prefabDirectoryEdit->setText(pathAsQString(
     PreferenceManager::instance().getPendingValue(Preferences::PrefabDirectory)));
-  m_mcpSettingsWidget->updateControls();
 }
 
-bool MiscPreferencePane::validate()
+bool GeneralPreferencePane::validate()
 {
   return true;
 }
 
-void MiscPreferencePane::showRestartRequiredMessage()
+void GeneralPreferencePane::showRestartRequiredMessage()
 {
   QMessageBox::information(
     this,

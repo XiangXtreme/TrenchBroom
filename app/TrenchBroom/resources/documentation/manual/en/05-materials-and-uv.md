@@ -15,7 +15,7 @@ The browser has two compact control rows above the thumbnails. The first is a se
 - **Used** limits the browser to materials currently used by the map.
 - **100%–500%** changes the thumbnail scale. You can also hold #key(Ctrl) and use the mouse wheel over the browser to step through the same scale range.
 
-The selected thumbnail scale is shared with **Preferences > View > Material Browser > Icon size**. Ordinary wheel input continues to scroll the browser.
+The selected thumbnail scale is shared with **Preferences > Appearance and views > Material Browser > Icon size**. Ordinary wheel input continues to scroll the browser.
 
 To select all faces having a certain material, right-click that material in the material browser and click "Select Faces" in the pop-up menu.
 

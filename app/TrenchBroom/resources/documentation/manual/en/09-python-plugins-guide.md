@@ -31,7 +31,7 @@ The Python console automatically binds the active document, active selection, an
 - **Code Completion**: Press #key(Ctrl)+#key(Space) or #key(Tab) to open the completion popup; press #key(Tab) to insert the selected completion. #key(Enter) executes the current script even while the popup is visible.
 - **History Navigation**: Press #key(Up) on the first line or #key(Down) on the last line to navigate through previous scripts (up to 100 history entries). Unsubmitted text in the editor is automatically preserved as a draft while browsing history.
 - **Clear Output**: Click **Clear** in the tab header to clear all output logs.
-- **Font Customization**: Configure the family and size under **Preferences > View > Fonts > Python Console**; only installed monospace families are listed.
+- **Font Customization**: Configure the family and size under **Preferences > Appearance and views > Fonts > Python Console**; only installed monospace families are listed.
 
 ### Output and Error Reporting {#console_output_and_errors}
 
@@ -126,7 +126,7 @@ with doc.transaction("Batch Align Entities"):
 
 ## Python Plugins {#python_plugins}
 
-TrenchBroom features an embedded Python API runtime and extension system. Open **Preferences > Misc**, then click **Python Plugin Manager...** in the **Tools** section to manage manifest-based UI plugins. Configure directories with **Install UI Plugin...** inside the manager. It lists detected plugins, load status, metadata, and errors; use search or **Only show issues** to diagnose larger plugin sets, then refresh after changing files.
+TrenchBroom features an embedded Python API runtime and extension system. Open **Preferences > Extensions and automation**, then click **Python Plugin Manager...** in the **Python plugins** section to manage manifest-based UI plugins. Configure directories with **Install UI Plugin...** inside the manager. It lists detected plugins, load status, metadata, and errors; use search or **Only show issues** to diagnose larger plugin sets, then refresh after changing files.
 
 ![Plugin Inspector](images/PluginInspector.png)
 

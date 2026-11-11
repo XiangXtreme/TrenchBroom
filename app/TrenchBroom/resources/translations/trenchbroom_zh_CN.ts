@@ -1981,7 +1981,259 @@ Recover them? The current project file is kept as a backup in the autosave folde
             <source>Description</source>
             <translation>描述</translation>
             </message>
-        </context>
+                <message>
+            <source>Group</source>
+            <translation>分组</translation>
+        </message>
+        <message>
+            <source>Asset browsers</source>
+            <translation>资源浏览器</translation>
+        </message>
+        <message>
+            <source>Text overlays</source>
+            <translation>文字叠加层</translation>
+        </message>
+        <message>
+            <source>Map geometry</source>
+            <translation>地图几何</translation>
+        </message>
+        <message>
+            <source>Editing tools</source>
+            <translation>编辑工具</translation>
+        </message>
+        <message>
+            <source>Map views and guides</source>
+            <translation>地图视图与辅助线</translation>
+        </message>
+        <message>
+            <source>Soft map bounds color</source>
+            <translation>地图软边界</translation>
+        </message>
+        <message>
+            <source>Background</source>
+            <translation>背景</translation>
+        </message>
+        <message>
+            <source>X axis</source>
+            <translation>X 轴</translation>
+        </message>
+        <message>
+            <source>Y axis</source>
+            <translation>Y 轴</translation>
+        </message>
+        <message>
+            <source>Z axis</source>
+            <translation>Z 轴</translation>
+        </message>
+        <message>
+            <source>Point file</source>
+            <translation>漏点线</translation>
+        </message>
+        <message>
+            <source>Portal file border</source>
+            <translation>Portal 边框</translation>
+        </message>
+        <message>
+            <source>Portal file fill</source>
+            <translation>Portal 填充</translation>
+        </message>
+        <message>
+            <source>Compass background</source>
+            <translation>罗盘背景</translation>
+        </message>
+        <message>
+            <source>Compass background outline</source>
+            <translation>罗盘背景轮廓</translation>
+        </message>
+        <message>
+            <source>Compass axis outline</source>
+            <translation>罗盘坐标轴轮廓</translation>
+        </message>
+        <message>
+            <source>Camera frustum</source>
+            <translation>相机视锥</translation>
+        </message>
+        <message>
+            <source>Groups</source>
+            <translation>组</translation>
+        </message>
+        <message>
+            <source>Linked Groups</source>
+            <translation>链接组</translation>
+        </message>
+        <message>
+            <source>Tutorial overlay text</source>
+            <translation>教程叠加文字</translation>
+        </message>
+        <message>
+            <source>Tutorial overlay background</source>
+            <translation>教程叠加背景</translation>
+        </message>
+        <message>
+            <source>Faces</source>
+            <translation>面</translation>
+        </message>
+        <message>
+            <source>Selected faces</source>
+            <translation>选中的面</translation>
+        </message>
+        <message>
+            <source>Locked faces</source>
+            <translation>锁定的面</translation>
+        </message>
+        <message>
+            <source>Edges</source>
+            <translation>边</translation>
+        </message>
+        <message>
+            <source>Selected edges</source>
+            <translation>选中的边</translation>
+        </message>
+        <message>
+            <source>Locked edges</source>
+            <translation>锁定的边</translation>
+        </message>
+        <message>
+            <source>Undefined entity</source>
+            <translation>未定义实体</translation>
+        </message>
+        <message>
+            <source>Selection bounds</source>
+            <translation>选择边界</translation>
+        </message>
+        <message>
+            <source>Info overlay text</source>
+            <translation>信息叠加文字</translation>
+        </message>
+        <message>
+            <source>Group info overlay text</source>
+            <translation>组信息叠加文字</translation>
+        </message>
+        <message>
+            <source>Info overlay background</source>
+            <translation>信息叠加背景</translation>
+        </message>
+        <message>
+            <source>Selected info overlay text</source>
+            <translation>选中项信息文字</translation>
+        </message>
+        <message>
+            <source>Selected info overlay background</source>
+            <translation>选中项信息背景</translation>
+        </message>
+        <message>
+            <source>Locked info overlay text</source>
+            <translation>锁定项信息文字</translation>
+        </message>
+        <message>
+            <source>Locked info overlay background</source>
+            <translation>锁定项信息背景</translation>
+        </message>
+        <message>
+            <source>Handle</source>
+            <translation>控制柄</translation>
+        </message>
+        <message>
+            <source>Occluded handle</source>
+            <translation>被遮挡的控制柄</translation>
+        </message>
+        <message>
+            <source>Selected handle</source>
+            <translation>选中的控制柄</translation>
+        </message>
+        <message>
+            <source>Occluded selected handle</source>
+            <translation>被遮挡的选中控制柄</translation>
+        </message>
+        <message>
+            <source>Clip handle</source>
+            <translation>裁剪控制柄</translation>
+        </message>
+        <message>
+            <source>Clip face</source>
+            <translation>裁剪面</translation>
+        </message>
+        <message>
+            <source>Resize handle</source>
+            <translation>调整大小控制柄</translation>
+        </message>
+        <message>
+            <source>Rotate handle</source>
+            <translation>旋转控制柄</translation>
+        </message>
+        <message>
+            <source>Scale handle</source>
+            <translation>缩放控制柄</translation>
+        </message>
+        <message>
+            <source>Scale fill</source>
+            <translation>缩放填充</translation>
+        </message>
+        <message>
+            <source>Scale outline</source>
+            <translation>缩放轮廓</translation>
+        </message>
+        <message>
+            <source>Shear fill</source>
+            <translation>切变填充</translation>
+        </message>
+        <message>
+            <source>Shear outline</source>
+            <translation>切变轮廓</translation>
+        </message>
+        <message>
+            <source>Move trace</source>
+            <translation>移动轨迹</translation>
+        </message>
+        <message>
+            <source>Move indicator outline</source>
+            <translation>移动指示器轮廓</translation>
+        </message>
+        <message>
+            <source>Move indicator fill</source>
+            <translation>移动指示器填充</translation>
+        </message>
+        <message>
+            <source>Angle indicator</source>
+            <translation>角度指示器</translation>
+        </message>
+        <message>
+            <source>Texture seam</source>
+            <translation>纹理接缝</translation>
+        </message>
+        <message>
+            <source>Color2D</source>
+            <translation>2D 网格</translation>
+        </message>
+        <message>
+            <source>Text color</source>
+            <translation>文字</translation>
+        </message>
+        <message>
+            <source>Sub text color</source>
+            <translation>次要文字</translation>
+        </message>
+        <message>
+            <source>Group background color</source>
+            <translation>分组背景</translation>
+        </message>
+        <message>
+            <source>Background color</source>
+            <translation>背景</translation>
+        </message>
+        <message>
+            <source>Default color</source>
+            <translation>默认状态</translation>
+        </message>
+        <message>
+            <source>Selected color</source>
+            <translation>选中状态</translation>
+        </message>
+        <message>
+            <source>Used color</source>
+            <translation>已使用状态</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::ColorsPreferencePane</name>
         <message>
@@ -1989,7 +2241,11 @@ Recover them? The current project file is kept as a backup in the autosave folde
             <source>Double-click a color to begin editing it.</source>
             <translation>双击颜色开始编辑。</translation>
             </message>
-        </context>
+                <message>
+            <source>Filter colors</source>
+            <translation>筛选颜色</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::CompilationDialog</name>
         <message>
@@ -3153,7 +3409,11 @@ Value: %2</source>
             <source>Please fix all conflicting shortcuts highlighted in red.</source>
             <translation>请修复所有标红的快捷键冲突。</translation>
             </message>
-        </context>
+                <message>
+            <source>Filter shortcuts</source>
+            <translation>筛选快捷键</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::KeyboardShortcutModel</name>
         <message>
@@ -3383,7 +3643,43 @@ Value: %2</source>
             <source>Settings</source>
             <translation>设置</translation>
             </message>
-        </context>
+                <message>
+            <source>General</source>
+            <translation>常规</translation>
+        </message>
+        <message>
+            <source>Appearance and views</source>
+            <translation>外观与视图</translation>
+        </message>
+        <message>
+            <source>Keyboard shortcuts</source>
+            <translation>键盘快捷键</translation>
+        </message>
+        <message>
+            <source>Extensions and automation</source>
+            <translation>扩展与自动化</translation>
+        </message>
+        <message>
+            <source>Updates</source>
+            <translation>更新</translation>
+        </message>
+        <message>
+            <source>Restore Page Defaults</source>
+            <translation>恢复本页默认值</translation>
+        </message>
+        <message>
+            <source>Restore defaults for this category, including all its tabs.</source>
+            <translation>恢复当前分类及其全部标签页的默认设置</translation>
+        </message>
+        <message>
+            <source>Search all settings</source>
+            <translation>搜索全部设置</translation>
+        </message>
+        <message>
+            <source>No matching settings. Try another search.</source>
+            <translation>没有匹配的设置，请尝试其他关键词</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::LayerEditor</name>
         <message>
@@ -3923,90 +4219,7 @@ Please choose a different file name to export to.</source>
             <translation>重新加载所有启用的材质集合</translation>
             </message>
         </context>
-    <context>
-        <name>tb::ui::MiscPreferencePane</name>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="49" />
-            <source>Select the display language.</source>
-            <translation>选择界面显示语言。</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="87" />
-            <source>Prefix worldspawn header on copy</source>
-            <translation>复制时添加 worldspawn 头部</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="97" />
-            <source>Pie Menu Settings...</source>
-            <translation>饼状菜单设置...</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="98" />
-            <source>Python Plugin Manager...</source>
-            <translation>Python 插件管理器...</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="120" />
-            <source>Language</source>
-            <translation>语言</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="121" />
-            <source>Editor</source>
-            <translation>编辑器</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="122" />
-            <source>Tools</source>
-            <translation>工具</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="162" />
-            <source>Restart Required</source>
-            <translation>需要重启</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="163" />
-            <source>Language settings will take effect after applying preferences and restarting the application</source>
-            <translation>语言设置将在应用偏好并重启程序后生效。</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="109" />
-            <source>Enable 2D box selection with Ctrl+drag</source>
-            <translation>启用 Ctrl+拖拽 进行 2D 框选</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="127" />
-            <source>...</source>
-            <translation>...</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="144" />
-            <source>Prefab Directory</source>
-            <translation>Prefab 目录</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="168" />
-            <source>Prefab directory</source>
-            <translation>Prefab 目录</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="201" />
-            <source>Map toolchain</source>
-            <translation>地图工具链</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="169" />
-            <source>None (search PATH)</source>
-            <translation>未设置（从 PATH 查找）</translation>
-            </message>
-        <message>
-            <location filename="../../../../lib/TbUiLib/src/MiscPreferencePane.cpp" line="184" />
-            <source>Executables (*.exe);;All files (*)</source>
-            <translation>可执行文件 (*.exe);;所有文件 (*)</translation>
-            </message>
-        </context>
-    <context>
+<context>
         <name>tb::ui::ModEditor</name>
         <message>
             <location filename="../../../../lib/TbUiLib/src/ModEditor.cpp" line="113" />
@@ -5971,6 +6184,158 @@ By %2</source>
         <message>
             <source>Jump results with takeoff timing, speed and strafe analysis. Assisted movement is excluded.</source>
             <translation>显示起跳时机、速度和 Strafe 分析，辅助移动不计入成绩。</translation>
+        </message>
+            <message>
+            <source>Mouse</source>
+            <translation>鼠标</translation>
+        </message>
+        <message>
+            <source>Sensitivity</source>
+            <translation>灵敏度</translation>
+        </message>
+        <message>
+            <source>Raw input</source>
+            <translation>原始输入</translation>
+        </message>
+        <message>
+            <source>Movement physics</source>
+            <translation>移动物理</translation>
+        </message>
+        <message>
+            <source>Air acceleration</source>
+            <translation>空中加速度</translation>
+        </message>
+        <message>
+            <source>Ground acceleration</source>
+            <translation>地面加速度</translation>
+        </message>
+        <message>
+            <source>Friction</source>
+            <translation>摩擦力</translation>
+        </message>
+        <message>
+            <source>Stop speed</source>
+            <translation>停止速度</translation>
+        </message>
+        <message>
+            <source>Gravity</source>
+            <translation>重力</translation>
+        </message>
+        <message>
+            <source>Maximum speed</source>
+            <translation>最大速度</translation>
+        </message>
+        <message>
+            <source>Edge friction</source>
+            <translation>边缘摩擦</translation>
+        </message>
+        <message>
+            <source>Step height</source>
+            <translation>台阶高度</translation>
+        </message>
+        <message>
+            <source>View</source>
+            <translation>视图</translation>
+        </message>
+        <message>
+            <source>Field of view</source>
+            <translation>视场角</translation>
+        </message>
+        <message>
+            <source>Restore checkpoint view</source>
+            <translation>恢复存点视角</translation>
+        </message>
+        <message>
+            <source>Show HUD</source>
+            <translation>显示 HUD</translation>
+        </message>
+        <message>
+            <source>Show crosshair</source>
+            <translation>显示准星</translation>
+        </message>
+        <message>
+            <source>Show fall damage</source>
+            <translation>显示摔落伤害</translation>
+        </message>
+        <message>
+            <source>Keys</source>
+            <translation>按键</translation>
+        </message>
+        <message>
+            <source>Forward / Back</source>
+            <translation>前进 / 后退</translation>
+        </message>
+        <message>
+            <source>Move left / right</source>
+            <translation>向左 / 向右</translation>
+        </message>
+        <message>
+            <source>Jump / Duck</source>
+            <translation>跳跃 / 下蹲</translation>
+        </message>
+        <message>
+            <source>Walk / Use</source>
+            <translation>慢走 / 使用</translation>
+        </message>
+        <message>
+            <source>Turn left / right</source>
+            <translation>向左转 / 向右转</translation>
+        </message>
+        <message>
+            <source>Save / load point</source>
+            <translation>保存 / 读取存点</translation>
+        </message>
+        <message>
+            <source>Wheel up / down</source>
+            <translation>滚轮向上 / 向下</translation>
+        </message>
+        <message>
+            <source>Turn speed</source>
+            <translation>转向速度</translation>
+        </message>
+        <message>
+            <source>Player</source>
+            <translation>玩家</translation>
+        </message>
+        <message>
+            <source>Weapon speed</source>
+            <translation>武器移动速度</translation>
+        </message>
+        <message>
+            <source>Physics frame rate</source>
+            <translation>物理帧率</translation>
+        </message>
+        <message>
+            <source>Collision hulls</source>
+            <translation>碰撞体</translation>
+        </message>
+        <message>
+            <source>Collision backend</source>
+            <translation>碰撞内核</translation>
+        </message>
+        <message>
+            <source>Hull expansion</source>
+            <translation>碰撞体扩张方式</translation>
+        </message>
+        <message>
+            <source>Sound</source>
+            <translation>声音</translation>
+        </message>
+        <message>
+            <source>Volume</source>
+            <translation>音量</translation>
+        </message>
+        <message>
+            <source>Controls</source>
+            <translation>操作</translation>
+        </message>
+        <message>
+            <source>Physics and collision</source>
+            <translation>物理与碰撞</translation>
+        </message>
+        <message>
+            <source>View and sound</source>
+            <translation>显示与声音</translation>
         </message>
     </context>
     <context>
@@ -9682,6 +10047,84 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
         <message>
             <source>GoldSrc BSP (*.bsp)</source>
             <translation>GoldSrc BSP (*.bsp)</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::GeneralPreferencePane</name>
+        <message>
+            <source>Prefix worldspawn header on copy</source>
+            <translation>复制时添加 worldspawn 头部</translation>
+        </message>
+        <message>
+            <source>Enable 2D box selection with Ctrl+drag</source>
+            <translation>启用 Ctrl+拖拽 进行 2D 框选</translation>
+        </message>
+        <message>
+            <source>Pie Menu Settings...</source>
+            <translation>饼状菜单设置...</translation>
+        </message>
+        <message>
+            <source>...</source>
+            <translation>...</translation>
+        </message>
+        <message>
+            <source>Prefab Directory</source>
+            <translation>Prefab 目录</translation>
+        </message>
+        <message>
+            <source>Language</source>
+            <translation>语言</translation>
+        </message>
+        <message>
+            <source>Language changes take effect after restarting.</source>
+            <translation>更改语言后需重启应用程序</translation>
+        </message>
+        <message>
+            <source>Display language</source>
+            <translation>显示语言</translation>
+        </message>
+        <message>
+            <source>Editing</source>
+            <translation>编辑行为</translation>
+        </message>
+        <message>
+            <source>Assets</source>
+            <translation>资源</translation>
+        </message>
+        <message>
+            <source>Prefab directory</source>
+            <translation>Prefab 目录</translation>
+        </message>
+        <message>
+            <source>Menus</source>
+            <translation>菜单</translation>
+        </message>
+        <message>
+            <source>Pie menu</source>
+            <translation>饼菜单</translation>
+        </message>
+        <message>
+            <source>Restart Required</source>
+            <translation>需要重启</translation>
+        </message>
+        <message>
+            <source>Language settings will take effect after applying preferences and restarting the application</source>
+            <translation>语言设置将在应用偏好并重启程序后生效。</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::ExtensionsPreferencePane</name>
+        <message>
+            <source>Python Plugin Manager...</source>
+            <translation>Python 插件管理器...</translation>
+        </message>
+        <message>
+            <source>Python plugins</source>
+            <translation>Python 插件</translation>
+        </message>
+        <message>
+            <source>Installed plugins</source>
+            <translation>已安装插件</translation>
         </message>
     </context>
 </TS>

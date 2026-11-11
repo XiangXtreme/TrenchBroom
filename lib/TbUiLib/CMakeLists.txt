@@ -175,7 +175,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MaterialCollectionEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MiniToolBarLayout.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/McpSettingsWidget.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/MiscPreferencePane.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ExtensionsPreferencePane.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/GeneralPreferencePane.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ModEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ModelBrowser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ModelBrowserView.cpp
@@ -468,7 +469,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MaterialCollectionEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MiniToolBarLayout.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/McpSettingsWidget.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MiscPreferencePane.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ExtensionsPreferencePane.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/GeneralPreferencePane.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ModEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ModelBrowser.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/ModelBrowserView.h

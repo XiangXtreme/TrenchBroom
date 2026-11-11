@@ -20,6 +20,7 @@
 #include <QApplication>
 #include <QColor>
 #include <QComboBox>
+#include <QDialogButtonBox>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
@@ -30,21 +31,24 @@
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QTabWidget>
 #include <QTableView>
 #include <QTimer>
+#include <QTranslator>
 #include <QtTest/QTest>
 
 #include "base/PreferenceManager.h"
 #include "prefs/Preferences.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/ColorsPreferencePane.h"
+#include "ui/ExtensionsPreferencePane.h"
 #include "ui/GamesPreferencePane.h"
 #include "ui/KeyboardPreferencePane.h"
 #include "ui/KeyboardShortcutModel.h"
 #include "ui/McpSettingsWidget.h"
-#include "ui/MiscPreferencePane.h"
 #include "ui/MousePreferencePane.h"
 #include "ui/PreferenceDialog.h"
+#include "ui/QColorUtils.h"
 #include "ui/UpdatePreferencePane.h"
 #include "ui/ViewPreferencePane.h"
 
@@ -95,12 +99,108 @@ TEST_CASE("PreferenceDialog")
     CHECK(
       paneNames
       == QStringList{
-        "Games", "View", "Colors", "Mouse", "Keyboard", "Misc", "KreedzBroom", "Update"});
+        "General",
+        "Games",
+        "Appearance and views",
+        "Colors",
+        "Mouse",
+        "Keyboard shortcuts",
+        "KreedzBroom",
+        "Extensions and automation",
+        "Updates"});
 
     navigation->setCurrentRow(0);
     QTest::keyClick(navigation, Qt::Key_Down);
     CHECK(navigation->currentRow() == 1);
     CHECK(pages->currentIndex() == 1);
+  }
+
+  SECTION("search finds nested settings and preserves keyboard navigation")
+  {
+    auto* search = dialog->findChild<QLineEdit*>("PreferenceDialog_Search");
+    auto* navigation = dialog->findChild<QListWidget*>("PreferenceDialog_NavigationList");
+    auto* tabs = dialog->findChild<QTabWidget*>("KreedzBroomPreference_Tabs");
+    auto* pages = dialog->findChild<QStackedWidget*>("PreferenceDialog_Pages");
+    auto* empty = dialog->findChild<QLabel*>("PreferenceDialog_NoResults");
+    auto* buttons = dialog->findChild<QDialogButtonBox*>("PreferenceDialog_ButtonBox");
+    REQUIRE(search);
+    REQUIRE(navigation);
+    REQUIRE(tabs);
+    REQUIRE(pages);
+    REQUIRE(empty);
+    REQUIRE(buttons);
+
+    search->setText("sv_gravity");
+    CHECK(navigation->currentItem()->data(Qt::UserRole) == "play");
+    CHECK(tabs->currentIndex() == 1);
+    CHECK_FALSE(navigation->currentItem()->isHidden());
+    CHECK(navigation->item(0)->isHidden());
+    search->setText("Show jump results");
+    CHECK(tabs->currentIndex() == 3);
+    auto* colors = dialog->findChild<QTableView*>("ColorsPreference_Table");
+    REQUIRE(colors);
+    auto* colorPane = colors->parentWidget();
+    auto* localFilter = static_cast<QLineEdit*>(nullptr);
+    for (auto* field : colorPane->findChildren<QLineEdit*>())
+      if (field->property("preferenceTableFilter").toBool())
+        localFilter = field;
+    REQUIRE(localFilter);
+    localFilter->setText("Point file");
+    search->setText("Locked faces");
+    CHECK(navigation->currentItem()->data(Qt::UserRole) == "colors");
+    CHECK(localFilter->text().isEmpty());
+    CHECK(colors->currentIndex().siblingAtColumn(2).data().toString() == "Locked faces");
+
+    search->setText("MCP");
+    CHECK(navigation->currentItem()->data(Qt::UserRole) == "extensions");
+
+    search->setText("zzzz-no-setting");
+    CHECK_FALSE(empty->isHidden());
+    CHECK(pages->isHidden());
+    CHECK_FALSE(buttons->button(QDialogButtonBox::RestoreDefaults)->isEnabled());
+    QTest::keyClick(search, Qt::Key_Escape);
+    CHECK(search->text().isEmpty());
+    CHECK(empty->isHidden());
+    CHECK_FALSE(pages->isHidden());
+    for (int i = 0; i < navigation->count(); ++i)
+      CHECK_FALSE(navigation->item(i)->isHidden());
+
+    dialog->show();
+    search->setFocus();
+    QTest::keyClick(search, Qt::Key_Return);
+    CHECK(dialog->isVisible());
+    CHECK(dialog->focusWidget() == navigation);
+    dialog->hide();
+  }
+
+  SECTION("search uses translated captions and original physics names")
+  {
+    auto translator = QTranslator{};
+    REQUIRE(translator.load(QFINDTESTDATA(
+      "../../../../app/TrenchBroom/resources/translations/trenchbroom_zh_CN.qm")));
+    QCoreApplication::installTranslator(&translator);
+    auto translated =
+      std::make_unique<PreferenceDialog>(fixture.appController(), nullptr);
+    auto* search = translated->findChild<QLineEdit*>("PreferenceDialog_Search");
+    auto* navigation =
+      translated->findChild<QListWidget*>("PreferenceDialog_NavigationList");
+    auto* tabs = translated->findChild<QTabWidget*>("KreedzBroomPreference_Tabs");
+    REQUIRE(search);
+    REQUIRE(navigation);
+    REQUIRE(tabs);
+    CHECK(navigation->item(0)->text() == QString::fromUtf8("常规"));
+    search->setText(QString::fromUtf8("重力"));
+    CHECK(navigation->currentItem()->data(Qt::UserRole) == "play");
+    CHECK(tabs->currentIndex() == 1);
+    search->setText("sv_gravity");
+    CHECK(navigation->currentItem()->data(Qt::UserRole) == "play");
+    CHECK(tabs->currentIndex() == 1);
+    search->setText(QString::fromUtf8("跳跃成绩"));
+    CHECK(tabs->currentIndex() == 3);
+    search->setText(QString::fromUtf8("碰撞内核"));
+    CHECK(tabs->currentIndex() == 1);
+    translated.reset();
+    QCoreApplication::removeTranslator(&translator);
   }
 
   SECTION("opens and closes through AppController")
@@ -270,6 +370,23 @@ TEST_CASE("PreferenceDialog.preferencePanes")
     CHECK(swatch.isValid());
     CHECK(table->iconSize() == QSize{48, 12});
 
+    auto faceIndex = QModelIndex{};
+    for (int row = 0; row < table->model()->rowCount(); ++row)
+    {
+      const auto index = table->model()->index(row, 0);
+      if (index.data(Qt::ToolTipRole).toString() == "render/Colors/Faces")
+        faceIndex = index;
+      CHECK_FALSE(table->model()->index(row, 2).data().toString().contains("Colors/"));
+    }
+    REQUIRE(faceIndex.isValid());
+    const auto changedColor = QColor{31, 64, 128};
+    CHECK(table->model()->setData(faceIndex, changedColor, Qt::EditRole));
+    CHECK(
+      toQColor(PreferenceManager::instance().getPendingValue(Preferences::FaceColor))
+      == changedColor);
+    pane->resetToDefaults();
+    CHECK(faceIndex.data(Qt::DecorationRole).value<QColor>() != changedColor);
+
     pane.reset();
   }
 
@@ -333,9 +450,9 @@ TEST_CASE("PreferenceDialog.preferencePanes")
     pane.reset();
   }
 
-  SECTION("Misc")
+  SECTION("Extensions")
   {
-    auto pane = std::make_unique<MiscPreferencePane>(fixture.appController());
+    auto pane = std::make_unique<ExtensionsPreferencePane>(fixture.appController());
 
     auto* mcpSettings = pane->findChild<McpSettingsWidget*>("McpSettings_Group");
     auto* modeCombo = pane->findChild<QComboBox*>("McpSettings_Mode");
