@@ -79,6 +79,28 @@ TEST_CASE("CompilationPlan")
     CHECK(!plan.diagnostic);
     CHECK(plan.enabledTaskCount == 1);
   }
+  SECTION("diagnoses unsupported and incomplete built-in arguments before execution")
+  {
+    for (const auto* parameters :
+         {"-unknown",
+          "-ambient 0.1 0.2",
+          "-gamma -fast",
+          "-onlyents",
+          "--embed-source",
+          "-maxdistance 256"})
+    {
+      INFO(parameters);
+      std::get<mdl::CompilationHltools>(profile.tasks.front()).parameterSpec = parameters;
+      const auto plan = buildCompilationPlan(profile, map, input);
+      REQUIRE(plan.diagnostic);
+      CHECK(plan.diagnostic->taskIndex == 0);
+      CHECK(plan.diagnostic->field == CompilationField::Parameters);
+      CHECK_FALSE(std::filesystem::exists(input.parent_path() / "room.bsp"));
+    }
+    std::get<mdl::CompilationHltools>(profile.tasks.front()).parameterSpec =
+      "-ambient 0.1 0.2 0.3 -threads ${CPU_COUNT}";
+    CHECK_FALSE(buildCompilationPlan(profile, map, input).diagnostic);
+  }
   SECTION("rejects a profile with no enabled tasks")
   {
     std::get<mdl::CompilationHltools>(profile.tasks.front()).enabled = false;

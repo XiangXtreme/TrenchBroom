@@ -12,6 +12,7 @@ class QCheckBox;
 class QComboBox;
 class QLineEdit;
 class QLabel;
+class QPlainTextEdit;
 
 namespace tb::ui
 {
@@ -28,6 +29,11 @@ private:
     QCheckBox* checkbox;
     QComboBox* value;
     int presetCount;
+    int arity;
+    bool repeatable;
+    QLineEdit* path = nullptr;
+    QPlainTextEdit* list = nullptr;
+    std::vector<QLineEdit*> components = {};
   };
   QString m_parameters;
   QLineEdit* m_filter = nullptr;
@@ -45,6 +51,6 @@ signals:
 
 private:
   void filterEntries();
-  void changeOption(const Entry& entry, const QString& value);
+  void changeOption(const Entry& entry, const QStringList& values);
 };
 } // namespace tb::ui

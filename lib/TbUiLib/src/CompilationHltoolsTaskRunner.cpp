@@ -22,6 +22,7 @@
 #include "mdl/WorldNode.h"
 #include "ui/BuiltinGoldSrcAssets.h"
 #include "ui/CompilationVariables.h"
+#include "ui/HltoolsCompilerOptions.h"
 #include "ui/ProjectSession.h"
 #include "ui/QPathUtils.h"
 
@@ -182,13 +183,19 @@ Result<QStringList> CompilationHltoolsTaskRunner::prepare()
   auto arguments = QStringList{};
   for (const auto& argument : kdl::cmd_parse_args(parameters.value()))
     arguments.append(QString::fromStdString(argument));
-  // Input, output and scratch lifetime belong to this task, not command-line overrides.
-  for (const auto& argument : arguments)
+  if (const auto error = validateHltoolsArguments(arguments); !error.isEmpty())
+    return Error{error.toStdString()};
+  for (qsizetype i = 0; i < arguments.size(); ++i)
+  {
+    const auto flag = canonicalHltoolsFlag(arguments[i]);
+    if (flag == "-incremental")
+      m_incremental = true;
     if (
-      argument == "--project" || argument == "--map" || argument == "--output"
-      || argument == "-embedsource" || argument == "--embed-source")
-      return Error{
-        "Input/output and source embedding cannot be overridden in hltools parameters."};
+      flag == "-dumpintermediates" || flag == "-dump" || flag == "-dumpgather"
+      || flag.startsWith("-draw"))
+      m_preserveArtifacts = true;
+    i += findHltoolsCompilerOption(flag)->arity;
+  }
 
   m_context << "#### Built-in hltools: " << pathAsQString(m_target) << "\n";
   if (m_context.test())
@@ -216,6 +223,16 @@ Result<QStringList> CompilationHltoolsTaskRunner::prepare()
   if (!QDir{}.mkpath(pathAsQString(maps)))
     return Error{"Cannot create the compiler MAP directory."};
   m_inputPath = maps / (inputName.string() + ".map");
+  if (m_incremental)
+  {
+    auto cache = m_target;
+    cache.replace_extension(".inc");
+    auto staged = m_inputPath;
+    staged.replace_extension(".inc");
+    if (QFile::exists(pathAsQString(cache)))
+      if (const auto copied = copyArtifact(cache, staged); copied.is_error())
+        return std::get<Error>(copied.error());
+  }
   if (const auto exported =
         m_context.map().exportAs(mdl::MapExportOptions{m_inputPath, true, {}, {}});
       exported.is_error())
@@ -389,12 +406,47 @@ Result<void> CompilationHltoolsTaskRunner::writeLog() const
   return {};
 }
 
+Result<void> CompilationHltoolsTaskRunner::publishAuxiliaryArtifacts(
+  const bool succeeded) const
+{
+  const auto prefix = pathAsQString(m_inputPath.stem());
+  const auto targetPrefix = pathAsQString(m_target.stem());
+  const auto directory = QDir{pathAsQString(m_inputPath.parent_path())};
+  for (const auto& file : directory.entryInfoList(QDir::Files))
+  {
+    const auto name = file.fileName();
+    if (!name.startsWith(prefix + '.') && !name.startsWith(prefix + '_'))
+      continue;
+    const auto suffix = name.mid(prefix.size());
+    const auto cache = suffix == ".inc";
+    if (cache ? !m_incremental || !succeeded : !m_preserveArtifacts)
+      continue;
+    // Staged source/texlight inputs stay private; publish generated companions.
+    if (suffix == ".map" || suffix == ".bsp" || suffix == ".rad" || suffix == ".log")
+      continue;
+    const auto target = m_target.parent_path() / pathFromQString(targetPrefix + suffix);
+    if (const auto copied =
+          copyArtifact(pathFromQString(file.absoluteFilePath()), target);
+        copied.is_error())
+      return std::get<Error>(copied.error());
+    m_context << "#### Wrote " << pathAsQString(target) << "\n";
+  }
+  return {};
+}
+
 void CompilationHltoolsTaskRunner::finish(
   const int exitCode, const QProcess::ExitStatus status)
 {
   if (m_finished)
     return;
   readOutput();
+  const auto artifacts =
+    publishAuxiliaryArtifacts(status == QProcess::NormalExit && exitCode == 0);
+  if (artifacts.is_error())
+  {
+    fail(std::get<Error>(artifacts.error()).msg);
+    return;
+  }
   const auto logged = writeLog();
   if (logged.is_error())
   {

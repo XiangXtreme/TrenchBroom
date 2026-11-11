@@ -131,6 +131,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("map-settings"),
     QStringLiteral("compilation-hltools"),
     QStringLiteral("compilation-options"),
+    QStringLiteral("compilation-options-lighting"),
+    QStringLiteral("compilation-options-files"),
     QStringLiteral("compilation-collapsed"),
     QStringLiteral("compilation-error"),
     QStringLiteral("compilation-simulated"),
@@ -1089,6 +1091,23 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
           UiSnapshotReadinessState::Failed,
           "Compiler option list must be expanded and reflect the parameter expression"};
     }
+    if (
+      targetName == "compilation-options-lighting"
+      || targetName == "compilation-options-files")
+    {
+      const auto* options =
+        targetWidget.findChild<CollapsibleTitledPanel*>("HltoolsOptionsPanel");
+      const auto* modified = targetWidget.findChild<QCheckBox*>("HltoolsModifiedOnly");
+      const auto* input = targetWidget.findChild<QWidget*>(
+        targetName == "compilation-options-lighting" ? "HltoolsOption_ambientValue0"
+                                                     : "HltoolsOption_waddirValues");
+      if (
+        !options || !options->expanded() || !modified || !modified->isChecked() || !input
+        || !input->isVisible() || !input->isEnabled())
+        return {
+          UiSnapshotReadinessState::Failed,
+          "Advanced compiler controls must reflect the parameter expression"};
+    }
     return {
       ready ? UiSnapshotReadinessState::Ready : UiSnapshotReadinessState::Failed,
       "Built-in compiler output, quality and GPU controls must be visible"};
@@ -1847,10 +1866,24 @@ int runUiSnapshot(
             compilationDialog->findChild<QPushButton*>("CompilationSimulate")->click();
           targetWidget = compilationDialog.get();
           targetWidget->resize(1080, 720);
-          if (options.page == "compilation-options")
+          if (options.page.startsWith("compilation-options"))
           {
             compilationDialog->findChild<QLineEdit*>("HltoolsParameters")
               ->setText("-noskyclip -allleaks -bounce 4");
+            if (options.page == "compilation-options-lighting")
+              compilationDialog->findChild<QLineEdit*>("HltoolsParameters")
+                ->setText(
+                  "-ambient 0.05 0.08 0.12 -colourgamma 0.55 0.6 0.65 -colourscale 2 2 2 "
+                  "-drawsample 0 0 64 128");
+            else if (options.page == "compilation-options-files")
+              compilationDialog->findChild<QLineEdit*>("HltoolsParameters")
+                ->setText(
+                  "-wadinclude halflife.wad -wadinclude decals.wad -wadcfgfile "
+                  "\"D:/Half-Life/wads.cfg\" -waddir \"D:/Half-Life/valve\" -waddir "
+                  "\"D:/Half-Life/custom textures\"");
+            if (options.page != "compilation-options")
+              compilationDialog->findChild<QCheckBox*>("HltoolsModifiedOnly")
+                ->setChecked(true);
             compilationDialog->findChild<CollapsibleTitledPanel*>("HltoolsOptionsPanel")
               ->expand();
             targetWidget->resize(1080, 860);

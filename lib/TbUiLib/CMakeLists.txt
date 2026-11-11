@@ -1,5 +1,26 @@
 add_library(TbUiLib STATIC)
 
+# Consume the pinned compiler's registry, rather than maintaining a second list
+# of flags, stages, argument counts and repeatability in the editor.
+set(hltools_registry "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/src/common/cmdline.cpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${hltools_registry}")
+file(READ "${hltools_registry}" hltools_cmdline)
+string(REGEX MATCH "const option_spec options\\[\\] = \\{[^;]+" hltools_registry_body "${hltools_cmdline}")
+string(REGEX MATCHALL "\\{\"-[a-z0-9-]+\",[^}]+\\}" hltools_options "${hltools_registry_body}")
+string(REGEX MATCHALL "\\{" hltools_registry_braces "${hltools_registry_body}")
+list(LENGTH hltools_options hltools_option_count)
+list(LENGTH hltools_registry_braces hltools_brace_count)
+math(EXPR hltools_expected_count "${hltools_brace_count} - 1")
+if(NOT hltools_options OR NOT hltools_option_count EQUAL hltools_expected_count)
+  message(FATAL_ERROR "Cannot read the pinned hltools compiler option registry")
+endif()
+list(JOIN hltools_options ",\n" hltools_options)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/HltoolsOptionRegistry.inc"
+  CONTENT "@hltools_options@\n" @ONLY)
+set_source_files_properties(src/HltoolsCompilerOptions.cpp PROPERTIES
+  INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
 target_sources(TbUiLib
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/themes.qrc
@@ -61,6 +82,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationHltoolsTaskRunner.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HltoolsOptionsEditor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HltoolsCompilerOptions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationDialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationProfileEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompilationProfileListBox.cpp
@@ -371,6 +393,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationRunner.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationTaskListBox.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/HltoolsOptionsEditor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/HltoolsCompilerOptions.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CompilationVariables.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CommandPaletteDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/CreateTerrainMaterialDialog.h

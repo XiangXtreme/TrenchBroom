@@ -12,7 +12,10 @@
 #include "mdl/GameInfo.h"
 #include "mdl/Map.h"
 #include "ui/CompilationVariables.h"
+#include "ui/HltoolsCompilerOptions.h"
 #include "ui/QPathUtils.h"
+
+#include "kd/cmd_utils.h"
 
 #include <algorithm>
 #include <array>
@@ -169,7 +172,23 @@ CompilationPlan buildCompilationPlan(
             return;
         }
         if constexpr (requires { t.parameterSpec; })
-          field(t.parameterSpec, CompilationField::Parameters, tr("Parameters"), false);
+        {
+          const auto parameters =
+            field(t.parameterSpec, CompilationField::Parameters, tr("Parameters"), false);
+          if constexpr (std::is_same_v<T, mdl::CompilationHltools>)
+          {
+            if (parameters)
+            {
+              auto arguments = QStringList{};
+              for (const auto& argument : kdl::cmd_parse_args(*parameters))
+                arguments.push_back(QString::fromStdString(argument));
+              if (const auto error = validateHltoolsArguments(arguments);
+                  !error.isEmpty())
+                plan.diagnostic =
+                  CompilationDiagnostic{i, CompilationField::Parameters, error};
+            }
+          }
+        }
         if constexpr (std::is_same_v<T, mdl::CompilationHltools>)
         {
           if (!plan.diagnostic)

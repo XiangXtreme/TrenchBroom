@@ -7,16 +7,22 @@
 #include <QBoxLayout>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFileDialog>
+#include <QFontMetrics>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include "ui/FixedWidthFont.h"
+#include "ui/HltoolsCompilerOptions.h"
 #include "ui/PanelLayout.h"
 #include "ui/QStyleUtils.h"
 
 #include <algorithm>
+#include <map>
 #include <utility>
 
 namespace tb::ui
@@ -32,7 +38,7 @@ struct Token
 
 bool matchesFlag(const QString& token, const QString& flag)
 {
-  return token == flag || (flag == "-nopaque" && token == "-noopaque");
+  return canonicalHltoolsFlag(token) == flag;
 }
 
 // Preserve every untouched byte, including quoted paths and EL expressions with
@@ -83,13 +89,28 @@ std::vector<Token> tokens(const QString& text)
   return result;
 }
 
-QString optionValue(const std::vector<Token>& arguments, const QString& flag)
+// Skip registered value tokens: a path named "-noskyclip" is not a sky option.
+std::vector<size_t> occurrences(const std::vector<Token>& arguments, const QString& flag)
 {
-  auto result = QString{};
+  auto result = std::vector<size_t>{};
   for (size_t i = 0; i < arguments.size(); ++i)
+  {
     if (matchesFlag(arguments[i].text, flag))
-      result = i + 1 < arguments.size() ? arguments[i + 1].text : QString{};
+      result.push_back(i);
+    if (const auto* option = findHltoolsCompilerOption(arguments[i].text))
+      i += std::min(size_t(option->arity), arguments.size() - i - 1);
+  }
   return result;
+}
+
+QString quotedValue(QString value)
+{
+  // Keep expressions editable and quote paths as one command argument.
+  if (value.startsWith('"') && value.endsWith('"'))
+    return value;
+  if (value.contains(' ') || value.contains('\t'))
+    return '"' + value + '"';
+  return value;
 }
 } // namespace
 
@@ -103,6 +124,7 @@ HltoolsOptionsEditor::HltoolsOptionsEditor(QWidget* parent)
   m_stage->addItem(tr("All stages"), "");
   for (const auto* stage : {"CSG", "BSP", "VIS", "RAD"})
     m_stage->addItem(stage, stage);
+  m_stage->addItem(tr("Compile"), "Compile");
   m_filter = new QLineEdit{};
   m_filter->setObjectName("HltoolsOptionFilter");
   m_filter->setPlaceholderText(tr("Filter options or flags"));
@@ -117,249 +139,588 @@ HltoolsOptionsEditor::HltoolsOptionsEditor(QWidget* parent)
   auto* rows = createPanelColumn(content, PanelInsets::None);
   rows->setSpacing(4);
 
+  struct Presentation
+  {
+    QString label;
+    QString help;
+    QStringList presets;
+  };
+  auto descriptions = std::map<QString, Presentation>{};
   auto add = [&](
-               const char* stage,
                const char* flag,
                const QString& label,
                const QString& help,
-               const QStringList& values = QStringList{}) {
-    auto* row = new QWidget{};
-    row->setToolTip(help);
-    auto* rowLayout = createPanelActions(row);
-    rowLayout->setContentsMargins(4, 0, 4, 0);
-    auto* checkbox = new QCheckBox{label};
-    checkbox->setObjectName("HltoolsOption_" + QString::fromLatin1(flag + 1));
-    rowLayout->addWidget(checkbox);
-    QComboBox* value = nullptr;
-    if (!values.empty())
-    {
-      value = new QComboBox{};
-      value->setObjectName(checkbox->objectName() + "Value");
-      value->addItems(values);
-      value->setEditable(QString::fromLatin1(flag) != "-cliptype");
-      value->setInsertPolicy(QComboBox::NoInsert);
-      value->setMinimumContentsLength(10);
-      rowLayout->addWidget(value);
-    }
-    rowLayout->addStretch();
-    auto* flagLabel = new QLabel{flag};
-    flagLabel->setFont(Fonts::fixedWidthFont());
-    setInfoStyle(flagLabel);
-    rowLayout->addWidget(flagLabel);
-    auto* stageLabel =
-      new QLabel{QString{stage}.isEmpty() ? tr("Shared") : QString{stage}};
-    setInfoStyle(stageLabel);
-    rowLayout->addWidget(stageLabel);
-    rows->addWidget(row);
-    const auto entry =
-      Entry{flag, stage, row, checkbox, value, value ? value->count() : 0};
-    m_entries.push_back(entry);
-    connect(checkbox, &QCheckBox::clicked, this, [this, entry](bool checked) {
-      changeOption(
-        entry,
-        checked ? (entry.value ? entry.value->currentText() : entry.flag) : QString{});
-    });
-    if (value)
-    {
-      const auto changed = [this, entry] {
-        if (entry.checkbox->isChecked())
-          changeOption(entry, entry.value->currentText());
-      };
-      connect(value, &QComboBox::activated, this, changed);
-      if (value->isEditable())
-        connect(value->lineEdit(), &QLineEdit::editingFinished, this, changed);
-    }
+               const QStringList& presets = QStringList{}) {
+    descriptions.emplace(QString::fromLatin1(flag), Presentation{label, help, presets});
   };
 
   // Verified against the pinned hltools common/cmdline.cpp and stage parsers.
   add(
-    "CSG",
     "-cliptype",
     tr("Collision hull type"),
     tr("Override the default simple collision hull construction."),
     {"simple", "precise", "normalized", "smallest", "legacy", "legacytrim"});
   add(
-    "CSG",
     "-noskyclip",
     tr("Disable sky clipping"),
     tr("Do not generate collision clipping for sky brushes."));
   add(
-    "CSG / BSP",
     "-noclip",
     tr("Disable collision hulls"),
     tr("Do not build player collision hulls. Also affects BSP."));
   add(
-    "CSG",
     "-clipmerge",
     tr("Merge legacy collision hulls"),
     tr("Merge clipping generated by the legacy hull algorithm."));
   add(
-    "CSG",
     "-wadtextures",
     tr("Keep textures in external WADs"),
     tr("Store texture references instead of embedding every used texture. The game needs "
        "the WAD files."));
   add(
-    "CSG",
     "-nowadautodetect",
     tr("Disable WAD auto detection"),
     tr("Keep the supplied WAD list. Only useful with external WAD textures."));
   add(
-    "CSG",
     "-nolightopt",
     tr("Keep redundant light entities"),
     tr("Disable the light entity optimization pass."));
   add(
-    "CSG",
     "-nullifytrigger",
     tr("Strip trigger textures"),
     tr("Replace trigger textures with NULL."));
   add(
-    "BSP",
     "-nofill",
     tr("Disable outside filling"),
     tr("Keep outside space. Intended for debugging map leaks."));
+  add("-noinsidefill", tr("Disable inside filling"), tr("Keep enclosed unused space."));
   add(
-    "BSP",
-    "-noinsidefill",
-    tr("Disable inside filling"),
-    tr("Keep enclosed unused space."));
-  add(
-    "BSP",
     "-notjunc",
     tr("Disable T-junction repair"),
     tr("Skip T-junction fixes; cracks may remain between faces."));
-  add("BSP", "-nobrink", tr("Disable brink repair"), tr("Skip collision edge repairs."));
+  add("-nobrink", tr("Disable brink repair"), tr("Skip collision edge repairs."));
   add(
-    "BSP",
-    "-noopt",
-    tr("Disable BSP optimization"),
-    tr("Skip the BSP tree optimization pass."));
+    "-noopt", tr("Disable BSP optimization"), tr("Skip the BSP tree optimization pass."));
+  add("-noclipnodemerge", tr("Disable clipnode merging"), tr("Keep clipnodes separate."));
   add(
-    "BSP",
-    "-noclipnodemerge",
-    tr("Disable clipnode merging"),
-    tr("Keep clipnodes separate."));
-  add(
-    "BSP",
     "-deepclip",
     tr("Use deep collision clipping"),
     tr("Enable deep clipping in BSP construction."));
   add(
-    "BSP",
     "-allleaks",
     tr("Find all leaks"),
     tr("Survey every leak and put their paths in the pointfile."));
   add(
-    "BSP",
     "-nonulltex",
     tr("Keep NULL textures"),
     tr("Do not remove NULL textures during BSP generation."));
   add(
-    "BSP",
     "-nohull2",
     tr("Skip large collision hull"),
     tr("Do not build hull 2 for large monsters."));
   add(
-    "VIS",
     "-nofull",
     tr("Disable full visibility"),
     tr("Use normal visibility instead of the default full pass. Fast quality still takes "
        "precedence."));
+  add("-nofixprt", tr("Disable portal repair"), tr("Skip automatic portal corrections."));
   add(
-    "VIS",
-    "-nofixprt",
-    tr("Disable portal repair"),
-    tr("Skip automatic portal corrections."));
-  add(
-    "RAD",
     "-bounce",
     tr("Light bounces"),
     tr("Override bounce count. The compiler defaults to 8, or 12 with Extra quality. "
        "Variables are allowed."),
     {"8", "0", "2", "4", "12", "16"});
   add(
-    "RAD",
     "-nolerp",
     tr("Disable light interpolation"),
     tr("Do not interpolate lighting between patches."));
   add(
-    "RAD",
     "-notexscale",
     tr("Ignore texture scale for patches"),
     tr("Do not scale lighting patches with texture scale."));
   add(
-    "RAD",
     "-nosubdivide",
     tr("Disable patch subdivision"),
     tr("Keep lighting patches unsplit."));
   add(
-    "RAD",
     "-noskyfix",
     tr("Disable sky lighting fix"),
     tr("Use the legacy sky lighting behavior."));
+  add("-nospread", tr("Disable light spreading"), tr("Disable texture light spreading."));
   add(
-    "RAD",
-    "-nospread",
-    tr("Disable light spreading"),
-    tr("Disable texture light spreading."));
-  add(
-    "RAD",
     "-nopaque",
     tr("Disable opaque brush shadows"),
     tr("Ignore opaque brush blockers during lighting."));
   add(
-    "RAD",
     "-nostudioshadow",
     tr("Disable model shadows"),
     tr("Skip shadows from studio models."));
   add(
-    "RAD",
     "-rgbtransfers",
     tr("Use RGB light transfers"),
     tr("Keep color in bounced light transfers."));
   add(
-    "RAD",
     "-customshadowwithbounce",
     tr("Apply custom shadows to bounced light"),
     tr("Include custom shadow behavior in indirect lighting."));
   add(
-    "RAD",
     "-notextures",
     tr("Ignore texture reflectivity"),
     tr("Do not use texture pixels when estimating bounced light reflectivity."));
   add(
-    "RAD",
     "-nobleedfix",
     tr("Disable light bleed repair"),
     tr("Disable the lighting bleed correction pass."));
   add(
-    "RAD",
     "-circus",
     tr("Color lighting patches for debugging"),
     tr("Use diagnostic patch colors instead of normal lighting."));
   add(
-    "RAD",
     "-drawoverload",
     tr("Highlight lighting overloads"),
     tr("Mark overloaded lighting samples for debugging."));
   add(
-    "RAD",
     "-pre25",
     tr("Use pre-anniversary brightness limit"),
     tr("Clamp lighting to the fullbright threshold from before the Half-Life 25th "
        "anniversary update."));
   add(
-    "",
     "-threads",
     tr("Worker threads"),
     tr("Override automatic worker count. Variables such as ${CPU_COUNT} are allowed."),
     {"4", "1", "2", "8", "16", "${CPU_COUNT}"});
   add(
-    "",
     "-nochart",
     tr("Hide BSP usage chart"),
     tr("Skip the final BSP resource usage chart."));
+
+  add(
+    "-wadinclude",
+    tr("WADs to embed"),
+    tr("One WAD name per line. Repeatable; requires external WAD textures."));
+  add(
+    "-wadcfgfile",
+    tr("WAD configuration file"),
+    tr("Read WAD search paths from this file."));
+  add(
+    "-wadconfig",
+    tr("Named WAD configuration"),
+    tr("Select a configuration from the WAD configuration file."),
+    {"default"});
+  add(
+    "-hullfile",
+    tr("Collision hull sizes file"),
+    tr("Read custom player and monster hull dimensions from a file."));
+  add(
+    "-nullfile",
+    tr("Texture nullification file"),
+    tr("Read textures and entities to replace with NULL from a file."));
+  add(
+    "-worldextent",
+    tr("World extent"),
+    tr("World bounds per axis. Default: 65536."),
+    {"65536"});
+  add(
+    "-brushunion",
+    tr("Brush overlap warning ratio"),
+    tr("Warn above this overlap ratio; 0.1 means 10%. Default: 0."),
+    {"0", "0.1"});
+  add(
+    "-scale",
+    tr("Map and light intensity scale"),
+    tr("In a unified compile this affects BOTH map geometry (default: 1) and light "
+       "intensity (default: 2). Use colourscale to change only lighting."),
+    {"1", "2"});
+  add("-onlyents", tr("Update entities only"), QString{});
+  add(
+    "-maxnodesize",
+    tr("Maximum BSP node size"),
+    tr("Largest node size before an axial split. Default: 1024."),
+    {"1024"});
+  add(
+    "-subdivide",
+    tr("Face subdivision size"),
+    tr("Face subdivision size. Default: 240."),
+    {"240"});
+  add(
+    "-leakonly",
+    tr("Stop after leak detection"),
+    tr("Stop the outside-fill pass when a leak is detected."));
+  add("-maxdistance", tr("Maximum visibility distance"), QString{}, {"0"});
+  add(
+    "-chop",
+    tr("Bounce patch size"),
+    tr("Patch size for ordinary surfaces. Default: 64."),
+    {"64", "32", "128"});
+  add(
+    "-texchop",
+    tr("Emitting patch size"),
+    tr("Patch size for texture lights. Default: 32."),
+    {"32", "16", "64"});
+  add(
+    "-vismatrix",
+    tr("Visibility matrix"),
+    tr("Patch visibility storage. Default: sparse."),
+    {"sparse", "normal", "off"});
+  add(
+    "-compress",
+    tr("Light transfer compression"),
+    tr("0: float32; 1: float16; 2: float8. Default: 1."),
+    {"1", "0", "2"});
+  add(
+    "-rgbcompress",
+    tr("RGB transfer compression"),
+    tr("0: 96-bit; 1: 48-bit; 2: 32-bit; 3: 24-bit. Default: 2."),
+    {"2", "0", "1", "3"});
+  add(
+    "-incremental",
+    tr("Reuse light transfer cache"),
+    tr("Keep the .inc transfer cache beside the BSP and reuse it on the next compile."));
+  add(
+    "-gamma",
+    tr("Lightmap gamma"),
+    tr("Gamma for all lighting channels. Default: 0.55."),
+    {"0.55", "1"});
+  add(
+    "-colourscale",
+    tr("Light intensity by channel"),
+    tr("Red, green and blue intensity scales. Default: 2 2 2."),
+    {"2", "2", "2"});
+  add(
+    "-colourgamma",
+    tr("Gamma by channel"),
+    tr("Red, green and blue gamma. Default: 0.55 0.55 0.55."),
+    {"0.55", "0.55", "0.55"});
+  add(
+    "-ambient",
+    tr("Ambient light"),
+    tr("Minimum red, green and blue lighting, each from 0 to 1. Default: 0 0 0."),
+    {"0", "0", "0"});
+  add(
+    "-minlight",
+    tr("Minimum light"),
+    tr("Minimum luxel brightness, from 0 to 255. Default: 0."),
+    {"0"});
+  add(
+    "-limiter",
+    tr("Brightness limit"),
+    tr("Maximum brightness. Default: 255; pre25 overrides this with 188."),
+    {"255", "188"});
+  add(
+    "-sky",
+    tr("Diffuse sky scale"),
+    tr("Diffuse skylight multiplier. Default: 1."),
+    {"1"});
+  add(
+    "-dlight",
+    tr("Direct light threshold"),
+    tr("Direct light threshold. Default: 10."),
+    {"10"});
+  add(
+    "-dscale",
+    tr("Direct light scale"),
+    tr("Direct light intensity multiplier. Default: 1."),
+    {"1"});
+  add(
+    "-fade",
+    tr("Global light fade"),
+    tr("Global distance falloff multiplier. Default: 1."),
+    {"1"});
+  add(
+    "-coring",
+    tr("Light cutoff"),
+    tr("Discard light below this threshold. Default: 0.01."),
+    {"0.01"});
+  add(
+    "-smooth",
+    tr("Surface smoothing angle"),
+    tr("Phong smoothing angle in degrees. Default: 50."),
+    {"50"});
+  add(
+    "-smooth2",
+    tr("Texture seam smoothing angle"),
+    tr("Smoothing across texture seams, in degrees. Default: 0."),
+    {"0"});
+  add("-blur", tr("Lightmap blur"), tr("Lightmap blur radius. Default: 1.5."), {"1.5"});
+  add(
+    "-softsky",
+    tr("Soft skylight"),
+    tr("0: disabled; 1: enabled. Default: 1."),
+    {"1", "0"});
+  add(
+    "-texlightgap",
+    tr("Texture light gap"),
+    tr("Reject texture light samples across this gap. Default: 0."),
+    {"0"});
+  add(
+    "-noemitterrange",
+    tr("Disable emitter range"),
+    tr("Disable the texture light emitter range test."));
+  add(
+    "-texreflectgamma",
+    tr("Texture reflectivity gamma"),
+    tr("Texture reflectivity gamma. Default: 1.76."),
+    {"1.76"});
+  add(
+    "-texreflectscale",
+    tr("Texture reflectivity scale"),
+    tr("Texture reflectivity multiplier. Default: 0.7."),
+    {"0.7"});
+  add(
+    "-depth",
+    tr("Translucent light depth"),
+    tr("Translucent surface light depth. Default: 2."),
+    {"2"});
+  add(
+    "-blockopaque",
+    tr("Opaque entities block light"),
+    tr("0: disabled; 1: enabled. Default: 1."),
+    {"1", "0"});
+  add(
+    "-lights",
+    tr("Additional texture lights file"),
+    tr("Load an additional .rad texture-light definition file."));
+  add(
+    "-waddir",
+    tr("WAD search directories"),
+    tr("One directory per line. Each becomes a separate WAD search argument."));
+  add(
+    "-lightdata",
+    tr("Lighting memory budget (KB)"),
+    tr("Maximum lightmap data in KB. Default: 49152."),
+    {"49152"});
+  add(
+    "-texdata",
+    tr("Texture memory budget (KB)"),
+    tr("Maximum texture data in KB. Default: 32768."),
+    {"32768"});
+  add(
+    "-dump",
+    tr("Write patch debug files"),
+    tr("Write bounce patch debug files in the compilation working directory."));
+  add(
+    "-dumpgather",
+    tr("Write light gather data"),
+    tr("Save per-face light gather data beside the BSP as .gather."));
+  add(
+    "-drawsample",
+    tr("Sample debug sphere"),
+    tr("X, Y, Z and radius of the sample debug sphere."),
+    {"0", "0", "0", "64"});
+  add(
+    "-drawpatch",
+    tr("Draw patch points"),
+    tr("Write patch points for lighting diagnostics."));
+  add(
+    "-drawedge",
+    tr("Draw patch edges"),
+    tr("Write patch edges for lighting diagnostics."));
+  add(
+    "-drawlerp",
+    tr("Draw light interpolation"),
+    tr("Write light interpolation diagnostics."));
+  add(
+    "-drawnudge",
+    tr("Draw sample nudges"),
+    tr("Write nudged lighting sample diagnostics."));
+  add(
+    "-jitter",
+    tr("Light noise"),
+    tr("Red, green and blue lighting noise. Default: 0 0 0."),
+    {"0", "0", "0"});
+  add(
+    "-colourjitter",
+    tr("Colour noise"),
+    tr("Red, green and blue colour noise. Default: 0 0 0."),
+    {"0", "0", "0"});
+  add(
+    "-dumpintermediates",
+    tr("Keep intermediate files"),
+    tr("Save CSG and BSP intermediate files beside the output BSP."));
+  add("-embedsource", tr("Embed map source"), QString{});
+  add("-noembedsource", tr("Disable source embedding"), QString{});
+
+  const auto flagFont = Fonts::fixedWidthFont();
+  const auto flagMetrics = QFontMetrics{flagFont};
+  auto vectorFlagWidth = 0;
+  for (const auto& option : hltoolsCompilerOptions())
+    if (option.visible && option.arity > 1)
+      vectorFlagWidth =
+        std::max(vectorFlagWidth, flagMetrics.horizontalAdvance(option.flag));
+
+  for (const auto& option : hltoolsCompilerOptions())
+  {
+    if (!option.visible)
+      continue;
+    const auto found = descriptions.find(option.flag);
+    const auto presentation = found == descriptions.end()
+                                ? Presentation{option.flag, QString{}, {}}
+                                : found->second;
+    auto* row = new QWidget{};
+    row->setToolTip(
+      presentation.help
+      + (option.unavailableReason.isEmpty() ? QString{} : "\n" + option.unavailableReason));
+    auto* rowLayout = createPanelActions(row);
+    rowLayout->setContentsMargins(4, 0, 4, 0);
+    auto* checkbox = new QCheckBox{presentation.label};
+    checkbox->setObjectName("HltoolsOption_" + option.flag.mid(1));
+    rowLayout->addWidget(checkbox);
+    auto entry = Entry{
+      option.flag,
+      option.stage,
+      row,
+      checkbox,
+      nullptr,
+      0,
+      option.arity,
+      option.repeatable};
+    const auto path = option.flag == "-wadcfgfile" || option.flag == "-hullfile"
+                      || option.flag == "-nullfile" || option.flag == "-lights";
+    if (option.repeatable)
+    {
+      entry.list = new QPlainTextEdit{};
+      entry.list->setObjectName(checkbox->objectName() + "Values");
+      entry.list->setPlaceholderText(tr("One value per line"));
+      entry.list->setFixedHeight(60);
+      entry.list->setTabChangesFocus(true);
+      rowLayout->addWidget(entry.list, 1);
+    }
+    else if (option.arity > 1)
+    {
+      const auto components =
+        option.arity == 4 ? QStringList{"X", "Y", "Z", "r"} : QStringList{"R", "G", "B"};
+      for (int i = 0; i < option.arity; ++i)
+      {
+        auto* componentLabel = new QLabel{components[i]};
+        setInfoStyle(componentLabel);
+        rowLayout->addWidget(componentLabel);
+        auto* component = new QLineEdit{presentation.presets.value(i, "0")};
+        component->setObjectName(checkbox->objectName() + "Value" + QString::number(i));
+        component->setAccessibleName(presentation.label + " " + components[i]);
+        componentLabel->setBuddy(component);
+        component->setMinimumWidth(40);
+        entry.components.push_back(component);
+        rowLayout->addWidget(component, 1);
+      }
+    }
+    else if (path)
+    {
+      entry.path = new QLineEdit{};
+      entry.path->setObjectName(checkbox->objectName() + "Value");
+      rowLayout->addWidget(entry.path, 1);
+    }
+    else if (option.arity == 1)
+    {
+      entry.value = new QComboBox{};
+      entry.value->setObjectName(checkbox->objectName() + "Value");
+      entry.value->addItems(presentation.presets);
+      entry.presetCount = entry.value->count();
+      entry.value->setEditable(option.flag != "-cliptype" && option.flag != "-vismatrix");
+      entry.value->setInsertPolicy(QComboBox::NoInsert);
+      entry.value->setMinimumContentsLength(8);
+      rowLayout->addWidget(entry.value);
+    }
+    if (path || option.flag == "-waddir")
+    {
+      auto* browse = new QPushButton{tr("Browse…")};
+      rowLayout->addWidget(browse);
+      connect(browse, &QPushButton::clicked, this, [this, entry] {
+        const auto selected =
+          entry.repeatable
+            ? QFileDialog::getExistingDirectory(this, tr("WAD search directory"))
+            : QFileDialog::getOpenFileName(this, tr("Compiler input file"));
+        if (selected.isEmpty())
+          return;
+        if (entry.list)
+        {
+          const auto text = entry.list->toPlainText();
+          entry.list->setPlainText(text + (text.isEmpty() ? QString{} : "\n") + selected);
+        }
+        else
+        {
+          entry.path->setText(selected);
+          changeOption(entry, {quotedValue(selected)});
+        }
+      });
+      connect(checkbox, &QCheckBox::toggled, browse, &QWidget::setEnabled);
+      browse->setEnabled(false);
+    }
+    rowLayout->addStretch();
+    auto* flagLabel = new QLabel{option.flag};
+    flagLabel->setFont(flagFont);
+    if (option.arity > 1)
+      flagLabel->setFixedWidth(vectorFlagWidth);
+    setInfoStyle(flagLabel);
+    rowLayout->addWidget(flagLabel);
+    auto* stageLabel = new QLabel{
+      option.stage.isEmpty()      ? tr("Shared")
+      : option.stage == "Compile" ? tr("Compile")
+                                  : option.stage};
+    setInfoStyle(stageLabel);
+    rowLayout->addWidget(stageLabel);
+    if (!option.unavailableReason.isEmpty())
+    {
+      checkbox->setEnabled(false);
+      auto* unavailable = new QLabel{tr("Unavailable")};
+      setInfoStyle(unavailable);
+      rowLayout->addWidget(unavailable);
+    }
+    rows->addWidget(row);
+    m_entries.push_back(entry);
+    const auto values = [entry] {
+      auto result = QStringList{};
+      if (entry.value)
+        result.push_back(entry.value->currentText());
+      else if (entry.path)
+        result.push_back(quotedValue(entry.path->text()));
+      else if (entry.list)
+      {
+        for (const auto& line : entry.list->toPlainText().split('\n', Qt::SkipEmptyParts))
+          if (!line.trimmed().isEmpty())
+            result.push_back(quotedValue(line.trimmed()));
+      }
+      else
+        for (auto* component : entry.components)
+          result.push_back(component->text());
+      return result;
+    };
+    connect(checkbox, &QCheckBox::clicked, this, [this, entry, values](bool checked) {
+      changeOption(entry, checked ? values() : QStringList{});
+    });
+    const auto changed = [this, entry, values] {
+      if (entry.checkbox->isChecked())
+        changeOption(entry, values());
+    };
+    if (entry.value)
+    {
+      connect(entry.value, &QComboBox::activated, this, changed);
+      if (entry.value->isEditable())
+        connect(entry.value->lineEdit(), &QLineEdit::editingFinished, this, changed);
+    }
+    if (entry.path)
+      connect(entry.path, &QLineEdit::editingFinished, this, changed);
+    if (entry.list)
+      connect(entry.list, &QPlainTextEdit::textChanged, this, changed);
+    for (auto* component : entry.components)
+      connect(component, &QLineEdit::editingFinished, this, changed);
+  }
+
+  auto vectorLabelWidth = 0;
+  auto fileLabelWidth = 0;
+  for (const auto& entry : m_entries)
+  {
+    if (!entry.components.empty())
+      vectorLabelWidth = std::max(vectorLabelWidth, entry.checkbox->sizeHint().width());
+    if (entry.path || entry.list)
+      fileLabelWidth = std::max(fileLabelWidth, entry.checkbox->sizeHint().width());
+  }
+  for (const auto& entry : m_entries)
+  {
+    if (!entry.components.empty())
+      entry.checkbox->setFixedWidth(vectorLabelWidth);
+    if (entry.path || entry.list)
+      entry.checkbox->setFixedWidth(fileLabelWidth);
+  }
 
   m_empty = new QLabel{tr("No matching options")};
   setInfoStyle(m_empty);
@@ -383,27 +744,64 @@ void HltoolsOptionsEditor::setParameters(const QString& parameters)
   const auto arguments = tokens(parameters);
   for (const auto& entry : m_entries)
   {
-    const auto found = std::ranges::any_of(
-      arguments, [&](const auto& token) { return matchesFlag(token.text, entry.flag); });
+    const auto positions = occurrences(arguments, entry.flag);
+    const auto found = !positions.empty();
     const auto blocker = QSignalBlocker{entry.checkbox};
     entry.checkbox->setChecked(found);
+    const auto values = [&] {
+      auto result = QStringList{};
+      for (const auto pos : positions)
+      {
+        for (int value = 0; value < entry.arity; ++value)
+          result.push_back(
+            pos + 1 + size_t(value) < arguments.size()
+              ? arguments[pos + 1 + size_t(value)].text
+              : QString{});
+        if (!entry.repeatable && pos != positions.back())
+          result.clear();
+      }
+      return result;
+    }();
     if (entry.value)
     {
       const auto valueBlocker = QSignalBlocker{entry.value};
-      const auto value = optionValue(arguments, entry.flag);
       if (found)
       {
         while (entry.value->count() > entry.presetCount)
           entry.value->removeItem(entry.value->count() - 1);
-        auto index = entry.value->findText(value);
+        auto index = entry.value->findText(values.value(0));
         if (index < 0)
         {
-          entry.value->addItem(value);
+          entry.value->addItem(values.value(0));
           index = entry.value->count() - 1;
         }
         entry.value->setCurrentIndex(index);
       }
-      entry.value->setEnabled(found);
+      entry.value->setEnabled(found && entry.checkbox->isEnabled());
+    }
+    if (entry.path)
+    {
+      const auto valueBlocker = QSignalBlocker{entry.path};
+      if (found)
+        entry.path->setText(values.value(0));
+      entry.path->setEnabled(found);
+    }
+    if (entry.list)
+    {
+      const auto valueBlocker = QSignalBlocker{entry.list};
+      if (
+        found && !entry.list->hasFocus()
+        && entry.list->toPlainText() != values.join('\n'))
+        entry.list->setPlainText(values.join('\n'));
+      entry.list->setEnabled(found);
+    }
+    if (auto* browse = entry.row->findChild<QPushButton*>())
+      browse->setEnabled(found && entry.checkbox->isEnabled());
+    for (size_t i = 0; i < entry.components.size(); ++i)
+    {
+      if (found)
+        entry.components[i]->setText(values.value(qsizetype(i)));
+      entry.components[i]->setEnabled(found);
     }
   }
   filterEntries();
@@ -426,34 +824,47 @@ void HltoolsOptionsEditor::filterEntries()
   m_empty->setVisible(visible == 0);
 }
 
-void HltoolsOptionsEditor::changeOption(const Entry& entry, const QString& value)
+void HltoolsOptionsEditor::changeOption(const Entry& entry, const QStringList& values)
 {
   auto text = m_parameters;
   const auto arguments = tokens(text);
-  for (size_t i = arguments.size(); i > 0; --i)
+  const auto positions = occurrences(arguments, entry.flag);
+  for (auto i = positions.rbegin(); i != positions.rend(); ++i)
   {
-    const auto& token = arguments[i - 1];
-    if (matchesFlag(token.text, entry.flag))
+    const auto& token = arguments[*i];
+    auto end = token.start + token.length;
+    for (int value = 0; value < entry.arity && *i + 1 + size_t(value) < arguments.size();
+         ++value)
     {
-      auto end = token.start + token.length;
-      if (entry.value && i < arguments.size())
-      {
-        auto numeric = false;
-        arguments[i].text.toDouble(&numeric);
-        if (!arguments[i].text.startsWith('-') || numeric)
-          end = arguments[i].start + arguments[i].length;
-      }
-      text.remove(token.start, end - token.start);
+      const auto& next = arguments[*i + 1 + size_t(value)];
+      auto numeric = false;
+      next.text.toDouble(&numeric);
+      if (next.text.startsWith('-') && !numeric && text[next.start] != '"')
+        break;
+      end = next.start + next.length;
     }
+    text.remove(token.start, end - token.start);
   }
   text = text.trimmed();
-  if (!value.isEmpty())
+  // The checkbox is the explicit override; value controls never persist another state.
+  if (entry.checkbox->isChecked())
   {
-    if (!text.isEmpty())
-      text += ' ';
-    text += entry.flag;
-    if (entry.value)
-      text += ' ' + value;
+    const auto append = [&](const QString& value) {
+      if (!text.isEmpty())
+        text += ' ';
+      text += entry.flag;
+      if (entry.arity > 0)
+        text += ' ' + value;
+    };
+    if (entry.repeatable)
+    {
+      if (values.isEmpty())
+        append({});
+      for (const auto& value : values)
+        append(value);
+    }
+    else
+      append(values.join(' '));
   }
   setParameters(text);
   emit parametersChanged(text);

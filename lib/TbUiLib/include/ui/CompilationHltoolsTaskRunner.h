@@ -35,6 +35,8 @@ private:
   QString m_backend;
   QString m_reportedStage;
   bool m_finished = false;
+  bool m_incremental = false;
+  bool m_preserveArtifacts = false;
 
 public:
   CompilationHltoolsTaskRunner(CompilationContext& context, mdl::CompilationHltools task);
@@ -46,6 +48,7 @@ private:
   Result<QStringList> prepare();
   void readOutput();
   Result<void> writeLog() const;
+  Result<void> publishAuxiliaryArtifacts(bool succeeded) const;
   void finish(int exitCode, QProcess::ExitStatus status);
   void fail(const std::string& message);
   void releaseProcess();

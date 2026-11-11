@@ -148,6 +148,80 @@ TEST_CASE("CompilationHltoolsTaskRunner")
     CHECK(context.bspPath() == pathFromQString(outputPath));
   }
 
+  SECTION("advanced lighting arguments publish diagnostics using the output name")
+  {
+    task.parameterSpec =
+      "-threads 2 -ambient 0.1 0.2 0.3 -colourgamma 0.55 0.6 0.65 "
+      "-colourscale 2 2 2 -dumpgather --dump-intermediates -drawpatch";
+    auto context =
+      CompilationContext{map, camera, variables, TextOutputAdapter{&output}, false};
+    auto runner = CompilationHltoolsTaskRunner{context, task};
+    auto ended = QSignalSpy{&runner, &CompilationTaskRunner::end};
+    auto failed = QSignalSpy{&runner, &CompilationTaskRunner::error};
+    runner.execute();
+    REQUIRE(QTest::qWaitFor([&] { return !ended.empty() || !failed.empty(); }, 30000));
+    INFO(output.toPlainText().toStdString());
+    REQUIRE(failed.empty());
+    REQUIRE(ended.count() == 1);
+    CHECK(QFile::exists(outputPath));
+    for (const auto* suffix : {".gather", ".p0", "_patch.pts"})
+    {
+      INFO(suffix);
+      auto artifact =
+        QFile{directory.filePath(QString{"output with spaces/custom"} + suffix)};
+      REQUIRE(artifact.open(QIODevice::ReadOnly));
+      CHECK(artifact.size() > 0);
+    }
+    CHECK_FALSE(QFile::exists(directory.filePath("output with spaces/custom.map")));
+  }
+
+  SECTION("incremental compiles retain and reuse the light transfer cache")
+  {
+    task.parameterSpec = "-threads 2 -bounce 1 -incremental";
+    for (int pass = 0; pass < 2; ++pass)
+    {
+      output.clear();
+      auto context =
+        CompilationContext{map, camera, variables, TextOutputAdapter{&output}, false};
+      auto runner = CompilationHltoolsTaskRunner{context, task};
+      auto ended = QSignalSpy{&runner, &CompilationTaskRunner::end};
+      auto failed = QSignalSpy{&runner, &CompilationTaskRunner::error};
+      runner.execute();
+      REQUIRE(QTest::qWaitFor([&] { return !ended.empty() || !failed.empty(); }, 30000));
+      INFO(output.toPlainText().toStdString());
+      REQUIRE(failed.empty());
+      REQUIRE(ended.count() == 1);
+      auto cache = QFile{directory.filePath("output with spaces/custom.inc")};
+      REQUIRE(cache.open(QIODevice::ReadOnly));
+      CHECK(cache.size() > 0);
+      if (pass == 1)
+      {
+        auto log = QFile{directory.filePath("output with spaces/custom.log")};
+        REQUIRE(log.open(QIODevice::ReadOnly));
+        CHECK(log.readAll().contains("Reading transfers file"));
+      }
+    }
+  }
+
+  SECTION("unsupported arguments fail in execution and simulation preserving the BSP")
+  {
+    const auto simulate = GENERATE(false, true);
+    task.parameterSpec = GENERATE("-unknown", "-ambient 0 0", "--embed-source");
+    REQUIRE(QDir{}.mkpath(directory.filePath("output with spaces")));
+    auto previous = QFile{outputPath};
+    REQUIRE(previous.open(QIODevice::WriteOnly));
+    previous.write("previous BSP");
+    previous.close();
+    auto context =
+      CompilationContext{map, camera, variables, TextOutputAdapter{&output}, simulate};
+    auto runner = CompilationHltoolsTaskRunner{context, task};
+    auto failed = QSignalSpy{&runner, &CompilationTaskRunner::error};
+    runner.execute();
+    REQUIRE(failed.count() == 1);
+    REQUIRE(previous.open(QIODevice::ReadOnly));
+    CHECK(previous.readAll() == "previous BSP");
+  }
+
   SECTION("standalone model collision follows the original MAP search roots")
   {
     REQUIRE(QDir{}.mkpath(directory.filePath("game/models")));

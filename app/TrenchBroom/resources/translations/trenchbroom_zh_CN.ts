@@ -10705,5 +10705,484 @@ Expression: %3</source>
             <source>No matching options</source>
             <translation>没有匹配的选项</translation>
         </message>
+        <message>
+            <source>Compile</source>
+            <translation>编译</translation>
+        </message>
+        <message>
+            <source>WADs to embed</source>
+            <translation>嵌入的 WAD</translation>
+        </message>
+        <message>
+            <source>One WAD name per line. Repeatable; requires external WAD textures.</source>
+            <translation>每行一个 WAD 名称，可重复指定；需要使用外部 WAD 纹理。</translation>
+        </message>
+        <message>
+            <source>WAD configuration file</source>
+            <translation>WAD 配置文件</translation>
+        </message>
+        <message>
+            <source>Read WAD search paths from this file.</source>
+            <translation>从此文件读取 WAD 搜索路径。</translation>
+        </message>
+        <message>
+            <source>Named WAD configuration</source>
+            <translation>WAD 配置名称</translation>
+        </message>
+        <message>
+            <source>Select a configuration from the WAD configuration file.</source>
+            <translation>选择 WAD 配置文件中的一个配置。</translation>
+        </message>
+        <message>
+            <source>Collision hull sizes file</source>
+            <translation>碰撞外壳尺寸文件</translation>
+        </message>
+        <message>
+            <source>Read custom player and monster hull dimensions from a file.</source>
+            <translation>从文件读取玩家和怪物的自定义碰撞外壳尺寸。</translation>
+        </message>
+        <message>
+            <source>Texture nullification file</source>
+            <translation>NULL 替换规则文件</translation>
+        </message>
+        <message>
+            <source>Read textures and entities to replace with NULL from a file.</source>
+            <translation>从文件读取要替换为 NULL 的纹理与实体。</translation>
+        </message>
+        <message>
+            <source>World extent</source>
+            <translation>世界范围</translation>
+        </message>
+        <message>
+            <source>World bounds per axis. Default: 65536.</source>
+            <translation>各坐标轴的世界范围，默认 65536。</translation>
+        </message>
+        <message>
+            <source>Brush overlap warning ratio</source>
+            <translation>笔刷重叠警告比例</translation>
+        </message>
+        <message>
+            <source>Warn above this overlap ratio; 0.1 means 10%. Default: 0.</source>
+            <translation>重叠比例超过此值时警告；0.1 表示 10%，默认 0。</translation>
+        </message>
+        <message>
+            <source>Map and light intensity scale</source>
+            <translation>地图与光照强度缩放</translation>
+        </message>
+        <message>
+            <source>In a unified compile this affects BOTH map geometry (default: 1) and light intensity (default: 2). Use colourscale to change only lighting.</source>
+            <translation>一体编译时同时影响地图几何（默认 1）和光照强度（默认 2）。仅调整光照请使用 colourscale。</translation>
+        </message>
+        <message>
+            <source>Update entities only</source>
+            <translation>仅更新实体</translation>
+        </message>
+        <message>
+            <source>Maximum BSP node size</source>
+            <translation>最大 BSP 节点尺寸</translation>
+        </message>
+        <message>
+            <source>Largest node size before an axial split. Default: 1024.</source>
+            <translation>超过此尺寸时沿坐标轴分割节点，默认 1024。</translation>
+        </message>
+        <message>
+            <source>Face subdivision size</source>
+            <translation>表面细分尺寸</translation>
+        </message>
+        <message>
+            <source>Face subdivision size. Default: 240.</source>
+            <translation>表面细分尺寸，默认 240。</translation>
+        </message>
+        <message>
+            <source>Stop after leak detection</source>
+            <translation>检测到漏点时停止填充</translation>
+        </message>
+        <message>
+            <source>Stop the outside-fill pass when a leak is detected.</source>
+            <translation>检测到漏点时停止外部填充阶段。</translation>
+        </message>
+        <message>
+            <source>Maximum visibility distance</source>
+            <translation>最大可见距离</translation>
+        </message>
+        <message>
+            <source>Bounce patch size</source>
+            <translation>反弹面片尺寸</translation>
+        </message>
+        <message>
+            <source>Patch size for ordinary surfaces. Default: 64.</source>
+            <translation>普通表面的光照面片尺寸，默认 64。</translation>
+        </message>
+        <message>
+            <source>Emitting patch size</source>
+            <translation>发光面片尺寸</translation>
+        </message>
+        <message>
+            <source>Patch size for texture lights. Default: 32.</source>
+            <translation>纹理光源的光照面片尺寸，默认 32。</translation>
+        </message>
+        <message>
+            <source>Visibility matrix</source>
+            <translation>可见性矩阵</translation>
+        </message>
+        <message>
+            <source>Patch visibility storage. Default: sparse.</source>
+            <translation>面片可见性的存储方式，默认 sparse（稀疏矩阵）。</translation>
+        </message>
+        <message>
+            <source>Light transfer compression</source>
+            <translation>光照传递压缩</translation>
+        </message>
+        <message>
+            <source>0: float32; 1: float16; 2: float8. Default: 1.</source>
+            <translation>0：32 位浮点；1：16 位浮点；2：8 位浮点。默认 1。</translation>
+        </message>
+        <message>
+            <source>RGB transfer compression</source>
+            <translation>RGB 光照传递压缩</translation>
+        </message>
+        <message>
+            <source>0: 96-bit; 1: 48-bit; 2: 32-bit; 3: 24-bit. Default: 2.</source>
+            <translation>0：96 位；1：48 位；2：32 位；3：24 位。默认 2。</translation>
+        </message>
+        <message>
+            <source>Reuse light transfer cache</source>
+            <translation>复用光照传递缓存</translation>
+        </message>
+        <message>
+            <source>Keep the .inc transfer cache beside the BSP and reuse it on the next compile.</source>
+            <translation>将 .inc 光照传递缓存保存在 BSP 旁，供下次编译复用。</translation>
+        </message>
+        <message>
+            <source>Lightmap gamma</source>
+            <translation>光照贴图伽马</translation>
+        </message>
+        <message>
+            <source>Gamma for all lighting channels. Default: 0.55.</source>
+            <translation>所有光照通道的伽马值，默认 0.55。</translation>
+        </message>
+        <message>
+            <source>Light intensity by channel</source>
+            <translation>各通道光照强度</translation>
+        </message>
+        <message>
+            <source>Red, green and blue intensity scales. Default: 2 2 2.</source>
+            <translation>红、绿、蓝通道的强度倍率，默认 2 2 2。</translation>
+        </message>
+        <message>
+            <source>Gamma by channel</source>
+            <translation>各通道伽马</translation>
+        </message>
+        <message>
+            <source>Red, green and blue gamma. Default: 0.55 0.55 0.55.</source>
+            <translation>红、绿、蓝通道的伽马值，默认 0.55 0.55 0.55。</translation>
+        </message>
+        <message>
+            <source>Ambient light</source>
+            <translation>环境光</translation>
+        </message>
+        <message>
+            <source>Minimum red, green and blue lighting, each from 0 to 1. Default: 0 0 0.</source>
+            <translation>红、绿、蓝通道的最低光照，各取 0 到 1，默认 0 0 0。</translation>
+        </message>
+        <message>
+            <source>Minimum light</source>
+            <translation>最低亮度</translation>
+        </message>
+        <message>
+            <source>Minimum luxel brightness, from 0 to 255. Default: 0.</source>
+            <translation>光照采样点的最低亮度，取 0 到 255，默认 0。</translation>
+        </message>
+        <message>
+            <source>Brightness limit</source>
+            <translation>亮度上限</translation>
+        </message>
+        <message>
+            <source>Maximum brightness. Default: 255; pre25 overrides this with 188.</source>
+            <translation>最大亮度默认 255；pre25 会将此值覆盖为 188。</translation>
+        </message>
+        <message>
+            <source>Diffuse sky scale</source>
+            <translation>天空漫射倍率</translation>
+        </message>
+        <message>
+            <source>Diffuse skylight multiplier. Default: 1.</source>
+            <translation>天空漫射光倍率，默认 1。</translation>
+        </message>
+        <message>
+            <source>Direct light threshold</source>
+            <translation>直接光照阈值</translation>
+        </message>
+        <message>
+            <source>Direct light threshold. Default: 10.</source>
+            <translation>直接光照阈值，默认 10。</translation>
+        </message>
+        <message>
+            <source>Direct light scale</source>
+            <translation>直接光照倍率</translation>
+        </message>
+        <message>
+            <source>Direct light intensity multiplier. Default: 1.</source>
+            <translation>直接光照强度倍率，默认 1。</translation>
+        </message>
+        <message>
+            <source>Global light fade</source>
+            <translation>全局光照衰减</translation>
+        </message>
+        <message>
+            <source>Global distance falloff multiplier. Default: 1.</source>
+            <translation>全局距离衰减倍率，默认 1。</translation>
+        </message>
+        <message>
+            <source>Light cutoff</source>
+            <translation>光照截断阈值</translation>
+        </message>
+        <message>
+            <source>Discard light below this threshold. Default: 0.01.</source>
+            <translation>忽略低于此阈值的光照，默认 0.01。</translation>
+        </message>
+        <message>
+            <source>Surface smoothing angle</source>
+            <translation>表面平滑角度</translation>
+        </message>
+        <message>
+            <source>Phong smoothing angle in degrees. Default: 50.</source>
+            <translation>Phong 平滑角度（度），默认 50。</translation>
+        </message>
+        <message>
+            <source>Texture seam smoothing angle</source>
+            <translation>纹理接缝平滑角度</translation>
+        </message>
+        <message>
+            <source>Smoothing across texture seams, in degrees. Default: 0.</source>
+            <translation>跨纹理接缝的平滑角度（度），默认 0。</translation>
+        </message>
+        <message>
+            <source>Lightmap blur</source>
+            <translation>光照贴图模糊</translation>
+        </message>
+        <message>
+            <source>Lightmap blur radius. Default: 1.5.</source>
+            <translation>光照贴图模糊半径，默认 1.5。</translation>
+        </message>
+        <message>
+            <source>Soft skylight</source>
+            <translation>柔和天空光</translation>
+        </message>
+        <message>
+            <source>0: disabled; 1: enabled. Default: 1.</source>
+            <translation>0：关闭；1：开启。默认 1。</translation>
+        </message>
+        <message>
+            <source>Texture light gap</source>
+            <translation>纹理光源间隙</translation>
+        </message>
+        <message>
+            <source>Reject texture light samples across this gap. Default: 0.</source>
+            <translation>忽略跨越此间隙的纹理光源采样，默认 0。</translation>
+        </message>
+        <message>
+            <source>Disable emitter range</source>
+            <translation>禁用光源范围检查</translation>
+        </message>
+        <message>
+            <source>Disable the texture light emitter range test.</source>
+            <translation>禁用纹理光源的发光范围检查。</translation>
+        </message>
+        <message>
+            <source>Texture reflectivity gamma</source>
+            <translation>纹理反射率伽马</translation>
+        </message>
+        <message>
+            <source>Texture reflectivity gamma. Default: 1.76.</source>
+            <translation>纹理反射率伽马值，默认 1.76。</translation>
+        </message>
+        <message>
+            <source>Texture reflectivity scale</source>
+            <translation>纹理反射率倍率</translation>
+        </message>
+        <message>
+            <source>Texture reflectivity multiplier. Default: 0.7.</source>
+            <translation>纹理反射率倍率，默认 0.7。</translation>
+        </message>
+        <message>
+            <source>Translucent light depth</source>
+            <translation>半透明光照深度</translation>
+        </message>
+        <message>
+            <source>Translucent surface light depth. Default: 2.</source>
+            <translation>半透明表面的透光深度，默认 2。</translation>
+        </message>
+        <message>
+            <source>Opaque entities block light</source>
+            <translation>不透明实体遮挡光照</translation>
+        </message>
+        <message>
+            <source>Additional texture lights file</source>
+            <translation>附加纹理光源文件</translation>
+        </message>
+        <message>
+            <source>Load an additional .rad texture-light definition file.</source>
+            <translation>加载附加的 .rad 纹理光源定义文件。</translation>
+        </message>
+        <message>
+            <source>WAD search directories</source>
+            <translation>WAD 搜索目录</translation>
+        </message>
+        <message>
+            <source>One directory per line. Each becomes a separate WAD search argument.</source>
+            <translation>每行一个目录，各自生成一条 WAD 搜索参数。</translation>
+        </message>
+        <message>
+            <source>Lighting memory budget (KB)</source>
+            <translation>光照内存上限（KB）</translation>
+        </message>
+        <message>
+            <source>Maximum lightmap data in KB. Default: 49152.</source>
+            <translation>光照贴图数据上限（KB），默认 49152。</translation>
+        </message>
+        <message>
+            <source>Texture memory budget (KB)</source>
+            <translation>纹理内存上限（KB）</translation>
+        </message>
+        <message>
+            <source>Maximum texture data in KB. Default: 32768.</source>
+            <translation>纹理数据上限（KB），默认 32768。</translation>
+        </message>
+        <message>
+            <source>Write patch debug files</source>
+            <translation>输出面片调试文件</translation>
+        </message>
+        <message>
+            <source>Write bounce patch debug files in the compilation working directory.</source>
+            <translation>将光照反弹面片调试文件写入编译工作目录。</translation>
+        </message>
+        <message>
+            <source>Write light gather data</source>
+            <translation>输出光照采样数据</translation>
+        </message>
+        <message>
+            <source>Save per-face light gather data beside the BSP as .gather.</source>
+            <translation>将各表面的光照采样数据保存为 BSP 旁的 .gather 文件。</translation>
+        </message>
+        <message>
+            <source>Sample debug sphere</source>
+            <translation>采样调试球</translation>
+        </message>
+        <message>
+            <source>X, Y, Z and radius of the sample debug sphere.</source>
+            <translation>采样调试球的 X、Y、Z 坐标与半径。</translation>
+        </message>
+        <message>
+            <source>Draw patch points</source>
+            <translation>输出面片点</translation>
+        </message>
+        <message>
+            <source>Write patch points for lighting diagnostics.</source>
+            <translation>输出光照面片点用于诊断。</translation>
+        </message>
+        <message>
+            <source>Draw patch edges</source>
+            <translation>输出面片边</translation>
+        </message>
+        <message>
+            <source>Write patch edges for lighting diagnostics.</source>
+            <translation>输出光照面片边用于诊断。</translation>
+        </message>
+        <message>
+            <source>Draw light interpolation</source>
+            <translation>输出光照插值</translation>
+        </message>
+        <message>
+            <source>Write light interpolation diagnostics.</source>
+            <translation>输出光照插值诊断信息。</translation>
+        </message>
+        <message>
+            <source>Draw sample nudges</source>
+            <translation>输出采样点偏移</translation>
+        </message>
+        <message>
+            <source>Write nudged lighting sample diagnostics.</source>
+            <translation>输出光照采样点微调后的诊断信息。</translation>
+        </message>
+        <message>
+            <source>Light noise</source>
+            <translation>光照噪声</translation>
+        </message>
+        <message>
+            <source>Red, green and blue lighting noise. Default: 0 0 0.</source>
+            <translation>红、绿、蓝通道的光照噪声，默认 0 0 0。</translation>
+        </message>
+        <message>
+            <source>Colour noise</source>
+            <translation>颜色噪声</translation>
+        </message>
+        <message>
+            <source>Red, green and blue colour noise. Default: 0 0 0.</source>
+            <translation>红、绿、蓝通道的颜色噪声，默认 0 0 0。</translation>
+        </message>
+        <message>
+            <source>Keep intermediate files</source>
+            <translation>保留中间文件</translation>
+        </message>
+        <message>
+            <source>Save CSG and BSP intermediate files beside the output BSP.</source>
+            <translation>将 CSG 和 BSP 中间文件保存在输出 BSP 旁。</translation>
+        </message>
+        <message>
+            <source>Embed map source</source>
+            <translation>嵌入地图源文件</translation>
+        </message>
+        <message>
+            <source>Disable source embedding</source>
+            <translation>禁用源文件嵌入</translation>
+        </message>
+        <message>
+            <source>One value per line</source>
+            <translation>每行一个值</translation>
+        </message>
+        <message>
+            <source>Browse…</source>
+            <translation>浏览…</translation>
+        </message>
+        <message>
+            <source>WAD search directory</source>
+            <translation>WAD 搜索目录</translation>
+        </message>
+        <message>
+            <source>Compiler input file</source>
+            <translation>编译输入文件</translation>
+        </message>
+        <message>
+            <source>Unavailable</source>
+            <translation>不可用</translation>
+        </message>
     </context>
+<context>
+    <name>HltoolsCompilerOptions</name>
+    <message>
+        <source>Entity-only updates require the standalone CSG command.</source>
+        <translation>仅更新实体需要使用独立的 CSG 命令。</translation>
+    </message>
+    <message>
+        <source>Maximum visibility distance is not implemented by hltools.</source>
+        <translation>hltools 尚未实现最大可见距离。</translation>
+    </message>
+    <message>
+        <source>Source embedding is unavailable in the bundled compiler.</source>
+        <translation>内置编译器不支持嵌入源文件。</translation>
+    </message>
+    <message>
+        <source>This option is not used by the unified compiler.</source>
+        <translation>一体编译不使用此选项。</translation>
+    </message>
+    <message>
+        <source>Unknown compiler option: %1</source>
+        <translation>未知编译参数：%1</translation>
+    </message>
+    <message>
+        <source>%1 requires %2 value(s).</source>
+        <translation>%1 需要 %2 个值。</translation>
+    </message>
+</context>
 </TS>
