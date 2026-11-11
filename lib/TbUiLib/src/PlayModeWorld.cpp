@@ -19,6 +19,7 @@
 
 #include "ui/PlayModeWorld.h"
 
+#include "PlayModeHltoolsMap.h"
 #include "cs/scs.h"
 #include "mdl/Brush.h"
 #include "mdl/BrushFace.h"
@@ -389,6 +390,13 @@ void ScsWorldDeleter::operator()(scs_world* world) const
 PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions& options)
 {
   auto result = PlayModeWorld{};
+  if (
+    options.clipType == SCS_CLIPTYPE_LEGACYTRIM
+    && options.compiler != SCS_COMPILER_HLTOOLS)
+  {
+    result.error = "Legacytrim requires the hltools collision compiler";
+    return result;
+  }
   result.clipType = options.clipType;
   const auto zhlt = options.compiler == SCS_COMPILER_ZHLT;
   auto worldBrushes = BrushCollector{options.hullMask};
@@ -427,127 +435,123 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   };
   const auto worldNoclip = intForKey(map.worldNode().entity(), "zhlt_noclip") != 0;
 
-  map.worldNode().accept(
-    kdl::overload(
-      [](auto&& thisLambda, const mdl::WorldNode& worldNode) {
-        worldNode.visitChildren(thisLambda);
-      },
-      [](auto&& thisLambda, const mdl::LayerNode& layerNode) {
-        if (!layerNode.layer().omitFromExport())
+  map.worldNode().accept(kdl::overload(
+    [](auto&& thisLambda, const mdl::WorldNode& worldNode) {
+      worldNode.visitChildren(thisLambda);
+    },
+    [](auto&& thisLambda, const mdl::LayerNode& layerNode) {
+      if (!layerNode.layer().omitFromExport())
+      {
+        layerNode.visitChildren(thisLambda);
+      }
+    },
+    [](auto&& thisLambda, const mdl::GroupNode& groupNode) {
+      groupNode.visitChildren(thisLambda);
+    },
+    [&](const mdl::EntityNode& entityNode) {
+      const auto& entity = entityNode.entity();
+      if (const auto* name = entity.property("targetname"); name && !name->empty())
+      {
+        destinations.push_back({*name, vm::vec3f{entity.origin()}, spawnAngles(entity)});
+      }
+      if (entity.pointEntity())
+      {
+        const auto classname = toLower(entity.classname());
+        if (classname == "info_player_start" || classname == "info_player_deathmatch")
         {
-          layerNode.visitChildren(thisLambda);
+          result.spawnPoints.push_back(
+            {classname, vm::vec3f{entity.origin()}, spawnAngles(entity)});
         }
-      },
-      [](auto&& thisLambda, const mdl::GroupNode& groupNode) {
-        groupNode.visitChildren(thisLambda);
-      },
-      [&](const mdl::EntityNode& entityNode) {
-        const auto& entity = entityNode.entity();
-        if (const auto* name = entity.property("targetname"); name && !name->empty())
+        return;
+      }
+
+      if (toLower(entity.classname()) == "trigger_teleport")
+      {
+        // SF_TRIGGER_NOCLIENTS excludes the single simulated player.
+        if ((intForKey(entity, "spawnflags") & 2) != 0)
         {
-          destinations.push_back(
-            {*name, vm::vec3f{entity.origin()}, spawnAngles(entity)});
-        }
-        if (entity.pointEntity())
-        {
-          const auto classname = toLower(entity.classname());
-          if (classname == "info_player_start" || classname == "info_player_deathmatch")
-          {
-            result.spawnPoints.push_back(
-              {classname, vm::vec3f{entity.origin()}, spawnAngles(entity)});
-          }
           return;
         }
-
-        if (toLower(entity.classname()) == "trigger_teleport")
+        if (const auto* master = entity.property("master"); master && !master->empty())
         {
-          // SF_TRIGGER_NOCLIENTS excludes the single simulated player.
-          if ((intForKey(entity, "spawnflags") & 2) != 0)
+          result.warnings.push_back(
+            "trigger_teleport master logic is not simulated: " + *master);
+          return;
+        }
+        const auto* target = entity.property("target");
+        if (!target || target->empty())
+        {
+          result.warnings.push_back("trigger_teleport has no target");
+          return;
+        }
+        auto& teleport = teleports.emplace_back(
+          CollectedTeleport{BrushCollector{options.hullMask}, *target});
+        const auto noclip = intForKey(entity, "zhlt_noclip") != 0;
+        for (const auto* child : entityNode.children())
+        {
+          if (const auto* brush = dynamic_cast<const mdl::BrushNode*>(child);
+              brush && brush->visible())
           {
-            return;
-          }
-          if (const auto* master = entity.property("master"); master && !master->empty())
-          {
-            result.warnings.push_back(
-              "trigger_teleport master logic is not simulated: " + *master);
-            return;
-          }
-          const auto* target = entity.property("target");
-          if (!target || target->empty())
-          {
-            result.warnings.push_back("trigger_teleport has no target");
-            return;
-          }
-          auto& teleport = teleports.emplace_back(
-            CollectedTeleport{BrushCollector{options.hullMask}, *target});
-          const auto noclip = intForKey(entity, "zhlt_noclip") != 0;
-          for (const auto* child : entityNode.children())
-          {
-            if (const auto* brush = dynamic_cast<const mdl::BrushNode*>(child);
-                brush && brush->visible())
+            if (const auto info = brushInfo(brush->brush(), noclip, zhlt))
             {
-              if (const auto info = brushInfo(brush->brush(), noclip, zhlt))
-              {
-                teleport.brushes.add(brush->brush(), *info, SCS_CONTENTS_SOLID);
-              }
+              teleport.brushes.add(brush->brush(), *info, SCS_CONTENTS_SOLID);
             }
           }
-          return;
         }
+        return;
+      }
 
-        const auto role = entityRole(entity.classname());
-        if (role == EntityRole::Ignore)
-        {
-          return;
-        }
+      const auto role = entityRole(entity.classname());
+      if (role == EntityRole::Ignore)
+      {
+        return;
+      }
 
-        const auto noclip = intForKey(entity, "zhlt_noclip") != 0;
-        // Brush entities are collected in the order NodeWriter writes them to the .map
-        // file, so their indices match the compiled map's models and physents. The
-        // order matters: traces keep the first model's plane on ties (pixelwalk).
-        auto* collected =
-          role == EntityRole::World ? nullptr : &entities.emplace_back(options.hullMask);
-        if (collected)
-        {
-          collected->entityContents = role == EntityRole::Ladder ? SCS_CONTENTS_LADDER
-                                      : role == EntityRole::Liquid
-                                        ? liquidContents(entity)
-                                        : 0;
-        }
+      const auto noclip = intForKey(entity, "zhlt_noclip") != 0;
+      // Brush entities are collected in the order NodeWriter writes them to the .map
+      // file, so their indices match the compiled map's models and physents. The
+      // order matters: traces keep the first model's plane on ties (pixelwalk).
+      auto* collected =
+        role == EntityRole::World ? nullptr : &entities.emplace_back(options.hullMask);
+      if (collected)
+      {
+        collected->entityContents = role == EntityRole::Ladder   ? SCS_CONTENTS_LADDER
+                                    : role == EntityRole::Liquid ? liquidContents(entity)
+                                                                 : 0;
+      }
 
-        entityNode.visitChildren(
-          kdl::overload(
-            [](const mdl::WorldNode&) {},
-            [](const mdl::LayerNode&) {},
-            [](const mdl::GroupNode&) {},
-            [](const mdl::EntityNode&) {},
-            [&](const mdl::BrushNode& brushNode) {
-              if (!brushNode.visible())
-              {
-                return;
-              }
-              if (!collected)
-              {
-                addWorldBrush(brushNode, noclip);
-              }
-              else if (const auto info = brushInfo(brushNode.brush(), noclip, zhlt))
-              {
-                // brush entity contents come from the entity, not the material
-                collected->brushes.add(brushNode.brush(), *info, SCS_CONTENTS_SOLID);
-                if (role == EntityRole::Solid)
-                  addJumpSurfaces(
-                    brushNode.brush(), *info, toLower(entity.classname()) != "func_door");
-              }
-            },
-            [](const mdl::PatchNode&) {}));
-      },
-      [&](const mdl::BrushNode& brushNode) {
-        if (brushNode.visible())
-        {
-          addWorldBrush(brushNode, worldNoclip);
-        }
-      },
-      [](const mdl::PatchNode&) {}));
+      entityNode.visitChildren(kdl::overload(
+        [](const mdl::WorldNode&) {},
+        [](const mdl::LayerNode&) {},
+        [](const mdl::GroupNode&) {},
+        [](const mdl::EntityNode&) {},
+        [&](const mdl::BrushNode& brushNode) {
+          if (!brushNode.visible())
+          {
+            return;
+          }
+          if (!collected)
+          {
+            addWorldBrush(brushNode, noclip);
+          }
+          else if (const auto info = brushInfo(brushNode.brush(), noclip, zhlt))
+          {
+            // brush entity contents come from the entity, not the material
+            collected->brushes.add(brushNode.brush(), *info, SCS_CONTENTS_SOLID);
+            if (role == EntityRole::Solid)
+              addJumpSurfaces(
+                brushNode.brush(), *info, toLower(entity.classname()) != "func_door");
+          }
+        },
+        [](const mdl::PatchNode&) {}));
+    },
+    [&](const mdl::BrushNode& brushNode) {
+      if (brushNode.visible())
+      {
+        addWorldBrush(brushNode, worldNoclip);
+      }
+    },
+    [](const mdl::PatchNode&) {}));
 
   std::erase_if(entities, [](const auto& entity) { return entity.brushes.empty(); });
 
@@ -592,6 +596,11 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   desc.compiler = options.compiler;
   desc.teleports = teleportDescs.data();
   desc.teleport_count = static_cast<uint32_t>(teleportDescs.size());
+  const auto mapText = options.compiler == SCS_COMPILER_HLTOOLS
+                         ? serializePlayModeHltoolsMap(map)
+                         : std::string{};
+  desc.map_text = mapText.data();
+  desc.map_text_size = mapText.size();
 
   auto info = scs_world_info{};
   scs_world* world = nullptr;
@@ -605,6 +614,9 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   case SCS_ERR_OUT_OF_MEMORY:
     result.error = "out of memory";
     return result;
+  case SCS_ERR_COMPILE:
+    result.error = info.error_message;
+    return result;
   default:
     result.error = "internal error while compiling collision hulls";
     return result;
@@ -613,6 +625,10 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   result.world = ScsWorldPtr{world};
   result.worldBrushCount = worldBrushes.size();
   result.entityCount = entities.size();
+  if (options.compiler == SCS_COMPILER_HLTOOLS)
+    result.entityCount = info.model_count > 0 ? info.model_count - 1 : 0;
+  if (info.warnings[0])
+    result.warnings.emplace_back(info.warnings);
   result.teleportCount = teleportDescs.size();
   result.skippedBrushCount += info.skipped_brushes;
   result.buildMilliseconds = info.build_milliseconds;

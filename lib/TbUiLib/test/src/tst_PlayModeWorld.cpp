@@ -43,6 +43,7 @@
 #include <utility>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace tb::ui
 {
@@ -488,6 +489,101 @@ TEST_CASE("buildPlayModeWorld")
     CHECK(world.spawnPoints[0].classname == "info_player_start");
     CHECK(world.spawnPoints[0].origin == vm::vec3f{10, 20, 30});
     CHECK(world.spawnPoints[0].angles == vm::vec3f{0, 90, 0});
+  }
+}
+
+TEST_CASE("buildPlayModeWorld hltools")
+{
+  const auto mapFormat = GENERATE(mdl::MapFormat::Standard, mdl::MapFormat::Valve);
+  CAPTURE(mapFormat);
+  auto fixture = mdl::MapFixture{};
+  auto& map = fixture.create({.mapFormat = mapFormat});
+  mdl::addNodes(
+    map,
+    {{&mdl::parentForNodes(map),
+      {createCuboid(map, vm::bbox3d{{-512, -512, -16}, {512, 512, 0}}, "floor")}}});
+  const auto options = PlayModeWorldOptions{.compiler = SCS_COMPILER_HLTOOLS};
+
+  SECTION("visible brushes feed hltools and hidden brushes stay excluded")
+  {
+    auto* hidden = createCuboid(map, vm::bbox3d{{100, -64, 0}, {116, 64, 128}}, "wall");
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {hidden}}});
+    mdl::hideNodes(map, {hidden});
+    createBrushEntity(map, "func_wall", vm::bbox3d{{150, -64, 0}, {166, 64, 128}});
+    const auto world = buildPlayModeWorld(map, options);
+    INFO(world.error);
+    REQUIRE(world.world);
+    CHECK(
+      blockedAtX(createContext(world).get(), 300.0f) == vm::approx{133.96875f, 0.01f});
+  }
+
+  SECTION("local legacytrim keeps func_detail collision")
+  {
+    auto* detail =
+      createBrushEntity(map, "func_detail", vm::bbox3d{{100, -64, 0}, {116, 64, 128}});
+    setProperty(*detail, "zhlt_cliptype", "legacytrim");
+    const auto world = buildPlayModeWorld(map, options);
+    INFO(world.error);
+    REQUIRE(world.world);
+    CHECK(world.entityCount == 1u);
+    CHECK(blockedAtX(createContext(world).get(), 300.0f) == vm::approx{83.96875f, 0.01f});
+  }
+
+  SECTION("ORIGIN brushes stay attached to their submodel")
+  {
+    auto* wall =
+      createBrushEntity(map, "func_wall", vm::bbox3d{{100, -64, 0}, {116, 64, 128}});
+    mdl::addNodes(
+      map,
+      {{wall, {createCuboid(map, vm::bbox3d{{104, -4, 40}, {112, 4, 48}}, "ORIGIN")}}});
+    const auto world = buildPlayModeWorld(map, options);
+    INFO(world.error);
+    REQUIRE(world.world);
+    CHECK(blockedAtX(createContext(world).get(), 300.0f) == vm::approx{83.96875f, 0.01f});
+  }
+
+  SECTION("hull shape definitions affect expansion and remain non-solid")
+  {
+    auto* shape =
+      createBrushEntity(map, "info_hullshape", vm::bbox3d{{-8, -8, -8}, {8, 8, 8}});
+    setProperty(*shape, "targetname", "small");
+    setProperty(*shape, "origin", "0 0 0");
+    setProperty(*shape, "disabled", "0");
+    auto* wall =
+      createBrushEntity(map, "func_wall", vm::bbox3d{{100, -64, 0}, {116, 64, 128}});
+    setProperty(*wall, "zhlt_hull1", "small");
+    const auto world = buildPlayModeWorld(map, options);
+    INFO(world.error);
+    REQUIRE(world.world);
+    CHECK(world.entityCount == 1u);
+    CHECK(blockedAtX(createContext(world).get(), 300.0f) == vm::approx{91.96875f, 0.01f});
+  }
+
+  SECTION("teleport behavior survives the compiler switch")
+  {
+    auto* trigger = createBrushEntity(
+      map, "trigger_teleport", vm::bbox3d{{100, -64, 0}, {116, 64, 128}});
+    setProperty(*trigger, "target", "exit");
+    auto* destination = new mdl::EntityNode{mdl::Entity{{
+      {"classname", "info_teleport_destination"},
+      {"targetname", "exit"},
+      {"origin", "300 100 64"},
+    }}};
+    mdl::addNodes(map, {{&mdl::parentForNodes(map), {destination}}});
+    const auto world = buildPlayModeWorld(map, options);
+    INFO(world.error);
+    REQUIRE(world.world);
+    REQUIRE(world.teleportCount == 1);
+    auto context = createContext(world);
+    const float spawn[] = {90, 0, 40};
+    scs_spawn(context.get(), spawn, nullptr);
+    auto cmd = scs_usercmd{};
+    cmd.msec = 10;
+    scs_step(context.get(), &cmd);
+    auto state = scs_player_state{};
+    scs_get_state(context.get(), &state);
+    CHECK(state.teleport_count == 1);
+    CHECK(state.origin[0] == 300.0f);
   }
 }
 

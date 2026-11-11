@@ -303,27 +303,49 @@ void KreedzBroomPreferencePane::createGui()
       "The frame rate changes the physics like in the game. 100 is the KZ standard."));
 
   right->addSection("Clip Hulls");
-  right->addRow(
-    "Compiler",
-    choiceField(
-      Preferences::PlayModeCompiler,
-      {
-        {"VHLT", Preferences::PlayModeCompilerVhlt},
-        {"ZHLT", Preferences::PlayModeCompilerZhlt},
-      }));
+  auto* compilerField = qobject_cast<QComboBox*>(choiceField(
+    Preferences::PlayModeCompiler,
+    {
+      {"VHLT", Preferences::PlayModeCompilerVhlt},
+      {"ZHLT", Preferences::PlayModeCompilerZhlt},
+      {"hltools", Preferences::PlayModeCompilerHltools},
+    }));
+  auto* cliptypeField = qobject_cast<QComboBox*>(choiceField(
+    Preferences::PlayModeClipType,
+    {
+      {"Legacy", Preferences::PlayModeClipTypeLegacy},
+      {"Legacytrim (hltools)", Preferences::PlayModeClipTypeLegacytrim},
+      {"Simple", Preferences::PlayModeClipTypeSimple},
+      {"Precise", Preferences::PlayModeClipTypePrecise},
+      {"Normalized", Preferences::PlayModeClipTypeNormalized},
+      {"Smallest", Preferences::PlayModeClipTypeSmallest},
+    }));
+  right->addRow("Compiler", compilerField);
   right->addRow(
     "Cliptype",
     withToolTip(
-      choiceField(
-        Preferences::PlayModeClipType,
-        {
-          {"Legacy", Preferences::PlayModeClipTypeLegacy},
-          {"Simple", Preferences::PlayModeClipTypeSimple},
-          {"Precise", Preferences::PlayModeClipTypePrecise},
-          {"Normalized", Preferences::PlayModeClipTypeNormalized},
-          {"Smallest", Preferences::PlayModeClipTypeSmallest},
-        }),
-      "hlcsg -cliptype. Legacy is what most CS 1.6 maps use."));
+      cliptypeField, "hlcsg -cliptype. Legacytrim uses the embedded hltools compiler."));
+  connect(
+    cliptypeField,
+    &QComboBox::currentIndexChanged,
+    this,
+    [compilerField, cliptypeField]() {
+      if (cliptypeField->currentData().toInt() == Preferences::PlayModeClipTypeLegacytrim)
+        compilerField->setCurrentIndex(
+          compilerField->findData(Preferences::PlayModeCompilerHltools));
+    });
+  connect(
+    compilerField,
+    &QComboBox::currentIndexChanged,
+    this,
+    [compilerField, cliptypeField]() {
+      if (
+        compilerField->currentData().toInt() != Preferences::PlayModeCompilerHltools
+        && cliptypeField->currentData().toInt()
+             == Preferences::PlayModeClipTypeLegacytrim)
+        cliptypeField->setCurrentIndex(
+          cliptypeField->findData(Preferences::PlayModeClipTypeLegacy));
+    });
 
   right->addSection("Sound");
   right->addRow(

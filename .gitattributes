@@ -1,2 +1,4 @@
 # Unified patches contain significant single-space context lines.
 scripts/performance/*.patch -whitespace
+# Preserve upstream formatting, including its final blank lines, for hash parity.
+lib/GoldSrcCollisionLib/thirdparty/hltools/** text eol=lf whitespace=-blank-at-eof

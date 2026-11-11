@@ -398,6 +398,7 @@ inline auto PlayModeStepSize = Preference<float>{"Controls/Play mode/sv_stepsize
 // Whose hlcsg builds the clip hulls (SCS_COMPILER_*).
 inline constexpr auto PlayModeCompilerVhlt = 0;
 inline constexpr auto PlayModeCompilerZhlt = 1;
+inline constexpr auto PlayModeCompilerHltools = 2;
 inline auto PlayModeCompiler =
   Preference<int>{"Controls/Play mode/Compiler", PlayModeCompilerVhlt};
 
@@ -407,6 +408,7 @@ inline constexpr auto PlayModeClipTypeNormalized = 1;
 inline constexpr auto PlayModeClipTypeSimple = 2;
 inline constexpr auto PlayModeClipTypePrecise = 3;
 inline constexpr auto PlayModeClipTypeLegacy = 4;
+inline constexpr auto PlayModeClipTypeLegacytrim = 5;
 inline auto PlayModeClipType =
   Preference<int>{"Controls/Play mode/Cliptype", PlayModeClipTypeLegacy};
 

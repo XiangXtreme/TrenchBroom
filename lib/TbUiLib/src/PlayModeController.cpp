@@ -114,6 +114,8 @@ const char* clipTypeName(const int clipType)
     return "simple";
   case SCS_CLIPTYPE_PRECISE:
     return "precise";
+  case SCS_CLIPTYPE_LEGACYTRIM:
+    return "legacytrim";
   default:
     return "legacy";
   }
@@ -150,12 +152,6 @@ constexpr auto ShowKeys = std::array<ShowKey, 6>{{
   {SCS_IN_DUCK, "DUCK", -1.4f, 2.0f},
   {SCS_IN_JUMP, "JUMP", 1.4f, 2.0f},
 }};
-
-// The HUD shows whole units like KZ speedometers (truncated, not rounded).
-std::string formatSpeed(const float speed)
-{
-  return std::to_string(static_cast<int>(speed));
-}
 
 // The last hard landing's damage stays up for a moment.
 constexpr auto FallFontScale = 1.3f;
@@ -330,11 +326,11 @@ void PlayModeController::start(
   const auto compiler = std::clamp(
     pref(Preferences::PlayModeCompiler),
     Preferences::PlayModeCompilerVhlt,
-    Preferences::PlayModeCompilerZhlt);
+    Preferences::PlayModeCompilerHltools);
   const auto clipType = std::clamp(
     pref(Preferences::PlayModeClipType),
     Preferences::PlayModeClipTypeSmallest,
-    Preferences::PlayModeClipTypeLegacy);
+    Preferences::PlayModeClipTypeLegacytrim);
   const auto* map = &m_document.map();
   const auto cacheValid = m_world.world && m_worldMap == map
                           && m_worldModificationCount == map->modificationCount()
@@ -411,18 +407,16 @@ void PlayModeController::finishStarting()
   scs_set_world(m_context.get(), m_world.world.get());
   if (!usingCachedWorld)
   {
-    m_document.logger().info() << "Play mode: compiled " << m_world.worldBrushCount
-                               << " world brushes and " << m_world.entityCount
-                               << " brush entities, " << m_world.teleportCount
-                               << " teleport triggers in "
-                               << formatFloat(
-                                    static_cast<float>(m_world.buildMilliseconds), 1)
-                               << " ms (" << m_world.skippedBrushCount << " skipped), "
-                               << (pref(Preferences::PlayModeCompiler)
-                                       == Preferences::PlayModeCompilerZhlt
-                                     ? "ZHLT"
-                                     : "VHLT")
-                               << " cliptype " << clipTypeName(m_world.clipType);
+    m_document.logger().info()
+      << "Play mode: compiled " << m_world.worldBrushCount << " world brushes and "
+      << m_world.entityCount << " brush entities, " << m_world.teleportCount
+      << " teleport triggers in "
+      << formatFloat(static_cast<float>(m_world.buildMilliseconds), 1) << " ms ("
+      << m_world.skippedBrushCount << " skipped), "
+      << (m_worldCompiler == Preferences::PlayModeCompilerHltools ? "hltools"
+          : m_worldCompiler == Preferences::PlayModeCompilerZhlt  ? "ZHLT"
+                                                                  : "VHLT")
+      << " cliptype " << clipTypeName(m_world.clipType);
   }
 
   placePlayer(m_startFromCamera);

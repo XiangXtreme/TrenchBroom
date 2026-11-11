@@ -52,7 +52,7 @@
 extern "C" {
 #endif
 
-#define SCS_API_VERSION 1
+#define SCS_API_VERSION 2
 
 typedef struct scs_world scs_world;     /* immutable, ref-counted collision world */
 typedef struct scs_context scs_context; /* one simulated player */
@@ -62,7 +62,8 @@ typedef enum scs_result {
   SCS_ERR_INVALID_ARGUMENT = -1,
   SCS_ERR_HULL_LIMIT = -2, /* runaway hull size (sanity cap of 2^24 clipnodes) */
   SCS_ERR_OUT_OF_MEMORY = -3,
-  SCS_ERR_INTERNAL = -4
+  SCS_ERR_INTERNAL = -4,
+  SCS_ERR_COMPILE = -5 /* hltools diagnostic is in scs_world_info::error_message */
 } scs_result;
 
 /* ------------------------------------------------------------------------ */
@@ -161,10 +162,12 @@ typedef struct scs_teleport_trigger
 #define SCS_CLIPTYPE_SIMPLE 2  /* VHLT default */
 #define SCS_CLIPTYPE_PRECISE 3
 #define SCS_CLIPTYPE_LEGACY 4  /* ZHLT default, what most CS 1.6 maps use */
+#define SCS_CLIPTYPE_LEGACYTRIM 5 /* hltools continuous exterior surface hulls */
 
 /* Whose hlcsg to imitate. They differ in simple, normalized and precise. */
 #define SCS_COMPILER_VHLT 0
 #define SCS_COMPILER_ZHLT 1
+#define SCS_COMPILER_HLTOOLS 2
 
 typedef struct scs_world_desc {
   const scs_brush* world_brushes;
@@ -175,6 +178,11 @@ typedef struct scs_world_desc {
   int32_t compiler; /* SCS_COMPILER_* */
   const scs_teleport_trigger* teleports;
   uint32_t teleport_count;
+  /* SCS_COMPILER_HLTOOLS compiles this complete MAP text using the embedded
+   * hltools CSG/BSP stages. world_brushes/entities are then unused. The text
+   * is borrowed for this call only and need not be null terminated. */
+  const char* map_text;
+  size_t map_text_size;
 } scs_world_desc;
 
 typedef struct scs_world_info {
@@ -184,6 +192,9 @@ typedef struct scs_world_info {
   uint32_t world_clipnodes[4];
   uint32_t skipped_brushes;    /* degenerate / open brushes that were ignored */
   double build_milliseconds;
+  uint32_t model_count;
+  char error_message[1024];
+  char warnings[4096]; /* bounded newline-separated hltools diagnostics */
 } scs_world_info;
 
 /* Compile brushes into GoldSrc clip hulls entirely in memory (no .map/.bsp).

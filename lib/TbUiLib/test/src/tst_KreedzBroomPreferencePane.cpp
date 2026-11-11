@@ -18,6 +18,7 @@
  */
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QKeyEvent>
 #include <QtTest/QTest>
 
@@ -88,6 +89,27 @@ TEST_CASE("KreedzBroomPreferencePane")
   REQUIRE(failures);
   CHECK(results->isChecked());
   CHECK(failures->isChecked());
+
+  SECTION("legacytrim selects hltools and switching compiler restores legacy")
+  {
+    QComboBox* compiler = nullptr;
+    QComboBox* cliptype = nullptr;
+    for (auto* field : pane.findChildren<QComboBox*>())
+    {
+      if (field->findText("hltools") >= 0)
+        compiler = field;
+      if (field->findText("Legacytrim (hltools)") >= 0)
+        cliptype = field;
+    }
+    REQUIRE(compiler);
+    REQUIRE(cliptype);
+    cliptype->setCurrentIndex(
+      cliptype->findData(Preferences::PlayModeClipTypeLegacytrim));
+    CHECK(pref(Preferences::PlayModeCompiler) == Preferences::PlayModeCompilerHltools);
+    CHECK(pref(Preferences::PlayModeClipType) == Preferences::PlayModeClipTypeLegacytrim);
+    compiler->setCurrentIndex(compiler->findData(Preferences::PlayModeCompilerZhlt));
+    CHECK(pref(Preferences::PlayModeClipType) == Preferences::PlayModeClipTypeLegacy);
+  }
   results->click();
   CHECK_FALSE(pref(Preferences::PlayModeShowJumpStats));
   CHECK(pref(Preferences::PlayModeShowFailedJumps));

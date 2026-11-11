@@ -107,6 +107,7 @@ struct BrushModel
   std::array<std::vector<ClipPlane>, kNumHulls> planes;
   float mins[3]{};
   float maxs[3]{};
+  float origin[3]{}; // local BSP geometry is translated by the brush entity origin
 
   // Engine-side entity properties (what SV_CopyEdictToPhysEnt reads).
   int solid = 4; // SOLID_BSP

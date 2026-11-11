@@ -1,0 +1,33 @@
+set(HLTOOLS_COLLISION_SOURCES
+  src/collision/collision.cpp
+  src/collision/runtime.cpp
+  src/common/build_info.cpp
+  src/common/direct_clip_io.cpp
+  src/common/error.cpp
+  src/common/filesystem.cpp
+  src/csg/bsp_output.cpp
+  src/csg/brush.cpp
+  src/csg/brush_union.cpp
+  src/csg/clip_merge.cpp
+  src/csg/csg.cpp
+  src/csg/entity_output_fixups.cpp
+  src/csg/hull_file.cpp
+  src/csg/map_parser.cpp
+  src/csg/map_post.cpp
+  src/csg/surface_clip.cpp
+  src/csg/textures.cpp
+  src/bsp/brush.cpp
+  src/bsp/face.cpp
+  src/bsp/inputs.cpp
+  src/bsp/merge.cpp
+  src/bsp/bsp.cpp
+  src/bsp/brink.cpp
+  src/bsp/outside.cpp
+  src/bsp/portals.cpp
+  src/bsp/solid_bsp.cpp
+  src/bsp/surfaces.cpp
+  src/bsp/tjunc.cpp
+  src/bsp/write_bsp.cpp
+  src/format/bsp/entity_lump.cpp
+  src/format/bsp/face_extents.cpp
+)

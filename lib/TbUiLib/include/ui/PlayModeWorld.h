@@ -71,11 +71,12 @@ struct PlayModeWorld
 
 struct PlayModeWorldOptions
 {
-  int compiler = 0; // SCS_COMPILER_VHLT; also decides which tool textures exist
+  int compiler = 0; // SCS_COMPILER_VHLT, ZHLT, or HLTOOLS
   int clipType = 4; // SCS_CLIPTYPE_LEGACY, what most CS 1.6 maps were compiled with
   // Play Mode only needs the point, standing, and ducked player hulls by default.
   // The large hull remains available to the generic SCS API, but is omitted from
-  // this editor-only collision world unless explicitly requested.
+  // this editor-only collision world unless explicitly requested. The hltools
+  // backend always builds all four hulls through its original CSG/BSP stages.
   uint32_t hullMask = 0b1011u;
 };
 
@@ -85,7 +86,9 @@ struct PlayModeWorldOptions
  * world geometry, func_ladder and func_water become special brush entities, and
  * trigger_teleport becomes a non-blocking touch volume. Other non-solid brush entities
  * are ignored, and CLIP / ORIGIN / HINT / SKIP / !liquid materials determine brush
- * contents. Clip hulls are expanded with VHLT's or ZHLT's
+ * contents. The hltools backend serializes a detached MAP snapshot and runs the
+ * shared hltools CSG/BSP compiler, including legacytrim and per-entity settings.
+ * The plane-based backends expand clip hulls with VHLT's or ZHLT's
  * hlcsg rules for the chosen cliptype, including their tool textures (BEVEL, and for
  * VHLT CLIPHULLn / NOCLIP / ...).
  */

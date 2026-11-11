@@ -427,6 +427,10 @@ function Invoke-StrictCompile {
   $sourceFiles = @(
     $ChangedFiles |
       Where-Object { $_ -match '\.(c|cc|cpp|cxx)$' } |
+      # This immutable upstream snapshot has its own build/tests and hash checks.
+      # Keep TB's stricter warning policy on the adapter, not the imported sources
+      # (which also include a standalone test program outside the TB build).
+      Where-Object { $_ -notmatch '^lib/GoldSrcCollisionLib/thirdparty/hltools/' } |
       ForEach-Object { Join-Path $RepositoryRoot $_ } |
       Where-Object { Test-Path $_ } |
       ForEach-Object { (Resolve-Path $_).Path } |
@@ -611,6 +615,14 @@ try {
 
   $changedFiles = @(Get-ChangedFiles $effectiveBaseRef $Paths)
   Write-Host "Changed files considered: $($changedFiles.Count)"
+  if ($Full -or @($changedFiles | Where-Object {
+        $_ -match '^lib/GoldSrcCollisionLib/' -or $_ -eq 'scripts/sync-hltools-collision.py'
+      }).Count -gt 0) {
+    & python (Join-Path $PSScriptRoot 'sync-hltools-collision.py') --check
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Bundled hltools source verification failed'
+    }
+  }
   if ($changedFiles.Count -eq 0 -and -not $Full) {
     Write-Host "Nothing to check."
     exit 0

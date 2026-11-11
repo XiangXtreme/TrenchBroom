@@ -772,6 +772,7 @@ void PlayerHost::addPhysents(const float* center, float radius)
     pe.info = static_cast<int>(index);
     pe.model = reinterpret_cast<struct model_s*>(const_cast<BrushModel*>(&model));
     pe.rendermode = kRenderNormal;
+    copyVec(model.origin, pe.origin);
   };
 
   physent_t& world = pm.physents[0];
@@ -805,8 +806,8 @@ void PlayerHost::addPhysents(const float* center, float radius)
       bool touches = true;
       for (int k = 0; k < 3; ++k)
       {
-        touches = touches && center[k] - radius <= model.maxs[k]
-                  && center[k] + radius >= model.mins[k];
+        touches = touches && center[k] - radius <= model.maxs[k] + model.origin[k]
+                  && center[k] + radius >= model.mins[k] + model.origin[k];
       }
       if (!touches)
       {

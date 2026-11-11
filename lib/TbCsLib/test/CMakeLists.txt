@@ -3,6 +3,7 @@ EMBED_UTF8_MANIFEST(TbCsLibTest)
 
 target_sources(TbCsLibTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_ScsApi.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_HltoolsWorld.cpp
 )
 
 target_link_libraries(TbCsLibTest

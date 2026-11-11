@@ -18,14 +18,15 @@
  */
 
 // extern "C" boundary: argument checking, exception fencing, handle types.
-#include "cs/scs.h"
-
+#include "HltoolsCompiler.h"
 #include "HullCompiler.h"
 #include "PlayerHost.h"
 #include "World.h"
+#include "cs/scs.h"
 
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <new>
@@ -46,7 +47,8 @@ struct scs_context
   tb::cs::PlayerHost host;
 };
 
-namespace {
+namespace
+{
 
 std::vector<tb::cs::BrushPlane> convertPlanes(const scs_brush& brush)
 {
@@ -56,7 +58,9 @@ std::vector<tb::cs::BrushPlane> convertPlanes(const scs_brush& brush)
   {
     const scs_plane& p = brush.planes[i];
     planes.push_back(
-      {{p.normal[0], p.normal[1], p.normal[2]}, p.dist, (p.flags & SCS_PLANE_BEVEL) != 0});
+      {{p.normal[0], p.normal[1], p.normal[2]},
+       p.dist,
+       (p.flags & SCS_PLANE_BEVEL) != 0});
   }
   return planes;
 }
@@ -109,51 +113,83 @@ void fillTrace(const pmtrace_t& in, scs_trace* out)
 
 extern "C" {
 
-scs_result scs_world_build(const scs_world_desc* desc, scs_world** out_world, scs_world_info* info)
+scs_result scs_world_build(
+  const scs_world_desc* desc, scs_world** out_world, scs_world_info* info)
 {
   if (
     !desc || !out_world || (desc->world_brush_count && !desc->world_brushes)
     || (desc->entity_count && !desc->entities)
     || (desc->teleport_count && !desc->teleports)
-    || desc->cliptype < SCS_CLIPTYPE_SMALLEST || desc->cliptype > SCS_CLIPTYPE_LEGACY
-    || desc->compiler < SCS_COMPILER_VHLT || desc->compiler > SCS_COMPILER_ZHLT)
+    || desc->cliptype < SCS_CLIPTYPE_SMALLEST
+    || desc->cliptype
+         > (desc->compiler == SCS_COMPILER_HLTOOLS ? SCS_CLIPTYPE_LEGACYTRIM : SCS_CLIPTYPE_LEGACY)
+    || desc->compiler < SCS_COMPILER_VHLT || desc->compiler > SCS_COMPILER_HLTOOLS
+    || (desc->compiler == SCS_COMPILER_HLTOOLS && !desc->map_text))
   {
     return SCS_ERR_INVALID_ARGUMENT;
   }
   *out_world = nullptr;
+  if (info)
+    *info = {};
 
   const auto start = std::chrono::steady_clock::now();
   try
   {
     tb::cs::HullCompileOptions options;
-    options.clipType = static_cast<tb::cs::ClipType>(desc->cliptype);
-    options.compiler = static_cast<tb::cs::Compiler>(desc->compiler);
+    options.clipType = static_cast<tb::cs::ClipType>(
+      desc->cliptype == SCS_CLIPTYPE_LEGACYTRIM ? SCS_CLIPTYPE_LEGACY : desc->cliptype);
+    options.compiler = desc->compiler == SCS_COMPILER_ZHLT ? tb::cs::Compiler::Zhlt
+                                                           : tb::cs::Compiler::Vhlt;
 
     auto world = std::make_shared<tb::cs::World>();
     tb::cs::HullCompileStats worldStats;
-    world->models.push_back(compileBrushes(
-      desc->world_brushes, desc->world_brush_count, false, options, worldStats));
-    world->models.back()->name = "world";
-
-    std::size_t skipped = worldStats.skippedBrushes;
-    for (uint32_t i = 0; i < desc->entity_count; ++i)
+    std::size_t skipped = 0;
+    if (desc->compiler == SCS_COMPILER_HLTOOLS)
     {
-      const scs_brush_entity& ent = desc->entities[i];
-      tb::cs::HullCompileStats stats;
-      auto model = compileBrushes(ent.brushes, ent.brush_count, true, options, stats);
-      skipped += stats.skippedBrushes;
-      if (ent.entity_contents == 0)
+      auto compiled = tb::cs::compileHltoolsWorld(
+        {desc->map_text, desc->map_text_size}, desc->cliptype);
+      world->models = std::move(compiled.models);
+      if (!world->models.empty())
+        for (size_t h = 0; h < 4; ++h)
+          worldStats.clipnodes[h] = world->models[0]->clipnodes[h].size();
+      if (info)
       {
-        model->solid = 4; // SOLID_BSP
-        model->skin = 0;
+        auto warnings = std::string{};
+        for (const auto& warning : compiled.warnings)
+        {
+          warnings += warning + "\n";
+          if (warnings.size() >= sizeof(info->warnings) - 1)
+            break;
+        }
+        std::snprintf(info->warnings, sizeof(info->warnings), "%s", warnings.c_str());
       }
-      else
+    }
+    else
+    {
+      world->models.push_back(compileBrushes(
+        desc->world_brushes, desc->world_brush_count, false, options, worldStats));
+      world->models.back()->name = "world";
+
+      skipped = worldStats.skippedBrushes;
+      for (uint32_t i = 0; i < desc->entity_count; ++i)
       {
-        model->solid = 0; // SOLID_NOT, contents carried in skin
-        model->skin = ent.entity_contents;
+        const scs_brush_entity& ent = desc->entities[i];
+        tb::cs::HullCompileStats stats;
+        auto model = compileBrushes(ent.brushes, ent.brush_count, true, options, stats);
+        skipped += stats.skippedBrushes;
+        if (ent.entity_contents == 0)
+        {
+          model->solid = 4; // SOLID_BSP
+          model->skin = 0;
+        }
+        else
+        {
+          model->solid = 0; // SOLID_NOT, contents carried in skin
+          model->skin = ent.entity_contents;
+        }
+        model->name = "*" + std::to_string(i + 1);
+        world->models.push_back(std::move(model));
       }
-      model->name = "*" + std::to_string(i + 1);
-      world->models.push_back(std::move(model));
     }
 
     for (uint32_t i = 0; i < desc->teleport_count; ++i)
@@ -181,13 +217,16 @@ scs_result scs_world_build(const scs_world_desc* desc, scs_world** out_world, sc
 
     if (info)
     {
+      info->model_count = static_cast<uint32_t>(world->models.size());
       for (int h = 0; h < tb::cs::kNumHulls; ++h)
       {
-        info->world_clipnodes[h] = static_cast<uint32_t>(worldStats.clipnodes[static_cast<std::size_t>(h)]);
+        info->world_clipnodes[h] =
+          static_cast<uint32_t>(worldStats.clipnodes[static_cast<std::size_t>(h)]);
       }
       info->skipped_brushes = static_cast<uint32_t>(skipped);
-      info->build_milliseconds =
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+      info->build_milliseconds = std::chrono::duration<double, std::milli>(
+                                   std::chrono::steady_clock::now() - start)
+                                   .count();
     }
 
     *out_world = new scs_world{std::move(world)};
@@ -200,6 +239,12 @@ scs_result scs_world_build(const scs_world_desc* desc, scs_world** out_world, sc
   catch (const std::bad_alloc&)
   {
     return SCS_ERR_OUT_OF_MEMORY;
+  }
+  catch (const std::exception& error)
+  {
+    if (info)
+      std::snprintf(info->error_message, sizeof(info->error_message), "%s", error.what());
+    return desc->compiler == SCS_COMPILER_HLTOOLS ? SCS_ERR_COMPILE : SCS_ERR_INTERNAL;
   }
   catch (...)
   {
@@ -220,14 +265,14 @@ void scs_config_defaults(scs_config* config)
   }
   *config = scs_config{};
   scs_movevars& mv = config->movevars;
-  mv.gravity = 800.0f;          // sv_gravity
-  mv.stopspeed = 75.0f;         // forced by CS (engine default 100)
-  mv.maxspeed = 320.0f;         // sv_maxspeed
+  mv.gravity = 800.0f;  // sv_gravity
+  mv.stopspeed = 75.0f; // forced by CS (engine default 100)
+  mv.maxspeed = 320.0f; // sv_maxspeed
   mv.spectatormaxspeed = 500.0f;
-  mv.accelerate = 5.0f;         // forced by CS
-  mv.airaccelerate = 10.0f;     // sv_airaccelerate
+  mv.accelerate = 5.0f;     // forced by CS
+  mv.airaccelerate = 10.0f; // sv_airaccelerate
   mv.wateraccelerate = 10.0f;
-  mv.friction = 4.0f;           // forced by CS
+  mv.friction = 4.0f; // forced by CS
   mv.edgefriction = 2.0f;
   mv.waterfriction = 1.0f;
   mv.entgravity = 1.0f;
@@ -334,7 +379,8 @@ int scs_position_is_free(scs_context* ctx, const float origin[3], int usehull)
   return ctx && origin && ctx->host.positionIsFree(origin, usehull) ? 1 : 0;
 }
 
-void scs_trace_hull(scs_context* ctx, const float start[3], const float end[3], int usehull, scs_trace* out)
+void scs_trace_hull(
+  scs_context* ctx, const float start[3], const float end[3], int usehull, scs_trace* out)
 {
   if (!ctx || !start || !end || !out)
   {
@@ -468,7 +514,8 @@ void scs_client_input_defaults(scs_client_input* in)
   in->anglespeedkey = 0.67f;
 }
 
-void scs_build_usercmd(scs_client_input* in, float clientmaxspeed, uint8_t msec, scs_usercmd* cmd)
+void scs_build_usercmd(
+  scs_client_input* in, float clientmaxspeed, uint8_t msec, scs_usercmd* cmd)
 {
   if (!in || !cmd)
   {
@@ -542,7 +589,8 @@ void scs_build_usercmd(scs_client_input* in, float clientmaxspeed, uint8_t msec,
   std::memcpy(cmd->viewangles, in->viewangles, sizeof(cmd->viewangles));
 }
 
-uint32_t scs_tick_clock_advance(scs_tick_clock* clock, double dt_seconds, uint8_t* msec_out)
+uint32_t scs_tick_clock_advance(
+  scs_tick_clock* clock, double dt_seconds, uint8_t* msec_out)
 {
   if (!clock)
   {

@@ -215,6 +215,8 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeTimeline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeTravel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeWorld.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeHltoolsMap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PlayModeHltoolsMap.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupButton.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PopupWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PrefabAsset.cpp
