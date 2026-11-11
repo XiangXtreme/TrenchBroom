@@ -19,6 +19,7 @@
 
 #include "ui/ControlListBox.h"
 
+#include <QEvent>
 #include <QLabel>
 #include <QListWidget>
 #include <QMouseEvent>
@@ -179,6 +180,16 @@ const ControlListBoxItemRenderer* ControlListBoxItemRendererWrapper::renderer() 
   return m_renderer;
 }
 
+bool ControlListBoxItemRendererWrapper::event(QEvent* event)
+{
+  const auto result = QWidget::event(event);
+  // Child layouts propagate geometry changes here after their cached constraints
+  // have been invalidated. A disclosure's toggled signal arrives too early.
+  if (event->type() == QEvent::LayoutRequest)
+    emit sizeHintChanged();
+  return result;
+}
+
 // ControlListBox
 
 ControlListBox::ControlListBox(
@@ -316,13 +327,21 @@ void ControlListBox::updateItemSizes()
 {
   for (int i = 0; i < count(); ++i)
   {
-    auto* item = renderer(i);
+    auto* item = wrapper(i);
+    item->layout()->activate();
     auto size = item->minimumSizeHint();
     if (item->hasHeightForWidth())
       size.setHeight(
         std::max(size.height(), item->heightForWidth(m_listWidget->viewport()->width())));
-    m_listWidget->item(i)->setSizeHint(size);
+    if (m_listWidget->item(i)->sizeHint() != size)
+      m_listWidget->item(i)->setSizeHint(size);
   }
+}
+
+void ControlListBox::resizeEvent(QResizeEvent* event)
+{
+  QWidget::resizeEvent(event);
+  updateItemSizes();
 }
 
 const ControlListBoxItemRenderer* ControlListBox::renderer(const int i) const
@@ -379,6 +398,11 @@ void ControlListBox::addItemRenderer(ControlListBoxItemRenderer* renderer)
   }
 
   auto* wrapper = new ControlListBoxItemRendererWrapper{renderer, m_showSeparator};
+  connect(
+    wrapper,
+    &ControlListBoxItemRendererWrapper::sizeHintChanged,
+    this,
+    &ControlListBox::updateItemSizes);
 
   m_listWidget->setItemWidget(widgetItem, wrapper);
   widgetItem->setSizeHint(renderer->minimumSizeHint());

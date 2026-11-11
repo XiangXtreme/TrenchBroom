@@ -28,6 +28,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPushButton>
 #include <QSignalBlocker>
 
@@ -74,6 +75,8 @@ CompilationTaskEditorBase::CompilationTaskEditorBase(
   setContextMenuPolicy(Qt::CustomContextMenu);
 
   auto* panel = new TitledPanel{m_title};
+  m_titleBar = panel->getTitleBar();
+  m_titleBar->setAutoFillBackground(true);
 
   auto* layout = new QVBoxLayout{};
   layout->setContentsMargins(0, 0, 0, 0);
@@ -116,6 +119,26 @@ void CompilationTaskEditorBase::addMainLayout(QLayout* layout)
 void CompilationTaskEditorBase::updateItem()
 {
   std::visit([&](const auto& t) { m_enabledCheckbox->setChecked(t.enabled); }, m_task);
+}
+
+void CompilationTaskEditorBase::setSelected(
+  const bool selected, const QListWidget* listWidget)
+{
+  // A task is an editable form. Keep selection feedback in its header rather
+  // than changing the surface and label colors of every field and diagnostic.
+  ControlListBoxItemRenderer::setSelected(false, listWidget);
+  m_titleBar->setBackgroundRole(selected ? QPalette::AlternateBase : QPalette::Base);
+  auto headerPalette = palette();
+  for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled})
+  {
+    headerPalette.setColor(
+      group,
+      QPalette::AlternateBase,
+      listWidget->palette().color(group, QPalette::AlternateBase));
+    headerPalette.setColor(
+      group, QPalette::WindowText, listWidget->palette().color(group, QPalette::Text));
+  }
+  m_titleBar->setPalette(headerPalette);
 }
 
 void CompilationTaskEditorBase::setDiagnostic(
@@ -713,8 +736,6 @@ CompilationHltoolsTaskEditor::CompilationHltoolsTaskEditor(
   options->createContentLayout()->addWidget(m_optionsEditor);
   form->addRow(options);
   connect(
-    options, &CollapsibleTitledPanel::toggled, this, [this] { emit layoutChanged(); });
-  connect(
     m_optionsEditor,
     &HltoolsOptionsEditor::parametersChanged,
     m_parametersEditor,
@@ -913,12 +934,6 @@ ControlListBoxItemRenderer* CompilationTaskListBox::createItemRenderer(
     task);
 
   connect(
-    static_cast<CompilationTaskEditorBase*>(renderer),
-    &CompilationTaskEditorBase::layoutChanged,
-    this,
-    &CompilationTaskListBox::updateItemSizes);
-
-  connect(
     renderer,
     &QWidget::customContextMenuRequested,
     this,
@@ -979,14 +994,6 @@ void CompilationTaskListBox::setDiagnostic(
     if (auto* editor = qobject_cast<CompilationTaskEditorBase*>(renderer(i)))
       editor->setDiagnostic(
         diagnostic && diagnostic->taskIndex == size_t(i) ? diagnostic : std::nullopt);
-  // Inline feedback changes a renderer's height; let the list refresh its row sizes.
-  updateItemSizes();
-}
-
-void CompilationTaskListBox::resizeEvent(QResizeEvent* event)
-{
-  ControlListBox::resizeEvent(event);
-  updateItemSizes();
 }
 
 } // namespace tb::ui

@@ -19,7 +19,10 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
+#include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QtTest/QSignalSpy>
 
 #include "mdl/CompilationProfile.h"
@@ -33,6 +36,7 @@
 #include "ui/HltoolsOptionsEditor.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/TitleBar.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -195,6 +199,107 @@ TEST_CASE("CompilationHltoolsTaskEditor")
     CHECK(sky->parentWidget()->isHidden());
     CHECK_FALSE(
       editor.findChild<QCheckBox*>("HltoolsOption_bounce")->parentWidget()->isHidden());
+  }
+}
+
+TEST_CASE("CompilationTaskListBox")
+{
+  auto fixture = MapDocumentFixture{};
+  auto& document = fixture.create();
+  auto profile = mdl::CompilationProfile{
+    "Built-in", "", {mdl::CompilationHltools{}, mdl::CompilationCopyFiles{}}};
+  auto list = CompilationTaskListBox{document};
+  list.setProfile(&profile);
+  list.resize(760, 900);
+  list.show();
+  const auto settle = [] {
+    for (int i = 0; i < 10; ++i)
+    {
+      QCoreApplication::sendPostedEvents();
+      QCoreApplication::processEvents();
+    }
+  };
+  settle();
+  auto* rows = list.findChild<QListWidget*>();
+  auto* editor = list.findChild<CompilationHltoolsTaskEditor*>();
+  auto* options = list.findChild<CollapsibleTitledPanel*>("HltoolsOptionsPanel");
+  REQUIRE(rows);
+  REQUIRE(editor);
+  REQUIRE(options);
+  auto* title = static_cast<TitleBar*>(nullptr);
+  for (auto* widget : editor->findChildren<QWidget*>())
+    if (auto* bar = dynamic_cast<TitleBar*>(widget))
+    {
+      title = bar;
+      break;
+    }
+  REQUIRE(title);
+  const auto collapsedHeight = rows->visualItemRect(rows->item(0)).height();
+  const auto qualityPosition =
+    editor->findChild<QComboBox*>("HltoolsQuality")->mapTo(editor, QPoint{});
+
+  SECTION("expanding and collapsing releases the row height without a resize")
+  {
+    for (int i = 0; i < 3; ++i)
+    {
+      options->expand();
+      settle();
+      CHECK(rows->visualItemRect(rows->item(0)).height() > collapsedHeight + 100);
+      options->collapse();
+      settle();
+      CHECK(rows->visualItemRect(rows->item(0)).height() == collapsedHeight);
+      CHECK(editor->height() == collapsedHeight);
+      CHECK(
+        editor->findChild<QComboBox*>("HltoolsQuality")->mapTo(editor, QPoint{})
+        == qualityPosition);
+      CHECK(rows->visualItemRect(rows->item(1)).top() == collapsedHeight);
+    }
+    list.resize(400, 600);
+    settle();
+    const auto narrowHeight = rows->visualItemRect(rows->item(0)).height();
+    options->expand();
+    settle();
+    options->collapse();
+    settle();
+    CHECK(rows->visualItemRect(rows->item(0)).height() == narrowHeight);
+    list.resize(760, 900);
+    settle();
+    CHECK(rows->visualItemRect(rows->item(0)).height() == collapsedHeight);
+  }
+  SECTION("inline diagnostics grow and shrink the row at the current width")
+  {
+    list.setDiagnostic(CompilationDiagnostic{
+      size_t{0},
+      CompilationField::Parameters,
+      QString{"Unknown compile option. "}.repeated(30)});
+    settle();
+    const auto diagnosticHeight = rows->visualItemRect(rows->item(0)).height();
+    CHECK(diagnosticHeight > collapsedHeight);
+    list.resize(400, 900);
+    settle();
+    CHECK(rows->visualItemRect(rows->item(0)).height() > diagnosticHeight);
+    list.setDiagnostic(std::nullopt);
+    list.resize(760, 900);
+    settle();
+    CHECK(rows->visualItemRect(rows->item(0)).height() == collapsedHeight);
+  }
+  SECTION("selection highlights the title while keeping the form neutral")
+  {
+    list.setCurrentRow(0);
+    settle();
+    CHECK(list.selectedRow() == 0);
+    CHECK(editor->backgroundRole() == QPalette::Base);
+    CHECK(title->backgroundRole() == QPalette::AlternateBase);
+    CHECK(title->autoFillBackground());
+    auto* titleLabel = title->findChild<QLabel*>();
+    REQUIRE(titleLabel);
+    CHECK(
+      titleLabel->palette().color(QPalette::Active, QPalette::WindowText)
+      == rows->palette().color(QPalette::Active, QPalette::Text));
+    list.setCurrentRow(1);
+    settle();
+    CHECK(list.selectedRow() == 1);
+    CHECK(title->backgroundRole() == QPalette::Base);
   }
 }
 

@@ -46,6 +46,7 @@ namespace ui
 class MapDocument;
 class MultiCompletionLineEdit;
 class TitledPanel;
+class TitleBar;
 class HltoolsOptionsEditor;
 
 class CompilationTaskEditorBase : public ControlListBoxItemRenderer
@@ -58,6 +59,7 @@ protected:
   mdl::CompilationTask& m_task;
   QCheckBox* m_enabledCheckbox = nullptr;
   QHBoxLayout* m_taskLayout = nullptr;
+  TitleBar* m_titleBar = nullptr;
   QLabel* m_diagnosticLabel = nullptr;
   std::optional<CompilationField> m_diagnosticField;
 
@@ -76,10 +78,8 @@ protected:
 
 public:
   void updateItem() override;
+  void setSelected(bool selected, const QListWidget* listWidget) override;
   void setDiagnostic(const std::optional<CompilationDiagnostic>& diagnostic);
-
-signals:
-  void layoutChanged();
 
 private:
   void updateCompleter(QCompleter* completer);
@@ -267,7 +267,6 @@ public:
 
 private:
   size_t itemCount() const override;
-  void resizeEvent(QResizeEvent* event) override;
   ControlListBoxItemRenderer* createItemRenderer(QWidget* parent, size_t index) override;
 signals:
   void taskChanged();

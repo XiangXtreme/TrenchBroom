@@ -65,6 +65,12 @@ public:
 
   ControlListBoxItemRenderer* renderer();
   const ControlListBoxItemRenderer* renderer() const;
+
+protected:
+  bool event(QEvent* event) override;
+
+signals:
+  void sizeHintChanged();
 };
 
 class ControlListBox : public QWidget
@@ -113,6 +119,7 @@ protected:
    */
   void updateItems();
   void updateItemSizes();
+  void resizeEvent(QResizeEvent* event) override;
 
   const ControlListBoxItemRenderer* renderer(int i) const;
   ControlListBoxItemRenderer* renderer(int i);

@@ -87,6 +87,7 @@
 #include "ui/CommandPaletteDialog.h"
 #include "ui/CompilationDialog.h"
 #include "ui/CompilationProfileManager.h"
+#include "ui/CompilationTaskListBox.h"
 #include "ui/CyclingMapView.h"
 #include "ui/EntityBrowserView.h"
 #include "ui/EntityMotionPreview.h"
@@ -130,6 +131,7 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("map-settings"),
     QStringLiteral("compilation-hltools"),
     QStringLiteral("compilation-options"),
+    QStringLiteral("compilation-collapsed"),
     QStringLiteral("compilation-error"),
     QStringLiteral("compilation-simulated"),
     QStringLiteral("map-areas"),
@@ -1046,6 +1048,35 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
                        && quality->isVisible() && gpu->isVisible()
                        && !output->text().isEmpty() && quality->currentData() == "normal"
                        && gpu->isChecked() && output->text() == "${MAP_BASE_NAME}.bsp";
+    if (targetName == "compilation-collapsed")
+    {
+      auto* options =
+        targetWidget.findChild<CollapsibleTitledPanel*>("HltoolsOptionsPanel");
+      auto* tasks = targetWidget.findChild<CompilationTaskListBox*>();
+      auto* editor = targetWidget.findChild<CompilationHltoolsTaskEditor*>();
+      if (!options || !tasks || !editor)
+        return {UiSnapshotReadinessState::Failed, "Compiler task is missing"};
+      const auto initialHeight = targetWidget.property("collapsedTaskHeight");
+      if (!initialHeight.isValid())
+      {
+        targetWidget.setProperty("collapsedTaskHeight", editor->height());
+        options->expand();
+        return {UiSnapshotReadinessState::Pending, "Expanding compiler options"};
+      }
+      if (options->expanded())
+      {
+        if (editor->height() <= initialHeight.toInt() + 100)
+          return {UiSnapshotReadinessState::Pending, "Waiting for expanded row height"};
+        options->collapse();
+        tasks->setCurrentRow(0);
+        return {
+          UiSnapshotReadinessState::Pending, "Collapsing and selecting compiler task"};
+      }
+      if (editor->height() != initialHeight.toInt())
+        return {UiSnapshotReadinessState::Pending, "Waiting for collapsed row height"};
+      if (editor->backgroundRole() != QPalette::Base || tasks->selectedRow() != 0)
+        return {UiSnapshotReadinessState::Failed, "Selected task form must stay neutral"};
+    }
     if (targetName == "compilation-options")
     {
       const auto* options =
