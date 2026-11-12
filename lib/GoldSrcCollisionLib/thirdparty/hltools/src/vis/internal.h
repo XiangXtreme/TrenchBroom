@@ -1,12 +1,13 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
-#include <mutex>
+#include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "../common/types.h"
+#include "../common/limits.h"
 #include "format/bsp/data.h"
 #include "../math/vector.h"
 #include "vis.h"
@@ -44,9 +45,11 @@ namespace vis
         plane plane_;
         int leaf = 0;
         winding *winding_ = nullptr;
-        portal_status status = portal_status::none;
+        std::atomic<portal_status> status{portal_status::none};
         byte *visbits = nullptr;
         byte *mightsee = nullptr;
+        std::unique_ptr<byte[]> visbits_storage;
+        std::unique_ptr<byte[]> mightsee_storage;
         unsigned nummightsee = 0;
         int numcansee = 0;
         std::uint32_t zone = 0;
@@ -58,12 +61,17 @@ namespace vis
         portal *portals[max_portals_on_leaf] = {};
     };
 
+    struct additional_leaf
+    {
+        int leaf = 0;
+        int neighbor = 0;
+    };
+
     struct leaf_info
     {
         bool isoverviewpoint = false;
         bool isskyboxpoint = false;
-        std::vector<int> additional_leaves;
-        int neighbor = 0;
+        std::vector<additional_leaf> additional_leaves;
     };
 
     // an info_overview_point entity: its leaf sees everything (or, reversed,
@@ -85,7 +93,7 @@ namespace vis
 
     struct pstack
     {
-        byte mightsee[32760 / 8] = {};
+        byte mightsee[((limits::max_map_leafs + 63) / 64) * 8] = {};
         pstack *head = nullptr;
         leaf *leaf_ = nullptr;
         portal *portal_ = nullptr;
@@ -129,8 +137,6 @@ namespace vis
         unsigned bitlongs = 0;
         int originalvismapsize = 0;
         int totalvis = 0;
-
-        std::mutex portal_mutex;
     };
 
     int compress_vis(const byte *src, unsigned src_length, byte *dest, unsigned dest_length);

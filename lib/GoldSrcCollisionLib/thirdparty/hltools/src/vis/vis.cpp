@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <sstream>
 
 #include "../common/error.h"
@@ -173,7 +174,10 @@ namespace vis
                         }
                     }
                     if (!has_target)
+                    {
                         logging::warn("entity %d (info_portal) does not have a target leaf", i);
+                        continue;
+                    }
                     state.rooms.push_back(room);
                 }
             }
@@ -191,10 +195,16 @@ namespace vis
             state.numportals = parse_int_token(reader, "number of portals");
             logging::file("  %d portal leafs, %d portals\n", state.portalleafs, state.numportals);
 
+            if (state.portalleafs > limits::max_map_leafs)
+                err::fatal("too many portalleafs (%u > %d)", state.portalleafs,
+                           limits::max_map_leafs);
+            if (state.numportals < 0 || state.numportals > std::numeric_limits<int>::max() / 2)
+                err::fatal("invalid number of portals (%d)", state.numportals);
+
             state.bitbytes = ((state.portalleafs + 63) & ~63) >> 3;
             state.bitlongs = state.bitbytes / sizeof(std::uint32_t);
 
-            state.portals.assign(2 * state.numportals, portal{});
+            state.portals = std::vector<portal>(2 * state.numportals);
             state.leafs.assign(state.portalleafs, leaf{});
             state.leafinfos.assign(state.portalleafs, leaf_info{});
             state.leafcounts.assign(state.portalleafs, 0);
@@ -205,58 +215,55 @@ namespace vis
             state.visibility.assign(limits::max_map_visibility, 0);
             state.vismap_p = state.visibility.data();
 
-            if (state.portalleafs > limits::max_map_leafs)
-            {
-                err::fatal("too many portalleafs (%u > %d)", state.portalleafs,
-                           limits::max_map_leafs);
-            }
-
             state.leafcount_all = 0;
             for (unsigned i = 0; i < state.portalleafs; i++)
             {
                 state.leafcounts[i] = parse_int_token(reader, "leaf mapping");
+                if (state.leafcounts[i] < 0
+                    || state.leafcounts[i] > limits::max_map_leafs - state.leafcount_all)
+                    err::fatal("corrupted leaf mapping count");
                 state.leafstarts[i] = state.leafcount_all;
                 state.leafcount_all += state.leafcounts[i];
             }
 
-            if (state.map->models.empty() || state.leafcount_all != state.map->models[0].visleafs)
+            if (state.map->models.empty() || state.leafcount_all != state.map->models[0].visleafs
+                || state.map->leafs.size() <= (size_t)state.leafcount_all)
             {
                 err::fatal("corrupted leaf mapping (%d != %d)", state.leafcount_all,
                            state.map->models.empty() ? -1 : state.map->models[0].visleafs);
             }
 
-            // fold the overview and room entities into per leaf flags now that
-            // the bsp leaf to vis leaf mapping is known
+            // Resolve BSP leaves to portal leaves once rather than scanning the
+            // entire mapping for each overview point and room portal.
+            std::vector<int> portal_leaf_for_visleaf((size_t)state.leafcount_all);
             for (unsigned i = 0; i < state.portalleafs; i++)
             {
-                for (const overview_point &overview : state.overview_points)
-                {
-                    int d = overview.visleafnum - state.leafstarts[i];
-                    if (0 <= d && d < state.leafcounts[i])
-                    {
-                        if (overview.reverse)
-                            state.leafinfos[i].isskyboxpoint = true;
-                        else
-                            state.leafinfos[i].isoverviewpoint = true;
-                    }
-                }
+                for (int j = 0; j < state.leafcounts[i]; j++)
+                    portal_leaf_for_visleaf[(size_t)(state.leafstarts[i] + j)] = (int)i;
+            }
+            const auto portal_leaf = [&](int visleaf) {
+                return visleaf >= 0 && visleaf < state.leafcount_all
+                    ? portal_leaf_for_visleaf[(size_t)visleaf] : -1;
+            };
 
-                for (const room_portal &room : state.rooms)
+            for (const overview_point &overview : state.overview_points)
+            {
+                const int leaf = portal_leaf(overview.visleafnum);
+                if (leaf >= 0)
                 {
-                    int d1 = room.visleafnum - state.leafstarts[i];
-                    if (0 <= d1 && d1 < state.leafcounts[i])
-                    {
-                        for (unsigned k = 0; k < state.portalleafs; k++)
-                        {
-                            int d2 = room.target_visleafnum - state.leafstarts[k];
-                            if (0 <= d2 && d2 < state.leafcounts[k])
-                            {
-                                state.leafinfos[i].additional_leaves.push_back((int)k);
-                                state.leafinfos[i].neighbor = room.neighbor;
-                            }
-                        }
-                    }
+                    if (overview.reverse)
+                        state.leafinfos[(size_t)leaf].isskyboxpoint = true;
+                    else
+                        state.leafinfos[(size_t)leaf].isoverviewpoint = true;
                 }
+            }
+
+            for (const room_portal &room : state.rooms)
+            {
+                const int source = portal_leaf(room.visleafnum);
+                const int target = portal_leaf(room.target_visleafnum);
+                if (source >= 0 && target >= 0)
+                    state.leafinfos[(size_t)source].additional_leaves.push_back({target, room.neighbor});
             }
 
             portal *p = state.portals.data();
@@ -267,9 +274,9 @@ namespace vis
                 leafnums[0] = parse_int_token(reader, "portal leaf");
                 leafnums[1] = parse_int_token(reader, "portal leaf");
 
-                if (numpoints > max_points_on_winding)
-                    err::fatal("load_portals: portal %i has too many points", i);
-                if ((unsigned)leafnums[0] > state.portalleafs || (unsigned)leafnums[1] > state.portalleafs)
+                if (numpoints < 3 || numpoints > max_points_on_winding)
+                    err::fatal("load_portals: portal %i has an invalid point count", i);
+                if ((unsigned)leafnums[0] >= state.portalleafs || (unsigned)leafnums[1] >= state.portalleafs)
                     err::fatal("load_portals: reading portal %i", i);
 
                 winding *w = p->winding_ = new_winding(state, numpoints);
@@ -318,45 +325,41 @@ namespace vis
             }
         }
 
-        portal *get_next_portal(vis_state &state)
+        void leaf_flow_neighbor_add_leaf(vis_state &state, int source,
+                                         const additional_leaf &link,
+                                         std::vector<unsigned> &seen, unsigned &generation,
+                                         std::vector<int> &queue)
         {
-            std::lock_guard<std::mutex> lock(state.portal_mutex);
-
-            int min = 99999;
-            portal *best = nullptr;
-            for (int j = 0; j < state.numportals * 2; j++)
+            if (++generation == 0)
             {
-                portal *tp = state.portals.data() + j;
-                if ((int)tp->nummightsee < min && tp->status == portal_status::none)
-                {
-                    min = tp->nummightsee;
-                    best = tp;
-                }
+                std::fill(seen.begin(), seen.end(), 0);
+                generation = 1;
             }
-
-            if (best)
-                best->status = portal_status::working;
-            return best;
-        }
-
-
-        void leaf_flow_neighbor_add_leaf(vis_state &state, int current, int add, int neighbor,
-                                         std::unordered_map<int, bool> &exclude)
-        {
-            byte *outbuffer = state.uncompressed.data() + current * state.bitbytes;
-            outbuffer[add >> 3] |= (1 << (add & 7));
-            exclude[current] = true;
-
-            if (neighbor == 0)
-                return;
-
-            leaf *leaf_ptr = &state.leafs[current];
-            for (unsigned i = 0; i < leaf_ptr->numportals; i++)
+            queue.clear();
+            queue.push_back(source);
+            seen[(size_t)source] = generation;
+            size_t next = 0;
+            for (int depth = 0; next < queue.size(); depth++)
             {
-                portal *p = leaf_ptr->portals[i];
-                if (exclude[p->leaf])
-                    continue;
-                leaf_flow_neighbor_add_leaf(state, p->leaf, add, neighbor - 1, exclude);
+                const size_t end = queue.size();
+                while (next < end)
+                {
+                    const int current = queue[next++];
+                    byte *outbuffer = state.uncompressed.data() + current * state.bitbytes;
+                    outbuffer[link.leaf >> 3] |= (1 << (link.leaf & 7));
+                    if (depth >= link.neighbor)
+                        continue;
+
+                    const leaf &current_leaf = state.leafs[(size_t)current];
+                    for (unsigned i = 0; i < current_leaf.numportals; i++)
+                    {
+                        const int next_leaf = current_leaf.portals[i]->leaf;
+                        if (seen[(size_t)next_leaf] == generation)
+                            continue;
+                        seen[(size_t)next_leaf] = generation;
+                        queue.push_back(next_leaf);
+                    }
+                }
             }
         }
 
@@ -373,7 +376,7 @@ namespace vis
             for (unsigned i = 0; i < leaf_ptr->numportals; i++)
             {
                 portal *p = leaf_ptr->portals[i];
-                if (p->status != portal_status::done)
+                if (p->status.load(std::memory_order_acquire) != portal_status::done)
                     err::fatal("portal not done (leaf %d)", leafnum);
 
                 byte *dst = outbuffer;
@@ -446,22 +449,28 @@ namespace vis
                 for (int i = 0; i < state.numportals * 2; i++)
                 {
                     state.portals[i].visbits = state.portals[i].mightsee;
-                    state.portals[i].status = portal_status::done;
+                    state.portals[i].status.store(portal_status::done, std::memory_order_relaxed);
                 }
                 return;
             }
 
-            // one portal per work item so the bar advances as portals finish
-            // (the old leaf_thread loop drained the whole queue inside the
-            // first few items, so the bar sat at 0% until the phase ended)
-            // scheduling is unchanged: every item still pulls the cheapest
-            // pending portal through get_next_portal
+            // The base counts are immutable now. Sort once, keeping the old
+            // lowest-count / original-index priority without a locked scan
+            // of every portal for each work item.
+            std::vector<portal *> ordered;
+            ordered.reserve(state.portals.size());
+            for (portal &p : state.portals)
+                ordered.push_back(&p);
+            std::stable_sort(ordered.begin(), ordered.end(), [](const portal *a, const portal *b) {
+                return a->nummightsee < b->nummightsee;
+            });
             threads::run_phase("computing visibility",
                                state.options.full ? "computing full visibility"
                                                   : "computing portal visibility",
-                               state.numportals * 2, [&](int) {
-                if (portal *p = get_next_portal(state))
-                    portal_flow(state, p);
+                               state.numportals * 2, [&](int index) {
+                portal *p = ordered[(size_t)index];
+                p->status.store(portal_status::working, std::memory_order_relaxed);
+                portal_flow(state, p);
             });
         }
 
@@ -474,15 +483,14 @@ namespace vis
 
             calc_portal_vis(state);
 
+            std::vector<unsigned> seen(state.portalleafs, 0);
+            std::vector<int> queue;
+            unsigned generation = 0;
             for (unsigned i = 0; i < state.portalleafs; i++)
             {
-                if (!state.leafinfos[i].additional_leaves.empty())
+                for (const additional_leaf &link : state.leafinfos[i].additional_leaves)
                 {
-                    for (int leaf_index : state.leafinfos[i].additional_leaves)
-                    {
-                        std::unordered_map<int, bool> exclude;
-                        leaf_flow_neighbor_add_leaf(state, i, leaf_index, state.leafinfos[i].neighbor, exclude);
-                    }
+                    leaf_flow_neighbor_add_leaf(state, (int)i, link, seen, generation, queue);
                 }
             }
 

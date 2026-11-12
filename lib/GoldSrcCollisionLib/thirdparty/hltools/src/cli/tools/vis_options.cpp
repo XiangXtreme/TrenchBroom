@@ -17,7 +17,8 @@ vis::vis_options parse_vis_options(const cli::args &args, const std::string &por
     options.full = !args.has("-nofull") && !options.fast;
     options.nofixprt = args.has("-nofixprt");
     options.chart = true;
-    options.maxdistance = (unsigned)std::abs(args.int_value("-maxdistance", 0));
+    const long long maxdistance = args.int_value("-maxdistance", 0);
+    options.maxdistance = (unsigned)(maxdistance < 0 ? -maxdistance : maxdistance);
 
     logging::setting("full vis", options.full ? "on" : "off", "on", !options.full);
     logging::setting("fast vis", options.fast ? "on" : "off", "off", options.fast);

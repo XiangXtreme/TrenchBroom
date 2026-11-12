@@ -388,7 +388,8 @@ namespace vis
                     // the loop forced a reload every iteration, because the
                     // uint32 store to *might could alias it)
                     const std::uint64_t *test = (const std::uint64_t *)
-                        (p->status == portal_status::done ? p->visbits : p->mightsee);
+                        (p->status.load(std::memory_order_acquire) == portal_status::done
+                             ? p->visbits : p->mightsee);
                     const std::uint64_t *prevmight = (const std::uint64_t *)prevstack->mightsee;
                     const std::uint64_t *vis = (const std::uint64_t *)thread->leafvis;
                     std::uint64_t *might = (std::uint64_t *)stack.mightsee;
@@ -493,10 +494,11 @@ namespace vis
 
     void portal_flow(vis_state &state, portal *p)
     {
-        if (p->status != portal_status::working)
+        if (p->status.load(std::memory_order_relaxed) != portal_status::working)
             err::fatal("portal_flow: reflowed");
 
-        p->visbits = (byte *)std::calloc(1, state.bitbytes);
+        p->visbits_storage = std::make_unique<byte[]>(state.bitbytes);
+        p->visbits = p->visbits_storage.get();
 
         thread_data data;
         std::memset(&data, 0, sizeof(data));
@@ -512,13 +514,14 @@ namespace vis
             ((std::uint32_t *)data.pstack_head.mightsee)[i] = ((std::uint32_t *)p->mightsee)[i];
 
         recursive_leaf_flow(state, p->leaf, &data, &data.pstack_head, 0);
-        p->status = portal_status::done;
+        p->status.store(portal_status::done, std::memory_order_release);
     }
 
     void base_portal_vis(vis_state &state, int index)
     {
         portal *p = state.portals.data() + index;
-        p->mightsee = (byte *)std::calloc(1, state.bitbytes);
+        p->mightsee_storage = std::make_unique<byte[]>(state.bitbytes);
+        p->mightsee = p->mightsee_storage.get();
 
         const int portalsize = state.numportals * 2;
         std::vector<byte> portalsee(portalsize);

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <vector>
 
 #include "../../common/error.h"
@@ -128,7 +129,10 @@ rad::rad_options parse_rad_options(const cli::args &args, int argc, char **argv,
             options.numbounce = 12;
         }
     }
-    options.numbounce = (unsigned)args.int_value("-bounce", (int)options.numbounce);
+    const int bounce = args.int_value("-bounce", (int)options.numbounce);
+    if (bounce < 0)
+        err::fatal("-bounce must not be negative");
+    options.numbounce = (unsigned)bounce;
     options.lerp_enabled = !args.has("-nolerp");
     options.chop = (float)args.float_value("-chop", options.chop);
     options.texchop = (float)args.float_value("-texchop", options.texchop);
@@ -158,8 +162,15 @@ rad::rad_options parse_rad_options(const cli::args &args, int argc, char **argv,
     options.smoothing_value = (float)args.float_value("-smooth", options.smoothing_value);
     options.smoothing_value_2 = (float)args.float_value("-smooth2", options.smoothing_value_2);
     options.coring = (float)args.float_value("-coring", options.coring);
-    options.max_map_lightdata = args.int_value("-lightdata", options.max_map_lightdata / 1024) * 1024;
-    options.max_map_miptex = args.int_value("-texdata", options.max_map_miptex / 1024) * 1024;
+    const auto size_in_bytes = [&](const char *flag, int default_bytes) {
+        const int kb = args.int_value(flag, default_bytes / 1024);
+        if (kb < 0 || kb > std::numeric_limits<int>::max() / 1024)
+            err::fatal("%s must be between 0 and %d KiB", flag,
+                       std::numeric_limits<int>::max() / 1024);
+        return kb * 1024;
+    };
+    options.max_map_lightdata = size_in_bytes("-lightdata", options.max_map_lightdata);
+    options.max_map_miptex = size_in_bytes("-texdata", options.max_map_miptex);
     if (args.has("-vismatrix"))
     {
         const char *value = args.value("-vismatrix", "");

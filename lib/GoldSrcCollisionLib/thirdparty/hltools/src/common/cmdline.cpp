@@ -1,10 +1,13 @@
 #include "cmdline.h"
+#include "error.h"
 #include "log.h"
 #include "string_util.h"
 
+#include <cerrno>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 
 namespace cli
 {
@@ -217,7 +220,23 @@ namespace cli
     int args::int_value(const char *flag, int def) const
     {
         const char *v = value(flag, nullptr);
-        return v ? std::atoi(v) : def;
+        if (!v)
+        {
+            if (has(flag))
+                err::fatal("%s requires an integer value", flag);
+            return def;
+        }
+
+        char *end = nullptr;
+        errno = 0;
+        const long value = std::strtol(v, &end, 10);
+        if (v == end || *end != '\0' || errno == ERANGE
+            || value < std::numeric_limits<int>::min()
+            || value > std::numeric_limits<int>::max())
+            err::fatal("%s expects an integer in the range %d..%d, got '%s'",
+                       flag, std::numeric_limits<int>::min(),
+                       std::numeric_limits<int>::max(), v);
+        return (int)value;
     }
 
     double args::float_value(const char *flag, double def) const
@@ -240,9 +259,9 @@ namespace cli
                     long min, long max, long step, long &out)
     {
         char *end = nullptr;
-        // an overlarge value saturates, which the bounds then reject
+        errno = 0;
         const long value = std::strtol(text, &end, 10);
-        if (consumed_whole_token(text, end) && value >= min && value <= max
+        if (errno != ERANGE && consumed_whole_token(text, end) && value >= min && value <= max
             && (step <= 0 || value % step == 0))
         {
             out = value;
@@ -260,8 +279,9 @@ namespace cli
                      long min, long max, bool allow_zero, long &out)
     {
         char *end = nullptr;
+        errno = 0;
         const long value = std::strtol(text, &end, 10);
-        if (consumed_whole_token(text, end)
+        if (errno != ERANGE && consumed_whole_token(text, end)
             && ((allow_zero && value == 0)
                 || (value >= min && value <= max && (value & (value - 1)) == 0)))
         {
@@ -278,8 +298,9 @@ namespace cli
                        std::initializer_list<long> allowed, long &out)
     {
         char *end = nullptr;
+        errno = 0;
         const long value = std::strtol(text, &end, 10);
-        if (consumed_whole_token(text, end))
+        if (errno != ERANGE && consumed_whole_token(text, end))
         {
             for (long candidate : allowed)
                 if (candidate == value)
