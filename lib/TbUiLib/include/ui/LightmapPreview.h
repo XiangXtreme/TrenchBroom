@@ -43,6 +43,15 @@ class LightmapPreview : public QObject
 {
   Q_OBJECT
 public:
+  enum class Activity
+  {
+    Idle,
+    Waiting,
+    Baking,
+    Succeeded,
+    Failed,
+    Cancelled
+  };
   explicit LightmapPreview(MapDocument& document);
 
   void configure(render::RenderContext& context);
@@ -51,6 +60,12 @@ public:
   int remainingSeconds() const;
   bool stale() const;
   bool hasResult() const;
+  Activity activity() const;
+  bool manualRequest() const;
+  bool waitingForEdit() const;
+  bool changesQueued() const;
+  int stagePercent() const;
+  qint64 elapsedMilliseconds() const;
   QString statusText() const;
   QString error() const;
   QString output() const;
@@ -85,6 +100,11 @@ private:
   bool m_dirty = true;
   bool m_pending = false;
   bool m_manualPending = false;
+  Activity m_activity = Activity::Idle;
+  bool m_manualRequest = false;
+  bool m_waitingForEdit = false;
+  int m_stagePercent = -1;
+  qint64 m_elapsedMilliseconds = 0;
   size_t m_revision = 0;
   QString m_status;
   QString m_error;

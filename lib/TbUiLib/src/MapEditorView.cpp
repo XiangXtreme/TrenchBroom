@@ -26,6 +26,7 @@
 #include "ui/InfoPanel.h"
 #include "ui/Inspector.h"
 #include "ui/IssueBrowserView.h"
+#include "ui/LightmapPreviewControls.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorController.h"
 #include "ui/MapView2D.h"
@@ -36,6 +37,7 @@
 #include "ui/SelectionPropertyEditor.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableMapViewContainer.h"
+#include "ui/TaskNotification.h"
 #include "ui/WorkbenchSurface.h"
 #include "ui/outliner/OutlinerTreeWidget.h"
 
@@ -111,6 +113,8 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(6, 6, 6, 6);
   layout->addWidget(m_hSplitter);
+  auto* notifications = new TaskNotificationCenter{this};
+  connectLightmapPreviewNotifications(toolBox().lightmapPreview(), *notifications, this);
   m_controller = std::make_unique<MapEditorController>(appController, document, *this);
   if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
     connect(

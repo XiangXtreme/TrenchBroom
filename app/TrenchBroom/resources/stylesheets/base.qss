@@ -72,6 +72,25 @@ QMenu::separator {
   margin: 4px 6px;
 }
 
+QProgressBar {
+  background: @tb-input-background;
+  border: 1px solid @tb-border;
+  border-radius: 3px;
+  color: @tb-text;
+  min-height: 20px;
+  text-align: center;
+}
+
+QProgressBar[tbControlRole="compact"] {
+  min-height: 8px;
+  max-height: 8px;
+}
+
+QProgressBar::chunk {
+  background: @tb-accent;
+  border-radius: 2px;
+}
+
 QToolBar {
   background: @tb-panel-background;
   border: none;

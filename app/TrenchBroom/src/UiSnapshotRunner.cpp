@@ -109,6 +109,7 @@
 #include "ui/PreferenceDialog.h"
 #include "ui/QPathUtils.h"
 #include "ui/SwitchableMapViewContainer.h"
+#include "ui/TaskNotification.h"
 #include "ui/ThemeRegistry.h"
 #include "ui/UiSnapshot.h"
 #include "ui/WelcomeWindow.h"
@@ -173,6 +174,8 @@ bool isSupportedUiSnapshotPage(const QString& page)
     QStringLiteral("python-console"),
     QStringLiteral("command-palette"),
     QStringLiteral("components"),
+    QStringLiteral("task-notification"),
+    QStringLiteral("task-notification-failure"),
     QStringLiteral("asset-library"),
     QStringLiteral("asset-library-material"),
     QStringLiteral("asset-library-builtin"),
@@ -1908,6 +1911,32 @@ int runUiSnapshot(
         {
           targetWidget = mapWindow;
           mapWindow->resize(1440, 900);
+          if (targetName.startsWith(QStringLiteral("task-notification")))
+          {
+            auto* center = mapWindow->findChild<TaskNotificationCenter*>();
+            if (!center)
+            {
+              qCritical() << "Task notification host was not created";
+              return 3;
+            }
+            auto notification = TaskNotification{};
+            notification.title = QStringLiteral("Baking lightmap");
+            notification.detail = QStringLiteral("Calculating visibility · 42%");
+            notification.progress = 42;
+            notification.actions.push_back({QStringLiteral("Cancel"), {}});
+            if (targetName == QStringLiteral("task-notification-failure"))
+            {
+              notification.state = TaskNotification::State::Failed;
+              notification.title = QStringLiteral("Lightmap bake failed");
+              notification.detail =
+                QStringLiteral("The map is not sealed. Fix the leak before baking.");
+              notification.progress = -2;
+              notification.dismissible = true;
+              notification.actions = {
+                {QStringLiteral("View log…"), {}}, {QStringLiteral("Retry"), {}}};
+            }
+            center->update(QStringLiteral("snapshot"), notification);
+          }
           if (isOutlinerSnapshotTarget(targetName))
           {
             mapWindow->switchToInspectorPage(InspectorPage::Outliner);

@@ -22,13 +22,14 @@
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
-#include <QLineEdit>
 #include <QLayout>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPointer>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QScopeGuard>
@@ -614,6 +615,28 @@ TEST_CASE("ProjectWindow")
     CHECK(state->property("tbStatus").toString() == alphaState);
     tabs->setCurrentIndex(1);
     CHECK(state->property("tbStatus").toString() == "modified");
+  }
+
+  SECTION("lightmap status follows the active project map")
+  {
+    auto* status = window.findChild<QStatusBar*>("WorkspaceNotifications");
+    REQUIRE(status);
+    auto first =
+      QPointer<QToolButton>{status->findChild<QToolButton*>("LightmapPreviewStatus")};
+    REQUIRE(first);
+    tabs->setCurrentIndex(1);
+    REQUIRE(first.isNull());
+    auto second =
+      QPointer<QToolButton>{status->findChild<QToolButton*>("LightmapPreviewStatus")};
+    REQUIRE(second);
+    tabs->setCurrentIndex(0);
+    REQUIRE(second.isNull());
+    REQUIRE(status->findChild<QToolButton*>("LightmapPreviewStatus"));
+    closeTab(*tabs, 0);
+    REQUIRE(status->findChild<QToolButton*>("LightmapPreviewStatus"));
+    closeTab(*tabs, 0);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    CHECK(status->findChild<QToolButton*>("LightmapPreviewStatus") == nullptr);
   }
 
   SECTION("compact content views preserve navigation and optional details")

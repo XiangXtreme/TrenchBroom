@@ -44,7 +44,7 @@ without an object name, helper call, or local stylesheet.
 | Numeric input | `QSpinBox`, `QDoubleSpinBox` | Shared input surface and step controls |
 | Boolean input | `QCheckBox`, `QRadioButton` | Shared indicator size, contrast, focus, and disabled states |
 | Commands | `QPushButton`, `QToolButton` | Shared command states; icon controls remain visually quiet |
-| Ranges | `QSlider`, scroll bars | Shared groove, handle, hover, and focus treatment |
+| Ranges | `QSlider`, scroll bars, `QProgressBar` | Shared groove, handle, progress, hover, and focus treatment |
 | Collections | item views and headers | Shared row height and active/inactive selection treatment |
 | Navigation | tabs, menus, navigation buttons | Shared navigation states with an accent reserved for active position |
 
@@ -134,6 +134,12 @@ tree branches. The `components`, `terrain` and `terrain-collapsed` snapshots cov
 states; feature panels do not supply their own title geometry or arrow rendering.
 
 ## Shared composition
+
+`TaskNotificationCenter` hosts compact task cards inside a document workspace. It
+coalesces updates by task id, delays quiet background work, and expires completed tasks;
+callers provide state, text, progress and actions. The card uses the shared card surface,
+ordinary controls and the canonical progress bar. The host never covers space outside
+the cards, so the underlying editor continues to receive input.
 
 `PanelLayout` owns content padding, form column/row gaps, action spacing and ordinary
 scroll-area defaults. Use `createPanelForm`, `createPanelColumn`, `createPanelActions`

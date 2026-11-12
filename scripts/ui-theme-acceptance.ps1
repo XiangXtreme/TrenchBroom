@@ -331,6 +331,8 @@ foreach ($target in $normalizedTargets) {
       "python-console",
       "command-palette",
       "components",
+      "task-notification",
+      "task-notification-failure",
       "asset-library",
       "asset-library-material",
       "asset-library-builtin",
@@ -415,6 +417,7 @@ $resolvedOutlinerMapPath =
   if ($usesOutlinerFixture) { Resolve-Path -Path $OutlinerMapPath } else { $null }
 $resolvedMapPath = if (
   $normalizedTargets -contains "workbench" -or
+  @($normalizedTargets | Where-Object { $_.StartsWith("task-notification") }).Count -gt 0 -or
   @($normalizedTargets | Where-Object { $_.StartsWith("map-area") }).Count -gt 0 -or
   @($normalizedTargets | Where-Object { $_.StartsWith("project-") }).Count -gt 0 -or
   $normalizedTargets -contains "entity-browser" -or
@@ -505,6 +508,7 @@ foreach ($target in $normalizedTargets) {
       }
       if (
         $target -eq "workbench" -or
+        $target.StartsWith("task-notification") -or
         $target -eq "map-settings" -or
         $target.StartsWith("compilation-") -or
         $target.StartsWith("map-area") -or

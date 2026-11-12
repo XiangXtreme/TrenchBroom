@@ -20,6 +20,7 @@
 #include "prefs/Preferences.h"
 #include "ui/LightmapPreview.h"
 #include "ui/QPathUtils.h"
+#include "ui/TaskNotification.h"
 
 namespace tb::ui
 {
@@ -123,11 +124,82 @@ QWidget* createLightmapPreviewStatus(LightmapPreview& preview, QWidget* parent)
   const auto refresh = [&preview, button] {
     button->setVisible(pref(Preferences::ShowLightmap));
     button->setText(
-      preview.error().isEmpty() ? preview.statusText() : tr("Lightmap bake failed"));
+      preview.activity() == LightmapPreview::Activity::Failed ? tr("Lightmap bake failed")
+                                                              : preview.statusText());
     button->setToolTip(preview.statusText());
   };
   QObject::connect(&preview, &LightmapPreview::stateChanged, button, refresh);
+  QObject::connect(&preview, &QObject::destroyed, button, &QObject::deleteLater);
   refresh();
   return button;
+}
+
+void connectLightmapPreviewNotifications(
+  LightmapPreview& preview, TaskNotificationCenter& center, QWidget* dialogParent)
+{
+  const auto id = QStringLiteral("lightmap");
+  auto refresh = [&preview,
+                  &center,
+                  dialogParent,
+                  id,
+                  previous = LightmapPreview::Activity::Idle]() mutable {
+    using Activity = LightmapPreview::Activity;
+    using State = TaskNotification::State;
+    const auto activity = preview.activity();
+    if (!pref(Preferences::ShowLightmap) || activity == Activity::Idle)
+    {
+      center.remove(id);
+      previous = Activity::Idle;
+      return;
+    }
+    if (
+      (activity == Activity::Succeeded || activity == Activity::Failed
+       || activity == Activity::Cancelled)
+      && activity == previous)
+      return;
+
+    auto notification = TaskNotification{};
+    notification.showDelayMs = preview.manualRequest() ? 0 : 1000;
+    switch (activity)
+    {
+    case Activity::Waiting:
+    case Activity::Baking:
+      notification.title = tr("Baking lightmap");
+      notification.detail = preview.statusText();
+      notification.progress = activity == Activity::Baking ? preview.stagePercent() : -2;
+      notification.actions.push_back({tr("Cancel"), [&preview] { preview.cancel(); }});
+      break;
+    case Activity::Succeeded:
+      notification.state = State::Succeeded;
+      notification.title =
+        preview.stale() ? tr("Bake finished · changes pending") : tr("Lightmap updated");
+      notification.detail = tr("%1 s").arg(
+        static_cast<double>(preview.elapsedMilliseconds()) / 1000.0, 0, 'f', 1);
+      break;
+    case Activity::Failed:
+      notification.state = State::Failed;
+      notification.title = tr("Lightmap bake failed");
+      notification.detail = preview.hasResult()
+                              ? tr("Previous result retained · %1").arg(preview.error())
+                              : preview.error();
+      notification.dismissible = true;
+      notification.actions.push_back(
+        {tr("View log…"), [&preview, dialogParent] { showLog(preview, dialogParent); }});
+      notification.actions.push_back(
+        {tr("Retry"), [&preview] { preview.requestBake(); }});
+      break;
+    case Activity::Cancelled:
+      notification.state = State::Succeeded;
+      notification.title = tr("Lightmap bake cancelled");
+      break;
+    case Activity::Idle:
+      return;
+    }
+    previous = activity;
+    center.update(id, notification);
+  };
+  QObject::connect(&preview, &LightmapPreview::stateChanged, &center, std::move(refresh));
+  QObject::connect(
+    &preview, &QObject::destroyed, &center, [&center, id] { center.remove(id); });
 }
 } // namespace tb::ui

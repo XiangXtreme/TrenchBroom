@@ -11240,6 +11240,14 @@ Expression: %3</source>
             <translation>等待更新</translation>
         </message>
         <message>
+            <source>Waiting for editing to finish</source>
+            <translation>等待编辑完成</translation>
+        </message>
+        <message>
+            <source>Starting</source>
+            <translation>正在启动</translation>
+        </message>
+        <message>
             <source>Cancelled</source>
             <translation>已取消</translation>
         </message>
@@ -11340,6 +11348,45 @@ Expression: %3</source>
         <message>
             <source>Lightmap bake failed</source>
             <translation>光照烘焙失败</translation>
+        </message>
+        <message>
+            <source>Baking lightmap</source>
+            <translation>正在烘焙光照</translation>
+        </message>
+        <message>
+            <source>Cancel</source>
+            <translation>取消</translation>
+        </message>
+        <message>
+            <source>Lightmap updated</source>
+            <translation>光照已更新</translation>
+        </message>
+        <message>
+            <source>Bake finished · changes pending</source>
+            <translation>烘焙完成 · 有待更新的修改</translation>
+        </message>
+        <message>
+            <source>%1 s</source>
+            <translation>%1 秒</translation>
+        </message>
+        <message>
+            <source>Previous result retained · %1</source>
+            <translation>已保留上次结果 · %1</translation>
+        </message>
+        <message>
+            <source>Retry</source>
+            <translation>重试</translation>
+        </message>
+        <message>
+            <source>Lightmap bake cancelled</source>
+            <translation>光照烘焙已取消</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::TaskNotificationCard</name>
+        <message>
+            <source>Dismiss notification</source>
+            <translation>关闭通知</translation>
         </message>
     </context>
 </TS>

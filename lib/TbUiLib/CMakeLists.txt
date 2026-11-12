@@ -177,6 +177,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapBakeReader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapPreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapPreviewControls.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TaskNotification.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LimitedKeySequenceEdit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapCommandSurface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapDocumentActionCache.cpp
@@ -467,6 +468,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LightmapBaker.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LightmapBakeReader.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LightmapPreview.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/TaskNotification.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/LimitedKeySequenceEdit.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/MapStatus.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/WorkspaceLayout.h

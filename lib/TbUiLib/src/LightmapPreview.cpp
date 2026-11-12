@@ -50,6 +50,7 @@ LightmapPreview::LightmapPreview(MapDocument& document)
     &LightmapBaker::stageProgressChanged,
     this,
     [this](const QString& stage, const int percent) {
+      m_stagePercent = percent;
       m_status = percent >= 0 ? tr("%1 · %2%").arg(stage).arg(percent) : stage;
       emit stateChanged();
     });
@@ -94,10 +95,13 @@ LightmapPreview::LightmapPreview(MapDocument& document)
       {
         if (pref(Preferences::LightmapAutoUpdate) && m_dirty)
           schedule();
-        else
+        // A manual request waiting for an edit is independent of automatic updates.
+        else if (m_baking || m_activity != Activity::Waiting || !m_manualRequest)
         {
           m_timer.stop();
           m_pending = m_manualPending;
+          if (!m_baking && !m_manualPending && m_activity == Activity::Waiting)
+            m_activity = Activity::Idle;
         }
         emit stateChanged();
       }
@@ -148,6 +152,30 @@ bool LightmapPreview::hasResult() const
 {
   return bool(m_assembly);
 }
+LightmapPreview::Activity LightmapPreview::activity() const
+{
+  return m_activity;
+}
+bool LightmapPreview::manualRequest() const
+{
+  return m_manualRequest;
+}
+bool LightmapPreview::waitingForEdit() const
+{
+  return m_waitingForEdit;
+}
+bool LightmapPreview::changesQueued() const
+{
+  return m_pending;
+}
+int LightmapPreview::stagePercent() const
+{
+  return m_stagePercent;
+}
+qint64 LightmapPreview::elapsedMilliseconds() const
+{
+  return m_elapsedMilliseconds;
+}
 QString LightmapPreview::error() const
 {
   return m_error;
@@ -167,10 +195,11 @@ QString LightmapPreview::statusText() const
     return tr("Lightmap preview off");
   if (m_baking)
     return m_pending ? tr("%1 · changes queued").arg(m_status) : m_status;
+  if (m_timer.isActive())
+    return m_waitingForEdit ? tr("Waiting for editing to finish")
+                            : tr("Waiting to update");
   if (!m_error.isEmpty())
     return tr("Bake failed · %1").arg(m_error);
-  if (m_timer.isActive())
-    return tr("Waiting to update");
   if (!m_status.isEmpty() && m_status == tr("Cancelled"))
     return m_status;
   if (m_dirty)
@@ -201,14 +230,22 @@ void LightmapPreview::schedule(const bool manual)
   if (!pref(Preferences::ShowLightmap))
     return;
   m_requested = true;
+  if (m_activity != Activity::Waiting && m_activity != Activity::Baking)
+    m_manualRequest = manual;
+  else
+    m_manualRequest = m_manualRequest || manual;
   if (m_baking)
   {
     m_pending = true;
     m_manualPending = m_manualPending || manual;
   }
   else
+  {
+    m_activity = Activity::Waiting;
     m_timer.start(
-      manual ? 0 : std::clamp(pref(Preferences::LightmapUpdateDelay), 100, 30000));
+      m_manualRequest ? 0
+                      : std::clamp(pref(Preferences::LightmapUpdateDelay), 100, 30000));
+  }
   emit stateChanged();
 }
 
@@ -236,12 +273,15 @@ void LightmapPreview::invalidate()
 
 void LightmapPreview::cancel()
 {
+  const auto hadWork = canCancel();
   m_timer.stop();
   m_baker.cancel();
   m_pending = false;
   m_manualPending = false;
+  m_waitingForEdit = false;
   m_requested = true;
-  m_status = tr("Cancelled");
+  m_status = hadWork ? tr("Cancelled") : QString{};
+  m_activity = hadWork ? Activity::Cancelled : Activity::Idle;
   setProgress(false, -1);
   emit stateChanged();
 }
@@ -263,8 +303,14 @@ void LightmapPreview::startBake()
   if (m_document.map().commandProcessor().isTransactionActive())
   {
     m_timer.start(150);
+    if (!m_waitingForEdit)
+    {
+      m_waitingForEdit = true;
+      emit stateChanged();
+    }
     return;
   }
+  m_waitingForEdit = false;
   m_pending = false;
   m_manualPending = false;
   m_error.clear();
@@ -273,7 +319,11 @@ void LightmapPreview::startBake()
   auto& logger = m_document.map().logger();
   const auto startedAt = std::chrono::steady_clock::now();
   logger.info() << "Baking a lightmap for the view.";
+  m_activity = Activity::Baking;
+  m_stagePercent = -1;
+  m_status = tr("Starting");
   setProgress(true, -1);
+  emit stateChanged();
   m_baker.start(
     m_document.map(),
     8,
@@ -285,6 +335,7 @@ void LightmapPreview::startBake()
       if (!bake)
       {
         m_dirty = true;
+        m_activity = Activity::Failed;
         m_error = QString::fromStdString(error);
         logger.error() << "Cannot bake a lightmap: " << error;
         if (m_pending && (m_manualPending || pref(Preferences::LightmapAutoUpdate)))
@@ -301,6 +352,7 @@ void LightmapPreview::startBake()
       if (assembly->blocks.empty() && assembly->terrainBlocks.empty())
       {
         m_dirty = true;
+        m_activity = Activity::Failed;
         m_error = tr("The bake does not match the current map.");
         logger.warn() << "The lightmap bake does not match any face of this map.";
         if (m_pending && (m_manualPending || pref(Preferences::LightmapAutoUpdate)))
@@ -312,6 +364,8 @@ void LightmapPreview::startBake()
       const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now() - startedAt)
                              .count();
+      m_elapsedMilliseconds = elapsed;
+      m_activity = Activity::Succeeded;
       const auto totalLit = assembly->blocks.size() + assembly->terrainBlocks.size();
       logger.info() << "Lightmap baked in " << elapsed << " ms: " << totalLit << " of "
                     << bake->faces.size() << " faces lit, " << assembly->width << "x"

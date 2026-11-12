@@ -2,7 +2,10 @@
  Copyright (C) 2026 XiangXtreme
  This file is part of TrenchBroom, licensed under GPL version 3 or later.
  */
+#include <QLabel>
+#include <QPushButton>
 #include <QScopeGuard>
+#include <QToolButton>
 #include <QtTest/QTest>
 
 #include "base/PreferenceManager.h"
@@ -21,7 +24,9 @@
 #include "prefs/Preferences.h"
 #include "ui/AppControllerFixture.h"
 #include "ui/LightmapPreview.h"
+#include "ui/LightmapPreviewControls.h"
 #include "ui/MapDocument.h"
+#include "ui/TaskNotification.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -118,6 +123,12 @@ TEST_CASE("LightmapPreview")
 
   SECTION("edits during baking queue one follow-up without restarting the worker")
   {
+    auto observedQueue = false;
+    auto observer = QObject{};
+    QObject::connect(&preview, &LightmapPreview::stateChanged, &observer, [&] {
+      if (preview.baking() && preview.changesQueued())
+        observedQueue = preview.statusText().contains("changes queued");
+    });
     setPref(Preferences::LightmapAutoUpdate, true);
     editDuringBake = true;
     preview.requestBake();
@@ -125,19 +136,103 @@ TEST_CASE("LightmapPreview")
       [&] { return starts == 2 && !preview.baking() && !preview.stale(); }, 30000));
     QTest::qWait(250);
     CHECK(starts == 2);
+    CHECK(observedQueue);
     CHECK(preview.hasResult());
     CHECK(preview.error().isEmpty());
   }
 
+  SECTION("automatic work waits before showing its notification")
+  {
+    auto host = QWidget{};
+    host.resize(640, 480);
+    host.show();
+    auto center = TaskNotificationCenter{&host};
+    connectLightmapPreviewNotifications(preview, center, &host);
+    map.commandProcessor().startTransaction("Drag", mdl::TransactionScope::LongRunning);
+    setPref(Preferences::LightmapAutoUpdate, true);
+    auto* card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_lightmap");
+    REQUIRE(card);
+    CHECK(card->isHidden());
+    REQUIRE(QTest::qWaitFor([&] { return !card->isHidden(); }, 2000));
+    CHECK(preview.waitingForEdit());
+    CHECK(starts == 0);
+    preview.cancel();
+    map.commandProcessor().commitTransaction();
+  }
+
   SECTION("active edit transactions defer even a manually requested bake")
   {
+    auto host = QWidget{};
+    host.resize(640, 480);
+    host.show();
+    auto center = TaskNotificationCenter{&host};
+    connectLightmapPreviewNotifications(preview, center, &host);
     map.commandProcessor().startTransaction("Drag", mdl::TransactionScope::LongRunning);
     preview.requestBake();
+    auto* card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_lightmap");
+    REQUIRE(card);
+    CHECK_FALSE(card->isHidden());
     QTest::qWait(250);
     CHECK(starts == 0);
+    CHECK(preview.waitingForEdit());
+    CHECK(preview.statusText() == "Waiting for editing to finish");
     map.commandProcessor().commitTransaction();
     waitForResult();
     CHECK(starts == 1);
+  }
+
+  SECTION("disabling automatic updates keeps a waiting manual request")
+  {
+    setPref(Preferences::LightmapAutoUpdate, true);
+    map.commandProcessor().startTransaction("Drag", mdl::TransactionScope::LongRunning);
+    preview.requestBake();
+    REQUIRE(QTest::qWaitFor([&] { return preview.waitingForEdit(); }, 2000));
+    setPref(Preferences::LightmapAutoUpdate, false);
+    CHECK(preview.canCancel());
+    CHECK(preview.activity() == LightmapPreview::Activity::Waiting);
+    map.commandProcessor().commitTransaction();
+    waitForResult();
+    CHECK(starts == 1);
+  }
+
+  SECTION("failure can be dismissed and retry creates a new task")
+  {
+    auto host = QWidget{};
+    host.resize(640, 480);
+    host.show();
+    auto center = TaskNotificationCenter{&host};
+    connectLightmapPreviewNotifications(preview, center, &host);
+    auto* status =
+      qobject_cast<QToolButton*>(createLightmapPreviewStatus(preview, &host));
+    REQUIRE(status);
+    fail = true;
+    preview.requestBake();
+    REQUIRE(QTest::qWaitFor([&] { return !preview.error().isEmpty(); }, 5000));
+    CHECK(status->text() == "Lightmap bake failed");
+    auto* card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_lightmap");
+    REQUIRE(card);
+    auto* retry = static_cast<QPushButton*>(nullptr);
+    for (auto* button : card->findChildren<QPushButton*>())
+      if (button->text() == "Retry")
+        retry = button;
+    REQUIRE(retry);
+    fail = false;
+    retry->click();
+    CHECK(status->text() != "Lightmap bake failed");
+    REQUIRE(QTest::qWaitFor([&] { return !preview.stale(); }, 30000));
+    CHECK(preview.activity() == LightmapPreview::Activity::Succeeded);
+    CHECK(preview.elapsedMilliseconds() >= 0);
+    CHECK(preview.hasResult());
+    fail = true;
+    preview.requestBake();
+    REQUIRE(QTest::qWaitFor([&] { return !preview.error().isEmpty(); }, 5000));
+    card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_lightmap");
+    REQUIRE(card);
+    REQUIRE(card->findChild<QToolButton*>("TaskNotificationDismiss"));
+    card->findChild<QToolButton*>("TaskNotificationDismiss")->click();
+    emit preview.stateChanged();
+    CHECK(card->isHidden());
+    CHECK(preview.hasResult());
   }
 
   SECTION("cancellation permits another bake and display changes do not bake")

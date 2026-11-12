@@ -34,6 +34,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPlainTextEdit>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScrollBar>
@@ -53,6 +54,7 @@
 #include "ui/CollapsibleTitledPanel.h"
 #include "ui/PanelLayout.h"
 #include "ui/QStyleUtils.h"
+#include "ui/TaskNotification.h"
 #include "ui/WorkbenchSurface.h"
 
 #include <initializer_list>
@@ -465,6 +467,29 @@ std::unique_ptr<QWidget> createUiComponentSnapshot()
   rightColumn->setSpacing(12);
   rightColumn->addWidget(actionSection);
   rightColumn->addWidget(collectionSection);
+  auto* notificationSection = makeSection(QStringLiteral("Task notifications"));
+  auto* progress = new QProgressBar{};
+  progress->setValue(65);
+  sectionLayout(*notificationSection)->addRow(QStringLiteral("Progress"), progress);
+  auto* runningCard = new TaskNotificationCard{};
+  auto running = TaskNotification{};
+  running.title = QStringLiteral("Baking lightmap");
+  running.detail = QStringLiteral("Calculating visibility · 42%");
+  running.progress = 42;
+  running.actions.push_back({QStringLiteral("Cancel"), {}});
+  runningCard->setNotification(running);
+  auto* failedCard = new TaskNotificationCard{};
+  auto failed = TaskNotification{};
+  failed.state = TaskNotification::State::Failed;
+  failed.title = QStringLiteral("Lightmap bake failed");
+  failed.detail = QStringLiteral("The map is not sealed.");
+  failed.dismissible = true;
+  failed.actions.push_back({QStringLiteral("View log…"), {}});
+  failed.actions.push_back({QStringLiteral("Retry"), {}});
+  failedCard->setNotification(failed);
+  sectionLayout(*notificationSection)->addRow(runningCard);
+  sectionLayout(*notificationSection)->addRow(failedCard);
+  rightColumn->addWidget(notificationSection);
   rightColumn->addStretch(1);
 
   columns->addLayout(leftColumn, 1);
