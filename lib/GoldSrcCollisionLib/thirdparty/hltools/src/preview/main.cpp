@@ -72,6 +72,7 @@ int wmain(int argc, wchar_t **wide_argv)
     utf8_argv.reserve(arguments.size());
     for (auto &argument : arguments)
         utf8_argv.push_back(argument.data());
+    utf8_argv.push_back(nullptr);
     return run_worker(argc, utf8_argv.data());
 }
 #else
