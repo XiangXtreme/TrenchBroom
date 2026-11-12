@@ -1,5 +1,5 @@
 {
-  "revision": "bb58d7866101b2a4977d183d76a240888f3145b3",
+  "revision": "53f8ca47a44e9330afb8e3bddaa2b729da9b4eec",
   "files": {
     "LICENSE": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
     "THIRD_PARTY_NOTICES.md": "1a981caaa32f7ad81142b6ae5041ea98709e889c02fe5beff5110ad9430c3a9b",
@@ -131,7 +131,7 @@
     "src/math/winding.h": "4c45012829e80e349341e335d28ef7f05bcacde4da8fc3c34ccec7285513b91b",
     "src/preview/CMakeLists.txt": "b8ae1847154f29c51c86b1fa0a4fddfd74661a0938c56110fa4198392a87d75f",
     "src/preview/README.md": "36f6eebb6f04268476995b78220dcf905f30e24c07242c89cc1ffaf71154a3c5",
-    "src/preview/main.cpp": "df8005e3f7ff5ce1ad9f0bd4813e20d3cebb2f787c6d151a932a707521283a81",
+    "src/preview/main.cpp": "02bf7198306aa7416ef769032e6a65a016282fddf7220c813db155277cd77305",
     "src/preview/sources.cmake": "29fb972ca5609884c5ccac96203855d8d25919ae3468d48761a35e7aa5fd3f63",
     "src/preview/verify_cli_parity.py": "4615c2401feb1744e81c112eb0da7418ecbac786f8cad1d832e7b56b718686f8",
     "src/rad/compress.cpp": "058607d80380a3a71077d15230ec74b6492e51b64e615e48d0b024df3346a7c7",
