@@ -67,7 +67,14 @@ namespace
 Result<std::optional<Palette>> loadPalette(
   const fs::FileSystem& fs, const MaterialConfig& materialConfig)
 {
-  if (materialConfig.palette.empty())
+  // GoldSrc mip textures have an embedded palette. Do not require a game install
+  // just to load an otherwise self-contained WAD3 collection.
+  const auto usesOnlyGoldSrcTextures =
+    !materialConfig.extensions.empty()
+    && std::ranges::all_of(materialConfig.extensions, [](const auto& extension) {
+         return kdl::ci::str_is_equal(extension.string(), ".C");
+       });
+  if (materialConfig.palette.empty() || usesOnlyGoldSrcTextures)
   {
     return Result<std::optional<Palette>>{std::nullopt};
   }

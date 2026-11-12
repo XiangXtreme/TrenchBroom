@@ -3491,6 +3491,51 @@ TEST_CASE("Project terrain region encodes and decodes material asset binding")
   }
 }
 
+TEST_CASE("The hltools tutorial project can export every lesson")
+{
+  const auto source = std::filesystem::path{__FILE__}
+                        .parent_path()
+                        .parent_path()
+                        .parent_path()
+                        .parent_path()
+                        .parent_path()
+                      / "examples/hltools-tutorial/hltools-tutorial.tbproj";
+  REQUIRE(std::filesystem::exists(source));
+  auto temp = QTemporaryDir{};
+  REQUIRE(temp.isValid());
+  const auto root = pathFromQString(temp.path());
+  const auto copy = root / "tutorial.tbproj";
+  std::filesystem::copy_file(source, copy);
+  const auto session = requireProject(ProjectSession::open(copy));
+  CHECK(session->store().info().gameId == "Half-Life");
+  const auto maps = requireProject(session->store().assets(project::AssetType::Map));
+  REQUIRE(maps.size() == 6);
+  const auto audit = requireProject(auditGoldSrcProjectResources(*session));
+  CHECK(audit.mapsScanned == maps.size());
+  auto config = mdl::QuakeFixtureConfig;
+  config.gameInfo.gameConfig.materialConfig.extensions = {".C"};
+  auto fixture = MapDocumentFixture{};
+  auto& document = fixture.create(config);
+  requireProject(session->registerDocument(document, maps.front().id));
+  for (const auto* material : {"WALL", "FLOOR", "BLUE", "ORANGE", "HINT", "SKIP"})
+  {
+    INFO(material);
+    CHECK(document.map().materialManager().material(material) != nullptr);
+  }
+  session->unregisterDocument(document);
+  for (const auto& map : maps)
+  {
+    INFO(map.virtualPath);
+    requireProject(validateGoldSrcCompileResources(audit, map.id));
+    const auto output = root / std::filesystem::path{map.virtualPath}.stem();
+    requireProject(session->exportCompileSnapshot(map.id, output));
+    CHECK(std::filesystem::exists(output / "map.map"));
+    const auto wad =
+      requireProject(project::readGoldSrcWad(readProjectFile(output / "textures.wad")));
+    CHECK_FALSE(wad.textures.empty());
+  }
+}
+
 TEST_CASE("Terrain brush applies strength and hardness")
 {
   auto soft = TerrainRegion{vm::vec2d{0, 0}};

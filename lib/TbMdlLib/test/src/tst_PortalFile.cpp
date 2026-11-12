@@ -26,6 +26,7 @@
 #include "vm/polygon.h"
 
 #include <filesystem>
+#include <sstream>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -58,6 +59,33 @@ const std::vector<vm::polygon3f> ExpectedPortals{
 
 TEST_CASE("loadPortalFile")
 {
+  SECTION("GoldSrc hltools")
+  {
+    auto stream = std::istringstream{
+      "2\n1\n4 0 1 (0 0 0) (0 64 0) (0 64 128) (0 0 128) \n"
+      "1 0\n1 1\n"};
+    const auto portals = loadPortalFile(stream);
+    REQUIRE(portals.is_success());
+    CHECK(
+      portals.value()
+      == std::vector<vm::polygon3f>{{{0, 0, 0}, {0, 64, 0}, {0, 64, 128}, {0, 0, 128}}});
+  }
+
+  SECTION("invalid GoldSrc hltools header")
+  {
+    auto stream = std::istringstream{"2\nnot-a-count\n"};
+    CHECK(loadPortalFile(stream).is_error());
+  }
+
+  SECTION("hltools tutorial portals")
+  {
+    const auto path = getFixtureRoot() / "test/mdl/PortalFile/hltools-tutorial.prt";
+    const auto portals =
+      kdl::with_istream(path, [](auto& stream) { return loadPortalFile(stream); });
+    REQUIRE(portals.is_success());
+    CHECK(portals.value().size() == 24);
+  }
+
   SECTION("invalid PRT1")
   {
     const auto path =

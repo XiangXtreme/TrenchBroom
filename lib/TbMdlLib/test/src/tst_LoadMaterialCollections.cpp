@@ -276,6 +276,31 @@ TEST_CASE("LoadMaterialCollections")
 
     auto taskManager = kdl::task_manager{};
 
+    SECTION("GoldSrc WAD textures do not need an external palette")
+    {
+      const auto wadPath = fixtureRoot / "test/mdl/LoadMipTexture/hl.wad";
+      fs.mount("textures", fs::openFS<fs::WadFileSystem>(wadPath));
+      auto materialConfig =
+        mdl::MaterialConfig{"textures", {".C"}, "missing/palette.lmp", "wad", "", {}};
+
+      CHECK_THAT(
+        loadMaterialCollections(fs, materialConfig, createResource, taskManager, logger),
+        MatchesMaterialCollections({
+          {"hl.wad",
+           {MaterialInfo{"blowjob_machine", 128, 128}, MaterialInfo{"bongs2", 128, 128}}},
+        }));
+
+      // Formats with externally indexed colors still require the configured palette.
+      materialConfig.extensions = {".D"};
+      CHECK(
+        loadMaterialCollections(fs, materialConfig, createResource, taskManager, logger)
+          .is_error());
+      materialConfig.extensions = {".C", ".D"};
+      CHECK(
+        loadMaterialCollections(fs, materialConfig, createResource, taskManager, logger)
+          .is_error());
+    }
+
     SECTION("WAD file")
     {
       const auto wadPath =

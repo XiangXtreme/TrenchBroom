@@ -53,6 +53,7 @@
 #include "base/PreferenceManager.h"
 #include "el/Expression.h"
 #include "gl/GlManager.h"
+#include "gl/MaterialManager.h"
 #include "gl/PerspectiveCamera.h"
 #include "gl/Resource.h"
 #include "gl/ResourceManager.h"
@@ -3549,6 +3550,51 @@ TEST_CASE("ProjectWindow")
     QApplication::processEvents();
     const auto savedIndex = tabs->tabData(0).toString().toStdString() == alphaId ? 0 : 1;
     CHECK_FALSE(tabs->tabText(savedIndex).endsWith("*"));
+  }
+}
+
+TEST_CASE("The hltools tutorial maps open in the project workspace")
+{
+  const auto source = std::filesystem::path{__FILE__}
+                        .parent_path()
+                        .parent_path()
+                        .parent_path()
+                        .parent_path()
+                        .parent_path()
+                      / "examples/hltools-tutorial/hltools-tutorial.tbproj";
+  REQUIRE(std::filesystem::exists(source));
+  auto directory = QTemporaryDir{};
+  REQUIRE(directory.isValid());
+  const auto copy = pathFromQString(directory.filePath("tutorial.tbproj"));
+  std::filesystem::copy_file(source, copy);
+
+  const auto applicationName = QApplication::applicationName();
+  QApplication::setApplicationName(
+    QString{"TrenchBroom-TutorialTest-%1"}.arg(QCoreApplication::applicationPid()));
+  const auto restoreSettings = qScopeGuard([&]() {
+    QSettings{}.clear();
+    QApplication::setApplicationName(applicationName);
+  });
+  auto config = std::string{GameConfig};
+  config.replace(config.find("\"name\": \"Workspace\""), 19, "\"name\": \"Half-Life\"");
+  config.replace(config.find("\".D\""), 4, "\".C\"");
+  auto fixture = AppControllerFixture{[&](const auto& writeGameConfig) {
+    writeGameConfig("Half-Life", config, std::nullopt, std::nullopt);
+  }};
+  auto& app = fixture.appController();
+  REQUIRE(app.openProject(copy));
+  auto projects = app.projects();
+  REQUIRE(projects.size() == 1);
+  auto session = projects.front();
+  const auto maps = require(session->store().assets(project::AssetType::Map));
+  REQUIRE(maps.size() == 6);
+  for (const auto& map : maps)
+  {
+    INFO(map.virtualPath);
+    require(app.mapWindowManager().loadProjectMap(session, map.id));
+    auto* document = session->documentFor(map.id);
+    REQUIRE(document != nullptr);
+    CHECK(document->map().materialManager().material("WALL") != nullptr);
   }
 }
 

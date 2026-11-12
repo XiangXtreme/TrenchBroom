@@ -27,6 +27,7 @@
 #include "vm/polygon.h"
 #include "vm/vec.h"
 
+#include <charconv>
 #include <string>
 
 namespace tb::mdl
@@ -87,7 +88,18 @@ Result<std::vector<vm::polygon3f>> loadPortalFile(std::istream& stream)
   }
   else
   {
-    return Error{"Unknown portal format: " + formatCode};
+    // GoldSrc hltools writes the leaf count directly, followed by the portal
+    // count and the same vertex records used by PRT1. The leaf mapping after
+    // the portal records is only used by VIS and can be ignored here.
+    const auto parseCount = [](const std::string& text, unsigned long& value) {
+      const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+      return result.ec == std::errc{} && result.ptr == text.data() + text.size();
+    };
+    auto numLeafs = 0ul;
+    if (!parseCount(formatCode, numLeafs))
+      return Error{"Unknown portal format: " + formatCode};
+    if (!std::getline(stream, line) || !parseCount(kdl::str_trim(line), numPortals))
+      return Error{"Error reading header"};
   }
 
   if (!stream.good())
