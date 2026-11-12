@@ -319,6 +319,8 @@ void LightmapBaker::runStage()
       arguments << QStringLiteral("-fast");
     else if (m_quality == Preferences::LightmapQualityUltra)
       arguments << QStringLiteral("-extra");
+    else
+      arguments << QStringLiteral("-nofull");
     arguments << QStringLiteral("-noclip") << QStringLiteral("-previewcache")
               << m_workDir->filePath("geometry");
   }

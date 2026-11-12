@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <optional>
+#include <string>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -106,16 +107,34 @@ TEST_CASE("LightmapBaker")
 
   SECTION("bundled compiler bakes the live map and assembles brush lightmaps")
   {
-    const auto quality = GENERATE(
+    const auto quality = std::string{GENERATE(
       Preferences::LightmapQualityFast,
       Preferences::LightmapQualityNormal,
-      Preferences::LightmapQualityUltra);
+      Preferences::LightmapQualityUltra)};
+    CAPTURE(quality);
     auto progress = QSignalSpy{&baker, &LightmapBaker::stageProgressChanged};
     baker.start(map, 2, quality, result.callback());
     requireBake(map, baker, result);
     CHECK(std::ranges::any_of(progress, [](const auto& args) {
       return args.at(0).toString() == "Reading lightmaps";
     }));
+    const auto& output = baker.output();
+    if (quality == Preferences::LightmapQualityFast)
+    {
+      CHECK(output.find("fast vis") != std::string::npos);
+      CHECK(output.find("computing portal visibility") == std::string::npos);
+      CHECK(output.find("computing full visibility") == std::string::npos);
+    }
+    else if (quality == Preferences::LightmapQualityNormal)
+    {
+      CHECK(output.find("computing portal visibility") != std::string::npos);
+      CHECK(output.find("oversampling (-extra)") == std::string::npos);
+    }
+    else
+    {
+      CHECK(output.find("computing full visibility") != std::string::npos);
+      CHECK(output.find("oversampling (-extra)") != std::string::npos);
+    }
   }
 
   SECTION("relative WAD paths retain the editor working directory")
@@ -239,9 +258,18 @@ TEST_CASE("LightmapBaker")
     baker.start(map, 2, Preferences::LightmapQualityFast, result.callback());
     requireBake(map, baker, result);
     CHECK(baker.reusedGeometry());
+    result = {};
+    baker.start(map, 2, Preferences::LightmapQualityNormal, result.callback());
+    requireBake(map, baker, result);
+    CHECK_FALSE(baker.reusedGeometry());
+    CHECK(baker.output().find("computing portal visibility") != std::string::npos);
+    result = {};
+    baker.start(map, 2, Preferences::LightmapQualityNormal, result.callback());
+    requireBake(map, baker, result);
+    CHECK(baker.reusedGeometry());
     baker.clearCache();
     result = {};
-    baker.start(map, 2, Preferences::LightmapQualityFast, result.callback());
+    baker.start(map, 2, Preferences::LightmapQualityNormal, result.callback());
     requireBake(map, baker, result);
     CHECK_FALSE(baker.reusedGeometry());
   }
