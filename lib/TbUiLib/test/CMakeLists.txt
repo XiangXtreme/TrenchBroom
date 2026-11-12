@@ -36,6 +36,7 @@ target_sources(TbUiLibTest
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_EntityMotionPreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LayerActions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LightmapBaker.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_LightmapPreview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_CompilationHltoolsTaskRunner.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_HltoolsCompilerOptions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tst_HltoolsOptionsEditor.cpp

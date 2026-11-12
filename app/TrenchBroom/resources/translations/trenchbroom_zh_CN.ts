@@ -6100,7 +6100,39 @@ By %2</source>
             <translation>ID: %1
 作者: %2</translation>
             </message>
-        </context>
+        <message>
+            <source>Rebake after editing</source>
+            <translation>编辑后自动重新烘焙</translation>
+        </message>
+        <message>
+            <source> s</source>
+            <translation> 秒</translation>
+        </message>
+        <message>
+            <source>Changes the display immediately without rebaking.</source>
+            <translation>即时调整显示效果，无需重新烘焙。</translation>
+        </message>
+        <message>
+            <source>Lightmap Preview</source>
+            <translation>光照预览</translation>
+        </message>
+        <message>
+            <source>Automatic update</source>
+            <translation>自动更新</translation>
+        </message>
+        <message>
+            <source>Update delay</source>
+            <translation>更新延迟</translation>
+        </message>
+        <message>
+            <source>Baked light intensity</source>
+            <translation>烘焙光照强度</translation>
+        </message>
+        <message>
+            <source>Display gamma</source>
+            <translation>显示 Gamma</translation>
+        </message>
+    </context>
     <context>
         <name>tb::ui::SmartFaceSelectionPanel</name>
         <message>
@@ -11185,4 +11217,129 @@ Expression: %3</source>
         <translation>%1 需要 %2 个值。</translation>
     </message>
 </context>
+    <context>
+        <name>tb::ui::LightmapPreview</name>
+        <message>
+            <source>%1 · %2%</source>
+            <translation>%1 · %2%</translation>
+        </message>
+        <message>
+            <source>Lightmap preview off</source>
+            <translation>光照预览已关闭</translation>
+        </message>
+        <message>
+            <source>%1 · changes queued</source>
+            <translation>%1 · 有待烘焙的修改</translation>
+        </message>
+        <message>
+            <source>Bake failed · %1</source>
+            <translation>烘焙失败 · %1</translation>
+        </message>
+        <message>
+            <source>Waiting to update</source>
+            <translation>等待更新</translation>
+        </message>
+        <message>
+            <source>Cancelled</source>
+            <translation>已取消</translation>
+        </message>
+        <message>
+            <source>Lightmap out of date</source>
+            <translation>光照预览待更新</translation>
+        </message>
+        <message>
+            <source>Lightmap out of date · automatic update off</source>
+            <translation>光照预览待更新 · 自动更新已关闭</translation>
+        </message>
+        <message>
+            <source>Lightmap up to date</source>
+            <translation>光照预览已更新</translation>
+        </message>
+        <message>
+            <source>The bake does not match the current map.</source>
+            <translation>烘焙结果与当前地图不匹配。</translation>
+        </message>
+        <message>
+            <source>Lighting updated · geometry reused</source>
+            <translation>光照已更新 · 已复用几何与可见性</translation>
+        </message>
+    </context>
+    <context>
+        <name>tb::ui::LightmapBaker</name>
+        <message>
+            <source>Starting</source>
+            <translation>正在启动</translation>
+        </message>
+        <message>
+            <source>Updating lighting</source>
+            <translation>正在更新光照</translation>
+        </message>
+        <message>
+            <source>Compiler exited with code %1.</source>
+            <translation>编译器已退出，退出码为 %1。</translation>
+        </message>
+        <message>
+            <source>The lightmap compiler crashed.</source>
+            <translation>光照编译器已崩溃。</translation>
+        </message>
+        <message>
+            <source>The map is not sealed. Fix the leak before baking.</source>
+            <translation>地图未密封，请修复泄漏后再烘焙。</translation>
+        </message>
+        <message>
+            <source>The map exceeds the lightmap atlas budget.</source>
+            <translation>地图超出了光照图集容量。</translation>
+        </message>
+        <message>
+            <source>Reading lightmaps</source>
+            <translation>正在读取光照贴图</translation>
+        </message>
+    </context>
+    <context>
+        <name>LightmapPreviewControls</name>
+        <message>
+            <source>Lightmap preview log</source>
+            <translation>光照预览日志</translation>
+        </message>
+        <message>
+            <source>Fast</source>
+            <translation>快速</translation>
+        </message>
+        <message>
+            <source>Normal</source>
+            <translation>标准</translation>
+        </message>
+        <message>
+            <source>Ultra</source>
+            <translation>超高</translation>
+        </message>
+        <message>
+            <source>Bake now</source>
+            <translation>立即烘焙</translation>
+        </message>
+        <message>
+            <source>Automatic update</source>
+            <translation>自动更新</translation>
+        </message>
+        <message>
+            <source>Cancel bake</source>
+            <translation>取消烘焙</translation>
+        </message>
+        <message>
+            <source>Lighting only</source>
+            <translation>仅显示光照</translation>
+        </message>
+        <message>
+            <source>View log…</source>
+            <translation>查看日志…</translation>
+        </message>
+        <message>
+            <source>Open diagnostic folder</source>
+            <translation>打开诊断文件夹</translation>
+        </message>
+        <message>
+            <source>Lightmap bake failed</source>
+            <translation>光照烘焙失败</translation>
+        </message>
+    </context>
 </TS>

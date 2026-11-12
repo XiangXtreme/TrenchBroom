@@ -43,4 +43,10 @@ namespace csg
     miptex_build_result build_miptex_lump(const map_source &map,
                                           const texinfo_store &texinfos,
                                           const wad_build_options &options);
+
+    // Exact resource identity for the session-local preview geometry cache.
+    // Uses the same path resolution and WAD order as the compiler. A bounded
+    // byte comparison avoids treating changed texture contents as unchanged.
+    bool preview_wad_identity(const map_source &map, const wad_build_options &options,
+                              std::string &identity);
 }

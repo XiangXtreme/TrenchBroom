@@ -80,6 +80,7 @@ set(HLTOOLS_PREVIEW_FORMAT_SOURCES
 )
 set(HLTOOLS_PREVIEW_DRIVER_SOURCES
   src/cli/hltools/compile.cpp
+  src/cli/hltools/preview_cache.cpp
   src/cli/hltools/project_input.cpp
   src/cli/tools/compile_parameters.cpp
   src/cli/tools/lightmap_tool.cpp

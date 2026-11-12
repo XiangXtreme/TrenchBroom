@@ -432,6 +432,27 @@ namespace csg
         }
     }
 
+    bool preview_wad_identity(const map_source &map, const wad_build_options &options,
+                              std::string &identity)
+    {
+        constexpr std::size_t limit = 128 * 1024 * 1024;
+        for (const auto &wad : collect_wad_paths(map, options))
+        {
+            const auto path = resolve_wad_path(wad.path);
+            std::error_code ec;
+            const auto size = std::filesystem::file_size(path, ec);
+            if (ec || size > limit || identity.size() > limit - size)
+                return false;
+            std::vector<byte> bytes;
+            if (!fs::read_all(path, bytes))
+                return false;
+            identity += wad.runtime ? "runtime:" : "embedded:";
+            identity += std::to_string(bytes.size()) + ":";
+            identity.append((const char *)bytes.data(), bytes.size());
+        }
+        return true;
+    }
+
     miptex_build_result build_miptex_lump(const map_source &map,
                                           const texinfo_store &texinfos,
                                           const wad_build_options &options)

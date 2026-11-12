@@ -81,6 +81,22 @@ const std::string& LightmapBaker::output() const
   return m_output;
 }
 
+std::filesystem::path LightmapBaker::diagnosticDirectory() const
+{
+  return m_failedWorkDir ? pathFromQString(m_failedWorkDir->path())
+                         : std::filesystem::path{};
+}
+
+bool LightmapBaker::reusedGeometry() const
+{
+  return m_reusedGeometry;
+}
+
+void LightmapBaker::clearCache()
+{
+  m_cachedWorkDir.reset();
+}
+
 std::filesystem::path LightmapBaker::workerPath()
 {
   return hltoolsWorkerPath();
@@ -102,6 +118,7 @@ void LightmapBaker::start(
   m_project.reset();
   m_output.clear();
   m_progressBuffer.clear();
+  m_reusedGeometry = false;
   m_stage = 0;
 
   m_workDir = std::make_shared<QTemporaryDir>(
@@ -111,6 +128,12 @@ void LightmapBaker::start(
     finish(std::nullopt, "could not create the lightmap scratch directory");
     return;
   }
+
+  if (m_cachedWorkDir)
+    for (const auto* suffix : {".bsp", ".key", ".wa_"})
+      QFile::copy(
+        m_cachedWorkDir->filePath(QStringLiteral("geometry") + suffix),
+        m_workDir->filePath(QStringLiteral("geometry") + suffix));
 
   if (projectInfoProvider)
   {
@@ -183,6 +206,7 @@ void LightmapBaker::start(
       }
     });
 
+  emit stageProgressChanged(tr("Starting"), -1);
   runStage();
 }
 
@@ -227,7 +251,7 @@ void LightmapBaker::readOutput()
 
   // HLTools repaints progress with carriage returns and can split a line across reads.
   static const auto progressLine = QRegularExpression{
-    R"((?:^|[\r\n])[ \t]*[^\r\n\[]+\[[# ]+\][ \t]+(\d{1,3})%[ \t]+(\d+(?:\.\d+)?)s[ \t])"};
+    R"((?:^|[\r\n])[ \t]*([^\r\n\[]+?)\s*\[[# ]+\][ \t]+(\d{1,3})%[ \t]+(\d+(?:\.\d+)?)s[ \t])"};
   m_progressBuffer += chunk;
   auto matches = progressLine.globalMatch(QString::fromUtf8(m_progressBuffer));
   auto last = QRegularExpressionMatch{};
@@ -236,14 +260,22 @@ void LightmapBaker::readOutput()
 
   if (last.hasMatch())
   {
-    const auto percent = last.captured(1).toInt();
-    const auto elapsed = last.captured(2).toDouble();
+    const auto percent = last.captured(2).toInt();
+    const auto elapsed = last.captured(3).toDouble();
+    emit stageProgressChanged(last.captured(1).trimmed(), percent);
     const auto seconds =
       percent > 0 && percent < 100 ? std::ceil(elapsed * (100 - percent) / percent) : 0.0;
     emit remainingSecondsChanged(
       seconds > 0 && seconds <= std::numeric_limits<int>::max()
         ? static_cast<int>(seconds)
         : -1);
+  }
+
+  if (
+    !m_reusedGeometry && m_output.find("preview: reusing geometry") != std::string::npos)
+  {
+    m_reusedGeometry = true;
+    emit stageProgressChanged(tr("Updating lighting"), -1);
   }
 
   const auto lastBreak =
@@ -296,6 +328,8 @@ void LightmapBaker::runStage()
       arguments << QStringLiteral("-fast");
     else if (m_quality == Preferences::LightmapQualityUltra)
       arguments << QStringLiteral("-extra");
+    arguments << QStringLiteral("-noclip") << QStringLiteral("-previewcache")
+              << m_workDir->filePath("geometry");
   }
   else
   {
@@ -323,13 +357,21 @@ void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
   readOutput();
   if (exitStatus != static_cast<int>(QProcess::NormalExit) || exitCode != 0)
   {
-    finish(std::nullopt, m_output.empty() ? "the map toolchain failed" : m_output);
+    auto reason = tr("Compiler exited with code %1.").arg(exitCode).toStdString();
+    if (exitStatus != static_cast<int>(QProcess::NormalExit))
+      reason = tr("The lightmap compiler crashed.").toStdString();
+    else if (m_output.find("!!! LEAK") != std::string::npos)
+      reason = tr("The map is not sealed. Fix the leak before baking.").toStdString();
+    else if (m_output.find("AllocBlock") != std::string::npos)
+      reason = tr("The map exceeds the lightmap atlas budget.").toStdString();
+    finish(std::nullopt, std::move(reason));
     return;
   }
 
   if (m_stage == 0)
   {
     m_stage = 1;
+    emit stageProgressChanged(tr("Reading lightmaps"), -1);
     emit remainingSecondsChanged(-1);
     runStage();
     return;
@@ -351,6 +393,15 @@ void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
 void LightmapBaker::finish(std::optional<render::LightmapBake> bake, std::string error)
 {
   auto callback = std::move(m_callback);
+  if (bake)
+    m_cachedWorkDir = m_workDir;
+  else if (m_workDir && m_workDir->isValid())
+  {
+    m_failedWorkDir = m_workDir;
+    auto log = QFile{m_workDir->filePath("preview-output.log")};
+    if (log.open(QIODevice::WriteOnly))
+      log.write(QByteArray::fromStdString(error + "\n\n" + m_output));
+  }
   cancel();
   if (callback)
     callback(std::move(bake), error);

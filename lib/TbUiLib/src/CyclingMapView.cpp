@@ -33,6 +33,7 @@
 #include "prefs/Preferences.h"
 #include "ui/ImageUtils.h"
 #include "ui/LightmapPreview.h"
+#include "ui/LightmapPreviewControls.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView2D.h"
 #include "ui/MapView3D.h"
@@ -125,22 +126,12 @@ void CyclingMapView::createGui(
     setPref(Preferences::ShowLightmap, checked);
   });
 
-  auto* qualityMenu = new QMenu{m_lightmapButton};
-  auto* qualityGroup = new QActionGroup{qualityMenu};
-  const auto addQuality = [&](const QString& name, const char* quality) {
-    auto* action = qualityMenu->addAction(name);
-    action->setCheckable(true);
-    action->setData(QString::fromLatin1(quality));
-    qualityGroup->addAction(action);
-    connect(action, &QAction::triggered, this, [quality] {
-      setPref(Preferences::LightmapQuality, quality);
-    });
-  };
-  addQuality(tr("Fast"), Preferences::LightmapQualityFast);
-  addQuality(tr("Normal"), Preferences::LightmapQualityNormal);
-  addQuality(tr("Ultra"), Preferences::LightmapQualityUltra);
-  m_lightmapButton->setMenu(qualityMenu);
   auto& preview = toolBox.lightmapPreview();
+  m_lightmapButton->setMenu(createLightmapPreviewMenu(preview, m_lightmapButton));
+  connect(&preview, &LightmapPreview::stateChanged, this, [this, &preview] {
+    updateChrome();
+    m_lightmapButton->setToolTip(preview.statusText());
+  });
   m_bakingLightmap = preview.baking();
   m_lightmapRemainingSeconds = preview.remainingSeconds();
   connect(
@@ -231,6 +222,8 @@ void CyclingMapView::updateLightmapButton()
   auto qualityLabel = QString{};
   for (auto* action : m_lightmapButton->menu()->actions())
   {
+    if (!action->data().isValid())
+      continue;
     const auto selected = action->data().toString() == selectedQuality;
     action->setChecked(selected);
     if (selected)

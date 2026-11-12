@@ -176,6 +176,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapBaker.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapBakeReader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapPreview.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/LightmapPreviewControls.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/LimitedKeySequenceEdit.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapCommandSurface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MapDocumentActionCache.cpp

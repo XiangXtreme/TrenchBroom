@@ -123,6 +123,7 @@ namespace cli
             // values are not mistaken for map names
             {"-dumpintermediates", 0, 0, false, false},
             {"--dump-intermediates", 0, 0, false, false},
+            {"-previewcache", 0, 1, false, false},
             {"-embedsource", 0, 0, false, false},
             {"--embed-source", 0, 0, false, false},
             {"-noembedsource", 0, 0, false, false},

@@ -22,6 +22,7 @@
 #include <QBoxLayout>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QFontDatabase>
 #include <QLabel>
 #include <QListView>
@@ -45,6 +46,7 @@
 #include "vm/scalar.h"
 
 #include <array>
+#include <cmath>
 #include <string>
 
 namespace tb::ui
@@ -259,6 +261,22 @@ QWidget* ViewPreferencePane::createViewPreferences()
   pythonConsoleFontLayout->addWidget(m_pythonConsoleFontFamilyCombo, 1);
   pythonConsoleFontLayout->addWidget(m_pythonConsoleFontSizeSpin);
 
+  m_lightmapAutoUpdate = new QCheckBox{tr("Rebake after editing")};
+  m_lightmapDelay = new QDoubleSpinBox{};
+  m_lightmapDelay->setRange(0.1, 30.0);
+  m_lightmapDelay->setSingleStep(0.1);
+  m_lightmapDelay->setDecimals(1);
+  m_lightmapDelay->setSuffix(tr(" s"));
+  m_lightmapIntensity = new QDoubleSpinBox{};
+  m_lightmapIntensity->setRange(0.0, 8.0);
+  m_lightmapIntensity->setSingleStep(0.1);
+  m_lightmapGamma = new QDoubleSpinBox{};
+  m_lightmapGamma->setRange(0.1, 4.0);
+  m_lightmapGamma->setSingleStep(0.1);
+  const auto displayHint = tr("Changes the display immediately without rebaking.");
+  m_lightmapIntensity->setToolTip(displayHint);
+  m_lightmapGamma->setToolTip(displayHint);
+
   auto* layout = new FormWithSectionsLayout{};
   layout->setContentsMargins(
     LayoutConstants::DialogOuterMargin,
@@ -280,6 +298,12 @@ QWidget* ViewPreferencePane::createViewPreferences()
   layout->addRow("Enable multisampling", m_enableMsaa);
   layout->addRow(tr("FPS limit"), m_fpsLimitSpin);
 
+  layout->addSection(tr("Lightmap Preview"));
+  layout->addRow(tr("Automatic update"), m_lightmapAutoUpdate);
+  layout->addRow(tr("Update delay"), m_lightmapDelay);
+  layout->addRow(tr("Baked light intensity"), m_lightmapIntensity);
+  layout->addRow(tr("Display gamma"), m_lightmapGamma);
+
   layout->addSection("Material Browser");
   layout->addRow("Icon size", m_materialBrowserIconSizeCombo);
 
@@ -294,6 +318,19 @@ QWidget* ViewPreferencePane::createViewPreferences()
 
 void ViewPreferencePane::bindEvents()
 {
+  connect(m_lightmapAutoUpdate, &QCheckBox::toggled, this, [](bool value) {
+    PreferenceManager::instance().set(Preferences::LightmapAutoUpdate, value);
+  });
+  connect(m_lightmapDelay, &QDoubleSpinBox::valueChanged, this, [](double value) {
+    PreferenceManager::instance().set(
+      Preferences::LightmapUpdateDelay, int(std::lround(value * 1000.0)));
+  });
+  connect(m_lightmapIntensity, &QDoubleSpinBox::valueChanged, this, [](double value) {
+    PreferenceManager::instance().set(Preferences::LightmapIntensity, float(value));
+  });
+  connect(m_lightmapGamma, &QDoubleSpinBox::valueChanged, this, [](double value) {
+    PreferenceManager::instance().set(Preferences::LightmapGamma, float(value));
+  });
   connect(m_default2DToolCombo, &QComboBox::activated, this, [this](const int index) {
     PreferenceManager::instance().set(
       Preferences::Default2DSelectMode, m_default2DToolCombo->itemData(index).toBool());
@@ -376,6 +413,10 @@ void ViewPreferencePane::doResetToDefaults()
   prefs.resetToDefault(Preferences::Default2DSelectMode);
   prefs.resetToDefault(Preferences::Link2DCameras);
   prefs.resetToDefault(Preferences::Brightness);
+  prefs.resetToDefault(Preferences::LightmapAutoUpdate);
+  prefs.resetToDefault(Preferences::LightmapUpdateDelay);
+  prefs.resetToDefault(Preferences::LightmapIntensity);
+  prefs.resetToDefault(Preferences::LightmapGamma);
   prefs.resetToDefault(Preferences::GridAlpha);
   prefs.resetToDefault(Preferences::CameraFov);
   prefs.resetToDefault(Preferences::ShowAxes);
@@ -392,6 +433,10 @@ void ViewPreferencePane::doResetToDefaults()
 
 void ViewPreferencePane::updateControls()
 {
+  const auto autoUpdateBlocker = QSignalBlocker{m_lightmapAutoUpdate};
+  const auto delayBlocker = QSignalBlocker{m_lightmapDelay};
+  const auto intensityBlocker = QSignalBlocker{m_lightmapIntensity};
+  const auto gammaBlocker = QSignalBlocker{m_lightmapGamma};
   const auto layoutBlocker = QSignalBlocker{m_layoutCombo};
   const auto defaultToolBlocker = QSignalBlocker{m_default2DToolCombo};
   const auto link2DCamerasBlocker = QSignalBlocker{m_link2dCameras};
@@ -416,6 +461,12 @@ void ViewPreferencePane::updateControls()
 
   auto& prefs = PreferenceManager::instance();
 
+  m_lightmapAutoUpdate->setChecked(
+    prefs.getPendingValue(Preferences::LightmapAutoUpdate));
+  m_lightmapDelay->setValue(
+    prefs.getPendingValue(Preferences::LightmapUpdateDelay) / 1000.0);
+  m_lightmapIntensity->setValue(prefs.getPendingValue(Preferences::LightmapIntensity));
+  m_lightmapGamma->setValue(prefs.getPendingValue(Preferences::LightmapGamma));
   m_layoutCombo->setCurrentIndex(prefs.getPendingValue(Preferences::MapViewLayout));
   m_default2DToolCombo->setCurrentIndex(
     prefs.getPendingValue(Preferences::Default2DSelectMode) ? 1 : 0);

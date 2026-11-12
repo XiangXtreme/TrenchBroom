@@ -21,12 +21,15 @@
 
 #include "base/Logger.h"
 #include "base/PreferenceManager.h"
+#include "mdl/CommandProcessor.h"
 #include "mdl/Map.h"
 #include "prefs/Preferences.h"
 #include "render/RenderContext.h"
 #include "ui/MapDocument.h"
 
+#include <algorithm>
 #include <chrono>
+#include <unordered_set>
 
 namespace tb::ui
 {
@@ -42,8 +45,23 @@ LightmapPreview::LightmapPreview(MapDocument& document)
       setProgress(true, seconds);
     });
 
+  connect(
+    &m_baker,
+    &LightmapBaker::stageProgressChanged,
+    this,
+    [this](const QString& stage, const int percent) {
+      m_status = percent >= 0 ? tr("%1 · %2%").arg(stage).arg(percent) : stage;
+      emit stateChanged();
+    });
+
   m_notifierConnection += m_document.documentWasLoadedNotifier.connect([this] {
+    cancel();
+    m_baker.clearCache();
+    m_assembly.reset();
+    m_atlas.clear();
+    m_displayInputs.clear();
     m_modificationCount = m_document.map().modificationCount();
+    m_requested = false;
     invalidate();
   });
   m_notifierConnection += m_document.modificationStateDidChangeNotifier.connect([this] {
@@ -55,20 +73,37 @@ LightmapPreview::LightmapPreview(MapDocument& document)
       invalidate();
     }
   });
+  auto& preferences = PreferenceManager::instance();
   m_notifierConnection +=
-    PreferenceManager::instance().preferenceDidChangeNotifier.connect(
-      [this](const std::filesystem::path& path) {
-        if (path == Preferences::LightmapQuality.path)
+    preferences.preferenceDidChangeNotifier.connect([this](const auto& path) {
+      if (path == Preferences::LightmapQuality.path)
+      {
+        invalidate();
+      }
+      else if (path == Preferences::ShowLightmap.path && !pref(Preferences::ShowLightmap))
+      {
+        cancel();
+      }
+      else if (path == Preferences::ShowLightmap.path && pref(Preferences::ShowLightmap))
+      {
+        if (m_dirty || !m_assembly)
+          requestBake();
+        emit stateChanged();
+      }
+      else if (path == Preferences::LightmapAutoUpdate.path)
+      {
+        if (pref(Preferences::LightmapAutoUpdate) && m_dirty)
+          schedule();
+        else
         {
-          invalidate();
+          m_timer.stop();
+          m_pending = m_manualPending;
         }
-        else if (
-          path == Preferences::ShowLightmap.path && !pref(Preferences::ShowLightmap))
-        {
-          cancel();
-          m_requested = bool(m_assembly);
-        }
-      });
+        emit stateChanged();
+      }
+      else if (path == Preferences::LightmapUpdateDelay.path && m_timer.isActive())
+        schedule();
+    });
 }
 
 void LightmapPreview::configure(render::RenderContext& context)
@@ -76,8 +111,7 @@ void LightmapPreview::configure(render::RenderContext& context)
   context.setShowLightmap(pref(Preferences::ShowLightmap));
   if (context.showLightmap() && !m_requested)
   {
-    m_requested = true;
-    m_timer.start(1500);
+    requestBake();
   }
 
   // The map renderer shares its brush buffers with the 2D views. Keep the UVs
@@ -91,6 +125,11 @@ bool LightmapPreview::baking() const
   return m_baking;
 }
 
+bool LightmapPreview::canCancel() const
+{
+  return m_baking || m_timer.isActive();
+}
+
 int LightmapPreview::remainingSeconds() const
 {
   return m_remainingSeconds;
@@ -101,15 +140,96 @@ void LightmapPreview::setProjectInfoProvider(ProjectInfoProvider provider)
   m_projectInfoProvider = std::move(provider);
 }
 
+bool LightmapPreview::stale() const
+{
+  return m_dirty;
+}
+bool LightmapPreview::hasResult() const
+{
+  return bool(m_assembly);
+}
+QString LightmapPreview::error() const
+{
+  return m_error;
+}
+QString LightmapPreview::output() const
+{
+  return QString::fromStdString(m_baker.output());
+}
+std::filesystem::path LightmapPreview::diagnosticDirectory() const
+{
+  return m_baker.diagnosticDirectory();
+}
+
+QString LightmapPreview::statusText() const
+{
+  if (!pref(Preferences::ShowLightmap))
+    return tr("Lightmap preview off");
+  if (m_baking)
+    return m_pending ? tr("%1 · changes queued").arg(m_status) : m_status;
+  if (!m_error.isEmpty())
+    return tr("Bake failed · %1").arg(m_error);
+  if (m_timer.isActive())
+    return tr("Waiting to update");
+  if (!m_status.isEmpty() && m_status == tr("Cancelled"))
+    return m_status;
+  if (m_dirty)
+    return pref(Preferences::LightmapAutoUpdate)
+             ? tr("Lightmap out of date")
+             : tr("Lightmap out of date · automatic update off");
+  return m_status.isEmpty() ? tr("Lightmap up to date") : m_status;
+}
+
+void LightmapPreview::retainMatchingFaces()
+{
+  if (!m_assembly)
+    return;
+  m_displayInputs = render::matchingLightmapFaces(m_displayInputs, m_document.map());
+  auto valid = std::unordered_set<const mdl::BrushFace*>{};
+  for (const auto& input : m_displayInputs)
+    valid.insert(input.face);
+  auto assembly = std::make_shared<render::LightmapAssembly>(*m_assembly);
+  std::erase_if(
+    assembly->blocks, [&](const auto& block) { return !valid.contains(block.first); });
+  // Terrain fragments have no stable editor face handle; do not reuse them after edits.
+  assembly->terrainBlocks.clear();
+  m_assembly = std::move(assembly);
+}
+
+void LightmapPreview::schedule(const bool manual)
+{
+  if (!pref(Preferences::ShowLightmap))
+    return;
+  m_requested = true;
+  if (m_baking)
+  {
+    m_pending = true;
+    m_manualPending = m_manualPending || manual;
+  }
+  else
+    m_timer.start(
+      manual ? 0 : std::clamp(pref(Preferences::LightmapUpdateDelay), 100, 30000));
+  emit stateChanged();
+}
+
+void LightmapPreview::requestBake()
+{
+  m_error.clear();
+  if (!m_baking)
+    m_status.clear();
+  schedule(true);
+}
+
 void LightmapPreview::invalidate()
 {
-  cancel();
-  m_requested = false;
-  if (m_assembly)
-  {
-    m_assembly.reset();
-    m_atlas.clear();
-  }
+  ++m_revision;
+  m_dirty = true;
+  if (!m_baking)
+    m_status.clear();
+  retainMatchingFaces();
+  if (pref(Preferences::LightmapAutoUpdate))
+    schedule();
+  emit stateChanged();
   if (pref(Preferences::ShowLightmap))
     emit changed();
 }
@@ -118,7 +238,12 @@ void LightmapPreview::cancel()
 {
   m_timer.stop();
   m_baker.cancel();
+  m_pending = false;
+  m_manualPending = false;
+  m_requested = true;
+  m_status = tr("Cancelled");
   setProgress(false, -1);
+  emit stateChanged();
 }
 
 void LightmapPreview::setProgress(const bool baking, const int remainingSeconds)
@@ -133,6 +258,18 @@ void LightmapPreview::setProgress(const bool baking, const int remainingSeconds)
 
 void LightmapPreview::startBake()
 {
+  if (!pref(Preferences::ShowLightmap))
+    return;
+  if (m_document.map().commandProcessor().isTransactionActive())
+  {
+    m_timer.start(150);
+    return;
+  }
+  m_pending = false;
+  m_manualPending = false;
+  m_error.clear();
+  const auto revision = m_revision;
+  const auto inputs = render::collectLightmapFaces(m_document.map());
   auto& logger = m_document.map().logger();
   const auto startedAt = std::chrono::steady_clock::now();
   logger.info() << "Baking a lightmap for the view.";
@@ -141,21 +278,34 @@ void LightmapPreview::startBake()
     m_document.map(),
     8,
     pref(Preferences::LightmapQuality),
-    [this, startedAt](
+    [this, startedAt, revision, inputs](
       std::optional<render::LightmapBake> bake, const std::string& error) {
       setProgress(false, -1);
       auto& logger = m_document.map().logger();
       if (!bake)
       {
+        m_dirty = true;
+        m_error = QString::fromStdString(error);
         logger.error() << "Cannot bake a lightmap: " << error;
+        if (m_pending && (m_manualPending || pref(Preferences::LightmapAutoUpdate)))
+          schedule(m_manualPending);
+        emit stateChanged();
         return;
       }
 
       auto assembly = std::make_shared<render::LightmapAssembly>();
-      render::buildLightmapAssembly(m_document.map(), *bake, *assembly);
+      const auto matching = render::matchingLightmapFaces(inputs, m_document.map());
+      render::buildLightmapAssembly(matching, *bake, *assembly);
+      if (revision != m_revision)
+        assembly->terrainBlocks.clear();
       if (assembly->blocks.empty() && assembly->terrainBlocks.empty())
       {
+        m_dirty = true;
+        m_error = tr("The bake does not match the current map.");
         logger.warn() << "The lightmap bake does not match any face of this map.";
+        if (m_pending && (m_manualPending || pref(Preferences::LightmapAutoUpdate)))
+          schedule(m_manualPending);
+        emit stateChanged();
         return;
       }
 
@@ -170,6 +320,13 @@ void LightmapPreview::startBake()
       m_atlas.setData(assembly->width, assembly->height, assembly->pixels);
       assembly->pixels = std::vector<std::uint8_t>{};
       m_assembly = std::move(assembly);
+      m_displayInputs = matching;
+      m_dirty = revision != m_revision;
+      m_status = m_baker.reusedGeometry() ? tr("Lighting updated · geometry reused")
+                                          : tr("Lightmap up to date");
+      if (m_pending && (m_manualPending || pref(Preferences::LightmapAutoUpdate)))
+        schedule(m_manualPending);
+      emit stateChanged();
       emit changed();
     },
     m_projectInfoProvider);

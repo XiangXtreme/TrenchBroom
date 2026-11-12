@@ -131,7 +131,10 @@ TEST_CASE("AreaMapView")
     auto* button = original->findChild<QToolButton*>("MapViewLightmapButton");
     REQUIRE(button);
     REQUIRE(button->menu());
-    REQUIRE(button->menu()->actions().size() == 3);
+    REQUIRE(button->menu()->actions().size() > 3);
+    REQUIRE(button->menu()->findChild<QAction*>("LightmapBakeNow"));
+    REQUIRE(button->menu()->findChild<QAction*>("LightmapAutomaticUpdate"));
+    REQUIRE(button->menu()->findChild<QAction*>("LightmapCancelBake"));
     CHECK(button->popupMode() == QToolButton::MenuButtonPopup);
     CHECK(button->text().isEmpty());
     CHECK(button->toolButtonStyle() == Qt::ToolButtonIconOnly);

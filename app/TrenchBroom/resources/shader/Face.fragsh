@@ -33,6 +33,9 @@ uniform bool ShadeFaces;
 uniform bool ShowFog;
 uniform bool ApplyLightmap;
 uniform sampler2D Lightmap;
+uniform float LightmapIntensity;
+uniform float LightmapGamma;
+uniform bool LightmapOnly;
 uniform int EntityRenderMode;
 uniform float EntityAlpha;
 uniform vec3 EntityColor;
@@ -75,7 +78,8 @@ void main()
   // Baked lighting, sampled from the lightmap atlas.
   if (ApplyLightmap)
   {
-    gl_FragColor.rgb = min(gl_FragColor.rgb * texture2D(Lightmap, lightmapUv).rgb, vec3(1.0));
+    vec3 base = LightmapOnly ? vec3(1.0) : gl_FragColor.rgb;
+    gl_FragColor.rgb = min(base * texture2D(Lightmap, lightmapUv).rgb * LightmapIntensity, vec3(1.0));
   }
 
   gl_FragColor = vec4(vec3(Brightness / 2.0 * gl_FragColor), gl_FragColor.a);
@@ -118,8 +122,7 @@ void main()
 
   if (ApplyLightmap)
   {
-    const float lightmapDisplayGamma = 1.6;
-    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / lightmapDisplayGamma));
+    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / max(LightmapGamma, 0.1)));
   }
 
   if (ShowFog && EntityRenderMode != 3 && EntityRenderMode != 5)

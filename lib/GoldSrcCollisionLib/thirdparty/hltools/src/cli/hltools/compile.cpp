@@ -28,6 +28,7 @@
 #include "../tools/vis_tool.h"
 #include "../tools/rad_tool.h"
 #include "project_input.h"
+#include "preview_cache.h"
 
 namespace tools
 {
@@ -236,51 +237,64 @@ namespace tools
 
         auto start = std::chrono::steady_clock::now();
 
-        // ---- csg ----------------------------------------------------------
-        csg::csg_result result = csg::run_csg(std::move(source), csg_options);
-
-        // build the intermediates before build_bsp_data mutates the entities,
-        // exactly like the file based flow
-        csg::intermediate_data inter = csg::build_intermediate_data(result, csg_options.brush);
-        if (dump_intermediates && !csg::write_intermediate_files(base, inter, result))
-            err::fatal("could not write csg intermediate files");
-
-        // rad still reads the textures from the temp wad on disk (phase 2
-        // hands them over in memory)
-        if (!fs::write_all(base + ".wa_", result.temp_wad.data(), result.temp_wad.size()))
-            err::fatal("could not write '%s'", (base + ".wa_").c_str());
-
-        format::map_data map = csg::build_bsp_data(result, optimize_lights);
-
-        // ---- bsp (csg handed over in memory) ------------------------------
-        bsp::bsp_input input;
-        for (int hull = 0; hull < bsp::num_hulls; hull++)
+        preview_cache cache(args.value("-previewcache", ""), source_text, source,
+                            csg_options, argc, argv);
+        format::map_data map;
+        if (cache.restore(map, source, base))
         {
-            input.surfaces[hull] = std::move(inter.surfaces[hull]);
-            input.brushes[hull] = std::move(inter.brushes[hull]);
+            csg_options.brush.only_entities = true;
+            auto entities = csg::run_csg(std::move(source), csg_options);
+            csg::replace_entities(entities, map, optimize_lights);
         }
-        input.hull_sizes = std::move(inter.hull_sizes);
-        input.planes = std::move(inter.planes);
-        input.surface_clips = std::move(inter.surface_clips);
-        bsp::run_bsp(map, base, bsp_options, std::move(input));
-
-        if (logging::had_leak() || logging::had_error())
+        else
         {
-            // keep the tree and the pts pointfile on disk for leak debugging,
-            // and stop before vis and rad like the file based pipeline
-            if (embed_source)
-                attach_embedded_source(map, source_bytes,
-                                       compile_parameters, {});
-            format::bsp_file::write(bsp_path, map);
-            auto leak_end = std::chrono::steady_clock::now();
-            std::chrono::duration<double> leak_elapsed = leak_end - start;
-            logging::done(leak_elapsed.count());
-            logging::close();
-            return 1;
-        }
+            // ---- csg ----------------------------------------------------------
+            csg::csg_result result = csg::run_csg(std::move(source), csg_options);
 
-        // ---- vis (portals via prt for now) -------------------------------
-        vis::run_vis(map, vis_options);
+            // build the intermediates before build_bsp_data mutates the entities,
+            // exactly like the file based flow
+            csg::intermediate_data inter = csg::build_intermediate_data(result, csg_options.brush);
+            if (dump_intermediates && !csg::write_intermediate_files(base, inter, result))
+                err::fatal("could not write csg intermediate files");
+
+            // rad still reads the textures from the temp wad on disk (phase 2
+            // hands them over in memory)
+            if (!fs::write_all(base + ".wa_", result.temp_wad.data(), result.temp_wad.size()))
+                err::fatal("could not write '%s'", (base + ".wa_").c_str());
+
+            map = csg::build_bsp_data(result, optimize_lights);
+
+            // ---- bsp (csg handed over in memory) ------------------------------
+            bsp::bsp_input input;
+            for (int hull = 0; hull < bsp::num_hulls; hull++)
+            {
+                input.surfaces[hull] = std::move(inter.surfaces[hull]);
+                input.brushes[hull] = std::move(inter.brushes[hull]);
+            }
+            input.hull_sizes = std::move(inter.hull_sizes);
+            input.planes = std::move(inter.planes);
+            input.surface_clips = std::move(inter.surface_clips);
+            bsp::run_bsp(map, base, bsp_options, std::move(input));
+
+            if (logging::had_leak() || logging::had_error())
+            {
+                // keep the tree and the pts pointfile on disk for leak debugging,
+                // and stop before vis and rad like the file based pipeline
+                if (embed_source)
+                    attach_embedded_source(map, source_bytes,
+                                           compile_parameters, {});
+                format::bsp_file::write(bsp_path, map);
+                auto leak_end = std::chrono::steady_clock::now();
+                std::chrono::duration<double> leak_elapsed = leak_end - start;
+                logging::done(leak_elapsed.count());
+                logging::close();
+                return 1;
+            }
+
+            // ---- vis (portals via prt for now) -------------------------------
+            vis::run_vis(map, vis_options);
+            cache.save(map, base);
+        }
 
         // ---- rad -----------------------------------------------------------
         // if the lightmap atlas overflows, rad skips lighting; keep the post vis

@@ -42,7 +42,11 @@ progress pipe and cancellation. Vulkan GPU lighting is requested by default when
 the worker is built with the SDK; missing devices and unsupported maps automatically
 use CPU lighting. Builds without the SDK keep the CPU path. Source ZIP output is not
 part of the worker build. Fatal errors
-and compiler globals stay isolated in the worker process. Project extraction
+and compiler globals stay isolated in the worker process. Previews skip collision
+hulls. A session cache retains the BSP immediately after VIS; supported point-light
+changes reuse it only after exact MAP/settings/WAD validation and interior-origin
+checks. RAD always runs in full. Other changes trigger a complete compilation.
+Project extraction
 stays in TB-owned scratch storage so cancellation also cleans extracted assets.
 
 Algorithm changes belong in hltools, including its `src/collision` and
@@ -81,3 +85,25 @@ tests MAP and project inputs at all three quality levels and compares lighting
 lumps, atlas pixels and manifests against the full CLI when `--cli` is supplied.
 
 The upstream license is preserved at `thirdparty/hltools/LICENSE`.
+
+## Preview interaction
+
+The preview keeps the last successful atlas on failure. Face addresses are checked
+against a snapshot of geometry, UVs, material, surface attributes and brush-entity
+properties before sampling; changed or removed faces cannot consume an old tile.
+Terrain lightmaps are conservatively invalidated after edits. Unchanged surfaces
+can still show the previous lighting while the new bake runs.
+
+The preview menu and bottom status surface offer manual baking, automatic updates,
+cancellation, lighting-only display, output logs and the last failure's scratch
+folder. View preferences control update delay, intensity and display gamma. Display
+controls never start a bake. Automatic updates debounce edits, wait for the current
+edit transaction, and queue at most one follow-up after a running bake. Disabling
+automatic updates leaves rebaking to the manual command.
+
+A local Normal/GPU/8-thread run on the frozen Lws_gxl_speedrun preview took 106.6 s
+for the full bake and 9.7 s after a light-intensity edit with geometry/VIS reuse.
+These are single-run timings, not a guarantee for other maps. CPU and GPU fixtures
+compare all BSP lumps against complete compilations (normalizing the generated
+entity timestamp), including brush entities, material/UV edits, WAD changes and
+invalid or boundary-crossing light positions.

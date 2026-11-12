@@ -47,7 +47,16 @@ public:
 
   void configure(render::RenderContext& context);
   bool baking() const;
+  bool canCancel() const;
   int remainingSeconds() const;
+  bool stale() const;
+  bool hasResult() const;
+  QString statusText() const;
+  QString error() const;
+  QString output() const;
+  std::filesystem::path diagnosticDirectory() const;
+  void requestBake();
+  void cancel();
 
   using ProjectInfoProvider = LightmapBaker::ProjectInfoProvider;
   void setProjectInfoProvider(ProjectInfoProvider provider);
@@ -55,11 +64,13 @@ public:
 signals:
   void changed();
   void progressChanged(bool baking, int remainingSeconds);
+  void stateChanged();
 
 private:
   void invalidate();
-  void cancel();
   void startBake();
+  void schedule(bool manual = false);
+  void retainMatchingFaces();
   void setProgress(bool baking, int remainingSeconds);
 
   MapDocument& m_document;
@@ -71,6 +82,13 @@ private:
   bool m_requested = false;
   bool m_baking = false;
   int m_remainingSeconds = -1;
+  bool m_dirty = true;
+  bool m_pending = false;
+  bool m_manualPending = false;
+  size_t m_revision = 0;
+  QString m_status;
+  QString m_error;
+  std::vector<render::FaceLightmapInput> m_displayInputs;
   NotifierConnection m_notifierConnection;
   ProjectInfoProvider m_projectInfoProvider;
 };

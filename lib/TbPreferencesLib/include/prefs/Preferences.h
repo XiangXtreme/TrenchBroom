@@ -459,6 +459,11 @@ inline auto FaceRenderMode =
 
 inline auto ShadeFaces = Preference<bool>{"Map view/Shade faces", true};
 inline auto ShowLightmap = Preference<bool>{"Map view/Show lightmap", false};
+inline auto LightmapAutoUpdate = Preference<bool>{"Lightmap/Automatic update", true};
+inline auto LightmapUpdateDelay = Preference<int>{"Lightmap/Update delay", 1500};
+inline auto LightmapIntensity = Preference<float>{"Lightmap/Display intensity", 1.0f};
+inline auto LightmapGamma = Preference<float>{"Lightmap/Display gamma", 1.6f};
+inline auto LightmapOnly = Preference<bool>{"Lightmap/Lighting only", false};
 inline constexpr auto LightmapQualityFast = "fast";
 inline constexpr auto LightmapQualityNormal = "normal";
 inline constexpr auto LightmapQualityUltra = "ultra";

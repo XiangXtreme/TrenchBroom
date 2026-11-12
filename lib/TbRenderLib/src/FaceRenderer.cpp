@@ -230,6 +230,10 @@ void FaceRenderer::render(RenderContext& context)
     }
     shader.set("ApplyLightmap", lightmapActive);
     shader.set("Lightmap", 1);
+    shader.set(
+      "LightmapIntensity", std::clamp(pref(Preferences::LightmapIntensity), 0.0f, 8.0f));
+    shader.set("LightmapGamma", std::clamp(pref(Preferences::LightmapGamma), 0.1f, 4.0f));
+    shader.set("LightmapOnly", pref(Preferences::LightmapOnly));
 
     shader.set("Alpha", m_alpha);
     shader.set("TexCoordOffset", vm::vec2f{});

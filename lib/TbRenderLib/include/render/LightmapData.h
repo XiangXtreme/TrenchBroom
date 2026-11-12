@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -135,7 +136,15 @@ struct FaceLightmapInput
   vm::plane3d plane;
   std::vector<vm::vec3f> outline;
   const mdl::BrushFace* face = nullptr;
+  std::string materialName;
+  std::string entitySignature;
+  // Exact editor geometry/UV snapshot; never dereference a saved face pointer.
+  std::vector<double> signature;
 };
+
+std::vector<FaceLightmapInput> collectLightmapFaces(const mdl::Map& map);
+std::vector<FaceLightmapInput> matchingLightmapFaces(
+  const std::vector<FaceLightmapInput>& snapshot, const mdl::Map& map);
 
 /**
  * Samples one face's lightmap rectangle out of the baked faces that cover it.

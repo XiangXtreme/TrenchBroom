@@ -26,8 +26,10 @@
 #include "mdl/GroupNode.h"
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
+#include "mdl/ModelUtils.h"
 #include "mdl/Node.h"
 #include "mdl/PatchNode.h"
+#include "mdl/UvAttributes.h"
 #include "mdl/WorldNode.h"
 
 #include "kd/overload.h"
@@ -339,14 +341,37 @@ std::vector<FaceLightmapInput> collectBrushFaces(mdl::Map& map)
         }
       },
       [&](mdl::BrushNode& n) {
+        auto entitySignature = std::string{};
+        const auto* owner = mdl::findContainingEntity(n);
+        if (owner && owner != &map.worldNode())
+          for (const auto& property : owner->entity().properties())
+            for (const auto& value : {property.key(), property.value()})
+              entitySignature += std::to_string(value.size()) + ":" + value;
         for (const auto& face : n.brush().faces())
         {
           auto input = FaceLightmapInput{};
           input.plane = face.boundary();
           input.face = &face;
+          input.materialName = face.materialName();
+          input.entitySignature = entitySignature;
+          const auto uv = face.uvAttributes();
+          input.signature = {
+            double(uv.offset.x()),
+            double(uv.offset.y()),
+            double(uv.scale.x()),
+            double(uv.scale.y()),
+            double(uv.rotation),
+            double(face.resolvedSurfaceContents()),
+            double(face.resolvedSurfaceFlags()),
+            double(face.resolvedSurfaceValue())};
+          for (const auto axis : {face.uAxis(), face.vAxis()})
+            for (size_t c = 0; c < 3; ++c)
+              input.signature.push_back(axis[c]);
           for (const auto* halfEdge : face.geometry()->boundary())
           {
             input.outline.push_back(vm::vec3f{halfEdge->origin()->position()});
+            for (size_t c = 0; c < 3; ++c)
+              input.signature.push_back(halfEdge->origin()->position()[c]);
           }
           result.push_back(std::move(input));
         }
@@ -359,6 +384,28 @@ std::vector<FaceLightmapInput> collectBrushFaces(mdl::Map& map)
 }
 
 } // namespace
+
+std::vector<FaceLightmapInput> collectLightmapFaces(const mdl::Map& map)
+{
+  return collectBrushFaces(const_cast<mdl::Map&>(map));
+}
+
+std::vector<FaceLightmapInput> matchingLightmapFaces(
+  const std::vector<FaceLightmapInput>& snapshot, const mdl::Map& map)
+{
+  auto current = collectLightmapFaces(map);
+  auto sorted = snapshot;
+  std::ranges::sort(sorted, std::less<const mdl::BrushFace*>{}, &FaceLightmapInput::face);
+  std::erase_if(current, [&](const auto& face) {
+    const auto it = std::ranges::lower_bound(
+      sorted, face.face, std::less<const mdl::BrushFace*>{}, &FaceLightmapInput::face);
+    return it == sorted.end() || it->face != face.face
+           || it->materialName != face.materialName
+           || it->entitySignature != face.entitySignature
+           || it->signature != face.signature;
+  });
+  return current;
+}
 
 const LightmapBlock* LightmapAssembly::blockFor(const mdl::BrushFace& face) const
 {

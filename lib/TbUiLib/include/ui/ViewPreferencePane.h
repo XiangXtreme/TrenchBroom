@@ -25,6 +25,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QDoubleSpinBox;
 class QSpinBox;
 
 namespace tb::ui
@@ -45,6 +46,10 @@ private:
   QComboBox* m_filterModeCombo = nullptr;
   QCheckBox* m_enableMsaa = nullptr;
   QSpinBox* m_fpsLimitSpin = nullptr;
+  QCheckBox* m_lightmapAutoUpdate = nullptr;
+  QDoubleSpinBox* m_lightmapDelay = nullptr;
+  QDoubleSpinBox* m_lightmapIntensity = nullptr;
+  QDoubleSpinBox* m_lightmapGamma = nullptr;
   QComboBox* m_themeCombo = nullptr;
   QComboBox* m_materialBrowserIconSizeCombo = nullptr;
   QComboBox* m_rendererFontSizeCombo = nullptr;

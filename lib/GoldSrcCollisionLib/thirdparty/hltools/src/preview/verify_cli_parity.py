@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 import sqlite3
 import struct
@@ -58,6 +59,74 @@ def invoke(command, directory):
     return result.stdout
 
 
+def verify_preview_cache(worker, directory, gpu=False):
+    source, project = fixture(directory)
+    original = source.read_text(encoding="utf-8")
+    cache = directory / "geometry-cache"
+
+    def bake(cached, project_mode=False):
+        destination = directory / "cache-result.bsp"
+        inputs = (["--project", project, "--map", "room", "--output", destination]
+                  if project_mode else [source])
+        output = invoke([worker, "compile", *inputs, "-fast", "-noclip", "-threads", "1",
+                         "-minlight", "1", *(["-gpu"] if gpu else []),
+                         *(["-previewcache", cache] if cached else [])], directory)
+        data = (destination if project_mode else source.with_suffix(".bsp")).read_bytes()
+        lumps = [data[o:o+n] for o,n in
+                 [struct.unpack_from("<ii", data, 4+8*j) for j in range(15)]]
+        lumps[0] = re.sub(rb'"compiled_at" "[^"]*"', b'"compiled_at" "TIME"', lumps[0])
+        assert not lumps[9], "preview does not build collision hulls"
+        return output, lumps
+
+    def check_edit(text, should_reuse):
+        source.write_text(text, encoding="utf-8")
+        output, cached = bake(True)
+        assert (b"preview: reusing geometry" in output) == should_reuse, output.decode(errors="replace")
+        _, full = bake(False)
+        assert cached == full, f"relighting must equal a complete bake: {[i for i in range(15) if cached[i] != full[i]]}"
+
+    check_edit(original, False)
+    check_edit(original.replace("255 210 150 300", "120 180 255 500"), True)
+    check_edit(original.replace('"0 0 80"', '"24 0 70"'), True)
+    # A raw origin can be empty while the BSP origin+1 occupant probe is solid.
+    check_edit(original.replace('"0 0 80"', '"0 0 127.5"'), False)
+    check_edit(original.replace('"0 0 40"', '"10 0 40"'), False)
+    check_edit(original.replace("WALL 0 0 0 1 1", "WALL 8 0 0 1 1", 1), False)
+    check_edit(original, False)
+    wad = directory / "wall.wad"
+    changed = bytearray(wad.read_bytes())
+    changed[12+40+340+2] = 90
+    wad.write_bytes(changed)
+    check_edit(original.replace("255 210 150 300", "250 100 100 300"), False)
+    # Moving into solid must invalidate geometry reuse; full BSP retains its
+    # existing leak/occupant validation rather than accepting a cached tree.
+    source.write_text(original.replace('"0 0 80"', '"0 0 -8"'), encoding="utf-8")
+    output, _ = bake(True)
+    assert b"preview: reusing geometry" not in output
+
+    # Brush entities take the standard only-entities model-number path too.
+    modeled = original + '{\n"classname" "func_wall"\n' + box(-32,-32,0,32,32,16) + '}\n'
+    check_edit(modeled, False)
+    check_edit(modeled.replace("255 210 150 300", "80 160 255 400"), True)
+    check_edit(modeled.replace('"_light" "255 210 150 300"', '"_light" "255 210 150 300"\n"style" "2"'), False)
+
+    # Extracted project resources have fresh temporary paths on every run.
+    # Identical bytes must still reuse geometry, changed bytes must not.
+    Path(str(cache) + ".key").unlink(missing_ok=True)
+    output, _ = bake(True, True)
+    assert b"preview: reusing geometry" not in output
+    output, cached = bake(True, True)
+    assert b"preview: reusing geometry" in output
+    _, full = bake(False, True)
+    assert cached[1:] == full[1:]
+    with sqlite3.connect(project) as db:
+        db.execute("UPDATE content SET data=? WHERE id='w'", (bytes(changed),))
+    db.close()
+    output, _ = bake(True, True)
+    assert b"preview: reusing geometry" not in output
+    print("Verified exact cached relighting, geometry/material invalidation and project resources")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker", required=True, type=Path)
@@ -108,6 +177,13 @@ def main():
         invoke([worker,"compile",map_path,"-fast","-threads","2","-minlight","1"],directory)
         assert not list(directory.glob("hltools-tbproj-*")), "project scratch must be cleaned"
         print("Verified six lightmap pairs, project cleanup and failure recovery")
+        cache_directory = directory / "cache checks"
+        cache_directory.mkdir()
+        verify_preview_cache(worker, cache_directory)
+        if args.gpu:
+            gpu_directory = directory / "GPU cache checks"
+            gpu_directory.mkdir()
+            verify_preview_cache(worker, gpu_directory, True)
 
 
 if __name__ == "__main__":

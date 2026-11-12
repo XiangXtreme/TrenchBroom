@@ -88,9 +88,13 @@ public:
    * The output of the last run, for diagnosing a failed bake.
    */
   const std::string& output() const;
+  std::filesystem::path diagnosticDirectory() const;
+  bool reusedGeometry() const;
+  void clearCache();
 
 signals:
   void remainingSecondsChanged(int seconds);
+  void stageProgressChanged(const QString& stage, int percent);
 
 private:
   void readOutput();
@@ -100,6 +104,9 @@ private:
 
   std::unique_ptr<QProcess> m_process;
   std::shared_ptr<QTemporaryDir> m_workDir;
+  std::shared_ptr<QTemporaryDir> m_cachedWorkDir;
+  std::shared_ptr<QTemporaryDir> m_failedWorkDir;
+  bool m_reusedGeometry = false;
   std::filesystem::path m_executable;
   std::string m_quality;
   std::string m_output;

@@ -228,6 +228,22 @@ TEST_CASE("LightmapBaker")
     CHECK_FALSE(baker.running());
   }
 
+  SECTION("a second session bake reuses geometry and visibility")
+  {
+    baker.start(map, 2, Preferences::LightmapQualityFast, result.callback());
+    requireBake(map, baker, result);
+    CHECK_FALSE(baker.reusedGeometry());
+    result = {};
+    baker.start(map, 2, Preferences::LightmapQualityFast, result.callback());
+    requireBake(map, baker, result);
+    CHECK(baker.reusedGeometry());
+    baker.clearCache();
+    result = {};
+    baker.start(map, 2, Preferences::LightmapQualityFast, result.callback());
+    requireBake(map, baker, result);
+    CHECK_FALSE(baker.reusedGeometry());
+  }
+
   SECTION("compiler failure is reported and the next bake succeeds")
   {
     auto emptyFixture = mdl::MapFixture{};
@@ -237,6 +253,9 @@ TEST_CASE("LightmapBaker")
     CHECK_FALSE(result.bake);
     CHECK_FALSE(result.error.empty());
     CHECK_FALSE(baker.running());
+    const auto diagnostics = baker.diagnosticDirectory();
+    REQUIRE(std::filesystem::is_directory(diagnostics));
+    CHECK(std::filesystem::is_regular_file(diagnostics / "preview-output.log"));
     result = {};
     baker.start(map, 2, Preferences::LightmapQualityFast, result.callback());
     requireBake(map, baker, result);

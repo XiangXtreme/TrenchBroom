@@ -25,6 +25,7 @@
 #include "mdl/Map_Layers.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/TestFactory.h"
+#include "mdl/UvAttributes.h"
 #include "mdl/WorldNode.h"
 #include "render/LightmapData.h"
 
@@ -312,6 +313,28 @@ TEST_CASE("buildLightmapAssembly")
 
     // the rectangles must not overlap, so their tiles differ
     CHECK(assembly.blocks[0].second.tile != assembly.blocks[1].second.tile);
+  }
+
+  SECTION("snapshots reject changed UVs, materials and removed faces")
+  {
+    auto fixture = mdl::MapFixture{};
+    auto& map = fixture.create();
+    auto* brush = mdl::createBrushNode(map);
+    mdl::addNodes(map, {{map.worldNode().defaultLayer(), {brush}}});
+    const auto snapshot = collectLightmapFaces(map);
+    REQUIRE(snapshot.size() == 6);
+    CHECK(matchingLightmapFaces(snapshot, map).size() == 6);
+    // Keep face addresses stable to exercise signatures independently of identity.
+    auto& mutableBrush = const_cast<mdl::Brush&>(brush->brush());
+    auto& face = mutableBrush.face(0);
+    auto uv = face.uvAttributes();
+    uv.offset = uv.offset + vm::vec2f{8, 0};
+    REQUIRE(face.setUvAttributes(uv).is_success());
+    CHECK(matchingLightmapFaces(snapshot, map).size() == 5);
+    mutableBrush.face(1).setMaterialName("changed");
+    CHECK(matchingLightmapFaces(snapshot, map).size() == 4);
+    mdl::removeNodes(map, {brush});
+    CHECK(matchingLightmapFaces(snapshot, map).empty());
   }
 
   SECTION("ignores excluded faces even when they overlap a baked face")
