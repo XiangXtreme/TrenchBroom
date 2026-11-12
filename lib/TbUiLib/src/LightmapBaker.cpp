@@ -320,7 +320,7 @@ void LightmapBaker::runStage()
     else if (m_quality == Preferences::LightmapQualityUltra)
       arguments << QStringLiteral("-extra");
     else
-      arguments << QStringLiteral("-nofull");
+      arguments << QStringLiteral("-previewfastvis");
     arguments << QStringLiteral("-noclip") << QStringLiteral("-previewcache")
               << m_workDir->filePath("geometry");
   }

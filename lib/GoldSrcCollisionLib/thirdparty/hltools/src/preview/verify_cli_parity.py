@@ -141,7 +141,7 @@ def main():
         directory.mkdir()
         map_path, project = fixture(directory)
         for project_mode in [False, True]:
-            for quality in [[], ["-fast"], ["-extra"]]:
+            for quality in [[], ["-fast"], ["-previewfastvis"], ["-extra"]]:
                 outputs = []
                 for i, executable in enumerate([cli, worker]):
                     output = directory / f"result{i}"
@@ -155,8 +155,14 @@ def main():
                     compile_output = invoke([
                         executable,"compile",*source,"-threads","2","-minlight","1",
                         *( ["-gpu"] if args.gpu else [] ),*quality],directory)
+                    text = compile_output.decode(errors="replace")
+                    if quality in (["-fast"], ["-previewfastvis"]):
+                        assert re.search(r"fast vis\s+on\b", text), text
+                    if quality == ["-fast"]:
+                        assert "bouncing light" not in text, text
+                    if quality == ["-previewfastvis"]:
+                        assert re.search(r"bouncing light\s+\(8 passes\)", text), text
                     if args.require_gpu:
-                        text = compile_output.decode(errors="replace")
                         assert "gpu device" in text.lower() and "none found" not in text.lower(), text
                         assert "-gpu:" not in text, text
                     invoke([executable,"lightmap",bsp,output/"atlas.bmp","-manifest",output/"atlas.json","-force"],directory)
@@ -176,7 +182,7 @@ def main():
         assert run.returncode != 0
         invoke([worker,"compile",map_path,"-fast","-threads","2","-minlight","1"],directory)
         assert not list(directory.glob("hltools-tbproj-*")), "project scratch must be cleaned"
-        print("Verified six lightmap pairs, project cleanup and failure recovery")
+        print("Verified eight lightmap pairs, project cleanup and failure recovery")
         cache_directory = directory / "cache checks"
         cache_directory.mkdir()
         verify_preview_cache(worker, cache_directory)

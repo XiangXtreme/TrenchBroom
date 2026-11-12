@@ -17,6 +17,9 @@ The editor supplies MAP/WAD or a frozen project, thread limit and quality and
 reads the existing atlas/manifest output. No separate hltools installation is
 needed. Update this source in hltools and sync the pinned snapshot into TB.
 
+Preview compilation accepts `-previewfastvis` for fast VIS with the normal RAD
+settings, independently of the shared `-fast` option.
+
 Preview compilation accepts `-noclip -previewcache <prefix>`. The editor owns
 this session cache and copies it into each new scratch directory. It contains
 VIS output before RAD mutates the BSP, plus its temporary WAD. Only changes to
@@ -24,5 +27,5 @@ supported point-light photometric properties and valid interior origins can
 reuse geometry; all other MAP text, compiler settings and resolved WAD bytes
 must match exactly. Studio BSP, external hulls and custom invisible-item inputs
 disable reuse. Missing, oversized or unreadable inputs fall back to a complete
-compile. Relighting uses the existing CSG entity replacement and complete RAD;
-no partial light transport or approximate visibility is used.
+compile. Relighting uses the existing CSG entity replacement, cached visibility
+and complete RAD rather than partially updating the cached geometry.

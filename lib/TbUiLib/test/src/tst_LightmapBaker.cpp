@@ -124,10 +124,15 @@ TEST_CASE("LightmapBaker")
       CHECK(output.find("fast vis") != std::string::npos);
       CHECK(output.find("computing portal visibility") == std::string::npos);
       CHECK(output.find("computing full visibility") == std::string::npos);
+      CHECK(output.find("bouncing light") == std::string::npos);
     }
     else if (quality == Preferences::LightmapQualityNormal)
     {
-      CHECK(output.find("computing portal visibility") != std::string::npos);
+      CHECK(output.find("fast vis") != std::string::npos);
+      CHECK(output.find("computing portal visibility") == std::string::npos);
+      CHECK(output.find("computing full visibility") == std::string::npos);
+      CHECK(output.find("bouncing light") != std::string::npos);
+      CHECK(output.find("(8 passes)") != std::string::npos);
       CHECK(output.find("oversampling (-extra)") == std::string::npos);
     }
     else
@@ -200,12 +205,14 @@ TEST_CASE("LightmapBaker")
     baker.start(
       map,
       2,
-      Preferences::LightmapQualityFast,
+      Preferences::LightmapQualityNormal,
       result.callback(),
       [&](const auto&) -> Result<std::optional<ProjectCompileInfo>> {
         return std::optional{ProjectCompileInfo{root / "room.tbproj", "maps/room.map"}};
       });
     requireBake(map, baker, result);
+    CHECK(baker.output().find("fast vis") != std::string::npos);
+    CHECK(baker.output().find("(8 passes)") != std::string::npos);
   }
 
   SECTION("cancel while starting cleans scratch and allows immediate replacement")
@@ -262,7 +269,8 @@ TEST_CASE("LightmapBaker")
     baker.start(map, 2, Preferences::LightmapQualityNormal, result.callback());
     requireBake(map, baker, result);
     CHECK_FALSE(baker.reusedGeometry());
-    CHECK(baker.output().find("computing portal visibility") != std::string::npos);
+    CHECK(baker.output().find("fast vis") != std::string::npos);
+    CHECK(baker.output().find("(8 passes)") != std::string::npos);
     result = {};
     baker.start(map, 2, Preferences::LightmapQualityNormal, result.callback());
     requireBake(map, baker, result);
