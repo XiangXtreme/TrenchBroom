@@ -3954,13 +3954,21 @@ zhlt_invisible(choices) :"Invisible" : 1 =
 ]
 
 // info_portal
-// TODO: vector for target so it can do a lot. Though doing the entity won't be as simple.
-// That means we need to parse string and what not. 
-// For the time being, ONE target is good enough.
-@PointClass color(255 200 200) = info_portal : "Create a portal to the selected info_leaf, from the leaf the info_portal is inside. Forces target leaf to be visible from the current one."
+@PointClass color(255 200 200) = info_portal : "Add or remove visibility between this leaf and named point or brush entities."
 [
-	target(target_source) : "Name of info_leaf"
-	neighbor(integer) : "TODO: Layers of neighboring leaves to be affected" : 1
+	target(target_source) : "Targets" : : "Separate multiple target names with semicolons."
+	neighbor(integer) : "Source neighbor depth" : 1 : "Number of portal hops to include around this entity (0–16)."
+	targetneighbor(integer) : "Target neighbor depth" : : "Number of portal hops to include around each target (0–16; default 0)."
+	oneway(choices) : "Visibility direction" : : "If unset, a single info_leaf link without other new options is one-way; other links are two-way." =
+	[
+		0 : "Two-way"
+		1 : "One-way"
+	]
+	reverse(choices) : "Visibility operation" : : "Remove visibility instead of adding it." =
+	[
+		0 : "Add visibility"
+		1 : "Remove visibility"
+	]
 ]
 
 // info_leaf

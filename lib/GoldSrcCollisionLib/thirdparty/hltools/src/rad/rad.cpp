@@ -710,6 +710,9 @@ namespace rad
                                });
             if (gpu_lighting)
                 gpu_gather_finish(state);
+            if (state.options.ao && state.options.ao_stats)
+                logging::info("ambient occlusion: %llu samples, %llu rays, %llu blocked\n",
+                              state.ao_samples.load(), state.ao_rays.load(), state.ao_blocked_rays.load());
 
             if (state.options.dumpgather)
             {

@@ -24,6 +24,7 @@
 #include "fs/Reader.h"
 #include "fs/TraversalMode.h"
 #include "mdl/CatchConfig.h"
+#include "mdl/Entity.h"
 #include "mdl/EntityDefinition.h"
 #include "mdl/EntityDefinitionTestUtils.h"
 #include "mdl/FgdParser.h"
@@ -31,6 +32,7 @@
 
 #include "kd/ranges/contains.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 
@@ -109,6 +111,29 @@ TEST_CASE("FgdParser")
     CHECK(defs.front().propertyDefinitions[0].shortDescription == "细节层级");
     CHECK(defs.front().propertyDefinitions[0].longDescription == "细节层级建议保留为1");
     CHECK(defs.front().propertyDefinitions[1].shortDescription == "无碰撞穿透");
+  }
+
+  SECTION("bundled GoldSrc portals expose new keys without changing legacy defaults")
+  {
+    const auto filename = GENERATE("CounterStrike16.fgd", "CounterStrike16_zh.fgd");
+    const auto path = getFixtureRoot() / "games/Halflife" / filename;
+    auto file = fs::Disk::openFile(path) | kdl::value();
+    auto reader = file->reader().buffer();
+    auto parser = FgdParser{reader.stringView(), RgbaF{1, 1, 1, 1}, path};
+    auto status = TestParserStatus{};
+    const auto definitions = parser.parseDefinitions(status) | kdl::value();
+    const auto portal =
+      std::ranges::find(definitions, "info_portal", &EntityDefinition::name);
+    REQUIRE(portal != definitions.end());
+    auto entity = Entity{};
+    setDefaultProperties(*portal, entity, SetDefaultPropertyMode::SetAll);
+    for (const auto* key : {"oneway", "reverse", "targetneighbor"})
+    {
+      const auto* property = getPropertyDefinition(*portal, key);
+      REQUIRE(property);
+      CHECK_FALSE(PropertyDefinition::defaultValue(*property));
+      CHECK_FALSE(entity.hasProperty(key));
+    }
   }
 
   SECTION("empty and whitespace input")

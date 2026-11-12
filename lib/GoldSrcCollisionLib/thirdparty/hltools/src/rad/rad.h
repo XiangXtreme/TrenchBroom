@@ -82,6 +82,19 @@ namespace rad
         float texreflectgamma = 1.76f;
         float texreflectscale = 0.7f;
         float blur = 1.5f;
+        float blurclamp = 0.0f;
+        int pcf = 1;
+        bool ao = false;
+        float ao_scale = 32.0f;
+        float ao_gain = 1.0f;
+        int ao_level = 3;
+        float ao_minweight = 0.045f;
+        float ao_opacity = 1.0f;
+        math::vec3f ao_color{0.0f, 0.0f, 0.0f};
+        int ao_mode = 0;
+        int ao_studio_mode = -1; // -1 inherits each entity's shadow mode
+        bool ao_stats = false;
+        bool light_cull = false; // skip very faint direct-light contributions
         bool noemitterrange = false;
         bool bleedfix = true;
         float texlightgap = 0.0f;

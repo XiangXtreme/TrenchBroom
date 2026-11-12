@@ -52,7 +52,8 @@ def main():
              "src/preview/verify_cli_parity.py", "src/rad/gpu/gpu.cpp",
              "src/rad/gpu/shaders/trace_bsp.comp", "src/rad/gpu/shaders/gather.comp",
              "src/rad/gpu/shaders/formfactor.comp", "src/rad/gpu/shaders/trace_lib.glsl",
-             "cmake/embed_binary.cmake", "LICENSE"]
+             "cmake/embed_binary.cmake", "LICENSE", "THIRD_PARTY_NOTICES.md",
+             "third_party/sdhlt/SDHLT-LICENSE.md"]
     files = {}
     while todo:
         name = todo.pop()

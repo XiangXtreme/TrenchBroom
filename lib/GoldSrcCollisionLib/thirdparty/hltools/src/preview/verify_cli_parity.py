@@ -127,6 +127,53 @@ def verify_preview_cache(worker, directory, gpu=False):
     print("Verified exact cached relighting, geometry/material invalidation and project resources")
 
 
+def verify_lighting_features(cli, worker, directory):
+    source, _ = fixture(directory)
+    original = source.read_text(encoding="utf-8").replace(
+        '}\n{\n"classname" "info_player_start"',
+        box(32, -32, 0, 48, 32, 64) + '}\n{\n"classname" "info_player_start"', 1)
+    text = original.replace('{\n"classname" "info_texlights"\n"WALL" "30 45 60 30"\n}\n', '')
+    source.write_text(text, encoding="utf-8")
+
+    def bake(executable, options):
+        output = invoke([executable, "compile", source, "-previewfastvis", "-bounce", "0",
+                         "-noclip", "-threads", "2", *options], directory)
+        data = source.with_suffix(".bsp").read_bytes()
+        start, length = struct.unpack_from("<ii", data, 4 + 8 * 8)
+        lighting = data[start:start + length]
+        assert lighting and max(lighting) > 1
+        return lighting, output
+
+    configurations = [[], ["-ao", "-aostats"], ["-ao", "-aocolor", "128", "0", "0"],
+                      ["-pcf", "2"], ["-blurclamp", "0.75"],
+                      ["-ao", "-pcf", "2", "-blurclamp", "0.75"]]
+    results = []
+    for options in configurations:
+        expected, log = bake(cli, options)
+        actual, _ = bake(worker, options)
+        assert actual == expected, f"worker/CLI mismatch for {options}"
+        if "-aostats" in options:
+            assert b"ambient occlusion:" in log and b" rays, " in log
+        results.append(expected)
+    for index, options in enumerate(configurations[1:], 1):
+        assert results[index] != results[0], f"{options} did not change lighting"
+    assert results[1] != results[2], "AO tint did not change lighting"
+    for options in (["-ao"], ["-pcf", "2"], ["-lightcull"]):
+        expected, _ = bake(worker, options)
+        actual, log = bake(worker, ["-gpu", *options])
+        assert actual == expected, f"GPU fallback changed lighting for {options}"
+        assert b"cpu path" in log.lower(), log.decode(errors="replace")
+
+    # With texlights as the only light source, AO must not dim their emission.
+    source.write_text(original.replace(
+        '{\n"classname" "light"\n"origin" "0 0 80"\n"_light" "255 210 150 300"\n}\n', ''),
+        encoding="utf-8")
+    baseline, _ = bake(worker, [])
+    occluded, _ = bake(worker, ["-ao"])
+    assert baseline == occluded, "AO changed a scene lit only by emissive surfaces"
+    print("Verified AO, texlights, PCF, blur clamp, CLI/worker parity and GPU fallback")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker", required=True, type=Path)
@@ -183,6 +230,9 @@ def main():
         invoke([worker,"compile",map_path,"-fast","-threads","2","-minlight","1"],directory)
         assert not list(directory.glob("hltools-tbproj-*")), "project scratch must be cleaned"
         print("Verified eight lightmap pairs, project cleanup and failure recovery")
+        quality_directory = directory / "lighting features"
+        quality_directory.mkdir()
+        verify_lighting_features(cli, worker, quality_directory)
         cache_directory = directory / "cache checks"
         cache_directory.mkdir()
         verify_preview_cache(worker, cache_directory)

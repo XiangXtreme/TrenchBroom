@@ -1594,6 +1594,7 @@ namespace rad
         format::map_data &map = *state.map;
 
         state.directlights.assign(map.leafs.size(), nullptr);
+        state.face_emissive.assign(map.faces.size(), 0);
         int styleused[allstyles];
         memset(styleused, 0, allstyles * sizeof(styleused[0]));
         styleused[0] = true;
@@ -1617,6 +1618,7 @@ namespace rad
                      && *state.face_texlights[(size_t)p->facenumber]->value("_scale")
                      && float_for_key(*state.face_texlights[(size_t)p->facenumber], "_scale") <= 0))
             {
+                state.face_emissive[(size_t)p->facenumber] = 1;
                 dl = (directlight *)calloc(1, sizeof(directlight));
                 err::require(dl != nullptr, "create_direct_lights: out of memory");
 
@@ -2404,7 +2406,7 @@ namespace rad
         // that can see it step selects normal (0) or topatch/fast (1) lights
         void gather_sample_light(rad_state &state, const vec3v &pos, const byte *const pvs,
                                  const vec3v &normal, vec3v *sample, byte *styles, int step,
-                                 int miptex, int texlightgap_surfacenum)
+                                 int miptex, int texlightgap_surfacenum, vec3v *emitter_sample = nullptr)
         {
             if (state.gpu_gather_phase != 0)
             {
@@ -2425,6 +2427,9 @@ namespace rad
             bool sky_used = false;
             vec3v testline_origin;
             vec3v adds[allstyles];
+            vec3v emitter_adds[allstyles];
+            if (emitter_sample)
+                memset(emitter_adds, 0, sizeof(emitter_adds));
             unsigned long long adds_touched = 0; // bit per style; adds[style] is zeroed lazily on first touch
             int style;
             bool lighting_diversify;
@@ -2473,6 +2478,55 @@ namespace rad
                         }
                     }
                 }
+            };
+
+            int pcf_mins[2] = {};
+            int pcf_maxs[2] = {};
+            const format::texinfo_t *pcf_tex = nullptr;
+            if (state.options.pcf > 1)
+            {
+                texlightgap_setup();
+                const auto &face = state.map->faces[(size_t)texlightgap_surfacenum];
+                pcf_tex = &state.map->texinfo[(size_t)face.texinfo];
+                format::get_face_extents(*state.map, texlightgap_surfacenum, pcf_mins, pcf_maxs);
+            }
+            // SDHLT samples a rotated grid in the receiver's texture plane.
+            // Directional sky rays translate with the sample; point rays end
+            // at the same light origin.
+            const auto pcf_visibility = [&](const vec3v &target, bool sky) -> vec_t {
+                const int n = state.options.pcf;
+                const vec_t step_size = (vec_t)texture_step / n;
+                const vec_t first = (vec_t)(-texture_step / 2.0) + step_size / 2;
+                constexpr vec_t rotation = (vec_t)0.70710678118;
+                int tested = 0;
+                int visible = 0;
+                for (int a = 0; a < n; ++a)
+                    for (int b = 0; b < n; ++b)
+                    {
+                        const vec_t s = first + a * step_size;
+                        const vec_t t = first + b * step_size;
+                        vec3v tap;
+                        math::multiply_add(pos, (s - t) * rotation, texlightgap_textoworld[0], tap);
+                        math::multiply_add(tap, (s + t) * rotation, texlightgap_textoworld[1], tap);
+                        bool valid = true;
+                        for (int axis = 0; axis < 2; ++axis)
+                        {
+                            const vec_t coord = math::dot(tap, pcf_tex->vecs[axis]) + pcf_tex->vecs[axis][3];
+                            if (coord < pcf_mins[axis] * texture_step || coord > pcf_maxs[axis] * texture_step)
+                                valid = false;
+                        }
+                        if (!valid)
+                            continue;
+                        ++tested;
+                        vec3v end;
+                        if (sky)
+                            end = target + (tap - pos);
+                        else
+                            end = target;
+                        if (test_line(state, tap, end) == (sky ? contents_sky : contents_empty))
+                            ++visible;
+                    }
+                return tested ? (vec_t)visible / tested : 0;
             };
 
             for (int ileaf = 0; ileaf < (int)state.lightleafs.size(); ileaf++)
@@ -2534,12 +2588,16 @@ namespace rad
                                             }
                                         }
 
+                                        const vec_t shadow = state.options.pcf > 1 ? pcf_visibility(delta, true) : 1;
+                                        if (shadow <= 0)
+                                            continue;
+
                                         vec3v add_one;
                                         if (lighting_diversify)
                                         {
                                             dot = (vec_t)(lighting_scale * std::pow((double)dot, lighting_power));
                                         }
-                                        math::scale(l->intensity, dot * l->sunnormalweights[j], add_one);
+                                        math::scale(l->intensity, dot * l->sunnormalweights[j] * shadow, add_one);
                                         math::multiply(add_one, transparency, add_one);
                                         // add to the total brightness of this sample
                                         style = l->style;
@@ -2605,6 +2663,10 @@ namespace rad
                                             }
                                         }
 
+                                        const vec_t shadow = state.options.pcf > 1 ? pcf_visibility(delta, true) : 1;
+                                        if (shadow <= 0)
+                                            continue;
+
                                         // how far this piece of sky has deviated from the sun
                                         vec_t factor;
                                         {
@@ -2620,7 +2682,7 @@ namespace rad
                                         {
                                             dot = (vec_t)(lighting_scale * std::pow((double)dot, lighting_power));
                                         }
-                                        math::scale(sky_intensity, dot, add_one);
+                                        math::scale(sky_intensity, dot * shadow, add_one);
                                         math::multiply(add_one, transparency, add_one);
                                         // add to the total brightness of this sample
                                         style = l->style;
@@ -2832,10 +2894,21 @@ namespace rad
                                     break;
                                 }
                                 }
-                                if (test_line(state, pos, testline_origin) != contents_empty)
+                                // SDHLT's distance cutoff is approximate. Cull
+                                // using the actual computed contribution so
+                                // unusual fade and emitter settings cannot
+                                // discard a brighter light prematurely.
+                                if (state.options.light_cull && add[0] >= 0 && add[1] >= 0 && add[2] >= 0
+                                    && vector_maximum(add) <= 0.5f)
+                                    continue;
+                                const vec_t shadow = state.options.pcf > 1
+                                    ? pcf_visibility(testline_origin, false)
+                                    : (test_line(state, pos, testline_origin) == contents_empty ? 1 : 0);
+                                if (shadow <= 0)
                                 {
                                     continue;
                                 }
+                                math::scale(add, shadow, add);
                                 // add to the total brightness of this sample
                                 style = l->style;
                                 if (shadowtests_active)
@@ -2857,6 +2930,8 @@ namespace rad
                                 }
                                 adds_touch(style);
                                 math::add(adds[style], add, adds[style]);
+                                if (emitter_sample && l->type == emit_type::surface && l->source_patch)
+                                    math::add(emitter_adds[style], add, emitter_adds[style]);
                             } // end emit_skylight
                         }
                     }
@@ -2903,6 +2978,8 @@ namespace rad
                     }
 
                     math::add(sample[style_index], adds[style], sample[style_index]);
+                    if (emitter_sample)
+                        math::add(emitter_sample[style_index], emitter_adds[style], emitter_sample[style_index]);
                 }
                 else
                 {
@@ -3214,6 +3291,109 @@ namespace rad
 
     namespace
     {
+        bool ao_hits_emissive_face(const rad_state &state, const vec3v &hit, const vec3v &direction)
+        {
+            for (const vec_t offset : {vec_t(math::on_epsilon), vec_t(math::on_epsilon / 4)})
+            {
+                vec3v query;
+                math::multiply_add(hit, -offset, direction, query);
+                const format::dleaf_t *leaf = point_in_leaf(state, query);
+                for (unsigned i = 0; i < leaf->nummarksurfaces; ++i)
+                {
+                    const size_t index = (size_t)leaf->firstmarksurface + i;
+                    if (index >= state.map->marksurfaces.size())
+                        break;
+                    const unsigned face = state.map->marksurfaces[index];
+                    if (face >= state.map->faces.size())
+                        continue;
+                    const plane *face_plane = plane_from_face_number(state, face);
+                    if (std::fabs(math::dot(hit, face_plane->normal) - face_plane->dist) <= math::on_epsilon
+                        && math::dot(face_plane->normal, direction) < 0
+                        && point_in_winding(winding_from_face(state, state.map->faces[face]),
+                                            *face_plane, hit, vec_t(math::on_epsilon)))
+                        return face < state.face_emissive.size() && state.face_emissive[face] != 0;
+                }
+            }
+            return false;
+        }
+
+        void apply_ambient_occlusion(rad_state &state, const vec3v &spot,
+                                     const vec3v &normal, const vec3v &color,
+                                     vec3v *sampled, const vec3v *emitter, const byte *styles)
+        {
+            const int level = state.options.ao_level;
+            const auto &directions = state.skynormals[level];
+            const auto &weights = state.skynormalsizes[level];
+            vec_t total = 0;
+            int accepted = 0;
+            for (size_t k = 0; k < directions.size(); ++k)
+            {
+                const vec_t cosine = math::dot(normal, directions[k]);
+                if (cosine > math::normal_epsilon)
+                {
+                    total += cosine * weights[k];
+                    ++accepted;
+                }
+            }
+            if (total <= 0 || accepted == 0)
+                return;
+            const vec_t min_weight = state.options.ao_minweight * total / accepted;
+            vec_t occluded = 0;
+            unsigned long long rays = 0;
+            unsigned long long hits = 0;
+            for (size_t k = 0; k < directions.size(); ++k)
+            {
+                const vec_t cosine = math::dot(normal, directions[k]);
+                if (cosine <= math::normal_epsilon)
+                    continue;
+                const vec_t weight = cosine * weights[k];
+                if (weight < min_weight)
+                    continue;
+                vec3v end, hit;
+                ++rays;
+                math::multiply_add(spot, state.options.ao_scale, directions[k], end);
+                bool blocked = false;
+                if (test_line(state, spot, end, &hit[0]) == contents_solid)
+                    blocked = !ao_hits_emissive_face(state, hit, directions[k]);
+                else
+                {
+                    vec3v transparency;
+                    int style;
+                    blocked = test_segment_against_opaque_list(state, spot, end, transparency, style, true);
+                }
+                if (blocked)
+                {
+                    ++hits;
+                    occluded += weight;
+                    if (occluded >= total * 0.999)
+                    {
+                        occluded = total;
+                        break;
+                    }
+                }
+            }
+            if (state.options.ao_stats)
+            {
+                state.ao_samples.fetch_add(1, std::memory_order_relaxed);
+                state.ao_rays.fetch_add(rays, std::memory_order_relaxed);
+                state.ao_blocked_rays.fetch_add(hits, std::memory_order_relaxed);
+            }
+            vec_t alpha = occluded / total;
+            if (state.options.ao_gain != 1)
+                alpha = (vec_t)std::pow(alpha, state.options.ao_gain);
+            alpha *= state.options.ao_opacity;
+            if (alpha <= 0)
+                return;
+            for (int j = 0; j < allstyles && styles[j] != 255; ++j)
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    const vec_t emission = std::min(emitter[j][channel], sampled[j][channel]);
+                    sampled[j][channel] = std::max(vec_t(0),
+                        (sampled[j][channel] - emission) * (1 - alpha)
+                            + emission + color[channel] * alpha);
+                }
+        }
+
         void calc_lightmap(rad_state &state, lightinfo *l, byte *styles)
         {
             int facenum;
@@ -3225,6 +3405,17 @@ namespace rad
 
             facenum = l->surfnum;
             memset(l->lmcache, 0, (size_t)(l->lmcachewidth * l->lmcacheheight) * sizeof(vec3v[allstyles]));
+            vec3v ao_color = state.options.ao_color;
+            if (state.options.ao && state.options.ao_mode == 0)
+            {
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    const vec_t gamma = state.options.colour_qgamma[channel];
+                    const vec_t scale = state.options.colour_lightscale[channel] * state.options.direct_scale;
+                    if (gamma > 0 && scale > 0)
+                        ao_color[channel] = (vec_t)(256.0 * std::pow(std::min(ao_color[channel], vec_t(255)) / 256.0, 1.0 / gamma) / scale);
+                }
+            }
 
             // for each sample whose light we need to calculate
             for (i = 0; i < l->lmcachewidth * l->lmcacheheight; i++)
@@ -3247,6 +3438,9 @@ namespace rad
                 vec3v *normal_out;
                 bool nudged;
                 int *wallflags_out;
+                vec3v emitterlight[allstyles];
+                if (state.options.ao)
+                    memset(emitterlight, 0, sizeof(emitterlight));
 
                 // prepare input parameters and output destinations
                 {
@@ -3389,24 +3583,33 @@ namespace rad
                 {
                     if (!blocked)
                     {
-                        gather_sample_light(state, spot, pvs, pointnormal, sampled, styles, 0, l->miptex, surface);
+                        gather_sample_light(state, spot, pvs, pointnormal, sampled, styles, 0, l->miptex, surface,
+                                            state.options.ao ? emitterlight : nullptr);
                     }
                     if (l->translucent_b)
                     {
                         vec3v sampled2[allstyles];
+                        vec3v emitterlight2[allstyles];
                         memset(sampled2, 0, allstyles * sizeof(vec3v));
+                        if (state.options.ao)
+                            memset(emitterlight2, 0, sizeof(emitterlight2));
                         if (!blocked)
                         {
-                            gather_sample_light(state, spot2, pvs2, pointnormal2, sampled2, styles, 0, l->miptex, surface);
+                            gather_sample_light(state, spot2, pvs2, pointnormal2, sampled2, styles, 0, l->miptex, surface,
+                                                state.options.ao ? emitterlight2 : nullptr);
                         }
                         for (j = 0; j < allstyles && styles[j] != 255; j++)
                         {
                             for (int x = 0; x < 3; x++)
                             {
                                 sampled[j][x] = (vec_t)((1.0 - l->translucent_v[x]) * sampled[j][x] + l->translucent_v[x] * sampled2[j][x]);
+                                if (state.options.ao)
+                                    emitterlight[j][x] = (vec_t)((1.0 - l->translucent_v[x]) * emitterlight[j][x] + l->translucent_v[x] * emitterlight2[j][x]);
                             }
                         }
                     }
+                    if (state.options.ao && !blocked)
+                        apply_ambient_occlusion(state, spot, pointnormal, ao_color, sampled, emitterlight, styles);
                     if (state.options.drawnudge)
                     {
                         for (j = 0; j < allstyles && styles[j] != 255; j++)
@@ -3552,11 +3755,20 @@ namespace rad
             int s_center, t_center;
             vec_t sizehalf;
             vec_t weighting, subsamples;
+            vec_t style_subsamples[allstyles] = {};
+            vec_t center_maxlight[allstyles] = {};
             vec3v centernormal;
             vec_t weighting_correction;
             int pass;
             s_center = (i % lightmapwidth) * l.lmcache_density + l.lmcache_offset;
             t_center = (i / lightmapwidth) * l.lmcache_density + l.lmcache_offset;
+            if (state.options.blurclamp > 0.0f)
+            {
+                const int center = s_center + l.lmcachewidth * t_center;
+                for (j = 0; j < allstyles && f_styles[j] != 255; j++)
+                    center_maxlight[j] = std::max({l.lmcache[center][j][0],
+                        l.lmcache[center][j][1], l.lmcache[center][j][2]});
+            }
             sizehalf = (vec_t)(0.5 * state.options.blur * l.lmcache_density);
             subsamples = 0.0;
             math::copy(l.lmcache_normal[s_center + l.lmcachewidth * t_center], centernormal);
@@ -3656,7 +3868,17 @@ namespace rad
                         weighting = weighting * weighting_correction;
                         for (j = 0; j < allstyles && f_styles[j] != 255; j++)
                         {
-                            math::multiply_add(fl_samples[j][i].light, weighting, l.lmcache[pos][j], fl_samples[j][i].light);
+                            vec_t style_weight = weighting;
+                            if (state.options.blurclamp > 0.0f)
+                            {
+                                const vec_t brightest = std::max({l.lmcache[pos][j][0],
+                                    l.lmcache[pos][j][1], l.lmcache[pos][j][2]});
+                                if (brightest > 0 && brightest > center_maxlight[j])
+                                    style_weight *= std::max(std::max(center_maxlight[j], vec_t(0)) / brightest,
+                                                             vec_t(1) - state.options.blurclamp);
+                            }
+                            math::multiply_add(fl_samples[j][i].light, style_weight, l.lmcache[pos][j], fl_samples[j][i].light);
+                            style_subsamples[j] += style_weight;
                         }
                         subsamples += weighting;
                     }
@@ -3671,6 +3893,7 @@ namespace rad
                     for (j = 0; j < allstyles && f_styles[j] != 255; j++)
                     {
                         math::clear(fl_samples[j][i].light);
+                        style_subsamples[j] = 0;
                     }
                 }
             }
@@ -3678,7 +3901,11 @@ namespace rad
             {
                 for (j = 0; j < allstyles && f_styles[j] != 255; j++)
                 {
-                    math::scale(fl_samples[j][i].light, 1.0 / subsamples, fl_samples[j][i].light);
+                    const vec_t total = state.options.blurclamp > 0.0f ? style_subsamples[j] : subsamples;
+                    if (total > math::normal_epsilon)
+                        math::scale(fl_samples[j][i].light, 1.0 / total, fl_samples[j][i].light);
+                    else
+                        math::clear(fl_samples[j][i].light);
                 }
             }
         } // end of i loop

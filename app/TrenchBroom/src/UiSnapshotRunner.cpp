@@ -1110,6 +1110,16 @@ UiSnapshotReadiness uiSnapshotReadiness(QWidget& targetWidget, const QString& ta
         return {
           UiSnapshotReadinessState::Failed,
           "Advanced compiler controls must reflect the parameter expression"};
+      if (targetName == "compilation-options-lighting")
+      {
+        const auto* ao = targetWidget.findChild<QCheckBox*>("HltoolsOption_ao");
+        const auto* color =
+          targetWidget.findChild<QLineEdit*>("HltoolsOption_aocolorValue0");
+        if (!ao || !ao->isChecked() || !color || color->text() != "128")
+          return {
+            UiSnapshotReadinessState::Failed,
+            "AO compiler controls must reflect the parameter expression"};
+      }
     }
     return {
       ready ? UiSnapshotReadinessState::Ready : UiSnapshotReadinessState::Failed,
@@ -1876,8 +1886,8 @@ int runUiSnapshot(
             if (options.page == "compilation-options-lighting")
               compilationDialog->findChild<QLineEdit*>("HltoolsParameters")
                 ->setText(
-                  "-ambient 0.05 0.08 0.12 -colourgamma 0.55 0.6 0.65 -colourscale 2 2 2 "
-                  "-drawsample 0 0 64 128");
+                  "-ambient 0.05 0.08 0.12 -ao -aoscale 64 -aocolor 128 32 16 "
+                  "-pcf 2 -blurclamp 0.75 -drawsample 0 0 64 128");
             else if (options.page == "compilation-options-files")
               compilationDialog->findChild<QLineEdit*>("HltoolsParameters")
                 ->setText(

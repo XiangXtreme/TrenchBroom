@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -73,6 +74,8 @@ namespace rad
                     return contents_empty;
                 if (node == contents_solid)
                 {
+                    if (skyhit)
+                        std::copy_n(&start[0], 3, skyhit);
                     return contents_solid;
                 }
                 if (node == contents_sky)
@@ -87,6 +90,8 @@ namespace rad
                 }
                 if (linecontent)
                 {
+                    if (skyhit)
+                        std::copy_n(&start[0], 3, skyhit);
                     return contents_solid;
                 }
                 linecontent = node;
@@ -264,6 +269,8 @@ namespace rad
                 {
                     if (node == contents_solid)
                     {
+                        if (skyhit)
+                            std::copy_n(&curstart[0], 3, skyhit);
                         return contents_solid;
                     }
                     if (node == contents_sky)
@@ -278,6 +285,8 @@ namespace rad
                     }
                     if (linecontent)
                     {
+                        if (skyhit)
+                            std::copy_n(&curstart[0], 3, skyhit);
                         return contents_solid;
                     }
                     linecontent = node;
@@ -417,6 +426,7 @@ namespace rad
             }
             delete f->winding;
             f->winding = neww;
+            f->original_faces.insert(f->original_faces.end(), f2->original_faces.begin(), f2->original_faces.end());
             return true;
         }
 
@@ -494,6 +504,7 @@ namespace rad
         {
             opaque_face *of = &state.opaquefaces[i];
             const format::dface_t *df = &map.faces[i];
+            of->original_faces.push_back((int)i);
             of->winding = new math::winding{winding_from_face(state, *df)};
             if (of->winding->size() < 3)
             {
@@ -566,7 +577,8 @@ namespace rad
 
     namespace
     {
-        int test_line_opaque_face(const rad_state &state, int facenum, const vec3v &hit)
+        int test_line_opaque_face(const rad_state &state, int facenum, const vec3v &hit,
+                                  bool skip_emissive = false)
         {
             const opaque_face *thisface = &state.opaquefaces[(size_t)facenum];
             int x;
@@ -595,10 +607,17 @@ namespace rad
                     return 0;
                 }
             }
+            if (skip_emissive)
+                for (const int original : thisface->original_faces)
+                    if ((size_t)original < state.face_emissive.size() && state.face_emissive[(size_t)original]
+                        && point_in_winding(winding_from_face(state, state.map->faces[(size_t)original]),
+                                            thisface->pl, hit, vec_t(math::on_epsilon)))
+                        return 2;
             return 1;
         }
 
-        int test_line_opaque_r(const rad_state &state, int nodenum, const vec3v &start, const vec3v &stop)
+        int test_line_opaque_r(const rad_state &state, int nodenum, const vec3v &start, const vec3v &stop,
+                               bool skip_emissive)
         {
             const opaque_node *thisnode;
             vec_t front, back;
@@ -627,16 +646,16 @@ namespace rad
             }
             if (front > math::on_epsilon / 2 && back > math::on_epsilon / 2)
             {
-                return test_line_opaque_r(state, thisnode->children[0], start, stop);
+                return test_line_opaque_r(state, thisnode->children[0], start, stop, skip_emissive);
             }
             if (front < -math::on_epsilon / 2 && back < -math::on_epsilon / 2)
             {
-                return test_line_opaque_r(state, thisnode->children[1], start, stop);
+                return test_line_opaque_r(state, thisnode->children[1], start, stop, skip_emissive);
             }
             if (std::fabs(front) <= math::on_epsilon && std::fabs(back) <= math::on_epsilon)
             {
-                return test_line_opaque_r(state, thisnode->children[0], start, stop)
-                    || test_line_opaque_r(state, thisnode->children[1], start, stop);
+                const int first = test_line_opaque_r(state, thisnode->children[0], start, stop, skip_emissive);
+                return first ? first : test_line_opaque_r(state, thisnode->children[1], start, stop, skip_emissive);
             }
             {
                 int side;
@@ -654,19 +673,18 @@ namespace rad
                 mid[2] = start[2] + (stop[2] - start[2]) * frac;
                 for (facenum = thisnode->firstface; facenum < thisnode->firstface + thisnode->numfaces; facenum++)
                 {
-                    if (test_line_opaque_face(state, facenum, mid))
-                    {
-                        return 1;
-                    }
+                    const int hit = test_line_opaque_face(state, facenum, mid, skip_emissive);
+                    if (hit)
+                        return hit;
                 }
-                return test_line_opaque_r(state, thisnode->children[side], start, mid)
-                    || test_line_opaque_r(state, thisnode->children[!side], mid, stop);
+                const int first = test_line_opaque_r(state, thisnode->children[side], start, mid, skip_emissive);
+                return first ? first : test_line_opaque_r(state, thisnode->children[!side], mid, stop, skip_emissive);
             }
         }
     }
 
     int test_line_opaque(const rad_state &state, int modelnum, const vec3v &modelorigin,
-                         const vec3v &start, const vec3v &stop)
+                         const vec3v &start, const vec3v &stop, bool skip_emissive)
     {
         const opaque_model *thismodel = &state.opaquemodels[(size_t)modelnum];
         vec_t front, back, frac;
@@ -721,7 +739,7 @@ namespace rad
                 }
             }
         }
-        return test_line_opaque_r(state, thismodel->headnode, p1, p2);
+        return test_line_opaque_r(state, thismodel->headnode, p1, p2, skip_emissive);
     }
 
     namespace

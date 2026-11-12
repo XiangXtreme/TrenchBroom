@@ -129,6 +129,69 @@ namespace vis
                 point[i] = (float)v[i];
         }
 
+        // Match SDHLT's brush targets by sampling each model face on both
+        // sides; a model can span several world leaves.
+        std::vector<int> model_leaves(const format::map_data &map, int modelnum)
+        {
+            std::vector<int> result;
+            if (modelnum <= 0 || (size_t)modelnum >= map.models.size())
+                return result;
+            const auto &model = map.models[(size_t)modelnum];
+            for (int index = 0; index < model.numfaces; ++index)
+            {
+                const int face_index = model.firstface + index;
+                if (face_index < 0 || (size_t)face_index >= map.faces.size())
+                    continue;
+                const auto &face = map.faces[(size_t)face_index];
+                if ((size_t)face.planenum >= map.planes.size() || face.numedges <= 0)
+                    continue;
+                const auto &plane = map.planes[(size_t)face.planenum];
+                float centroid[3] = {};
+                int count = 0;
+                const auto add_samples = [&](const float point[3]) {
+                    for (int side : {-1, 1})
+                    {
+                        float sample[3];
+                        for (int axis = 0; axis < 3; ++axis)
+                            sample[axis] = point[axis] + side * 2.0f * plane.normal[axis];
+                        const int leaf = vis_leafnum_for_point(map, sample);
+                        if (leaf >= 0 && (size_t)leaf + 1 < map.leafs.size()
+                            && map.leafs[(size_t)leaf + 1].contents != -2)
+                            result.push_back(leaf);
+                    }
+                };
+                for (int edge = 0; edge < face.numedges; ++edge)
+                {
+                    const int surfedge = face.firstedge + edge;
+                    if (surfedge < 0 || (size_t)surfedge >= map.surfedges.size())
+                        continue;
+                    const int number = map.surfedges[(size_t)surfedge];
+                    if (number == std::numeric_limits<int>::min())
+                        continue;
+                    const size_t edge_index = (size_t)(number < 0 ? -number : number);
+                    if (edge_index >= map.edges.size())
+                        continue;
+                    const size_t vertex = map.edges[edge_index].v[number < 0 ? 1 : 0];
+                    if (vertex >= map.vertexes.size())
+                        continue;
+                    const float *point = map.vertexes[vertex].point;
+                    add_samples(point);
+                    for (int axis = 0; axis < 3; ++axis)
+                        centroid[axis] += point[axis];
+                    ++count;
+                }
+                if (count > 0)
+                {
+                    for (float &axis : centroid)
+                        axis /= count;
+                    add_samples(centroid);
+                }
+            }
+            std::sort(result.begin(), result.end());
+            result.erase(std::unique(result.begin(), result.end()), result.end());
+            return result;
+        }
+
         // collects info_overview_point and info_portal entities, resolving
         // their origins to vis leaf numbers against the loaded bsp
         void collect_leaf_entities(vis_state &state)
@@ -153,32 +216,73 @@ namespace vis
                     parse_origin_key(entities[(size_t)i], point);
                     room_portal room;
                     room.visleafnum = vis_leafnum_for_point(*state.map, point);
-                    int neighbor = std::atoi(entities[(size_t)i].value("neighbor"));
-                    room.neighbor = neighbor < 0 ? 0 : (neighbor > max_room_neighbor ? max_room_neighbor : neighbor);
+                    const auto &portal_entity = entities[(size_t)i];
+                    room.neighbor = std::clamp(std::atoi(portal_entity.value("neighbor")), 0, max_room_neighbor);
+                    room.target_neighbor = std::clamp(std::atoi(portal_entity.value("targetneighbor")), 0, max_room_neighbor);
+                    room.reverse = std::atoi(portal_entity.value("reverse")) != 0;
 
                     const char *target = entities[(size_t)i].value("target");
                     if (target[0] == '\0')
                         continue; // like the reference, a room without a target is dropped
 
-                    // the last info_leaf whose targetname matches wins
-                    bool has_target = false;
-                    for (const format::entity &candidate : entities)
+                    const bool legacy_form = !std::strchr(target, ';') && !portal_entity.has("oneway")
+                        && !portal_entity.has("reverse") && !portal_entity.has("targetneighbor");
+
+                    std::stringstream targets(target);
+                    std::string name;
+                    while (std::getline(targets, name, ';'))
                     {
-                        if (std::strcmp(candidate.value("classname"), "info_leaf") == 0
-                            && std::strcmp(candidate.value("targetname"), target) == 0)
+                        const size_t first = name.find_first_not_of(" \t");
+                        if (first == std::string::npos)
+                            continue;
+                        name = name.substr(first, name.find_last_not_of(" \t") - first + 1);
+                        const format::entity *candidate = nullptr;
+                        const format::entity *legacy_candidate = nullptr;
+                        for (const auto &entity : entities)
+                        {
+                            if (std::strcmp(entity.value("classname"), "worldspawn") != 0
+                                && name == entity.value("targetname"))
+                            {
+                                if (!candidate)
+                                    candidate = &entity;
+                                if (legacy_form && std::strcmp(entity.value("classname"), "info_leaf") == 0)
+                                    legacy_candidate = &entity; // original last-match behavior
+                            }
+                        }
+                        if (legacy_candidate)
+                            candidate = legacy_candidate;
+                        if (!candidate)
+                        {
+                            logging::warn("entity %d (info_portal) target '%s' does not exist", i, name.c_str());
+                            continue;
+                        }
+                        // Old maps used info_leaf with an implicit one-way link.
+                        // An explicit oneway key or a new portal option selects
+                        // SDHLT's bidirectional default instead.
+                        const bool legacy = legacy_form
+                            && std::strcmp(candidate->value("classname"), "info_leaf") == 0;
+                        room.oneway = portal_entity.has("oneway")
+                            ? std::atoi(portal_entity.value("oneway")) != 0 : legacy;
+                        const char *model = candidate->value("model");
+                        std::vector<int> leaves;
+                        if (*model == '*')
+                        {
+                            leaves = model_leaves(*state.map, std::atoi(model + 1));
+                            if (leaves.empty())
+                                logging::warn("entity %d (info_portal) target '%s' has no valid brush leaves", i, name.c_str());
+                        }
+                        else
                         {
                             float target_point[3];
-                            parse_origin_key(candidate, target_point);
-                            room.target_visleafnum = vis_leafnum_for_point(*state.map, target_point);
-                            has_target = true;
+                            parse_origin_key(*candidate, target_point);
+                            leaves.push_back(vis_leafnum_for_point(*state.map, target_point));
+                        }
+                        for (const int leaf : leaves)
+                        {
+                            room.target_visleafnum = leaf;
+                            state.rooms.push_back(room);
                         }
                     }
-                    if (!has_target)
-                    {
-                        logging::warn("entity %d (info_portal) does not have a target leaf", i);
-                        continue;
-                    }
-                    state.rooms.push_back(room);
                 }
             }
         }
@@ -263,7 +367,8 @@ namespace vis
                 const int source = portal_leaf(room.visleafnum);
                 const int target = portal_leaf(room.target_visleafnum);
                 if (source >= 0 && target >= 0)
-                    state.leafinfos[(size_t)source].additional_leaves.push_back({target, room.neighbor});
+                    state.leafinfos[(size_t)source].additional_leaves.push_back(
+                        {target, room.neighbor, room.target_neighbor, room.reverse, room.oneway});
             }
 
             portal *p = state.portals.data();
@@ -325,10 +430,9 @@ namespace vis
             }
         }
 
-        void leaf_flow_neighbor_add_leaf(vis_state &state, int source,
-                                         const additional_leaf &link,
-                                         std::vector<unsigned> &seen, unsigned &generation,
-                                         std::vector<int> &queue)
+        void collect_neighbor_leaves(const vis_state &state, int source, int distance,
+                                     std::vector<unsigned> &seen, unsigned &generation,
+                                     std::vector<int> &queue)
         {
             if (++generation == 0)
             {
@@ -345,9 +449,7 @@ namespace vis
                 while (next < end)
                 {
                     const int current = queue[next++];
-                    byte *outbuffer = state.uncompressed.data() + current * state.bitbytes;
-                    outbuffer[link.leaf >> 3] |= (1 << (link.leaf & 7));
-                    if (depth >= link.neighbor)
+                    if (depth >= distance)
                         continue;
 
                     const leaf &current_leaf = state.leafs[(size_t)current];
@@ -402,6 +504,11 @@ namespace vis
             {
                 if (state.leafinfos[i].isskyboxpoint)
                     outbuffer[i >> 3] |= (1 << (i & 7));
+            }
+            for (const int excluded : state.leafinfos[leafnum].removed_leaves)
+            {
+                if (excluded != leafnum)
+                    outbuffer[excluded >> 3] &= ~(1 << (excluded & 7));
             }
 
             int numvis = 0;
@@ -484,13 +591,36 @@ namespace vis
             calc_portal_vis(state);
 
             std::vector<unsigned> seen(state.portalleafs, 0);
-            std::vector<int> queue;
+            std::vector<int> source_leaves;
+            std::vector<int> target_leaves;
             unsigned generation = 0;
             for (unsigned i = 0; i < state.portalleafs; i++)
             {
                 for (const additional_leaf &link : state.leafinfos[i].additional_leaves)
                 {
-                    leaf_flow_neighbor_add_leaf(state, (int)i, link, seen, generation, queue);
+                    collect_neighbor_leaves(state, (int)i, link.neighbor, seen, generation, source_leaves);
+                    collect_neighbor_leaves(state, link.leaf, link.target_neighbor, seen, generation, target_leaves);
+                    if ((size_t)source_leaves.size() * target_leaves.size() > 262144)
+                        logging::warn("info_portal at leaf %u links many leaves; consider reducing neighbor values", i);
+                    const auto apply = [&](int from, int to) {
+                        if (link.reverse)
+                        {
+                            if (from != to)
+                                state.leafinfos[(size_t)from].removed_leaves.push_back(to);
+                        }
+                        else
+                        {
+                            byte *out = state.uncompressed.data() + from * state.bitbytes;
+                            out[to >> 3] |= (1 << (to & 7));
+                        }
+                    };
+                    for (const int from : source_leaves)
+                        for (const int to : target_leaves)
+                        {
+                            apply(from, to);
+                            if (!link.oneway)
+                                apply(to, from);
+                        }
                 }
             }
 

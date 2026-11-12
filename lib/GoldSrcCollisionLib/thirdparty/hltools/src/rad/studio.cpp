@@ -615,6 +615,7 @@ namespace rad
     void load_studio_models(rad_state &state)
     {
         state.studio_models.clear();
+        state.ao_studio_models.clear();
         state.num_studio_models = 0;
 
         if (!state.options.studioshadow)
@@ -690,6 +691,13 @@ namespace rad
             studio_shadow_model shadow = build_shadow_model(neutral, place, trace_mode);
             if (shadow.triangles.empty())
                 continue;
+            if (state.options.ao && state.options.ao_studio_mode >= 0)
+            {
+                if (state.options.ao_studio_mode == trace_mode)
+                    state.ao_studio_models.push_back(shadow);
+                else
+                    state.ao_studio_models.push_back(build_shadow_model(neutral, place, state.options.ao_studio_mode));
+            }
             state.studio_models.push_back(std::move(shadow));
         }
 
@@ -704,6 +712,7 @@ namespace rad
     void free_studio_models(rad_state &state)
     {
         state.studio_models.clear();
+        state.ao_studio_models.clear();
         state.num_studio_models = 0;
     }
 
@@ -755,11 +764,13 @@ namespace rad
     }
 
     bool test_segment_against_studio_list(const rad_state &state, const vec3v &p1,
-                                          const vec3v &p2)
+                                          const vec3v &p2, bool for_ao)
     {
-        if (state.studio_models.empty())
+        const auto &models = for_ao && !state.ao_studio_models.empty()
+            ? state.ao_studio_models : state.studio_models;
+        if (models.empty())
             return false;
-        for (const studio_shadow_model &model : state.studio_models)
+        for (const studio_shadow_model &model : models)
             if (test_segment_against_studio_model(model, p1, p2))
                 return true;
         return false;

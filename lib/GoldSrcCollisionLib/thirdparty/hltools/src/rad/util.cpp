@@ -305,14 +305,17 @@ namespace rad
     // list partial blockers accumulate into scaleout, style converters into
     // opaquestyleout (-1 = no conversion)
     bool test_segment_against_opaque_list(const rad_state &state, const vec3v &p1, const vec3v &p2,
-                                          vec3v &scaleout, int &opaquestyleout)
+                                          vec3v &scaleout, int &opaquestyleout, bool skip_emissive)
     {
         scaleout = vec3v{1.0, 1.0, 1.0};
         opaquestyleout = -1;
         for (size_t x = 0; x < state.opaque_list.size(); x++)
         {
             const opaque_entity &oe = state.opaque_list[x];
-            if (!test_line_opaque(state, oe.modelnum, oe.origin, p1, p2))
+            const int hit = test_line_opaque(state, oe.modelnum, oe.origin, p1, p2, skip_emissive);
+            if (hit == 2)
+                return false;
+            if (!hit)
             {
                 continue;
             }
@@ -330,7 +333,7 @@ namespace rad
             opaquestyleout = -1;
             return true;
         }
-        if (test_segment_against_studio_list(state, p1, p2))
+        if (test_segment_against_studio_list(state, p1, p2, skip_emissive))
         {
             scaleout = vec3v{0.0, 0.0, 0.0};
             opaquestyleout = -1;

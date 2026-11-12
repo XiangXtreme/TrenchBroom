@@ -61,6 +61,23 @@ TEST_CASE("HltoolsOptionsEditor")
     CHECK_FALSE(parameters.contains("0.5"));
     CHECK_FALSE(parameters.contains("0.6"));
   }
+  SECTION("ambient occlusion and shadow options round trip through controls")
+  {
+    editor.setParameters("-ao -aocolor 128 32 16 -pcf 2");
+    auto* ao = editor.findChild<QCheckBox*>("HltoolsOption_ao");
+    auto* color = editor.findChild<QCheckBox*>("HltoolsOption_aocolor");
+    auto* red = editor.findChild<QLineEdit*>("HltoolsOption_aocolorValue0");
+    REQUIRE(ao);
+    REQUIRE(color);
+    REQUIRE(red);
+    CHECK(ao->isChecked());
+    CHECK(color->isChecked());
+    CHECK(red->text() == "128");
+    red->setText("64");
+    QMetaObject::invokeMethod(red, "editingFinished", Qt::DirectConnection);
+    CHECK(parameters.contains("-aocolor 64 32 16"));
+    CHECK(parameters.contains("-pcf 2"));
+  }
   SECTION("repeatable entries preserve spaces and separate WAD values")
   {
     editor.setParameters(

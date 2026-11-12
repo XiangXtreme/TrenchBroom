@@ -5415,13 +5415,21 @@ zhlt_invisible(choices) :"完全隐形不进渲染" : 1 =
 ]
 
 // info_portal
-// TODO: vector for target so it can do a lot. Though doing the entity won't be as simple.
-// That means we need to parse string and what not. 
-// For the time being, ONE target is good enough.
-@PointClass color(255 200 200) = info_portal : "Create a portal to the selected info_leaf, from the leaf the info_portal is inside. Forces target leaf to be visible from the current one."
+@PointClass color(255 200 200) = info_portal : "在当前叶与指定的点实体或 Brush 实体之间添加或移除可见性。"
 [
-	target(target_source) : "触发目标"
-	neighbor(integer) : "TODO: Layers of neighboring leaves to be affected" : 1
+	target(target_source) : "目标实体" : : "多个目标名称用分号分隔。"
+	neighbor(integer) : "起点邻接范围" : 1 : "从当前实体向外扩展的 Portal 层数（0–16）。"
+	targetneighbor(integer) : "目标邻接范围" : : "从每个目标向外扩展的 Portal 层数（0–16，默认 0）。"
+	oneway(choices) : "可见方向" : : "未设置时，未使用其他新选项的单个 info_leaf 连接为单向，其他连接为双向。" =
+	[
+		0 : "双向"
+		1 : "单向"
+	]
+	reverse(choices) : "可见性操作" : : "移除指定的可见性，默认添加。" =
+	[
+		0 : "添加可见性"
+		1 : "移除可见性"
+	]
 ]
 
 // info_leaf

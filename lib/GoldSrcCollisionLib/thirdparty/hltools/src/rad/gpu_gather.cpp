@@ -455,6 +455,12 @@ namespace rad
     {
         const format::map_data &map = *state.map;
 
+        if (state.options.pcf > 1 || state.options.ao || state.options.light_cull)
+        {
+            logging::warn("-gpu: AO, shadow filtering and light culling require the cpu path");
+            return false;
+        }
+
         if (!state.opaque_list.empty() || state.num_studio_models != 0)
         {
             logging::warn("-gpu: map has opaque entities or studio models; using the cpu path");

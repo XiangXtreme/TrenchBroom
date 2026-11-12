@@ -11148,6 +11148,110 @@ Expression: %3</source>
             <translation>光照贴图模糊半径，默认 1.5。</translation>
         </message>
         <message>
+            <source>Shadow edge preservation</source>
+            <translation>保留阴影边缘</translation>
+        </message>
+        <message>
+            <source>Reduce light leaking across shadow edges during blur. Range: 0–1; default: 0.</source>
+            <translation>减少模糊时光线渗入阴影边缘。范围：0–1，默认 0。</translation>
+        </message>
+        <message>
+            <source>Shadow filter samples</source>
+            <translation>阴影滤波采样</translation>
+        </message>
+        <message>
+            <source>Samples per axis for softer shadow edges. Range: 1–8; default: 1. Values above 1 use CPU direct lighting.</source>
+            <translation>每个方向的采样数，用于柔化阴影边缘。范围：1–8，默认 1。大于 1 时使用 CPU 计算直接光。</translation>
+        </message>
+        <message>
+            <source>Ambient occlusion</source>
+            <translation>环境光遮蔽</translation>
+        </message>
+        <message>
+            <source>Darken nearby corners and contacts. Uses CPU direct lighting.</source>
+            <translation>加深附近的角落和接触部位。使用 CPU 计算直接光。</translation>
+        </message>
+        <message>
+            <source>AO distance</source>
+            <translation>AO 距离</translation>
+        </message>
+        <message>
+            <source>Maximum ambient occlusion distance in map units. Range: 1–1024; default: 32.</source>
+            <translation>环境光遮蔽的最大距离，单位为地图单位。范围：1–1024，默认 32。</translation>
+        </message>
+        <message>
+            <source>AO falloff</source>
+            <translation>AO 衰减</translation>
+        </message>
+        <message>
+            <source>Shape the ambient occlusion falloff. Range: 0.125–8; default: 1.</source>
+            <translation>调整环境光遮蔽的衰减曲线。范围：0.125–8，默认 1。</translation>
+        </message>
+        <message>
+            <source>AO sampling level</source>
+            <translation>AO 采样级别</translation>
+        </message>
+        <message>
+            <source>Set ambient occlusion direction density. Range: 1–8; default: 3.</source>
+            <translation>设置环境光遮蔽的采样方向密度。范围：1–8，默认 3。</translation>
+        </message>
+        <message>
+            <source>AO minimum ray weight</source>
+            <translation>AO 最小射线权重</translation>
+        </message>
+        <message>
+            <source>Skip low-weight ambient occlusion rays. Range: 0–0.1; default: 0.045.</source>
+            <translation>跳过权重较低的环境光遮蔽射线。范围：0–0.1，默认 0.045。</translation>
+        </message>
+        <message>
+            <source>AO strength</source>
+            <translation>AO 强度</translation>
+        </message>
+        <message>
+            <source>Set ambient occlusion strength. Range: 0–8; default: 1.</source>
+            <translation>设置环境光遮蔽强度。范围：0–8，默认 1。</translation>
+        </message>
+        <message>
+            <source>AO color</source>
+            <translation>AO 颜色</translation>
+        </message>
+        <message>
+            <source>Red, green and blue ambient occlusion tint. Default: 0 0 0.</source>
+            <translation>环境光遮蔽的红、绿、蓝色调，默认 0 0 0。</translation>
+        </message>
+        <message>
+            <source>AO color mode</source>
+            <translation>AO 颜色模式</translation>
+        </message>
+        <message>
+            <source>Interpret the AO color as displayed RGB or additive linear light. Default: normal.</source>
+            <translation>将 AO 颜色作为显示用 RGB 或叠加线性光处理，默认 normal。</translation>
+        </message>
+        <message>
+            <source>AO model tracing</source>
+            <translation>AO 模型追踪</translation>
+        </message>
+        <message>
+            <source>Override model tracing for ambient occlusion only. Default: inherit.</source>
+            <translation>仅覆盖环境光遮蔽的模型追踪方式，默认 inherit（继承）。</translation>
+        </message>
+        <message>
+            <source>Report AO statistics</source>
+            <translation>显示 AO 统计</translation>
+        </message>
+        <message>
+            <source>Report ambient occlusion sample and ray counts.</source>
+            <translation>显示环境光遮蔽的采样和射线数量。</translation>
+        </message>
+        <message>
+            <source>Skip faint direct lights</source>
+            <translation>跳过微弱直接光</translation>
+        </message>
+        <message>
+            <source>Skip very faint direct-light rays to save time. This can change lighting and uses CPU direct lighting.</source>
+            <translation>跳过非常微弱的直接光射线以节省时间。可能改变光照，并使用 CPU 计算直接光。</translation>
+        </message>
+        <message>
             <source>Soft skylight</source>
             <translation>柔和天空光</translation>
         </message>

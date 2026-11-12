@@ -65,6 +65,9 @@ namespace vis
     {
         int leaf = 0;
         int neighbor = 0;
+        int target_neighbor = 0;
+        bool reverse = false;
+        bool oneway = false;
     };
 
     struct leaf_info
@@ -72,6 +75,7 @@ namespace vis
         bool isoverviewpoint = false;
         bool isskyboxpoint = false;
         std::vector<additional_leaf> additional_leaves;
+        std::vector<int> removed_leaves;
     };
 
     // an info_overview_point entity: its leaf sees everything (or, reversed,
@@ -82,13 +86,15 @@ namespace vis
         int reverse = 0;
     };
 
-    // an info_portal entity: its leaf gains visibility of a target info_leaf,
-    // spreading to portal neighbors up to `neighbor` hops
+    // A resolved info_portal link between two BSP leaves.
     struct room_portal
     {
         int visleafnum = 0;
         int target_visleafnum = 0;
         int neighbor = 0;
+        int target_neighbor = 0;
+        bool reverse = false;
+        bool oneway = false;
     };
 
     struct pstack

@@ -211,6 +211,53 @@ rad::rad_options parse_rad_options(const cli::args &args, int argc, char **argv,
     options.texreflectgamma = (float)args.float_value("-texreflectgamma", options.texreflectgamma);
     options.texreflectscale = (float)args.float_value("-texreflectscale", options.texreflectscale);
     options.blur = (float)args.float_value("-blur", options.blur);
+    const auto bounded_float = [&](const char *flag, float fallback, double min, double max) {
+        if (!args.has(flag))
+            return fallback;
+        const char *value = args.value(flag, nullptr);
+        double parsed = 0;
+        if (!value || !cli::option_float("rad", flag, value, min, max, parsed))
+            err::fatal("invalid value for %s", flag);
+        return (float)parsed;
+    };
+    options.blurclamp = bounded_float("-blurclamp", options.blurclamp, 0.0, 1.0);
+    options.pcf = args.int_value("-pcf", options.pcf);
+    if (options.pcf < 1 || options.pcf > 8)
+        err::fatal("-pcf must be between 1 and 8");
+    options.ao = args.has("-ao");
+    options.ao_stats = args.has("-aostats");
+    options.light_cull = args.has("-lightcull");
+    if (args.has("-aostudio"))
+    {
+        const char *mode = args.value("-aostudio", "");
+        if (str::iequals(mode, "0") || str::iequals(mode, "inherit"))
+            options.ao_studio_mode = -1;
+        else if (str::iequals(mode, "1") || str::iequals(mode, "fast"))
+            options.ao_studio_mode = 0;
+        else if (str::iequals(mode, "2") || str::iequals(mode, "normal"))
+            options.ao_studio_mode = 1;
+        else if (str::iequals(mode, "3") || str::iequals(mode, "slow"))
+            options.ao_studio_mode = 2;
+        else
+            err::fatal("-aostudio must be inherit/0, fast/1, normal/2 or slow/3");
+    }
+    options.ao_scale = bounded_float("-aoscale", options.ao_scale, 1.0, 1024.0);
+    options.ao_gain = bounded_float("-aogain", options.ao_gain, 0.125, 8.0);
+    options.ao_level = args.int_value("-aolevel", options.ao_level);
+    if (options.ao_level < 1 || options.ao_level > 8)
+        err::fatal("-aolevel must be between 1 and 8");
+    options.ao_minweight = bounded_float("-aominweight", options.ao_minweight, 0.0, 0.1);
+    options.ao_opacity = bounded_float("-aoopacity", options.ao_opacity, 0.0, 8.0);
+    if (args.has("-aomode"))
+    {
+        const char *mode = args.value("-aomode", "");
+        if (str::iequals(mode, "0") || str::iequals(mode, "normal"))
+            options.ao_mode = 0;
+        else if (str::iequals(mode, "1") || str::iequals(mode, "additive"))
+            options.ao_mode = 1;
+        else
+            err::fatal("-aomode must be normal/0 or additive/1");
+    }
     options.noemitterrange = args.has("-noemitterrange");
     options.bleedfix = !args.has("-nobleedfix");
     options.texlightgap = (float)args.float_value("-texlightgap", options.texlightgap);
@@ -237,6 +284,18 @@ rad::rad_options parse_rad_options(const cli::args &args, int argc, char **argv,
             options.ambient[0] = (float)atof(argv[i + 1]) * 128;
             options.ambient[1] = (float)atof(argv[i + 2]) * 128;
             options.ambient[2] = (float)atof(argv[i + 3]) * 128;
+        }
+        if (str::iequals(argv[i], "-aocolor"))
+        {
+            if (i + 3 >= argc)
+                err::fatal("-aocolor requires three values");
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                double value = 0;
+                if (!cli::option_float("rad", "-aocolor", argv[i + 1 + channel], 0.0, 65535.0, value))
+                    err::fatal("invalid -aocolor channel");
+                options.ao_color[channel] = (float)value;
+            }
         }
         if (str::iequals(argv[i], "-colourgamma") && i + 3 < argc)
         {

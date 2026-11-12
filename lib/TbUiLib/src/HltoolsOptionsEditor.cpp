@@ -443,6 +443,71 @@ HltoolsOptionsEditor::HltoolsOptionsEditor(QWidget* parent)
     {"0"});
   add("-blur", tr("Lightmap blur"), tr("Lightmap blur radius. Default: 1.5."), {"1.5"});
   add(
+    "-blurclamp",
+    tr("Shadow edge preservation"),
+    tr("Reduce light leaking across shadow edges during blur. Range: 0–1; default: 0."),
+    {"0", "0.5", "0.75", "1"});
+  add(
+    "-pcf",
+    tr("Shadow filter samples"),
+    tr("Samples per axis for softer shadow edges. Range: 1–8; default: 1. Values above 1 "
+       "use CPU direct lighting."),
+    {"1", "2", "3", "4"});
+  add(
+    "-ao",
+    tr("Ambient occlusion"),
+    tr("Darken nearby corners and contacts. Uses CPU direct lighting."));
+  add(
+    "-aoscale",
+    tr("AO distance"),
+    tr("Maximum ambient occlusion distance in map units. Range: 1–1024; default: 32."),
+    {"32", "16", "64", "128"});
+  add(
+    "-aogain",
+    tr("AO falloff"),
+    tr("Shape the ambient occlusion falloff. Range: 0.125–8; default: 1."),
+    {"1", "0.5", "2"});
+  add(
+    "-aolevel",
+    tr("AO sampling level"),
+    tr("Set ambient occlusion direction density. Range: 1–8; default: 3."),
+    {"3", "1", "2", "4", "5"});
+  add(
+    "-aominweight",
+    tr("AO minimum ray weight"),
+    tr("Skip low-weight ambient occlusion rays. Range: 0–0.1; default: 0.045."),
+    {"0.045", "0", "0.02", "0.1"});
+  add(
+    "-aoopacity",
+    tr("AO strength"),
+    tr("Set ambient occlusion strength. Range: 0–8; default: 1."),
+    {"1", "0.5", "2"});
+  add(
+    "-aocolor",
+    tr("AO color"),
+    tr("Red, green and blue ambient occlusion tint. Default: 0 0 0."),
+    {"0", "0", "0"});
+  add(
+    "-aomode",
+    tr("AO color mode"),
+    tr("Interpret the AO color as displayed RGB or additive linear light. Default: "
+       "normal."),
+    {"normal", "additive"});
+  add(
+    "-aostudio",
+    tr("AO model tracing"),
+    tr("Override model tracing for ambient occlusion only. Default: inherit."),
+    {"inherit", "fast", "normal", "slow"});
+  add(
+    "-aostats",
+    tr("Report AO statistics"),
+    tr("Report ambient occlusion sample and ray counts."));
+  add(
+    "-lightcull",
+    tr("Skip faint direct lights"),
+    tr("Skip very faint direct-light rays to save time. This can change lighting and "
+       "uses CPU direct lighting."));
+  add(
     "-softsky",
     tr("Soft skylight"),
     tr("0: disabled; 1: enabled. Default: 1."),

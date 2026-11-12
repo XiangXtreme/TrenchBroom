@@ -373,11 +373,13 @@ set(CPACK_PACKAGE_VENDOR "TrenchBroom")
 set(CPACK_STRIP_FILES FALSE)
 
 # Platform specific CPack configuration
+set(HLTOOLS_LICENSE_FILES
+    "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/LICENSE"
+    "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/THIRD_PARTY_NOTICES.md"
+    "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/third_party/sdhlt/SDHLT-LICENSE.md"
+    "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/manifest.json")
 if(APPLE)
     # Bundle resources must be present before macdeployqt seals the bundle.
-    set(HLTOOLS_LICENSE_FILES
-        "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/LICENSE"
-        "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/manifest.json")
     target_sources(TrenchBroom PRIVATE ${HLTOOLS_LICENSE_FILES})
     set_source_files_properties(${HLTOOLS_LICENSE_FILES} PROPERTIES
         MACOSX_PACKAGE_LOCATION "Resources/licenses/hltools")
@@ -388,9 +390,7 @@ else()
     set(HLTOOLS_LICENSE_DESTINATION "share/TrenchBroom/licenses/hltools")
 endif()
 if(NOT APPLE)
-    install(FILES
-        "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/LICENSE"
-        "${PROJECT_SOURCE_DIR}/lib/GoldSrcCollisionLib/thirdparty/hltools/manifest.json"
+    install(FILES ${HLTOOLS_LICENSE_FILES}
         DESTINATION "${HLTOOLS_LICENSE_DESTINATION}" COMPONENT TrenchBroom)
 endif()
 

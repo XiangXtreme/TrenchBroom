@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdio>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -348,6 +349,7 @@ namespace rad
         int tex_width;
         int tex_height;
         const byte *tex_canvas;
+        std::vector<int> original_faces;
     };
 
     struct opaque_node
@@ -499,6 +501,7 @@ namespace rad
         std::vector<vec3v> face_offset; // for models with origins
         std::vector<vec3v> face_centroids;
         std::vector<unsigned char> face_lightmode;
+        std::vector<unsigned char> face_emissive;
 
         // the patch pool the reference allocates the worst case up front and
         // shrinks it afterwards; pointers into this storage live in
@@ -600,7 +603,11 @@ namespace rad
         // opaque studio models loaded by studiocpp; the count gates the
         // opaque segment tests in the sample gather
         std::vector<studio_shadow_model> studio_models;
+        std::vector<studio_shadow_model> ao_studio_models;
         int num_studio_models = 0;
+        std::atomic<unsigned long long> ao_samples{0};
+        std::atomic<unsigned long long> ao_rays{0};
+        std::atomic<unsigned long long> ao_blocked_rays{0};
 
         // the single stage wide lock, standing in for the reference threadlock
         std::mutex lock;
@@ -636,7 +643,8 @@ namespace rad
     bool intersect_linesegment_plane(const plane &pl, const vec3v &p1, const vec3v &p2, vec3v &point);
     void plane_from_points(const vec3v &p1, const vec3v &p2, const vec3v &p3, plane &pl);
     bool test_segment_against_opaque_list(const rad_state &state, const vec3v &p1, const vec3v &p2,
-                                          vec3v &scaleout, int &opaquestyleout);
+                                          vec3v &scaleout, int &opaquestyleout,
+                                          bool skip_emissive = false);
     void snap_to_plane(const plane &pl, vec3v &point, vec_t offset);
     vec_t calc_sight_area(const rad_state &state, const vec3v &receiver_origin, const vec3v &receiver_normal,
                           const math::winding *emitter_winding, int skylevel,
@@ -681,11 +689,12 @@ namespace rad
     // ===== tracecpp =====
 
     void make_tnodes(rad_state &state);
-    int test_line(const rad_state &state, const vec3v &start, const vec3v &stop, vec_t *skyhitout = nullptr);
+    // When supplied, hitout receives the first solid or sky boundary hit.
+    int test_line(const rad_state &state, const vec3v &start, const vec3v &stop, vec_t *hitout = nullptr);
     void create_opaque_nodes(rad_state &state);
     void delete_opaque_nodes(rad_state &state);
     int test_line_opaque(const rad_state &state, int modelnum, const vec3v &modelorigin,
-                         const vec3v &start, const vec3v &stop);
+                         const vec3v &start, const vec3v &stop, bool skip_emissive = false);
     int count_opaque_faces(const rad_state &state, int modelnum);
     int test_point_opaque(const rad_state &state, int modelnum, const vec3v &modelorigin,
                           bool solid, const vec3v &point);
@@ -766,7 +775,8 @@ namespace rad
 
     void load_studio_models(rad_state &state);
     void free_studio_models(rad_state &state);
-    bool test_segment_against_studio_list(const rad_state &state, const vec3v &p1, const vec3v &p2);
+    bool test_segment_against_studio_list(const rad_state &state, const vec3v &p1, const vec3v &p2,
+                                          bool for_ao = false);
     // the per model trace, exposed so the shadow contract can be tested without
     // a compiled map
     bool test_segment_against_studio_model(const studio_shadow_model &model,

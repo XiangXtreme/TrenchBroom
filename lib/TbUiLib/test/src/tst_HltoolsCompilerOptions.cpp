@@ -41,5 +41,27 @@ TEST_CASE("HltoolsCompilerOptions")
           {"--project", "game.tbproj"}})
       CHECK_FALSE(validateHltoolsArguments(arguments).isEmpty());
   }
+  SECTION("SDHLT lighting options have the correct arity")
+  {
+    CHECK(validateHltoolsArguments({"-ao",
+                                    "-aoscale",
+                                    "64",
+                                    "-aocolor",
+                                    "128",
+                                    "32",
+                                    "16",
+                                    "-aomode",
+                                    "normal",
+                                    "-aostudio",
+                                    "fast",
+                                    "-pcf",
+                                    "2",
+                                    "-blurclamp",
+                                    "0.75",
+                                    "-lightcull"})
+            .isEmpty());
+    CHECK_FALSE(validateHltoolsArguments({"-aocolor", "128", "32", "-ao"}).isEmpty());
+    CHECK_FALSE(validateHltoolsArguments({"-pcf"}).isEmpty());
+  }
 }
 } // namespace tb::ui
