@@ -110,10 +110,12 @@ TEST_CASE("LightmapBaker")
       Preferences::LightmapQualityFast,
       Preferences::LightmapQualityNormal,
       Preferences::LightmapQualityUltra);
-    auto progress = QSignalSpy{&baker, &LightmapBaker::remainingSecondsChanged};
+    auto progress = QSignalSpy{&baker, &LightmapBaker::stageProgressChanged};
     baker.start(map, 2, quality, result.callback());
     requireBake(map, baker, result);
-    CHECK_FALSE(progress.empty());
+    CHECK(std::ranges::any_of(progress, [](const auto& args) {
+      return args.at(0).toString() == "Reading lightmaps";
+    }));
   }
 
   SECTION("relative WAD paths retain the editor working directory")

@@ -41,11 +41,6 @@ LightmapPreview::LightmapPreview(MapDocument& document)
   m_timer.setSingleShot(true);
   connect(&m_timer, &QTimer::timeout, this, &LightmapPreview::startBake);
   connect(
-    &m_baker, &LightmapBaker::remainingSecondsChanged, this, [this](const int seconds) {
-      setProgress(true, seconds);
-    });
-
-  connect(
     &m_baker,
     &LightmapBaker::stageProgressChanged,
     this,
@@ -132,11 +127,6 @@ bool LightmapPreview::baking() const
 bool LightmapPreview::canCancel() const
 {
   return m_baking || m_timer.isActive();
-}
-
-int LightmapPreview::remainingSeconds() const
-{
-  return m_remainingSeconds;
 }
 
 void LightmapPreview::setProjectInfoProvider(ProjectInfoProvider provider)
@@ -282,18 +272,8 @@ void LightmapPreview::cancel()
   m_requested = true;
   m_status = hadWork ? tr("Cancelled") : QString{};
   m_activity = hadWork ? Activity::Cancelled : Activity::Idle;
-  setProgress(false, -1);
+  m_baking = false;
   emit stateChanged();
-}
-
-void LightmapPreview::setProgress(const bool baking, const int remainingSeconds)
-{
-  if (m_baking != baking || m_remainingSeconds != remainingSeconds)
-  {
-    m_baking = baking;
-    m_remainingSeconds = remainingSeconds;
-    emit progressChanged(baking, remainingSeconds);
-  }
 }
 
 void LightmapPreview::startBake()
@@ -322,7 +302,7 @@ void LightmapPreview::startBake()
   m_activity = Activity::Baking;
   m_stagePercent = -1;
   m_status = tr("Starting");
-  setProgress(true, -1);
+  m_baking = true;
   emit stateChanged();
   m_baker.start(
     m_document.map(),
@@ -330,7 +310,7 @@ void LightmapPreview::startBake()
     pref(Preferences::LightmapQuality),
     [this, startedAt, revision, inputs](
       std::optional<render::LightmapBake> bake, const std::string& error) {
-      setProgress(false, -1);
+      m_baking = false;
       auto& logger = m_document.map().logger();
       if (!bake)
       {

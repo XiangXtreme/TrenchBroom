@@ -13,7 +13,6 @@ class LightmapPreview;
 class TaskNotificationCenter;
 
 QMenu* createLightmapPreviewMenu(LightmapPreview& preview, QWidget* parent);
-QWidget* createLightmapPreviewStatus(LightmapPreview& preview, QWidget* parent);
 void connectLightmapPreviewNotifications(
   LightmapPreview& preview, TaskNotificationCenter& center, QWidget* dialogParent);
 } // namespace tb::ui

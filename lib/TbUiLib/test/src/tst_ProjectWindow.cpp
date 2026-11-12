@@ -50,6 +50,7 @@
 #include <QtTest/QTest>
 
 #include "TestEnvironment.h"
+#include "base/PreferenceManager.h"
 #include "el/Expression.h"
 #include "gl/GlManager.h"
 #include "gl/PerspectiveCamera.h"
@@ -75,6 +76,7 @@
 #include "mdl/Map_World.h"
 #include "mdl/PropertyDefinition.h"
 #include "mdl/WorldNode.h"
+#include "prefs/Preferences.h"
 #include "ui/Action.h"
 #include "ui/ActionExecutionContext.h"
 #include "ui/ActionManager.h"
@@ -88,6 +90,7 @@
 #include "ui/CreateEntityTool.h"
 #include "ui/EntityBrowserView.h"
 #include "ui/InfoPanel.h"
+#include "ui/LightmapPreview.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapSettingsDialog.h"
@@ -106,6 +109,7 @@
 #include "ui/ProjectWindow.h"
 #include "ui/QPathUtils.h"
 #include "ui/Splitter.h"
+#include "ui/TaskNotification.h"
 #include "ui/WorkspaceLayout.h"
 #include "ui/WorkspaceToolPanel.h"
 #include "ui/outliner/OutlinerTreeWidget.h"
@@ -617,26 +621,38 @@ TEST_CASE("ProjectWindow")
     CHECK(state->property("tbStatus").toString() == "modified");
   }
 
-  SECTION("lightmap status follows the active project map")
+  SECTION("lightmap notifications follow their project maps")
   {
-    auto* status = window.findChild<QStatusBar*>("WorkspaceNotifications");
-    REQUIRE(status);
-    auto first =
-      QPointer<QToolButton>{status->findChild<QToolButton*>("LightmapPreviewStatus")};
-    REQUIRE(first);
+    const auto show = pref(Preferences::ShowLightmap);
+    const auto automatic = pref(Preferences::LightmapAutoUpdate);
+    const auto restore = qScopeGuard([&] {
+      setPref(Preferences::ShowLightmap, false);
+      setPref(Preferences::LightmapAutoUpdate, automatic);
+      setPref(Preferences::ShowLightmap, show);
+    });
+    setPref(Preferences::LightmapAutoUpdate, false);
+    setPref(Preferences::ShowLightmap, false);
+    setPref(Preferences::ShowLightmap, true);
+
+    auto* alphaCard =
+      alphaWindow->findChild<TaskNotificationCard*>("TaskNotificationCard_lightmap");
+    REQUIRE(alphaCard);
+    CHECK(alphaCard->isVisible());
+
     tabs->setCurrentIndex(1);
-    REQUIRE(first.isNull());
-    auto second =
-      QPointer<QToolButton>{status->findChild<QToolButton*>("LightmapPreviewStatus")};
-    REQUIRE(second);
+    auto* betaWindow = window.activeMapWindow();
+    REQUIRE(betaWindow);
+    auto* betaCard =
+      betaWindow->findChild<TaskNotificationCard*>("TaskNotificationCard_lightmap");
+    REQUIRE(betaCard);
+    CHECK(betaCard->isVisible());
+    CHECK_FALSE(alphaCard->isVisible());
+
     tabs->setCurrentIndex(0);
-    REQUIRE(second.isNull());
-    REQUIRE(status->findChild<QToolButton*>("LightmapPreviewStatus"));
-    closeTab(*tabs, 0);
-    REQUIRE(status->findChild<QToolButton*>("LightmapPreviewStatus"));
-    closeTab(*tabs, 0);
-    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    CHECK(status->findChild<QToolButton*>("LightmapPreviewStatus") == nullptr);
+    CHECK(alphaCard->isVisible());
+    CHECK_FALSE(betaCard->isVisible());
+    alphaWindow->toolBox().lightmapPreview().cancel();
+    betaWindow->toolBox().lightmapPreview().cancel();
   }
 
   SECTION("compact content views preserve navigation and optional details")

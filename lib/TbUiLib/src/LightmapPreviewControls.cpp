@@ -12,7 +12,6 @@
 #include <QFontDatabase>
 #include <QMenu>
 #include <QPlainTextEdit>
-#include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -112,26 +111,6 @@ QMenu* createLightmapPreviewMenu(LightmapPreview& preview, QWidget* parent)
   QObject::connect(&preview, &LightmapPreview::stateChanged, menu, refresh);
   refresh();
   return menu;
-}
-
-QWidget* createLightmapPreviewStatus(LightmapPreview& preview, QWidget* parent)
-{
-  auto* button = new QToolButton{parent};
-  button->setObjectName("LightmapPreviewStatus");
-  button->setProperty("tbControlRole", "compact");
-  button->setPopupMode(QToolButton::InstantPopup);
-  button->setMenu(createLightmapPreviewMenu(preview, button));
-  const auto refresh = [&preview, button] {
-    button->setVisible(pref(Preferences::ShowLightmap));
-    button->setText(
-      preview.activity() == LightmapPreview::Activity::Failed ? tr("Lightmap bake failed")
-                                                              : preview.statusText());
-    button->setToolTip(preview.statusText());
-  };
-  QObject::connect(&preview, &LightmapPreview::stateChanged, button, refresh);
-  QObject::connect(&preview, &QObject::destroyed, button, &QObject::deleteLater);
-  refresh();
-  return button;
 }
 
 void connectLightmapPreviewNotifications(

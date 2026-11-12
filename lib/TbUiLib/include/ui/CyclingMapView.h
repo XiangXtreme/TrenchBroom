@@ -60,8 +60,6 @@ private:
   QToolButton* m_lightmapButton = nullptr;
   WorkbenchBorder* m_border = nullptr;
   NotifierConnection m_preferenceConnection;
-  bool m_bakingLightmap = false;
-  int m_lightmapRemainingSeconds = -1;
 
 public:
   CyclingMapView(

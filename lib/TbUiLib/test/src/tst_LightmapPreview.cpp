@@ -202,13 +202,9 @@ TEST_CASE("LightmapPreview")
     host.show();
     auto center = TaskNotificationCenter{&host};
     connectLightmapPreviewNotifications(preview, center, &host);
-    auto* status =
-      qobject_cast<QToolButton*>(createLightmapPreviewStatus(preview, &host));
-    REQUIRE(status);
     fail = true;
     preview.requestBake();
     REQUIRE(QTest::qWaitFor([&] { return !preview.error().isEmpty(); }, 5000));
-    CHECK(status->text() == "Lightmap bake failed");
     auto* card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_lightmap");
     REQUIRE(card);
     auto* retry = static_cast<QPushButton*>(nullptr);
@@ -218,7 +214,6 @@ TEST_CASE("LightmapPreview")
     REQUIRE(retry);
     fail = false;
     retry->click();
-    CHECK(status->text() != "Lightmap bake failed");
     REQUIRE(QTest::qWaitFor([&] { return !preview.stale(); }, 30000));
     CHECK(preview.activity() == LightmapPreview::Activity::Succeeded);
     CHECK(preview.elapsedMilliseconds() >= 0);

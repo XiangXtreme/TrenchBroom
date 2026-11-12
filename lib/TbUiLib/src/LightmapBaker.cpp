@@ -37,8 +37,6 @@
 #include "ui/QPathUtils.h"
 
 #include <algorithm>
-#include <cmath>
-#include <limits>
 #include <thread>
 
 namespace tb::ui
@@ -261,14 +259,7 @@ void LightmapBaker::readOutput()
   if (last.hasMatch())
   {
     const auto percent = last.captured(2).toInt();
-    const auto elapsed = last.captured(3).toDouble();
     emit stageProgressChanged(last.captured(1).trimmed(), percent);
-    const auto seconds =
-      percent > 0 && percent < 100 ? std::ceil(elapsed * (100 - percent) / percent) : 0.0;
-    emit remainingSecondsChanged(
-      seconds > 0 && seconds <= std::numeric_limits<int>::max()
-        ? static_cast<int>(seconds)
-        : -1);
   }
 
   if (
@@ -372,7 +363,6 @@ void LightmapBaker::stageFinished(const int exitCode, const int exitStatus)
   {
     m_stage = 1;
     emit stageProgressChanged(tr("Reading lightmaps"), -1);
-    emit remainingSecondsChanged(-1);
     runStage();
     return;
   }

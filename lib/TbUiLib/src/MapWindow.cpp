@@ -93,7 +93,6 @@
 #include "ui/Inspector.h"
 #include "ui/LaunchGameEngineDialog.h"
 #include "ui/LightmapPreview.h"
-#include "ui/LightmapPreviewControls.h"
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorController.h"
@@ -622,8 +621,6 @@ void MapWindow::createStatusBar()
   auto* layout = new QHBoxLayout{statusSurface};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(status, 1);
-  layout->addWidget(
-    createLightmapPreviewStatus(m_mapView->toolBox().lightmapPreview(), statusSurface));
   layout->addWidget(m_appController.updater().createUpdateIndicator(statusSurface));
   m_tools->addStatusWidget(statusSurface);
 }

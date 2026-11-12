@@ -57,7 +57,6 @@ public:
   void configure(render::RenderContext& context);
   bool baking() const;
   bool canCancel() const;
-  int remainingSeconds() const;
   bool stale() const;
   bool hasResult() const;
   Activity activity() const;
@@ -78,7 +77,6 @@ public:
 
 signals:
   void changed();
-  void progressChanged(bool baking, int remainingSeconds);
   void stateChanged();
 
 private:
@@ -86,7 +84,6 @@ private:
   void startBake();
   void schedule(bool manual = false);
   void retainMatchingFaces();
-  void setProgress(bool baking, int remainingSeconds);
 
   MapDocument& m_document;
   render::LightmapAtlas m_atlas;
@@ -96,7 +93,6 @@ private:
   size_t m_modificationCount;
   bool m_requested = false;
   bool m_baking = false;
-  int m_remainingSeconds = -1;
   bool m_dirty = true;
   bool m_pending = false;
   bool m_manualPending = false;

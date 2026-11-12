@@ -174,12 +174,14 @@ TEST_CASE("AreaMapView")
     auto* otherButton = second->findChild<QToolButton*>("MapViewLightmapButton");
     REQUIRE(otherButton);
     auto& preview = window.toolBox().lightmapPreview();
-    emit preview.progressChanged(true, 65);
-    CHECK(button->text() == "~1:05");
-    CHECK(otherButton->text() == button->text());
-    emit preview.progressChanged(false, -1);
+    preview.requestBake();
+    REQUIRE(preview.canCancel());
     CHECK(button->text().isEmpty());
     CHECK(otherButton->text().isEmpty());
+    CHECK(button->toolButtonStyle() == Qt::ToolButtonIconOnly);
+    CHECK(otherButton->toolButtonStyle() == Qt::ToolButtonIconOnly);
+    CHECK(button->toolTip().contains("Ultra"));
+    preview.cancel();
     original->setViewType(CyclingMapView::View_XZ);
     CHECK(button->isHidden());
   }

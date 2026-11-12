@@ -44,13 +44,11 @@
 #include "mdl/MapHeader.h"
 #include "ui/ActionManager.h"
 #include "ui/AppController.h"
-#include "ui/LightmapPreviewControls.h"
 #include "ui/MapCommandSurface.h"
 #include "ui/MapDocument.h"
 #include "ui/MapEditorView.h"
 #include "ui/MapStatus.h"
 #include "ui/MapView3D.h"
-#include "ui/MapViewToolBox.h"
 #include "ui/MapWindow.h"
 #include "ui/MapWindowManager.h"
 #include "ui/ModelBrowser.h"
@@ -506,17 +504,6 @@ void ProjectWindow::refreshCommands()
     return;
   m_status->setDocument(
     activeMapWindow() ? activeMapWindow()->documentHandle() : nullptr);
-  if (auto* window = activeMapWindow(); m_lightmapStatusWindow != window)
-  {
-    delete m_lightmapStatus.data();
-    m_lightmapStatusWindow = window;
-    if (window)
-    {
-      m_lightmapStatus =
-        createLightmapPreviewStatus(window->toolBox().lightmapPreview(), m_notifications);
-      m_notifications->addPermanentWidget(m_lightmapStatus);
-    }
-  }
   m_commands->updateShortcuts();
   auto* mapSave = m_commands->findAction(
     m_appController.actionManager().actionsMap().at("Menu/File/Save"));

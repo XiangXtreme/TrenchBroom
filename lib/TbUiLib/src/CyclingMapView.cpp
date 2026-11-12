@@ -32,7 +32,6 @@
 #include "gl/Camera.h"
 #include "prefs/Preferences.h"
 #include "ui/ImageUtils.h"
-#include "ui/LightmapPreview.h"
 #include "ui/LightmapPreviewControls.h"
 #include "ui/MapDocument.h"
 #include "ui/MapView2D.h"
@@ -128,24 +127,6 @@ void CyclingMapView::createGui(
 
   auto& preview = toolBox.lightmapPreview();
   m_lightmapButton->setMenu(createLightmapPreviewMenu(preview, m_lightmapButton));
-  connect(&preview, &LightmapPreview::stateChanged, this, [this, &preview] {
-    updateChrome();
-    m_lightmapButton->setToolTip(preview.statusText());
-  });
-  m_bakingLightmap = preview.baking();
-  m_lightmapRemainingSeconds = preview.remainingSeconds();
-  connect(
-    &preview,
-    &LightmapPreview::progressChanged,
-    this,
-    [this](const bool baking, const int seconds) {
-      if (m_bakingLightmap != baking || m_lightmapRemainingSeconds != seconds)
-      {
-        m_bakingLightmap = baking;
-        m_lightmapRemainingSeconds = seconds;
-        updateChrome();
-      }
-    });
   m_preferenceConnection +=
     PreferenceManager::instance().preferenceDidChangeNotifier.connect(
       [this](const auto& path) {
@@ -230,22 +211,9 @@ void CyclingMapView::updateLightmapButton()
       qualityLabel = action->text();
   }
 
-  auto status = QString{};
-  if (m_bakingLightmap)
-  {
-    status = m_lightmapRemainingSeconds < 0
-               ? tr("Baking…")
-               : QStringLiteral("~%1:%2")
-                   .arg(m_lightmapRemainingSeconds / 60)
-                   .arg(m_lightmapRemainingSeconds % 60, 2, 10, QLatin1Char{'0'});
-  }
-
-  m_lightmapButton->setText(status);
-  auto toolTip = tr("Toggle lightmap preview. Use the arrow to choose quality (%1).")
-                   .arg(qualityLabel);
-  if (!status.isEmpty())
-    toolTip += QLatin1Char{'\n'} + status;
-  m_lightmapButton->setToolTip(toolTip);
+  m_lightmapButton->setToolTip(
+    tr("Toggle lightmap preview. Use the arrow to choose quality (%1).")
+      .arg(qualityLabel));
 }
 
 void CyclingMapView::updateChrome()
@@ -292,14 +260,6 @@ void CyclingMapView::updateChrome()
                             && availableHeight >= viewSize.height();
   const auto showLightmap = showSelector && is3D && lightmapSpace >= compactSize.width()
                             && availableHeight >= compactSize.height();
-  if (showLightmap && m_bakingLightmap)
-  {
-    m_lightmapButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    const auto statusSize = m_lightmapButton->sizeHint();
-    if (statusSize.width() > lightmapSpace || statusSize.height() > availableHeight)
-      m_lightmapButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-  }
-
   const auto lightmapSize = m_lightmapButton->sizeHint();
   const auto rowHeight =
     showLightmap ? std::max(viewSize.height(), lightmapSize.height()) : viewSize.height();

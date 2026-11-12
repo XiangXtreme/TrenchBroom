@@ -5,7 +5,6 @@
 #pragma once
 
 #include <QMainWindow>
-#include <QPointer>
 
 #include "base/Result.h"
 #include "project/ProjectAsset.h"
@@ -46,8 +45,6 @@ class ProjectWindow : public QMainWindow
   WorkspaceToolPanel* m_tools = nullptr;
   MapStatus* m_status = nullptr;
   QStatusBar* m_notifications = nullptr;
-  QPointer<MapWindow> m_lightmapStatusWindow;
-  QPointer<QWidget> m_lightmapStatus;
   QWidget* m_emptyWorkspace = nullptr;
   QTreeWidget* m_assets = nullptr;
   QTreeWidget* m_history = nullptr;

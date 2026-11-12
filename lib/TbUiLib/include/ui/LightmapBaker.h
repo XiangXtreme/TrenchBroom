@@ -93,7 +93,6 @@ public:
   void clearCache();
 
 signals:
-  void remainingSecondsChanged(int seconds);
   void stageProgressChanged(const QString& stage, int percent);
 
 private:

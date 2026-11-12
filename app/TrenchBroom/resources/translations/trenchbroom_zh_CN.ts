@@ -8,10 +8,6 @@
             <translation>开关光照预览</translation>
             </message>
         <message>
-            <source>Baking…</source>
-            <translation>烘焙中…</translation>
-            </message>
-        <message>
             <source>Toggle lightmap preview. Use the arrow to choose quality (%1).</source>
             <translation>切换光照预览。点击箭头选择质量（%1）。</translation>
             </message>
