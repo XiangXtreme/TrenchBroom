@@ -26,7 +26,8 @@ namespace format::tbproject
 
         std::string stem_of(const std::string &path)
         {
-            return std::filesystem::path(path).stem().string();
+            const auto stem = std::filesystem::u8path(path).stem().u8string();
+            return {reinterpret_cast<const char *>(stem.data()), stem.size()};
         }
 
         std::string column_text(sqlite3_stmt *statement, int column)

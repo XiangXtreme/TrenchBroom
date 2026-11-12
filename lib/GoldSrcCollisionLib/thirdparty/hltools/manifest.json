@@ -1,5 +1,5 @@
 {
-  "revision": "53f8ca47a44e9330afb8e3bddaa2b729da9b4eec",
+  "revision": "7e5a79c83fb421c04af19d204aaaaea084a60bd3",
   "files": {
     "LICENSE": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
     "THIRD_PARTY_NOTICES.md": "1a981caaa32f7ad81142b6ae5041ea98709e889c02fe5beff5110ad9430c3a9b",
@@ -120,7 +120,7 @@
     "src/format/miptex/types.h": "54f9fccc7aa063f0cc00daa1a5fd61aaad25e41842434d9cf2b1d35af1f3fc1f",
     "src/format/rad/texlights.cpp": "60c9d578fa053ea62e958d366c6d7610bc54fe6223b46752776d127e96d6dc13",
     "src/format/rad/texlights.h": "466916d7a8a60d4ed4470b1ddb9f7d857e2c0b568500a520dbb416f013812042",
-    "src/format/tbproject/project.cpp": "65fc1d7f651ef7287a4c93c5d8f6821b669ae07ff6bcc4c4732944447fddba31",
+    "src/format/tbproject/project.cpp": "a3444d6571962e22ba1a2701b489802a5724e2bf7f7a4dc3c230f6e43baf52a8",
     "src/format/tbproject/project.h": "96b65e4067a045f71afe8ec77dfe0c0f38bea3f9368d42733d79903b6613f91a",
     "src/format/wad/archive.cpp": "0856ed1596bb02244cded0238a32791a664a2d901c0b70e446098dc7c5a33302",
     "src/format/wad/archive.h": "cf67a657c38a72ae8545d678493774776f152406260d7f553750ed2221ff1a15",
@@ -131,7 +131,7 @@
     "src/math/winding.h": "4c45012829e80e349341e335d28ef7f05bcacde4da8fc3c34ccec7285513b91b",
     "src/preview/CMakeLists.txt": "b8ae1847154f29c51c86b1fa0a4fddfd74661a0938c56110fa4198392a87d75f",
     "src/preview/README.md": "36f6eebb6f04268476995b78220dcf905f30e24c07242c89cc1ffaf71154a3c5",
-    "src/preview/main.cpp": "02bf7198306aa7416ef769032e6a65a016282fddf7220c813db155277cd77305",
+    "src/preview/main.cpp": "9066ec5ace6624e22ae63de69862c34f8d6039925ab5bdc80413badbb8164d8b",
     "src/preview/sources.cmake": "29fb972ca5609884c5ccac96203855d8d25919ae3468d48761a35e7aa5fd3f63",
     "src/preview/verify_cli_parity.py": "4615c2401feb1744e81c112eb0da7418ecbac786f8cad1d832e7b56b718686f8",
     "src/rad/compress.cpp": "058607d80380a3a71077d15230ec74b6492e51b64e615e48d0b024df3346a7c7",
