@@ -31,7 +31,6 @@ class QLabel;
 class QLineEdit;
 class QListWidget;
 class QImage;
-class QProgressBar;
 class QPushButton;
 class QTimer;
 class QSlider;
@@ -46,6 +45,7 @@ class AssetLibraryListView;
 class AssetLibrarySource;
 class ProjectSession;
 class ElidedLabel;
+class TaskNotificationCenter;
 
 /**
  * The application-wide asset library browser.
@@ -91,9 +91,7 @@ class AssetLibraryWindow : public QDialog
   QAction* m_moveAction = nullptr;
   QToolButton* m_newFolderButton = nullptr;
   QLineEdit* m_tagsEdit = nullptr;
-  QProgressBar* m_convertProgress = nullptr;
-  QPushButton* m_convertCancel = nullptr;
-  QPushButton* m_retryButton = nullptr;
+  TaskNotificationCenter* m_taskNotifications = nullptr;
   std::vector<std::string> m_retryIds;
   QTimer* m_convertTimer = nullptr;
   std::vector<std::string> m_convertQueue;
@@ -101,6 +99,9 @@ class AssetLibraryWindow : public QDialog
   int m_convertFailed = 0;
   QStringList m_conversionReport;
   std::vector<std::string> m_failedConversions;
+  struct ImportBatch;
+  std::unique_ptr<ImportBatch> m_importBatch;
+  QTimer* m_importTimer = nullptr;
   QLineEdit* m_searchEdit = nullptr;
   QComboBox* m_tagCombo = nullptr;
   QComboBox* m_soundCombo = nullptr;
@@ -174,6 +175,10 @@ private:
   void runCreateTerrainMaterial();
   std::optional<std::array<std::string, 3>> selectedTextures() const;
   void importFiles(const QStringList& files);
+  void stepImportQueue();
+  void finishImport(bool cancelled);
+  void updateImportNotification();
+  void updateConversionNotification();
   void runConvertPending();
   void retryFailedConversions();
   void stepConvertQueue();

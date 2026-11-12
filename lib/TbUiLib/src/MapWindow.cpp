@@ -118,6 +118,7 @@
 #include "ui/SignalDelayer.h"
 #include "ui/Splitter.h"
 #include "ui/SwitchableMapViewContainer.h"
+#include "ui/UpdateNotifications.h"
 #include "ui/ViewUtils.h"
 #include "ui/WadUtils.h"
 #include "ui/WidgetState.h"
@@ -204,6 +205,7 @@ MapWindow::MapWindow(
     createMenus();
     createToolBar();
     createStatusBar();
+    connectUpdateNotifications(m_editor->notifications(), m_appController.updater());
   }
   if (embedded)
   {
@@ -621,7 +623,6 @@ void MapWindow::createStatusBar()
   auto* layout = new QHBoxLayout{statusSurface};
   layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(status, 1);
-  layout->addWidget(m_appController.updater().createUpdateIndicator(statusSurface));
   m_tools->addStatusWidget(statusSurface);
 }
 
@@ -1733,6 +1734,7 @@ void MapWindow::showCompileDialog()
 
     m_compilationDialog =
       new CompilationDialog{m_appController, *m_document, camera, this};
+    m_compilationDialog->setNotificationCenter(m_editor->notifications());
     connect(
       m_compilationDialog,
       &CompilationDialog::compilationProfileStarted,
@@ -1742,13 +1744,12 @@ void MapWindow::showCompileDialog()
       });
   }
 
-  if (const auto* profile = lastCompilationProfile())
+  if (!m_compilationDialog->isRunning())
   {
-    m_compilationDialog->selectProfile(*profile);
-  }
-  else
-  {
-    m_compilationDialog->selectFirstProfile();
+    if (const auto* profile = lastCompilationProfile())
+      m_compilationDialog->selectProfile(*profile);
+    else
+      m_compilationDialog->selectFirstProfile();
   }
 
   showModelessDialog(m_compilationDialog);
@@ -1862,8 +1863,9 @@ bool MapWindow::closeCompileDialog()
     return true;
   }
 
-  if (m_compilationDialog->close())
+  if (m_compilationDialog->closeForDocument())
   {
+    delete m_compilationDialog.data();
     m_compilationDialog = nullptr;
     return true;
   }

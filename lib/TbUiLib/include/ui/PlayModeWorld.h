@@ -21,6 +21,7 @@
 
 #include "ui/PlayModeJumpGuide.h"
 
+#include "vm/bbox.h"
 #include "vm/vec.h"
 
 #include <cstdint>
@@ -35,7 +36,8 @@ namespace tb
 namespace mdl
 {
 class Map;
-}
+class WorldNode;
+} // namespace mdl
 
 namespace ui
 {
@@ -94,6 +96,15 @@ struct PlayModeWorldOptions
  */
 PlayModeWorld buildPlayModeWorld(
   const mdl::Map& map, const PlayModeWorldOptions& options = {});
+
+/** Copies the map without editor-owned resource references for background work. */
+std::unique_ptr<mdl::WorldNode> makePlayModeWorldSnapshot(const mdl::Map& map);
+
+/** Builds from a detached world, which may be compiled while the live map is edited. */
+PlayModeWorld buildPlayModeWorld(
+  const mdl::WorldNode& worldNode,
+  const vm::bbox3d& worldBounds,
+  const PlayModeWorldOptions& options = {});
 
 } // namespace ui
 } // namespace tb

@@ -127,7 +127,7 @@ private:
   void stopXInput2();
   bool startWindows(QWidget& view);
   void stopWindows();
-  void clipCursorToView();
+  bool clipCursorToView();
 };
 
 } // namespace tb::ui

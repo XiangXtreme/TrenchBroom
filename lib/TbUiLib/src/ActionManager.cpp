@@ -19,6 +19,7 @@
 
 #include "ui/ActionManager.h"
 
+#include <QMessageBox>
 #include <QtSystemDetection>
 
 #include "base/PreferenceManager.h"
@@ -42,6 +43,7 @@
 #include "ui/MapWindow.h"
 #include "ui/StandardShortcut.h"
 #include "ui/SweepTool.h"
+#include "update/Updater.h"
 
 #include "kd/contracts.h"
 
@@ -50,6 +52,7 @@
 #include <fmt/format.h>
 
 #include <string>
+#include <variant>
 
 namespace tb::ui
 {
@@ -2296,6 +2299,32 @@ void ActionManager::createHelpMenu()
     ActionContext::Any,
     standardShortcut(StandardShortcut::HelpContents),
     [](auto& context) { context.appController().showManual(); },
+    [](const auto&) { return true; },
+  }));
+  helpMenu.addItem(addAction(Action{
+    "Menu/Help/Check for Updates",
+    "Check for Updates…",
+    ActionContext::Any,
+    KeySequence{},
+    [](auto& context) {
+      auto& updater = context.appController().updater();
+      if (std::holds_alternative<upd::UpdateDisabledState>(updater.state()))
+      {
+        QMessageBox::information(
+          nullptr,
+          QObject::tr("Updates unavailable"),
+          QObject::tr("Updates are unavailable in this build."));
+        return;
+      }
+      if (std::holds_alternative<upd::UpToDateState>(updater.state()))
+        updater.reset();
+      if (
+        std::holds_alternative<upd::IdleState>(updater.state())
+        || std::holds_alternative<upd::UpdateErrorState>(updater.state()))
+        updater.checkForUpdates(true);
+      else if (!std::holds_alternative<upd::CheckingForUpdatesState>(updater.state()))
+        updater.showUpdateDialog();
+    },
     [](const auto&) { return true; },
   }));
   helpMenu.addItem(addAction(Action{

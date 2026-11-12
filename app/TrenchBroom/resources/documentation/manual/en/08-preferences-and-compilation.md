@@ -144,13 +144,9 @@ TrenchBroom will notify you of a new update in the following places:
 - The welcome window
 - The "About TrenchBroom" dialog
 - The update preferences
-- The status bar
+- A notification in the editor
 
-In each of these places, the status of the updater will be shown as text. If a user action is available, a clickable link will appear. For example, if an update is available, a link labeled "Update available" appears. Clicking the link will bring up a dialog where the update can be downloaded and installed.
-
-![Update Indicator (macOS)](images/UpdateIndicator.png)
-
-In the above screenshot, the updater hasn't performed an update check yet, so the link is labeled "Check for updates". Clicking this link will start an update check.
+The editor notification provides an action to open the update details. The welcome window, About dialog and update preferences also show the updater status. To check manually, choose **Help > Check for Updates**.
 
 ![Update Preferences](images/UpdatePreferences.png)
 

@@ -543,8 +543,12 @@ void PlayModeRawMouse::stopXInput2()
 bool PlayModeRawMouse::startWindows(QWidget& view)
 {
   m_clipView = &view;
+  if (!clipCursorToView())
+  {
+    m_clipView = nullptr;
+    return false;
+  }
   QCoreApplication::instance()->installNativeEventFilter(this);
-  clipCursorToView();
   m_confined = true;
 
 #ifdef Q_OS_WIN
@@ -581,18 +585,18 @@ void PlayModeRawMouse::stopWindows()
   m_clipView = nullptr;
 }
 
-void PlayModeRawMouse::clipCursorToView()
+bool PlayModeRawMouse::clipCursorToView()
 {
 #ifdef Q_OS_WIN
   if (!m_clipView)
   {
-    return;
+    return false;
   }
 
   auto* hwnd = reinterpret_cast<HWND>(m_clipView->window()->winId());
   if (GetForegroundWindow() != hwnd)
   {
-    return;
+    return false;
   }
 
   // ClipCursor takes physical screen coordinates: the view's offset in the window's
@@ -615,8 +619,11 @@ void PlayModeRawMouse::clipCursorToView()
     !GetClipCursor(&current) || current.left != clip.left || current.top != clip.top
     || current.right != clip.right || current.bottom != clip.bottom)
   {
-    ClipCursor(&clip);
+    return ClipCursor(&clip) == TRUE;
   }
+  return true;
+#else
+  return false;
 #endif
 }
 

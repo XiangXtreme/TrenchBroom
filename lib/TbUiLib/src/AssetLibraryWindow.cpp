@@ -30,8 +30,6 @@
 #include <QMimeData>
 #include <QPainter>
 #include <QPixmap>
-#include <QProgressBar>
-#include <QProgressDialog>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
@@ -72,6 +70,7 @@
 #include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
 #include "ui/RecentDocuments.h"
+#include "ui/TaskNotification.h"
 #include "ui/TerrainMaterial.h"
 
 #include <fmt/format.h>
@@ -270,6 +269,28 @@ QColor accentColor(const QWidget& widget)
 }
 } // namespace
 
+struct AssetLibraryWindow::ImportBatch
+{
+  struct Entry
+  {
+    std::filesystem::path source;
+    std::filesystem::path relative;
+    bool conflict = false;
+  };
+  std::vector<Entry> entries;
+  std::set<std::string> occupied;
+  std::vector<std::string> imported;
+  std::vector<std::pair<std::string, std::string>> conversions;
+  QStringList report;
+  QStringList retryFiles;
+  std::vector<std::string> failedConversions;
+  size_t copied = 0;
+  size_t converted = 0;
+  bool overwrite = false;
+  bool conversionsPrepared = false;
+  qsizetype unsupportedCount = 0;
+};
+
 AssetLibraryWindow::AssetLibraryWindow(QWidget* parent)
   : QDialog{parent}
 {
@@ -297,6 +318,7 @@ void AssetLibraryWindow::buildUi()
 {
   setWindowTitle(tr("Asset Library"));
   setObjectName(QStringLiteral("AssetLibraryWindow"));
+  m_taskNotifications = new TaskNotificationCenter{this};
   setWindowIconTB(this);
   resize(1180, 760);
   m_reloadTimer = new QTimer{this};
@@ -313,7 +335,7 @@ void AssetLibraryWindow::buildUi()
     [this](const QString& id) {
       if (
         m_source && id.toStdString() == m_source->libraryId()
-        && !m_convertTimer->isActive())
+        && !m_convertTimer->isActive() && !m_importBatch)
         m_reloadTimer->start(0);
     });
 
@@ -556,37 +578,16 @@ void AssetLibraryWindow::buildUi()
   m_listButton->setCheckable(true);
   m_gridButton->setChecked(true);
 
-  m_convertProgress = new QProgressBar{tools};
-  m_convertProgress->setMaximumWidth(180);
-  m_convertProgress->setTextVisible(false);
-  m_convertProgress->hide();
-  m_convertCancel = new QPushButton{tr("Cancel"), tools};
-  m_convertCancel->hide();
-  m_retryButton = new QPushButton{tr("Retry failed"), tools};
-  m_retryButton->setObjectName("AssetLibraryRetryFailed");
-  m_retryButton->setProperty("tbControlRole", "compact");
-  m_retryButton->setToolTip(
-    tr("Re-run conversion only for the assets that failed in the last batch."));
-  m_retryButton->hide();
-  connect(
-    m_retryButton,
-    &QPushButton::clicked,
-    this,
-    &AssetLibraryWindow::retryFailedConversions);
   m_convertTimer = new QTimer{this};
   m_convertTimer->setObjectName("AssetLibraryConvertTimer");
   m_convertTimer->setInterval(0);
   connect(m_convertTimer, &QTimer::timeout, this, &AssetLibraryWindow::stepConvertQueue);
-  connect(
-    m_convertCancel,
-    &QPushButton::clicked,
-    this,
-    &AssetLibraryWindow::cancelConvertQueue);
+  m_importTimer = new QTimer{this};
+  m_importTimer->setObjectName("AssetLibraryImportTimer");
+  m_importTimer->setInterval(0);
+  connect(m_importTimer, &QTimer::timeout, this, &AssetLibraryWindow::stepImportQueue);
 
   toolsLayout->addWidget(m_countLabel);
-  toolsLayout->addWidget(m_convertProgress);
-  toolsLayout->addWidget(m_convertCancel);
-  toolsLayout->addWidget(m_retryButton);
   toolsLayout->addStretch(1);
   auto* viewActions = new QHBoxLayout{};
   viewActions->setSpacing(4);
@@ -1102,22 +1103,26 @@ void AssetLibraryWindow::updateHeader()
 
 void AssetLibraryWindow::updateActions()
 {
-  m_newFolderButton->setEnabled(m_source && m_source->canManage());
+  const auto busy = m_convertTimer->isActive() || m_importBatch != nullptr;
+  m_newFolderButton->setEnabled(!busy && m_source && m_source->canManage());
   const auto hasSource = m_source != nullptr;
-  m_importButton->setEnabled(hasSource && m_source->canImport());
-  m_createMaterialButton->setEnabled(hasSource && m_source->canManage());
+  m_importButton->setEnabled(!busy && hasSource && m_source->canImport());
+  m_createMaterialButton->setEnabled(!busy && hasSource && m_source->canManage());
   m_convertButton->setEnabled(
-    hasSource && m_source->canConvert() && pendingCount() > 0
-    && !m_convertTimer->isActive());
+    !busy && hasSource && m_source->canConvert() && pendingCount() > 0);
   m_revealButton->setEnabled(hasSource && m_source->canReveal());
   m_searchEdit->setEnabled(hasSource);
+  m_grid->setEnabled(!busy);
+  m_folders->setEnabled(!busy);
+  updateSelectionActions();
 }
 
 void AssetLibraryWindow::updateSelectionActions()
 {
-  m_createMaterialFromSelection->setEnabled(selectedTextures().has_value());
+  const auto busy = m_convertTimer->isActive() || m_importBatch != nullptr;
+  m_createMaterialFromSelection->setEnabled(!busy && selectedTextures().has_value());
   const auto canDelete =
-    m_source && m_source->canManage() && !m_grid->selectedItems().empty();
+    !busy && m_source && m_source->canManage() && !m_grid->selectedItems().empty();
   m_deleteButton->setEnabled(canDelete);
   m_deleteAction->setEnabled(canDelete);
   m_moveAction->setEnabled(canDelete);
@@ -1852,33 +1857,28 @@ void AssetLibraryWindow::retryFailedConversions()
 {
   if (
     !m_source || !m_source->canConvert() || m_retryIds.empty()
-    || m_convertTimer->isActive())
+    || m_convertTimer->isActive() || m_importBatch)
     return;
 
   m_reloadTimer->stop();
   m_convertQueue = m_retryIds;
   m_retryIds.clear();
-  m_retryButton->hide();
   m_convertDone = 0;
   m_convertFailed = 0;
   m_conversionReport.clear();
   m_failedConversions.clear();
-  m_convertProgress->setRange(0, int(m_convertQueue.size()));
-  m_convertProgress->setValue(0);
-  m_convertProgress->show();
-  m_convertCancel->show();
   m_convertTimer->start();
+  updateConversionNotification();
   updateActions();
 }
 
 void AssetLibraryWindow::runConvertPending()
 {
-  if (!m_source || !m_source->canConvert() || m_convertTimer->isActive())
+  if (!m_source || !m_source->canConvert() || m_convertTimer->isActive() || m_importBatch)
     return;
   m_reloadTimer->stop();
   m_convertQueue.clear();
   m_retryIds.clear();
-  m_retryButton->hide();
   for (const auto& asset : m_assets)
   {
     if (needsConversion(asset))
@@ -1891,12 +1891,21 @@ void AssetLibraryWindow::runConvertPending()
   m_convertFailed = 0;
   m_conversionReport.clear();
   m_failedConversions.clear();
-  m_convertProgress->setRange(0, int(m_convertQueue.size()));
-  m_convertProgress->setValue(0);
-  m_convertProgress->show();
-  m_convertCancel->show();
   m_convertTimer->start();
+  updateConversionNotification();
   updateActions();
+}
+
+void AssetLibraryWindow::updateConversionNotification()
+{
+  const auto total = m_convertDone + int(m_convertQueue.size());
+  auto notification = TaskNotification{};
+  notification.title = tr("Converting assets");
+  notification.detail = tr("%1 of %2").arg(m_convertDone).arg(total);
+  notification.progress = total > 0 ? 100 * m_convertDone / total : -1;
+  notification.showDelayMs = 500;
+  notification.actions.push_back({tr("Cancel"), [this] { cancelConvertQueue(); }});
+  m_taskNotifications->update(QStringLiteral("asset-conversion"), notification);
 }
 
 void AssetLibraryWindow::stepConvertQueue()
@@ -1919,30 +1928,34 @@ void AssetLibraryWindow::stepConvertQueue()
            + (result.is_error() ? QString::fromStdString(std::get<Error>(result.error()).msg) : tr("No compatible content was produced."));
   }
   ++m_convertDone;
-  m_convertProgress->setValue(m_convertDone);
+  updateConversionNotification();
 
   if (m_convertQueue.empty())
   {
     m_convertTimer->stop();
-    m_convertProgress->hide();
-    m_convertCancel->hide();
     reload();
-    m_footer->setText(
-      tr("Converted %1 asset(s)%2.")
-        .arg(m_convertDone - m_convertFailed)
-        .arg(m_convertFailed > 0 ? tr(", %1 failed").arg(m_convertFailed) : QString{}));
+    auto notification = TaskNotification{};
+    notification.state = m_failedConversions.empty() ? TaskNotification::State::Succeeded
+                                                     : TaskNotification::State::Failed;
+    notification.title = m_failedConversions.empty()
+                           ? tr("Assets converted")
+                           : tr("Some assets could not be converted");
+    notification.detail = tr("%1 converted · %2 failed")
+                            .arg(m_convertDone - m_convertFailed)
+                            .arg(m_convertFailed);
+    notification.dismissible = !m_failedConversions.empty();
     if (!m_failedConversions.empty())
     {
       m_retryIds = m_failedConversions;
-      m_retryButton->setText(tr("Retry failed (%1)").arg(qulonglong(m_retryIds.size())));
-      m_retryButton->show();
-      showOperationReport(m_conversionReport, {}, m_failedConversions);
+      notification.actions.push_back(
+        {tr("View details"),
+         [this] { showOperationReport(m_conversionReport, {}, m_failedConversions); }});
+      notification.actions.push_back(
+        {tr("Retry failed"), [this] { retryFailedConversions(); }});
     }
     else
-    {
       m_retryIds.clear();
-      m_retryButton->hide();
-    }
+    m_taskNotifications->update(QStringLiteral("asset-conversion"), notification);
   }
 }
 
@@ -1951,26 +1964,40 @@ void AssetLibraryWindow::cancelConvertQueue()
   m_convertTimer->stop();
   const auto remaining = m_convertQueue.size();
   m_convertQueue.clear();
-  m_convertProgress->hide();
-  m_convertCancel->hide();
   reload();
-  m_footer->setText(tr("Cancelled: %1 completed, %2 failed, %3 pending.")
-                      .arg(m_convertDone)
-                      .arg(m_convertFailed)
-                      .arg(qulonglong(remaining)));
+  auto notification = TaskNotification{};
+  notification.state = m_failedConversions.empty() ? TaskNotification::State::Succeeded
+                                                   : TaskNotification::State::Failed;
+  notification.title = tr("Asset conversion cancelled");
+  notification.detail = tr("%1 completed · %2 failed · %3 pending")
+                          .arg(m_convertDone)
+                          .arg(m_convertFailed)
+                          .arg(qulonglong(remaining));
+  notification.dismissible = !m_failedConversions.empty();
+  if (!m_failedConversions.empty())
+  {
+    m_retryIds = m_failedConversions;
+    notification.actions.push_back(
+      {tr("View details"),
+       [this] { showOperationReport(m_conversionReport, {}, m_failedConversions); }});
+    notification.actions.push_back(
+      {tr("Retry failed"), [this] { retryFailedConversions(); }});
+  }
+  m_taskNotifications->update(QStringLiteral("asset-conversion"), notification);
 }
 
 void AssetLibraryWindow::resetConvertQueue()
 {
   m_convertTimer->stop();
+  m_importTimer->stop();
+  m_importBatch.reset();
   m_convertQueue.clear();
   m_retryIds.clear();
   m_failedConversions.clear();
   m_conversionReport.clear();
   m_convertDone = m_convertFailed = 0;
-  m_convertProgress->hide();
-  m_convertCancel->hide();
-  m_retryButton->hide();
+  m_taskNotifications->remove(QStringLiteral("asset-conversion"));
+  m_taskNotifications->remove(QStringLiteral("asset-import"));
 }
 
 void AssetLibraryWindow::runImport()
@@ -2166,57 +2193,41 @@ void AssetLibraryWindow::showOperationReport(
     importFiles(files);
   else if (result == 2)
   {
-    const auto retryConversions = conversions;
-    m_convertQueue = retryConversions;
-    m_convertDone = m_convertFailed = 0;
-    m_conversionReport.clear();
-    m_failedConversions.clear();
-    m_convertProgress->setRange(0, int(retryConversions.size()));
-    m_convertProgress->setValue(0);
-    m_convertProgress->show();
-    m_convertCancel->show();
-    m_convertTimer->start();
-    updateActions();
+    m_retryIds = conversions;
+    retryFailedConversions();
   }
 }
 
 void AssetLibraryWindow::importFiles(const QStringList& files)
 {
-  if (!m_source || !m_source->canImport())
+  if (!m_source || !m_source->canImport() || m_convertTimer->isActive() || m_importBatch)
     return;
-  struct Entry
-  {
-    std::filesystem::path source;
-    std::filesystem::path relative;
-    bool conflict = false;
-  };
-  auto occupied = std::set<std::string>{};
+
+  auto batch = std::make_unique<ImportBatch>();
   const auto stored = m_source->allAssets();
   if (stored.is_error())
     return;
   for (const auto& asset : stored.value())
   {
-    occupied.insert(asset.virtualPath);
-    occupied.insert(asset.sourceContainer);
+    batch->occupied.insert(asset.virtualPath);
+    batch->occupied.insert(asset.sourceContainer);
   }
-  auto entries = std::vector<Entry>{};
-  auto report = QStringList{};
-  auto retry = QStringList{};
-  auto failedConversions = std::vector<std::string>{};
   for (const auto& file : files)
   {
     const auto source = pathFromQString(file);
     const auto subfolder = librarySubfolderForFile(source, pathFromQString(m_folderPath));
     if (subfolder.empty())
     {
-      report << tr("%1: unsupported file type").arg(file);
+      batch->report << tr("%1: unsupported file type").arg(file);
+      ++batch->unsupportedCount;
       continue;
     }
     const auto relative = subfolder / source.filename();
-    entries.push_back({source, relative, occupied.contains(relative.generic_string())});
+    batch->entries.push_back(
+      {source, relative, batch->occupied.contains(relative.generic_string())});
   }
-  auto overwrite = false;
-  if (std::ranges::any_of(entries, [](const auto& entry) { return entry.conflict; }))
+  if (std::ranges::any_of(
+        batch->entries, [](const auto& entry) { return entry.conflict; }))
   {
     const auto answer = QMessageBox::question(
       this,
@@ -2226,101 +2237,177 @@ void AssetLibraryWindow::importFiles(const QStringList& files)
       QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
     if (answer == QMessageBox::Cancel)
       return;
-    overwrite = answer == QMessageBox::Yes;
+    batch->overwrite = answer == QMessageBox::Yes;
   }
-  auto progress = QProgressDialog{
-    tr("Importing and converting assets"),
-    tr("Cancel"),
-    0,
-    int(entries.size() * 2),
-    this};
-  progress.setWindowModality(Qt::WindowModal);
-  progress.setMinimumDuration(0);
-  auto imported = std::vector<std::string>{};
-  auto copied = 0;
-  for (auto& entry : entries)
+  if (batch->entries.empty() && batch->unsupportedCount == 0)
+    return;
+  m_reloadTimer->stop();
+  m_importBatch = std::move(batch);
+  m_importTimer->start();
+  updateImportNotification();
+  updateActions();
+}
+
+void AssetLibraryWindow::updateImportNotification()
+{
+  if (!m_importBatch)
+    return;
+  const auto& batch = *m_importBatch;
+  const auto converted = batch.conversionsPrepared;
+  const auto done = converted ? batch.converted : batch.copied;
+  const auto total = converted ? batch.conversions.size() : batch.entries.size();
+  auto notification = TaskNotification{};
+  notification.title =
+    converted ? tr("Converting imported assets") : tr("Importing assets");
+  notification.detail = tr("%1 of %2").arg(qulonglong(done)).arg(qulonglong(total));
+  notification.progress = total > 0 ? int(100 * done / total) : -1;
+  notification.showDelayMs = 500;
+  notification.actions.push_back({tr("Cancel"), [this] { finishImport(true); }});
+  m_taskNotifications->update(QStringLiteral("asset-import"), notification);
+}
+
+void AssetLibraryWindow::stepImportQueue()
+{
+  if (!m_importBatch || !m_source)
   {
-    progress.setValue(copied);
-    if (progress.wasCanceled())
-      break;
-    if (!overwrite)
+    m_importTimer->stop();
+    return;
+  }
+  auto& batch = *m_importBatch;
+  if (batch.copied < batch.entries.size())
+  {
+    auto& entry = batch.entries[batch.copied];
+    if (!batch.overwrite)
     {
       const auto requested = entry.relative;
-      for (auto counter = 1; occupied.contains(entry.relative.generic_string());
+      for (auto counter = 1; batch.occupied.contains(entry.relative.generic_string());
            ++counter)
-        entry.relative = requested.parent_path() / (requested.stem().string() + "_" + std::to_string(counter) + requested.extension().string());
+        entry.relative = requested.parent_path()
+                         / (requested.stem().string() + "_" + std::to_string(counter)
+                            + requested.extension().string());
     }
     const auto added =
-      overwrite ? m_source->replaceFile(entry.source, entry.relative.generic_string())
-                : m_source->importFile(entry.source, entry.relative.generic_string());
+      batch.overwrite
+        ? m_source->replaceFile(entry.source, entry.relative.generic_string())
+        : m_source->importFile(entry.source, entry.relative.generic_string());
     if (added.is_error())
     {
-      report << tr("%1: import failed: %2")
-                  .arg(
-                    pathAsQString(entry.source),
-                    QString::fromStdString(std::get<Error>(added.error()).msg));
-      retry << pathAsQString(entry.source);
+      batch.report << tr("%1: import failed: %2")
+                        .arg(
+                          pathAsQString(entry.source),
+                          QString::fromStdString(std::get<Error>(added.error()).msg));
+      batch.retryFiles << pathAsQString(entry.source);
     }
     else
     {
-      imported.push_back(added.value());
-      occupied.insert(added.value());
-      report << tr("%1: imported as %2")
-                  .arg(
-                    pathAsQString(entry.source), QString::fromStdString(added.value()));
+      batch.imported.push_back(added.value());
+      batch.occupied.insert(added.value());
+      batch.report << tr("%1: imported as %2")
+                        .arg(
+                          pathAsQString(entry.source),
+                          QString::fromStdString(added.value()));
     }
-    ++copied;
+    ++batch.copied;
+    updateImportNotification();
+    return;
   }
-  reload();
-  // Copy IDs before converting: each publication can invalidate a browser's listing.
-  auto convert = std::vector<std::pair<std::string, std::string>>{};
-  for (const auto& asset : m_assets)
-    if (
-      std::ranges::find(imported, asset.sourceContainer) != imported.end()
-      || std::ranges::find(imported, asset.virtualPath) != imported.end())
-    {
-      if (needsConversion(asset))
-        convert.emplace_back(asset.id, asset.virtualPath);
-      else
-        report << tr("%1: ready to use").arg(QString::fromStdString(asset.virtualPath));
-    }
-  auto converted = 0;
-  for (const auto& [id, path] : convert)
+  if (!batch.conversionsPrepared)
   {
-    if (progress.wasCanceled())
-      break;
-    progress.setValue(int(entries.size()) + converted);
-    if (progress.wasCanceled())
-      break;
+    reload();
+    for (const auto& asset : m_assets)
+      if (
+        std::ranges::find(batch.imported, asset.sourceContainer) != batch.imported.end()
+        || std::ranges::find(batch.imported, asset.virtualPath) != batch.imported.end())
+      {
+        if (needsConversion(asset))
+          batch.conversions.emplace_back(asset.id, asset.virtualPath);
+        else
+          batch.report
+            << tr("%1: ready to use").arg(QString::fromStdString(asset.virtualPath));
+      }
+    batch.conversionsPrepared = true;
+    updateImportNotification();
+  }
+  if (batch.converted < batch.conversions.size())
+  {
+    const auto& [id, path] = batch.conversions[batch.converted];
     const auto result = m_source->convertAsset(id);
     if (result.is_error() || !result.value())
     {
-      report << tr("%1: imported, conversion failed: %2")
-                  .arg(
-                    QString::fromStdString(path),
-                    result.is_error()
-                      ? QString::fromStdString(std::get<Error>(result.error()).msg)
-                      : tr("No compatible content was produced."));
-      failedConversions.push_back(id);
+      batch.report << tr("%1: imported, conversion failed: %2")
+                        .arg(
+                          QString::fromStdString(path),
+                          result.is_error()
+                            ? QString::fromStdString(std::get<Error>(result.error()).msg)
+                            : tr("No compatible content was produced."));
+      batch.failedConversions.push_back(id);
     }
     else
-      report << tr("%1: converted and ready to use").arg(QString::fromStdString(path));
-    ++converted;
+      batch.report
+        << tr("%1: converted and ready to use").arg(QString::fromStdString(path));
+    ++batch.converted;
+    updateImportNotification();
+    return;
   }
-  const auto cancelled = progress.wasCanceled();
-  progress.close();
-  if (cancelled)
-    report << tr(
-                "Cancelled: %1 file(s) not imported; %2 conversion(s) pending. Completed "
-                "imports were kept.")
-                .arg(int(entries.size()) - copied)
-                .arg(int(convert.size()) - converted);
+  finishImport(false);
+}
+
+void AssetLibraryWindow::finishImport(const bool cancelled)
+{
+  if (!m_importBatch)
+    return;
+  m_importTimer->stop();
+  auto batch = std::move(m_importBatch);
   reload();
-  m_footer->setText(tr("Imported %1 file(s); converted %2; failed %3.")
-                      .arg(int(imported.size()))
-                      .arg(converted - int(failedConversions.size()))
-                      .arg(retry.size() + qsizetype(failedConversions.size())));
-  showOperationReport(report, retry, failedConversions);
+  if (cancelled)
+    batch->report << tr("Import cancelled; completed imports were kept.");
+  const auto failures = batch->retryFiles.size()
+                        + qsizetype(batch->failedConversions.size())
+                        + batch->unsupportedCount;
+  auto notification = TaskNotification{};
+  notification.state =
+    failures > 0 ? TaskNotification::State::Failed : TaskNotification::State::Succeeded;
+  notification.title = cancelled      ? tr("Asset import cancelled")
+                       : failures > 0 ? tr("Some assets could not be imported")
+                                      : tr("Assets imported");
+  notification.detail =
+    tr("%1 imported · %2 converted · %3 failed")
+      .arg(qulonglong(batch->imported.size()))
+      .arg(qulonglong(batch->converted - batch->failedConversions.size()))
+      .arg(failures);
+  notification.dismissible = failures > 0;
+  if (failures > 0 || cancelled)
+  {
+    notification.actions.push_back(
+      {tr("View details"),
+       [this,
+        report = batch->report,
+        files = batch->retryFiles,
+        conversions = batch->failedConversions] {
+         showOperationReport(report, files, conversions);
+       }});
+  }
+  if (!batch->retryFiles.empty() || !batch->failedConversions.empty())
+  {
+    notification.actions.push_back(
+      {tr("Retry failed"),
+       [this,
+        report = batch->report,
+        files = batch->retryFiles,
+        conversions = batch->failedConversions] {
+         if (!files.empty() && !conversions.empty())
+           showOperationReport(report, files, conversions);
+         else if (!files.empty())
+           importFiles(files);
+         else
+         {
+           m_taskNotifications->remove(QStringLiteral("asset-import"));
+           m_retryIds = conversions;
+           retryFailedConversions();
+         }
+       }});
+  }
+  m_taskNotifications->update(QStringLiteral("asset-import"), notification);
 }
 
 void AssetLibraryWindow::refreshUsage()

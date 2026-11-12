@@ -27,11 +27,13 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
+#include <QHideEvent>
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSaveFile>
+#include <QShowEvent>
 #include <QTemporaryDir>
 #include <QTextEdit>
 #include <QTimer>
@@ -55,6 +57,7 @@
 #include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
 #include "ui/Splitter.h"
+#include "ui/TaskNotification.h"
 #include "ui/TitledPanel.h"
 #include "ui/ViewConstants.h"
 
@@ -82,6 +85,18 @@ CompilationDialog::CompilationDialog(
   resize(1000, 760);
   updatePlan();
   updateCompileButtons();
+}
+
+CompilationDialog::~CompilationDialog()
+{
+  if (m_notifications)
+    m_notifications->remove(QStringLiteral("compilation"));
+}
+
+void CompilationDialog::setNotificationCenter(TaskNotificationCenter& notifications)
+{
+  m_notifications = &notifications;
+  updateTaskNotification();
 }
 
 bool CompilationDialog::selectProfile(const mdl::CompilationProfile& profile)
@@ -320,6 +335,18 @@ void CompilationDialog::keyPressEvent(QKeyEvent* event)
   }
 }
 
+void CompilationDialog::showEvent(QShowEvent* event)
+{
+  QDialog::showEvent(event);
+  updateTaskNotification();
+}
+
+void CompilationDialog::hideEvent(QHideEvent* event)
+{
+  QDialog::hideEvent(event);
+  updateTaskNotification();
+}
+
 void CompilationDialog::updateCompileButtons()
 {
   const auto* profile = m_profileManager->selectedProfile();
@@ -454,6 +481,48 @@ void CompilationDialog::updateRunStatus()
     setErrorStyle(m_currentRunLabel);
   else
     setDefaultStyle(m_currentRunLabel);
+  updateTaskNotification();
+}
+
+void CompilationDialog::updateTaskNotification()
+{
+  if (!m_notifications)
+    return;
+  const auto id = QStringLiteral("compilation");
+  if (isVisible() || !m_runTimer.isValid())
+  {
+    m_notifications->remove(id);
+    return;
+  }
+
+  auto notification = TaskNotification{};
+  notification.detail = m_currentRunLabel->text();
+  notification.actions.push_back({tr("View log"), [this] {
+                                    show();
+                                    raise();
+                                    activateWindow();
+                                  }});
+  if (m_run.running())
+  {
+    notification.title =
+      m_simulation ? tr("Simulating compilation") : tr("Compiling map");
+    notification.progress = -1;
+    notification.actions.push_back({tr("Stop"), [this] { stopCompilation(); }});
+  }
+  else if (m_outcome)
+  {
+    notification.state = *m_outcome == CompilationOutcome::Failed
+                           ? TaskNotification::State::Failed
+                           : TaskNotification::State::Succeeded;
+    notification.title =
+      *m_outcome == CompilationOutcome::Failed      ? tr("Map compilation failed")
+      : *m_outcome == CompilationOutcome::Cancelled ? tr("Map compilation cancelled")
+                                                    : tr("Map compilation completed");
+    notification.dismissible = true;
+  }
+  else
+    return;
+  m_notifications->update(id, notification);
 }
 
 void CompilationDialog::saveLog()
@@ -602,6 +671,21 @@ void CompilationDialog::stopCompilation()
 
 void CompilationDialog::closeEvent(QCloseEvent* event)
 {
+  if (m_run.running() && m_notifications)
+  {
+    event->accept();
+    return;
+  }
+  if (!closeForDocument())
+  {
+    event->ignore();
+    return;
+  }
+  event->accept();
+}
+
+bool CompilationDialog::closeForDocument()
+{
   if (m_run.running())
   {
     const auto result = QMessageBox::warning(
@@ -612,15 +696,14 @@ void CompilationDialog::closeEvent(QCloseEvent* event)
       QMessageBox::Yes);
 
     if (result != QMessageBox::Yes)
-    {
-      event->ignore();
-      return;
-    }
+      return false;
 
     stopCompilation();
   }
   saveProfile();
-  event->accept();
+  if (m_notifications)
+    m_notifications->remove(QStringLiteral("compilation"));
+  return true;
 }
 
 void CompilationDialog::compilationStarted()
@@ -654,6 +737,7 @@ void CompilationDialog::compilationEnded()
   if (!m_runOutputs.empty())
     m_openOutputButton->setEnabled(
       QDir{pathAsQString(m_runOutputs.back().parent_path())}.exists());
+  updateTaskNotification();
   updateCompileButtons();
 }
 

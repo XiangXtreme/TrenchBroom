@@ -41,6 +41,7 @@ class Updater : public QObject
 private:
   HttpClient& m_httpClient;
   UpdateController* m_updateController;
+  bool m_userInitiatedCheck = false;
 
 public:
   /**
@@ -62,20 +63,27 @@ public:
 
   /**
    * Perform an update check. Only has an effect while the update controller is in the
-   * idle or error state.
+   * idle or error state. Explicit user requests can opt into immediate feedback.
    */
-  void checkForUpdates();
+  void checkForUpdates(bool userInitiated = false);
+
+  bool userInitiatedCheck() const;
 
   /**
    * Reset the update controller to the idle state.
    */
   void reset();
 
+  const UpdateControllerState& state() const;
+
   /**
    * Create an update indicator label. The label shows the current state of the update
    * controller and let the user trigger certain actions.
    */
   QWidget* createUpdateIndicator(QWidget* parent = nullptr);
+
+signals:
+  void stateChanged(const UpdateControllerState& state);
 };
 
 } // namespace upd

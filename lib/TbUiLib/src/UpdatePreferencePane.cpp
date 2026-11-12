@@ -60,8 +60,8 @@ void UpdatePreferencePane::createGui()
 QWidget* UpdatePreferencePane::createUpdatePreferences()
 {
   auto* updateInfo = new QLabel{tr(
-    R"(TrenchBroom can check for updates. If an update is available, you will be notified in the status bar and other places.
-To download and install an available update, click on the link labeled "Update available".)")};
+    R"(TrenchBroom can check for updates. Available updates appear in a notification and in this preferences page.
+Open the update details to download and install an available update.)")};
 
   m_autoCheckForUpdates = new QCheckBox{};
   connect(m_autoCheckForUpdates, &QCheckBox::checkStateChanged, [&](const auto state) {

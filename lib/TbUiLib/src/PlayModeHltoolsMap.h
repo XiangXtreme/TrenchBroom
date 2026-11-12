@@ -19,14 +19,17 @@
 
 #pragma once
 
+#include "vm/bbox.h"
+
 #include <string>
 
 namespace tb::mdl
 {
-class Map;
+class WorldNode;
 }
 
 namespace tb::ui
 {
-std::string serializePlayModeHltoolsMap(const mdl::Map& map);
+std::string serializePlayModeHltoolsMap(
+  const mdl::WorldNode& worldNode, const vm::bbox3d& worldBounds);
 }

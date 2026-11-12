@@ -30,6 +30,7 @@
 #include "gl/PerspectiveCamera.h"
 #include "mdl/GameFileSystem.h"
 #include "mdl/Map.h"
+#include "mdl/WorldNode.h"
 #include "prefs/Preferences.h"
 #include "render/RenderBatch.h"
 #include "render/RenderService.h"
@@ -250,19 +251,18 @@ PlayModeController::PlayModeController(
   , m_worldBuildWatcher{std::make_unique<QFutureWatcher<WorldBuildResult>>()}
 {
   m_clock.start();
+  const auto sceneChanged = [this](const auto&) { ++m_sceneRevision; };
+  m_startConnections += m_document.nodesWereAddedNotifier.connect(sceneChanged);
+  m_startConnections += m_document.nodesWereRemovedNotifier.connect(sceneChanged);
+  m_startConnections += m_document.nodesDidChangeNotifier.connect(sceneChanged);
+  m_startConnections += m_document.nodeVisibilityDidChangeNotifier.connect(sceneChanged);
   QObject::connect(
     m_worldBuildWatcher.get(), &QFutureWatcher<WorldBuildResult>::finished, [this]() {
       finishStarting();
     });
 }
 
-PlayModeController::~PlayModeController()
-{
-  if (m_worldBuildWatcher->isRunning())
-  {
-    m_worldBuildWatcher->waitForFinished();
-  }
-}
+PlayModeController::~PlayModeController() = default;
 
 bool PlayModeController::active() const
 {
@@ -279,6 +279,8 @@ void PlayModeController::start(
 
   m_startCompletion = std::move(completion);
   m_startFromCamera = fromCamera;
+  m_startCancelled = false;
+  m_startError.clear();
 
   // Recreate the context so preference changes (sv_airaccelerate) take effect; the
   // player state survives in m_savedState.
@@ -315,6 +317,7 @@ void PlayModeController::start(
   m_context.reset(scs_init(&config));
   if (!m_context)
   {
+    m_startError = "Could not create the physics context";
     m_document.logger().error() << "Play mode: could not create the physics context";
     if (m_startCompletion)
     {
@@ -333,10 +336,15 @@ void PlayModeController::start(
     Preferences::PlayModeClipTypeLegacytrim);
   const auto* map = &m_document.map();
   const auto cacheValid = m_world.world && m_worldMap == map
+                          && m_worldMapIdentity == map->identity()
                           && m_worldModificationCount == map->modificationCount()
+                          && m_worldSceneRevision == m_sceneRevision
                           && m_worldCompiler == compiler && m_worldClipType == clipType;
   m_starting = true;
   m_startUsingCachedWorld = cacheValid;
+  m_startMapIdentity = map->identity();
+  m_startModificationCount = map->modificationCount();
+  m_startSceneRevision = m_sceneRevision;
   if (cacheValid)
   {
     finishStarting();
@@ -345,16 +353,34 @@ void PlayModeController::start(
 
   m_worldCompiler = compiler;
   m_worldClipType = clipType;
-  m_worldBuildWatcher->setFuture(
-    QtConcurrent::run([map, compiler, clipType]() -> WorldBuildResult {
-      return std::make_shared<PlayModeWorld>(
-        buildPlayModeWorld(*map, {.compiler = compiler, .clipType = clipType}));
+  const auto bounds = map->worldBounds();
+  auto snapshot = std::shared_ptr<mdl::WorldNode>{makePlayModeWorldSnapshot(*map)};
+  m_worldBuildWatcher->setFuture(QtConcurrent::run(
+    [snapshot = std::move(snapshot), bounds, compiler, clipType]() -> WorldBuildResult {
+      return std::make_shared<PlayModeWorld>(buildPlayModeWorld(
+        *snapshot, bounds, {.compiler = compiler, .clipType = clipType}));
     }));
+}
+
+void PlayModeController::cancelStart()
+{
+  if (m_starting)
+    m_startCancelled = true;
 }
 
 bool PlayModeController::starting() const
 {
   return m_starting;
+}
+
+bool PlayModeController::startCancelled() const
+{
+  return m_startCancelled;
+}
+
+const std::string& PlayModeController::startError() const
+{
+  return m_startError;
 }
 
 void PlayModeController::finishStarting()
@@ -366,11 +392,29 @@ void PlayModeController::finishStarting()
 
   m_starting = false;
   const auto usingCachedWorld = m_startUsingCachedWorld;
+  if (
+    m_startCancelled || m_document.map().identity() != m_startMapIdentity
+    || m_document.map().modificationCount() != m_startModificationCount
+    || m_sceneRevision != m_startSceneRevision)
+  {
+    if (!m_startCancelled)
+      m_startError = "The map changed while collision was being built";
+    m_startUsingCachedWorld = false;
+    m_context.reset();
+    if (m_startCompletion)
+    {
+      auto completion = std::move(m_startCompletion);
+      completion(false);
+    }
+    return;
+  }
   if (!usingCachedWorld)
   {
     const auto world = m_worldBuildWatcher->result();
     if (!world || !world->world)
     {
+      m_startError =
+        world && !world->error.empty() ? world->error : "Could not build collision";
       if (world && !world->error.empty())
       {
         m_document.logger().error() << "Play mode: " << world->error;
@@ -390,7 +434,9 @@ void PlayModeController::finishStarting()
       m_document.logger().warn() << "Play mode: " << warning;
     }
     m_worldMap = &m_document.map();
+    m_worldMapIdentity = m_document.map().identity();
     m_worldModificationCount = m_document.map().modificationCount();
+    m_worldSceneRevision = m_sceneRevision;
   }
   m_startUsingCachedWorld = false;
 

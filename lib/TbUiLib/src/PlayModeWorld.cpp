@@ -26,10 +26,12 @@
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
 #include "mdl/EntityNode.h"
+#include "mdl/EntityNodeBase.h"
 #include "mdl/GroupNode.h"
 #include "mdl/Layer.h"
 #include "mdl/LayerNode.h"
 #include "mdl/Map.h"
+#include "mdl/Node.h"
 #include "mdl/PatchNode.h"
 #include "mdl/WorldNode.h"
 
@@ -380,7 +382,35 @@ struct NamedDestination
   vm::vec3f angles;
 };
 
+void detachEditorResources(mdl::Node& node)
+{
+  if (auto* entityNode = dynamic_cast<mdl::EntityNodeBase*>(&node))
+  {
+    auto entity = entityNode->entity();
+    entity.unsetEntityDefinitionAndModel();
+    entityNode->setEntity(std::move(entity));
+  }
+  if (auto* brushNode = dynamic_cast<mdl::BrushNode*>(&node))
+  {
+    for (auto i = size_t{0}; i < brushNode->brush().faceCount(); ++i)
+      brushNode->setFaceMaterial(i, nullptr);
+  }
+  if (auto* patchNode = dynamic_cast<mdl::PatchNode*>(&node))
+    patchNode->setMaterial(nullptr);
+  for (auto* child : node.children())
+    detachEditorResources(*child);
+}
+
 } // namespace
+
+std::unique_ptr<mdl::WorldNode> makePlayModeWorldSnapshot(const mdl::Map& map)
+{
+  auto snapshot = std::unique_ptr<mdl::WorldNode>{
+    static_cast<mdl::WorldNode*>(map.worldNode().cloneRecursively(map.worldBounds()))};
+  snapshot->disableNodeTreeUpdates();
+  detachEditorResources(*snapshot);
+  return snapshot;
+}
 
 void ScsWorldDeleter::operator()(scs_world* world) const
 {
@@ -388,6 +418,14 @@ void ScsWorldDeleter::operator()(scs_world* world) const
 }
 
 PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions& options)
+{
+  return buildPlayModeWorld(map.worldNode(), map.worldBounds(), options);
+}
+
+PlayModeWorld buildPlayModeWorld(
+  const mdl::WorldNode& worldNode,
+  const vm::bbox3d& worldBounds,
+  const PlayModeWorldOptions& options)
 {
   auto result = PlayModeWorld{};
   if (
@@ -433,9 +471,9 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
       ++result.skippedBrushCount;
     }
   };
-  const auto worldNoclip = intForKey(map.worldNode().entity(), "zhlt_noclip") != 0;
+  const auto worldNoclip = intForKey(worldNode.entity(), "zhlt_noclip") != 0;
 
-  map.worldNode().accept(kdl::overload(
+  worldNode.accept(kdl::overload(
     [](auto&& thisLambda, const mdl::WorldNode& worldNode) {
       worldNode.visitChildren(thisLambda);
     },
@@ -597,7 +635,7 @@ PlayModeWorld buildPlayModeWorld(const mdl::Map& map, const PlayModeWorldOptions
   desc.teleports = teleportDescs.data();
   desc.teleport_count = static_cast<uint32_t>(teleportDescs.size());
   const auto mapText = options.compiler == SCS_COMPILER_HLTOOLS
-                         ? serializePlayModeHltoolsMap(map)
+                         ? serializePlayModeHltoolsMap(worldNode, worldBounds)
                          : std::string{};
   desc.map_text = mapText.data();
   desc.map_text_size = mapText.size();

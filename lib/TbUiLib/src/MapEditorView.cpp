@@ -113,8 +113,9 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
   auto* layout = new QVBoxLayout{this};
   layout->setContentsMargins(6, 6, 6, 6);
   layout->addWidget(m_hSplitter);
-  auto* notifications = new TaskNotificationCenter{this};
-  connectLightmapPreviewNotifications(toolBox().lightmapPreview(), *notifications, this);
+  m_notifications = new TaskNotificationCenter{this};
+  connectLightmapPreviewNotifications(
+    toolBox().lightmapPreview(), *m_notifications, this);
   m_controller = std::make_unique<MapEditorController>(appController, document, *this);
   if (auto* browser = m_infoPanel->findChild<ModelBrowser*>())
     connect(
@@ -145,6 +146,11 @@ MapEditorView::MapEditorView(AppController& appController, MapDocument& document
     if (auto* view = qobject_cast<MapViewBase*>(focus); view && isAncestorOf(view))
       m_currentMapView = view;
   });
+}
+
+TaskNotificationCenter& MapEditorView::notifications() const
+{
+  return *m_notifications;
 }
 
 void MapEditorView::connectOutlinerWidgets()

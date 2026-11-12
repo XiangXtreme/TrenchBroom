@@ -10,7 +10,11 @@
 #include <QToolButton>
 #include <QtTest/QTest>
 
+#include "ui/AppController.h"
+#include "ui/AppControllerFixture.h"
 #include "ui/TaskNotification.h"
+#include "ui/UpdateNotifications.h"
+#include "update/Updater.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -96,6 +100,36 @@ TEST_CASE("TaskNotification")
     CHECK(host.findChild<TaskNotificationCard*>("TaskNotificationCard_quiet") == nullptr);
   }
 
+  SECTION("persistent results appear even when the task finishes quickly")
+  {
+    task.showDelayMs = 1000;
+    center.update("update", task);
+    task.state = TaskNotification::State::Succeeded;
+    task.expireAfterMs = -1;
+    center.update("update", task);
+    auto* card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_update");
+    REQUIRE(card);
+    CHECK_FALSE(card->isHidden());
+  }
+
+  SECTION("centers in the same window keep their cards separate")
+  {
+    auto child = QWidget{&host};
+    child.setGeometry(20, 20, 760, 560);
+    child.show();
+    auto childCenter = TaskNotificationCenter{&child};
+    center.update("project", task);
+    childCenter.update("map", task);
+    auto* project = host.findChild<TaskNotificationCard*>("TaskNotificationCard_project");
+    auto* map = child.findChild<TaskNotificationCard*>("TaskNotificationCard_map");
+    REQUIRE(project);
+    REQUIRE(map);
+    const auto mapBounds = QRect{child.mapTo(&host, map->pos()), map->size()};
+    CHECK_FALSE(project->geometry().intersects(mapBounds));
+    center.remove("project");
+    CHECK(map->geometry().bottom() == child.height() - 13);
+  }
+
   SECTION("failures appear immediately and persist until dismissed")
   {
     task.showDelayMs = 200;
@@ -154,5 +188,41 @@ TEST_CASE("TaskNotification")
     delete otherCenter;
     CHECK(host.findChild<TaskNotificationCard*>("TaskNotificationCard_owned") == nullptr);
   }
+}
+
+TEST_CASE("UpdateNotifications")
+{
+  auto fixture = AppControllerFixture{};
+  auto& updater = fixture.appController().updater();
+  auto host = QWidget{};
+  host.resize(800, 600);
+  host.show();
+  auto center = TaskNotificationCenter{&host};
+  updateUpdateNotification(center, updater, upd::CheckingForUpdatesState{nullptr});
+  auto* card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_update");
+  REQUIRE(card);
+  CHECK(card->isHidden());
+  auto available = upd::UpdateAvailableState{};
+  available.updateInfo.updateVersion = "2.0";
+  updateUpdateNotification(center, updater, available);
+  CHECK_FALSE(card->isHidden());
+  REQUIRE(card->findChild<QPushButton*>());
+  CHECK(card->findChild<QPushButton*>()->text() == "View update");
+
+  updateUpdateNotification(center, updater, upd::UpdateErrorState{"Network error"});
+  auto buttons = card->findChildren<QPushButton*>();
+  REQUIRE(buttons.size() == 2);
+  CHECK(buttons[1]->text() == "Retry");
+  updateUpdateNotification(center, updater, upd::IdleState{});
+  CHECK(card->isHidden());
+
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  updater.checkForUpdates(true);
+  updateUpdateNotification(center, updater, upd::CheckingForUpdatesState{nullptr});
+  card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_update");
+  REQUIRE(card);
+  CHECK_FALSE(card->isHidden());
+  updateUpdateNotification(center, updater, upd::UpToDateState{"2.0"});
+  CHECK_FALSE(card->isHidden());
 }
 } // namespace tb::ui

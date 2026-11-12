@@ -20,7 +20,6 @@
 #include "PlayModeHltoolsMap.h"
 
 #include "mdl/BrushNode.h"
-#include "mdl/Map.h"
 #include "mdl/NodeWriter.h"
 #include "mdl/PatchNode.h"
 #include "mdl/WorldNode.h"
@@ -55,10 +54,11 @@ void removeHiddenGeometry(mdl::Node& node)
 
 } // namespace
 
-std::string serializePlayModeHltoolsMap(const mdl::Map& map)
+std::string serializePlayModeHltoolsMap(
+  const mdl::WorldNode& worldNode, const vm::bbox3d& worldBounds)
 {
   auto snapshot = std::unique_ptr<mdl::WorldNode>{
-    static_cast<mdl::WorldNode*>(map.worldNode().cloneRecursively(map.worldBounds()))};
+    static_cast<mdl::WorldNode*>(worldNode.cloneRecursively(worldBounds))};
   removeHiddenGeometry(*snapshot);
   auto stream = std::ostringstream{};
   auto tasks = kdl::task_manager{0};

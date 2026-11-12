@@ -34,6 +34,7 @@ class MapWindow;
 class MapStatus;
 class ProjectSession;
 class ProjectAssetPanel;
+class TaskNotificationCenter;
 class WorkspaceToolPanel;
 
 class ProjectWindow : public QMainWindow
@@ -45,6 +46,7 @@ class ProjectWindow : public QMainWindow
   WorkspaceToolPanel* m_tools = nullptr;
   MapStatus* m_status = nullptr;
   QStatusBar* m_notifications = nullptr;
+  TaskNotificationCenter* m_taskNotifications = nullptr;
   QWidget* m_emptyWorkspace = nullptr;
   QTreeWidget* m_assets = nullptr;
   QTreeWidget* m_history = nullptr;

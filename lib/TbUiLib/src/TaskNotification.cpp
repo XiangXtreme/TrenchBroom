@@ -23,6 +23,15 @@
 namespace tb::ui
 {
 
+namespace
+{
+std::vector<TaskNotificationCenter*>& notificationCenters()
+{
+  static auto centers = std::vector<TaskNotificationCenter*>{};
+  return centers;
+}
+} // namespace
+
 class TaskNotificationCard::Impl
 {
 public:
@@ -146,13 +155,16 @@ TaskNotificationCenter::TaskNotificationCenter(QWidget* host)
   , m_impl{std::make_unique<Impl>()}
 {
   m_impl->host = host;
+  notificationCenters().push_back(this);
   host->installEventFilter(this);
 }
 
 TaskNotificationCenter::~TaskNotificationCenter()
 {
+  std::erase(notificationCenters(), this);
   for (const auto& entry : m_impl->entries)
     delete entry.second.card;
+  reposition();
 }
 
 void TaskNotificationCenter::update(
@@ -218,7 +230,7 @@ void TaskNotificationCenter::update(
     static_cast<QGraphicsOpacityEffect*>(entry.card->graphicsEffect())->setOpacity(1.0);
     if (
       notification.state == TaskNotification::State::Succeeded
-      && entry.showTimer->isActive())
+      && entry.showTimer->isActive() && notification.expireAfterMs >= 0)
     {
       remove(id);
       return;
@@ -252,7 +264,9 @@ bool TaskNotificationCenter::eventFilter(QObject* watched, QEvent* event)
 {
   if (
     watched == m_impl->host
-    && (event->type() == QEvent::Resize || event->type() == QEvent::Show))
+    && (event->type() == QEvent::Resize || event->type() == QEvent::Move
+        || event->type() == QEvent::Show || event->type() == QEvent::Hide
+        || event->type() == QEvent::ParentChange))
     reposition();
   return QObject::eventFilter(watched, event);
 }
@@ -261,19 +275,43 @@ void TaskNotificationCenter::reposition()
 {
   constexpr auto margin = 12;
   constexpr auto spacing = 8;
-  const auto width = std::max(1, std::min(360, m_impl->host->width() - 2 * margin));
-  auto y = m_impl->host->height() - margin;
-  for (auto it = m_impl->order.rbegin(); it != m_impl->order.rend(); ++it)
+  auto occupied = std::map<QWidget*, std::vector<QRect>>{};
+  for (auto* center : notificationCenters())
   {
-    auto* card = m_impl->entries.at(*it).card;
-    if (card->isHidden())
+    auto* host = center->m_impl->host;
+    if (!host->isVisible())
       continue;
-    card->setFixedWidth(width);
-    card->adjustSize();
-    y -= card->height();
-    card->move(std::max(0, m_impl->host->width() - width - margin), std::max(0, y));
-    card->raise();
-    y -= spacing;
+    auto* window = host->window();
+    const auto origin = host->mapTo(window, QPoint{});
+    const auto width = std::max(1, std::min(360, host->width() - 2 * margin));
+    const auto x = std::max(0, host->width() - width - margin);
+    auto y = host->height() - margin;
+    auto& windowOccupied = occupied[window];
+    for (auto it = center->m_impl->order.rbegin(); it != center->m_impl->order.rend();
+         ++it)
+    {
+      auto* card = center->m_impl->entries.at(*it).card;
+      if (card->isHidden())
+        continue;
+      card->setFixedWidth(width);
+      card->adjustSize();
+      y -= card->height();
+      auto bounds = QRect{origin + QPoint{x, y}, card->size()};
+      for (const auto& other : windowOccupied)
+      {
+        if (bounds.intersects(other))
+        {
+          y = other.top() - origin.y() - spacing - card->height();
+          bounds.moveTop(origin.y() + y);
+        }
+      }
+      y = std::max(0, y);
+      card->move(x, y);
+      card->raise();
+      bounds.moveTop(origin.y() + y);
+      windowOccupied.push_back(bounds);
+      y -= spacing;
+    }
   }
 }
 } // namespace tb::ui

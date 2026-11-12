@@ -33,6 +33,7 @@ class MapViewToolBox;
 class PythonConsole;
 class Splitter;
 class SwitchableMapViewContainer;
+class TaskNotificationCenter;
 class WorkbenchSurface;
 
 /**
@@ -59,6 +60,7 @@ private:
   WorkbenchSurface* m_inspectorSurface = nullptr;
 
   SwitchableMapViewContainer* m_mapView = nullptr;
+  TaskNotificationCenter* m_notifications = nullptr;
   // Layout changes destroy viewports; a cleared pointer falls back to the new layout.
   QPointer<MapViewBase> m_currentMapView;
   QPointer<InfoPanel> m_infoPanel;
@@ -81,6 +83,7 @@ public:
   MapView3D* currentOrFirstVisible3DMapView() const;
   MapView3D& activate3DMapView();
   MapViewToolBox& toolBox() const;
+  TaskNotificationCenter& notifications() const;
 
   InfoPanel* infoPanel() const;
   /** The host takes QWidget ownership and must destroy the panel before the document. */

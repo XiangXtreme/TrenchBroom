@@ -21,6 +21,7 @@
 
 #include <QElapsedTimer>
 
+#include "base/NotifierConnection.h"
 #include "cs/scs.h"
 #include "ui/PlayModeSound.h"
 #include "ui/PlayModeTimeline.h"
@@ -87,7 +88,10 @@ private:
   std::unique_ptr<scs_context, ContextDeleter> m_context;
   PlayModeWorld m_world;
   const mdl::Map* m_worldMap = nullptr;
+  int m_worldMapIdentity = 0;
   std::optional<size_t> m_worldModificationCount;
+  size_t m_sceneRevision = 0;
+  size_t m_worldSceneRevision = 0;
   int m_worldCompiler = -1;
   int m_worldClipType = -1;
   bool m_active = false;
@@ -130,6 +134,12 @@ private:
   bool m_starting = false;
   bool m_startUsingCachedWorld = false;
   bool m_startFromCamera = false;
+  bool m_startCancelled = false;
+  int m_startMapIdentity = 0;
+  size_t m_startModificationCount = 0;
+  size_t m_startSceneRevision = 0;
+  std::string m_startError;
+  NotifierConnection m_startConnections;
 
 public:
   PlayModeController(MapDocument& document, gl::PerspectiveCamera& camera);
@@ -145,9 +155,12 @@ public:
    * succeeded and is invoked on the UI thread.
    */
   void start(bool fromCamera, std::function<void(bool)> completion);
+  void cancelStart();
   void stop();
 
   bool starting() const;
+  bool startCancelled() const;
+  const std::string& startError() const;
 
   void keyDown(const QKeyEvent& event);
   void keyUp(const QKeyEvent& event);

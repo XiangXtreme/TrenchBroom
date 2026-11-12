@@ -9,6 +9,8 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileDialog>
 #include <QImage>
 #include <QInputDialog>
@@ -18,6 +20,7 @@
 #include <QListWidget>
 #include <QMediaPlayer>
 #include <QMenu>
+#include <QMimeData>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -43,6 +46,7 @@
 #include "ui/CreateTerrainMaterialDialog.h"
 #include "ui/ModelThumbnail.h"
 #include "ui/QPathUtils.h"
+#include "ui/TaskNotification.h"
 #include "ui/TerrainMaterial.h"
 
 #include <algorithm>
@@ -786,6 +790,84 @@ TEST_CASE("AssetInspection")
     CHECK_FALSE(convert->isEnabled());
   }
 
+  SECTION("import reports conversion failures with an actionable notification")
+  {
+    auto source = QTemporaryDir{};
+    auto destination = QTemporaryDir{};
+    REQUIRE(source.isValid());
+    REQUIRE(destination.isValid());
+    const auto path = pathFromQString(source.path()) / "broken.png";
+    write(path, {1, 2, 3});
+    auto library = require(
+      project::AssetLibrary::create(pathFromQString(destination.path()), "Library"));
+    auto browser = AssetLibraryWindow{destination.path(), false};
+    auto mime = QMimeData{};
+    mime.setUrls({QUrl::fromLocalFile(pathAsQString(path))});
+    auto enter = QDragEnterEvent{
+      QPoint{10, 10}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&browser, &enter);
+    REQUIRE(enter.isAccepted());
+    auto drop =
+      QDropEvent{QPointF{10, 10}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&browser, &drop);
+    REQUIRE(drop.isAccepted());
+    auto* timer = browser.findChild<QTimer*>("AssetLibraryImportTimer");
+    REQUIRE(timer);
+    REQUIRE(timer->isActive());
+    QTRY_VERIFY(!timer->isActive());
+    auto* card =
+      browser.findChild<TaskNotificationCard*>("TaskNotificationCard_asset-import");
+    REQUIRE(card);
+    CHECK_FALSE(card->isHidden());
+    const auto buttons = card->findChildren<QPushButton*>();
+    CHECK(std::ranges::any_of(buttons, [](const auto* button) {
+      return !button->isHidden() && button->text() == "View details";
+    }));
+    CHECK(std::ranges::any_of(buttons, [](const auto* button) {
+      return !button->isHidden() && button->text() == "Retry failed";
+    }));
+  }
+
+  SECTION("cancelling an import keeps completed files and stops the queue")
+  {
+    auto source = QTemporaryDir{};
+    auto destination = QTemporaryDir{};
+    REQUIRE(source.isValid());
+    REQUIRE(destination.isValid());
+    const auto first = pathFromQString(source.path()) / "one.png";
+    const auto second = pathFromQString(source.path()) / "two.png";
+    write(first, png(Qt::red));
+    write(second, png(Qt::blue));
+    auto library = require(
+      project::AssetLibrary::create(pathFromQString(destination.path()), "Library"));
+    auto browser = AssetLibraryWindow{destination.path(), false};
+    auto mime = QMimeData{};
+    mime.setUrls(
+      {QUrl::fromLocalFile(pathAsQString(first)),
+       QUrl::fromLocalFile(pathAsQString(second))});
+    auto enter = QDragEnterEvent{
+      QPoint{10, 10}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&browser, &enter);
+    REQUIRE(enter.isAccepted());
+    auto drop =
+      QDropEvent{QPointF{10, 10}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier};
+    QApplication::sendEvent(&browser, &drop);
+    REQUIRE(drop.isAccepted());
+    auto* timer = browser.findChild<QTimer*>("AssetLibraryImportTimer");
+    REQUIRE(timer);
+    REQUIRE(timer->isActive());
+    REQUIRE(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    auto* card =
+      browser.findChild<TaskNotificationCard*>("TaskNotificationCard_asset-import");
+    REQUIRE(card);
+    auto* cancel = card->findChild<QPushButton*>();
+    REQUIRE(cancel);
+    CHECK(cancel->text() == "Cancel");
+    cancel->click();
+    CHECK_FALSE(timer->isActive());
+    CHECK(require(library->assets()).size() == 1u);
+  }
+
   SECTION("switching libraries clears failed conversion retries")
   {
     auto first = QTemporaryDir{};
@@ -801,19 +883,19 @@ TEST_CASE("AssetInspection")
       require(project::AssetLibrary::create(pathFromQString(second.path()), "Second"));
     auto browser = AssetLibraryWindow{first.path(), false};
     auto* convert = browser.findChild<QPushButton*>("AssetLibraryConvert");
-    auto* retry = browser.findChild<QPushButton*>("AssetLibraryRetryFailed");
     REQUIRE(convert);
-    REQUIRE(retry);
-    auto closeReport = QTimer{};
-    QObject::connect(&closeReport, &QTimer::timeout, &browser, [&]() {
-      for (auto* dialog : browser.findChildren<QDialog*>())
-        if (dialog->windowTitle() == "Asset operation results")
-          dialog->reject();
-    });
-    closeReport.start(10);
     convert->click();
-    QTRY_VERIFY(!retry->isHidden());
-    closeReport.stop();
+    auto card = QPointer<TaskNotificationCard>{};
+    QTRY_VERIFY(
+      (card = browser.findChild<TaskNotificationCard*>(
+         "TaskNotificationCard_asset-conversion"))
+      && !card->isHidden());
+    auto* retry = static_cast<QPushButton*>(nullptr);
+    for (auto* button : card->findChildren<QPushButton*>())
+      if (button->text() == "Retry failed")
+        retry = button;
+    REQUIRE(retry);
+    CHECK_FALSE(browser.findChild<QDialog*>(QString{}, Qt::FindDirectChildrenOnly));
 
     QTimer::singleShot(0, &browser, [&]() {
       auto* dialog = browser.findChild<QFileDialog*>();
@@ -841,7 +923,7 @@ TEST_CASE("AssetInspection")
     (*choose)->trigger();
     CHECK_FALSE(timer->isActive());
     CHECK(browser.libraryId() == other->info().id);
-    CHECK(retry->isHidden());
+    CHECK((!card || card->isHidden()));
     CHECK_FALSE(convert->isEnabled());
   }
 

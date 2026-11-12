@@ -330,6 +330,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UvEditor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UvView.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UpdateConfig.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/UpdateNotifications.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UpdatePreferencePane.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/UpdateVersion.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/VariableStoreModel.cpp
@@ -627,6 +628,7 @@ target_sources(TbUiLib
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UvEditor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UvView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UpdateConfig.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UpdateNotifications.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UpdatePreferencePane.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/UpdateVersion.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui/VariableStoreModel.h

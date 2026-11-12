@@ -2056,9 +2056,8 @@ TEST_CASE("ProjectWindow")
     soundKind->setCurrentIndex(0);
     QApplication::processEvents();
     CHECK(visibleIds().size() == 2);
-    auto* retry = libraryWindow.findChild<QPushButton*>("AssetLibraryRetryFailed");
-    REQUIRE(retry);
-    CHECK(retry->isHidden());
+    CHECK_FALSE(libraryWindow.findChild<TaskNotificationCard*>(
+      "TaskNotificationCard_asset-conversion"));
     CHECK(
       grid->currentItem()
         ->data(AssetLibraryItemDelegate::AssetIdRole)
@@ -2819,6 +2818,36 @@ TEST_CASE("ProjectWindow")
 
     CHECK_FALSE(session->modified());
     CHECK_FALSE(std::filesystem::exists(projectRecoveryPath(session->path())));
+  }
+
+  SECTION("auto-save failures remain actionable until recovery succeeds")
+  {
+    auto input = project::AssetImport{};
+    input.type = project::AssetType::Sound;
+    input.virtualPath = "sound/recovery.wav";
+    input.displayName = "Recovery";
+    input.original = {9};
+    input.compatible = {9};
+    (void)require(session->importAsset(input));
+
+    const auto folder = projectRecoveryDirectory(session->path());
+    auto obstruction = QFile{pathAsQString(folder)};
+    REQUIRE(obstruction.open(QIODevice::WriteOnly));
+    obstruction.close();
+    auto* timer = window.findChild<QTimer*>("ProjectAutosaveTimer");
+    REQUIRE(timer);
+    QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+    auto card = QPointer<TaskNotificationCard>{
+      window.findChild<TaskNotificationCard*>("TaskNotificationCard_project-autosave")};
+    REQUIRE(card);
+    CHECK_FALSE(card->isHidden());
+    auto* retry = card->findChild<QPushButton*>();
+    REQUIRE(retry);
+    CHECK(retry->text() == "Retry");
+    REQUIRE(obstruction.remove());
+    retry->click();
+    CHECK((!card || card->isHidden()));
+    CHECK(std::filesystem::exists(projectRecoveryPath(session->path())));
   }
 
   SECTION("terrain materials appear and preview in both catalog sources")

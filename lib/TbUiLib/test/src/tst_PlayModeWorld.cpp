@@ -17,10 +17,17 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <QScopeGuard>
+#include <QtTest/QTest>
+
+#include "base/PreferenceManager.h"
 #include "cs/scs.h"
+#include "gl/Material.h"
+#include "gl/PerspectiveCamera.h"
 #include "mdl/BrushBuilder.h"
 #include "mdl/BrushNode.h"
 #include "mdl/Entity.h"
+#include "mdl/EntityDefinition.h"
 #include "mdl/EntityNode.h"
 #include "mdl/EntityProperties.h"
 #include "mdl/Map.h"
@@ -28,7 +35,12 @@
 #include "mdl/Map_NodeVisibility.h"
 #include "mdl/Map_Nodes.h"
 #include "mdl/WorldNode.h"
+#include "prefs/Preferences.h"
+#include "ui/AppControllerFixture.h"
 #include "ui/CatchConfig.h"
+#include "ui/MapDocument.h"
+#include "ui/MapDocumentFixture.h"
+#include "ui/PlayModeController.h"
 #include "ui/PlayModeTimeline.h"
 #include "ui/PlayModeWorld.h"
 
@@ -132,6 +144,48 @@ TEST_CASE("buildPlayModeWorld")
     scs_get_state(context.get(), &state);
     CHECK((state.flags & SCS_FL_ONGROUND) != 0);
     CHECK(state.origin[2] == vm::approx{36.03125f, 0.001f});
+  }
+
+  SECTION("a detached world keeps its collision after the map changes")
+  {
+    const auto bounds = map.worldBounds();
+    auto snapshot = makePlayModeWorldSnapshot(map);
+    mdl::addNodes(
+      map,
+      {{&mdl::parentForNodes(map),
+        {createCuboid(map, vm::bbox3d{{100, -64, 0}, {116, 64, 128}}, "wall")}}});
+
+    const auto frozenWorld = buildPlayModeWorld(*snapshot, bounds);
+    const auto liveWorld = buildPlayModeWorld(map);
+    REQUIRE(frozenWorld.world);
+    REQUIRE(liveWorld.world);
+    CHECK(frozenWorld.worldBrushCount == 1u);
+    CHECK(liveWorld.worldBrushCount == 2u);
+  }
+
+  SECTION("background snapshots do not retain editor-owned materials or definitions")
+  {
+    auto material = gl::Material{"wall", nullptr};
+    auto definition = mdl::EntityDefinition{};
+    auto* entity =
+      createBrushEntity(map, "func_wall", vm::bbox3d{{100, -64, 0}, {116, 64, 128}});
+    entity->setDefinition(&definition);
+    auto* brush = static_cast<mdl::BrushNode*>(entity->children().front());
+    brush->setFaceMaterial(0, &material);
+    const auto clear = qScopeGuard([&] {
+      entity->setDefinition(nullptr);
+      brush->setFaceMaterial(0, nullptr);
+    });
+    REQUIRE(material.usageCount() == 1u);
+    REQUIRE(definition.usageCount() == 1u);
+    auto snapshot = makePlayModeWorldSnapshot(map);
+    CHECK(material.usageCount() == 1u);
+    CHECK(definition.usageCount() == 1u);
+    entity->setDefinition(nullptr);
+    brush->setFaceMaterial(0, nullptr);
+    CHECK(material.usageCount() == 0u);
+    CHECK(definition.usageCount() == 0u);
+    REQUIRE(buildPlayModeWorld(*snapshot, map.worldBounds()).world);
   }
 
   SECTION("CLIP blocks the player but not hull 0, ORIGIN and HINT brushes vanish")
@@ -510,7 +564,8 @@ TEST_CASE("buildPlayModeWorld hltools")
     mdl::addNodes(map, {{&mdl::parentForNodes(map), {hidden}}});
     mdl::hideNodes(map, {hidden});
     createBrushEntity(map, "func_wall", vm::bbox3d{{150, -64, 0}, {166, 64, 128}});
-    const auto world = buildPlayModeWorld(map, options);
+    auto snapshot = makePlayModeWorldSnapshot(map);
+    const auto world = buildPlayModeWorld(*snapshot, map.worldBounds(), options);
     INFO(world.error);
     REQUIRE(world.world);
     CHECK(
@@ -584,6 +639,55 @@ TEST_CASE("buildPlayModeWorld hltools")
     scs_get_state(context.get(), &state);
     CHECK(state.teleport_count == 1);
     CHECK(state.origin[0] == 300.0f);
+  }
+}
+
+TEST_CASE("PlayModeController background startup")
+{
+  auto app = AppControllerFixture{};
+  auto fixture = MapDocumentFixture{};
+  auto& document = fixture.create();
+  auto camera = gl::PerspectiveCamera{};
+  const auto compiler = pref(Preferences::PlayModeCompiler);
+  const auto restore =
+    qScopeGuard([&] { setPref(Preferences::PlayModeCompiler, compiler); });
+  setPref(Preferences::PlayModeCompiler, Preferences::PlayModeCompilerVhlt);
+  auto& map = document.map();
+  mdl::addNodes(
+    map,
+    {{&mdl::parentForNodes(map),
+      {createCuboid(map, vm::bbox3d{{0, 0, 0}, {32, 32, 32}}, "wall")}}});
+  auto controller = PlayModeController{document, camera};
+  auto completed = false;
+  auto started = false;
+  controller.start(true, [&](const bool success) {
+    completed = true;
+    started = success;
+  });
+  REQUIRE(controller.starting());
+
+  SECTION("cancelled work cannot enter Play mode")
+  {
+    controller.cancelStart();
+    REQUIRE(QTest::qWaitFor([&] { return completed; }, 10000));
+    CHECK_FALSE(started);
+    CHECK(controller.startCancelled());
+    CHECK_FALSE(controller.active());
+  }
+
+  SECTION("map changes invalidate the snapshot even without a modification count change")
+  {
+    const auto modifications = map.modificationCount();
+    map.undoCommand();
+    mdl::addNodes(
+      map,
+      {{&mdl::parentForNodes(map),
+        {createCuboid(map, vm::bbox3d{{64, 0, 0}, {96, 32, 32}}, "wall")}}});
+    REQUIRE(map.modificationCount() == modifications);
+    REQUIRE(QTest::qWaitFor([&] { return completed; }, 10000));
+    CHECK_FALSE(started);
+    CHECK(controller.startError() == "The map changed while collision was being built");
+    CHECK_FALSE(controller.active());
   }
 }
 

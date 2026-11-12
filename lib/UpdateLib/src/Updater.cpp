@@ -23,6 +23,8 @@
 #include "update/UpdateDialog.h"
 #include "update/UpdateIndicator.h"
 
+#include <variant>
+
 namespace upd
 {
 
@@ -32,22 +34,39 @@ Updater::Updater(
   , m_httpClient{httpClient}
   , m_updateController{new UpdateController{m_httpClient, std::move(config), this}}
 {
+  connect(
+    m_updateController, &UpdateController::stateChanged, this, [this](const auto& state) {
+      emit stateChanged(state);
+      if (!std::holds_alternative<CheckingForUpdatesState>(state))
+        m_userInitiatedCheck = false;
+    });
 }
 
 void Updater::showUpdateDialog()
 {
-  auto dialog = new UpdateDialog(*m_updateController);
-  dialog->exec();
+  auto dialog = UpdateDialog{*m_updateController};
+  dialog.exec();
 }
 
-void Updater::checkForUpdates()
+void Updater::checkForUpdates(const bool userInitiated)
 {
+  m_userInitiatedCheck = userInitiated;
   m_updateController->checkForUpdates();
+}
+
+bool Updater::userInitiatedCheck() const
+{
+  return m_userInitiatedCheck;
 }
 
 void Updater::reset()
 {
   m_updateController->reset();
+}
+
+const UpdateControllerState& Updater::state() const
+{
+  return m_updateController->state();
 }
 
 QWidget* Updater::createUpdateIndicator(QWidget* parent)

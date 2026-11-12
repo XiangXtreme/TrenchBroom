@@ -21,7 +21,9 @@ along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QStandardPaths>
 #include <QtTest/QSignalSpy>
+#include <QtTest/QTest>
 
 #include "gl/PerspectiveCamera.h"
 #include "mdl/CompilationProfile.h"
@@ -34,6 +36,7 @@ along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
 #include "ui/CompilationVariables.h"
 #include "ui/MapDocument.h"
 #include "ui/MapDocumentFixture.h"
+#include "ui/TaskNotification.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -116,6 +119,52 @@ TEST_CASE("CompilationDialog")
       REQUIRE(profileManager->selectedProfile() != nullptr);
       CHECK(profileManager->selectedProfile()->name == "profile 1");
     }
+  }
+
+  SECTION("a hidden compilation continues and can be stopped from its notification")
+  {
+    const auto cmake = QStandardPaths::findExecutable("cmake");
+    REQUIRE_FALSE(cmake.isEmpty());
+    auto fixture = MapDocumentFixture{};
+    auto& document = fixture.create(fixtureConfigWithCompilationProfiles(
+      {{"background",
+        "",
+        {mdl::CompilationRunTool{true, cmake.toStdString(), "-E sleep 10", true}}}}));
+    auto camera = gl::PerspectiveCamera{};
+    auto host = QWidget{};
+    host.resize(800, 600);
+    host.show();
+    auto center = TaskNotificationCenter{&host};
+    auto dialog = CompilationDialog{appController, document, camera, &host, false};
+    dialog.setNotificationCenter(center);
+    dialog.show();
+    dialog.runSelectedProfile();
+    REQUIRE(dialog.isRunning());
+    dialog.close();
+    CHECK_FALSE(dialog.isVisible());
+    CHECK(dialog.isRunning());
+    auto* card =
+      host.findChild<TaskNotificationCard*>("TaskNotificationCard_compilation");
+    REQUIRE(card);
+    CHECK_FALSE(card->isHidden());
+    auto findButton = [&card](const QString& text) {
+      for (auto* button : card->findChildren<QPushButton*>())
+        if (button->text() == text && !button->isHidden())
+          return button;
+      return static_cast<QPushButton*>(nullptr);
+    };
+    auto* viewLog = findButton("View log");
+    REQUIRE(viewLog);
+    viewLog->click();
+    CHECK(dialog.isVisible());
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    dialog.close();
+    card = host.findChild<TaskNotificationCard*>("TaskNotificationCard_compilation");
+    REQUIRE(card);
+    auto* stop = findButton("Stop");
+    REQUIRE(stop);
+    stop->click();
+    REQUIRE(QTest::qWaitFor([&] { return !dialog.isRunning(); }, 5000));
   }
 
   SECTION("selectFirstProfile")

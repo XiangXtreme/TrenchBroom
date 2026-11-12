@@ -21,6 +21,7 @@
 
 #include <QDialog>
 #include <QElapsedTimer>
+#include <QPointer>
 
 #include "ui/CompilationRun.h"
 
@@ -51,6 +52,7 @@ class AppController;
 class CompilationProfileManager;
 class MapDocument;
 class ProjectSession;
+class TaskNotificationCenter;
 
 class CompilationDialog : public QDialog
 {
@@ -83,6 +85,7 @@ private:
   bool m_simulation = false;
   QTextEdit* m_output = nullptr;
   CompilationRun m_run;
+  QPointer<TaskNotificationCenter> m_notifications;
   // One frozen input folder per run; kept alive until the dialog closes so a finished
   // run's output directory can still be inspected.
   std::vector<std::unique_ptr<QTemporaryDir>> m_snapshots;
@@ -94,6 +97,7 @@ public:
     const gl::PerspectiveCamera& camera,
     QWidget* parent = nullptr,
     bool persistProfiles = true);
+  ~CompilationDialog() override;
 
   bool selectProfile(const mdl::CompilationProfile& profile);
   void selectFirstProfile();
@@ -102,6 +106,8 @@ public:
   bool runProfileByName(const std::string& profileName);
   bool isRunning() const;
   QString outputText() const;
+  void setNotificationCenter(TaskNotificationCenter& notifications);
+  bool closeForDocument();
 
 signals:
   void compilationProfileStarted(const std::string& profileName);
@@ -110,10 +116,13 @@ private:
   void createGui();
 
   void keyPressEvent(QKeyEvent* event) override;
+  void showEvent(QShowEvent* event) override;
+  void hideEvent(QHideEvent* event) override;
 
   void updateCompileButtons();
   void updatePlan();
   void updateRunStatus();
+  void updateTaskNotification();
   void saveLog();
   void startCompilation(bool test);
   Result<void> runProfile(const mdl::CompilationProfile& profile, bool test);

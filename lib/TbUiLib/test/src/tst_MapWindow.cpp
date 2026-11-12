@@ -99,6 +99,7 @@
 #include "ui/MoveObjectsTool.h"
 #include "ui/PieMenu.h"
 #include "ui/PlayModeFullScreen.h"
+#include "ui/PlayModeRawMouse.h"
 #include "ui/PythonConsole.h"
 #include "ui/QKeySequenceUtils.h"
 #include "ui/QPathUtils.h"
@@ -111,6 +112,7 @@
 #include "ui/outliner/OutlinerTreeWidget.h"
 #include "ui/python/PythonScripting.h"
 
+#include <array>
 #include <utility>
 
 #include <catch2/catch_test_macros.hpp>
@@ -1899,7 +1901,28 @@ TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
   REQUIRE(view != nullptr);
   REQUIRE(view->isVisible());
   QCursor::setPos(view->mapToGlobal(view->rect().center()));
+  const auto hwnd = reinterpret_cast<HWND>(window.winId());
+  const auto foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+  const auto testThread = GetCurrentThreadId();
+  const auto attached = foregroundThread != 0 && foregroundThread != testThread
+                        && AttachThreadInput(testThread, foregroundThread, TRUE);
+  BringWindowToTop(hwnd);
+  SetForegroundWindow(hwnd);
+  if (attached)
+    AttachThreadInput(testThread, foregroundThread, FALSE);
+  auto click = std::array<INPUT, 2>{};
+  click[0].type = INPUT_MOUSE;
+  click[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+  click[1].type = INPUT_MOUSE;
+  click[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+  REQUIRE(SendInput(UINT(click.size()), click.data(), sizeof(INPUT)) == click.size());
+  REQUIRE(QTest::qWaitFor([&] { return GetForegroundWindow() == hwnd; }, 3000));
   QTest::mouseClick(view, Qt::LeftButton);
+
+  auto inactiveWindow = QWidget{};
+  auto inactiveMouse = PlayModeRawMouse{[](double, double, double) {}};
+  CHECK(inactiveMouse.start(inactiveWindow, true) == PlayModeRawMouse::Backend::None);
+  CHECK_FALSE(inactiveMouse.confinesPointer());
 
   for (const auto [raw, fullScreen] :
        {std::pair{true, false},
@@ -1929,7 +1952,6 @@ TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
         CHECK(view->size() == window.size());
       }
 
-      const auto hwnd = reinterpret_cast<HWND>(window.winId());
       const auto hiddenCursor = GetCursor();
       CHECK(QWidget::mouseGrabber() == view);
       CHECK(GetCapture() == hwnd);
@@ -1964,10 +1986,14 @@ TEST_CASE("MapView3D native play mode mouse capture", "[desktop]")
           CHECK(QWidget::mouseGrabber() == view);
           CHECK(GetCursor() == hiddenCursor);
           const auto cursorInView = view->mapFromGlobal(QCursor::pos());
+          auto clip = RECT{};
+          REQUIRE(GetClipCursor(&clip));
           INFO(
             "view " << view->width() << "x" << view->height() << ", cursor "
                     << cursorInView.x() << "," << cursorInView.y() << ", scale "
-                    << view->devicePixelRatioF());
+                    << view->devicePixelRatioF() << ", foreground "
+                    << (GetForegroundWindow() == hwnd) << ", clip " << clip.left << ","
+                    << clip.top << "-" << clip.right << "," << clip.bottom);
           CHECK(view->rect().contains(view->mapFromGlobal(QCursor::pos())));
         }
       }

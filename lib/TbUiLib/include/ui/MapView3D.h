@@ -21,6 +21,7 @@
 
 #include <QImage>
 #include <QPointF>
+#include <QPointer>
 
 #include "base/NotifierConnection.h"
 #include "ui/MapViewBase.h"
@@ -30,7 +31,6 @@
 #include <vector>
 
 class QKeyEvent;
-class QProgressDialog;
 
 namespace tb
 {
@@ -50,6 +50,7 @@ class FlyModeHelper;
 class PlayModeController;
 class PlayModeFullScreen;
 class PlayModeRawMouse;
+class TaskNotificationCenter;
 
 class MapView3D : public MapViewBase
 {
@@ -62,7 +63,8 @@ private:
   std::unique_ptr<PlayModeFullScreen> m_playModeFullScreen;
   std::optional<QPointF> m_terrainCursorPosition;
   bool m_changingPlayPresentation = false;
-  QProgressDialog* m_playModeBuildProgress = nullptr;
+  QPointer<TaskNotificationCenter> m_playNotifications;
+  QString m_playNotificationId;
   bool m_ignoreCameraChangeEvents = false;
 
   // Play mode mouse capture

@@ -62,6 +62,8 @@
 #include "ui/QPathUtils.h"
 #include "ui/QStyleUtils.h"
 #include "ui/RecentDocuments.h"
+#include "ui/TaskNotification.h"
+#include "ui/UpdateNotifications.h"
 #include "ui/WorkspaceToolPanel.h"
 
 #include <fmt/ranges.h>
@@ -201,6 +203,8 @@ ProjectWindow::ProjectWindow(AppController& app, std::shared_ptr<ProjectSession>
   history->addAction(tr("Restore Version"), this, &ProjectWindow::restoreCheckpoint);
 
   auto* body = new QWidget{this};
+  m_taskNotifications = new TaskNotificationCenter{body};
+  connectUpdateNotifications(*m_taskNotifications, m_appController.updater());
   auto* layout = new QVBoxLayout{body};
   layout->setContentsMargins(6, 4, 6, 4);
   layout->setSpacing(4);
@@ -962,6 +966,7 @@ bool ProjectWindow::save()
   if (saved)
   {
     discardProjectRecovery(m_session->path());
+    m_taskNotifications->remove(QStringLiteral("project-autosave"));
   }
   return saved;
 }
@@ -976,11 +981,16 @@ void ProjectWindow::autosaveProject()
   if (const auto result = writeProjectRecovery(*m_session, m_session->path());
       result.is_error())
   {
-    m_notifications->showMessage(
-      tr("Auto-save failed: %1")
-        .arg(QString::fromStdString(std::get<Error>(result.error()).msg)),
-      8000);
+    auto notification = TaskNotification{};
+    notification.state = TaskNotification::State::Failed;
+    notification.title = tr("Project auto-save failed");
+    notification.detail = QString::fromStdString(std::get<Error>(result.error()).msg);
+    notification.dismissible = true;
+    notification.actions.push_back({tr("Retry"), [this] { autosaveProject(); }});
+    m_taskNotifications->update(QStringLiteral("project-autosave"), notification);
   }
+  else
+    m_taskNotifications->remove(QStringLiteral("project-autosave"));
 }
 
 Result<bool> ProjectWindow::prepareImport(

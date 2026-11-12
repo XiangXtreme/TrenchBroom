@@ -25,7 +25,6 @@
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
-#include <QProgressDialog>
 #include <QTimer>
 #include <QWheelEvent>
 
@@ -72,6 +71,7 @@
 #include "ui/FaceToolController.h"
 #include "ui/FlyModeHelper.h"
 #include "ui/MapDocument.h"
+#include "ui/MapEditorView.h"
 #include "ui/MapViewToolBox.h"
 #include "ui/MoveObjectsToolController.h"
 #include "ui/PathToolController.h"
@@ -85,6 +85,7 @@
 #include "ui/SetBrushFaceAttributesTool.h"
 #include "ui/ShearToolController.h"
 #include "ui/SweepToolController.h"
+#include "ui/TaskNotification.h"
 #include "ui/TerrainInspector.h"
 #include "ui/TerrainPreviewRenderer.h"
 #include "ui/TerrainTool.h"
@@ -131,6 +132,8 @@ MapView3D::MapView3D(
 MapView3D::~MapView3D()
 {
   stopPlayMode();
+  if (m_playNotifications)
+    m_playNotifications->remove(m_playNotificationId);
 }
 
 QImage MapView3D::grabMapThumbnailFramebuffer()
@@ -187,82 +190,136 @@ void MapView3D::startPlayMode(const bool fromCamera)
   cancelMouseDrag();
   m_toolBox.entityMotionPreview().setSuspended(true);
 
-  m_playModeBuildProgress = new QProgressDialog{this};
-  m_playModeBuildProgress->setWindowTitle(tr("Play Mode"));
-  m_playModeBuildProgress->setLabelText(tr("Compiling collision hulls..."));
-  m_playModeBuildProgress->setRange(0, 0);
-  m_playModeBuildProgress->setCancelButton(nullptr);
-  m_playModeBuildProgress->setWindowModality(Qt::WindowModal);
-  m_playModeBuildProgress->setMinimumDuration(0);
-  m_playModeBuildProgress->show();
-  m_playModeBuildProgress->raise();
-  QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-
-  m_playMode->start(fromCamera, [this](const bool started) {
-    if (m_playModeBuildProgress)
+  for (auto* parent = parentWidget(); parent; parent = parent->parentWidget())
+    if (auto* editor = qobject_cast<MapEditorView*>(parent))
     {
-      m_playModeBuildProgress->close();
-      m_playModeBuildProgress->deleteLater();
-      m_playModeBuildProgress = nullptr;
-    }
-    if (!started)
-    {
-      m_toolBox.entityMotionPreview().setSuspended(false);
-      return;
-    }
-
-    const auto changingPresentation = kdl::set_temp{m_changingPlayPresentation, true};
-    if (pref(Preferences::PlayModeFullScreen))
-    {
-      m_playModeFullScreen->enter(*this);
-    }
-    // Let the modal build dialog return native focus and settle any full-screen
-    // resizing before Raw Input confines the pointer to this widget's rectangle.
-    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-
-    m_mouseTrackingBeforePlay = hasMouseTracking();
-    setMouseTracking(true);
-    setCursor(Qt::BlankCursor);
-    setFocus(Qt::OtherFocusReason);
-
-    const auto raw = pref(Preferences::PlayModeRawInput);
-    const auto backend = m_rawMouse->start(*this, raw);
-    m_warpCursor = true;
-    // Windows ClipCursor only confines coordinates. Capture the events and cursor
-    // shape too, so fast motion and widget cursor updates cannot reveal the pointer.
-    m_grabbedMouse =
-      !m_rawMouse->confinesPointer() || QGuiApplication::platformName() == "windows";
-    if (m_grabbedMouse)
-    {
-      grabMouse(Qt::BlankCursor);
-    }
-
-    const auto motion = std::string{raw ? "raw" : "accelerated"};
-    const auto confined = m_rawMouse->confinesPointer() ? "" : ", not confined";
-    switch (backend)
-    {
-    case PlayModeRawMouse::Backend::Wayland:
-      m_playMode->setInputDescription(motion + ", Wayland locked pointer");
-      break;
-    case PlayModeRawMouse::Backend::XInput2:
-      m_playMode->setInputDescription(motion + ", XInput2" + confined);
-      break;
-    case PlayModeRawMouse::Backend::RawInput:
-      m_playMode->setInputDescription(motion + ", Raw Input" + confined);
-      break;
-    case PlayModeRawMouse::Backend::None:
-      m_playMode->setInputDescription(
-        std::string{"cursor warping (accelerated)"}
-        + (m_rawMouse->confinesPointer() ? ", confined" : ""));
+      m_playNotifications = &editor->notifications();
       break;
     }
+  m_playNotificationId =
+    QStringLiteral("play-%1").arg(reinterpret_cast<quintptr>(this), 0, 16);
+  if (m_playNotifications)
+  {
+    auto notification = TaskNotification{};
+    notification.title = tr("Building Play mode collision");
+    notification.progress = -1;
+    notification.showDelayMs = 500;
+    notification.actions.push_back({tr("Cancel"), [this] { stopPlayMode(); }});
+    m_playNotifications->update(m_playNotificationId, notification);
+  }
 
-    m_wheelAccumulator = 0;
-    m_lastPlayMousePos = QCursor::pos() - mapToGlobal(QPoint{0, 0});
-    m_awaitingCursorWarp = false;
-    recenterPlayCursor();
-    update();
-  });
+  const auto startupWindow = QPointer<QWidget>{window()};
+  const auto watchActivation = startupWindow && startupWindow->isActiveWindow();
+  m_playMode->start(
+    fromCamera, [this, fromCamera, startupWindow, watchActivation](const bool started) {
+      if (!started)
+      {
+        m_toolBox.entityMotionPreview().setSuspended(false);
+        if (m_playNotifications)
+        {
+          auto notification = TaskNotification{};
+          notification.state = m_playMode->startCancelled()
+                                 ? TaskNotification::State::Succeeded
+                                 : TaskNotification::State::Failed;
+          notification.title = m_playMode->startCancelled()
+                                 ? tr("Play mode cancelled")
+                                 : tr("Play mode collision failed");
+          notification.detail = QCoreApplication::translate(
+            "PlayModeController", m_playMode->startError().c_str());
+          notification.dismissible = !m_playMode->startCancelled();
+          if (!m_playMode->startCancelled())
+            notification.actions.push_back(
+              {tr("Retry"), [this, fromCamera] { startPlayMode(fromCamera); }});
+          m_playNotifications->update(m_playNotificationId, notification);
+        }
+        return;
+      }
+
+      if (
+        !isVisible()
+        || (watchActivation && (!startupWindow || !startupWindow->isActiveWindow())))
+      {
+        m_playMode->stop();
+        m_toolBox.entityMotionPreview().setSuspended(false);
+        if (m_playNotifications)
+          m_playNotifications->remove(m_playNotificationId);
+        return;
+      }
+      if (m_playNotifications)
+        m_playNotifications->remove(m_playNotificationId);
+
+      const auto changingPresentation = kdl::set_temp{m_changingPlayPresentation, true};
+      if (pref(Preferences::PlayModeFullScreen))
+      {
+        m_playModeFullScreen->enter(*this);
+      }
+      // Settle any full-screen resizing before Raw Input confines the pointer.
+      QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+      m_mouseTrackingBeforePlay = hasMouseTracking();
+      setMouseTracking(true);
+      setCursor(Qt::BlankCursor);
+      setFocus(Qt::OtherFocusReason);
+
+      const auto raw = pref(Preferences::PlayModeRawInput);
+      const auto backend = m_rawMouse->start(*this, raw);
+      if (QGuiApplication::platformName() == "windows" && !m_rawMouse->confinesPointer())
+      {
+        m_rawMouse->stop();
+        unsetCursor();
+        setMouseTracking(m_mouseTrackingBeforePlay);
+        m_playMode->stop();
+        m_toolBox.entityMotionPreview().setSuspended(false);
+        m_playModeFullScreen->leave();
+        if (m_playNotifications)
+        {
+          auto notification = TaskNotification{};
+          notification.state = TaskNotification::State::Failed;
+          notification.title = tr("Play mode could not capture the mouse");
+          notification.detail = tr("Activate the editor window and try again.");
+          notification.dismissible = true;
+          notification.actions.push_back(
+            {tr("Retry"), [this, fromCamera] { startPlayMode(fromCamera); }});
+          m_playNotifications->update(m_playNotificationId, notification);
+        }
+        return;
+      }
+      m_warpCursor = true;
+      // Windows ClipCursor only confines coordinates. Capture the events and cursor
+      // shape too, so fast motion and widget cursor updates cannot reveal the pointer.
+      m_grabbedMouse =
+        !m_rawMouse->confinesPointer() || QGuiApplication::platformName() == "windows";
+      if (m_grabbedMouse)
+      {
+        grabMouse(Qt::BlankCursor);
+      }
+
+      const auto motion = std::string{raw ? "raw" : "accelerated"};
+      const auto confined = m_rawMouse->confinesPointer() ? "" : ", not confined";
+      switch (backend)
+      {
+      case PlayModeRawMouse::Backend::Wayland:
+        m_playMode->setInputDescription(motion + ", Wayland locked pointer");
+        break;
+      case PlayModeRawMouse::Backend::XInput2:
+        m_playMode->setInputDescription(motion + ", XInput2" + confined);
+        break;
+      case PlayModeRawMouse::Backend::RawInput:
+        m_playMode->setInputDescription(motion + ", Raw Input" + confined);
+        break;
+      case PlayModeRawMouse::Backend::None:
+        m_playMode->setInputDescription(
+          std::string{"cursor warping (accelerated)"}
+          + (m_rawMouse->confinesPointer() ? ", confined" : ""));
+        break;
+      }
+
+      m_wheelAccumulator = 0;
+      m_lastPlayMousePos = QCursor::pos() - mapToGlobal(QPoint{0, 0});
+      m_awaitingCursorWarp = false;
+      recenterPlayCursor();
+      update();
+    });
 }
 
 void MapView3D::recenterPlayCursor()
@@ -282,6 +339,18 @@ void MapView3D::stopPlayMode()
 
 void MapView3D::stopPlayMode(const bool deferPresentationRestore)
 {
+  if (m_playMode->starting())
+  {
+    m_playMode->cancelStart();
+    if (m_playNotifications)
+    {
+      auto notification = TaskNotification{};
+      notification.title = tr("Cancelling Play mode");
+      notification.progress = -1;
+      m_playNotifications->update(m_playNotificationId, notification);
+    }
+    return;
+  }
   if (!m_playMode->active())
   {
     const auto changingPresentation = kdl::set_temp{m_changingPlayPresentation, true};

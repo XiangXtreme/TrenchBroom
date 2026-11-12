@@ -1470,6 +1470,18 @@
             <source>Show Entity Browser</source>
             <translation>显示实体浏览器</translation>
         </message>
+        <message>
+            <source>Check for Updates…</source>
+            <translation>检查更新…</translation>
+        </message>
+        <message>
+            <source>Updates unavailable</source>
+            <translation>更新不可用</translation>
+        </message>
+        <message>
+            <source>Updates are unavailable in this build.</source>
+            <translation>此版本不支持更新。</translation>
+        </message>
     </context>
     <context>
         <name>tb::AppPreferenceManager</name>
@@ -2425,6 +2437,30 @@ Recover them? The current project file is kept as a backup in the autosave folde
         <message>
             <source>Task %1 — %2</source>
             <translation>任务 %1 — %2</translation>
+        </message>
+        <message>
+            <source>View log</source>
+            <translation>查看日志</translation>
+        </message>
+        <message>
+            <source>Simulating compilation</source>
+            <translation>正在模拟编译</translation>
+        </message>
+        <message>
+            <source>Compiling map</source>
+            <translation>正在编译地图</translation>
+        </message>
+        <message>
+            <source>Map compilation failed</source>
+            <translation>地图编译失败</translation>
+        </message>
+        <message>
+            <source>Map compilation cancelled</source>
+            <translation>地图编译已取消</translation>
+        </message>
+        <message>
+            <source>Map compilation completed</source>
+            <translation>地图编译完成</translation>
         </message>
     </context>
     <context>
@@ -5912,6 +5948,12 @@ They may contain new features or bug fixes that are not yet part of a stable rel
             <translation>预发布版本是指尚未被视为稳定的TrenchBroom版本。
 它们可能包含尚未纳入稳定版本的新功能或错误修复。</translation>
             </message>
+        <message>
+            <source>TrenchBroom can check for updates. Available updates appear in a notification and in this preferences page.
+Open the update details to download and install an available update.</source>
+            <translation>TrenchBroom 可以检查更新。可用更新会显示在通知和此首选项页面中。
+打开更新详情即可下载并安装可用更新。</translation>
+        </message>
         </context>
     <context>
         <name>tb::ui::ViewEditor</name>
@@ -6824,6 +6866,38 @@ By %2</source>
             <source>Compiling collision hulls...</source>
             <translation>正在编译碰撞体...</translation>
             </message>
+        <message>
+            <source>Building Play mode collision</source>
+            <translation>正在构建游玩模式碰撞</translation>
+        </message>
+        <message>
+            <source>Cancel</source>
+            <translation>取消</translation>
+        </message>
+        <message>
+            <source>Play mode cancelled</source>
+            <translation>已取消进入游玩模式</translation>
+        </message>
+        <message>
+            <source>Play mode collision failed</source>
+            <translation>游玩模式碰撞构建失败</translation>
+        </message>
+        <message>
+            <source>Retry</source>
+            <translation>重试</translation>
+        </message>
+        <message>
+            <source>Cancelling Play mode</source>
+            <translation>正在取消游玩模式</translation>
+        </message>
+        <message>
+            <source>Play mode could not capture the mouse</source>
+            <translation>游玩模式无法捕获鼠标</translation>
+        </message>
+        <message>
+            <source>Activate the editor window and try again.</source>
+            <translation>请激活编辑器窗口后重试。</translation>
+        </message>
         </context>
     <context>
         <name>tb::ui::McpSettingsWidget</name>
@@ -8678,6 +8752,66 @@ Projects keep their captured copies.</source>
         <source>Destination folder</source>
         <translation>目标文件夹</translation>
     </message>
+        <message>
+            <source>Converting assets</source>
+            <translation>正在转换资源</translation>
+        </message>
+        <message>
+            <source>%1 of %2</source>
+            <translation>%1 / %2</translation>
+        </message>
+        <message>
+            <source>Assets converted</source>
+            <translation>资源转换完成</translation>
+        </message>
+        <message>
+            <source>Some assets could not be converted</source>
+            <translation>部分资源转换失败</translation>
+        </message>
+        <message>
+            <source>%1 converted · %2 failed</source>
+            <translation>已转换 %1 个 · 失败 %2 个</translation>
+        </message>
+        <message>
+            <source>View details</source>
+            <translation>查看详情</translation>
+        </message>
+        <message>
+            <source>Asset conversion cancelled</source>
+            <translation>已取消资源转换</translation>
+        </message>
+        <message>
+            <source>%1 completed · %2 failed · %3 pending</source>
+            <translation>已处理 %1 个 · 失败 %2 个 · 待处理 %3 个</translation>
+        </message>
+        <message>
+            <source>Converting imported assets</source>
+            <translation>正在转换导入的资源</translation>
+        </message>
+        <message>
+            <source>Importing assets</source>
+            <translation>正在导入资源</translation>
+        </message>
+        <message>
+            <source>Import cancelled; completed imports were kept.</source>
+            <translation>已取消导入，已导入的资源予以保留。</translation>
+        </message>
+        <message>
+            <source>Asset import cancelled</source>
+            <translation>已取消资源导入</translation>
+        </message>
+        <message>
+            <source>Some assets could not be imported</source>
+            <translation>部分资源导入失败</translation>
+        </message>
+        <message>
+            <source>Assets imported</source>
+            <translation>资源导入完成</translation>
+        </message>
+        <message>
+            <source>%1 imported · %2 converted · %3 failed</source>
+            <translation>已导入 %1 个 · 已转换 %2 个 · 失败 %3 个</translation>
+        </message>
     </context>
         <context>
         <name>tb::ui::ProjectAssetPanel</name>
@@ -9554,6 +9688,14 @@ Removing them frees about %3. Current assets and versions are kept.</source>
             <source>Project assets (*.map *.mdl *.spr *.wav *.tbprefab *.wad *.png *.bmp *.tga *.jpg)</source>
             <translation>工程资源 (*.map *.mdl *.spr *.wav *.tbprefab *.wad *.png *.bmp *.tga *.jpg)</translation>
         </message>
+        <message>
+            <source>Project auto-save failed</source>
+            <translation>项目自动保存失败</translation>
+        </message>
+        <message>
+            <source>Retry</source>
+            <translation>重试</translation>
+        </message>
     </context>
     <context>
         <name>QPlatformTheme</name>
@@ -10164,6 +10306,18 @@ Skyboxes: gfx/env/&lt;skyname&gt;bk.tga (all six faces, without a namespace)</so
         <message>
             <source>Failed (estimate)</source>
             <translation>失败（估算）</translation>
+        </message>
+        <message>
+            <source>Could not create the physics context</source>
+            <translation>无法创建物理模拟环境</translation>
+        </message>
+        <message>
+            <source>The map changed while collision was being built</source>
+            <translation>构建碰撞期间地图已更改</translation>
+        </message>
+        <message>
+            <source>Could not build collision</source>
+            <translation>无法构建碰撞</translation>
         </message>
     </context>
     <context>
@@ -11383,6 +11537,45 @@ Expression: %3</source>
         <message>
             <source>Dismiss notification</source>
             <translation>关闭通知</translation>
+        </message>
+    </context>
+    <context>
+        <name>UpdateNotifications</name>
+        <message>
+            <source>Checking for updates</source>
+            <translation>正在检查更新</translation>
+        </message>
+        <message>
+            <source>Update available</source>
+            <translation>有可用更新</translation>
+        </message>
+        <message>
+            <source>View update</source>
+            <translation>查看更新</translation>
+        </message>
+        <message>
+            <source>TrenchBroom is up to date</source>
+            <translation>TrenchBroom 已是最新版本</translation>
+        </message>
+        <message>
+            <source>Downloading update</source>
+            <translation>正在下载更新</translation>
+        </message>
+        <message>
+            <source>Preparing update</source>
+            <translation>正在准备更新</translation>
+        </message>
+        <message>
+            <source>Update ready to install</source>
+            <translation>更新已准备安装</translation>
+        </message>
+        <message>
+            <source>Update failed</source>
+            <translation>更新失败</translation>
+        </message>
+        <message>
+            <source>Retry</source>
+            <translation>重试</translation>
         </message>
     </context>
 </TS>
