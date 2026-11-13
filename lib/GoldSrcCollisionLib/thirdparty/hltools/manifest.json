@@ -1,5 +1,5 @@
 {
-  "revision": "d205e91126f3fe78b82db23f7afc64573fb1d7c0",
+  "revision": "70a67f7f21fca1a078211f8c68203041c523f3f5",
   "files": {
     "LICENSE": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
     "THIRD_PARTY_NOTICES.md": "1a981caaa32f7ad81142b6ae5041ea98709e889c02fe5beff5110ad9430c3a9b",
@@ -120,7 +120,7 @@
     "src/format/miptex/types.h": "54f9fccc7aa063f0cc00daa1a5fd61aaad25e41842434d9cf2b1d35af1f3fc1f",
     "src/format/rad/texlights.cpp": "60c9d578fa053ea62e958d366c6d7610bc54fe6223b46752776d127e96d6dc13",
     "src/format/rad/texlights.h": "466916d7a8a60d4ed4470b1ddb9f7d857e2c0b568500a520dbb416f013812042",
-    "src/format/tbproject/project.cpp": "ecba94afd1a09a572847c886f90f30b1dfcc37a037958a4bc1f1977f6ce14593",
+    "src/format/tbproject/project.cpp": "4915efbfce8577c40c00e64f5f14e08de9f7ebeaa6b37d7f5905f086cfc39479",
     "src/format/tbproject/project.h": "96b65e4067a045f71afe8ec77dfe0c0f38bea3f9368d42733d79903b6613f91a",
     "src/format/wad/archive.cpp": "0856ed1596bb02244cded0238a32791a664a2d901c0b70e446098dc7c5a33302",
     "src/format/wad/archive.h": "cf67a657c38a72ae8545d678493774776f152406260d7f553750ed2221ff1a15",
@@ -148,7 +148,7 @@
     "src/rad/internal.h": "4aebf2ff5cec62368ef7a0d55a84044e66ad235ae103795e7b1cc0087f31ffe8",
     "src/rad/lerp.cpp": "0c13945d1a141f2b9be3186c986ed5e3058551b693e726cbf86e61e07d0de27a",
     "src/rad/light_budget.cpp": "800f830624148e0aa6e0db4ec02c1bcf00b76d6d6dbb2c531e9e5d7feb4a5319",
-    "src/rad/lightmap.cpp": "921125aca70b4b3fa3e196ef4dc483061105205754dd7c7a9104d7ee297fff8d",
+    "src/rad/lightmap.cpp": "d01a8c9e29b6fd17d0f76b5e385b024596158ccf30e1308d27bbdcfc2baaa96a",
     "src/rad/nomatrix.cpp": "64bafd1de493ab55fd7c14ab5686cf005c5153ccf91f1a9191c91ee24dc9fba4",
     "src/rad/patches.cpp": "8b8ac357944cbca390822b809994ef459e8b6185bed707b1f7b2b7e308fb8266",
     "src/rad/position.cpp": "e73efc32180e2ee8cf5cb3d1397a2aa6dac3b6a1a2238a8c8643b9aa105f3ef5",
