@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <string_view>
 #include <utility>
 
 namespace format::tbproject
@@ -26,7 +27,9 @@ namespace format::tbproject
 
         std::string stem_of(const std::string &path)
         {
-            const auto stem = std::filesystem::u8path(path).stem().u8string();
+            const auto utf8Path = std::u8string_view{
+              reinterpret_cast<const char8_t *>(path.data()), path.size()};
+            const auto stem = std::filesystem::path(utf8Path).stem().u8string();
             return {reinterpret_cast<const char *>(stem.data()), stem.size()};
         }
 
